@@ -36,7 +36,7 @@ Start by telling the user which proposal type was detected and why. Then gather 
 
 Once the conversation has covered all sections, write the proposal:
 
-1. **Filename**: `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided $ARGUMENTS, use that as the name slug.
+1. **Filename**: `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided $ARGUMENTS, use that as the name slug. If $ARGUMENTS is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
 2. **Format**: Use the appropriate template below.
 3. **Content**: Synthesize the conversation into clear, concise prose. Do not include the raw Q&A — distill it.
 
@@ -100,6 +100,7 @@ Once the conversation has covered all sections, write the proposal:
 
 ## After Writing
 
+- Create `spec/proposals/` if it does not exist.
 - Tell the user the file path and summarize what was written.
 - Remind them to review the proposal and commit it to git.
 - Note: once `spex register` is available, it will validate the proposal structure and link it to the spec. For now, the proposal is a plain markdown file committed to `spec/proposals/`.
