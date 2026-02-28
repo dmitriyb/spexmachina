@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/project.json",
+  "title": "Spex Machina Project",
+  "description": "Schema for the project-level spec file (project.json). Defines project metadata, top-level requirements, module declarations with inter-module dependencies, and milestones.",
+  "type": "object",
+  "required": ["name", "modules"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Project description."
+    },
+    "version": {
+      "type": "string",
+      "description": "Project version string."
+    },
+    "requirements": {
+      "type": "array",
+      "description": "Project-level requirements (functional and non-functional).",
+      "items": { "$ref": "#/$defs/requirement" }
+    },
+    "modules": {
+      "type": "array",
+      "description": "Module declarations. Each module has its own directory with a module.json.",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/module" }
+    },
+    "milestones": {
+      "type": "array",
+      "description": "Project milestones that group modules.",
+      "items": { "$ref": "#/$defs/milestone" }
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "type": "object",
+      "required": ["id", "type", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the requirements array."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["functional", "non_functional"],
+          "description": "Requirement type."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short requirement title."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed requirement description."
+        },
+        "depends_on": {
+          "type": "array",
+          "description": "IDs of other requirements this one depends on (depends_on edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "module": {
+      "type": "object",
+      "required": ["id", "name", "path"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the modules array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Module name."
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path to the module directory containing module.json."
+        },
+        "description": {
+          "type": "string",
+          "description": "Module description."
+        },
+        "requires_module": {
+          "type": "array",
+          "description": "IDs of other modules this one depends on (requires_module edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "milestone": {
+      "type": "object",
+      "required": ["id", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the milestones array."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Milestone title."
+        },
+        "description": {
+          "type": "string",
+          "description": "Milestone description."
+        },
+        "groups": {
+          "type": "array",
+          "description": "Module IDs grouped under this milestone (groups edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
