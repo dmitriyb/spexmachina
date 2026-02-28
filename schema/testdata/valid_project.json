@@ -1,0 +1,56 @@
+{
+  "name": "spex-machina",
+  "description": "The spec state machine.",
+  "version": "0.1.0",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Validate spec structure",
+      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Compute merkle tree",
+      "description": "Hash every node, store snapshots, diff against previous snapshots.",
+      "depends_on": [1]
+    },
+    {
+      "id": 3,
+      "type": "non_functional",
+      "title": "Deterministic output",
+      "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions."
+    }
+  ],
+  "modules": [
+    {
+      "id": 1,
+      "name": "Schema",
+      "path": "schema",
+      "description": "JSON Schema definitions for project.json and module.json."
+    },
+    {
+      "id": 2,
+      "name": "Validator",
+      "path": "validator",
+      "description": "Spec directory validation.",
+      "requires_module": [1]
+    },
+    {
+      "id": 3,
+      "name": "Merkle",
+      "path": "merkle",
+      "description": "Hash tree, snapshots, diff, impact classification.",
+      "requires_module": [1]
+    }
+  ],
+  "milestones": [
+    {
+      "id": 1,
+      "title": "Bootstrap",
+      "description": "Core schema and validation working.",
+      "groups": [1, 2]
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+{
+  "name": "validator",
+  "description": "Spec directory validation: schema conformance, content paths, DAG checks, orphan detection.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "JSON schema conformance",
+      "description": "Validate project.json and module.json against their JSON Schemas.",
+      "preq_id": 1
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Content path resolution",
+      "description": "All content paths resolve to existing markdown files.",
+      "preq_id": 1
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "DAG acyclicity",
+      "description": "Module dependencies and component references form a DAG.",
+      "depends_on": [1],
+      "preq_id": 1
+    },
+    {
+      "id": 4,
+      "type": "non_functional",
+      "title": "Structured error output",
+      "description": "Exit 1 with structured JSON errors listing every violation."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "SchemaChecker",
+      "description": "Validates JSON files against embedded JSON Schemas.",
+      "content": "arch_schema_checker.md",
+      "implements": [1],
+      "uses": []
+    },
+    {
+      "id": 2,
+      "name": "DAGChecker",
+      "description": "Verifies the spec graph is acyclic.",
+      "content": "arch_dag_checker.md",
+      "implements": [3],
+      "uses": [1]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Schema validation implementation",
+      "content": "impl_schema_validation.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Cycle detection algorithm",
+      "content": "impl_cycle_detection.md",
+      "describes": [2]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Validation pipeline",
+      "description": "JSON files flow through schema check, then structural checks, producing an error report.",
+      "content": "flow_validation_pipeline.md",
+      "uses": [1, 2]
+    }
+  ]
+}

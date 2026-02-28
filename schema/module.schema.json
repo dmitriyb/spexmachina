@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/module.json",
+  "title": "Spex Machina Module",
+  "description": "Schema for a module-level spec file (module.json). Defines module metadata, requirements, architecture components, implementation sections, and data flows.",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Module name."
+    },
+    "description": {
+      "type": "string",
+      "description": "Module description."
+    },
+    "requirements": {
+      "type": "array",
+      "description": "Module-level requirements (functional and non-functional).",
+      "items": { "$ref": "#/$defs/requirement" }
+    },
+    "components": {
+      "type": "array",
+      "description": "Architecture components with content links and cross-references.",
+      "items": { "$ref": "#/$defs/component" }
+    },
+    "impl_sections": {
+      "type": "array",
+      "description": "Implementation sections describing how components are built.",
+      "items": { "$ref": "#/$defs/impl_section" }
+    },
+    "data_flows": {
+      "type": "array",
+      "description": "Data flow definitions between components.",
+      "items": { "$ref": "#/$defs/data_flow" }
+    }
+  },
+  "$defs": {
+    "requirement": {
+      "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements.",
+      "type": "object",
+      "required": ["id", "type", "title"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the requirements array."
+        },
+        "preq_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Project requirement ID this module requirement derives from."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["functional", "non_functional"],
+          "description": "Requirement type."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Short requirement title."
+        },
+        "description": {
+          "type": "string",
+          "description": "Detailed requirement description."
+        },
+        "depends_on": {
+          "type": "array",
+          "description": "IDs of other requirements this one depends on (depends_on edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the components array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Component name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Component description."
+        },
+        "content": {
+          "type": "string",
+          "description": "Relative path to the markdown file with detailed content (described_in edge to content leaf)."
+        },
+        "implements": {
+          "type": "array",
+          "description": "Requirement IDs this component implements (implements edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        },
+        "uses": {
+          "type": "array",
+          "description": "IDs of other components this one depends on (uses edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "impl_section": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the impl_sections array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Implementation section name."
+        },
+        "content": {
+          "type": "string",
+          "description": "Relative path to the markdown file with implementation details (described_in edge to content leaf)."
+        },
+        "describes": {
+          "type": "array",
+          "description": "Component IDs described by this section (describes edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "data_flow": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the data_flows array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Data flow name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Data flow description."
+        },
+        "content": {
+          "type": "string",
+          "description": "Relative path to the markdown file with data flow details (described_in edge to content leaf)."
+        },
+        "uses": {
+          "type": "array",
+          "description": "Component IDs involved in this data flow (uses edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}
