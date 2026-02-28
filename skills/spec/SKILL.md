@@ -25,6 +25,7 @@ Check the current state of `spec/`:
 | `spec/project.json` does not exist | **New project** | Create `project.json` + all module dirs, `module.json` files, and markdown leaves |
 | `spec/project.json` exists, proposal adds new modules | **New module** | Add module entries to `project.json`, create new module dirs with `module.json` and markdown leaves |
 | `spec/project.json` exists, proposal modifies existing nodes | **Alter** | Modify existing JSON and markdown files in place |
+| `spec/project.json` exists, proposal adds new modules AND modifies existing nodes | **New module + Alter** | Both actions apply — add new modules and modify existing nodes in a single pass |
 
 Tell the user which mode was detected and why before proceeding.
 
@@ -61,6 +62,7 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 |------|------|----|-------|
 | `depends_on` | requirement | requirement | `depends_on: [id, ...]` |
 | `requires_module` | module | module | `requires_module: [id, ...]` |
+| `preq_id` | module requirement | project requirement | `preq_id: id` |
 | `groups` | milestone | module | `groups: [id, ...]` |
 | `implements` | component | requirement | `implements: [id, ...]` |
 | `uses` | component | component | `uses: [id, ...]` |
