@@ -176,7 +176,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 	}{
 		{"implements", len(mod.Components) > 0 && len(mod.Components[0].Implements) > 0},
 		{"uses (component)", len(mod.Components) > 1 && len(mod.Components[1].Uses) > 0},
-		{"described_in", len(mod.ImplSections) > 0 && len(mod.ImplSections[0].DescribedIn) > 0},
+		{"describes", len(mod.ImplSections) > 0 && len(mod.ImplSections[0].Describes) > 0},
 		{"depends_on", len(mod.Requirements) > 2 && len(mod.Requirements[2].DependsOn) > 0},
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
 		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
@@ -243,20 +243,25 @@ func TestFR6_ContentPaths(t *testing.T) {
 		t.Fatalf("unmarshal module: %v", err)
 	}
 
+	// Content is optional in the schema, so only validate non-empty values.
+	var found int
 	for _, c := range mod.Components {
-		if c.Content == "" {
-			t.Fatalf("component %q has empty content path", c.Name)
+		if c.Content != "" {
+			found++
 		}
 	}
 	for _, s := range mod.ImplSections {
-		if s.Content == "" {
-			t.Fatalf("impl_section %q has empty content path", s.Name)
+		if s.Content != "" {
+			found++
 		}
 	}
 	for _, d := range mod.DataFlows {
-		if d.Content == "" {
-			t.Fatalf("data_flow %q has empty content path", d.Name)
+		if d.Content != "" {
+			found++
 		}
+	}
+	if found == 0 {
+		t.Fatal("expected at least one node with a content path in fixture")
 	}
 }
 
@@ -291,6 +296,60 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 			t.Fatalf("module schema missing property %q", key)
 		}
 	}
+}
+
+func TestNegative_TypeMismatch(t *testing.T) {
+	// String IDs must fail unmarshal since Go types use int.
+	tests := []struct {
+		name string
+		json string
+		target any
+	}{
+		{
+			"string ID in component",
+			`{"name":"m","components":[{"id":"abc","name":"c"}]}`,
+			new(ModuleSpec),
+		},
+		{
+			"string ID in requirement",
+			`{"name":"p","modules":[{"id":1,"name":"m","path":"m/"}],"requirements":[{"id":"x","type":"functional","title":"t"}]}`,
+			new(Project),
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := json.Unmarshal([]byte(tt.json), tt.target)
+			if err == nil {
+				t.Fatal("expected unmarshal error for type mismatch, got nil")
+			}
+		})
+	}
+}
+
+func TestNegative_MissingRequired(t *testing.T) {
+	// Go unmarshal doesn't enforce "required" — those are JSON Schema constraints
+	// for the validator module. Verify zero-value behavior so type changes don't
+	// silently pass.
+	t.Run("project missing name", func(t *testing.T) {
+		var proj Project
+		err := json.Unmarshal([]byte(`{"modules":[{"id":1,"name":"m","path":"m/"}]}`), &proj)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if proj.Name != "" {
+			t.Fatalf("expected empty Name, got %q", proj.Name)
+		}
+	})
+	t.Run("module missing name", func(t *testing.T) {
+		var mod ModuleSpec
+		err := json.Unmarshal([]byte(`{}`), &mod)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mod.Name != "" {
+			t.Fatalf("expected empty Name, got %q", mod.Name)
+		}
+	})
 }
 
 func readTestdata(t *testing.T, name string) []byte {

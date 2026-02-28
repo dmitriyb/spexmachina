@@ -5,7 +5,7 @@
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
 // Node types: requirement, component, impl_section, data_flow, milestone, module.
-// Edge types: implements, uses, described_in, depends_on, groups, requires_module.
+// Edge types: implements, uses, describes, depends_on, groups, requires_module.
 package schema
 
 import "embed"
@@ -84,7 +84,7 @@ type ImplSection struct {
 	ID          int    `json:"id"`
 	Name        string `json:"name"`
 	Content     string `json:"content,omitempty"`
-	DescribedIn []int  `json:"described_in,omitempty"`
+	Describes []int `json:"describes,omitempty"`
 }
 
 // DataFlow represents a data flow in a module.

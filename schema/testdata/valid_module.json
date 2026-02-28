@@ -51,13 +51,13 @@
       "id": 1,
       "name": "Schema validation implementation",
       "content": "impl_schema_validation.md",
-      "described_in": [1]
+      "describes": [1]
     },
     {
       "id": 2,
       "name": "Cycle detection algorithm",
       "content": "impl_cycle_detection.md",
-      "described_in": [2]
+      "describes": [2]
     }
   ],
   "data_flows": [

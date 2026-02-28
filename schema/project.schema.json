@@ -39,6 +39,7 @@
   },
   "$defs": {
     "requirement": {
+      "$comment": "NOTE: This definition is duplicated in module.schema.json. Keep both in sync or extract to a shared schema.",
       "type": "object",
       "required": ["id", "type", "title"],
       "additionalProperties": false,

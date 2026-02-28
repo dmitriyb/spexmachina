@@ -39,6 +39,7 @@
   },
   "$defs": {
     "requirement": {
+      "$comment": "NOTE: This definition is duplicated in project.schema.json. Keep both in sync or extract to a shared schema.",
       "type": "object",
       "required": ["id", "type", "title"],
       "additionalProperties": false,
@@ -135,9 +136,9 @@
           "type": "string",
           "description": "Relative path to the markdown file with implementation details (described_in edge to content leaf)."
         },
-        "described_in": {
+        "describes": {
           "type": "array",
-          "description": "Component IDs whose implementation is described in this section (described_in edge).",
+          "description": "Component IDs described by this section (describes edge).",
           "items": {
             "type": "integer",
             "minimum": 1
