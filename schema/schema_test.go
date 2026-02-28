@@ -178,6 +178,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"uses (component)", len(mod.Components) > 1 && len(mod.Components[1].Uses) > 0},
 		{"describes", len(mod.ImplSections) > 0 && len(mod.ImplSections[0].Describes) > 0},
 		{"depends_on", len(mod.Requirements) > 2 && len(mod.Requirements[2].DependsOn) > 0},
+		{"preq_id", len(mod.Requirements) > 0 && mod.Requirements[0].PreqID > 0},
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
 		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},

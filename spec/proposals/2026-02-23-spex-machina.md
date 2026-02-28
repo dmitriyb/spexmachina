@@ -17,7 +17,7 @@ Every spec change — from initial project creation to incremental edits — is 
 The JSON Schema definitions for `project.json` and `module.json`. This is the foundation — it defines what a valid spec looks like. Includes:
 
 - Project-level schema: requirements, architecture reference, module declarations with inter-module dependencies
-- Module-level schema: requirements (functional + non-functional), architecture components (with markdown content links), implementation sections (with markdown content links), data flows
+- Module-level schema: requirements (functional + non-functional, linked to project requirements via `preq_id`), architecture components (with markdown content links), implementation sections (with markdown content links), data flows
 - All IDs are numeric within their type
 - All cross-references are validated (requirements referenced by components, components referenced by impl sections, etc.)
 
@@ -107,6 +107,10 @@ Generates human-readable output from spec JSON + markdown:
 The spec graph structure (nodes, edges, IDs, cross-references) lives in JSON where every entity is a field, not a regex target. Rich content (ASCII diagrams, code snippets, algorithm descriptions, data flow narratives) lives in markdown files linked from JSON via `content` paths. This keeps the graph machine-readable while allowing rich human-authored content.
 
 The merkle tree hashes both: JSON structure changes are detected at the interior nodes, markdown content changes are detected at the leaves. The impact path (impl-only vs arch+impl vs structural) is determined by which level of the tree changed.
+
+### Requirement decomposition: project → module
+
+Project-level requirements define high-level goals. Module-level requirements are decompositions of project requirements, linked via `preq_id` (project requirement ID). This creates a traceable hierarchy: a project requirement like "Validate spec structure" decomposes into module requirements like "JSON schema conformance", "Content path resolution", and "DAG acyclicity". The validator can check that every module requirement traces back to a project requirement.
 
 ### Task backend: beads, not GitHub Issues
 

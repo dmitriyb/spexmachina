@@ -6,20 +6,23 @@
       "id": 1,
       "type": "functional",
       "title": "JSON schema conformance",
-      "description": "Validate project.json and module.json against their JSON Schemas."
+      "description": "Validate project.json and module.json against their JSON Schemas.",
+      "preq_id": 1
     },
     {
       "id": 2,
       "type": "functional",
       "title": "Content path resolution",
-      "description": "All content paths resolve to existing markdown files."
+      "description": "All content paths resolve to existing markdown files.",
+      "preq_id": 1
     },
     {
       "id": 3,
       "type": "functional",
       "title": "DAG acyclicity",
       "description": "Module dependencies and component references form a DAG.",
-      "depends_on": [1]
+      "depends_on": [1],
+      "preq_id": 1
     },
     {
       "id": 4,

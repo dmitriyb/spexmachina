@@ -39,7 +39,7 @@
   },
   "$defs": {
     "requirement": {
-      "$comment": "NOTE: This definition is duplicated in project.schema.json. Keep both in sync or extract to a shared schema.",
+      "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements.",
       "type": "object",
       "required": ["id", "type", "title"],
       "additionalProperties": false,
@@ -48,6 +48,11 @@
           "type": "integer",
           "minimum": 1,
           "description": "Numeric ID, unique within the requirements array."
+        },
+        "preq_id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Project requirement ID this module requirement derives from."
         },
         "type": {
           "type": "string",
