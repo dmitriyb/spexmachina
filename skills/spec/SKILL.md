@@ -1,0 +1,173 @@
+---
+name: spec
+description: "Read a proposal and author spec files: project.json, module.json, and markdown content leaves"
+argument-hint: "<proposal-path-or-name>"
+---
+
+# /spec — Author Spec from Proposal
+
+Read a proposal from `spec/proposals/` and create or modify the spec: `project.json`, `module.json` files, and markdown content leaves. This is the LLM interface for spec authoring — all structural output must conform to the JSON Schema.
+
+## Resolve Proposal
+
+1. If `$ARGUMENTS` is a path to an existing file, use it directly.
+2. If `$ARGUMENTS` is a name (no path separator), look for `spec/proposals/*-$ARGUMENTS.md`.
+3. If `$ARGUMENTS` is empty, list `spec/proposals/` and ask the user which proposal to use.
+
+Read the proposal fully before proceeding.
+
+## Detect Mode
+
+Check the current state of `spec/`:
+
+| Condition | Mode | What to do |
+|-----------|------|------------|
+| `spec/project.json` does not exist | **New project** | Create `project.json` + all module dirs, `module.json` files, and markdown leaves |
+| `spec/project.json` exists, proposal adds new modules | **New module** | Add module entries to `project.json`, create new module dirs with `module.json` and markdown leaves |
+| `spec/project.json` exists, proposal modifies existing nodes | **Alter** | Modify existing JSON and markdown files in place |
+| `spec/project.json` exists, proposal adds new modules AND modifies existing nodes | **New module + Alter** | Both actions apply — add new modules and modify existing nodes in a single pass |
+
+Tell the user which mode was detected and why before proceeding.
+
+## Schema Reference
+
+All JSON output must conform to the schemas in `schema/project.schema.json` and `schema/module.schema.json`. Read these files before writing any JSON. Key rules:
+
+### project.json
+
+- **Required**: `name`, `modules` (at least one)
+- **Optional**: `description`, `version`, `requirements`, `milestones`
+- Requirements: `id` (int ≥1), `type` ("functional" | "non_functional"), `title` (required); `description`, `depends_on` (optional)
+- Modules: `id` (int ≥1), `name`, `path` (required); `description`, `requires_module` (optional)
+- Milestones: `id` (int ≥1), `title` (required); `description`, `groups` (optional)
+
+### module.json
+
+- **Required**: `name`
+- **Optional**: `description`, `requirements`, `components`, `impl_sections`, `data_flows`
+- Requirements: same as project, plus optional `preq_id` (traces to project requirement)
+- Components: `id`, `name` (required); `description`, `content`, `implements`, `uses` (optional)
+- Impl sections: `id`, `name` (required); `content`, `describes` (optional)
+- Data flows: `id`, `name` (required); `description`, `content`, `uses` (optional)
+
+### IDs
+
+- All IDs are integers ≥1, unique within their array (requirements, components, etc.)
+- Assign IDs sequentially starting from 1 within each array
+- In alter mode, never reuse an ID that was previously assigned — append with the next available ID
+
+### Edges
+
+| Edge | From | To | Field |
+|------|------|----|-------|
+| `depends_on` | requirement | requirement | `depends_on: [id, ...]` |
+| `requires_module` | module | module | `requires_module: [id, ...]` |
+| `preq_id` | module requirement | project requirement | `preq_id: id` |
+| `groups` | milestone | module | `groups: [id, ...]` |
+| `implements` | component | requirement | `implements: [id, ...]` |
+| `uses` | component | component | `uses: [id, ...]` |
+| `describes` | impl_section | component | `describes: [id, ...]` |
+| `uses` | data_flow | component | `uses: [id, ...]` |
+| `described_in` | node | markdown leaf | `content: "path.md"` |
+
+## Interface Mapping
+
+The schema has no explicit interface node type. When migrating legacy specs that have an Interfaces section:
+
+- **Behavioral contracts** (C ABI stability, serialization format, protocol guarantees) → model as **functional requirements**
+- **Structural interfaces** (data loaders, visualization, export) → model as **components**
+
+## File Layout
+
+### Directory structure
+
+```
+spec/
+  project.json
+  proposals/
+    YYYY-MM-DD-name.md
+  <module-path>/          ← path from project.json module entry
+    module.json
+    arch_<name>.md        ← component content
+    impl_<name>.md        ← impl_section content
+    flow_<name>.md        ← data_flow content
+```
+
+### Content path conventions
+
+Content paths in `module.json` are relative to the module directory:
+
+| Node type | Filename pattern | Example |
+|-----------|-----------------|---------|
+| component | `arch_<snake_name>.md` | `arch_schema_checker.md` |
+| impl_section | `impl_<snake_name>.md` | `impl_cycle_detection.md` |
+| data_flow | `flow_<snake_name>.md` | `flow_validation_pipeline.md` |
+
+Use lowercase snake_case for the `<name>` portion. The name should be a short, descriptive slug derived from the node name.
+
+### Markdown content leaves
+
+Each markdown file is a content leaf. Write substantive content — these are the detailed design documents that implementers will read. Structure:
+
+- **Component (`arch_*.md`)**: What this component is, its responsibilities, key interfaces, and design rationale. Include ASCII diagrams where they clarify structure.
+- **Impl section (`impl_*.md`)**: How the component is built — algorithms, data structures, error handling, key implementation decisions.
+- **Data flow (`flow_*.md`)**: How data moves between components — input format, transformations, output format, error paths.
+
+## Workflow
+
+### 1. Read proposal and schemas
+
+- Read the resolved proposal file
+- Read `schema/project.schema.json` and `schema/module.schema.json`
+- If in new-module or alter mode, read the existing `spec/project.json` and relevant `module.json` files
+
+### 2. Plan the spec graph
+
+Before writing files, present the user with a summary:
+
+- **Project-level requirements** — list with IDs and titles
+- **Modules** — list with IDs, names, paths, and inter-module dependencies
+- **For each module**: requirements, components, impl_sections, data_flows — with edges shown
+- **Milestones** — if applicable
+
+Ask the user to confirm or adjust before writing files. This is the spec review gate.
+
+### 3. Write JSON files
+
+- Write `spec/project.json` (or update it in alter/new-module mode)
+- Create module directories under `spec/<module-path>/`
+- Write `spec/<module-path>/module.json` for each module
+- Use 2-space indentation for JSON
+
+### 4. Write markdown content leaves
+
+- Create each markdown file referenced by `content` fields
+- Write substantive content synthesized from the proposal — not stubs
+- If the proposal lacks detail for a particular node, write what you can and mark gaps with `<!-- TODO: detail needed -->` comments
+
+### 5. Validate
+
+- Run `spex validate` if available (the binary may not exist yet during bootstrap)
+- If `spex validate` is not available, manually verify:
+  - All `content` paths in module.json resolve to files that were created
+  - All cross-reference IDs (implements, uses, describes, depends_on, requires_module, groups) point to existing nodes
+  - No duplicate IDs within any array
+
+### 6. Report
+
+Tell the user:
+- What files were created or modified (list them)
+- Any `<!-- TODO -->` markers that need follow-up
+- Remind them to review the spec and commit it to git
+- Note: once `spex validate` exists, run it to confirm structural validity
+
+## Alter Mode Details
+
+When modifying an existing spec:
+
+1. Read all existing JSON files first
+2. Preserve existing IDs — never renumber
+3. Add new nodes with the next sequential ID after the current maximum
+4. When removing nodes, delete the JSON entry and its content file — do not leave orphans
+5. When modifying a node, update the JSON fields and the content markdown as needed
+6. Update all edges affected by the change (e.g., if a component is removed, remove its ID from any `uses` or `describes` arrays)
