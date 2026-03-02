@@ -37,7 +37,7 @@
       "name": "SpecReader",
       "description": "Reads and parses the spec directory into an in-memory graph structure for rendering.",
       "content": "arch_spec_reader.md",
-      "implements": [1, 2, 3]
+      "implements": [1, 2, 3, 4]
     },
     {
       "id": 2,

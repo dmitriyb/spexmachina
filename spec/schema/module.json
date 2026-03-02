@@ -37,14 +37,14 @@
       "name": "ProjectSchema",
       "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements, module declarations, and milestones.",
       "content": "arch_project_schema.md",
-      "implements": [1]
+      "implements": [1, 4]
     },
     {
       "id": 2,
       "name": "ModuleSchema",
       "description": "The module.json JSON Schema definition. Defines the structure for module requirements, components, impl_sections, and data_flows.",
       "content": "arch_module_schema.md",
-      "implements": [2]
+      "implements": [2, 4]
     },
     {
       "id": 3,

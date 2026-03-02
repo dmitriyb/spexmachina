@@ -6,7 +6,7 @@
       "id": 1,
       "type": "functional",
       "title": "Read bead metadata",
-      "preq_id": 4,
+      "preq_id": 3,
       "description": "Read spec-related fields from bead metadata: metadata.component, metadata.impl_section, metadata.module, metadata.spec_hash."
     },
     {
@@ -54,7 +54,7 @@
       "name": "NodeMatcher",
       "description": "Matches changed spec nodes to beads by comparing spec paths and metadata fields.",
       "content": "arch_node_matcher.md",
-      "implements": [2],
+      "implements": [2, 5],
       "uses": [1]
     },
     {

@@ -6,7 +6,7 @@
       "id": 1,
       "type": "functional",
       "title": "Create beads",
-      "preq_id": 5,
+      "preq_id": 3,
       "description": "Create beads via bd create with full spec metadata: module, component, impl_section, spec_hash, proposal reference."
     },
     {
@@ -53,7 +53,7 @@
       "name": "BeadCreator",
       "description": "Creates new beads via the bd CLI with spec metadata attached.",
       "content": "arch_bead_creator.md",
-      "implements": [1]
+      "implements": [1, 6]
     },
     {
       "id": 2,

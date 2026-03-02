@@ -37,7 +37,7 @@
       "name": "Registrar",
       "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present.",
       "content": "arch_registrar.md",
-      "implements": [1]
+      "implements": [1, 4]
     },
     {
       "id": 2,

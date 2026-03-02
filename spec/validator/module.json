@@ -60,6 +60,13 @@
       "title": "Fast validation",
       "preq_id": 11,
       "description": "Validating a spec with 100 modules and 1000 nodes completes in under 1 second."
+    },
+    {
+      "id": 9,
+      "type": "non_functional",
+      "title": "Self-validate",
+      "preq_id": 8,
+      "description": "The validator can validate spex-machina's own spec directory, ensuring the tool's spec remains consistent as it evolves."
     }
   ],
   "components": [
@@ -68,7 +75,7 @@
       "name": "SchemaChecker",
       "description": "Validates project.json and module.json against embedded JSON Schemas using a JSON Schema validation library.",
       "content": "arch_schema_checker.md",
-      "implements": [1]
+      "implements": [1, 8, 9]
     },
     {
       "id": 2,
