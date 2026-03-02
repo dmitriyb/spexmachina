@@ -12,7 +12,7 @@ Review PR #$ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific 
 Read ONLY these documents:
 
 1. The PR diff and description
-2. The linked bead: run `bd show <bead-id> --json` using the bead ID from the PR description
+2. The linked bead: run `br show <bead-id>` using the bead ID from the PR description
 3. If the bead references spec nodes, read the relevant `spec/<module>_reqs.md` and `spec/<module>_impl.md`
 
 ## Review Process
