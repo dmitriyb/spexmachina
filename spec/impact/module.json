@@ -1,0 +1,112 @@
+{
+  "name": "impact",
+  "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/close/review).",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Read bead metadata",
+      "preq_id": 4,
+      "description": "Read spec-related fields from bead metadata: metadata.component, metadata.impl_section, metadata.module, metadata.spec_hash."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Match changed nodes to beads",
+      "preq_id": 4,
+      "description": "Correlate changed spec nodes (from merkle diff) with existing beads using spec metadata fields.",
+      "depends_on": [1]
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Classify actions",
+      "preq_id": 4,
+      "description": "Determine action for each affected bead: create (new spec nodes without beads), close (removed spec nodes with existing beads), review (modified spec nodes with existing beads).",
+      "depends_on": [2]
+    },
+    {
+      "id": 4,
+      "type": "functional",
+      "title": "Output impact report",
+      "preq_id": 4,
+      "description": "Produce a structured JSON impact report listing all affected beads and their classified actions.",
+      "depends_on": [3]
+    },
+    {
+      "id": 5,
+      "type": "non_functional",
+      "title": "Deterministic matching",
+      "preq_id": 9,
+      "description": "Same merkle diff + same bead state always produces the same impact report."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "BeadReader",
+      "description": "Reads bead metadata from the bd CLI, extracting spec-related fields for matching.",
+      "content": "arch_bead_reader.md",
+      "implements": [1]
+    },
+    {
+      "id": 2,
+      "name": "NodeMatcher",
+      "description": "Matches changed spec nodes to beads by comparing spec paths and metadata fields.",
+      "content": "arch_node_matcher.md",
+      "implements": [2],
+      "uses": [1]
+    },
+    {
+      "id": 3,
+      "name": "ActionClassifier",
+      "description": "Determines the action (create/close/review) for each matched or unmatched spec node.",
+      "content": "arch_action_classifier.md",
+      "implements": [3],
+      "uses": [2]
+    },
+    {
+      "id": 4,
+      "name": "ReportGenerator",
+      "description": "Produces the structured JSON impact report from classified actions.",
+      "content": "arch_report_generator.md",
+      "implements": [4],
+      "uses": [3]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Bead metadata reading",
+      "content": "impl_bead_reading.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Node matching algorithm",
+      "content": "impl_node_matching.md",
+      "describes": [2]
+    },
+    {
+      "id": 3,
+      "name": "Action classification rules",
+      "content": "impl_action_classification.md",
+      "describes": [3]
+    },
+    {
+      "id": 4,
+      "name": "Report format",
+      "content": "impl_report_format.md",
+      "describes": [4]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Impact analysis flow",
+      "description": "Merkle diff + bead metadata → matched pairs → classified actions → impact report.",
+      "content": "flow_impact_analysis.md",
+      "uses": [1, 2, 3, 4]
+    }
+  ]
+}

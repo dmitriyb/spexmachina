@@ -1,0 +1,72 @@
+{
+  "name": "schema",
+  "description": "JSON Schema definitions for project.json and module.json. The foundation that defines what a valid spec looks like.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Define project schema",
+      "preq_id": 1,
+      "description": "JSON Schema for project.json covering name, description, version, requirements, module declarations with inter-module dependencies, and milestones."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Define module schema",
+      "preq_id": 1,
+      "description": "JSON Schema for module.json covering requirements (with preq_id), architecture components (with content links), implementation sections (with content links), and data flows."
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Embed schemas in binary",
+      "preq_id": 9,
+      "description": "Make schemas available programmatically via go:embed so the validator can use them without external file dependencies."
+    },
+    {
+      "id": 4,
+      "type": "non_functional",
+      "title": "Numeric ID constraints",
+      "preq_id": 1,
+      "description": "All IDs are integers >= 1, unique within their containing array. Schema enforces minimum value; uniqueness enforced by validator."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "ProjectSchema",
+      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements, module declarations, and milestones.",
+      "content": "arch_project_schema.md",
+      "implements": [1]
+    },
+    {
+      "id": 2,
+      "name": "ModuleSchema",
+      "description": "The module.json JSON Schema definition. Defines the structure for module requirements, components, impl_sections, and data_flows.",
+      "content": "arch_module_schema.md",
+      "implements": [2]
+    },
+    {
+      "id": 3,
+      "name": "SchemaLoader",
+      "description": "Go package that embeds JSON Schema files and exposes them for programmatic use by the validator and other modules.",
+      "content": "arch_schema_loader.md",
+      "implements": [3],
+      "uses": [1, 2]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Schema definitions",
+      "content": "impl_schema_definitions.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Go embedding",
+      "content": "impl_go_embedding.md",
+      "describes": [3]
+    }
+  ]
+}
