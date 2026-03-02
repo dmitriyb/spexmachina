@@ -1,0 +1,102 @@
+{
+  "name": "render",
+  "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Render markdown",
+      "preq_id": 7,
+      "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Render DOT",
+      "preq_id": 7,
+      "description": "Generate a graphviz DOT graph of spec nodes and edges. Nodes are requirements, components, impl_sections. Edges are implements, uses, describes, depends_on."
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Render JSON",
+      "preq_id": 7,
+      "description": "Generate a machine-readable JSON graph of the full spec. All nodes and edges in a single JSON document for piping to other tools."
+    },
+    {
+      "id": 4,
+      "type": "non_functional",
+      "title": "Composable output",
+      "preq_id": 10,
+      "description": "All render output goes to stdout. Format is selected via subcommand or flag. Output is pipeable to other tools."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "SpecReader",
+      "description": "Reads and parses the spec directory into an in-memory graph structure for rendering.",
+      "content": "arch_spec_reader.md",
+      "implements": [1, 2, 3, 4]
+    },
+    {
+      "id": 2,
+      "name": "MarkdownRenderer",
+      "description": "Generates a collated markdown document from the parsed spec, inlining content from markdown files.",
+      "content": "arch_markdown_renderer.md",
+      "implements": [1],
+      "uses": [1]
+    },
+    {
+      "id": 3,
+      "name": "DOTRenderer",
+      "description": "Generates a graphviz DOT graph from the parsed spec.",
+      "content": "arch_dot_renderer.md",
+      "implements": [2],
+      "uses": [1]
+    },
+    {
+      "id": 4,
+      "name": "JSONRenderer",
+      "description": "Generates a full JSON graph from the parsed spec.",
+      "content": "arch_json_renderer.md",
+      "implements": [3],
+      "uses": [1]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Spec reading implementation",
+      "content": "impl_spec_reading.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Markdown rendering implementation",
+      "content": "impl_markdown_rendering.md",
+      "describes": [2]
+    },
+    {
+      "id": 3,
+      "name": "DOT generation implementation",
+      "content": "impl_dot_generation.md",
+      "describes": [3]
+    },
+    {
+      "id": 4,
+      "name": "JSON serialization implementation",
+      "content": "impl_json_serialization.md",
+      "describes": [4]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Render pipeline",
+      "description": "Spec JSON + markdown leaves → parsed graph → format-specific output (markdown, DOT, or JSON) → stdout.",
+      "content": "flow_render_pipeline.md",
+      "uses": [1, 2, 3, 4]
+    }
+  ]
+}

@@ -1,0 +1,86 @@
+{
+  "name": "proposal",
+  "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Register proposal",
+      "preq_id": 6,
+      "description": "Copy or link a proposal file to spec/proposals/, validate that required sections are present (Vision, Modules, Key requirements, Design decisions for project proposals; Context, Proposed change, Impact expectation for change proposals)."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Show proposal history",
+      "preq_id": 6,
+      "description": "List all proposals with their dates, show which proposals led to which spec changes and which bead actions (via spec_proposal metadata on beads)."
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Provide templates",
+      "preq_id": 6,
+      "description": "Output a project proposal template or a change proposal template to stdout. Templates include all required sections with placeholder content."
+    },
+    {
+      "id": 4,
+      "type": "non_functional",
+      "title": "Git-native proposals",
+      "preq_id": 12,
+      "description": "Proposals are plain markdown files in spec/proposals/. No database, no external state. Everything is committed to git."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "Registrar",
+      "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present.",
+      "content": "arch_registrar.md",
+      "implements": [1, 4]
+    },
+    {
+      "id": 2,
+      "name": "HistoryViewer",
+      "description": "Queries proposals and their linked spec changes and bead actions to show the proposal history.",
+      "content": "arch_history_viewer.md",
+      "implements": [2]
+    },
+    {
+      "id": 3,
+      "name": "TemplateProvider",
+      "description": "Generates and outputs proposal templates (project and change) to stdout.",
+      "content": "arch_template_provider.md",
+      "implements": [3]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Registration implementation",
+      "content": "impl_registration.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "History tracking implementation",
+      "content": "impl_history_tracking.md",
+      "describes": [2]
+    },
+    {
+      "id": 3,
+      "name": "Template management",
+      "content": "impl_template_management.md",
+      "describes": [3]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Proposal lifecycle",
+      "description": "Proposal file → register (validate + copy) → spec change → impact → bead actions → history query.",
+      "content": "flow_proposal_lifecycle.md",
+      "uses": [1, 2]
+    }
+  ]
+}

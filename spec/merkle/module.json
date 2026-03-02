@@ -1,0 +1,140 @@
+{
+  "name": "merkle",
+  "description": "Merkle hash tree over the spec: leaf hashes, interior hashes, snapshots, diff, and impact classification.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Compute leaf hashes",
+      "preq_id": 2,
+      "description": "Hash each markdown content file and each JSON file in the spec. Leaf nodes in the merkle tree."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Compute interior hashes",
+      "preq_id": 2,
+      "description": "Interior node hashes are computed from the sorted concatenation of their children's hashes. Tree mirrors spec hierarchy: project → module → {arch, impl} → leaves.",
+      "depends_on": [1]
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Store snapshots",
+      "preq_id": 2,
+      "description": "Write the complete hash tree to a snapshot file committed to git alongside the spec.",
+      "depends_on": [2]
+    },
+    {
+      "id": 4,
+      "type": "functional",
+      "title": "Diff against snapshot",
+      "preq_id": 2,
+      "description": "Compare current hash tree against a stored snapshot. Report changed leaves and changed paths (interior nodes whose hash changed).",
+      "depends_on": [3]
+    },
+    {
+      "id": 5,
+      "type": "functional",
+      "title": "Classify impact",
+      "preq_id": 2,
+      "description": "Classify each change as impl-only (only impl_section leaves changed), arch+impl (component leaves changed), or structural (module.json or project.json changed).",
+      "depends_on": [4]
+    },
+    {
+      "id": 6,
+      "type": "non_functional",
+      "title": "Deterministic hashing",
+      "preq_id": 9,
+      "description": "Same file content always produces the same hash. Hash computation is order-independent for interior nodes (children sorted before hashing)."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "Hasher",
+      "description": "Computes SHA-256 hashes for individual files (leaf nodes) and for sorted child hash lists (interior nodes).",
+      "content": "arch_hasher.md",
+      "implements": [1, 6]
+    },
+    {
+      "id": 2,
+      "name": "TreeBuilder",
+      "description": "Builds the merkle tree by walking the spec directory structure. Maps spec hierarchy to tree nodes.",
+      "content": "arch_tree_builder.md",
+      "implements": [2],
+      "uses": [1]
+    },
+    {
+      "id": 3,
+      "name": "SnapshotStore",
+      "description": "Reads and writes snapshot files. Serializes the hash tree to a JSON file for git storage.",
+      "content": "arch_snapshot_store.md",
+      "implements": [3]
+    },
+    {
+      "id": 4,
+      "name": "DiffEngine",
+      "description": "Compares two hash trees (current vs snapshot) and identifies changed nodes at every level.",
+      "content": "arch_diff_engine.md",
+      "implements": [4],
+      "uses": [2, 3]
+    },
+    {
+      "id": 5,
+      "name": "ImpactClassifier",
+      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural.",
+      "content": "arch_impact_classifier.md",
+      "implements": [5],
+      "uses": [4]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Hash computation",
+      "content": "impl_hash_computation.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Tree construction",
+      "content": "impl_tree_construction.md",
+      "describes": [2]
+    },
+    {
+      "id": 3,
+      "name": "Snapshot format",
+      "content": "impl_snapshot_format.md",
+      "describes": [3]
+    },
+    {
+      "id": 4,
+      "name": "Diff algorithm",
+      "content": "impl_diff_algorithm.md",
+      "describes": [4]
+    },
+    {
+      "id": 5,
+      "name": "Impact classification rules",
+      "content": "impl_impact_classification.md",
+      "describes": [5]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Hash computation flow",
+      "description": "Spec files are hashed bottom-up: leaf files → interior nodes → tree root. The tree is then serialized to a snapshot.",
+      "content": "flow_hash_computation.md",
+      "uses": [1, 2, 3]
+    },
+    {
+      "id": 2,
+      "name": "Diff and classification flow",
+      "description": "Current tree and stored snapshot are compared node-by-node. Changed paths are classified by impact level.",
+      "content": "flow_diff_classification.md",
+      "uses": [3, 4, 5]
+    }
+  ]
+}
