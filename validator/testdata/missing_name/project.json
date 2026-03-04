@@ -1,0 +1,9 @@
+{
+  "modules": [
+    {
+      "id": 1,
+      "name": "core",
+      "path": "core"
+    }
+  ]
+}

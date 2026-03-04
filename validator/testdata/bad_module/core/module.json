@@ -1,0 +1,8 @@
+{
+  "name": "core",
+  "components": [
+    {
+      "name": "missing-id"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "modules": [
+    {
+      "id": "not-a-number",
+      "path": "core"
+    }
+  ]
+}
