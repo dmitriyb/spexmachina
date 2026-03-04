@@ -14,7 +14,7 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 | Validator | Spec directory validation (DAG, refs, orphans) | Schema |
 | Merkle | Hash tree, snapshots, diff, impact classification | Schema |
 | Impact | Map merkle diff to affected beads | Merkle |
-| Apply | Execute bead actions via `bd` CLI | Impact |
+| Apply | Execute bead actions via `br` CLI | Impact |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |
 
@@ -38,12 +38,12 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 
 ## Issue Tracking
 
-This project uses `bd` (beads) for all issue tracking. Do NOT use markdown TODOs or other tracking methods.
+This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) for task selection. Do NOT use markdown TODOs or other tracking methods.
 
-- Find work: `bd ready --json`
-- Claim work: `bd update <id> --claim`
-- Complete work: `bd close <id> --reason "description"`
-- Sync: `bd sync`
+- Find work: `bv --robot-next` or `br ready`
+- Claim work: `br update <id> --status in_progress`
+- Complete work: `br close <id>`
+- Link PR: `br update <id> --external-ref "PR#<number>"`
 
 ## Organizational Constraints
 
