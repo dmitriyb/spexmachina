@@ -2,11 +2,11 @@ package validator
 
 import (
 	"bytes"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/dmitriyb/spexmachina/schema"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -18,7 +18,21 @@ type compiledSchemas struct {
 	module  *jsonschema.Schema
 }
 
-// compileSchemas loads and compiles the embedded JSON Schemas once.
+var (
+	cachedSchemas    *compiledSchemas
+	cachedSchemasErr error
+	schemasOnce      sync.Once
+)
+
+// getSchemas compiles the embedded JSON Schemas once and caches the result.
+func getSchemas() (*compiledSchemas, error) {
+	schemasOnce.Do(func() {
+		cachedSchemas, cachedSchemasErr = compileSchemas()
+	})
+	return cachedSchemas, cachedSchemasErr
+}
+
+// compileSchemas loads and compiles the embedded JSON Schemas.
 func compileSchemas() (*compiledSchemas, error) {
 	c := jsonschema.NewCompiler()
 
@@ -61,7 +75,7 @@ func compileSchemas() (*compiledSchemas, error) {
 // CheckSchema validates project.json and all module.json files in specDir
 // against the embedded JSON Schemas. It returns all violations found.
 func CheckSchema(specDir string) []ValidationError {
-	schemas, err := compileSchemas()
+	schemas, err := getSchemas()
 	if err != nil {
 		return []ValidationError{{
 			Check:    "schema",
@@ -84,7 +98,7 @@ func CheckSchema(specDir string) []ValidationError {
 	}
 
 	// Extract module paths from project.json to validate each module.json.
-	modules, extractErr := extractModulePaths(projData)
+	modulePaths, extractErr := extractModulePaths(projData)
 	if extractErr != nil {
 		errs = append(errs, ValidationError{
 			Check:    "schema",
@@ -95,9 +109,9 @@ func CheckSchema(specDir string) []ValidationError {
 		return errs
 	}
 
-	for _, mod := range modules {
-		modFilePath := filepath.Join(specDir, mod.path, "module.json")
-		displayPath := mod.path + "/module.json"
+	for _, modPath := range modulePaths {
+		modFilePath := filepath.Join(specDir, modPath, "module.json")
+		displayPath := modPath + "/module.json"
 		modErrs, _ := validateFile(modFilePath, displayPath, schemas.module)
 		errs = append(errs, modErrs...)
 	}
@@ -164,10 +178,11 @@ func flattenValidationErrors(valErr *jsonschema.ValidationError, displayPath str
 			path = displayPath + ":" + unit.InstanceLocation
 		}
 		errs = append(errs, ValidationError{
-			Check:    "schema",
-			Severity: "error",
-			Path:     path,
-			Message:  msg,
+			Check:      "schema",
+			Severity:   "error",
+			Path:       path,
+			Message:    msg,
+			SchemaPath: unit.KeywordLocation,
 		})
 	}
 	// If BasicOutput produced no leaf errors, fall back to the top-level error.
@@ -182,26 +197,32 @@ func flattenValidationErrors(valErr *jsonschema.ValidationError, displayPath str
 	return errs
 }
 
-// moduleInfo holds a module's path extracted from project.json.
-type moduleInfo struct {
-	path string
-}
-
-// extractModulePaths parses the project.json data to extract module paths.
-func extractModulePaths(projData any) ([]moduleInfo, error) {
-	// Re-marshal and unmarshal into the schema.Project type to get module paths.
-	raw, err := json.Marshal(projData)
-	if err != nil {
-		return nil, fmt.Errorf("marshal project data: %w", err)
+// extractModulePaths extracts module paths from parsed project.json data
+// using type assertions (no marshal/unmarshal roundtrip needed).
+func extractModulePaths(projData any) ([]string, error) {
+	obj, ok := projData.(map[string]any)
+	if !ok {
+		return nil, fmt.Errorf("project data is not an object")
 	}
-	var proj schema.Project
-	if err := json.Unmarshal(raw, &proj); err != nil {
-		return nil, fmt.Errorf("unmarshal project: %w", err)
+	modsRaw, ok := obj["modules"]
+	if !ok {
+		return nil, nil
 	}
-	var modules []moduleInfo
-	for _, m := range proj.Modules {
-		path := strings.TrimRight(m.Path, "/")
-		modules = append(modules, moduleInfo{path: path})
+	mods, ok := modsRaw.([]any)
+	if !ok {
+		return nil, fmt.Errorf("modules field is not an array")
 	}
-	return modules, nil
+	var paths []string
+	for _, m := range mods {
+		modObj, ok := m.(map[string]any)
+		if !ok {
+			continue
+		}
+		p, ok := modObj["path"].(string)
+		if !ok {
+			continue
+		}
+		paths = append(paths, strings.TrimRight(p, "/"))
+	}
+	return paths, nil
 }

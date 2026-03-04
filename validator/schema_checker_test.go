@@ -112,7 +112,7 @@ func TestREQ1_AllErrorsHaveSchemaCheck(t *testing.T) {
 	}
 }
 
-func TestREQ8_SelfValidate(t *testing.T) {
+func TestREQ9_SelfValidate(t *testing.T) {
 	// Validate spex-machina's own spec directory.
 	specDir := filepath.Join("..", "spec")
 	errs := CheckSchema(specDir)
