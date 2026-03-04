@@ -15,14 +15,89 @@ Read ONLY these documents:
 2. The linked bead: run `br show <bead-id>` using the bead ID from the PR description
 3. If the bead references spec nodes, read the relevant `spec/<module>_reqs.md` and `spec/<module>_impl.md`
 
-## Review Process
+## Review Flow
+
+This skill supports an iterative cycle: `implement → [review → fix → review] → close`.
+
+### Step 1: Check for prior reviews
+
+Fetch all PR review comments (`gh api repos/{owner}/{repo}/pulls/{number}/comments`). Determine the state:
+
+- **No prior review comments exist** → this is a first review. Proceed to Step 2 (First Review).
+- **Prior review comments exist with no replies** → fixes haven't been attempted yet. **Stop. Do nothing.** Tell the user that prior review comments are still unaddressed.
+- **All prior review comments have replies** → proceed to Step 3 (Follow-up Review).
+
+To determine if a comment has a reply: comments with `in_reply_to_id` set are replies. A top-level comment (no `in_reply_to_id`) is "answered" if at least one reply references its `id`.
+
+### Step 2: First Review
 
 1. Read the PR description and linked bead
 2. Read the full diff
 3. Check spec traceability: does the code implement what the bead requires?
 4. Check test quality: do tests verify requirements, not just coverage?
 5. Check code quality: correctness, error handling, existing patterns followed
-6. Post review with inline comments
+6. Post review with inline comments (see Posting Comments below)
+
+### Step 3: Follow-up Review
+
+For each top-level review comment and its reply:
+
+1. Read the original comment to understand what was requested
+2. Read the reply to understand what was claimed to be fixed
+3. Read the current code (not just the diff — read the actual files) to verify the fix
+4. Classify each comment as **fixed** or **not fixed**
+
+Then decide:
+
+- **All fixed** → resolve all PR review threads, close the linked bead (`br close <id>`), commit the bead closure, and tell the user the PR is ready to merge.
+- **Some not fixed** → for each unfixed item, post a new reply on that comment thread explaining what's still wrong. Do NOT re-review already-fixed items.
+
+#### Resolving comment threads
+
+Use the GraphQL API to resolve each conversation thread:
+
+```bash
+# First, get the GraphQL node IDs for review threads
+gh api graphql -f query='
+{
+  repository(owner: "{owner}", name: "{repo}") {
+    pullRequest(number: {number}) {
+      reviewThreads(first: 100) {
+        nodes {
+          id
+          isResolved
+          comments(first: 1) {
+            nodes {
+              body
+            }
+          }
+        }
+      }
+    }
+  }
+}'
+
+# Then resolve each unresolved thread
+gh api graphql -f query='
+mutation {
+  resolveReviewThread(input: {threadId: "{thread_node_id}"}) {
+    thread { isResolved }
+  }
+}'
+```
+
+#### Closing the bead and committing
+
+```bash
+br close <bead-id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."
+git add .beads/issues.jsonl
+git commit -m "Close <bead-id>: <short bead title>
+
+All PR #<number> review feedback addressed.
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
+git push
+```
 
 ## Posting Comments
 
