@@ -1,8 +1,8 @@
 # Spex Machina
 
-*The spec state machine.*
+*Spec ex machina — no deus required.*
 
-A CLI tool that brings determinism to spec-driven development. Define your project as a typed DAG (JSON skeleton + markdown content), track changes with a merkle tree, and let the tool figure out which tasks need updating.
+A state machine and a simple CLI tool for your specifications. Define your project as a typed DAG (JSON skeleton + markdown content), track changes with a merkle tree, and let the tool figure out which tasks need updating. No LLM in the loop — just deterministic graph operations.
 
 ## Why
 
@@ -21,6 +21,15 @@ spec change → spex validate → spex hash → spex diff → spex impact → sp
 ```
 
 Every change starts with a **proposal** — a traceable document committed to git that captures *why* the change is being made.
+
+## Agent skills
+
+Before `spex` CLI exists, two Claude Code skills drive the creative work:
+
+- `/propose` — turns a free-form conversation into a structured proposal (project or change)
+- `/spec` — reads a proposal and authors the spec (JSON + markdown), creating or modifying modules
+
+These skills handle the LLM-side of spec authoring. Once the CLI is built, `/propose` and `/spec` will call `spex` subcommands for validation and registration, keeping the creative and structural halves cleanly separated.
 
 ## Spec format
 
