@@ -25,20 +25,20 @@ type Node struct {
 func BuildTree(specDir string) (*Node, error) {
 	proj, err := readProject(specDir)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
 	projectJSONPath := filepath.Join(specDir, "project.json")
 	projLeaf, err := hashLeaf(projectJSONPath, "project.json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
 	var moduleNodes []*Node
 	for _, mod := range proj.Modules {
 		mNode, err := buildModule(specDir, mod)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
 		moduleNodes = append(moduleNodes, mNode)
 	}
@@ -63,19 +63,19 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 
 	modSpec, err := readModuleSpec(modJSONPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
 	modLeaf, err := hashLeaf(modJSONPath, "module.json")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
 	children := []*Node{modLeaf}
 
 	archNode, err := buildGroup(modDir, "arch", componentContents(modSpec.Components))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 	if archNode != nil {
 		children = append(children, archNode)
@@ -83,7 +83,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 
 	implNode, err := buildGroup(modDir, "impl", implSectionContents(modSpec.ImplSections))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 	if implNode != nil {
 		children = append(children, implNode)
@@ -91,7 +91,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 
 	flowNode, err := buildGroup(modDir, "flow", dataFlowContents(modSpec.DataFlows))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 	if flowNode != nil {
 		children = append(children, flowNode)
@@ -122,7 +122,7 @@ func buildGroup(modDir, groupType string, contentPaths []string) (*Node, error) 
 		absPath := filepath.Join(modDir, rel)
 		leaf, err := hashLeaf(absPath, rel)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("merkle: build group %s: %w", groupType, err)
 		}
 		leaves = append(leaves, leaf)
 	}
@@ -143,7 +143,7 @@ func buildGroup(modDir, groupType string, contentPaths []string) (*Node, error) 
 func hashLeaf(path, name string) (*Node, error) {
 	h, err := HashFile(path)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("merkle: hash leaf %s: %w", name, err)
 	}
 	return &Node{
 		Name: name,
