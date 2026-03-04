@@ -26,6 +26,7 @@ func HashFile(path string) (string, error) {
 
 // HashChildren computes a deterministic SHA-256 hash for an interior node
 // by sorting child hashes lexicographically before concatenation.
+// Inputs must be fixed-length hex hash strings (e.g. from HashFile).
 func HashChildren(childHashes []string) string {
 	sorted := make([]string, len(childHashes))
 	copy(sorted, childHashes)
