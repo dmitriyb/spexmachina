@@ -1,0 +1,12 @@
+{
+  "name": "test-project",
+  "description": "A test project for schema validation.",
+  "modules": [
+    {
+      "id": 1,
+      "name": "core",
+      "path": "core",
+      "description": "Core module."
+    }
+  ]
+}

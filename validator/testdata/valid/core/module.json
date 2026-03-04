@@ -1,0 +1,25 @@
+{
+  "name": "core",
+  "description": "Core module spec.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Do something"
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "Widget",
+      "implements": [1]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Widget implementation",
+      "describes": [1]
+    }
+  ]
+}
