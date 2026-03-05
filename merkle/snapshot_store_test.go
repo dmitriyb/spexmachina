@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestREQ3_Save_CreatesValidJSON(t *testing.T) {
@@ -16,7 +17,8 @@ func TestREQ3_Save_CreatesValidJSON(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	if err := Save(tree, snapPath); err != nil {
+	now := time.Now().UTC()
+	if err := Save(tree, snapPath, now); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -52,7 +54,8 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	if err := Save(tree, snapPath); err != nil {
+	now := time.Now().UTC()
+	if err := Save(tree, snapPath, now); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -101,7 +104,7 @@ func TestREQ3_Save_NodeTypes(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	must(t, Save(tree, snapPath))
+	must(t, Save(tree, snapPath, time.Now().UTC()))
 
 	data, err := os.ReadFile(snapPath)
 	if err != nil {
@@ -143,7 +146,7 @@ func TestREQ3_Save_ChildrenArePaths(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	must(t, Save(tree, snapPath))
+	must(t, Save(tree, snapPath, time.Now().UTC()))
 
 	data, err := os.ReadFile(snapPath)
 	if err != nil {
@@ -179,7 +182,7 @@ func TestREQ3_Save_LeafNoChildren(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	must(t, Save(tree, snapPath))
+	must(t, Save(tree, snapPath, time.Now().UTC()))
 
 	data, err := os.ReadFile(snapPath)
 	if err != nil {
@@ -206,7 +209,7 @@ func TestREQ3_LoadSave_RoundTrip(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	if err := Save(tree, snapPath); err != nil {
+	if err := Save(tree, snapPath, time.Now().UTC()); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
@@ -234,7 +237,7 @@ func TestREQ3_LoadSave_PreservesStructure(t *testing.T) {
 	}
 
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
-	must(t, Save(tree, snapPath))
+	must(t, Save(tree, snapPath, time.Now().UTC()))
 
 	loaded, err := Load(snapPath)
 	if err != nil {
@@ -289,7 +292,8 @@ func TestREQ3_Load_InvalidJSON(t *testing.T) {
 
 func TestREQ3_Load_MissingRootNode(t *testing.T) {
 	snap := Snapshot{
-		RootHash: "nonexistent-hash",
+		RootHash: "some-hash",
+		RootKey:  "nonexistent",
 		Nodes:    map[string]*SnapshotNode{},
 	}
 	data, err := json.Marshal(snap)
@@ -304,8 +308,8 @@ func TestREQ3_Load_MissingRootNode(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for missing root node, got nil")
 	}
-	if !strings.Contains(err.Error(), "root_hash") {
-		t.Fatalf("error should mention root_hash, got: %v", err)
+	if !strings.Contains(err.Error(), "root_key") {
+		t.Fatalf("error should mention root_key, got: %v", err)
 	}
 }
 
@@ -320,30 +324,15 @@ func TestREQ3_Save_Deterministic(t *testing.T) {
 	path1 := filepath.Join(dir, "snap1.json")
 	path2 := filepath.Join(dir, "snap2.json")
 
-	must(t, Save(tree, path1))
-	must(t, Save(tree, path2))
+	// Same timestamp ensures byte-identical output
+	fixedTime := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC)
+	must(t, Save(tree, path1, fixedTime))
+	must(t, Save(tree, path2, fixedTime))
 
 	data1, _ := os.ReadFile(path1)
 	data2, _ := os.ReadFile(path2)
 
-	// Parse both to compare without timestamp
-	var s1, s2 Snapshot
-	must(t, json.Unmarshal(data1, &s1))
-	must(t, json.Unmarshal(data2, &s2))
-
-	if s1.RootHash != s2.RootHash {
-		t.Fatal("root hashes differ between saves")
-	}
-	if len(s1.Nodes) != len(s2.Nodes) {
-		t.Fatal("node counts differ between saves")
-	}
-	for key, n1 := range s1.Nodes {
-		n2, ok := s2.Nodes[key]
-		if !ok {
-			t.Fatalf("node %q missing from second save", key)
-		}
-		if n1.Hash != n2.Hash {
-			t.Fatalf("node %q hash differs between saves", key)
-		}
+	if string(data1) != string(data2) {
+		t.Fatal("snapshot files are not byte-identical")
 	}
 }

@@ -11,6 +11,7 @@ import (
 // Nodes are stored in a flat map keyed by path for O(1) lookup and easy diffing.
 type Snapshot struct {
 	RootHash  string                   `json:"root_hash"`
+	RootKey   string                   `json:"root_key"`
 	CreatedAt time.Time                `json:"created_at"`
 	Nodes     map[string]*SnapshotNode `json:"nodes"`
 }
@@ -23,10 +24,12 @@ type SnapshotNode struct {
 }
 
 // Save writes the merkle tree to a snapshot file as JSON.
-func Save(tree *Node, path string) error {
+// The createdAt parameter controls the timestamp for deterministic output.
+func Save(tree *Node, path string, createdAt time.Time) error {
 	snap := &Snapshot{
 		RootHash:  tree.Hash,
-		CreatedAt: time.Now().UTC(),
+		RootKey:   tree.Name,
+		CreatedAt: createdAt,
 		Nodes:     make(map[string]*SnapshotNode),
 	}
 	flattenTree(snap.Nodes, tree, "")
@@ -91,19 +94,14 @@ func nodePath(prefix, name string) string {
 
 // rebuildTree reconstructs the Node tree from a flat snapshot.
 func rebuildTree(snap *Snapshot) (*Node, error) {
-	// Find root: the node whose hash matches root_hash
-	var rootKey string
-	for key, sn := range snap.Nodes {
-		if sn.Hash == snap.RootHash {
-			rootKey = key
-			break
-		}
+	if snap.RootKey == "" {
+		return nil, fmt.Errorf("missing root_key in snapshot")
 	}
-	if rootKey == "" {
-		return nil, fmt.Errorf("no node matching root_hash %s", snap.RootHash)
+	if _, ok := snap.Nodes[snap.RootKey]; !ok {
+		return nil, fmt.Errorf("root_key %q not found in nodes", snap.RootKey)
 	}
 
-	return rebuildNode(snap.Nodes, rootKey)
+	return rebuildNode(snap.Nodes, snap.RootKey)
 }
 
 func rebuildNode(nodes map[string]*SnapshotNode, key string) (*Node, error) {
