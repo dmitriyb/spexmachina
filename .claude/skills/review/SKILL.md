@@ -49,42 +49,10 @@ For each top-level review comment and its reply:
 
 Then decide:
 
-- **All fixed** → resolve all PR review threads, close the linked bead (`br close <id>`), commit the bead closure, and tell the user the PR is ready to merge.
+- **All fixed** → close the linked bead (`br close <id>`), commit the bead closure, and tell the user the PR is ready to merge.
 - **Some not fixed** → for each unfixed item, post a new reply on that comment thread explaining what's still wrong. Do NOT re-review already-fixed items.
 
-#### Resolving comment threads
-
-Use the GraphQL API to resolve each conversation thread:
-
-```bash
-# First, get the GraphQL node IDs for review threads
-gh api graphql -f query='
-{
-  repository(owner: "{owner}", name: "{repo}") {
-    pullRequest(number: {number}) {
-      reviewThreads(first: 100) {
-        nodes {
-          id
-          isResolved
-          comments(first: 1) {
-            nodes {
-              body
-            }
-          }
-        }
-      }
-    }
-  }
-}'
-
-# Then resolve each unresolved thread
-gh api graphql -f query='
-mutation {
-  resolveReviewThread(input: {threadId: "{thread_node_id}"}) {
-    thread { isResolved }
-  }
-}'
-```
+Note: Do NOT attempt to resolve PR review threads via the GitHub GraphQL API — the `resolveReviewThread` mutation is not supported by fine-grained PATs. The closed bead serves as the approval signal.
 
 #### Closing the bead and committing
 
