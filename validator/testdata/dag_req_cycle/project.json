@@ -1,0 +1,6 @@
+{
+  "name": "req-cycle-test",
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}

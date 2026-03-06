@@ -1,0 +1,6 @@
+{
+  "name": "comp-cycle-test",
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}
