@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -25,12 +26,13 @@ type CreateOpts struct {
 	Labels []string
 }
 
-// BeadCLI abstracts bead creation, lookup, and closure so callers are not
-// coupled to a specific binary (br or bd).
+// BeadCLI abstracts bead creation, lookup, closure, and metadata updates
+// so callers are not coupled to a specific binary (br or bd).
 type BeadCLI interface {
 	Create(ctx context.Context, opts CreateOpts) (string, error)
 	FindExisting(ctx context.Context, labels []string) (string, error)
 	Close(ctx context.Context, id string, reason string) error
+	Update(ctx context.Context, id string, metadata map[string]string) error
 }
 
 // execCLI implements BeadCLI by shelling out to br or bd.
@@ -39,8 +41,8 @@ type execCLI struct {
 }
 
 // NewBeadCLI constructs a BeadCLI backed by the given binary name.
-// It verifies the binary exists on PATH and probes that the create
-// and close subcommands are available.
+// It verifies the binary exists on PATH and probes that the create,
+// close, and update subcommands are available.
 func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 	if _, err := exec.LookPath(bin); err != nil {
 		return nil, fmt.Errorf("apply: bead CLI not found: %s: %w", bin, err)
@@ -64,6 +66,13 @@ func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 	if out, err := closeProbe.CombinedOutput(); err != nil {
 		version := cliVersion(ctx, bin)
 		return nil, fmt.Errorf("apply: %s close probe failed (version %s): %w\n%s", bin, version, err, out)
+	}
+
+	// Probe: verify the update subcommand exists.
+	updateProbe := exec.CommandContext(ctx, bin, "update", "--help")
+	if out, err := updateProbe.CombinedOutput(); err != nil {
+		version := cliVersion(ctx, bin)
+		return nil, fmt.Errorf("apply: %s update probe failed (version %s): %w\n%s", bin, version, err, out)
 	}
 
 	return &execCLI{bin: bin}, nil
@@ -117,6 +126,25 @@ func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
 	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("apply: %s close %s: %w\n%s", c.bin, id, err, out)
+	}
+	return nil
+}
+
+// Update sets metadata key-value pairs on an existing bead.
+// Keys are applied in sorted order for deterministic behavior.
+func (c *execCLI) Update(ctx context.Context, id string, metadata map[string]string) error {
+	keys := make([]string, 0, len(metadata))
+	for k := range metadata {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := metadata[k]
+		args := []string{"update", id, "--metadata", fmt.Sprintf("%s=%s", k, v)}
+		out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("apply: %s update %s: %w\n%s", c.bin, id, err, out)
+		}
 	}
 	return nil
 }
