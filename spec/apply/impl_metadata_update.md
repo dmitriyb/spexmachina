@@ -3,12 +3,13 @@
 ## Command Construction
 
 ```go
-func updateBead(ctx context.Context, action Action) error {
-    out, err := exec.CommandContext(ctx, "bd", "update", action.BeadID,
-        "--metadata", fmt.Sprintf("spec_hash=%s", action.NewHash),
-    ).CombinedOutput()
-    if err != nil {
-        return fmt.Errorf("apply: update bead %s: %w\n%s", action.BeadID, err, out)
+func (c *execCLI) Update(ctx context.Context, id string, metadata map[string]string) error {
+    for k, v := range metadata {
+        args := []string{"update", id, "--metadata", fmt.Sprintf("%s=%s", k, v)}
+        out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+        if err != nil {
+            return fmt.Errorf("apply: %s update %s: %w\n%s", c.bin, id, err, out)
+        }
     }
     return nil
 }
