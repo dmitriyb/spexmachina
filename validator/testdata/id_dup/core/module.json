@@ -1,0 +1,13 @@
+{
+  "name": "core",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feature A"},
+    {"id": 1, "type": "functional", "title": "Feature A dup"}
+  ],
+  "components": [
+    {"id": 1, "name": "Engine"},
+    {"id": 1, "name": "Engine dup"}
+  ],
+  "impl_sections": [],
+  "data_flows": []
+}

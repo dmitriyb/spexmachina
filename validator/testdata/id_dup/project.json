@@ -1,0 +1,11 @@
+{
+  "name": "id-dup-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A"},
+    {"id": 1, "type": "functional", "title": "Req A duplicate"}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ],
+  "milestones": []
+}

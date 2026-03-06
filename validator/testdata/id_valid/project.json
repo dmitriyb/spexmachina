@@ -1,0 +1,13 @@
+{
+  "name": "id-valid-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A"},
+    {"id": 2, "type": "functional", "title": "Req B", "depends_on": [1]}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ],
+  "milestones": [
+    {"id": 1, "title": "M1", "groups": [1]}
+  ]
+}
