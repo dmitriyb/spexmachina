@@ -1,0 +1,13 @@
+{
+  "name": "core",
+  "components": [
+    {"id": 1, "name": "Engine", "content": "arch_engine.md"},
+    {"id": 2, "name": "Store"}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Setup", "content": "impl_setup.md", "describes": [1]}
+  ],
+  "data_flows": [
+    {"id": 1, "name": "Ingest", "content": "flow_ingest.md", "uses": [1]}
+  ]
+}

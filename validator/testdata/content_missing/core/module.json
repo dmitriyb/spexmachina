@@ -1,0 +1,10 @@
+{
+  "name": "core",
+  "components": [
+    {"id": 1, "name": "Engine", "content": "arch_engine.md"},
+    {"id": 2, "name": "Parser", "content": "arch_parser.md"}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Setup", "content": "impl_setup.md", "describes": [1]}
+  ]
+}

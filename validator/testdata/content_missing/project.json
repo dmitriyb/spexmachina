@@ -1,0 +1,6 @@
+{
+  "name": "content-missing-test",
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}
