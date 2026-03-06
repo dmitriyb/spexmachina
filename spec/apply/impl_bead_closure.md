@@ -3,16 +3,22 @@
 ## Command Construction
 
 ```go
-func closeBead(ctx context.Context, action Action) error {
-    reason := fmt.Sprintf("Spec node removed: %s/%s", action.Module, action.Node)
-    out, err := exec.CommandContext(ctx, "bd", "close", action.BeadID, "--reason", reason).CombinedOutput()
+func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
+    args := []string{"close", id, "--reason", reason}
+    out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
     if err != nil {
-        return fmt.Errorf("apply: close bead %s: %w\n%s", action.BeadID, err, out)
+        return fmt.Errorf("apply: %s close %s: %w\n%s", c.bin, id, err, out)
     }
     return nil
 }
 ```
 
+The `bin` parameter is the bead CLI binary name (`"br"` or `"bd"`), allowing the same logic to work with either tool.
+
+## Batch Processing
+
+Close actions are processed sequentially. Each failure is logged as a warning and accumulated. The batch continues even if individual closes fail.
+
 ## Error Tolerance
 
-If bd returns an error indicating the bead is already closed, treat it as success (idempotency). Only fail on unexpected errors (bd not found, storage corruption, etc.).
+Any non-zero exit code from the close command is treated as a warning, not a fatal error. This covers already-closed beads, missing bead IDs, and other transient issues. The warning is logged with the bead ID and command output for debuggability.
