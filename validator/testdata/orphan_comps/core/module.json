@@ -1,0 +1,14 @@
+{
+  "name": "core",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feature A"}
+  ],
+  "components": [
+    {"id": 1, "name": "Engine", "implements": [1]},
+    {"id": 2, "name": "Orphan Widget"},
+    {"id": 3, "name": "Lonely Service"}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Engine impl", "describes": [1]}
+  ]
+}
