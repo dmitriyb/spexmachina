@@ -28,4 +28,4 @@ Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-speci
 7. Run `go test ./...` and `go vet ./...` to confirm everything passes.
 8. Commit and push.
 9. Create a PR using `.github/pull_request_template.md`. Fill in the bead ID, spec references from the bead metadata, and changes summary.
-10. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`
+10. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`, then check the box in the PR body: `gh pr edit <number> --body "$(gh pr view <number> --json body --jq '.body' | sed 's/- \[ \] Bead linked to PR/- [x] Bead linked to PR/')"`
