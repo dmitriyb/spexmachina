@@ -40,7 +40,9 @@ func TestREQ2_CloseBeads_Success(t *testing.T) {
 
 func TestREQ2_CloseBeads_ErrorContinuesBatch(t *testing.T) {
 	cli := newMockCLI()
+	var called []string
 	cli.closeFn = func(id, reason string) error {
+		called = append(called, id)
 		if id == "bead-1" {
 			return fmt.Errorf("already closed")
 		}
@@ -62,10 +64,11 @@ func TestREQ2_CloseBeads_ErrorContinuesBatch(t *testing.T) {
 	if !strings.Contains(err.Error(), "already closed") {
 		t.Errorf("want error containing cause, got %v", err)
 	}
-	// Second action should still have been attempted (not in cli.closed since closeFn overrides)
-	// Verify by checking the error only mentions bead-1, not bead-2
-	if strings.Contains(err.Error(), "bead-2") {
-		t.Errorf("bead-2 should have succeeded, but error mentions it: %v", err)
+	if len(called) != 2 {
+		t.Fatalf("want 2 Close calls, got %d", len(called))
+	}
+	if called[0] != "bead-1" || called[1] != "bead-2" {
+		t.Errorf("want calls [bead-1 bead-2], got %v", called)
 	}
 }
 

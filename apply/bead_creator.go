@@ -39,8 +39,8 @@ type execCLI struct {
 }
 
 // NewBeadCLI constructs a BeadCLI backed by the given binary name.
-// It verifies the binary exists on PATH and probes flag compatibility
-// with a dry-run create.
+// It verifies the binary exists on PATH and probes that the create
+// and close subcommands are available.
 func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 	if _, err := exec.LookPath(bin); err != nil {
 		return nil, fmt.Errorf("apply: bead CLI not found: %s: %w", bin, err)
