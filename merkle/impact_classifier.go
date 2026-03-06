@@ -1,7 +1,7 @@
 package merkle
 
 import (
-	"path/filepath"
+	"path"
 	"strings"
 )
 
@@ -49,8 +49,8 @@ func Classify(changes []Change) []ClassifiedChange {
 }
 
 // classifyPath determines the impact level from a leaf path.
-func classifyPath(path string) ImpactLevel {
-	name := filepath.Base(path)
+func classifyPath(p string) ImpactLevel {
+	name := path.Base(p)
 
 	if name == "project.json" || name == "module.json" {
 		return Structural
@@ -58,8 +58,10 @@ func classifyPath(path string) ImpactLevel {
 	if strings.HasPrefix(name, "arch_") {
 		return ArchImpl
 	}
-	// impl_*.md, flow_*.md, or any other content leaf
-	return ImplOnly
+	if strings.HasPrefix(name, "impl_") || strings.HasPrefix(name, "flow_") {
+		return ImplOnly
+	}
+	return 0
 }
 
 // extractModule returns the module name from a merkle tree path.
