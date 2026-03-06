@@ -1,0 +1,6 @@
+{
+  "name": "orphan-reqs-test",
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}
