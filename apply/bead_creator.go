@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -130,8 +131,15 @@ func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
 }
 
 // Update sets metadata key-value pairs on an existing bead.
+// Keys are applied in sorted order for deterministic behavior.
 func (c *execCLI) Update(ctx context.Context, id string, metadata map[string]string) error {
-	for k, v := range metadata {
+	keys := make([]string, 0, len(metadata))
+	for k := range metadata {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := metadata[k]
 		args := []string{"update", id, "--metadata", fmt.Sprintf("%s=%s", k, v)}
 		out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
 		if err != nil {
