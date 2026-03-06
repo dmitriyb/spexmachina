@@ -12,7 +12,14 @@ type mockCLI struct {
 	created  []CreateOpts      // recorded Create calls
 	existing map[string]string // label key → bead ID for FindExisting
 	createFn func(CreateOpts) (string, error)
+	closeFn  func(id, reason string) error
+	closed   []closedBead // recorded Close calls
 	nextID   int
+}
+
+type closedBead struct {
+	ID     string
+	Reason string
 }
 
 func newMockCLI() *mockCLI {
@@ -36,6 +43,14 @@ func (m *mockCLI) FindExisting(_ context.Context, labels []string) (string, erro
 		return id, nil
 	}
 	return "", nil
+}
+
+func (m *mockCLI) Close(_ context.Context, id string, reason string) error {
+	if m.closeFn != nil {
+		return m.closeFn(id, reason)
+	}
+	m.closed = append(m.closed, closedBead{ID: id, Reason: reason})
+	return nil
 }
 
 func (m *mockCLI) setExisting(labels []string, id string) {
