@@ -41,14 +41,14 @@ func CheckDAG(specDir string) []ValidationError {
 }
 
 // loadSpec reads project.json and all referenced module.json files, returning
-// typed structures. The checkName parameter tags any load errors with the
-// appropriate checker name.
-func loadSpec(specDir, checkName string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
+// typed structures for validation. The check parameter is used to tag any
+// load/parse errors with the correct checker name.
+func loadSpec(specDir, check string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
 	projPath := filepath.Join(specDir, "project.json")
 	projData, err := os.ReadFile(projPath)
 	if err != nil {
 		return nil, nil, []ValidationError{{
-			Check:    checkName,
+			Check:    check,
 			Severity: "error",
 			Path:     "project.json",
 			Message:  fmt.Sprintf("read file: %s", err),
@@ -58,7 +58,7 @@ func loadSpec(specDir, checkName string) (*schema.Project, map[string]*schema.Mo
 	var project schema.Project
 	if err := json.Unmarshal(projData, &project); err != nil {
 		return nil, nil, []ValidationError{{
-			Check:    checkName,
+			Check:    check,
 			Severity: "error",
 			Path:     "project.json",
 			Message:  fmt.Sprintf("parse JSON: %s", err),
@@ -72,7 +72,7 @@ func loadSpec(specDir, checkName string) (*schema.Project, map[string]*schema.Mo
 		modData, err := os.ReadFile(modPath)
 		if err != nil {
 			errs = append(errs, ValidationError{
-				Check:    checkName,
+				Check:    check,
 				Severity: "error",
 				Path:     mod.Path + "/module.json",
 				Message:  fmt.Sprintf("read file: %s", err),
@@ -82,7 +82,7 @@ func loadSpec(specDir, checkName string) (*schema.Project, map[string]*schema.Mo
 		var modSpec schema.ModuleSpec
 		if err := json.Unmarshal(modData, &modSpec); err != nil {
 			errs = append(errs, ValidationError{
-				Check:    checkName,
+				Check:    check,
 				Severity: "error",
 				Path:     mod.Path + "/module.json",
 				Message:  fmt.Sprintf("parse JSON: %s", err),

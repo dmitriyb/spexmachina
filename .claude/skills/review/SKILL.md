@@ -19,6 +19,10 @@ Read ONLY these documents:
 
 This skill supports an iterative cycle: `implement → [review → fix → review] → close`.
 
+### Step 0: Resolve repo slug
+
+Run `gh repo view --json owner,name --jq '.owner.login + "/" + .name'` to get the `{owner}/{repo}` slug. Use this resolved value in all subsequent `gh api` calls. Do NOT guess the owner from the git remote or working directory name.
+
 ### Step 1: Check for prior reviews
 
 Fetch all PR review comments (`gh api repos/{owner}/{repo}/pulls/{number}/comments`). Determine the state:

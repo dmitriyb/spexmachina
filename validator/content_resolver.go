@@ -80,13 +80,15 @@ func checkModuleContent(specDir, modPath, modName string, mod *schema.ModuleSpec
 func checkContentPath(specDir, modPath, modName string, ref contentRef) []ValidationError {
 	location := fmt.Sprintf("%s/module.json:/%ss/%s/content", modName, ref.nodeKind, ref.nodeName)
 
-	if strings.Contains(ref.content, "..") {
-		return []ValidationError{{
-			Check:    "content",
-			Severity: "error",
-			Path:     location,
-			Message:  fmt.Sprintf("content path contains '..': %s", ref.content),
-		}}
+	for _, seg := range strings.Split(filepath.ToSlash(ref.content), "/") {
+		if seg == ".." {
+			return []ValidationError{{
+				Check:    "content",
+				Severity: "error",
+				Path:     location,
+				Message:  fmt.Sprintf("content path contains '..': %s", ref.content),
+			}}
+		}
 	}
 	if strings.HasPrefix(ref.content, "/") {
 		return []ValidationError{{
@@ -98,12 +100,16 @@ func checkContentPath(specDir, modPath, modName string, ref contentRef) []Valida
 	}
 
 	fullPath := filepath.Join(specDir, modPath, ref.content)
-	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+	if _, err := os.Stat(fullPath); err != nil {
+		msg := fmt.Sprintf("content file not found: %s", ref.content)
+		if !os.IsNotExist(err) {
+			msg = fmt.Sprintf("content file inaccessible: %s: %s", ref.content, err)
+		}
 		return []ValidationError{{
 			Check:    "content",
 			Severity: "error",
 			Path:     location,
-			Message:  fmt.Sprintf("content file not found: %s", ref.content),
+			Message:  msg,
 		}}
 	}
 
