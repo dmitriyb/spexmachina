@@ -1,0 +1,11 @@
+{
+  "name": "core",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Base feature"},
+    {"id": 2, "type": "functional", "title": "Extended feature", "depends_on": [1]}
+  ],
+  "components": [
+    {"id": 1, "name": "Engine"},
+    {"id": 2, "name": "Store", "uses": [1]}
+  ]
+}

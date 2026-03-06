@@ -1,0 +1,7 @@
+{
+  "name": "cycle-test",
+  "modules": [
+    {"id": 1, "name": "alpha", "path": "alpha", "requires_module": [2]},
+    {"id": 2, "name": "beta", "path": "beta", "requires_module": [1]}
+  ]
+}
