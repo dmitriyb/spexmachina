@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,20 +23,11 @@ func Report(errors []ValidationError, w io.Writer, isTTY bool) error {
 	sorted := make([]ValidationError, len(errors))
 	copy(sorted, errors)
 	slices.SortFunc(sorted, func(a, b ValidationError) int {
-		// errors before warnings
-		if a.Severity != b.Severity {
-			if a.Severity == "error" {
-				return -1
-			}
-			return 1
+		// errors before warnings: "error" < "warning" lexicographically
+		if c := cmp.Compare(a.Severity, b.Severity); c != 0 {
+			return c
 		}
-		if a.Path < b.Path {
-			return -1
-		}
-		if a.Path > b.Path {
-			return 1
-		}
-		return 0
+		return cmp.Compare(a.Path, b.Path)
 	})
 
 	var errCount, warnCount int
