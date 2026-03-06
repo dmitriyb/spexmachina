@@ -40,11 +40,9 @@ type execCLI struct {
 // It verifies the binary exists on PATH and probes flag compatibility
 // with a dry-run create.
 func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
-	path, err := exec.LookPath(bin)
-	if err != nil {
+	if _, err := exec.LookPath(bin); err != nil {
 		return nil, fmt.Errorf("apply: bead CLI not found: %s: %w", bin, err)
 	}
-	_ = path
 
 	// Probe: verify the flags we depend on are accepted.
 	probe := exec.CommandContext(ctx, bin,
@@ -72,9 +70,9 @@ func (c *execCLI) Create(ctx context.Context, opts CreateOpts) (string, error) {
 		"--silent",
 	}
 
-	out, err := exec.CommandContext(ctx, c.bin, args...).Output()
+	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("apply: %s create %q: %w", c.bin, opts.Title, err)
+		return "", fmt.Errorf("apply: %s create %q: %w\n%s", c.bin, opts.Title, err, out)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }
@@ -87,9 +85,9 @@ func (c *execCLI) FindExisting(ctx context.Context, labels []string) (string, er
 		args = append(args, "--label", l)
 	}
 
-	out, err := exec.CommandContext(ctx, c.bin, args...).Output()
+	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("apply: %s list: %w", c.bin, err)
+		return "", fmt.Errorf("apply: %s list: %w\n%s", c.bin, err, out)
 	}
 
 	var beads []struct {
