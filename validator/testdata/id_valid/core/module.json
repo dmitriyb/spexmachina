@@ -1,0 +1,18 @@
+{
+  "name": "core",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feature A", "preq_id": 1},
+    {"id": 2, "type": "functional", "title": "Feature B", "depends_on": [1]}
+  ],
+  "components": [
+    {"id": 1, "name": "Engine", "implements": [1], "uses": [2]},
+    {"id": 2, "name": "Store", "implements": [2]}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Engine impl", "describes": [1]},
+    {"id": 2, "name": "Store impl", "describes": [2]}
+  ],
+  "data_flows": [
+    {"id": 1, "name": "Ingest", "uses": [1, 2]}
+  ]
+}

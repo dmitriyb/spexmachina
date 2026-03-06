@@ -1,0 +1,12 @@
+{
+  "name": "id-dangling-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A", "depends_on": [99]}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core", "requires_module": [99]}
+  ],
+  "milestones": [
+    {"id": 1, "title": "M1", "groups": [99]}
+  ]
+}
