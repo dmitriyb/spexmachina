@@ -7,13 +7,13 @@
 3. Write tree to `spec/.snapshot.json`
 
 ```go
-func SaveSnapshot(ctx context.Context, specDir string) error {
+func SaveSnapshot(ctx context.Context, specDir string, createdAt time.Time) error {
     tree, err := merkle.BuildTree(specDir)
     if err != nil {
         return fmt.Errorf("apply: build tree for snapshot: %w", err)
     }
     snapshotPath := filepath.Join(specDir, ".snapshot.json")
-    if err := merkle.Save(tree, snapshotPath); err != nil {
+    if err := merkle.Save(tree, snapshotPath, createdAt); err != nil {
         return fmt.Errorf("apply: save snapshot: %w", err)
     }
     return nil

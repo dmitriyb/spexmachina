@@ -13,6 +13,7 @@ import (
 // it to spec/.snapshot.json. The createdAt parameter controls the snapshot
 // timestamp for deterministic output. This should only be called after all
 // bead actions have completed successfully.
+// ctx is currently unused but reserved for future cancellation support.
 func SaveSnapshot(ctx context.Context, specDir string, createdAt time.Time) error {
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
