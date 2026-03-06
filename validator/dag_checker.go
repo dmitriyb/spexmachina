@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -24,7 +25,14 @@ func CheckDAG(specDir string) []ValidationError {
 	var result []ValidationError
 	result = append(result, checkModuleDAG(project)...)
 
-	for modName, mod := range modules {
+	modNames := make([]string, 0, len(modules))
+	for name := range modules {
+		modNames = append(modNames, name)
+	}
+	slices.Sort(modNames)
+
+	for _, modName := range modNames {
+		mod := modules[modName]
 		result = append(result, checkRequirementDAG(modName, mod)...)
 		result = append(result, checkComponentDAG(modName, mod)...)
 	}
@@ -239,11 +247,6 @@ func sortedKeys(m map[int][]int) []int {
 	for k := range m {
 		keys = append(keys, k)
 	}
-	// Simple insertion sort — these are small collections.
-	for i := 1; i < len(keys); i++ {
-		for j := i; j > 0 && keys[j-1] > keys[j]; j-- {
-			keys[j-1], keys[j] = keys[j], keys[j-1]
-		}
-	}
+	slices.Sort(keys)
 	return keys
 }
