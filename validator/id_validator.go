@@ -77,15 +77,14 @@ func checkDuplicateIDs(path string, ids []int) []ValidationError {
 	}
 
 	var errs []ValidationError
-	for _, id := range ids {
-		if seen[id] > 1 {
+	for id, count := range seen {
+		if count > 1 {
 			errs = append(errs, ValidationError{
 				Check:    "id",
 				Severity: "error",
 				Path:     path,
 				Message:  fmt.Sprintf("duplicate ID %d", id),
 			})
-			seen[id] = 1 // report once per duplicate
 		}
 	}
 	return errs

@@ -97,6 +97,19 @@ func TestREQ6_DanglingRefsDetected(t *testing.T) {
 			t.Fatalf("expected error containing %q, got: %s", frag, allMsgs)
 		}
 	}
+
+	// Verify project-level depends_on is exercised (not just module-level).
+	found := false
+	for _, e := range errs {
+		if strings.HasPrefix(e.Path, "project.json:/requirements") &&
+			strings.Contains(e.Message, "depends_on") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected a project-level depends_on error with project.json:/requirements path")
+	}
 }
 
 func TestREQ6_DanglingRefsAreErrors(t *testing.T) {
