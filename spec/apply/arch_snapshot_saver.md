@@ -11,8 +11,10 @@ Saves the new merkle snapshot after all bead actions are complete.
 ## Interface
 
 ```go
-func SaveSnapshot(ctx context.Context, specDir string) error
+func SaveSnapshot(ctx context.Context, specDir string, createdAt time.Time) error
 ```
+
+The `createdAt` parameter controls the snapshot timestamp passed to `merkle.Save`, ensuring deterministic output.
 
 ## Timing
 
