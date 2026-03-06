@@ -1,0 +1,6 @@
+{
+  "name": "core",
+  "components": [
+    {"id": 1, "name": "Sneaky", "content": "../secret.md"}
+  ]
+}

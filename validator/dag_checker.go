@@ -17,7 +17,7 @@ import (
 //  2. Requirement dependency graph (per module): edges from depends_on
 //  3. Component dependency graph (per module): edges from uses
 func CheckDAG(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir)
+	project, modules, errs := loadSpec(specDir, "dag")
 	if len(errs) > 0 {
 		return errs
 	}
@@ -41,13 +41,14 @@ func CheckDAG(specDir string) []ValidationError {
 }
 
 // loadSpec reads project.json and all referenced module.json files, returning
-// typed structures for DAG checking.
-func loadSpec(specDir string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
+// typed structures. The checkName parameter tags any load errors with the
+// appropriate checker name.
+func loadSpec(specDir, checkName string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
 	projPath := filepath.Join(specDir, "project.json")
 	projData, err := os.ReadFile(projPath)
 	if err != nil {
 		return nil, nil, []ValidationError{{
-			Check:    "dag",
+			Check:    checkName,
 			Severity: "error",
 			Path:     "project.json",
 			Message:  fmt.Sprintf("read file: %s", err),
@@ -57,7 +58,7 @@ func loadSpec(specDir string) (*schema.Project, map[string]*schema.ModuleSpec, [
 	var project schema.Project
 	if err := json.Unmarshal(projData, &project); err != nil {
 		return nil, nil, []ValidationError{{
-			Check:    "dag",
+			Check:    checkName,
 			Severity: "error",
 			Path:     "project.json",
 			Message:  fmt.Sprintf("parse JSON: %s", err),
@@ -71,7 +72,7 @@ func loadSpec(specDir string) (*schema.Project, map[string]*schema.ModuleSpec, [
 		modData, err := os.ReadFile(modPath)
 		if err != nil {
 			errs = append(errs, ValidationError{
-				Check:    "dag",
+				Check:    checkName,
 				Severity: "error",
 				Path:     mod.Path + "/module.json",
 				Message:  fmt.Sprintf("read file: %s", err),
@@ -81,7 +82,7 @@ func loadSpec(specDir string) (*schema.Project, map[string]*schema.ModuleSpec, [
 		var modSpec schema.ModuleSpec
 		if err := json.Unmarshal(modData, &modSpec); err != nil {
 			errs = append(errs, ValidationError{
-				Check:    "dag",
+				Check:    checkName,
 				Severity: "error",
 				Path:     mod.Path + "/module.json",
 				Message:  fmt.Sprintf("parse JSON: %s", err),

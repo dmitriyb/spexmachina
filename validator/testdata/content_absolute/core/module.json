@@ -1,0 +1,6 @@
+{
+  "name": "core",
+  "components": [
+    {"id": 1, "name": "Escape", "content": "/etc/passwd"}
+  ]
+}
