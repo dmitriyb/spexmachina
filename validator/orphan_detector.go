@@ -7,12 +7,12 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// DetectOrphans finds requirements not implemented by any component and
+// CheckOrphans finds requirements not implemented by any component and
 // components not described by any impl_section. Orphans are warnings, not
 // errors — a spec in active development may have requirements awaiting
 // component assignment.
-func DetectOrphans(specDir string) []ValidationError {
-	_, modules, errs := loadSpec(specDir)
+func CheckOrphans(specDir string) []ValidationError {
+	_, modules, errs := loadSpec(specDir, "orphan")
 	if len(errs) > 0 {
 		return errs
 	}
