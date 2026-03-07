@@ -38,7 +38,7 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 - **Required**: `name`, `modules` (at least one)
 - **Optional**: `description`, `version`, `requirements`, `milestones`
 - Requirements: `id` (int ≥1), `type` ("functional" | "non_functional"), `title` (required); `description`, `depends_on` (optional)
-- Modules: `id` (int ≥1), `name`, `path` (required); `description`, `requires_module` (optional)
+- Modules: `id` (int ≥1), `name`, `path` (required); `description`, `requires_module` (optional). **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g., `"impact"`, not `"Impact"`)
 - Milestones: `id` (int ≥1), `title` (required); `description`, `groups` (optional)
 
 ### module.json
