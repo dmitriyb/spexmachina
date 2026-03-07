@@ -61,4 +61,4 @@ The bead must map to exactly one spec component. Only write code for that compon
 7. Run `go test ./...` and `go vet ./...` to confirm everything passes.
 8. Commit and push.
 9. Create a PR using `.github/pull_request_template.md`. Fill in the bead ID, spec references from the bead metadata, and changes summary.
-10. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`, then check the box in the PR body: `gh pr edit <number> --body "$(gh pr view <number> --json body --jq '.body' | sed 's/- \[ \] Bead linked to PR/- [x] Bead linked to PR/')"`
+10. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`, then commit `.beads/issues.jsonl` and push so the bead state is tracked in git. Then check the box in the PR body: `gh pr edit <number> --body "$(gh pr view <number> --json body --jq '.body' | sed 's/- \[ \] Bead linked to PR/- [x] Bead linked to PR/')"`
