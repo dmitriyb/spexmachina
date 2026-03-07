@@ -4,8 +4,8 @@ Reads bead metadata from the bead CLI (`br` or `bd`) to extract spec-related fie
 
 ## Responsibilities
 
-- Call `<bin> list --json` to get all beads with metadata
-- Extract spec-related metadata fields: `module`, `component`, `impl_section`, `spec_hash`
+- Call `<bin> list --json` to get all beads with labels
+- Extract spec-related labels (`key:value` strings): `spec_module`, `spec_component`, `spec_impl_section`, `spec_hash`
 - Build a lookup structure for the NodeMatcher
 
 ## Interface
@@ -24,7 +24,7 @@ func ReadBeads(ctx context.Context) ([]BeadSpec, error)
 
 ## Bead CLI Interaction
 
-Uses `exec.CommandContext(ctx, bin, "list", "--json")` to get bead data, where `bin` is `"br"` or `"bd"`. The `--json` flag outputs machine-readable JSON. Parse the output and extract `metadata.*` fields.
+Uses `exec.CommandContext(ctx, bin, "list", "--json")` to get bead data, where `bin` is `"br"` or `"bd"`. The `--json` flag outputs machine-readable JSON with a `labels` array of `key:value` strings. Parse the output and extract spec-related labels (e.g., `spec_module:validator`).
 
 ## Error Handling
 

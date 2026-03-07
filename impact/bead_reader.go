@@ -4,6 +4,7 @@ package impact
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -32,7 +33,12 @@ type rawBead struct {
 func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
 	out, err := exec.CommandContext(ctx, bin, "list", "--json").Output()
 	if err != nil {
-		return nil, fmt.Errorf("impact: read beads: %s list --json: %w", bin, err)
+		msg := ""
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			msg = string(exitErr.Stderr)
+		}
+		return nil, fmt.Errorf("impact: read beads: %s list --json: %w\n%s", bin, err, msg)
 	}
 
 	var raw []rawBead

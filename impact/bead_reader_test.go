@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -198,16 +197,14 @@ func writeStubCLI(t *testing.T, beads []rawBead) string {
 	dir := t.TempDir()
 	stub := filepath.Join(dir, "br-stub")
 
-	// The stub script echoes the JSON when called with "list --json"
-	script := "#!/bin/sh\necho '" + string(data) + "'\n"
-	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+	// Write JSON to a separate file and cat it to avoid quoting issues
+	jsonFile := filepath.Join(dir, "data.json")
+	if err := os.WriteFile(jsonFile, data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	// Verify the stub is executable
-	if _, err := exec.LookPath(stub); err != nil {
-		// LookPath won't find it without full path, but CommandContext with full path works
-		_ = err
+	script := "#!/bin/sh\ncat " + jsonFile + "\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
 	}
 
 	return stub
