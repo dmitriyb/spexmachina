@@ -74,7 +74,7 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		{
 			ID:     "bead-1",
 			Status: "open",
-			Labels: []string{"spec_module:Alpha", "spec_component:Comp1"},
+			Labels: []string{"spec_module:alpha", "spec_component:Comp1"},
 		},
 	}
 	beadsJSON, err := json.Marshal(beads)
@@ -187,7 +187,7 @@ func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 		{
 			ID:     "bead-1",
 			Status: "open",
-			Labels: []string{"spec_module:Alpha", "spec_component:Comp1"},
+			Labels: []string{"spec_module:alpha", "spec_component:Comp1"},
 		},
 	}
 	beadsJSON, err := json.Marshal(beads)
@@ -288,10 +288,10 @@ func TestFR4_BuildNodeMaps(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// project.json uses "Alpha" as the module name.
-	nm, ok := modules["Alpha"]
+	// project.json and module.json both use "alpha".
+	nm, ok := modules["alpha"]
 	if !ok {
-		t.Fatalf("expected NodeMap for module Alpha, got keys: %v", mapKeys(modules))
+		t.Fatalf("expected NodeMap for module alpha, got keys: %v", mapKeys(modules))
 	}
 
 	if nm["arch_comp1.md"] != "Comp1" {

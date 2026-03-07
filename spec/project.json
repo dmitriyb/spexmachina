@@ -83,47 +83,47 @@
   "modules": [
     {
       "id": 1,
-      "name": "Schema",
+      "name": "schema",
       "path": "schema",
       "description": "JSON Schema definitions for project.json and module.json. The foundation that defines what a valid spec looks like."
     },
     {
       "id": 2,
-      "name": "Validator",
+      "name": "validator",
       "path": "validator",
       "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
       "requires_module": [1]
     },
     {
       "id": 3,
-      "name": "Merkle",
+      "name": "merkle",
       "path": "merkle",
       "description": "Merkle hash tree over the spec: leaf hashes, interior hashes, snapshots, diff, and impact classification.",
       "requires_module": [1]
     },
     {
       "id": 4,
-      "name": "Impact",
+      "name": "impact",
       "path": "impact",
       "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/close/review).",
       "requires_module": [3]
     },
     {
       "id": 5,
-      "name": "Apply",
+      "name": "apply",
       "path": "apply",
       "description": "Executes impact report: creates/closes/updates beads via bead CLI (br or bd), tags with proposal, saves new merkle snapshot.",
       "requires_module": [4]
     },
     {
       "id": 6,
-      "name": "Proposal",
+      "name": "proposal",
       "path": "proposal",
       "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates."
     },
     {
       "id": 7,
-      "name": "Render",
+      "name": "render",
       "path": "render",
       "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
       "requires_module": [1]
