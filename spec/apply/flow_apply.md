@@ -12,23 +12,23 @@ impact report (JSON, stdin)
        │
        ▼
 ┌─────────────┐
-│ BeadCreator  │── bd create for each new spec node
+│ BeadCreator  │── bead create for each new spec node
 │              │   returns new bead IDs
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│ BeadUpdater  │── bd update metadata for modified nodes
+│ BeadUpdater  │── bead update metadata for modified nodes
 └──────┬──────┘
        │
        ▼
 ┌─────────────┐
-│ BeadCloser   │── bd close for removed spec nodes
+│ BeadCloser   │── bead close for removed spec nodes
 └──────┬──────┘
        │
        ▼
 ┌────────────────┐
-│ ProposalTagger  │── bd update metadata with proposal ref
+│ ProposalTagger  │── bead update metadata with proposal ref
 │                 │   for all affected beads
 └──────┬─────────┘
        │

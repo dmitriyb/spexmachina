@@ -29,7 +29,7 @@ func ShowHistory(ctx context.Context, specDir string, w io.Writer) error
 
 ## Bead Query
 
-Uses `bd list --json` and filters beads by `spec_proposal` metadata field. Groups results by proposal filename.
+Uses `<bin> list --json` (where `<bin>` is `br` or `bd`) and filters beads by `spec_proposal` metadata field. Groups results by proposal filename.
 
 ## Composability
 

@@ -8,7 +8,7 @@ Combine filesystem listing of proposals with bead metadata queries.
 
 1. List files in `spec/proposals/` matching `*.md`
 2. Sort by filename (which sorts by date due to the naming convention)
-3. Call `bd list --json` to get all beads
+3. Call `<bin> list --json` (where `<bin>` is `br` or `bd`) to get all beads
 4. For each proposal filename, filter beads where `metadata.spec_proposal == filename`
 5. Group matched beads by proposal
 6. Format and output

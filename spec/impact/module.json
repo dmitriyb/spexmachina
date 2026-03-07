@@ -51,7 +51,7 @@
     {
       "id": 1,
       "name": "BeadReader",
-      "description": "Reads bead metadata from the bd CLI, extracting spec-related fields for matching.",
+      "description": "Reads bead metadata from the bead CLI (br or bd), extracting spec-related fields for matching.",
       "content": "arch_bead_reader.md",
       "implements": [
         1
