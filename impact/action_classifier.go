@@ -10,12 +10,12 @@ import (
 
 // Action represents a classified impact action for a spec node.
 type Action struct {
-	Type   string // "create", "close", "review"
-	BeadID string // existing bead ID (empty for "create")
-	Module string // affected module
-	Node   string // affected spec node (component/impl_section name)
-	Impact string // impact level from merkle classification
-	Reason string // human-readable explanation
+	Type   string `json:"type"`              // "create", "close", "review"
+	BeadID string `json:"bead_id,omitempty"` // existing bead ID (empty for "create")
+	Module string `json:"module"`            // affected module
+	Node   string `json:"node"`              // affected spec node (component/impl_section name)
+	Impact string `json:"impact,omitempty"`  // impact level from merkle classification
+	Reason string `json:"reason"`            // human-readable explanation
 }
 
 // ClassifyActions applies the decision table to match results from NodeMatcher.
