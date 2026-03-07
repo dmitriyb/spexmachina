@@ -188,8 +188,12 @@ func TestNFR9_HashCommand_Deterministic(t *testing.T) {
 	})
 
 	var r1, r2 hashOutput
-	json.Unmarshal([]byte(out1), &r1)
-	json.Unmarshal([]byte(out2), &r2)
+	if err := json.Unmarshal([]byte(out1), &r1); err != nil {
+		t.Fatalf("unmarshal first run: %v", err)
+	}
+	if err := json.Unmarshal([]byte(out2), &r2); err != nil {
+		t.Fatalf("unmarshal second run: %v", err)
+	}
 
 	if r1.RootHash != r2.RootHash {
 		t.Fatalf("determinism: root hashes differ: %s vs %s", r1.RootHash, r2.RootHash)
