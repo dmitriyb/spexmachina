@@ -1,10 +1,12 @@
 # Bead Metadata Reading Implementation
 
-## bd CLI Interface
+## Bead CLI Interface
+
+The `bin` parameter is the bead CLI binary name (`"br"` or `"bd"`), allowing the same logic to work with either tool.
 
 ```go
-func ReadBeads(ctx context.Context) ([]BeadSpec, error) {
-    out, err := exec.CommandContext(ctx, "bd", "list", "--json").Output()
+func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
+    out, err := exec.CommandContext(ctx, bin, "list", "--json").Output()
     if err != nil {
         return nil, fmt.Errorf("impact: read beads: %w", err)
     }
@@ -14,7 +16,7 @@ func ReadBeads(ctx context.Context) ([]BeadSpec, error) {
 
 ## JSON Parsing
 
-The `bd list --json` output is a JSON array of bead objects. Each bead may have a `metadata` object with spec-related fields. Parse using `encoding/json` into a generic structure, then extract the relevant fields.
+The `<bin> list --json` output is a JSON array of bead objects. Each bead may have a `metadata` object with spec-related fields. Parse using `encoding/json` into a generic structure, then extract the relevant fields.
 
 ## Metadata Fields
 

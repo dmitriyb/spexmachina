@@ -4,7 +4,7 @@
 
 ```
 merkle diff                bead metadata
-(classified changes)       (from bd list --json)
+(classified changes)       (from bead list --json)
      │                          │
      ▼                          ▼
 ┌──────────────────────────────────┐

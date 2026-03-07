@@ -3,8 +3,8 @@
 ## Command Construction
 
 ```go
-func tagBead(ctx context.Context, beadID, proposalRef string) error {
-    out, err := exec.CommandContext(ctx, "bd", "update", beadID,
+func tagBead(ctx context.Context, bin, beadID, proposalRef string) error {
+    out, err := exec.CommandContext(ctx, bin, "update", beadID,
         "--metadata", fmt.Sprintf("spec_proposal=%s", proposalRef),
     ).CombinedOutput()
     if err != nil {

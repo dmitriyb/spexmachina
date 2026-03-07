@@ -58,8 +58,8 @@ Given a merkle diff, computes affected beads:
 
 Executes the impact report:
 
-- Creates beads via `bd create` with full spec metadata
-- Closes obsolete beads via `bd close` with reason
+- Creates beads via bead CLI (`br` or `bd`) with full spec metadata
+- Closes obsolete beads via bead CLI (`br` or `bd`) with reason
 - Updates bead metadata for modified spec nodes
 - Tags all affected beads with proposal reference
 - Saves new merkle snapshot
@@ -88,7 +88,7 @@ Generates human-readable output from spec JSON + markdown:
 2. **Compute merkle tree** — hash every node, store snapshots, diff against previous snapshots, classify change impact paths.
 3. **Map spec nodes to beads** — each plan-relevant spec node maps to a bead with `spec_id`, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal).
 4. **Compute impact** — given changed spec nodes, find all affected beads and classify actions (create/close/review).
-5. **Apply changes** — execute bead actions via `bd` CLI, tag with proposal, save snapshot.
+5. **Apply changes** — execute bead actions via bead CLI (`br` or `bd`), tag with proposal, save snapshot.
 6. **Manage proposals** — register, validate structure, link to spec changes and bead actions, show history.
 7. **Render spec** — generate markdown, DOT, or JSON from spec structure.
 
@@ -114,7 +114,7 @@ Project-level requirements define high-level goals. Module-level requirements ar
 
 ### Task backend: beads, not GitHub Issues
 
-Beads provides native `spec_id`, typed dependency graph (`blocks`, `parent-child`, `conditional-blocks`), arbitrary JSON metadata, and deterministic CLI (`bd --json`). GitHub Issues lacks all of these — dependencies are text in body, spec references are label conventions, metadata is parsed from prose by the LLM. `external_ref` on beads bridges the `Closes #N` gap for PR linking. The beads viewer (`bv`) TUI provides kanban, dependency graph visualization, PageRank, bottleneck detection, and critical path analysis — far beyond GitHub's flat issue list.
+Beads provides native `spec_id`, typed dependency graph (`blocks`, `parent-child`, `conditional-blocks`), arbitrary JSON metadata, and deterministic CLI (`br --json` / `bd --json`). GitHub Issues lacks all of these — dependencies are text in body, spec references are label conventions, metadata is parsed from prose by the LLM. `external_ref` on beads bridges the `Closes #N` gap for PR linking. The beads viewer (`bv`) TUI provides kanban, dependency graph visualization, PageRank, bottleneck detection, and critical path analysis — far beyond GitHub's flat issue list.
 
 ### Proposals as first-class artifacts
 
@@ -124,7 +124,7 @@ Every spec transition has a traceable rationale. Proposals are committed to git,
 
 Spec changes cascade — one node change can affect many tasks. The cost of supervision is low (review a structured diff), the cost of unsupervised changes is high (wrong tasks created, correct tasks closed). So spec changes always go through: propose → validate → impact → approve → apply.
 
-Task execution (`/implement`, `/review`, `/fix`) runs autonomously. Once tasks exist in beads with clear spec context (requirements, component, impl_section), agents work independently. `bd ready --json` picks the next task, `bd update --claim` locks it, `external_ref` tracks the PR.
+Task execution (`/implement`, `/review`, `/fix`) runs autonomously. Once tasks exist in beads with clear spec context (requirements, component, impl_section), agents work independently. `br ready --json` (or `bd ready --json`) picks the next task, `br update --claim` locks it, `external_ref` tracks the PR.
 
 ### No steps in the spec
 
@@ -136,4 +136,4 @@ The current plan.md conflates spec content with project management. In Spex Mach
 
 ### Go implementation
 
-Go for the CLI: single binary, fast compilation, excellent JSON handling, `os/exec` for calling `bd`, strong stdlib for hashing and file operations. No runtime dependencies.
+Go for the CLI: single binary, fast compilation, excellent JSON handling, `os/exec` for calling `br`/`bd`, strong stdlib for hashing and file operations. No runtime dependencies.

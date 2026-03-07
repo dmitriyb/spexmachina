@@ -33,7 +33,7 @@
       "id": 5,
       "type": "functional",
       "title": "Apply changes",
-      "description": "Execute bead actions via bd CLI, tag with proposal, save snapshot.",
+      "description": "Execute bead actions via bead CLI (br or bd), tag with proposal, save snapshot.",
       "depends_on": [4]
     },
     {
@@ -112,7 +112,7 @@
       "id": 5,
       "name": "Apply",
       "path": "apply",
-      "description": "Executes impact report: creates/closes/updates beads via bd CLI, tags with proposal, saves new merkle snapshot.",
+      "description": "Executes impact report: creates/closes/updates beads via bead CLI (br or bd), tags with proposal, saves new merkle snapshot.",
       "requires_module": [4]
     },
     {
