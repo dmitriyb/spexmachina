@@ -31,6 +31,11 @@ spec directory
 └──────┬────────┘
        │ warnings[]
        ▼
+┌────────────────────────┐
+│NameConsistencyChecker  │── project.json ↔ module.json names
+└──────┬─────────────────┘
+       │ errors[]
+       ▼
 ┌──────────────┐
 │ErrorReporter │── aggregate, format, output
 └──────┬───────┘
