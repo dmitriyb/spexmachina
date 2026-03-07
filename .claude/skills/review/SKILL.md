@@ -17,7 +17,7 @@ Read these documents:
    - Find labels `spec_module:<module>` and `spec_component:<component>`
    - Read `spec/<module>/arch_<snake_case(component)>.md` for architecture
    - Read `spec/<module>/impl_<snake_case(component)>.md` for implementation details
-   - Read `spec/<module>/flow_*.md` for data flow between components
+   - Glob for `spec/<module>/flow_*.md` and read all matching files for data flow context
    - Read `spec/<module>/module.json` for requirements the component implements (check `implements` field)
 4. If no spec labels exist, fall back to reading any spec references in the description
 
