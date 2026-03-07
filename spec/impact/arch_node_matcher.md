@@ -25,7 +25,7 @@ type Orphaned struct {
     Bead BeadSpec // bead references removed spec node
 }
 
-func MatchNodes(changes []ClassifiedChange, beads []BeadSpec) ([]Match, []Unmatched, []Orphaned)
+func MatchNodes(changes []ClassifiedChange, beads []BeadSpec, modules map[string]NodeMap) ([]Match, []Unmatched, []Orphaned)
 ```
 
 ## Matching Logic

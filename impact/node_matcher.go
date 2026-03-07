@@ -138,6 +138,8 @@ func lookupBeads(
 			if strings.HasPrefix(filename, "impl_") {
 				return copyBeads(implIdx[indexKey(c.Module, name)])
 			}
+			// flow_ and other prefixes: no bead index exists yet.
+			return nil
 		}
 	}
 
