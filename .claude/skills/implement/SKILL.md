@@ -9,6 +9,10 @@ First run `git checkout main && git pull --rebase` to ensure you are on the late
 
 Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific guidance.
 
+## Bead JSON Structure
+
+`br list --json` returns an array of bead objects. Spec metadata is stored in the `labels` array as `key:value` strings — there is no separate `metadata` object. Key fields: `id`, `status`, `labels`, `title`, `description`, `priority`, `issue_type`, `dependency_count`, `dependent_count`. Spec-related labels use the prefixes: `spec_module:`, `spec_component:`, `spec_impl_section:`, `spec_hash:`.
+
 ## Context Loading
 
 1. Run `br show $ARGUMENTS` to get the full bead details (title, description, labels, dependencies)

@@ -16,14 +16,14 @@ func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
 
 ## JSON Parsing
 
-The `<bin> list --json` output is a JSON array of bead objects. Each bead may have a `metadata` object with spec-related fields. Parse using `encoding/json` into a generic structure, then extract the relevant fields.
+The `<bin> list --json` output is a JSON array of bead objects. Each bead has a `labels` array containing `key:value` strings. Parse using `encoding/json` into a typed structure, then extract spec-related labels by splitting on the first `:`.
 
-## Metadata Fields
+## Spec Labels
 
-Expected metadata keys set by `spex apply`:
+Expected label keys set by `spex apply` (stored as `key:value` strings in the `labels` array):
 - `spec_module`: module name (e.g., "validator")
 - `spec_component`: component name (e.g., "SchemaChecker")
 - `spec_impl_section`: impl_section name (e.g., "Schema validation implementation")
 - `spec_hash`: hash of the spec node at the time the bead was created
 
-Beads without these metadata fields are ignored — they are not spec-managed beads.
+Beads without these labels are ignored — they are not spec-managed beads.
