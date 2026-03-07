@@ -37,21 +37,44 @@
       "name": "Registrar",
       "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present.",
       "content": "arch_registrar.md",
-      "implements": [1, 4]
+      "implements": [
+        1,
+        4
+      ]
     },
     {
       "id": 2,
       "name": "HistoryViewer",
       "description": "Queries proposals and their linked spec changes and bead actions to show the proposal history.",
       "content": "arch_history_viewer.md",
-      "implements": [2]
+      "implements": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "TemplateProvider",
       "description": "Generates and outputs proposal templates (project and change) to stdout.",
       "content": "arch_template_provider.md",
-      "implements": [3]
+      "implements": [
+        3
+      ]
+    },
+    {
+      "id": 4,
+      "name": "ProposalCommands",
+      "description": "CLI entry points for spex register, spex log, and spex template. Wires Registrar, HistoryViewer, TemplateProvider into subcommands.",
+      "content": "arch_proposal_commands.md",
+      "implements": [
+        1,
+        2,
+        3
+      ],
+      "uses": [
+        1,
+        2,
+        3
+      ]
     }
   ],
   "impl_sections": [
@@ -59,28 +82,45 @@
       "id": 1,
       "name": "Registration implementation",
       "content": "impl_registration.md",
-      "describes": [1]
+      "describes": [
+        1
+      ]
     },
     {
       "id": 2,
       "name": "History tracking implementation",
       "content": "impl_history_tracking.md",
-      "describes": [2]
+      "describes": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "Template management",
       "content": "impl_template_management.md",
-      "describes": [3]
+      "describes": [
+        3
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Proposal commands implementation",
+      "content": "impl_proposal_commands.md",
+      "describes": [
+        4
+      ]
     }
   ],
   "data_flows": [
     {
       "id": 1,
       "name": "Proposal lifecycle",
-      "description": "Proposal file → register (validate + copy) → spec change → impact → bead actions → history query.",
+      "description": "Proposal file \u2192 register (validate + copy) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
       "content": "flow_proposal_lifecycle.md",
-      "uses": [1, 2]
+      "uses": [
+        1,
+        2
+      ]
     }
   ]
 }

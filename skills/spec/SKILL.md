@@ -46,7 +46,7 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 - **Required**: `name`
 - **Optional**: `description`, `requirements`, `components`, `impl_sections`, `data_flows`
 - Requirements: same as project, plus optional `preq_id` (traces to project requirement)
-- Components: `id`, `name` (required); `description`, `content`, `implements`, `uses` (optional)
+- Components: `id`, `name` (required); `description`, `content`, `implements`, `uses` (optional). If users or other systems invoke the module externally, that entry point is itself a component.
 - Impl sections: `id`, `name` (required); `content`, `describes` (optional)
 - Data flows: `id`, `name` (required); `description`, `content`, `uses` (optional)
 
@@ -130,7 +130,9 @@ Before writing files, present the user with a summary:
 - **For each module**: requirements, components, impl_sections, data_flows — with edges shown
 - **Milestones** — if applicable
 
-Ask the user to confirm or adjust before writing files. This is the spec review gate.
+Ask the user:
+- "These modules will be created: `<list>`. Is anything missing?" — the user may identify modules the proposal implies but that you overlooked (e.g., CLI, API, UI layers).
+- Confirm or adjust before writing files. This is the spec review gate.
 
 ### 3. Write JSON files
 

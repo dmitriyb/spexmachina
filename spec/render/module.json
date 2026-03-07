@@ -7,7 +7,7 @@
       "type": "functional",
       "title": "Render markdown",
       "preq_id": 7,
-      "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files."
+      "description": "Generate a collated spec document in markdown. Structure: requirements \u2192 architecture \u2192 implementation, with content inlined from markdown files."
     },
     {
       "id": 2,
@@ -37,31 +37,66 @@
       "name": "SpecReader",
       "description": "Reads and parses the spec directory into an in-memory graph structure for rendering.",
       "content": "arch_spec_reader.md",
-      "implements": [1, 2, 3, 4]
+      "implements": [
+        1,
+        2,
+        3,
+        4
+      ]
     },
     {
       "id": 2,
       "name": "MarkdownRenderer",
       "description": "Generates a collated markdown document from the parsed spec, inlining content from markdown files.",
       "content": "arch_markdown_renderer.md",
-      "implements": [1],
-      "uses": [1]
+      "implements": [
+        1
+      ],
+      "uses": [
+        1
+      ]
     },
     {
       "id": 3,
       "name": "DOTRenderer",
       "description": "Generates a graphviz DOT graph from the parsed spec.",
       "content": "arch_dot_renderer.md",
-      "implements": [2],
-      "uses": [1]
+      "implements": [
+        2
+      ],
+      "uses": [
+        1
+      ]
     },
     {
       "id": 4,
       "name": "JSONRenderer",
       "description": "Generates a full JSON graph from the parsed spec.",
       "content": "arch_json_renderer.md",
-      "implements": [3],
-      "uses": [1]
+      "implements": [
+        3
+      ],
+      "uses": [
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "name": "RenderCommand",
+      "description": "CLI entry point for spex render. Parses format flag (markdown/dot/json), wires SpecReader with selected renderer, outputs to stdout.",
+      "content": "arch_render_command.md",
+      "implements": [
+        1,
+        2,
+        3,
+        4
+      ],
+      "uses": [
+        1,
+        2,
+        3,
+        4
+      ]
     }
   ],
   "impl_sections": [
@@ -69,34 +104,55 @@
       "id": 1,
       "name": "Spec reading implementation",
       "content": "impl_spec_reading.md",
-      "describes": [1]
+      "describes": [
+        1
+      ]
     },
     {
       "id": 2,
       "name": "Markdown rendering implementation",
       "content": "impl_markdown_rendering.md",
-      "describes": [2]
+      "describes": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "DOT generation implementation",
       "content": "impl_dot_generation.md",
-      "describes": [3]
+      "describes": [
+        3
+      ]
     },
     {
       "id": 4,
       "name": "JSON serialization implementation",
       "content": "impl_json_serialization.md",
-      "describes": [4]
+      "describes": [
+        4
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Render command implementation",
+      "content": "impl_render_command.md",
+      "describes": [
+        5
+      ]
     }
   ],
   "data_flows": [
     {
       "id": 1,
       "name": "Render pipeline",
-      "description": "Spec JSON + markdown leaves → parsed graph → format-specific output (markdown, DOT, or JSON) → stdout.",
+      "description": "Spec JSON + markdown leaves \u2192 parsed graph \u2192 format-specific output (markdown, DOT, or JSON) \u2192 stdout.",
       "content": "flow_render_pipeline.md",
-      "uses": [1, 2, 3, 4]
+      "uses": [
+        1,
+        2,
+        3,
+        4
+      ]
     }
   ]
 }

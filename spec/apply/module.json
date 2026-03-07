@@ -29,7 +29,11 @@
       "title": "Tag with proposal",
       "preq_id": 5,
       "description": "All affected beads (created, closed, reviewed) are tagged with the proposal reference that triggered the change.",
-      "depends_on": [1, 2, 3]
+      "depends_on": [
+        1,
+        2,
+        3
+      ]
     },
     {
       "id": 5,
@@ -37,7 +41,9 @@
       "title": "Save snapshot",
       "preq_id": 5,
       "description": "After applying all bead actions, save the new merkle snapshot to mark the current state as baseline.",
-      "depends_on": [4]
+      "depends_on": [
+        4
+      ]
     },
     {
       "id": 6,
@@ -53,36 +59,68 @@
       "name": "BeadCreator",
       "description": "Creates new beads via the bd CLI with spec metadata attached.",
       "content": "arch_bead_creator.md",
-      "implements": [1, 6]
+      "implements": [
+        1,
+        6
+      ]
     },
     {
       "id": 2,
       "name": "BeadCloser",
       "description": "Closes obsolete beads via the bd CLI with a reason derived from the impact report.",
       "content": "arch_bead_closer.md",
-      "implements": [2]
+      "implements": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "BeadUpdater",
       "description": "Updates bead metadata to reflect modified spec nodes.",
       "content": "arch_bead_updater.md",
-      "implements": [3]
+      "implements": [
+        3
+      ]
     },
     {
       "id": 4,
       "name": "ProposalTagger",
       "description": "Tags all affected beads with the proposal reference that triggered the changes.",
       "content": "arch_proposal_tagger.md",
-      "implements": [4],
-      "uses": [1, 2, 3]
+      "implements": [
+        4
+      ],
+      "uses": [
+        1,
+        2,
+        3
+      ]
     },
     {
       "id": 5,
       "name": "SnapshotSaver",
       "description": "Saves the new merkle snapshot after all bead actions are complete.",
       "content": "arch_snapshot_saver.md",
-      "implements": [5]
+      "implements": [
+        5
+      ]
+    },
+    {
+      "id": 6,
+      "name": "ApplyCommand",
+      "description": "CLI entry point for spex apply. Reads impact report, wires BeadCreator, BeadCloser, BeadUpdater, ProposalTagger, SnapshotSaver, executes all bead actions.",
+      "content": "arch_apply_command.md",
+      "implements": [
+        4,
+        5
+      ],
+      "uses": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
     }
   ],
   "impl_sections": [
@@ -90,31 +128,49 @@
       "id": 1,
       "name": "Bead creation commands",
       "content": "impl_bead_creation.md",
-      "describes": [1]
+      "describes": [
+        1
+      ]
     },
     {
       "id": 2,
       "name": "Bead closure commands",
       "content": "impl_bead_closure.md",
-      "describes": [2]
+      "describes": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "Metadata update commands",
       "content": "impl_metadata_update.md",
-      "describes": [3]
+      "describes": [
+        3
+      ]
     },
     {
       "id": 4,
       "name": "Proposal tagging",
       "content": "impl_proposal_tagging.md",
-      "describes": [4]
+      "describes": [
+        4
+      ]
     },
     {
       "id": 5,
       "name": "Snapshot saving",
       "content": "impl_snapshot_saving.md",
-      "describes": [5]
+      "describes": [
+        5
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Apply command implementation",
+      "content": "impl_apply_command.md",
+      "describes": [
+        6
+      ]
     }
   ],
   "data_flows": [
@@ -123,7 +179,13 @@
       "name": "Apply flow",
       "description": "Impact report is read, bead actions are executed in order (creates, then updates, then closes), all are tagged with the proposal, and the new snapshot is saved.",
       "content": "flow_apply.md",
-      "uses": [1, 2, 3, 4, 5]
+      "uses": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ]
     }
   ]
 }
