@@ -9,7 +9,7 @@ Review PR #$ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific 
 
 ## Context Loading
 
-Read ONLY these documents:
+Read these documents:
 
 1. The PR diff and description
 2. The linked bead: run `br show <bead-id>` using the bead ID from the PR description
