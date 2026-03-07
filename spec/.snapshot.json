@@ -1,0 +1,642 @@
+{
+  "root_hash": "ecbe548187b4672b2bd864991456f8b79833a6b50bd02806d0aa9c17c27290b2",
+  "root_key": "spex-machina",
+  "created_at": "2026-03-07T14:57:03.214540793+01:00",
+  "nodes": {
+    "spex-machina": {
+      "hash": "ecbe548187b4672b2bd864991456f8b79833a6b50bd02806d0aa9c17c27290b2",
+      "type": "project",
+      "children": [
+        "spex-machina/project.json",
+        "spex-machina/Schema",
+        "spex-machina/Validator",
+        "spex-machina/Merkle",
+        "spex-machina/Impact",
+        "spex-machina/Apply",
+        "spex-machina/Proposal",
+        "spex-machina/Render"
+      ]
+    },
+    "spex-machina/Apply": {
+      "hash": "c8ee270fbdaef69fa727f7cdb17d76efa122299e68142f94bfafbbc9f8175896",
+      "type": "module",
+      "children": [
+        "spex-machina/Apply/module.json",
+        "spex-machina/Apply/arch",
+        "spex-machina/Apply/impl",
+        "spex-machina/Apply/flow"
+      ]
+    },
+    "spex-machina/Apply/arch": {
+      "hash": "94a285887bc3749257048aeaeaa21bc1dabe29f7dfd6c6381c1d4c4f5aa7348e",
+      "type": "arch",
+      "children": [
+        "spex-machina/Apply/arch/arch_apply_command.md",
+        "spex-machina/Apply/arch/arch_bead_closer.md",
+        "spex-machina/Apply/arch/arch_bead_creator.md",
+        "spex-machina/Apply/arch/arch_bead_updater.md",
+        "spex-machina/Apply/arch/arch_proposal_tagger.md",
+        "spex-machina/Apply/arch/arch_snapshot_saver.md"
+      ]
+    },
+    "spex-machina/Apply/arch/arch_apply_command.md": {
+      "hash": "c4937ca4e44b4ca907b64d87ab7584f976ae4e098e6773a1f4155999c9028d21",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/arch/arch_bead_closer.md": {
+      "hash": "90a166783bced7d37b61499af377c4f0ff49c98ad3cfcec72788a98e0464b810",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/arch/arch_bead_creator.md": {
+      "hash": "93166746b302b9789a633060b6a92f69bb717f18bde53535ca00117900d4dc52",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/arch/arch_bead_updater.md": {
+      "hash": "e3193f39a784aad28f16f4d81ebb36633fa639c20efd50b1a34fa206584329cc",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/arch/arch_proposal_tagger.md": {
+      "hash": "065dac27f1a3b19831757b20d4ecab9cbad520b18784083c207cba3e6585ace5",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/arch/arch_snapshot_saver.md": {
+      "hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/flow": {
+      "hash": "9c37cadbb0503927b49ab9d44ef862d52e4900ce09377c8b4adfdc8b8a98be4b",
+      "type": "flow",
+      "children": [
+        "spex-machina/Apply/flow/flow_apply.md"
+      ]
+    },
+    "spex-machina/Apply/flow/flow_apply.md": {
+      "hash": "b622c18acc5583d922214046d8c32ee5038e9b11142483fc7ec8aeeb3affdf3a",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl": {
+      "hash": "e35e8eff30410dda383f79930028c527eb9068a1a88bd2489daad0324108aacb",
+      "type": "impl",
+      "children": [
+        "spex-machina/Apply/impl/impl_apply_command.md",
+        "spex-machina/Apply/impl/impl_bead_closure.md",
+        "spex-machina/Apply/impl/impl_bead_creation.md",
+        "spex-machina/Apply/impl/impl_metadata_update.md",
+        "spex-machina/Apply/impl/impl_proposal_tagging.md",
+        "spex-machina/Apply/impl/impl_snapshot_saving.md"
+      ]
+    },
+    "spex-machina/Apply/impl/impl_apply_command.md": {
+      "hash": "9a7c42c1155100f330a45ca00aeb744f8a6573220a22217a1a15e043398d197c",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl/impl_bead_closure.md": {
+      "hash": "7330a1c051e280b96a36bd5a88734a514657b3b8e8cdb27be6ce90252abc37ee",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl/impl_bead_creation.md": {
+      "hash": "a52dbd4959d45d97bd29f9f82bcaa3027b7f7d74d41d0e770c54789d17aae254",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl/impl_metadata_update.md": {
+      "hash": "bbd52d768fda09ad9295dcaacbf44d391e3ecbdb0850ea39ec5ad6b0bb83969e",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl/impl_proposal_tagging.md": {
+      "hash": "ff0288e4e5aba6bed3ae1cc048a5b01f7c78f1c2e78a3d92da512bff51d227b5",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/impl/impl_snapshot_saving.md": {
+      "hash": "9c740160ab6a16f4ec6f49f5b42c135ad392ee78157ef893aee85ea42e8bf99a",
+      "type": "leaf"
+    },
+    "spex-machina/Apply/module.json": {
+      "hash": "8924f1c25ca38657563af41d715e54e482db90b70205cda175df886be62d8f2d",
+      "type": "leaf"
+    },
+    "spex-machina/Impact": {
+      "hash": "1b3564e5b0845f136c156738f37d490c64a41af1064fab73e696f0da7b11c886",
+      "type": "module",
+      "children": [
+        "spex-machina/Impact/module.json",
+        "spex-machina/Impact/arch",
+        "spex-machina/Impact/impl",
+        "spex-machina/Impact/flow"
+      ]
+    },
+    "spex-machina/Impact/arch": {
+      "hash": "33961b3f82f209d9eb808465c5ded0def6f718ec3361bda52bb0d6a423360ed5",
+      "type": "arch",
+      "children": [
+        "spex-machina/Impact/arch/arch_action_classifier.md",
+        "spex-machina/Impact/arch/arch_bead_reader.md",
+        "spex-machina/Impact/arch/arch_impact_command.md",
+        "spex-machina/Impact/arch/arch_node_matcher.md",
+        "spex-machina/Impact/arch/arch_report_generator.md"
+      ]
+    },
+    "spex-machina/Impact/arch/arch_action_classifier.md": {
+      "hash": "03f063632e280fa6b806f173a18e90375cf815d3ed3043641ebd7c7c2ac42f26",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/arch/arch_bead_reader.md": {
+      "hash": "2449999327a160e090e560c015548401a79ca2416432b3723056221ab987caaf",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/arch/arch_impact_command.md": {
+      "hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/arch/arch_node_matcher.md": {
+      "hash": "14142c4ca4b6c816ea385a29e63f7d7c5c7bab5be30599ce8330b1730c05dcec",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/arch/arch_report_generator.md": {
+      "hash": "ea019aa898922fab60acf981b06b6b34d1cefe6ae31a308e24b36a3568b540b7",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/flow": {
+      "hash": "64e936a92e7d340fa07264ebe962bf63889f15c05d0acf56464d658c496fd2c5",
+      "type": "flow",
+      "children": [
+        "spex-machina/Impact/flow/flow_impact_analysis.md"
+      ]
+    },
+    "spex-machina/Impact/flow/flow_impact_analysis.md": {
+      "hash": "20096dddaeb015dada669e6fb5ee8eea785e09a17afc50ae98eb4ce7a1ac73f4",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/impl": {
+      "hash": "ce5aeb0b366081ed7e4571ee46a09b8f26b7511c1c93e426536e54f4ffee7ace",
+      "type": "impl",
+      "children": [
+        "spex-machina/Impact/impl/impl_action_classification.md",
+        "spex-machina/Impact/impl/impl_bead_reading.md",
+        "spex-machina/Impact/impl/impl_impact_command.md",
+        "spex-machina/Impact/impl/impl_node_matching.md",
+        "spex-machina/Impact/impl/impl_report_format.md"
+      ]
+    },
+    "spex-machina/Impact/impl/impl_action_classification.md": {
+      "hash": "60faba9e9d0d437204ca3c84da6c9e6139073a1b50b31c1974de127e259e1bdc",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/impl/impl_bead_reading.md": {
+      "hash": "2d136e3168f0ada9061ba7f9a1c7a606bc3d553f4beb4ddb83a804f7157ea54b",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/impl/impl_impact_command.md": {
+      "hash": "221cee68eaaa406aee621e27f657fe0bc82aa0388a2181abc4d1e514d9ec3856",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/impl/impl_node_matching.md": {
+      "hash": "d7bf214174e4d73e5faedf3ded67213e59af195efb3d4969129a8bb2743cadad",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/impl/impl_report_format.md": {
+      "hash": "cbc21baa1f8f6ab727dfdd87a7df9ba020b938fd4a939d681e4c25c018018b99",
+      "type": "leaf"
+    },
+    "spex-machina/Impact/module.json": {
+      "hash": "9fd4e648d74745bc253bea6a0ae6918cfe16ffb05463eb9f857514b339bd396c",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle": {
+      "hash": "6dd197d4a4b9c8a07f99258701a69c4b70c8ea8279fff9df0b24fcea453cc7ab",
+      "type": "module",
+      "children": [
+        "spex-machina/Merkle/module.json",
+        "spex-machina/Merkle/arch",
+        "spex-machina/Merkle/impl",
+        "spex-machina/Merkle/flow"
+      ]
+    },
+    "spex-machina/Merkle/arch": {
+      "hash": "c83f5117a927de5c137262cf471ad7101f1008fc64538e66243f0a8a59e0b197",
+      "type": "arch",
+      "children": [
+        "spex-machina/Merkle/arch/arch_diff_command.md",
+        "spex-machina/Merkle/arch/arch_diff_engine.md",
+        "spex-machina/Merkle/arch/arch_hash_command.md",
+        "spex-machina/Merkle/arch/arch_hasher.md",
+        "spex-machina/Merkle/arch/arch_impact_classifier.md",
+        "spex-machina/Merkle/arch/arch_snapshot_store.md",
+        "spex-machina/Merkle/arch/arch_tree_builder.md"
+      ]
+    },
+    "spex-machina/Merkle/arch/arch_diff_command.md": {
+      "hash": "f4e891916636feacd3321ad6dccee5ac232122abcd8f6739442b1a2b61fe7464",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_diff_engine.md": {
+      "hash": "69f39f281907423d1ae92bdac725b56bc30e62fe55c992fdf50a7d3c36e65a71",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_hash_command.md": {
+      "hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_hasher.md": {
+      "hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_impact_classifier.md": {
+      "hash": "eba753b76e761f34952b948f3cd0eea6bc7352229ebf9e6094149b9d818d8a4e",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_snapshot_store.md": {
+      "hash": "65c79ae4225865ee9c3d49d8911140a39257aa1950f96197eed8a61e84de449f",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/arch/arch_tree_builder.md": {
+      "hash": "adad3c8db5dc53d4e777066e619fd70c219f269f569659fe5600863570b9a1eb",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/flow": {
+      "hash": "7a55c1e355ad750f0b3e556d7ef7c825519fae61bb676d8fb8381b93a147d224",
+      "type": "flow",
+      "children": [
+        "spex-machina/Merkle/flow/flow_diff_classification.md",
+        "spex-machina/Merkle/flow/flow_hash_computation.md"
+      ]
+    },
+    "spex-machina/Merkle/flow/flow_diff_classification.md": {
+      "hash": "545626527d5a9fa74b27eb6e9e4ca9e17b055a6e8717304dee866eb56ef45923",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/flow/flow_hash_computation.md": {
+      "hash": "4efdd362502af700cc09f0d581472b5ea8f4776043b00f01abb528c9d1830f6d",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl": {
+      "hash": "a5c5ba3991d5a6245fe862ad8a98eca6bf43335eb8d18c352744cb257e8d7d8b",
+      "type": "impl",
+      "children": [
+        "spex-machina/Merkle/impl/impl_diff_algorithm.md",
+        "spex-machina/Merkle/impl/impl_diff_command.md",
+        "spex-machina/Merkle/impl/impl_hash_command.md",
+        "spex-machina/Merkle/impl/impl_hash_computation.md",
+        "spex-machina/Merkle/impl/impl_impact_classification.md",
+        "spex-machina/Merkle/impl/impl_snapshot_format.md",
+        "spex-machina/Merkle/impl/impl_tree_construction.md"
+      ]
+    },
+    "spex-machina/Merkle/impl/impl_diff_algorithm.md": {
+      "hash": "b942e481dfd10b36f15bb9c224a4f0445d5c336ae952bac7fe269c4cc46fa290",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_diff_command.md": {
+      "hash": "4e047649e86cc3c993329ed648ee7eed26117ff67a660c68ecee5eca9a9d862f",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_hash_command.md": {
+      "hash": "8dce6a3928bc70e77e547504e8d2e718ec6b67b925518ed2060bb511cfeb4dbf",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_hash_computation.md": {
+      "hash": "8146b15acf63400849247923e24b416f2c141fee221edd3268ab6515388cfdb5",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_impact_classification.md": {
+      "hash": "9850c4f4a6dbdf2569415353a741bd78fa86ae086521764c86bac2efb8bdf5cf",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_snapshot_format.md": {
+      "hash": "4310fa094658c6224c5491bb194b972535c9d7d5b31c9819b8a5d896691f2ded",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/impl/impl_tree_construction.md": {
+      "hash": "0a1625eb7d6c5098139d70cb09660adee44909b4338c69acb6d20ccd153ae619",
+      "type": "leaf"
+    },
+    "spex-machina/Merkle/module.json": {
+      "hash": "fc2da2f84fdc7fd2bf05c7f413f5d984ef4c256c8982e97df5a3f06f7019dc82",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal": {
+      "hash": "d12d819d026f6201a6f1f7634e0ba2235067bb79966c05d9d4b14a640960161d",
+      "type": "module",
+      "children": [
+        "spex-machina/Proposal/module.json",
+        "spex-machina/Proposal/arch",
+        "spex-machina/Proposal/impl",
+        "spex-machina/Proposal/flow"
+      ]
+    },
+    "spex-machina/Proposal/arch": {
+      "hash": "e4b6bff154c27b64cc9120cc1986572a114b8b6b6e2e8adb6ad88f2533169b38",
+      "type": "arch",
+      "children": [
+        "spex-machina/Proposal/arch/arch_history_viewer.md",
+        "spex-machina/Proposal/arch/arch_proposal_commands.md",
+        "spex-machina/Proposal/arch/arch_registrar.md",
+        "spex-machina/Proposal/arch/arch_template_provider.md"
+      ]
+    },
+    "spex-machina/Proposal/arch/arch_history_viewer.md": {
+      "hash": "b830ba6c9ba159859d84e10be0c78e8e11f81cb811598fa13370081150e9efd2",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/arch/arch_proposal_commands.md": {
+      "hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/arch/arch_registrar.md": {
+      "hash": "bd785d2cfa6d2ad8e77567e9eab84ed74bffaf42a1eb192c299d67bc978c16dc",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/arch/arch_template_provider.md": {
+      "hash": "b68cf00d0f93d2e0cd99b8e9dd99cf9798955617d247a4b29b69495c83e8c6a5",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/flow": {
+      "hash": "1ffe2217e84bf800ae0c7c5313f669e4cd659a4d0b3726c4e89057b718f1de79",
+      "type": "flow",
+      "children": [
+        "spex-machina/Proposal/flow/flow_proposal_lifecycle.md"
+      ]
+    },
+    "spex-machina/Proposal/flow/flow_proposal_lifecycle.md": {
+      "hash": "db25a6c3891a913aca16dbba61b34311afcdf98f85719567af9408e7b00cda83",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/impl": {
+      "hash": "c9772cf8daadd9fef6f748d448bfbfe26256327a796870df320ad93c8a9b68e5",
+      "type": "impl",
+      "children": [
+        "spex-machina/Proposal/impl/impl_history_tracking.md",
+        "spex-machina/Proposal/impl/impl_proposal_commands.md",
+        "spex-machina/Proposal/impl/impl_registration.md",
+        "spex-machina/Proposal/impl/impl_template_management.md"
+      ]
+    },
+    "spex-machina/Proposal/impl/impl_history_tracking.md": {
+      "hash": "9cc2e3d18617f0fe488bbdd56241a0149badf290342aa124e32aaf150834201a",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/impl/impl_proposal_commands.md": {
+      "hash": "517b117d7f1ac9bca6f46e453393bbaa9ffe00de5f54a5fc468367863691a3bd",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/impl/impl_registration.md": {
+      "hash": "a8ed7c365325fa1808314890f15caa5713d0307bf8fc71707e6b071e32a4af7c",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/impl/impl_template_management.md": {
+      "hash": "70331a5608bda0986b6b9dc9c8e166fe96035f4f713e9aec8d96c1f36b186e36",
+      "type": "leaf"
+    },
+    "spex-machina/Proposal/module.json": {
+      "hash": "51a3085c83cb4c049e68dba97535045b541823e14d2afa54a27952baf5ff085a",
+      "type": "leaf"
+    },
+    "spex-machina/Render": {
+      "hash": "74623939c3991b9c54be1f2cc11be66cb27e2b3a1333061db009b354a42d5deb",
+      "type": "module",
+      "children": [
+        "spex-machina/Render/module.json",
+        "spex-machina/Render/arch",
+        "spex-machina/Render/impl",
+        "spex-machina/Render/flow"
+      ]
+    },
+    "spex-machina/Render/arch": {
+      "hash": "64d05ddf2ce9d6557f93025dcb74989a898d16ebb389b75df453661035f79a6d",
+      "type": "arch",
+      "children": [
+        "spex-machina/Render/arch/arch_dot_renderer.md",
+        "spex-machina/Render/arch/arch_json_renderer.md",
+        "spex-machina/Render/arch/arch_markdown_renderer.md",
+        "spex-machina/Render/arch/arch_render_command.md",
+        "spex-machina/Render/arch/arch_spec_reader.md"
+      ]
+    },
+    "spex-machina/Render/arch/arch_dot_renderer.md": {
+      "hash": "3a4ba76100ea99d0b802850c05551afbfe5250ce3009d4af5aed548d09fa680d",
+      "type": "leaf"
+    },
+    "spex-machina/Render/arch/arch_json_renderer.md": {
+      "hash": "15267bb5b3bb0b07465cc444d61f9d9fe39c08f01686405fe45374f67ea0bea9",
+      "type": "leaf"
+    },
+    "spex-machina/Render/arch/arch_markdown_renderer.md": {
+      "hash": "063c8b721674d6951c7932dbde4b78a4c681e3823e3e93dd343246a74f628e13",
+      "type": "leaf"
+    },
+    "spex-machina/Render/arch/arch_render_command.md": {
+      "hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a",
+      "type": "leaf"
+    },
+    "spex-machina/Render/arch/arch_spec_reader.md": {
+      "hash": "e94f5e3b500c041e4b6d3502a9bfa303940f36904a6503528514c54629bb5d0a",
+      "type": "leaf"
+    },
+    "spex-machina/Render/flow": {
+      "hash": "f990a55219504330328c06c83dfb0bda4479ab15b5ba8e15a1cc164ac075a889",
+      "type": "flow",
+      "children": [
+        "spex-machina/Render/flow/flow_render_pipeline.md"
+      ]
+    },
+    "spex-machina/Render/flow/flow_render_pipeline.md": {
+      "hash": "739fe78a0f2cd65d6991e4c0188868dac0f0a699574f6e6fb3978ca45c9012bb",
+      "type": "leaf"
+    },
+    "spex-machina/Render/impl": {
+      "hash": "71addffd47456c172b6e0e8912dfa9649215bd956aeb393a2477faede511d0ba",
+      "type": "impl",
+      "children": [
+        "spex-machina/Render/impl/impl_dot_generation.md",
+        "spex-machina/Render/impl/impl_json_serialization.md",
+        "spex-machina/Render/impl/impl_markdown_rendering.md",
+        "spex-machina/Render/impl/impl_render_command.md",
+        "spex-machina/Render/impl/impl_spec_reading.md"
+      ]
+    },
+    "spex-machina/Render/impl/impl_dot_generation.md": {
+      "hash": "93537f16e2f3a84ae8aeea13ae53ac5452630ada5882b32ed55a1eb5724c71d4",
+      "type": "leaf"
+    },
+    "spex-machina/Render/impl/impl_json_serialization.md": {
+      "hash": "7ddcd34b5a08fcdc8929f473f7ddaf49234cba0c532c7d49d360daf0c233583c",
+      "type": "leaf"
+    },
+    "spex-machina/Render/impl/impl_markdown_rendering.md": {
+      "hash": "2333d81122f1f51b557393161676db04c77b98f7de5b4510a5c7810dbc3bcc14",
+      "type": "leaf"
+    },
+    "spex-machina/Render/impl/impl_render_command.md": {
+      "hash": "6a165472ee31433189b26aa3157f41d143b2fcbde477ba7ad3544ca432e4e26c",
+      "type": "leaf"
+    },
+    "spex-machina/Render/impl/impl_spec_reading.md": {
+      "hash": "91baca45a96b509a24b0cb93911c72c6b24439148594d97271cbfb8e19ceb3af",
+      "type": "leaf"
+    },
+    "spex-machina/Render/module.json": {
+      "hash": "bb27a9e132617767aee6a08ae5ef577d7d2c7e7707032a2e55cdb3ec75e2025c",
+      "type": "leaf"
+    },
+    "spex-machina/Schema": {
+      "hash": "deafeac4c08e29d3312d227615c4e30c32f55a00e87b7beda014253ef60fce0f",
+      "type": "module",
+      "children": [
+        "spex-machina/Schema/module.json",
+        "spex-machina/Schema/arch",
+        "spex-machina/Schema/impl"
+      ]
+    },
+    "spex-machina/Schema/arch": {
+      "hash": "5dd7911fcf73dd65f9dd5327b62b98701a9b109e67d4db001b0eb7627c7deda5",
+      "type": "arch",
+      "children": [
+        "spex-machina/Schema/arch/arch_module_schema.md",
+        "spex-machina/Schema/arch/arch_project_schema.md",
+        "spex-machina/Schema/arch/arch_schema_loader.md"
+      ]
+    },
+    "spex-machina/Schema/arch/arch_module_schema.md": {
+      "hash": "6c88e38b9e315cd388a94cf676974f6b400ef671c8ae27ed92378faf4378aa19",
+      "type": "leaf"
+    },
+    "spex-machina/Schema/arch/arch_project_schema.md": {
+      "hash": "d8c479f9fe0c04d3a678d519a44917e83047095eda9ae169b71162c28fc261db",
+      "type": "leaf"
+    },
+    "spex-machina/Schema/arch/arch_schema_loader.md": {
+      "hash": "6c9e1bdc39b9cc81498b18e516acaf5011f36b61896a3df6fa18b34fcf777d96",
+      "type": "leaf"
+    },
+    "spex-machina/Schema/impl": {
+      "hash": "1e2ccb9a22e2916e9f0e72820f8f65844578c24817b4a0d6cfc702ecc06b135a",
+      "type": "impl",
+      "children": [
+        "spex-machina/Schema/impl/impl_go_embedding.md",
+        "spex-machina/Schema/impl/impl_schema_definitions.md"
+      ]
+    },
+    "spex-machina/Schema/impl/impl_go_embedding.md": {
+      "hash": "fdc65ff190dc9d0c05b8777e14f0e5e7eaa9c74206a95a0e274988e45e92f055",
+      "type": "leaf"
+    },
+    "spex-machina/Schema/impl/impl_schema_definitions.md": {
+      "hash": "32431b4f09f657bc48a775136d250f901a20e1293d1758f46d2cfe75814bc476",
+      "type": "leaf"
+    },
+    "spex-machina/Schema/module.json": {
+      "hash": "ec70abed6dca1c9f3c5a2a938678a11872321d4429667732ae612eced052d67d",
+      "type": "leaf"
+    },
+    "spex-machina/Validator": {
+      "hash": "c0bab7bbb662e8946c132ae8ae723f5943cd0b3b47b97c87651d7f794bc93955",
+      "type": "module",
+      "children": [
+        "spex-machina/Validator/module.json",
+        "spex-machina/Validator/arch",
+        "spex-machina/Validator/impl",
+        "spex-machina/Validator/flow"
+      ]
+    },
+    "spex-machina/Validator/arch": {
+      "hash": "fb1e0d3b2d1602f36e730102cdb2b837dccce24e31d64442d01b2ff600ec660f",
+      "type": "arch",
+      "children": [
+        "spex-machina/Validator/arch/arch_content_resolver.md",
+        "spex-machina/Validator/arch/arch_dag_checker.md",
+        "spex-machina/Validator/arch/arch_error_reporter.md",
+        "spex-machina/Validator/arch/arch_id_validator.md",
+        "spex-machina/Validator/arch/arch_orphan_detector.md",
+        "spex-machina/Validator/arch/arch_schema_checker.md",
+        "spex-machina/Validator/arch/arch_validate_command.md"
+      ]
+    },
+    "spex-machina/Validator/arch/arch_content_resolver.md": {
+      "hash": "ad79d81e82fff86dacba258a142a51e3967d865f720871c67d07b27950b5e238",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_dag_checker.md": {
+      "hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_error_reporter.md": {
+      "hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_id_validator.md": {
+      "hash": "4d8c56545bb01486d9f224665ccb01b2a17e25361fe7b48b5407e50564ab0ed9",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_orphan_detector.md": {
+      "hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_schema_checker.md": {
+      "hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/arch/arch_validate_command.md": {
+      "hash": "3aa13da456c4d054a9d016663cf72555af7607c1c524a7d2fe4280b842926bd6",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/flow": {
+      "hash": "cc774703d66289761ff67b9b2afdb16d3e11550a119c4fa76531294e0b7a8afb",
+      "type": "flow",
+      "children": [
+        "spex-machina/Validator/flow/flow_validation_pipeline.md"
+      ]
+    },
+    "spex-machina/Validator/flow/flow_validation_pipeline.md": {
+      "hash": "7f0785bc49636182b96232f9380695c70b45b502250d9298bb04cfda817d99f4",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl": {
+      "hash": "ab66185e441c528a74bcd9e498fe5851c8d02d5e9664a00653d132a9f9ac7d81",
+      "type": "impl",
+      "children": [
+        "spex-machina/Validator/impl/impl_content_resolution.md",
+        "spex-machina/Validator/impl/impl_cycle_detection.md",
+        "spex-machina/Validator/impl/impl_error_output.md",
+        "spex-machina/Validator/impl/impl_id_validation.md",
+        "spex-machina/Validator/impl/impl_orphan_detection.md",
+        "spex-machina/Validator/impl/impl_schema_validation.md",
+        "spex-machina/Validator/impl/impl_validate_command.md"
+      ]
+    },
+    "spex-machina/Validator/impl/impl_content_resolution.md": {
+      "hash": "71d9f6241179f2eeaed56258ba43e63ce7fb3623dd96f6c45caf9d21907c61ce",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_cycle_detection.md": {
+      "hash": "424c68f4cdfee0afc6ae291ff0dab99a3a703ad77608a8b2dc3dafa18e79f77f",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_error_output.md": {
+      "hash": "dcb3cc671820383bef539ac999bab8ef469c36cde2db8d8ea67600dcabd51e41",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_id_validation.md": {
+      "hash": "8f9378b9b4f59dd1bc5a85816941056297662632406da58a8e08c32859081961",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_orphan_detection.md": {
+      "hash": "e64b0ac97324db1219e00876f8bc9a72e3cf876969e8180aef4db5de312cb67c",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_schema_validation.md": {
+      "hash": "10628acbc2a37017bb3a3096f206ecd9572759e4ae5d83175000d4276baa57af",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/impl/impl_validate_command.md": {
+      "hash": "801ffa4b459d848b8ecad1adef8835993e66f4ae43c8bbb20e430694fd747d89",
+      "type": "leaf"
+    },
+    "spex-machina/Validator/module.json": {
+      "hash": "a2e033bfc6bc63e1e4a120af05eb2e02890c37799f9779984acdf2035237f32b",
+      "type": "leaf"
+    },
+    "spex-machina/project.json": {
+      "hash": "ed1db20b8a90e6b1c1c21d931482433e8ccbe14dcd52ed390931d12cdc8cfcac",
+      "type": "leaf"
+    }
+  }
+}
