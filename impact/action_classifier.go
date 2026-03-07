@@ -2,6 +2,7 @@ package impact
 
 import (
 	"fmt"
+	"path"
 	"sort"
 
 	"github.com/dmitriyb/spexmachina/merkle"
@@ -28,8 +29,8 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		node := nodeFromChange(m.Change)
 
 		switch m.Change.Type {
-		case merkle.Added:
-			// Added node with matching bead — unexpected, review for consistency.
+		case merkle.Added, merkle.Modified:
+			reason := matchedChangeReason(m.Change.Type, impact, m.Change.Module, node)
 			for _, b := range m.Beads {
 				actions = append(actions, Action{
 					Type:   "review",
@@ -37,19 +38,7 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 					Module: m.Change.Module,
 					Node:   node,
 					Impact: impact,
-					Reason: fmt.Sprintf("Spec node modified (%s): %s/%s", impact, m.Change.Module, node),
-				})
-			}
-		case merkle.Modified:
-			// Modified node with matching bead — review.
-			for _, b := range m.Beads {
-				actions = append(actions, Action{
-					Type:   "review",
-					BeadID: b.ID,
-					Module: m.Change.Module,
-					Node:   node,
-					Impact: impact,
-					Reason: fmt.Sprintf("Spec node modified (%s): %s/%s", impact, m.Change.Module, node),
+					Reason: reason,
 				})
 			}
 		}
@@ -108,20 +97,19 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 	return actions
 }
 
-// nodeFromChange extracts the spec node name from the change path base filename.
-func nodeFromChange(c merkle.ClassifiedChange) string {
-	base := pathBase(c.Path)
-	return base
+// matchedChangeReason returns a human-readable reason for a matched change action.
+func matchedChangeReason(changeType merkle.ChangeType, impact, module, node string) string {
+	switch changeType {
+	case merkle.Added:
+		return fmt.Sprintf("Existing bead for added node (%s): %s/%s", impact, module, node)
+	default:
+		return fmt.Sprintf("Spec node modified (%s): %s/%s", impact, module, node)
+	}
 }
 
-// pathBase returns the last element of a slash-separated path.
-func pathBase(p string) string {
-	for i := len(p) - 1; i >= 0; i-- {
-		if p[i] == '/' {
-			return p[i+1:]
-		}
-	}
-	return p
+// nodeFromChange extracts the spec node name from the change path base filename.
+func nodeFromChange(c merkle.ClassifiedChange) string {
+	return path.Base(c.Path)
 }
 
 // beadNode returns the best available node name from a bead's spec metadata.

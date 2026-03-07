@@ -59,6 +59,9 @@ func TestFR3_ClassifyActions_ReviewOnAddedWithBead(t *testing.T) {
 	if actions[0].Type != "review" {
 		t.Errorf("want type review, got %q", actions[0].Type)
 	}
+	if !strings.Contains(actions[0].Reason, "added node") {
+		t.Errorf("want reason containing 'added node', got %q", actions[0].Reason)
+	}
 }
 
 func TestFR3_ClassifyActions_CreateOnAddedUnmatched(t *testing.T) {
