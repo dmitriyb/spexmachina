@@ -13,7 +13,13 @@ Read ONLY these documents:
 
 1. The PR diff and description
 2. The linked bead: run `br show <bead-id>` using the bead ID from the PR description
-3. If the bead references spec nodes, read the relevant `spec/<module>_reqs.md` and `spec/<module>_impl.md`
+3. Read spec files from the bead's labels:
+   - Find labels `spec_module:<module>` and `spec_component:<component>`
+   - Read `spec/<module>/arch_<snake_case(component)>.md` for architecture
+   - Read `spec/<module>/impl_<snake_case(component)>.md` for implementation details
+   - Read `spec/<module>/flow_*.md` for data flow between components
+   - Read `spec/<module>/module.json` for requirements the component implements (check `implements` field)
+4. If no spec labels exist, fall back to reading any spec references in the description
 
 ## Review Flow
 

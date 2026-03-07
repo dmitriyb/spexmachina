@@ -11,11 +11,14 @@ Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-speci
 
 ## Context Loading
 
-1. Run `br show $ARGUMENTS` to get the full bead details (title, description, metadata, dependencies)
-2. If the bead has `metadata.spec_id` or references a spec module, read the relevant `spec/<module>_impl.md`
-3. If the bead was created by `spex apply`, the description contains spec context — use it directly
-
-**DO NOT READ** `spec/*_arch.md`, `spec/*_plan.md` — already distilled into the bead.
+1. Run `br show $ARGUMENTS` to get the full bead details (title, description, labels, dependencies)
+2. Read spec files from the bead's labels:
+   - Find labels `spec_module:<module>` and `spec_component:<component>`
+   - Read `spec/<module>/arch_<snake_case(component)>.md` for architecture
+   - Read `spec/<module>/impl_<snake_case(component)>.md` for implementation details
+   - Read `spec/<module>/flow_*.md` for data flow between components
+   - Read `spec/<module>/module.json` for requirements the component implements (check `implements` field)
+3. If no spec labels exist, fall back to reading any spec references in the description
 
 ## Workflow
 

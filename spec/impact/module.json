@@ -15,7 +15,9 @@
       "title": "Match changed nodes to beads",
       "preq_id": 4,
       "description": "Correlate changed spec nodes (from merkle diff) with existing beads using spec metadata fields.",
-      "depends_on": [1]
+      "depends_on": [
+        1
+      ]
     },
     {
       "id": 3,
@@ -23,7 +25,9 @@
       "title": "Classify actions",
       "preq_id": 4,
       "description": "Determine action for each affected bead: create (new spec nodes without beads), close (removed spec nodes with existing beads), review (modified spec nodes with existing beads).",
-      "depends_on": [2]
+      "depends_on": [
+        2
+      ]
     },
     {
       "id": 4,
@@ -31,7 +35,9 @@
       "title": "Output impact report",
       "preq_id": 4,
       "description": "Produce a structured JSON impact report listing all affected beads and their classified actions.",
-      "depends_on": [3]
+      "depends_on": [
+        3
+      ]
     },
     {
       "id": 5,
@@ -47,31 +53,61 @@
       "name": "BeadReader",
       "description": "Reads bead metadata from the bd CLI, extracting spec-related fields for matching.",
       "content": "arch_bead_reader.md",
-      "implements": [1]
+      "implements": [
+        1
+      ]
     },
     {
       "id": 2,
       "name": "NodeMatcher",
       "description": "Matches changed spec nodes to beads by comparing spec paths and metadata fields.",
       "content": "arch_node_matcher.md",
-      "implements": [2, 5],
-      "uses": [1]
+      "implements": [
+        2,
+        5
+      ],
+      "uses": [
+        1
+      ]
     },
     {
       "id": 3,
       "name": "ActionClassifier",
       "description": "Determines the action (create/close/review) for each matched or unmatched spec node.",
       "content": "arch_action_classifier.md",
-      "implements": [3],
-      "uses": [2]
+      "implements": [
+        3
+      ],
+      "uses": [
+        2
+      ]
     },
     {
       "id": 4,
       "name": "ReportGenerator",
       "description": "Produces the structured JSON impact report from classified actions.",
       "content": "arch_report_generator.md",
-      "implements": [4],
-      "uses": [3]
+      "implements": [
+        4
+      ],
+      "uses": [
+        3
+      ]
+    },
+    {
+      "id": 5,
+      "name": "ImpactCommand",
+      "description": "CLI entry point for spex impact. Reads merkle diff, wires BeadReader, NodeMatcher, ActionClassifier, ReportGenerator, outputs impact report as JSON.",
+      "content": "arch_impact_command.md",
+      "implements": [
+        4
+      ],
+      "uses": [
+        1,
+        2,
+        3,
+        4
+      ]
     }
   ],
   "impl_sections": [
@@ -79,34 +115,55 @@
       "id": 1,
       "name": "Bead metadata reading",
       "content": "impl_bead_reading.md",
-      "describes": [1]
+      "describes": [
+        1
+      ]
     },
     {
       "id": 2,
       "name": "Node matching algorithm",
       "content": "impl_node_matching.md",
-      "describes": [2]
+      "describes": [
+        2
+      ]
     },
     {
       "id": 3,
       "name": "Action classification rules",
       "content": "impl_action_classification.md",
-      "describes": [3]
+      "describes": [
+        3
+      ]
     },
     {
       "id": 4,
       "name": "Report format",
       "content": "impl_report_format.md",
-      "describes": [4]
+      "describes": [
+        4
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Impact command implementation",
+      "content": "impl_impact_command.md",
+      "describes": [
+        5
+      ]
     }
   ],
   "data_flows": [
     {
       "id": 1,
       "name": "Impact analysis flow",
-      "description": "Merkle diff + bead metadata → matched pairs → classified actions → impact report.",
+      "description": "Merkle diff + bead metadata \u2192 matched pairs \u2192 classified actions \u2192 impact report.",
       "content": "flow_impact_analysis.md",
-      "uses": [1, 2, 3, 4]
+      "uses": [
+        1,
+        2,
+        3,
+        4
+      ]
     }
   ]
 }
