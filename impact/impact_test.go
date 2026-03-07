@@ -22,7 +22,7 @@ func TestFR2_MatchNodes_ComponentMatch(t *testing.T) {
 		{ID: "bead-2", Module: "validator", Component: "OtherComp"},
 	}
 
-	matched, unmatched, orphaned := MatchNodes(changes, beads)
+	matched, unmatched := MatchNodes(changes, beads)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match, got %d", len(matched))
@@ -32,9 +32,6 @@ func TestFR2_MatchNodes_ComponentMatch(t *testing.T) {
 	}
 	if len(unmatched) != 0 {
 		t.Fatalf("want 0 unmatched, got %d", len(unmatched))
-	}
-	if len(orphaned) != 0 {
-		t.Fatalf("want 0 orphaned, got %d", len(orphaned))
 	}
 }
 
@@ -50,7 +47,7 @@ func TestFR2_MatchNodes_ImplSectionMatch(t *testing.T) {
 		{ID: "bead-1", Module: "merkle", ImplSection: "HashAlgo"},
 	}
 
-	matched, unmatched, _ := MatchNodes(changes, beads)
+	matched, unmatched := MatchNodes(changes, beads)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match, got %d", len(matched))
@@ -72,7 +69,7 @@ func TestFR2_MatchNodes_Unmatched(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, _ := MatchNodes(changes, nil)
+	matched, unmatched := MatchNodes(changes, nil)
 
 	if len(matched) != 0 {
 		t.Fatalf("want 0 matched, got %d", len(matched))
@@ -96,7 +93,7 @@ func TestFR2_MatchNodes_StructuralAffectsAllModuleBeads(t *testing.T) {
 		{ID: "bead-3", Module: "other", Component: "C"},
 	}
 
-	matched, _, _ := MatchNodes(changes, beads)
+	matched, _ := MatchNodes(changes, beads)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match group, got %d", len(matched))
@@ -134,15 +131,9 @@ func TestFR3_ClassifyActions_DecisionTable(t *testing.T) {
 
 			var matched []Match
 			var unmatched []merkle.ClassifiedChange
-			var orphaned []BeadSpec
 
 			if tt.hasBead {
-				if tt.changeType == merkle.Removed {
-					// Removed + bead = orphaned path
-					orphaned = []BeadSpec{{ID: "bead-1", Module: "validator", Component: "Checker"}}
-				} else {
-					matched = []Match{{Change: change, Beads: []BeadSpec{{ID: "bead-1", Module: "validator", Component: "Checker"}}}}
-				}
+				matched = []Match{{Change: change, Beads: []BeadSpec{{ID: "bead-1", Module: "validator", Component: "Checker"}}}}
 			} else {
 				if tt.changeType != merkle.Removed {
 					unmatched = []merkle.ClassifiedChange{change}
@@ -150,7 +141,7 @@ func TestFR3_ClassifyActions_DecisionTable(t *testing.T) {
 				// removed + no bead = nothing to add
 			}
 
-			actions := ClassifyActions(matched, unmatched, orphaned)
+			actions := ClassifyActions(matched, unmatched)
 
 			if tt.wantAction == "" {
 				if len(actions) != 0 {
@@ -179,7 +170,7 @@ func TestFR3_ClassifyActions_ReasonFormat(t *testing.T) {
 		Beads: []BeadSpec{{ID: "b-1", Module: "merkle", Component: "Hasher"}},
 	}}
 
-	actions := ClassifyActions(matched, nil, nil)
+	actions := ClassifyActions(matched, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -247,8 +238,8 @@ func TestNFR5_Deterministic(t *testing.T) {
 	}
 
 	run := func() string {
-		matched, unmatched, orphaned := MatchNodes(changes, nil)
-		actions := ClassifyActions(matched, unmatched, orphaned)
+		matched, unmatched := MatchNodes(changes, nil)
+		actions := ClassifyActions(matched, unmatched)
 		var buf bytes.Buffer
 		if err := GenerateReport(actions, &buf); err != nil {
 			t.Fatal(err)

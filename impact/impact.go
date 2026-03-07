@@ -89,9 +89,8 @@ func ReadBeads(ctx context.Context, beadCLI string) ([]BeadSpec, error) {
 }
 
 // MatchNodes correlates classified changes with beads.
-// Returns matched changes, unmatched changes (no bead), and orphaned beads
-// (bead references a removed node).
-func MatchNodes(changes []merkle.ClassifiedChange, beads []BeadSpec) (matched []Match, unmatched []merkle.ClassifiedChange, orphaned []BeadSpec) {
+// Returns matched changes and unmatched changes (no bead).
+func MatchNodes(changes []merkle.ClassifiedChange, beads []BeadSpec) (matched []Match, unmatched []merkle.ClassifiedChange) {
 	// Index beads by (module, component) and (module, impl_section).
 	type key struct{ module, node string }
 	compIdx := make(map[key][]BeadSpec)
@@ -108,9 +107,6 @@ func MatchNodes(changes []merkle.ClassifiedChange, beads []BeadSpec) (matched []
 		modIdx[b.Module] = append(modIdx[b.Module], b)
 	}
 
-	// Track which beads were matched (for orphan detection on removals).
-	matchedBeadIDs := make(map[string]bool)
-
 	for _, cc := range changes {
 		nodeName, nodeType := resolveNode(cc.Path)
 		var found []BeadSpec
@@ -126,42 +122,17 @@ func MatchNodes(changes []merkle.ClassifiedChange, beads []BeadSpec) (matched []
 
 		if len(found) > 0 {
 			matched = append(matched, Match{Change: cc, Beads: found})
-			for _, b := range found {
-				matchedBeadIDs[b.ID] = true
-			}
 		} else {
 			unmatched = append(unmatched, cc)
 		}
 	}
 
-	// Orphaned: beads referencing removed nodes that weren't matched above.
-	// Only relevant for "removed" changes — find beads that reference nodes
-	// which were removed but didn't appear in matched results.
-	for _, cc := range changes {
-		if cc.Type != merkle.Removed {
-			continue
-		}
-		nodeName, nodeType := resolveNode(cc.Path)
-		var candidates []BeadSpec
-		if nodeType == "component" {
-			candidates = compIdx[key{cc.Module, nodeName}]
-		} else if nodeType == "impl_section" || nodeType == "flow" {
-			candidates = implIdx[key{cc.Module, nodeName}]
-		}
-		for _, b := range candidates {
-			if !matchedBeadIDs[b.ID] {
-				orphaned = append(orphaned, b)
-				matchedBeadIDs[b.ID] = true
-			}
-		}
-	}
-
-	return matched, unmatched, orphaned
+	return matched, unmatched
 }
 
-// ClassifyActions determines the action for each matched, unmatched, and
-// orphaned result according to the decision table in the spec.
-func ClassifyActions(matched []Match, unmatched []merkle.ClassifiedChange, orphaned []BeadSpec) []Action {
+// ClassifyActions determines the action for each matched and unmatched
+// result according to the decision table in the spec.
+func ClassifyActions(matched []Match, unmatched []merkle.ClassifiedChange) []Action {
 	var actions []Action
 
 	// Matched changes: action depends on change type.
@@ -205,21 +176,6 @@ func ClassifyActions(matched []Match, unmatched []merkle.ClassifiedChange, orpha
 			Node:   nodeName,
 			Impact: cc.Impact.String(),
 			Reason: fmt.Sprintf("New spec node: %s/%s", cc.Module, nodeName),
-		})
-	}
-
-	// Orphaned beads: close.
-	for _, b := range orphaned {
-		node := b.Component
-		if node == "" {
-			node = b.ImplSection
-		}
-		actions = append(actions, Action{
-			Type:   "close",
-			BeadID: b.ID,
-			Module: b.Module,
-			Node:   node,
-			Reason: fmt.Sprintf("Spec node removed: %s/%s", b.Module, node),
 		})
 	}
 

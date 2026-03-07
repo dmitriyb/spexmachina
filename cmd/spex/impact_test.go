@@ -163,7 +163,7 @@ func writeFakeBeadCLI(t *testing.T, jsonOutput string) string {
 	t.Helper()
 	dir := t.TempDir()
 	script := filepath.Join(dir, "fake-bead-cli")
-	content := "#!/bin/sh\necho '" + jsonOutput + "'\n"
+	content := "#!/bin/sh\ncat <<'BEADEOF'\n" + jsonOutput + "\nBEADEOF\n"
 	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
 		t.Fatalf("write fake bead CLI: %v", err)
 	}

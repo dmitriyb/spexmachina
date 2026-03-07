@@ -15,7 +15,6 @@ func runImpact(args []string) int {
 	fs := flag.NewFlagSet("impact", flag.ContinueOnError)
 	diffFile := fs.String("diff", "", "path to diff JSON file (default: stdin)")
 	beadCLI := fs.String("bead-cli", "br", "bead CLI binary name")
-	jsonOut := fs.Bool("json", false, "output as JSON (default)")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "spex impact: %v\n", err)
 		return 1
@@ -56,11 +55,8 @@ func runImpact(args []string) int {
 	}
 
 	// Run the impact pipeline.
-	matched, unmatched, orphaned := impact.MatchNodes(classified, beads)
-	actions := impact.ClassifyActions(matched, unmatched, orphaned)
-
-	// Always output JSON (impact is meant for piping).
-	_ = jsonOut
+	matched, unmatched := impact.MatchNodes(classified, beads)
+	actions := impact.ClassifyActions(matched, unmatched)
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "spex impact: %v\n", err)
 		return 1
