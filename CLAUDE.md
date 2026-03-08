@@ -27,7 +27,8 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 
 ## Build & Test
 
-- Build and test: `go test ./...`
+- Build: `go build -o bin/ ./cmd/spex/`
+- Test: `go test ./...`
 - Vet: `go vet ./...`
 
 ## Git Conventions
