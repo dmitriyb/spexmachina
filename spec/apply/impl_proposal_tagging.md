@@ -5,7 +5,7 @@
 ```go
 func tagBead(ctx context.Context, bin, beadID, proposalRef string) error {
     out, err := exec.CommandContext(ctx, bin, "update", beadID,
-        "--add-label", fmt.Sprintf("spec_proposal=%s", proposalRef),
+        "--add-label", fmt.Sprintf("spec_proposal:%s", proposalRef),
     ).CombinedOutput()
     if err != nil {
         return fmt.Errorf("apply: tag bead %s with proposal: %w\n%s", beadID, err, out)

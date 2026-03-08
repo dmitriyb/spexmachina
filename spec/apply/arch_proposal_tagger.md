@@ -18,7 +18,7 @@ func TagWithProposal(ctx context.Context, beadIDs []string, proposalRef string) 
 
 For each affected bead:
 ```
-<bin> update <bead_id> --add-label spec_proposal=<proposal_ref>
+<bin> update <bead_id> --add-label spec_proposal:<proposal_ref>
 ```
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
