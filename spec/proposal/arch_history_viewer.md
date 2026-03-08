@@ -5,7 +5,7 @@ Shows proposal history — which proposals led to which spec changes and bead ac
 ## Responsibilities
 
 - List all proposals in `spec/proposals/` with dates
-- For each proposal, find beads tagged with `spec_proposal=<filename>`
+- For each proposal, find beads tagged with `spec_proposal:<stem>` (filename without `.md`)
 - Show the link chain: proposal → beads created/closed/modified
 
 ## Interface

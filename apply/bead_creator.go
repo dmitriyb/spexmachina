@@ -88,34 +88,48 @@ func (c *execCLI) Create(ctx context.Context, opts CreateOpts) (string, error) {
 		"--silent",
 	}
 
-	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, c.bin, args...)
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("apply: %s create %q: %w\n%s", c.bin, opts.Title, err, out)
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("apply: %s create %q: %w\n%s", c.bin, opts.Title, err, ee.Stderr)
+		}
+		return "", fmt.Errorf("apply: %s create %q: %w", c.bin, opts.Title, err)
 	}
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
 // FindExisting searches for an open bead matching all given labels.
 // Returns the bead ID if found, or empty string if none exists.
+//
+// Note: --status and --label filters cannot be combined in br (br bug),
+// so we filter by label only and check status in Go.
 func (c *execCLI) FindExisting(ctx context.Context, labels []string) (string, error) {
-	args := []string{"list", "--status", "open", "--json"}
+	args := []string{"list", "--json"}
 	for _, l := range labels {
 		args = append(args, "--label", l)
 	}
 
-	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+	cmd := exec.CommandContext(ctx, c.bin, args...)
+	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("apply: %s list: %w\n%s", c.bin, err, out)
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("apply: %s list: %w\n%s", c.bin, err, ee.Stderr)
+		}
+		return "", fmt.Errorf("apply: %s list: %w", c.bin, err)
 	}
 
 	var beads []struct {
-		ID string `json:"id"`
+		ID     string `json:"id"`
+		Status string `json:"status"`
 	}
 	if err := json.Unmarshal(out, &beads); err != nil {
 		return "", fmt.Errorf("apply: parse %s list output: %w", c.bin, err)
 	}
-	if len(beads) > 0 {
-		return beads[0].ID, nil
+	for _, b := range beads {
+		if b.Status == "open" {
+			return b.ID, nil
+		}
 	}
 	return "", nil
 }
@@ -140,7 +154,7 @@ func (c *execCLI) Update(ctx context.Context, id string, metadata map[string]str
 	sort.Strings(keys)
 	for _, k := range keys {
 		v := metadata[k]
-		args := []string{"update", id, "--add-label", fmt.Sprintf("%s=%s", k, v)}
+		args := []string{"update", id, "--add-label", fmt.Sprintf("%s:%s", k, v)}
 		out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
 		if err != nil {
 			return fmt.Errorf("apply: %s update %s: %w\n%s", c.bin, id, err, out)

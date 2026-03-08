@@ -5,7 +5,7 @@
 ```go
 func tagBead(ctx context.Context, bin, beadID, proposalRef string) error {
     out, err := exec.CommandContext(ctx, bin, "update", beadID,
-        "--add-label", fmt.Sprintf("spec_proposal=%s", proposalRef),
+        "--add-label", fmt.Sprintf("spec_proposal:%s", proposalRef),
     ).CombinedOutput()
     if err != nil {
         return fmt.Errorf("apply: tag bead %s with proposal: %w\n%s", beadID, err, out)
@@ -20,4 +20,4 @@ All affected bead IDs (from creates, closes, and updates) are collected and tagg
 
 ## Proposal Reference Format
 
-The proposal reference is the filename relative to `spec/proposals/`, e.g., `2026-02-23-spex-machina.md`. This is sufficient for lookup — `spex log` can find the full path.
+The `.md` extension is stripped before storing as a label since `br` labels do not allow dots. The stored reference is the stem only, e.g., `2026-02-23-spex-machina`. When reading back, append `.md` and resolve relative to `spec/proposals/`. If the file does not exist, warn the user.

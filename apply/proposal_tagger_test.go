@@ -24,8 +24,9 @@ func TestREQ4_TagWithProposal_Success(t *testing.T) {
 		if cli.updated[i].ID != id {
 			t.Errorf("call %d: want bead ID %q, got %q", i, id, cli.updated[i].ID)
 		}
-		if cli.updated[i].Metadata["spec_proposal"] != proposal {
-			t.Errorf("call %d: want spec_proposal %q, got %q", i, proposal, cli.updated[i].Metadata["spec_proposal"])
+		wantRef := "2026-02-23-spex-machina" // .md stripped
+		if cli.updated[i].Metadata["spec_proposal"] != wantRef {
+			t.Errorf("call %d: want spec_proposal %q, got %q", i, wantRef, cli.updated[i].Metadata["spec_proposal"])
 		}
 	}
 }
