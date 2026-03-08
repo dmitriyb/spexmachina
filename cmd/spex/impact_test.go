@@ -55,8 +55,12 @@ func setupImpactDiffFile(t *testing.T) (string, string) {
 func fakeBR(t *testing.T, beadsJSON string) string {
 	t.Helper()
 	dir := t.TempDir()
+	jsonFile := filepath.Join(dir, "beads.json")
+	if err := os.WriteFile(jsonFile, []byte(beadsJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
 	script := filepath.Join(dir, "fake-br")
-	content := "#!/bin/sh\necho '" + beadsJSON + "'\n"
+	content := "#!/bin/sh\ncat " + jsonFile + "\n"
 	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +88,7 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 	brScript := fakeBR(t, string(beadsJSON))
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, "--spec", specDir})
+		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -116,7 +120,7 @@ func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
 	brScript := fakeBR(t, "[]")
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, "--spec", specDir})
+		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -159,7 +163,7 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 	brScript := fakeBR(t, "[]")
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, "--spec", specDir})
+		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -196,7 +200,7 @@ func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 	}
 	brScript := fakeBR(t, string(beadsJSON))
 
-	args := []string{"--diff", diffFile, "--bead-cli", brScript, "--spec", specDir}
+	args := []string{"--diff", diffFile, "--bead-cli", brScript, specDir}
 
 	out1 := captureStdout(t, func() {
 		runImpact(args)

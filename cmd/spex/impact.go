@@ -17,10 +17,14 @@ func runImpact(args []string) int {
 	fs := flag.NewFlagSet("impact", flag.ContinueOnError)
 	diffFlag := fs.String("diff", "", "path to diff JSON file (default: stdin)")
 	beadCLI := fs.String("bead-cli", "br", "bead CLI binary name")
-	specDir := fs.String("spec", "spec", "path to spec directory")
 	if err := fs.Parse(args); err != nil {
 		fmt.Fprintf(os.Stderr, "spex impact: %v\n", err)
 		return 1
+	}
+
+	specDir := "spec"
+	if fs.NArg() > 0 {
+		specDir = fs.Arg(0)
 	}
 
 	// Read diff JSON input.
@@ -53,7 +57,7 @@ func runImpact(args []string) int {
 		return 1
 	}
 
-	absSpec, err := filepath.Abs(*specDir)
+	absSpec, err := filepath.Abs(specDir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "spex impact: resolve spec path: %v\n", err)
 		return 1
@@ -144,7 +148,6 @@ func parseImpactLevel(s string) (merkle.ImpactLevel, error) {
 
 // moduleJSON is the subset of module.json we need for building NodeMaps.
 type moduleJSON struct {
-	Name       string `json:"name"`
 	Components []struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
