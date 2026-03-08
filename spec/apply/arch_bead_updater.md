@@ -26,7 +26,7 @@ func UpdateBeads(ctx context.Context, cli BeadCLI, reviews []Action, logger *slo
 
 For each review action:
 ```
-<bin> update <bead_id> --metadata spec_hash=<new_hash>
+<bin> update <bead_id> --add-label spec_hash=<new_hash>
 ```
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
