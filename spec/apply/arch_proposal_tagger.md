@@ -6,7 +6,7 @@ Tags all affected beads with the proposal that triggered the changes.
 
 - Accept the proposal reference (filename or path)
 - Tag all beads affected by the apply operation (created, closed, updated)
-- Uses the `<bin> update --metadata` command to add the proposal reference (where `<bin>` is `br` or `bd`)
+- Uses the `<bin> update --add-label` command to add the proposal reference (where `<bin>` is `br` or `bd`)
 
 ## Interface
 
@@ -18,7 +18,7 @@ func TagWithProposal(ctx context.Context, beadIDs []string, proposalRef string) 
 
 For each affected bead:
 ```
-<bin> update <bead_id> --metadata spec_proposal=<proposal_ref>
+<bin> update <bead_id> --add-label spec_proposal=<proposal_ref>
 ```
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
