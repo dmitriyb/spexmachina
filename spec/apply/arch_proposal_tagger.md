@@ -23,7 +23,7 @@ For each affected bead:
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 
-The proposal reference is the proposal filename (e.g., `2026-02-23-spex-machina.md`).
+The proposal reference is the proposal filename with the `.md` extension stripped (e.g., `2026-02-23-spex-machina`), since `br` labels do not allow dots. When reading back, append `.md` and verify the file exists at `spec/proposals/<ref>.md`.
 
 ## Audit Trail
 

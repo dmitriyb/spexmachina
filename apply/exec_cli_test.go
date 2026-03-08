@@ -3,7 +3,6 @@ package apply
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -294,12 +293,13 @@ func TestIntegration_TagWithProposal(t *testing.T) {
 		t.Fatalf("Create Y: %v", err)
 	}
 
-	proposal := "2026-02-23-spex-machina"
+	proposal := "2026-02-23-spex-machina.md"
 	if err := TagWithProposal(ctx, cli, []string{id1, id2}, proposal, testLogger()); err != nil {
 		t.Fatalf("TagWithProposal: %v", err)
 	}
 
-	want := fmt.Sprintf("spec_proposal:%s", proposal)
+	// .md extension is stripped because br labels don't allow dots.
+	want := "spec_proposal:2026-02-23-spex-machina"
 	for _, id := range []string{id1, id2} {
 		bead := brShow(t, cli.bin, id)
 		labels := toStringSlice(t, bead["labels"])
