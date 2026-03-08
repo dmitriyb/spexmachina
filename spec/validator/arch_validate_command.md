@@ -4,7 +4,7 @@ CLI entry point for `spex validate`. Orchestrates all validation checks on a spe
 
 ## Responsibilities
 
-- Parse CLI flags: spec directory path (positional or `--dir`), `--json` for structured output
+- Parse CLI flags: spec directory path (positional or `--dir`)
 - Discover and load `project.json` and all `module.json` files
 - Run checks in order: SchemaChecker, ContentResolver, IDValidator, DAGChecker, OrphanDetector
 - Aggregate errors through ErrorReporter
@@ -13,8 +13,8 @@ CLI entry point for `spex validate`. Orchestrates all validation checks on a spe
 ## Interface
 
 ```
-spex validate [dir] [--json]
+spex validate [dir]
 ```
 
 - `dir`: path to spec directory (default: `spec/`)
-- `--json`: output errors as JSON array instead of human-readable text
+- Output is always structured JSON; pretty-printed when stdout is a TTY, compact otherwise

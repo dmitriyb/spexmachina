@@ -107,15 +107,10 @@ func TestFR7_ValidateCommand_StructuredJSON(t *testing.T) {
 }
 
 func TestFR7_ValidateCommand_DefaultDir(t *testing.T) {
-	// Default dir "spec/" won't exist in a temp context, so it should fail
+	t.Chdir(t.TempDir())
 	code := runValidate(nil)
-	if code == 0 {
-		// If it happens to pass (e.g. running from repo root), that's also fine
-		return
-	}
-	// Should exit 1 when default dir doesn't exist or has errors
 	if code != 1 {
-		t.Fatalf("want exit 0 or 1, got %d", code)
+		t.Fatalf("want exit 1 when default spec/ missing, got %d", code)
 	}
 }
 
