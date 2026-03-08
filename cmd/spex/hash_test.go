@@ -16,7 +16,7 @@ func setupTestSpec(t *testing.T) string {
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "Alpha", "path": "alpha"}
+			{"id": 1, "name": "alpha", "path": "alpha"}
 		]
 	}`
 	writeTestFile(t, dir, "project.json", proj)
