@@ -8,7 +8,7 @@ import (
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprintln(os.Stderr, "usage: spex <command> [args]")
-		fmt.Fprintln(os.Stderr, "commands: hash, diff, impact")
+		fmt.Fprintln(os.Stderr, "commands: hash, diff, impact, validate")
 		os.Exit(1)
 	}
 
@@ -19,6 +19,8 @@ func main() {
 		os.Exit(runDiff(os.Args[2:]))
 	case "impact":
 		os.Exit(runImpact(os.Args[2:]))
+	case "validate":
+		os.Exit(runValidate(os.Args[2:]))
 	default:
 		fmt.Fprintf(os.Stderr, "spex: unknown command %q\n", os.Args[1])
 		os.Exit(1)
