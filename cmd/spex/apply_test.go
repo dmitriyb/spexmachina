@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -279,10 +280,33 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 		Summary: impact.Summary{CreateCount: 1, ReviewCount: 1, CloseCount: 1},
 	}
 
-	// Capture stdout by redirecting — for unit test we just verify the function returns 0.
+	// Capture stdout to verify output.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
 	code := printDryRun(report)
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	out, _ := io.ReadAll(r)
+	output := string(out)
+
 	if code != 0 {
 		t.Errorf("want exit code 0, got %d", code)
+	}
+	if !strings.Contains(output, "1 creates") {
+		t.Errorf("want output to contain '1 creates', got %q", output)
+	}
+	if !strings.Contains(output, "create: apply/NewComp") {
+		t.Errorf("want output to contain 'create: apply/NewComp', got %q", output)
+	}
+	if !strings.Contains(output, "review: Hasher (bead bead-1)") {
+		t.Errorf("want output to contain review line, got %q", output)
+	}
+	if !strings.Contains(output, "close:  Old (bead bead-2)") {
+		t.Errorf("want output to contain close line, got %q", output)
 	}
 }
 

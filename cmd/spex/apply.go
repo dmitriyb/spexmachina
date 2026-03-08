@@ -95,13 +95,15 @@ func runApply(args []string) int {
 	// 2. Updates (reviews)
 	updateActions := convertReviewActions(report.Reviews, hashes)
 	if err := apply.UpdateBeads(ctx, cli, updateActions, logger); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: update warnings: %v\n", err)
+		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
+		return 1
 	}
 
 	// 3. Closes
 	closeActions := convertCloseActions(report.Closes)
 	if err := apply.CloseBeads(ctx, cli, closeActions, logger); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: close warnings: %v\n", err)
+		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
+		return 1
 	}
 
 	// 4. Tag all affected beads with proposal.
