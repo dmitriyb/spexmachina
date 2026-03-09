@@ -26,9 +26,25 @@ Owns the review step between `spex impact` and `spex apply`. This is where the L
 
 Replaces the current label-parsing preflight logic with `spex check <bead-id>` (from Proposal 1: Mapping Layer). This makes preflight checks deterministic and decoupled from bead label format.
 
+### 4. Skills section in spec
+
+Skills are the LLM half of the architecture but have zero representation in the spec's JSON structure. Two-phase approach:
+
+**Phase 1 — Skills catalog in project.json**:
+Add a `skills` array to `project.json` listing each skill with name, purpose, file path, which `spex` subcommands it calls, and which spec modules it depends on. SKILL.md files remain authoritative. The catalog makes skills visible to the spec structure — the validator can check paths exist, the merkle tree detects project.json changes, and tools can discover what skills exist.
+
+Schema change: `project.schema.json` gets a `skills` array with properties: `name`, `purpose`, `path`, `uses_commands`, `depends_on_modules`.
+
+Validator: New SkillPathChecker verifies each skill's `path` exists and contains a SKILL.md file.
+
+**Phase 2 — Skills as first-class spec concept**:
+After implementing `/sync` and running the full pipeline, design a dedicated `skill.schema.json` that captures skill-specific structure: inputs/outputs, workflow steps, subcommand dependencies, triggers, preconditions. Each skill gets its own spec directory (e.g., `spec/skills/sync/`) with `skill.json` + markdown leaves, fully tracked by the merkle tree. Deferred because we don't yet know what the right schema fields are.
+
 ## Impact expectation
 
-- **Skill changes only** — no new Go code beyond what Proposals 1 and 2 introduce
-- **Modified skills**: `/spec` (add `spex validate` call), `/implement` (use `spex check`)
+- **Modified**: `schema/project.schema.json` (add `skills` array)
+- **Modified**: `spec/project.json` (add skills entries)
+- **Modified skills**: `/spec` (add `spex validate` call, test section generation), `/implement` (use `spex check`)
 - **New skill**: `/sync` (pipeline review step)
+- **New validator**: SkillPathChecker (optional, lightweight)
 - **Dependencies**: Proposal 1 (mapping layer for `/sync` and `/implement` preflight), Proposal 2 (test format for `/spec` test generation)
