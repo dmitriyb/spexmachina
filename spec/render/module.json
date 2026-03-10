@@ -154,5 +154,25 @@
         4
       ]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Spec reading tests",
+      "content": "test_spec_reading.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Renderer tests",
+      "content": "test_renderers.md",
+      "describes": [2, 3, 4]
+    },
+    {
+      "id": 3,
+      "name": "Render command tests",
+      "content": "test_render_command.md",
+      "describes": [5]
+    }
   ]
 }

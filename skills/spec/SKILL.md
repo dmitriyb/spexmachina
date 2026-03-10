@@ -36,19 +36,21 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 ### project.json
 
 - **Required**: `name`, `modules` (at least one)
-- **Optional**: `description`, `version`, `requirements`, `milestones`
+- **Optional**: `description`, `version`, `requirements`, `milestones`, `test_plan`
 - Requirements: `id` (int ≥1), `type` ("functional" | "non_functional"), `title` (required); `description`, `depends_on` (optional)
 - Modules: `id` (int ≥1), `name`, `path` (required); `description`, `requires_module` (optional). **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g., `"impact"`, not `"Impact"`)
 - Milestones: `id` (int ≥1), `title` (required); `description`, `groups` (optional)
+- Test plan: `scenarios` array; each scenario has `id` (int ≥1), `name` (required); `description`, `content` (path to `test_*.md`), `modules` (optional)
 
 ### module.json
 
 - **Required**: `name`
-- **Optional**: `description`, `requirements`, `components`, `impl_sections`, `data_flows`
+- **Optional**: `description`, `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`
 - Requirements: same as project, plus optional `preq_id` (traces to project requirement)
 - Components: `id`, `name` (required); `description`, `content`, `implements`, `uses` (optional). If users or other systems invoke the module externally, that entry point is itself a component.
 - Impl sections: `id`, `name` (required); `content`, `describes` (optional)
 - Data flows: `id`, `name` (required); `description`, `content`, `uses` (optional)
+- Test sections: `id`, `name` (required); `content` (path to `test_*.md`), `describes` (component IDs, optional)
 
 ### IDs
 
@@ -68,6 +70,8 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 | `uses` | component | component | `uses: [id, ...]` |
 | `describes` | impl_section | component | `describes: [id, ...]` |
 | `uses` | data_flow | component | `uses: [id, ...]` |
+| `describes` | test_section | component | `describes: [id, ...]` |
+| `modules` | test_scenario | module | `modules: [id, ...]` |
 | `described_in` | node | markdown leaf | `content: "path.md"` |
 
 ## Interface Mapping
@@ -91,6 +95,7 @@ spec/
     arch_<name>.md        ← component content
     impl_<name>.md        ← impl_section content
     flow_<name>.md        ← data_flow content
+    test_<name>.md        ← test_section content
 ```
 
 ### Content path conventions
@@ -102,6 +107,7 @@ Content paths in `module.json` are relative to the module directory:
 | component | `arch_<snake_name>.md` | `arch_schema_checker.md` |
 | impl_section | `impl_<snake_name>.md` | `impl_cycle_detection.md` |
 | data_flow | `flow_<snake_name>.md` | `flow_validation_pipeline.md` |
+| test_section | `test_<snake_name>.md` | `test_schema_validation.md` |
 
 Use lowercase snake_case for the `<name>` portion. The name should be a short, descriptive slug derived from the node name.
 
@@ -112,6 +118,7 @@ Each markdown file is a content leaf. Write substantive content — these are th
 - **Component (`arch_*.md`)**: What this component is, its responsibilities, key interfaces, and design rationale. Include ASCII diagrams where they clarify structure.
 - **Impl section (`impl_*.md`)**: How the component is built — algorithms, data structures, error handling, key implementation decisions.
 - **Data flow (`flow_*.md`)**: How data moves between components — input format, transformations, output format, error paths.
+- **Test section (`test_*.md`)**: Module integration/acceptance test scenarios for components — setup, inputs, expected outputs, edge cases. NOT unit tests (those are Go `_test.go` files).
 
 ## Workflow
 
@@ -127,7 +134,7 @@ Before writing files, present the user with a summary:
 
 - **Project-level requirements** — list with IDs and titles
 - **Modules** — list with IDs, names, paths, and inter-module dependencies
-- **For each module**: requirements, components, impl_sections, data_flows — with edges shown
+- **For each module**: requirements, components, impl_sections, data_flows, test_sections — with edges shown
 - **Milestones** — if applicable
 
 Ask the user:
@@ -147,15 +154,27 @@ Ask the user:
 - Write substantive content synthesized from the proposal — not stubs
 - If the proposal lacks detail for a particular node, write what you can and mark gaps with `<!-- TODO: detail needed -->` comments
 
-### 5. Validate
+### 5. Write test sections
+
+- For each module, create `test_sections` entries in `module.json` that cover all components
+- Each test_section's `describes` array must reference component IDs — every component must be covered by at least one test_section
+- Write `test_*.md` content leaves with substantive integration/acceptance test scenarios:
+  - **Setup**: what fixtures, test data, or preconditions are needed
+  - **Scenarios**: concrete input → expected output pairs
+  - **Edge cases**: boundary conditions, error paths, invalid inputs
+- Group related components into shared test_sections where they have natural testing affinity (e.g., components that form a pipeline)
+- If applicable, add cross-module `test_plan` scenarios to `project.json`
+
+### 6. Validate
 
 - Run `spex validate` if available (the binary may not exist yet during bootstrap)
 - If `spex validate` is not available, manually verify:
   - All `content` paths in module.json resolve to files that were created
   - All cross-reference IDs (implements, uses, describes, depends_on, requires_module, groups) point to existing nodes
   - No duplicate IDs within any array
+  - Every component is described by at least one test_section (test coverage check)
 
-### 6. Report
+### 7. Report
 
 Tell the user:
 - What files were created or modified (list them)

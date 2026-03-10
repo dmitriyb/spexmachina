@@ -227,5 +227,31 @@
         5
       ]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Hashing tests",
+      "content": "test_hashing.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Snapshot tests",
+      "content": "test_snapshots.md",
+      "describes": [3]
+    },
+    {
+      "id": 3,
+      "name": "Diff and classification tests",
+      "content": "test_diff_classification.md",
+      "describes": [4, 5]
+    },
+    {
+      "id": 4,
+      "name": "Merkle command tests",
+      "content": "test_merkle_commands.md",
+      "describes": [6, 7]
+    }
   ]
 }

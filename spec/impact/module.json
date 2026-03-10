@@ -165,5 +165,25 @@
         4
       ]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Bead matching tests",
+      "content": "test_bead_matching.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Classification and reporting tests",
+      "content": "test_classification_reporting.md",
+      "describes": [3, 4]
+    },
+    {
+      "id": 3,
+      "name": "Impact command tests",
+      "content": "test_impact_command.md",
+      "describes": [5]
+    }
   ]
 }

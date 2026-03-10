@@ -78,6 +78,12 @@
       "type": "non_functional",
       "title": "Git-native",
       "description": "Snapshots are files committed to git. Proposals are files committed to git. No external state."
+    },
+    {
+      "id": 13,
+      "type": "functional",
+      "title": "Spec test strategy",
+      "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios."
     }
   ],
   "modules": [

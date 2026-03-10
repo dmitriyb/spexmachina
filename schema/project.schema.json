@@ -35,6 +35,18 @@
       "type": "array",
       "description": "Project milestones that group modules.",
       "items": { "$ref": "#/$defs/milestone" }
+    },
+    "test_plan": {
+      "type": "object",
+      "description": "Project-level test plan for cross-module and end-to-end scenarios.",
+      "additionalProperties": false,
+      "properties": {
+        "scenarios": {
+          "type": "array",
+          "description": "Cross-module test scenarios.",
+          "items": { "$ref": "#/$defs/test_scenario" }
+        }
+      }
     }
   },
   "$defs": {
@@ -101,6 +113,40 @@
         "requires_module": {
           "type": "array",
           "description": "IDs of other modules this one depends on (requires_module edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "test_scenario": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the scenarios array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Test scenario name."
+        },
+        "description": {
+          "type": "string",
+          "description": "Test scenario description."
+        },
+        "content": {
+          "type": "string",
+          "description": "Relative path to the markdown file with test scenario details (described_in edge to content leaf)."
+        },
+        "modules": {
+          "type": "array",
+          "description": "Module IDs involved in this test scenario (modules edge).",
           "items": {
             "type": "integer",
             "minimum": 1

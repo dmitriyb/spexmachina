@@ -4,7 +4,7 @@ Validates that all `content` paths in module.json files resolve to existing mark
 
 ## Responsibilities
 
-- Walk all `content` fields in components, impl_sections, and data_flows
+- Walk all `content` fields in components, impl_sections, data_flows, and test_sections
 - Resolve each path relative to its module directory
 - Report missing files as validation errors
 
@@ -17,7 +17,7 @@ func CheckContentPaths(specDir string, project *schema.Project) []ValidationErro
 ## Behavior
 
 1. For each module in `project.json`, read its `module.json`
-2. For each component, impl_section, and data_flow with a `content` field:
+2. For each component, impl_section, data_flow, and test_section with a `content` field:
    - Construct the full path: `<specDir>/<module.path>/<content>`
    - Check if the file exists
 3. Report each missing file with the module name and node that references it

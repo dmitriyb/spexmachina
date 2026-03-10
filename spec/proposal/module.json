@@ -122,5 +122,25 @@
         2
       ]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Registration tests",
+      "content": "test_registration.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "History and template tests",
+      "content": "test_history_templates.md",
+      "describes": [2, 3]
+    },
+    {
+      "id": 3,
+      "name": "Proposal command tests",
+      "content": "test_proposal_commands.md",
+      "describes": [4]
+    }
   ]
 }

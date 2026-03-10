@@ -187,5 +187,25 @@
         5
       ]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Bead action tests",
+      "content": "test_bead_actions.md",
+      "describes": [1, 2, 3]
+    },
+    {
+      "id": 2,
+      "name": "Tagging and snapshot tests",
+      "content": "test_tagging_snapshot.md",
+      "describes": [4, 5]
+    },
+    {
+      "id": 3,
+      "name": "Apply command tests",
+      "content": "test_apply_command.md",
+      "describes": [6]
+    }
   ]
 }
