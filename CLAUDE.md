@@ -54,6 +54,7 @@ This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) f
 
 ## Where to Find Details
 
-- **Skills**: `.claude/skills/` — `/implement`, `/review`, `/fix` commands
+- **Skills**: `skills/` — all skill definitions (`/propose`, `/spec`, `/implement`, `/review`, `/fix`)
+- **Discovery**: `.claude/skills/` — symlinks for Claude Code slash commands
 - **Proposal**: `spec/proposals/` — project and change proposals
 - **Beads**: `.beads/` — task tracking database

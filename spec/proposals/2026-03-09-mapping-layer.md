@@ -4,9 +4,9 @@
 
 Manual testing of `spex` revealed three architectural gaps that block self-hosting:
 
-1. **No rename detection.** Renaming a module directory (e.g. `Apply` → `apply`) produces 177 diff changes (87 removes + 89 adds). Impact interprets these as close+create pairs when the real intent is a rename. This makes case renames — a routine refactor — destructive to the task graph.
+1. **Fragile traceability.** Spec metadata lives in bead labels (`spec_module:`, `spec_component:`), coupling spex to `br`'s label format. The `/implement` skill does deterministic preflight checks non-deterministically by parsing these labels. Any label format change in `br` breaks the pipeline.
 
-2. **Fragile traceability.** Spec metadata lives in bead labels (`spec_module:`, `spec_component:`), coupling spex to `br`'s label format. The `/implement` skill does deterministic preflight checks non-deterministically by parsing these labels. Any label format change in `br` breaks the pipeline.
+2. **No rename detection.** Renaming a module directory (e.g. `Apply` → `apply`) produces 2 diff changes (1 remove + 1 add) instead of 1 update. Impact interprets these as close+create pairs when the real intent is a rename. This makes case renames — a routine refactor — destructive to the task graph.
 
 3. **No spec↔bead bridge.** Spec and beads are independent worlds. There is no spex-owned data structure that records which spec node maps to which bead. Without this, rename detection, preflight checks, and mapping queries all require reverse-engineering bead metadata.
 
@@ -59,4 +59,4 @@ Cross-cutting CLI infrastructure that doesn't belong to any functional module.
 
 - **New beads**: Map module (4 components: MappingStore, RenameDetector, PreflightChecker, MapCommand) + CLI module (3 components: HelpFormatter, VersionCommand, ErrorFormatter)
 - **Modified beads**: Impact/NodeMatcher (mapping integration for rename detection), Apply/ApplyCommand (mapping file maintenance)
-- **Modified skill**: `/implement` (replace label-parsing preflight with `spex check`)
+- **Modified skill**: `/implement` (`skills/implement` — replace label-parsing preflight with `spex check`)

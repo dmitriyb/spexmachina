@@ -4,6 +4,45 @@
 
 The project proposal states: *"Skills are rewritten to call `spex` subcommands instead of doing structural work themselves."* This integration doesn't exist yet. The skills (`/spec`, `/implement`) still operate independently of the pipeline. Additionally, the pipeline has a designed review step between impact and apply — where the LLM adds intelligence by interpreting patterns and curating actions — but no skill owns this step.
 
+## Distribution model
+
+All canonical SKILL.md definitions live in `skills/`. The `type` field in project.json distinguishes skill vs agent vs hybrid — the filesystem doesn't need separate directories.
+
+**Discovery**: `.claude/skills/` contains symlinks to `../../skills/<name>` for Claude Code slash command discovery.
+
+**Spex repo**: Symlinks are tracked in git — clone and go.
+
+**Target projects**: `.claude/skills/` symlinks are gitignored. `spex init` scaffolds them by creating symlinks to the installed skill definitions (e.g. `~/.spex/skills/<name>`). Updates to skill definitions propagate automatically through symlinks — no copy/paste, no version drift.
+
+```
+skills/                          # ALL canonical definitions (tracked in git)
+  propose/SKILL.md               # type: skill
+  spec/SKILL.md                  # type: skill
+  implement/SKILL.md             # type: agent
+  review/SKILL.md                # type: agent
+  fix/SKILL.md                   # type: agent
+  (sync/SKILL.md)                # future (type: hybrid)
+
+.claude/skills/                  # symlinks for Claude Code discovery
+  propose -> ../../skills/propose
+  spec -> ../../skills/spec
+  implement -> ../../skills/implement
+  review -> ../../skills/review
+  fix -> ../../skills/fix
+```
+
+## Orchestration model
+
+Skills and agents are the same SKILL.md files invoked as `/command` slash commands. The distinction is in how they are orchestrated:
+
+**Interactive**: User invokes `/implement`, `/review`, `/fix` as slash commands in their Claude Code session. The signing key is available because the skill runs inline in the user's process. Creative skills (`/propose`, `/spec`) always run this way.
+
+**Orchestrated**: Faber (the external orchestrator) runs each agent-type skill in a separate Docker container (`claude -p "/implement bd-42"`) for context isolation. The reviewer never sees the implementer's reasoning — only the artifacts (PR, code, spec). This prevents cross-contamination of LLM context between pipeline stages.
+
+**Signing key constraint**: Skills run inline where the GPG signing key is available. Docker-based agent isolation means commits inside containers cannot be signed — faber handles signing at the orchestration layer if needed.
+
+**Language skill injection**: Skills like `go-expert` and `zig-expert` are user-global (`~/.claude/skills/`). Future: detect the project's language from project config or CLAUDE.md and inject the appropriate language skill reference into agent containers automatically.
+
 ## Proposed change
 
 ### 1. `/spec` skill — validate after authoring
@@ -65,7 +104,7 @@ Skills entries for project.json:
     "name": "implement",
     "type": "agent",
     "purpose": "Implement a bead task — write code, tests, create PR",
-    "path": ".claude/skills/implement",
+    "path": "skills/implement",
     "uses_commands": ["check"],
     "depends_on_modules": ["map"]
   },
@@ -73,7 +112,7 @@ Skills entries for project.json:
     "name": "review",
     "type": "agent",
     "purpose": "Review PR for correctness and spec traceability",
-    "path": ".claude/skills/review",
+    "path": "skills/review",
     "uses_commands": [],
     "depends_on_modules": []
   },
@@ -81,7 +120,7 @@ Skills entries for project.json:
     "name": "fix",
     "type": "agent",
     "purpose": "Fix review comments on a pull request",
-    "path": ".claude/skills/fix",
+    "path": "skills/fix",
     "uses_commands": [],
     "depends_on_modules": []
   }
@@ -132,9 +171,9 @@ After implementing `/sync` and running the full pipeline (propose → spec → v
 - **Modified**: `schema/project.schema.json` (add `skills` array with `type` field)
 - **Modified**: `spec/project.json` (add skills entries with skill/agent/hybrid types)
 - **Modified**: `skills/spec/SKILL.md` (call `spex validate`)
-- **Modified**: `.claude/skills/implement/SKILL.md` (convert to agent, use `spex check`, add input/output contracts)
-- **Modified**: `.claude/skills/review/SKILL.md` (convert to agent, add input/output contracts)
-- **Modified**: `.claude/skills/fix/SKILL.md` (convert to agent, add input/output contracts)
+- **Modified**: `skills/implement/SKILL.md` (convert to agent, use `spex check`, add input/output contracts)
+- **Modified**: `skills/review/SKILL.md` (convert to agent, add input/output contracts)
+- **Modified**: `skills/fix/SKILL.md` (convert to agent, add input/output contracts)
 - **New**: `skills/sync/SKILL.md` (hybrid: agent analysis + user approval)
 - **New**: Validator SkillPathChecker (optional, lightweight)
 - **Dependencies**: Proposal 1 (mapping layer for `/sync` and `/implement` preflight), Proposal 2 (test format for `/spec` test generation)
