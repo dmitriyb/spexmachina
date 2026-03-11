@@ -4,8 +4,8 @@
 // The JSON Schema files are embedded and accessible via [ProjectSchema] and
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
-// Node types: requirement, component, impl_section, data_flow, milestone, module.
-// Edge types: implements, uses, describes, described_in, depends_on, groups, requires_module.
+// Node types: requirement, component, impl_section, data_flow, milestone, module, test_scenario.
+// Edge types: implements, uses, describes, described_in, depends_on, groups, requires_module, modules.
 package schema
 
 import "embed"
