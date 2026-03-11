@@ -24,7 +24,7 @@ func setupSpecDir(t *testing.T) string {
 	}`
 	writeFile(t, dir, "project.json", proj)
 
-	// Module alpha: has arch and impl content
+	// Module alpha: has components and impl_sections
 	alphaDir := filepath.Join(dir, "alpha")
 	must(t, os.MkdirAll(alphaDir, 0755))
 	alphaMod := `{
@@ -42,7 +42,7 @@ func setupSpecDir(t *testing.T) string {
 	writeFile(t, alphaDir, "arch_comp2.md", "# Comp2 architecture\n")
 	writeFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
 
-	// Module beta: has only arch content
+	// Module beta: has only one component
 	betaDir := filepath.Join(dir, "beta")
 	must(t, os.MkdirAll(betaDir, 0755))
 	betaMod := `{
@@ -71,6 +71,40 @@ func must(t *testing.T, err error) {
 	}
 }
 
+func TestREQ7_BuildTree_SpecIDKeys(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	if root.Key != "project" {
+		t.Fatalf("root key: want project, got %s", root.Key)
+	}
+
+	// project/meta leaf
+	projLeaf := root.Children[0]
+	if projLeaf.Key != "project/meta" {
+		t.Fatalf("project meta key: want project/meta, got %s", projLeaf.Key)
+	}
+	if projLeaf.NodeType != "meta" {
+		t.Fatalf("project meta node_type: want meta, got %s", projLeaf.NodeType)
+	}
+
+	// module/1 (Alpha)
+	alpha := root.Children[1]
+	if alpha.Key != "module/1" {
+		t.Fatalf("alpha key: want module/1, got %s", alpha.Key)
+	}
+
+	// module/2 (Beta)
+	beta := root.Children[2]
+	if beta.Key != "module/2" {
+		t.Fatalf("beta key: want module/2, got %s", beta.Key)
+	}
+}
+
 func TestREQ2_BuildTree_Structure(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -83,32 +117,29 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 	if root.Type != "project" {
 		t.Fatalf("root type: want project, got %s", root.Type)
 	}
-	if root.Name != "test-project" {
-		t.Fatalf("root name: want test-project, got %s", root.Name)
-	}
 
-	// Children: project.json leaf + 2 module nodes
+	// Children: project/meta leaf + 2 module nodes
 	if len(root.Children) != 3 {
 		t.Fatalf("root children: want 3, got %d", len(root.Children))
 	}
 
 	projLeaf := root.Children[0]
-	if projLeaf.Type != "leaf" || projLeaf.Name != "project.json" {
-		t.Fatalf("first child: want leaf/project.json, got %s/%s", projLeaf.Type, projLeaf.Name)
+	if projLeaf.Type != "leaf" {
+		t.Fatalf("first child type: want leaf, got %s", projLeaf.Type)
 	}
 
 	alpha := root.Children[1]
-	if alpha.Type != "module" || alpha.Name != "Alpha" {
-		t.Fatalf("second child: want module/Alpha, got %s/%s", alpha.Type, alpha.Name)
+	if alpha.Type != "module" {
+		t.Fatalf("second child type: want module, got %s", alpha.Type)
 	}
 
 	beta := root.Children[2]
-	if beta.Type != "module" || beta.Name != "Beta" {
-		t.Fatalf("third child: want module/Beta, got %s/%s", beta.Type, beta.Name)
+	if beta.Type != "module" {
+		t.Fatalf("third child type: want module, got %s", beta.Type)
 	}
 }
 
-func TestREQ2_BuildTree_ModuleStructure(t *testing.T) {
+func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -117,34 +148,52 @@ func TestREQ2_BuildTree_ModuleStructure(t *testing.T) {
 	}
 
 	alpha := root.Children[1]
-	// Alpha should have: module.json leaf, arch group, impl group
-	if len(alpha.Children) != 3 {
-		t.Fatalf("alpha children: want 3, got %d", len(alpha.Children))
+	// Alpha should have: module.json meta + 2 components + 1 impl_section = 4 children
+	if len(alpha.Children) != 4 {
+		t.Fatalf("alpha children: want 4, got %d", len(alpha.Children))
 	}
 
-	modLeaf := alpha.Children[0]
-	if modLeaf.Type != "leaf" || modLeaf.Name != "module.json" {
-		t.Fatalf("module leaf: want leaf/module.json, got %s/%s", modLeaf.Type, modLeaf.Name)
+	// All children should be leaf type (no intermediate group nodes)
+	for _, child := range alpha.Children {
+		if child.Type != "leaf" {
+			t.Fatalf("child %s: want type leaf, got %s", child.Key, child.Type)
+		}
 	}
 
-	archGroup := alpha.Children[1]
-	if archGroup.Type != "arch" {
-		t.Fatalf("arch group type: want arch, got %s", archGroup.Type)
-	}
-	if len(archGroup.Children) != 2 {
-		t.Fatalf("arch leaves: want 2, got %d", len(archGroup.Children))
+	// Children should be sorted by key
+	for i := 1; i < len(alpha.Children); i++ {
+		if alpha.Children[i].Key < alpha.Children[i-1].Key {
+			t.Fatalf("children not sorted: %s comes after %s", alpha.Children[i].Key, alpha.Children[i-1].Key)
+		}
 	}
 
-	implGroup := alpha.Children[2]
-	if implGroup.Type != "impl" {
-		t.Fatalf("impl group type: want impl, got %s", implGroup.Type)
+	// Verify specific keys exist
+	wantKeys := map[string]string{
+		"module/1/meta":           "meta",
+		"module/1/component/1":    "component",
+		"module/1/component/2":    "component",
+		"module/1/impl_section/1": "impl_section",
 	}
-	if len(implGroup.Children) != 1 {
-		t.Fatalf("impl leaves: want 1, got %d", len(implGroup.Children))
+	for _, child := range alpha.Children {
+		wantType, ok := wantKeys[child.Key]
+		if !ok {
+			t.Errorf("unexpected child key: %s", child.Key)
+			continue
+		}
+		if child.NodeType != wantType {
+			t.Errorf("child %s: want node_type %s, got %s", child.Key, wantType, child.NodeType)
+		}
+		if child.Module != 1 {
+			t.Errorf("child %s: want module 1, got %d", child.Key, child.Module)
+		}
+		delete(wantKeys, child.Key)
+	}
+	for key := range wantKeys {
+		t.Errorf("missing expected child key: %s", key)
 	}
 }
 
-func TestREQ2_BuildTree_NoFlowGroup(t *testing.T) {
+func TestREQ7_BuildTree_ModuleID(t *testing.T) {
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -152,16 +201,24 @@ func TestREQ2_BuildTree_NoFlowGroup(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// Beta has no impl or flow content, only arch
-	beta := root.Children[2]
-	// Should have: module.json leaf + arch group (no impl, no flow)
-	if len(beta.Children) != 2 {
-		t.Fatalf("beta children: want 2, got %d", len(beta.Children))
+	// All module 1 leaves should have Module=1
+	alpha := root.Children[1]
+	for _, child := range alpha.Children {
+		if child.Module != 1 {
+			t.Errorf("alpha child %s: want module 1, got %d", child.Key, child.Module)
+		}
 	}
 
+	// Module node itself should have Module=1
+	if alpha.Module != 1 {
+		t.Errorf("alpha module: want 1, got %d", alpha.Module)
+	}
+
+	// Beta children should have Module=2
+	beta := root.Children[2]
 	for _, child := range beta.Children {
-		if child.Type == "impl" || child.Type == "flow" {
-			t.Fatalf("beta should not have %s group", child.Type)
+		if child.Module != 2 {
+			t.Errorf("beta child %s: want module 2, got %d", child.Key, child.Module)
 		}
 	}
 }
@@ -239,8 +296,8 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for missing content file, got nil")
 	}
-	if !strings.Contains(err.Error(), "arch_ghost.md") {
-		t.Fatalf("error should mention missing file, got: %v", err)
+	if !strings.Contains(err.Error(), "module/1/component/1") {
+		t.Fatalf("error should mention spec key, got: %v", err)
 	}
 }
 
@@ -285,7 +342,7 @@ func TestREQ2_BuildTree_AllNodesHaveHashes(t *testing.T) {
 	var walk func(*Node)
 	walk = func(n *Node) {
 		if n.Hash == "" {
-			t.Fatalf("node %q (type=%s) has empty hash", n.Name, n.Type)
+			t.Fatalf("node %q (type=%s) has empty hash", n.Key, n.Type)
 		}
 		for _, c := range n.Children {
 			walk(c)
@@ -315,24 +372,24 @@ func TestREQ2_BuildTree_JSONRoundTrip(t *testing.T) {
 	if decoded.Hash != root.Hash {
 		t.Fatalf("round-trip hash mismatch: want %s, got %s", root.Hash, decoded.Hash)
 	}
-	if decoded.Name != root.Name {
-		t.Fatalf("round-trip name mismatch: want %s, got %s", root.Name, decoded.Name)
+	if decoded.Key != root.Key {
+		t.Fatalf("round-trip key mismatch: want %s, got %s", root.Key, decoded.Key)
 	}
 }
 
-func TestREQ2_BuildTree_WithFlowContent(t *testing.T) {
+func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	dir := t.TempDir()
 
 	proj := `{
-		"name": "flow-project",
-		"modules": [{"id": 1, "name": "FlowMod", "path": "flowmod"}]
+		"name": "full-project",
+		"modules": [{"id": 1, "name": "FullMod", "path": "fullmod"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 
-	modDir := filepath.Join(dir, "flowmod")
+	modDir := filepath.Join(dir, "fullmod")
 	must(t, os.MkdirAll(modDir, 0755))
 	modJSON := `{
-		"name": "flowmod",
+		"name": "fullmod",
 		"components": [
 			{"id": 1, "name": "C1", "content": "arch_c1.md"}
 		],
@@ -353,18 +410,31 @@ func TestREQ2_BuildTree_WithFlowContent(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	flowMod := root.Children[1]
-	// module.json + arch + impl + flow = 4 children
-	if len(flowMod.Children) != 4 {
-		t.Fatalf("flowmod children: want 4, got %d", len(flowMod.Children))
+	fullMod := root.Children[1]
+	// meta + 1 component + 1 impl_section + 1 data_flow = 4 children
+	if len(fullMod.Children) != 4 {
+		t.Fatalf("fullmod children: want 4, got %d", len(fullMod.Children))
 	}
 
-	flowGroup := flowMod.Children[3]
-	if flowGroup.Type != "flow" {
-		t.Fatalf("flow group type: want flow, got %s", flowGroup.Type)
+	wantKeys := map[string]string{
+		"module/1/meta":           "meta",
+		"module/1/component/1":    "component",
+		"module/1/impl_section/1": "impl_section",
+		"module/1/data_flow/1":    "data_flow",
 	}
-	if len(flowGroup.Children) != 1 {
-		t.Fatalf("flow leaves: want 1, got %d", len(flowGroup.Children))
+	for _, child := range fullMod.Children {
+		wantType, ok := wantKeys[child.Key]
+		if !ok {
+			t.Errorf("unexpected child key: %s", child.Key)
+			continue
+		}
+		if child.NodeType != wantType {
+			t.Errorf("child %s: want node_type %s, got %s", child.Key, wantType, child.NodeType)
+		}
+		delete(wantKeys, child.Key)
+	}
+	for key := range wantKeys {
+		t.Errorf("missing expected child key: %s", key)
 	}
 }
 
@@ -387,11 +457,11 @@ func TestREQ2_BuildTree_EmptyModule(t *testing.T) {
 	}
 
 	emptyMod := root.Children[1]
-	// Only module.json leaf, no groups
+	// Only module meta leaf
 	if len(emptyMod.Children) != 1 {
 		t.Fatalf("empty module children: want 1, got %d", len(emptyMod.Children))
 	}
-	if emptyMod.Children[0].Name != "module.json" {
-		t.Fatalf("empty module child: want module.json, got %s", emptyMod.Children[0].Name)
+	if emptyMod.Children[0].Key != "module/1/meta" {
+		t.Fatalf("empty module child: want module/1/meta, got %s", emptyMod.Children[0].Key)
 	}
 }

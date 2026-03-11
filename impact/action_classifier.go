@@ -2,7 +2,6 @@ package impact
 
 import (
 	"fmt"
-	"path"
 	"sort"
 
 	"github.com/dmitriyb/spexmachina/merkle"
@@ -107,9 +106,11 @@ func matchedChangeReason(changeType merkle.ChangeType, impact, module, node stri
 	}
 }
 
-// nodeFromChange extracts the spec node name from the change path base filename.
+// nodeFromChange extracts the spec node identifier from the change path.
+// For spec-ID keys like "module/1/component/2", returns the full path.
+// For legacy paths, returns the base filename.
 func nodeFromChange(c merkle.ClassifiedChange) string {
-	return path.Base(c.Path)
+	return c.Path
 }
 
 // beadNode returns the best available node name from a bead's spec metadata.

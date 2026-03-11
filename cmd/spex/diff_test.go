@@ -104,12 +104,12 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 
 	foundModified := false
 	for _, c := range result.Changes {
-		if c.Type == "modified" && strings.HasSuffix(c.Path, "impl_comp1.md") {
+		if c.Type == "modified" && c.Path == "module/1/impl_section/1" {
 			foundModified = true
 		}
 	}
 	if !foundModified {
-		t.Fatal("expected modified change for impl_comp1.md")
+		t.Fatal("expected modified change for module/1/impl_section/1")
 	}
 }
 
@@ -146,7 +146,7 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 
 	foundArchImpl := false
 	for _, c := range result.Changes {
-		if c.Impact == "arch_impl" && strings.HasSuffix(c.Path, "arch_comp1.md") {
+		if c.Impact == "arch_impl" && c.Path == "module/1/component/1" {
 			foundArchImpl = true
 			if c.Module == "" {
 				t.Fatal("expected module name for arch change")
@@ -154,7 +154,7 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 		}
 	}
 	if !foundArchImpl {
-		t.Fatalf("expected arch_impl impact for arch file change, got: %+v", result.Changes)
+		t.Fatalf("expected arch_impl impact for component change, got: %+v", result.Changes)
 	}
 }
 

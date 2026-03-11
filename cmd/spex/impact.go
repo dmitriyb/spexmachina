@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/merkle"
@@ -149,10 +150,12 @@ func parseImpactLevel(s string) (merkle.ImpactLevel, error) {
 // moduleJSON is the subset of module.json we need for building NodeMaps.
 type moduleJSON struct {
 	Components []struct {
+		ID      int    `json:"id"`
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	} `json:"components"`
 	ImplSections []struct {
+		ID      int    `json:"id"`
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	} `json:"impl_sections"`
@@ -194,12 +197,12 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
 		nm := impact.NodeMap{}
 		for _, c := range mod.Components {
 			if c.Content != "" {
-				nm[c.Content] = c.Name
+				nm["component/"+strconv.Itoa(c.ID)] = c.Name
 			}
 		}
 		for _, s := range mod.ImplSections {
 			if s.Content != "" {
-				nm[s.Content] = s.Name
+				nm["impl_section/"+strconv.Itoa(s.ID)] = s.Name
 			}
 		}
 

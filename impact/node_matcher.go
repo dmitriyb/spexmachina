@@ -1,7 +1,6 @@
 package impact
 
 import (
-	"path"
 	"sort"
 	"strings"
 	"unicode"
@@ -25,15 +24,14 @@ type Orphaned struct {
 	Bead BeadSpec
 }
 
-// NodeMap maps content filenames (e.g., "arch_bead_reader.md") to their
-// canonical spec node names (e.g., "BeadReader" for components,
-// "Bead metadata reading" for impl_sections). Built from module.json.
+// NodeMap maps node identifiers to their canonical spec node names.
+// With spec-ID keys, the identifier is the node ID (e.g., "1" → "BeadReader").
+// With legacy paths, the identifier is the filename (e.g., "arch_bead_reader.md" → "BeadReader").
 type NodeMap map[string]string
 
 // MatchNodes correlates classified changes with beads using spec metadata.
-// The modules parameter maps module names to their NodeMaps for filename-to-name
-// resolution. If a module has no NodeMap, arch_ files fall back to snake-to-PascalCase
-// auto-derivation. Returns results sorted deterministically (NFR5).
+// The modules parameter maps module identifiers to their NodeMaps for ID-to-name
+// resolution. Returns results sorted deterministically (NFR5).
 func MatchNodes(changes []merkle.ClassifiedChange, beads []BeadSpec, modules map[string]NodeMap) ([]Match, []Unmatched, []Orphaned) {
 	if modules == nil {
 		modules = map[string]NodeMap{}
@@ -113,13 +111,14 @@ func buildBeadIndex(beads []BeadSpec) (compIdx, implIdx, modIdx map[string][]Bea
 }
 
 // lookupBeads finds beads matching a classified change.
+// Supports spec-ID keys (module/<id>/<type>/<id>) and legacy paths.
 func lookupBeads(
 	c merkle.ClassifiedChange,
 	compIdx, implIdx, modIdx map[string][]BeadSpec,
 	modules map[string]NodeMap,
 	allBeads []BeadSpec,
 ) []BeadSpec {
-	// Structural changes affect all beads in the module (or all beads for project.json).
+	// Structural changes affect all beads in the module (or all beads for project meta).
 	if c.Impact == merkle.Structural {
 		if c.Module == "" {
 			return copyBeads(allBeads)
@@ -127,7 +126,30 @@ func lookupBeads(
 		return copyBeads(modIdx[c.Module])
 	}
 
-	filename := path.Base(c.Path)
+	// Parse spec-ID key: module/<module_id>/<node_type>/<node_id>
+	parts := strings.Split(c.Path, "/")
+	if len(parts) >= 4 && parts[0] == "module" {
+		specNodeType := parts[2] // "component", "impl_section", "data_flow"
+		nodeID := parts[3]
+		nmKey := specNodeType + "/" + nodeID
+
+		// Try NodeMap resolution (type/ID → name).
+		if nm, ok := modules[c.Module]; ok {
+			if name, ok := nm[nmKey]; ok {
+				switch specNodeType {
+				case "component":
+					return copyBeads(compIdx[indexKey(c.Module, name)])
+				case "impl_section":
+					return copyBeads(implIdx[indexKey(c.Module, name)])
+				}
+			}
+		}
+
+		return nil
+	}
+
+	// Legacy fallback: filename-based matching.
+	filename := lastPathSegment(c.Path)
 
 	// Try NodeMap resolution first.
 	if nm, ok := modules[c.Module]; ok {
@@ -138,7 +160,6 @@ func lookupBeads(
 			if strings.HasPrefix(filename, "impl_") {
 				return copyBeads(implIdx[indexKey(c.Module, name)])
 			}
-			// flow_ and other prefixes: no bead index exists yet.
 			return nil
 		}
 	}
@@ -151,6 +172,16 @@ func lookupBeads(
 	}
 
 	return nil
+}
+
+// lastPathSegment returns the last component of a path.
+func lastPathSegment(p string) string {
+	for i := len(p) - 1; i >= 0; i-- {
+		if p[i] == '/' {
+			return p[i+1:]
+		}
+	}
+	return p
 }
 
 // copyBeads returns a shallow copy of the bead slice to avoid aliasing index internals.

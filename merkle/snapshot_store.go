@@ -8,7 +8,7 @@ import (
 )
 
 // Snapshot is the on-disk JSON representation of a merkle tree.
-// Nodes are stored in a flat map keyed by path for O(1) lookup and easy diffing.
+// Nodes are stored in a flat map keyed by spec ID for O(1) lookup and easy diffing.
 type Snapshot struct {
 	RootHash  string                   `json:"root_hash"`
 	RootKey   string                   `json:"root_key"`
@@ -20,6 +20,8 @@ type Snapshot struct {
 type SnapshotNode struct {
 	Hash     string   `json:"hash"`
 	Type     string   `json:"type"`
+	NodeType string   `json:"node_type,omitempty"`
+	Module   int      `json:"module,omitempty"`
 	Children []string `json:"children,omitempty"`
 }
 
@@ -28,11 +30,11 @@ type SnapshotNode struct {
 func Save(tree *Node, path string, createdAt time.Time) error {
 	snap := &Snapshot{
 		RootHash:  tree.Hash,
-		RootKey:   tree.Name,
+		RootKey:   tree.Key,
 		CreatedAt: createdAt,
 		Nodes:     make(map[string]*SnapshotNode),
 	}
-	flattenTree(snap.Nodes, tree, "")
+	flattenTreeToSnapshot(snap.Nodes, tree)
 
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
@@ -65,31 +67,23 @@ func Load(path string) (*Node, error) {
 	return root, nil
 }
 
-// flattenTree walks the tree recursively and populates the flat node map.
-// The prefix tracks the path from the root (empty for root-level nodes).
-func flattenTree(nodes map[string]*SnapshotNode, n *Node, prefix string) {
-	key := nodePath(prefix, n.Name)
-
+// flattenTreeToSnapshot walks the tree recursively and populates the flat node map.
+// Each node's Key is used directly as the map key.
+func flattenTreeToSnapshot(nodes map[string]*SnapshotNode, n *Node) {
 	sn := &SnapshotNode{
-		Hash: n.Hash,
-		Type: n.Type,
+		Hash:     n.Hash,
+		Type:     n.Type,
+		NodeType: n.NodeType,
+		Module:   n.Module,
 	}
 	for _, child := range n.Children {
-		sn.Children = append(sn.Children, nodePath(key, child.Name))
+		sn.Children = append(sn.Children, child.Key)
 	}
-	nodes[key] = sn
+	nodes[n.Key] = sn
 
 	for _, child := range n.Children {
-		flattenTree(nodes, child, key)
+		flattenTreeToSnapshot(nodes, child)
 	}
-}
-
-// nodePath builds a slash-separated path. If prefix is empty, returns name as-is.
-func nodePath(prefix, name string) string {
-	if prefix == "" {
-		return name
-	}
-	return prefix + "/" + name
 }
 
 // rebuildTree reconstructs the Node tree from a flat snapshot.
@@ -111,9 +105,11 @@ func rebuildNode(nodes map[string]*SnapshotNode, key string) (*Node, error) {
 	}
 
 	n := &Node{
-		Name: nodeName(key),
-		Hash: sn.Hash,
-		Type: sn.Type,
+		Key:      key,
+		Hash:     sn.Hash,
+		Type:     sn.Type,
+		NodeType: sn.NodeType,
+		Module:   sn.Module,
 	}
 
 	for _, childKey := range sn.Children {
@@ -125,14 +121,4 @@ func rebuildNode(nodes map[string]*SnapshotNode, key string) (*Node, error) {
 	}
 
 	return n, nil
-}
-
-// nodeName extracts the last path component (the node's own name).
-func nodeName(key string) string {
-	for i := len(key) - 1; i >= 0; i-- {
-		if key[i] == '/' {
-			return key[i+1:]
-		}
-	}
-	return key
 }

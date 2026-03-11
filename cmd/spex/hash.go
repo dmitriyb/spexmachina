@@ -51,19 +51,19 @@ func runHash(args []string) int {
 
 // hashOutput is the JSON representation of the hash command result.
 type hashOutput struct {
-	RootHash string       `json:"root_hash"`
-	Nodes    []hashNode   `json:"nodes"`
+	RootHash string     `json:"root_hash"`
+	Nodes    []hashNode `json:"nodes"`
 }
 
 type hashNode struct {
-	Path string `json:"path"`
+	Key  string `json:"key"`
 	Hash string `json:"hash"`
 	Type string `json:"type"`
 }
 
 func printJSON(tree *merkle.Node) int {
 	out := hashOutput{RootHash: tree.Hash}
-	collectNodes(&out.Nodes, tree, "")
+	collectNodes(&out.Nodes, tree)
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -74,18 +74,14 @@ func printJSON(tree *merkle.Node) int {
 	return 0
 }
 
-func collectNodes(nodes *[]hashNode, n *merkle.Node, prefix string) {
-	path := n.Name
-	if prefix != "" {
-		path = prefix + "/" + n.Name
-	}
+func collectNodes(nodes *[]hashNode, n *merkle.Node) {
 	*nodes = append(*nodes, hashNode{
-		Path: path,
+		Key:  n.Key,
 		Hash: n.Hash,
 		Type: n.Type,
 	})
 	for _, child := range n.Children {
-		collectNodes(nodes, child, path)
+		collectNodes(nodes, child)
 	}
 }
 
@@ -96,7 +92,7 @@ func printSummary(tree *merkle.Node) {
 	countNodes(tree, counts)
 
 	fmt.Printf("nodes: %d total", totalCount(counts))
-	for _, typ := range []string{"project", "module", "arch", "impl", "flow", "leaf"} {
+	for _, typ := range []string{"project", "module", "leaf"} {
 		if c, ok := counts[typ]; ok {
 			fmt.Printf(", %d %s", c, typ)
 		}

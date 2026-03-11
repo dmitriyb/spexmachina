@@ -26,7 +26,7 @@ func (ct ChangeType) String() string {
 
 // Change represents a single leaf-level difference between two merkle trees.
 type Change struct {
-	Path    string     // e.g., "validator/arch/arch_schema_checker.md"
+	Path    string     // spec ID key, e.g. "module/1/component/2"
 	Type    ChangeType // Added, Removed, or Modified
 	OldHash string     // empty for Added
 	NewHash string     // empty for Removed
@@ -37,11 +37,11 @@ type Change struct {
 // are reported as "added".
 func Diff(current, snapshot *Node) []Change {
 	currentLeaves := make(map[string]string)
-	flattenLeaves(currentLeaves, current, "")
+	flattenLeaves(currentLeaves, current)
 
 	snapshotLeaves := make(map[string]string)
 	if snapshot != nil {
-		flattenLeaves(snapshotLeaves, snapshot, "")
+		flattenLeaves(snapshotLeaves, snapshot)
 	}
 
 	var changes []Change
@@ -83,16 +83,15 @@ func Diff(current, snapshot *Node) []Change {
 	return changes
 }
 
-// flattenLeaves walks the tree and collects only leaf nodes into a path → hash map.
-func flattenLeaves(leaves map[string]string, n *Node, prefix string) {
-	key := nodePath(prefix, n.Name)
-
+// flattenLeaves walks the tree and collects only leaf nodes into a key → hash map.
+// Each leaf's Key is used directly (no path building needed with spec-ID keys).
+func flattenLeaves(leaves map[string]string, n *Node) {
 	if n.Type == "leaf" {
-		leaves[key] = n.Hash
+		leaves[n.Key] = n.Hash
 		return
 	}
 
 	for _, child := range n.Children {
-		flattenLeaves(leaves, child, key)
+		flattenLeaves(leaves, child)
 	}
 }
