@@ -155,6 +155,9 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 	if len(proj.Milestones) == 0 {
 		t.Fatal("expected project milestones in fixture")
 	}
+	if proj.TestPlan == nil || len(proj.TestPlan.Scenarios) == 0 {
+		t.Fatal("expected project test_plan with scenarios in fixture")
+	}
 }
 
 func TestFR4_AllEdgeTypes(t *testing.T) {
@@ -182,6 +185,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
 		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},
+		{"modules (test_scenario)", proj.TestPlan != nil && len(proj.TestPlan.Scenarios) > 0 && len(proj.TestPlan.Scenarios[0].Modules) > 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -235,6 +239,13 @@ func TestFR5_IDsAreNumeric(t *testing.T) {
 			t.Fatalf("milestone ID must be >= 1, got %d", ms.ID)
 		}
 	}
+	if proj.TestPlan != nil {
+		for _, s := range proj.TestPlan.Scenarios {
+			if s.ID < 1 {
+				t.Fatalf("test_scenario ID must be >= 1, got %d", s.ID)
+			}
+		}
+	}
 }
 
 func TestFR6_ContentPaths(t *testing.T) {
@@ -261,6 +272,18 @@ func TestFR6_ContentPaths(t *testing.T) {
 			found++
 		}
 	}
+	projData := readTestdata(t, "valid_project.json")
+	var proj Project
+	if err := json.Unmarshal(projData, &proj); err != nil {
+		t.Fatalf("unmarshal project: %v", err)
+	}
+	if proj.TestPlan != nil {
+		for _, s := range proj.TestPlan.Scenarios {
+			if s.Content != "" {
+				found++
+			}
+		}
+	}
 	if found == 0 {
 		t.Fatal("expected at least one node with a content path in fixture")
 	}
@@ -277,7 +300,7 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 		t.Fatalf("unmarshal project schema: %v", err)
 	}
 	props := projRaw["properties"].(map[string]any)
-	for _, key := range []string{"requirements", "modules", "milestones"} {
+	for _, key := range []string{"requirements", "modules", "milestones", "test_plan"} {
 		if props[key] == nil {
 			t.Fatalf("project schema missing property %q", key)
 		}

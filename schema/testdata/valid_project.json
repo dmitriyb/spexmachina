@@ -52,5 +52,16 @@
       "description": "Core schema and validation working.",
       "groups": [1, 2]
     }
-  ]
+  ],
+  "test_plan": {
+    "scenarios": [
+      {
+        "id": 1,
+        "name": "End-to-end flow",
+        "description": "Cross-module test.",
+        "content": "test_e2e.md",
+        "modules": [1, 2]
+      }
+    ]
+  }
 }
