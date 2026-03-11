@@ -7,13 +7,17 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
 // BeadSpec holds the spec-related metadata extracted from a bead's labels.
 type BeadSpec struct {
-	ID          string
-	Status      string
+	ID       string // bead ID
+	Status   string // bead status
+	RecordID int    // mapping record ID from "spex:<id>" label
+
+	// Legacy fields — still used by NodeMatcher (spexmachina-3ta will remove).
 	Module      string
 	Component   string
 	ImplSection string
@@ -27,9 +31,8 @@ type rawBead struct {
 	Labels []string `json:"labels"`
 }
 
-// ReadBeads calls `<bin> list --json` and extracts beads that have
-// spec-related labels (spec_module, spec_component, spec_impl_section, spec_hash).
-// Beads without a spec_module label are ignored.
+// ReadBeads calls `<bin> list --json` and extracts beads that carry a
+// `spex:<record-id>` label. Beads without that label are ignored.
 func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
 	out, err := exec.CommandContext(ctx, bin, "list", "--json").Output()
 	if err != nil {
@@ -48,36 +51,28 @@ func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
 
 	var beads []BeadSpec
 	for _, r := range raw {
-		bs := parseLabels(r)
-		if bs.Module == "" {
+		recID, ok := extractRecordID(r.Labels)
+		if !ok {
 			continue
 		}
-		beads = append(beads, bs)
+		beads = append(beads, BeadSpec{
+			ID:       r.ID,
+			Status:   r.Status,
+			RecordID: recID,
+		})
 	}
 	return beads, nil
 }
 
-// parseLabels extracts spec metadata from a raw bead's labels.
-func parseLabels(r rawBead) BeadSpec {
-	bs := BeadSpec{
-		ID:     r.ID,
-		Status: r.Status,
-	}
-	for _, l := range r.Labels {
-		k, v, ok := strings.Cut(l, ":")
-		if !ok {
-			continue
-		}
-		switch k {
-		case "spec_module":
-			bs.Module = v
-		case "spec_component":
-			bs.Component = v
-		case "spec_impl_section":
-			bs.ImplSection = v
-		case "spec_hash":
-			bs.SpecHash = v
+// extractRecordID finds the spex:<record-id> label and returns the integer ID.
+func extractRecordID(labels []string) (int, bool) {
+	for _, label := range labels {
+		if strings.HasPrefix(label, "spex:") {
+			id, err := strconv.Atoi(strings.TrimPrefix(label, "spex:"))
+			if err == nil && id >= 0 {
+				return id, true
+			}
 		}
 	}
-	return bs
+	return 0, false
 }
