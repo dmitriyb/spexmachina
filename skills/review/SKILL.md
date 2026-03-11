@@ -31,13 +31,21 @@ Run `gh repo view --json owner,name --jq '.owner.login + "/" + .name'` to get th
 
 ### Step 1: Check for prior reviews
 
-Fetch all PR review comments (`gh api repos/{owner}/{repo}/pulls/{number}/comments`). Determine the state:
+Check **both** sources of review feedback:
 
-- **No prior review comments exist** → this is a first review. Proceed to Step 2 (First Review).
-- **Prior review comments exist with no replies** → fixes haven't been attempted yet. **Stop. Do nothing.** Tell the user that prior review comments are still unaddressed.
-- **All prior review comments have replies** → proceed to Step 3 (Follow-up Review).
+1. **Review-level comments**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews` — look for reviews with `state` = `COMMENTED`/`CHANGES_REQUESTED` and a non-empty `body`.
+2. **Inline comments**: `gh api repos/{owner}/{repo}/pulls/{number}/comments` — line-level comments on the diff.
 
-To determine if a comment has a reply: comments with `in_reply_to_id` set are replies. A top-level comment (no `in_reply_to_id`) is "answered" if at least one reply references its `id`.
+A prior review exists if **either** source has feedback.
+
+- **No prior feedback from either source** → first review. Proceed to Step 2.
+- **Prior feedback exists but unaddressed** → **Stop. Do nothing.** Tell the user.
+- **Prior feedback exists and addressed** → proceed to Step 3 (Follow-up Review).
+
+How to determine if feedback is "addressed":
+
+- **Inline comments**: a top-level comment (no `in_reply_to_id`) is addressed if at least one reply references its `id`.
+- **Review-body comments**: addressed if at least one commit exists **after** the review's `submitted_at` timestamp. Check with `gh api repos/{owner}/{repo}/pulls/{number}/commits` and compare dates.
 
 ### Step 2: First Review
 
@@ -50,12 +58,12 @@ To determine if a comment has a reply: comments with `in_reply_to_id` set are re
 
 ### Step 3: Follow-up Review
 
-For each top-level review comment and its reply:
+Collect all feedback items from both sources (review bodies and inline comments). For each item:
 
-1. Read the original comment to understand what was requested
-2. Read the reply to understand what was claimed to be fixed
-3. Read the current code (not just the diff — read the actual files) to verify the fix
-4. Classify each comment as **fixed** or **not fixed**
+1. Read the original feedback to understand what was requested
+2. For inline comments: read the reply. For review-body items: identify the post-review commit(s).
+3. Read the **current code** (not just the diff) to verify the fix
+4. Classify each item as **fixed** or **not fixed**
 
 Then decide:
 
