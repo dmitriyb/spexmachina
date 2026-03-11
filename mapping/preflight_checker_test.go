@@ -519,6 +519,88 @@ func TestFR2_Check_Blocked_DependencyNoMappingRecord(t *testing.T) {
 	}
 }
 
+func TestFR2_Check_DiamondDependency(t *testing.T) {
+	store := newStubStore()
+	spec := newStubSpecGraph()
+
+	// Diamond: A→B→D, A→C→D. D is a shared dependency (not a cycle).
+	spec.modules["modD"] = ModuleInfo{
+		ID:   4,
+		Name: "modD",
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompD1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modD/component/1",
+		BeadID:     "bead-d1",
+		Module:     "modD",
+		Component:  "CompD1",
+		SpecHash:   "hd1",
+		BeadStatus: "closed",
+	})
+
+	spec.modules["modB"] = ModuleInfo{
+		ID:             2,
+		Name:           "modB",
+		RequiresModule: []int{4},
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompB1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modB/component/1",
+		BeadID:     "bead-b1",
+		Module:     "modB",
+		Component:  "CompB1",
+		SpecHash:   "hb1",
+		BeadStatus: "closed",
+	})
+
+	spec.modules["modC"] = ModuleInfo{
+		ID:             3,
+		Name:           "modC",
+		RequiresModule: []int{4},
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompC1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modC/component/1",
+		BeadID:     "bead-c1",
+		Module:     "modC",
+		Component:  "CompC1",
+		SpecHash:   "hc1",
+		BeadStatus: "closed",
+	})
+
+	spec.modules["modA"] = ModuleInfo{
+		ID:             1,
+		Name:           "modA",
+		RequiresModule: []int{2, 3},
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompA1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modA/component/1",
+		BeadID:     "bead-a1",
+		Module:     "modA",
+		Component:  "CompA1",
+		SpecHash:   "ha1",
+	})
+
+	spec.hashes["modA/component/1"] = "ha1"
+
+	result, err := Check(context.Background(), store, spec, "bead-a1")
+	if err != nil {
+		t.Fatalf("Check: %v (diamond dependency should not be a cycle)", err)
+	}
+	if result.Status != "ready" {
+		t.Fatalf("status: want ready, got %s (blockers: %v)", result.Status, result.Blockers)
+	}
+}
+
 func TestFR2_Check_TransitiveDependency(t *testing.T) {
 	store := newStubStore()
 	spec := newStubSpecGraph()

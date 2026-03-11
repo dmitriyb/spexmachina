@@ -75,8 +75,8 @@ func Check(ctx context.Context, store Store, spec SpecGraph, beadID string) (Pre
 	}
 
 	var blockers []Blocker
-	visited := map[int]bool{}
-	if err := checkModuleDeps(store, spec, mod, visited, &blockers); err != nil {
+	stack := map[int]bool{mod.ID: true}
+	if err := checkModuleDeps(store, spec, mod, stack, &blockers); err != nil {
 		return PreflightResult{}, fmt.Errorf("preflight: %w", err)
 	}
 
@@ -107,12 +107,14 @@ func Check(ctx context.Context, store Store, spec SpecGraph, beadID string) (Pre
 
 // checkModuleDeps walks requires_module edges transitively. For each required
 // module, all components must have a mapping record with bead_status "closed".
-func checkModuleDeps(store Store, spec SpecGraph, mod ModuleInfo, visited map[int]bool, blockers *[]Blocker) error {
+// The stack tracks the current recursion path for cycle detection; nodes seen
+// on a different branch (diamond dependencies) are allowed.
+func checkModuleDeps(store Store, spec SpecGraph, mod ModuleInfo, stack map[int]bool, blockers *[]Blocker) error {
 	for _, depID := range mod.RequiresModule {
-		if visited[depID] {
-			return fmt.Errorf("cycle detected: module %d already visited", depID)
+		if stack[depID] {
+			return fmt.Errorf("cycle detected: module %d already in dependency chain", depID)
 		}
-		visited[depID] = true
+		stack[depID] = true
 
 		depMod, err := spec.ModuleByID(depID)
 		if err != nil {
@@ -120,9 +122,10 @@ func checkModuleDeps(store Store, spec SpecGraph, mod ModuleInfo, visited map[in
 		}
 
 		// Recurse into transitive deps first.
-		if err := checkModuleDeps(store, spec, depMod, visited, blockers); err != nil {
+		if err := checkModuleDeps(store, spec, depMod, stack, blockers); err != nil {
 			return err
 		}
+		delete(stack, depID) // backtrack
 
 		// Check all components in the dep module have closed beads.
 		for _, comp := range depMod.Components {

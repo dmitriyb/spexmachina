@@ -15,9 +15,8 @@ import (
 // specGraph implements SpecGraph by reading spec files from disk.
 type specGraph struct {
 	project    *schema.Project
-	modules    map[string]*schema.ModuleSpec // keyed by module name
-	modulePaths map[string]string            // module name → directory path
-	tree       *merkle.Node
+	modules map[string]*schema.ModuleSpec // keyed by module name
+	tree    *merkle.Node
 }
 
 // NewSpecGraph reads the spec directory and builds a SpecGraph for preflight
@@ -33,7 +32,6 @@ func NewSpecGraph(specDir string) (SpecGraph, error) {
 	}
 
 	modules := map[string]*schema.ModuleSpec{}
-	modulePaths := map[string]string{}
 	for _, mod := range proj.Modules {
 		modDir := filepath.Join(specDir, mod.Path)
 		modPath := filepath.Join(modDir, "module.json")
@@ -46,7 +44,6 @@ func NewSpecGraph(specDir string) (SpecGraph, error) {
 			return nil, fmt.Errorf("preflight: parse %s: %w", modPath, err)
 		}
 		modules[mod.Name] = &ms
-		modulePaths[mod.Name] = modDir
 	}
 
 	tree, err := merkle.BuildTree(specDir)
@@ -55,10 +52,9 @@ func NewSpecGraph(specDir string) (SpecGraph, error) {
 	}
 
 	return &specGraph{
-		project:     &proj,
-		modules:     modules,
-		modulePaths: modulePaths,
-		tree:        tree,
+		project: &proj,
+		modules: modules,
+		tree:    tree,
 	}, nil
 }
 
