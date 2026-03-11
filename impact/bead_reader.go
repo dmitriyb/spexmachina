@@ -69,7 +69,7 @@ func extractRecordID(labels []string) (int, bool) {
 	for _, label := range labels {
 		if strings.HasPrefix(label, "spex:") {
 			id, err := strconv.Atoi(strings.TrimPrefix(label, "spex:"))
-			if err == nil {
+			if err == nil && id >= 0 {
 				return id, true
 			}
 		}
