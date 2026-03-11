@@ -31,6 +31,7 @@ type Project struct {
 	Requirements []Requirement `json:"requirements,omitempty"`
 	Modules      []Module      `json:"modules"`
 	Milestones   []Milestone   `json:"milestones,omitempty"`
+	TestPlan     *TestPlan     `json:"test_plan,omitempty"`
 }
 
 // Module represents a module declaration in project.json.
@@ -59,6 +60,20 @@ type Milestone struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
 	Groups      []int  `json:"groups,omitempty"`
+}
+
+// TestPlan represents the test_plan object in project.json.
+type TestPlan struct {
+	Scenarios []TestScenario `json:"scenarios,omitempty"`
+}
+
+// TestScenario represents a cross-module test scenario in a project's test_plan.
+type TestScenario struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Content     string `json:"content,omitempty"`
+	Modules     []int  `json:"modules,omitempty"`
 }
 
 // ModuleSpec represents a module.json file.
