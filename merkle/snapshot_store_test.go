@@ -381,3 +381,142 @@ func TestREQ3_Save_NodeTypeAndModulePreserved(t *testing.T) {
 		t.Errorf("module: want 1, got %d", compNode.Module)
 	}
 }
+
+func TestREQ3_Save_OverwritesPrevious(t *testing.T) {
+	specDir := setupSpecDir(t)
+	tree1, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, Save(tree1, snapPath, time.Now().UTC()))
+
+	// Modify a content file to produce a different tree
+	modDir := filepath.Join(specDir, "alpha")
+	must(t, os.WriteFile(filepath.Join(modDir, "arch_comp1.md"), []byte("# Modified content\n"), 0644))
+	tree2, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree after modification: %v", err)
+	}
+	if tree1.Hash == tree2.Hash {
+		t.Fatal("trees should have different root hashes after modification")
+	}
+
+	must(t, Save(tree2, snapPath, time.Now().UTC()))
+
+	loaded, err := Load(snapPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Hash != tree2.Hash {
+		t.Fatalf("loaded hash: want %s (tree2), got %s", tree2.Hash, loaded.Hash)
+	}
+}
+
+func TestREQ3_Save_PrettyPrintedJSON(t *testing.T) {
+	specDir := setupSpecDir(t)
+	tree, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, Save(tree, snapPath, time.Now().UTC()))
+
+	data, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+
+	content := string(data)
+	if !strings.Contains(content, "\n  ") {
+		t.Fatal("snapshot JSON is not indented (not pretty-printed)")
+	}
+	if !strings.Contains(content, "root_hash") {
+		t.Fatal("snapshot missing root_hash field in readable form")
+	}
+}
+
+func TestREQ3_Save_EmptyTree(t *testing.T) {
+	root := &Node{
+		Key:  "project",
+		Hash: "abc123",
+		Type: "project",
+	}
+
+	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, Save(root, snapPath, time.Now().UTC()))
+
+	data, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	var snap Snapshot
+	must(t, json.Unmarshal(data, &snap))
+	if len(snap.Nodes) != 1 {
+		t.Fatalf("nodes: want 1, got %d", len(snap.Nodes))
+	}
+
+	loaded, err := Load(snapPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Hash != root.Hash {
+		t.Fatalf("hash: want %s, got %s", root.Hash, loaded.Hash)
+	}
+	if len(loaded.Children) != 0 {
+		t.Fatalf("children: want 0, got %d", len(loaded.Children))
+	}
+}
+
+func TestREQ3_Load_UnknownNodeType(t *testing.T) {
+	snap := Snapshot{
+		RootHash: "abc",
+		RootKey:  "project",
+		Nodes: map[string]*SnapshotNode{
+			"project": {Hash: "abc", Type: "project", Children: []string{"project/widget"}},
+			"project/widget": {Hash: "def", Type: "unknown_type", NodeType: "future_kind"},
+		},
+	}
+	data, err := json.MarshalIndent(snap, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+
+	path := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, os.WriteFile(path, data, 0644))
+
+	loaded, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load should succeed with unknown type, got: %v", err)
+	}
+	child := loaded.Children[0]
+	if child.Type != "unknown_type" {
+		t.Fatalf("type: want unknown_type, got %s", child.Type)
+	}
+	if child.NodeType != "future_kind" {
+		t.Fatalf("node_type: want future_kind, got %s", child.NodeType)
+	}
+}
+
+func TestREQ3_Save_CreatesParentDirs(t *testing.T) {
+	root := &Node{
+		Key:  "project",
+		Hash: "xyz",
+		Type: "project",
+	}
+
+	snapPath := filepath.Join(t.TempDir(), "spec", "nested", ".snapshot.json")
+	if err := Save(root, snapPath, time.Now().UTC()); err != nil {
+		t.Fatalf("Save should create parent dirs, got: %v", err)
+	}
+
+	loaded, err := Load(snapPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if loaded.Hash != root.Hash {
+		t.Fatalf("hash: want %s, got %s", root.Hash, loaded.Hash)
+	}
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -42,6 +43,9 @@ func Save(tree *Node, path string, createdAt time.Time) error {
 	}
 	data = append(data, '\n')
 
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return fmt.Errorf("merkle: save snapshot %s: %w", path, err)
+	}
 	if err := os.WriteFile(path, data, 0644); err != nil {
 		return fmt.Errorf("merkle: save snapshot %s: %w", path, err)
 	}
