@@ -51,7 +51,7 @@
     {
       "id": 1,
       "name": "BeadReader",
-      "description": "Reads bead metadata from the bead CLI (br or bd), extracting spec-related fields for matching.",
+      "description": "Reads bead metadata from the bead CLI (br or bd). Extracts the mapping record ID from the simplified bead label (spex:<record-id>) for correlation with spec nodes.",
       "content": "arch_bead_reader.md",
       "implements": [
         1
@@ -60,7 +60,7 @@
     {
       "id": 2,
       "name": "NodeMatcher",
-      "description": "Matches changed spec nodes to beads by comparing spec paths and metadata fields.",
+      "description": "Matches changed spec nodes to beads using spec node IDs from the ID-based merkle diff. Correlates by matching spec node IDs against mapping record IDs, not by parsing paths or label conventions.",
       "content": "arch_node_matcher.md",
       "implements": [
         2,

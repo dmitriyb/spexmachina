@@ -51,35 +51,45 @@
       "title": "Idempotent apply",
       "preq_id": 9,
       "description": "Applying the same impact report twice produces no additional changes. Already-created beads are not duplicated, already-closed beads are not re-closed."
+    },
+    {
+      "id": 7,
+      "type": "functional",
+      "title": "Maintain mapping records",
+      "preq_id": 3,
+      "description": "After bead operations, write/update/remove mapping records in .bead-map.json. Set the bead label to the mapping record ID (spex:<record-id>). One label, one predictable format."
     }
   ],
   "components": [
     {
       "id": 1,
       "name": "BeadCreator",
-      "description": "Creates new beads via the bead CLI (br or bd) with spec metadata attached.",
+      "description": "Creates new beads via the bead CLI (br or bd). After creation, creates a mapping record in .bead-map.json linking the spec node to the new bead, and sets the bead label to the record ID.",
       "content": "arch_bead_creator.md",
       "implements": [
         1,
-        6
+        6,
+        7
       ]
     },
     {
       "id": 2,
       "name": "BeadCloser",
-      "description": "Closes obsolete beads via the bead CLI (br or bd) with a reason derived from the impact report.",
+      "description": "Closes obsolete beads via the bead CLI (br or bd) with a reason derived from the impact report. Removes the corresponding mapping record from .bead-map.json.",
       "content": "arch_bead_closer.md",
       "implements": [
-        2
+        2,
+        7
       ]
     },
     {
       "id": 3,
       "name": "BeadUpdater",
-      "description": "Updates bead metadata to reflect modified spec nodes.",
+      "description": "Updates bead metadata to reflect modified spec nodes. Updates the corresponding mapping record in .bead-map.json with the new spec hash.",
       "content": "arch_bead_updater.md",
       "implements": [
-        3
+        3,
+        7
       ]
     },
     {

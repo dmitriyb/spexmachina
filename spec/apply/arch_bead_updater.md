@@ -1,11 +1,12 @@
 # BeadUpdater
 
-Updates metadata on beads whose spec nodes were modified.
+Updates metadata on beads whose spec nodes were modified. Updates the corresponding mapping record in `.bead-map.json` with the new spec hash.
 
 ## Responsibilities
 
 - Read "review" actions from the impact report
-- Update `spec_hash` metadata to reflect the new spec content hash
+- Update `spec_hash` in the bead's `spex:` label metadata
+- Update the corresponding mapping record's `spec_hash` in `.bead-map.json`
 
 ## Interface
 
@@ -19,7 +20,7 @@ type BeadCLI interface {
     Update(ctx context.Context, id string, metadata map[string]string) error
 }
 
-func UpdateBeads(ctx context.Context, cli BeadCLI, reviews []Action, logger *slog.Logger) error
+func UpdateBeads(ctx context.Context, cli BeadCLI, store map.Store, reviews []Action, logger *slog.Logger) error
 ```
 
 ## Command Construction
@@ -31,9 +32,13 @@ For each review action:
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 
+## Mapping Record Update
+
+After updating the bead, BeadUpdater calls `store.Update(recordID, {"spec_hash": newHash})` to update the mapping record. The record ID is obtained from the bead's `spex:<record-id>` label.
+
 ## What Gets Updated
 
-Only `spec_hash` is updated automatically. The bead's title, description, and other metadata remain unchanged — the review action signals that a human should review the bead in context of the spec change, not that the bead should be automatically modified.
+Only `spec_hash` is updated automatically — both on the bead label and in the mapping record. The bead's title, description, and other metadata remain unchanged — the review action signals that a human should review the bead in context of the spec change, not that the bead should be automatically modified.
 
 ## Error Handling
 
@@ -41,6 +46,8 @@ Update errors are logged as warnings but do not abort the batch. This covers:
 
 - Bead ID no longer exists (manually closed between diff and apply)
 - Bead already has the target hash (idempotent — `update` overwrites metadata)
+
+If the bead update succeeds but the mapping record update fails, the error is logged as a warning. The stale record will be detected by `spex check` on the next preflight.
 
 Only binary-not-found errors (from `NewBeadCLI` construction) are fatal.
 

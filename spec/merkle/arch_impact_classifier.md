@@ -1,10 +1,10 @@
 # ImpactClassifier
 
-Classifies diff changes by their impact level.
+Classifies diff changes by their impact level. Uses node metadata (type, module association) instead of parsing path prefixes.
 
 ## Responsibilities
 
-- Analyze each change's path to determine the spec layer affected
+- Analyze each change's node metadata to determine the spec layer affected
 - Classify into three impact levels
 - Attach impact classification to each change for downstream consumption
 
@@ -12,9 +12,9 @@ Classifies diff changes by their impact level.
 
 | Level | Condition | Meaning |
 |-------|-----------|---------|
-| `impl_only` | Only `impl_*.md` or `flow_*.md` leaves changed within a module | Implementation detail changed, architecture stable |
-| `arch_impl` | Any `arch_*.md` leaf changed (with or without impl changes) | Architecture changed, dependent modules may be affected |
-| `structural` | `module.json` or `project.json` changed | Spec structure changed — new/removed nodes, changed edges |
+| `impl_only` | Node type is `impl_section` or `data_flow` | Implementation detail changed, architecture stable |
+| `arch_impl` | Node type is `component` | Architecture changed, dependent modules may be affected |
+| `structural` | Node type is `meta` (module.json or project.json) | Spec structure changed — new/removed nodes, changed edges |
 
 ## Interface
 
@@ -22,15 +22,18 @@ Classifies diff changes by their impact level.
 type ClassifiedChange struct {
     Change
     Impact string // "impl_only", "arch_impl", "structural"
-    Module string // which module is affected (empty for project-level)
 }
 
 func Classify(changes []Change) []ClassifiedChange
 ```
 
+The module association is already carried in `Change.Module` from the DiffEngine, so no path parsing is needed to determine which module a change belongs to.
+
 ## Rules
 
-1. If a change path starts with a module path and the filename matches `impl_*.md` or `flow_*.md` → `impl_only`
-2. If a change path starts with a module path and the filename matches `arch_*.md` → `arch_impl`
-3. If a change path ends with `module.json` or `project.json` → `structural`
+Classification uses the node metadata (NodeType, Module) attached to each change by the DiffEngine, not path parsing:
+
+1. If change.NodeType is `"impl_section"` or `"data_flow"` → `impl_only`
+2. If change.NodeType is `"component"` → `arch_impl`
+3. If change.NodeType is `"meta"` (module.json or project.json) → `structural`
 4. If a module has changes at multiple levels, the highest level wins (structural > arch_impl > impl_only)

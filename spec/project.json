@@ -124,8 +124,8 @@
       "id": 5,
       "name": "apply",
       "path": "apply",
-      "description": "Executes impact report: creates/closes/updates beads via bead CLI (br or bd), tags with proposal, saves new merkle snapshot.",
-      "requires_module": [4]
+      "description": "Executes impact report: creates/closes/updates beads via bead CLI (br or bd), tags with proposal, saves new merkle snapshot, maintains mapping records.",
+      "requires_module": [4, 9]
     },
     {
       "id": 6,
@@ -145,6 +145,13 @@
       "name": "cli",
       "path": "cli",
       "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra."
+    },
+    {
+      "id": 9,
+      "name": "map",
+      "path": "map",
+      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
+      "requires_module": [1]
     }
   ],
   "milestones": [
@@ -177,6 +184,12 @@
       "title": "CLI Infrastructure",
       "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
       "groups": [8]
+    },
+    {
+      "id": 6,
+      "title": "Mapping Layer",
+      "description": "Spec-to-bead bridge via mapping file, deterministic preflight checking, and CLI query interface.",
+      "groups": [9]
     }
   ],
   "test_plan": {
@@ -186,6 +199,12 @@
         "name": "CLI subcommand registration and help",
         "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
         "modules": [8]
+      },
+      {
+        "id": 2,
+        "name": "Cross-module mapping integration",
+        "description": "Merkle ID-based diff feeds impact analysis, impact report drives apply with mapping record maintenance, skills query mappings via spex map CLI.",
+        "modules": [3, 4, 5, 9]
       }
     ]
   }

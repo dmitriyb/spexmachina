@@ -1,12 +1,14 @@
 # BeadCreator
 
-Creates new beads via the bead CLI (`br` or `bd`) for spec nodes that don't yet have tracking beads.
+Creates new beads via the bead CLI (`br` or `bd`) for spec nodes that don't yet have tracking beads. After creation, creates a mapping record in `.bead-map.json` and sets the bead label to the record ID.
 
 ## Responsibilities
 
 - Read "create" actions from the impact report
-- Construct bead create commands with spec-tracking labels
+- Construct bead create commands with the component description as bead description
 - Execute bead creation and capture the new bead ID
+- Create a mapping record in `.bead-map.json` linking the spec node to the bead
+- Set the bead label to `spex:<record-id>`
 - Return created bead IDs for subsequent tagging
 
 ## Interface
@@ -17,7 +19,7 @@ type BeadCLI interface {
     FindExisting(ctx context.Context, labels []string) (string, error)
 }
 
-func CreateBeads(ctx context.Context, cli BeadCLI, creates []Action) ([]string, error)
+func CreateBeads(ctx context.Context, cli BeadCLI, store map.Store, creates []Action) ([]string, error)
 ```
 
 ## Command Construction
@@ -26,17 +28,29 @@ For each create action:
 ```
 <bin> create --title "<module>: <node_name>" \
   --type task \
-  --labels spec_module:<module>,spec_component:<component>,spec_hash:<hash> \
   --silent
 ```
 
-Where `<bin>` is the configured bead CLI binary (`br` or `bd`). Spec metadata is encoded as labels with a `spec_` prefix and colon separator.
+After creation, the mapping record is created and the bead label is set:
+```
+<bin> update <bead_id> --add-label spex:<record-id>
+```
 
-The title follows the pattern `"<module>: <node_name>"` for consistency and searchability.
+Where `<bin>` is the configured bead CLI binary (`br` or `bd`). The single `spex:<record-id>` label replaces the previous multi-label approach (`spec_module`, `spec_component`, `spec_hash`).
+
+## Mapping Record Creation
+
+After creating the bead, BeadCreator calls `store.Create()` with:
+- `spec_node_id`: from the impact action (e.g., `"module/3/component/2"`)
+- `bead_id`: from the bead CLI create output
+- `module`: module name from the spec graph
+- `component`: component/section name from the spec graph
+- `content_file`: resolved content file path
+- `spec_hash`: current merkle hash of the spec node
 
 ## Idempotency
 
-Before creating, check if a bead with matching `spec_module:<module>` + `spec_component:<component>` (or `spec_impl_section:<section>`) labels already exists and is open. If so, skip creation and return the existing bead ID.
+Before creating, check if a bead with a matching `spex:` label already exists and is open. If so, verify the mapping record exists and return the existing bead ID.
 
 ## External Binary Compatibility
 

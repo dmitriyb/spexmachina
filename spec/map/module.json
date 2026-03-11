@@ -1,0 +1,121 @@
+{
+  "name": "map",
+  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Store mapping records",
+      "preq_id": 3,
+      "description": "Read/write .bead-map.json. Each record links a spec node ID to a bead ID with structured metadata: module name, component/section name, content file path, spec hash at time of mapping."
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Preflight checking",
+      "preq_id": 4,
+      "description": "Given a bead ID, resolve mapping record to spec node, check dependency readiness across the spec graph, report status deterministically."
+    },
+    {
+      "id": 3,
+      "type": "functional",
+      "title": "Query mappings via CLI",
+      "preq_id": 3,
+      "description": "spex map get <record-id> returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex check <bead-id> runs preflight."
+    },
+    {
+      "id": 4,
+      "type": "non_functional",
+      "title": "Deterministic preflight",
+      "preq_id": 9,
+      "description": "Same mapping state + same spec state always produces the same preflight result. No LLM calls, no external state."
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "MappingStore",
+      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node ID to a bead ID with structured metadata.",
+      "content": "arch_mapping_store.md",
+      "implements": [1]
+    },
+    {
+      "id": 2,
+      "name": "PreflightChecker",
+      "description": "Deterministic preflight for /implement and /review skills. Resolves bead to mapping record to spec node, checks dependency readiness, reports status.",
+      "content": "arch_preflight_checker.md",
+      "implements": [2, 4],
+      "uses": [1]
+    },
+    {
+      "id": 3,
+      "name": "MapCommand",
+      "description": "CLI entry point for spex map and spex check. Wires MappingStore and PreflightChecker to serve queries and preflight checks.",
+      "content": "arch_map_command.md",
+      "implements": [3],
+      "uses": [1, 2]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Mapping file format",
+      "content": "impl_mapping_format.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "CRUD operations",
+      "content": "impl_crud_operations.md",
+      "describes": [1]
+    },
+    {
+      "id": 3,
+      "name": "Preflight algorithm",
+      "content": "impl_preflight_algorithm.md",
+      "describes": [2]
+    },
+    {
+      "id": 4,
+      "name": "Map command implementation",
+      "content": "impl_map_command.md",
+      "describes": [3]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Bead creation mapping flow",
+      "description": "When Apply creates a bead, it calls MappingStore to create a mapping record. The record ID is stored as the bead label. Skills query mappings via MapCommand.",
+      "content": "flow_bead_mapping.md",
+      "uses": [1, 3]
+    },
+    {
+      "id": 2,
+      "name": "Preflight checking flow",
+      "description": "Skill reads bead label, extracts record ID, calls spex map get to retrieve structured spec info, then reads spec content using the returned file path.",
+      "content": "flow_preflight.md",
+      "uses": [1, 2]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Mapping store tests",
+      "content": "test_mapping_store.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Preflight checker tests",
+      "content": "test_preflight_checker.md",
+      "describes": [2]
+    },
+    {
+      "id": 3,
+      "name": "Map command tests",
+      "content": "test_map_command.md",
+      "describes": [3]
+    }
+  ]
+}

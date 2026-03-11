@@ -1,23 +1,25 @@
 # DiffEngine
 
-Compares two merkle trees and identifies all changed nodes.
+Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash = modified. ID in current but not snapshot = added. ID in snapshot but not current = removed.
 
 ## Responsibilities
 
-- Compare current tree against a stored snapshot tree
-- Identify added nodes (in current but not in snapshot)
-- Identify removed nodes (in snapshot but not in current)
-- Identify modified nodes (same path, different hash)
-- Report changed paths from leaf to root
+- Compare current ID-keyed tree against a stored snapshot
+- Identify added nodes (ID in current but not in snapshot)
+- Identify removed nodes (ID in snapshot but not in current)
+- Identify modified nodes (same ID, different hash)
+- Report changes with spec IDs and node metadata
 
 ## Interface
 
 ```go
 type Change struct {
-    Path   string // e.g., "validator/arch/arch_schema_checker.md"
-    Type   string // "added", "removed", "modified"
-    OldHash string // empty for "added"
-    NewHash string // empty for "removed"
+    Key      string // spec ID, e.g. "module/3/component/2"
+    Type     string // "added", "removed", "modified"
+    NodeType string // "component", "impl_section", "data_flow", "test_section", "meta"
+    Module   int    // module ID
+    OldHash  string // empty for "added"
+    NewHash  string // empty for "removed"
 }
 
 func Diff(current, snapshot *Node) []Change
@@ -25,12 +27,12 @@ func Diff(current, snapshot *Node) []Change
 
 ## Algorithm
 
-1. Flatten both trees into path → hash maps
-2. For each path in current but not in snapshot: added
-3. For each path in snapshot but not in current: removed
-4. For each path in both with different hashes: modified
-5. Sort changes by path for deterministic output
+1. Flatten both trees into ID → hash maps
+2. For each ID in current but not in snapshot: added
+3. For each ID in snapshot but not in current: removed
+4. For each ID in both with different hashes: modified
+5. Sort changes by key for deterministic output
 
-## Changed Path Propagation
+## Rename Stability
 
-When a leaf changes, all ancestor interior nodes also have changed hashes. The diff reports leaf-level changes. The ImpactClassifier uses the ancestor path to determine the impact level.
+Because nodes are keyed by spec ID rather than file path, renaming a module directory or content file does not produce a remove + add. As long as the spec IDs remain the same, the diff correctly identifies the change as a modification.

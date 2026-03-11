@@ -2,26 +2,45 @@
 
 ## Approach
 
-Build an index of beads by their spec coordinates, then look up each changed spec node.
+Build an index of mapping records by their spec node ID, then look up each changed spec node directly.
 
 ## Algorithm
 
-1. Index beads by `(module, component)` and `(module, impl_section)` pairs
+1. Index mapping records by `spec_node_id` (e.g., `"module/3/component/2"`)
 2. For each changed spec node:
-   - Determine the module from the change path
-   - Determine the node type and name from the filename (e.g., `arch_hasher.md` → component "Hasher")
-   - Look up matching beads in the index
+   - Use the change's key (spec ID) to look up matching mapping records directly
+   - No path parsing, no name resolution, no case conversion needed
 3. Collect results into matched, unmatched, and orphaned lists
 
-## Name Resolution
+## Direct ID Matching
 
-Content filenames map to node names via the naming convention:
-- `arch_<snake_name>.md` → component with matching name
-- `impl_<snake_name>.md` → impl_section with matching name
-- `flow_<snake_name>.md` → data_flow with matching name
+The change key from the ID-based merkle diff (e.g., `"module/3/component/2"`) directly matches the `spec_node_id` field in mapping records. This is a simple map lookup:
 
-The exact name is looked up in `module.json` to handle any discrepancies between filename slugs and actual node names.
+```go
+func MatchNodes(changes []ClassifiedChange, records []Record) (matched, unmatched, orphaned) {
+    index := make(map[string][]Record)
+    for _, r := range records {
+        index[r.SpecNodeID] = append(index[r.SpecNodeID], r)
+    }
+
+    for _, change := range changes {
+        if recs, ok := index[change.Key]; ok {
+            matched = append(matched, Match{Change: change, Records: recs})
+            delete(index, change.Key)
+        } else {
+            unmatched = append(unmatched, Unmatched{Change: change})
+        }
+    }
+
+    // Remaining records in index are orphaned
+    for _, recs := range index {
+        for _, r := range recs {
+            orphaned = append(orphaned, Orphaned{Record: r})
+        }
+    }
+}
+```
 
 ## Multiple Beads per Node
 
-A single spec node may have multiple beads (e.g., an implementation bead and a review bead). All matching beads are returned.
+A single spec node may have multiple beads (e.g., an implementation bead and a review bead). All matching records are returned.

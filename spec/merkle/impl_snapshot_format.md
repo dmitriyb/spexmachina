@@ -2,30 +2,41 @@
 
 ## File Structure
 
-The snapshot is a JSON file at `spec/.snapshot.json`:
+The snapshot is a JSON file at `spec/.snapshot.json`, keyed by spec ID:
 
 ```json
 {
   "root_hash": "abc123...",
   "created_at": "2026-02-24T12:00:00Z",
   "nodes": {
-    "project.json": {
+    "project/meta": {
       "hash": "abc...",
-      "type": "leaf"
+      "type": "leaf",
+      "node_type": "meta"
     },
-    "schema": {
+    "module/1": {
       "hash": "def...",
       "type": "module",
-      "children": ["schema/module.json", "schema/arch", "schema/impl"]
+      "node_type": "module",
+      "module": 1
     },
-    "schema/module.json": {
+    "module/1/meta": {
       "hash": "ghi...",
-      "type": "leaf"
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 1
     },
-    "schema/arch": {
+    "module/1/component/1": {
       "hash": "jkl...",
-      "type": "arch",
-      "children": ["schema/arch_project_schema.md", "schema/arch_module_schema.md"]
+      "type": "leaf",
+      "node_type": "component",
+      "module": 1
+    },
+    "module/1/impl_section/1": {
+      "hash": "mno...",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 1
     }
   }
 }
@@ -33,9 +44,9 @@ The snapshot is a JSON file at `spec/.snapshot.json`:
 
 ## Design Decisions
 
-### Flat node map
+### Flat node map keyed by spec ID
 
-Nodes are stored in a flat map keyed by path rather than a nested tree. This makes lookup O(1) and diff comparison straightforward — iterate keys in both maps.
+Nodes are stored in a flat map keyed by spec ID rather than file path. This makes lookup O(1) and diff comparison straightforward — iterate keys in both maps. Because keys are spec IDs, renaming a module directory or content file does not change the snapshot structure.
 
 ### Timestamps
 
@@ -44,3 +55,7 @@ Nodes are stored in a flat map keyed by path rather than a nested tree. This mak
 ### No content storage
 
 The snapshot stores hashes, not file contents. Content is always read from the working tree. This keeps snapshots small and diff-friendly in git.
+
+### Node metadata
+
+Each node entry carries `node_type` and `module` fields. These are used by the ImpactClassifier to classify changes without path parsing. The metadata is redundant with the key format but avoids key parsing at classification time.

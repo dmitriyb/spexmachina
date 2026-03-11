@@ -1,12 +1,13 @@
 # BeadCloser
 
-Closes obsolete beads whose spec nodes have been removed.
+Closes obsolete beads whose spec nodes have been removed. Removes the corresponding mapping record from `.bead-map.json`.
 
 ## Responsibilities
 
 - Read "close" actions from the impact report
 - Construct bead close commands with descriptive reasons
 - Execute bead closure via `br` or `bd`
+- Remove the corresponding mapping record from `.bead-map.json`
 
 ## Interface
 
@@ -19,7 +20,7 @@ type BeadCLI interface {
     Close(ctx context.Context, id string, reason string) error
 }
 
-func CloseBeads(ctx context.Context, cli BeadCLI, closes []Action, logger *slog.Logger) error
+func CloseBeads(ctx context.Context, cli BeadCLI, store map.Store, closes []Action, logger *slog.Logger) error
 ```
 
 ## Command Construction
@@ -31,12 +32,18 @@ For each close action:
 
 Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 
+## Mapping Record Removal
+
+After closing the bead, BeadCloser calls `store.Delete(recordID)` to remove the mapping record. The record ID is obtained from the bead's `spex:<record-id>` label or from the mapping store lookup by spec node ID.
+
 ## Idempotency & Error Handling
 
 Close errors are logged as warnings but do not abort the batch. Exit code 0 means success; any non-zero exit is treated as a warning. This covers:
 
 - Bead already closed (idempotent)
 - Bead ID no longer exists (manually closed between diff and apply)
+
+If the bead close succeeds but the mapping record deletion fails, the error is logged as a warning. The orphaned record will be cleaned up on the next `spex apply`.
 
 Only binary-not-found errors (from `NewBeadCLI` construction) are fatal.
 
