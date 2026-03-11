@@ -30,7 +30,7 @@ type Store interface {
 	Get(id int) (Record, error)
 	GetByBead(beadID string) (Record, error)
 	GetBySpecNode(specNodeID string) (Record, error)
-	Update(id int, updates map[string]string) error
+	UpdateSpecHash(id int, hash string) error
 	Delete(id int) error
 	List() ([]Record, error)
 }
@@ -127,7 +127,7 @@ func (s *fileStore) GetBySpecNode(specNodeID string) (Record, error) {
 	return Record{}, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
 }
 
-func (s *fileStore) Update(id int, updates map[string]string) error {
+func (s *fileStore) UpdateSpecHash(id int, hash string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -138,9 +138,7 @@ func (s *fileStore) Update(id int, updates map[string]string) error {
 
 	for i, r := range data.Records {
 		if r.ID == id {
-			if v, ok := updates["spec_hash"]; ok {
-				data.Records[i].SpecHash = v
-			}
+			data.Records[i].SpecHash = hash
 			return s.save(data)
 		}
 	}

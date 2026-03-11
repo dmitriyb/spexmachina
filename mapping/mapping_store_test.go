@@ -206,7 +206,7 @@ func TestFR1_Update_SpecHash(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = s.Update(id, map[string]string{"spec_hash": "new-hash"})
+	err = s.UpdateSpecHash(id, "new-hash")
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestFR1_Update_SpecHash(t *testing.T) {
 func TestFR1_Update_NotFound(t *testing.T) {
 	s := testStore(t)
 
-	err := s.Update(999, map[string]string{"spec_hash": "x"})
+	err := s.UpdateSpecHash(999, "x")
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
