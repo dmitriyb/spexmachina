@@ -51,7 +51,8 @@ func runDiff(args []string) int {
 	}
 
 	changes := merkle.Diff(current, snapshot)
-	classified := merkle.Classify(changes)
+	moduleNames := merkle.ModuleNames(current)
+	classified := merkle.Classify(changes, moduleNames)
 
 	if *jsonOut {
 		return printDiffJSON(classified)

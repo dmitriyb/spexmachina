@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/dmitriyb/spexmachina/apply"
@@ -157,80 +156,79 @@ func printDryRun(report impact.ImpactReport) int {
 	return 0
 }
 
-// flattenTree walks a merkle tree and returns a map of path → hash for all leaves.
-// Paths follow the merkle tree convention: "module/group/file.md".
+// flattenTree walks a merkle tree and returns a map of key → hash for all leaves.
+// Keys are spec-ID format, e.g. "module/1/component/2".
 func flattenTree(n *merkle.Node) map[string]string {
 	leaves := make(map[string]string)
-	walkTree(leaves, n, "")
+	walkTree(leaves, n)
 	return leaves
 }
 
-func walkTree(leaves map[string]string, n *merkle.Node, prefix string) {
-	var key string
-	if prefix == "" {
-		key = n.Name
-	} else {
-		key = prefix + "/" + n.Name
-	}
-
+func walkTree(leaves map[string]string, n *merkle.Node) {
 	if n.Type == "leaf" {
-		leaves[key] = n.Hash
+		leaves[n.Key] = n.Hash
 		return
 	}
 	for _, child := range n.Children {
-		walkTree(leaves, child, key)
+		walkTree(leaves, child)
 	}
 }
 
-// lookupHash finds the hash of a spec node in the merkle tree.
-// The impact report Node for creates/reviews is a filename like "arch_comp.md".
-// The merkle tree path is "project/module/group/file.md".
-func lookupHash(hashes map[string]string, module, node string) string {
-	group := nodeGroup(node)
-	// Try all paths — the project name prefix varies.
-	for path, hash := range hashes {
-		if strings.HasSuffix(path, "/"+module+"/"+group+"/"+node) {
-			return hash
-		}
+// lookupHash finds the hash of a spec node in the merkle tree by its key.
+func lookupHash(hashes map[string]string, key string) string {
+	return hashes[key]
+}
+
+// nodeType returns the apply node type for a spec-ID key.
+func nodeType(key string) string {
+	// Parse key: module/<id>/<node_type>/<node_id>
+	parts := splitKey(key)
+	if len(parts) >= 3 {
+		return parts[2] // "component", "impl_section", "data_flow"
 	}
 	return ""
 }
 
-// nodeGroup returns the merkle tree group for a filename based on its prefix.
+// nodeGroup is no longer needed with spec-ID keys but kept for backward
+// compatibility with the impact report format.
 func nodeGroup(filename string) string {
-	switch {
-	case strings.HasPrefix(filename, "arch_"):
-		return "arch"
-	case strings.HasPrefix(filename, "impl_"):
-		return "impl"
-	case strings.HasPrefix(filename, "flow_"):
-		return "flow"
-	default:
-		return ""
-	}
+	return ""
 }
 
-// nodeType returns the apply node type for a filename based on its prefix.
-func nodeType(filename string) string {
-	switch {
-	case strings.HasPrefix(filename, "arch_"):
-		return "component"
-	case strings.HasPrefix(filename, "impl_"):
-		return "impl_section"
-	default:
-		return ""
-	}
-}
-
-// resolveNodeName resolves a filename to a spec node name using module NodeMaps.
-// Falls back to the filename if no mapping exists.
-func resolveNodeName(modules map[string]impact.NodeMap, module, filename string) string {
+// resolveNodeName resolves an impact action's node reference to a spec node name
+// using module NodeMaps. Falls back to the raw node value if no mapping exists.
+// Handles spec-ID paths like "module/1/component/2" by converting to the
+// type-qualified key "component/2" for NodeMap lookup.
+func resolveNodeName(modules map[string]impact.NodeMap, module, node string) string {
 	if nm, ok := modules[module]; ok {
-		if name, ok := nm[filename]; ok {
+		// Try direct lookup first.
+		if name, ok := nm[node]; ok {
 			return name
 		}
+		// Parse spec-ID: module/<id>/<type>/<nodeID> → type/nodeID
+		parts := splitKey(node)
+		if len(parts) >= 4 && parts[0] == "module" {
+			nmKey := parts[2] + "/" + parts[3]
+			if name, ok := nm[nmKey]; ok {
+				return name
+			}
+		}
 	}
-	return filename
+	return node
+}
+
+// splitKey splits a spec-ID key into its path segments.
+func splitKey(key string) []string {
+	var parts []string
+	start := 0
+	for i := 0; i < len(key); i++ {
+		if key[i] == '/' {
+			parts = append(parts, key[start:i])
+			start = i + 1
+		}
+	}
+	parts = append(parts, key[start:])
+	return parts
 }
 
 // convertCreateActions converts impact create actions to apply actions.
@@ -242,7 +240,7 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 			Module:   c.Module,
 			Node:     name,
 			NodeType: nodeType(c.Node),
-			SpecHash: lookupHash(hashes, c.Module, c.Node),
+			SpecHash: lookupHash(hashes, c.Node),
 		})
 	}
 	return actions
@@ -256,7 +254,7 @@ func convertReviewActions(reviews []impact.Action, hashes map[string]string) []a
 			BeadID:   r.BeadID,
 			Module:   r.Module,
 			Node:     r.Node,
-			SpecHash: lookupHash(hashes, r.Module, r.Node),
+			SpecHash: lookupHash(hashes, r.Node),
 		})
 	}
 	return actions

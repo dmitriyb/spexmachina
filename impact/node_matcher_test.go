@@ -7,19 +7,22 @@ import (
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
-func TestFR2_MatchArchChangeToComponentBead(t *testing.T) {
+func TestFR2_MatchComponentChangeToComponentBead(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+	}
+	modules := map[string]NodeMap{
+		"1": {"component/1": "BeadReader"},
 	}
 
-	matches, unmatched, orphaned := MatchNodes(changes, beads, nil)
+	matches, unmatched, orphaned := MatchNodes(changes, beads, modules)
 
 	if len(matches) != 1 {
 		t.Fatalf("want 1 match, got %d", len(matches))
@@ -41,16 +44,16 @@ func TestFR2_MatchArchChangeToComponentBead(t *testing.T) {
 func TestFR2_MatchImplChangeViaNodeMap(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/impl/impl_bead_reading.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/impl_section/1", Type: merkle.Modified},
 			Impact: merkle.ImplOnly,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", ImplSection: "Bead metadata reading"},
+		{ID: "b1", Module: "1", ImplSection: "Bead metadata reading"},
 	}
 	modules := map[string]NodeMap{
-		"impact": {"impl_bead_reading.md": "Bead metadata reading"},
+		"1": {"impl_section/1": "Bead metadata reading"},
 	}
 
 	matches, unmatched, _ := MatchNodes(changes, beads, modules)
@@ -69,16 +72,19 @@ func TestFR2_MatchImplChangeViaNodeMap(t *testing.T) {
 func TestFR2_UnmatchedAddedChange(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_new_thing.md", Type: merkle.Added},
+			Change: merkle.Change{Path: "module/1/component/5", Type: merkle.Added},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+	}
+	modules := map[string]NodeMap{
+		"1": {"component/1": "BeadReader"},
 	}
 
-	_, unmatched, _ := MatchNodes(changes, beads, nil)
+	_, unmatched, _ := MatchNodes(changes, beads, modules)
 
 	if len(unmatched) != 1 {
 		t.Fatalf("want 1 unmatched, got %d", len(unmatched))
@@ -91,16 +97,19 @@ func TestFR2_UnmatchedAddedChange(t *testing.T) {
 func TestFR2_OrphanedBeadFromRemovedChange(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Removed, OldHash: "aaa"},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Removed, OldHash: "aaa"},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+	}
+	modules := map[string]NodeMap{
+		"1": {"component/1": "BeadReader"},
 	}
 
-	matches, _, orphaned := MatchNodes(changes, beads, nil)
+	matches, _, orphaned := MatchNodes(changes, beads, modules)
 
 	if len(matches) != 0 {
 		t.Errorf("want 0 matches for removed change, got %d", len(matches))
@@ -116,15 +125,15 @@ func TestFR2_OrphanedBeadFromRemovedChange(t *testing.T) {
 func TestFR2_StructuralChangeMatchesAllModuleBeads(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/module.json", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/meta", Type: merkle.Modified},
 			Impact: merkle.Structural,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
-		{ID: "b2", Module: "impact", Component: "NodeMatcher"},
-		{ID: "b3", Module: "merkle", Component: "Hasher"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+		{ID: "b2", Module: "1", Component: "NodeMatcher"},
+		{ID: "b3", Module: "2", Component: "Hasher"},
 	}
 
 	matches, _, _ := MatchNodes(changes, beads, nil)
@@ -142,17 +151,17 @@ func TestFR2_StructuralChangeMatchesAllModuleBeads(t *testing.T) {
 	}
 }
 
-func TestFR2_ProjectJsonMatchesAllBeads(t *testing.T) {
+func TestFR2_ProjectMetaMatchesAllBeads(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/project.json", Type: merkle.Modified},
+			Change: merkle.Change{Path: "project/meta", Type: merkle.Modified},
 			Impact: merkle.Structural,
 			Module: "",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
-		{ID: "b2", Module: "merkle", Component: "Hasher"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+		{ID: "b2", Module: "2", Component: "Hasher"},
 	}
 
 	matches, _, _ := MatchNodes(changes, beads, nil)
@@ -168,17 +177,20 @@ func TestFR2_ProjectJsonMatchesAllBeads(t *testing.T) {
 func TestFR2_MultipleBeadsPerNode(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "impl-bead", Module: "impact", Component: "BeadReader"},
-		{ID: "review-bead", Module: "impact", Component: "BeadReader"},
+		{ID: "impl-bead", Module: "1", Component: "BeadReader"},
+		{ID: "review-bead", Module: "1", Component: "BeadReader"},
+	}
+	modules := map[string]NodeMap{
+		"1": {"component/1": "BeadReader"},
 	}
 
-	matches, _, _ := MatchNodes(changes, beads, nil)
+	matches, _, _ := MatchNodes(changes, beads, modules)
 
 	if len(matches) != 1 {
 		t.Fatalf("want 1 match, got %d", len(matches))
@@ -191,9 +203,9 @@ func TestFR2_MultipleBeadsPerNode(t *testing.T) {
 func TestFR2_RemovedChangeNoBeadIsIgnored(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_old_thing.md", Type: merkle.Removed},
+			Change: merkle.Change{Path: "module/1/component/99", Type: merkle.Removed},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 
@@ -213,21 +225,24 @@ func TestFR2_RemovedChangeNoBeadIsIgnored(t *testing.T) {
 func TestFR2_OrphanNotCreatedIfBeadAlsoMatchesNonRemoved(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Removed},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Removed},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
+	}
+	modules := map[string]NodeMap{
+		"1": {"component/1": "BeadReader"},
 	}
 
-	matches, _, orphaned := MatchNodes(changes, beads, nil)
+	matches, _, orphaned := MatchNodes(changes, beads, modules)
 
 	if len(matches) != 1 {
 		t.Errorf("want 1 match, got %d", len(matches))
@@ -240,24 +255,30 @@ func TestFR2_OrphanNotCreatedIfBeadAlsoMatchesNonRemoved(t *testing.T) {
 func TestNFR5_DeterministicOutput(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_node_matcher.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/component/2", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "z-bead", Module: "impact", Component: "BeadReader"},
-		{ID: "a-bead", Module: "impact", Component: "NodeMatcher"},
+		{ID: "z-bead", Module: "1", Component: "BeadReader"},
+		{ID: "a-bead", Module: "1", Component: "NodeMatcher"},
+	}
+	modules := map[string]NodeMap{
+		"1": {
+			"component/1": "BeadReader",
+			"component/2": "NodeMatcher",
+		},
 	}
 
 	// Run multiple times to verify determinism.
 	for i := 0; i < 5; i++ {
-		matches, _, _ := MatchNodes(changes, beads, nil)
+		matches, _, _ := MatchNodes(changes, beads, modules)
 
 		if len(matches) != 2 {
 			t.Fatalf("run %d: want 2 matches, got %d", i, len(matches))
@@ -315,17 +336,17 @@ func TestFR2_SnakeToPascal(t *testing.T) {
 func TestFR2_NodeMapResolutionOverridesAutoDerive(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/arch/arch_bead_reader.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "impact",
+			Module: "1",
 		},
 	}
-	// NodeMap resolves to a different name than auto-derivation would.
+	// NodeMap resolves ID to a name.
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "CustomName"},
+		{ID: "b1", Module: "1", Component: "CustomName"},
 	}
 	modules := map[string]NodeMap{
-		"impact": {"arch_bead_reader.md": "CustomName"},
+		"1": {"component/1": "CustomName"},
 	}
 
 	matches, _, _ := MatchNodes(changes, beads, modules)
@@ -338,38 +359,41 @@ func TestFR2_NodeMapResolutionOverridesAutoDerive(t *testing.T) {
 	}
 }
 
-func TestFR2_FlowChangeWithoutNodeMapIsUnmatched(t *testing.T) {
+func TestFR2_DataFlowChangeWithoutNodeMapIsUnmatched(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/impact/flow/flow_impact_analysis.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/1/data_flow/1", Type: merkle.Modified},
 			Impact: merkle.ImplOnly,
-			Module: "impact",
+			Module: "1",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "BeadReader"},
+		{ID: "b1", Module: "1", Component: "BeadReader"},
 	}
 
 	_, unmatched, _ := MatchNodes(changes, beads, nil)
 
 	if len(unmatched) != 1 {
-		t.Fatalf("want 1 unmatched for flow change without NodeMap, got %d", len(unmatched))
+		t.Fatalf("want 1 unmatched for data_flow change without NodeMap, got %d", len(unmatched))
 	}
 }
 
 func TestFR2_CrossModuleNoMatch(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "project/merkle/arch/arch_hasher.md", Type: merkle.Modified},
+			Change: merkle.Change{Path: "module/2/component/1", Type: merkle.Modified},
 			Impact: merkle.ArchImpl,
-			Module: "merkle",
+			Module: "2",
 		},
 	}
 	beads := []BeadSpec{
-		{ID: "b1", Module: "impact", Component: "Hasher"},
+		{ID: "b1", Module: "1", Component: "Hasher"},
+	}
+	modules := map[string]NodeMap{
+		"2": {"component/1": "Hasher"},
 	}
 
-	_, unmatched, _ := MatchNodes(changes, beads, nil)
+	_, unmatched, _ := MatchNodes(changes, beads, modules)
 
 	if len(unmatched) != 1 {
 		t.Fatalf("want 1 unmatched (different module), got %d", len(unmatched))

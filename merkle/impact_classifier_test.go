@@ -2,16 +2,16 @@ package merkle
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
 func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/Alpha/impl/impl_comp1.md", Type: Modified},
+		{Path: "module/1/impl_section/1", Type: Modified},
 	}
+	names := map[int]string{1: "Alpha"}
 
-	classified := Classify(changes)
+	classified := Classify(changes, names)
 
 	if len(classified) != 1 {
 		t.Fatalf("expected 1 classified change, got %d", len(classified))
@@ -24,24 +24,25 @@ func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	}
 }
 
-func TestREQ5_Classify_FlowIsImplOnly(t *testing.T) {
+func TestREQ5_Classify_DataFlowIsImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/Alpha/flow/flow_data.md", Type: Added},
+		{Path: "module/1/data_flow/1", Type: Added},
 	}
 
-	classified := Classify(changes)
+	classified := Classify(changes, nil)
 
 	if classified[0].Impact != ImplOnly {
-		t.Errorf("expected impl_only for flow file, got %s", classified[0].Impact)
+		t.Errorf("expected impl_only for data_flow, got %s", classified[0].Impact)
 	}
 }
 
 func TestREQ5_Classify_ArchImpl(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/Alpha/arch/arch_comp1.md", Type: Modified},
+		{Path: "module/1/component/1", Type: Modified},
 	}
+	names := map[int]string{1: "Alpha"}
 
-	classified := Classify(changes)
+	classified := Classify(changes, names)
 
 	if len(classified) != 1 {
 		t.Fatalf("expected 1 classified change, got %d", len(classified))
@@ -54,42 +55,43 @@ func TestREQ5_Classify_ArchImpl(t *testing.T) {
 	}
 }
 
-func TestREQ5_Classify_StructuralModuleJSON(t *testing.T) {
+func TestREQ5_Classify_StructuralModuleMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/Alpha/module.json", Type: Modified},
+		{Path: "module/1/meta", Type: Modified},
 	}
+	names := map[int]string{1: "Alpha"}
 
-	classified := Classify(changes)
+	classified := Classify(changes, names)
 
 	if classified[0].Impact != Structural {
-		t.Errorf("expected structural for module.json, got %s", classified[0].Impact)
+		t.Errorf("expected structural for module meta, got %s", classified[0].Impact)
 	}
 	if classified[0].Module != "Alpha" {
 		t.Errorf("expected module Alpha, got %q", classified[0].Module)
 	}
 }
 
-func TestREQ5_Classify_StructuralProjectJSON(t *testing.T) {
+func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/project.json", Type: Modified},
+		{Path: "project/meta", Type: Modified},
 	}
 
-	classified := Classify(changes)
+	classified := Classify(changes, nil)
 
 	if classified[0].Impact != Structural {
-		t.Errorf("expected structural for project.json, got %s", classified[0].Impact)
+		t.Errorf("expected structural for project/meta, got %s", classified[0].Impact)
 	}
 	if classified[0].Module != "" {
-		t.Errorf("expected empty module for project.json, got %q", classified[0].Module)
+		t.Errorf("expected empty module for project/meta, got %q", classified[0].Module)
 	}
 }
 
 func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/Alpha/impl/impl_comp1.md", Type: Modified, OldHash: "aaa", NewHash: "bbb"},
+		{Path: "module/1/impl_section/1", Type: Modified, OldHash: "aaa", NewHash: "bbb"},
 	}
 
-	classified := Classify(changes)
+	classified := Classify(changes, nil)
 
 	c := classified[0]
 	if c.Path != changes[0].Path {
@@ -105,13 +107,14 @@ func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 
 func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 	changes := []Change{
-		{Path: "test-project/project.json", Type: Modified},
-		{Path: "test-project/Alpha/arch/arch_comp1.md", Type: Modified},
-		{Path: "test-project/Alpha/impl/impl_comp1.md", Type: Modified},
-		{Path: "test-project/Beta/flow/flow_data.md", Type: Added},
+		{Path: "project/meta", Type: Modified},
+		{Path: "module/1/component/1", Type: Modified},
+		{Path: "module/1/impl_section/1", Type: Modified},
+		{Path: "module/2/data_flow/1", Type: Added},
 	}
+	names := map[int]string{1: "Alpha", 2: "Beta"}
 
-	classified := Classify(changes)
+	classified := Classify(changes, names)
 
 	if len(classified) != 4 {
 		t.Fatalf("expected 4 classified changes, got %d", len(classified))
@@ -144,7 +147,7 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// Modify an arch file and an impl file
+	// Modify a component file and an impl file
 	writeFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Modified arch\n")
 	writeFile(t, filepath.Join(specDir, "alpha"), "impl_comp1.md", "# Modified impl\n")
 	current, err := BuildTree(specDir)
@@ -153,7 +156,8 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 	}
 
 	changes := Diff(current, snapshot)
-	classified := Classify(changes)
+	moduleNames := ModuleNames(current)
+	classified := Classify(changes, moduleNames)
 
 	if len(classified) == 0 {
 		t.Fatal("expected classified changes, got none")
@@ -162,28 +166,31 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 	// Should have at least one arch_impl and one impl_only
 	var hasArch, hasImpl bool
 	for _, c := range classified {
-		if c.Impact == ArchImpl && strings.HasSuffix(c.Path, "arch_comp1.md") {
+		if c.Impact == ArchImpl && c.Path == "module/1/component/1" {
 			hasArch = true
+			if c.Module != "Alpha" {
+				t.Errorf("expected module Alpha for component change, got %q", c.Module)
+			}
 		}
-		if c.Impact == ImplOnly && strings.HasSuffix(c.Path, "impl_comp1.md") {
+		if c.Impact == ImplOnly && c.Path == "module/1/impl_section/1" {
 			hasImpl = true
 		}
 	}
 	if !hasArch {
-		t.Error("expected arch_impl change for arch_comp1.md")
+		t.Error("expected arch_impl change for module/1/component/1")
 	}
 	if !hasImpl {
-		t.Error("expected impl_only change for impl_comp1.md")
+		t.Error("expected impl_only change for module/1/impl_section/1")
 	}
 }
 
 func TestREQ5_Classify_EmptyChanges(t *testing.T) {
-	classified := Classify(nil)
+	classified := Classify(nil, nil)
 	if len(classified) != 0 {
 		t.Fatalf("expected 0 classified changes for nil input, got %d", len(classified))
 	}
 
-	classified = Classify([]Change{})
+	classified = Classify([]Change{}, nil)
 	if len(classified) != 0 {
 		t.Fatalf("expected 0 classified changes for empty input, got %d", len(classified))
 	}
@@ -203,5 +210,17 @@ func TestREQ5_ImpactLevel_String(t *testing.T) {
 		if got := tt.level.String(); got != tt.want {
 			t.Errorf("ImpactLevel(%d).String() = %q, want %q", tt.level, got, tt.want)
 		}
+	}
+}
+
+func TestREQ5_Classify_NilModuleNames_FallsBackToID(t *testing.T) {
+	changes := []Change{
+		{Path: "module/3/component/1", Type: Modified},
+	}
+
+	classified := Classify(changes, nil)
+
+	if classified[0].Module != "3" {
+		t.Errorf("expected module ID fallback '3', got %q", classified[0].Module)
 	}
 }

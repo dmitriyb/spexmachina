@@ -76,8 +76,8 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 	if len(modified) != 1 {
 		t.Fatalf("expected 1 modified change, got %d: %v", len(modified), changes)
 	}
-	if !strings.HasSuffix(modified[0].Path, "arch_comp1.md") {
-		t.Errorf("expected modified path to end with arch_comp1.md, got %s", modified[0].Path)
+	if modified[0].Path != "module/1/component/1" {
+		t.Errorf("expected modified path module/1/component/1, got %s", modified[0].Path)
 	}
 	if modified[0].OldHash == "" || modified[0].NewHash == "" {
 		t.Error("expected both OldHash and NewHash to be non-empty for modified change")
@@ -124,15 +124,15 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 		}
 	}
 
-	// The new impl file is added; module.json is modified (its hash changed)
+	// The new impl_section/2 is added; module meta is modified (its hash changed)
 	foundNewImpl := false
 	for _, c := range added {
-		if strings.HasSuffix(c.Path, "impl_comp2.md") {
+		if c.Path == "module/1/impl_section/2" {
 			foundNewImpl = true
 		}
 	}
 	if !foundNewImpl {
-		t.Errorf("expected added change for impl_comp2.md, changes: %v", changes)
+		t.Errorf("expected added change for module/1/impl_section/2, changes: %v", changes)
 	}
 }
 
@@ -174,12 +174,12 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 
 	foundBeta := false
 	for _, c := range removed {
-		if strings.Contains(c.Path, "Beta") || strings.Contains(c.Path, "beta") {
+		if strings.HasPrefix(c.Path, "module/2") {
 			foundBeta = true
 		}
 	}
 	if !foundBeta {
-		t.Errorf("expected removed change for beta module, changes: %v", changes)
+		t.Errorf("expected removed change for module/2, changes: %v", changes)
 	}
 }
 
@@ -298,4 +298,3 @@ var fixedTime = func() time.Time {
 	t, _ := time.Parse(time.RFC3339, "2026-01-01T00:00:00Z")
 	return t
 }()
-

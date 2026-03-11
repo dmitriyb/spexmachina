@@ -10,18 +10,37 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// Node represents a node in the merkle tree. Leaf nodes correspond to files,
-// interior nodes correspond to groups (arch, impl, flow), modules, or the project root.
+// Node represents a node in the merkle tree. Leaf nodes correspond to spec
+// content files, interior nodes correspond to modules or the project root.
+// Nodes are keyed by spec ID (e.g., "module/1/component/2"), not file path.
 type Node struct {
-	Name     string  `json:"name"`
+	Key      string  `json:"key"`
 	Hash     string  `json:"hash"`
-	Type     string  `json:"type"` // "leaf", "arch", "impl", "flow", "module", "project"
+	Type     string  `json:"type"`                // "leaf", "module", "project"
+	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "meta"
+	Module   int     `json:"module,omitempty"`     // module ID (0 for project-level nodes)
 	Children []*Node `json:"children,omitempty"`
+	moduleName string // unexported; module name for ModuleNames extraction
+}
+
+// ModuleNames extracts a map of module ID → module name from the tree.
+// Module names are stored during tree construction for downstream use.
+func ModuleNames(tree *Node) map[int]string {
+	names := map[int]string{}
+	if tree == nil {
+		return names
+	}
+	for _, child := range tree.Children {
+		if child.Type == "module" {
+			names[child.Module] = child.moduleName
+		}
+	}
+	return names
 }
 
 // BuildTree constructs a merkle tree from the spec directory. It reads
 // project.json to discover modules, then module.json files to discover
-// content files, and hashes everything bottom-up.
+// content files, and hashes everything bottom-up. Nodes are keyed by spec ID.
 func BuildTree(specDir string) (*Node, error) {
 	proj, err := readProject(specDir)
 	if err != nil {
@@ -29,7 +48,7 @@ func BuildTree(specDir string) (*Node, error) {
 	}
 
 	projectJSONPath := filepath.Join(specDir, "project.json")
-	projLeaf, err := hashLeaf(projectJSONPath, "project.json")
+	projLeaf, err := hashLeaf(projectJSONPath, "project/meta", "meta", 0)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
@@ -44,13 +63,10 @@ func BuildTree(specDir string) (*Node, error) {
 	}
 
 	children := append([]*Node{projLeaf}, moduleNodes...)
-	childHashes := make([]string, len(children))
-	for i, c := range children {
-		childHashes[i] = c.Hash
-	}
+	childHashes := collectHashes(children)
 
 	return &Node{
-		Name:     proj.Name,
+		Key:      "project",
 		Hash:     HashChildren(childHashes),
 		Type:     "project",
 		Children: children,
@@ -66,90 +82,92 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
-	modLeaf, err := hashLeaf(modJSONPath, "module.json")
+	metaKey := fmt.Sprintf("module/%d/meta", mod.ID)
+	modLeaf, err := hashLeaf(modJSONPath, metaKey, "meta", mod.ID)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
 	children := []*Node{modLeaf}
 
-	archNode, err := buildGroup(modDir, "arch", componentContents(modSpec.Components))
-	if err != nil {
-		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-	}
-	if archNode != nil {
-		children = append(children, archNode)
-	}
-
-	implNode, err := buildGroup(modDir, "impl", implSectionContents(modSpec.ImplSections))
-	if err != nil {
-		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-	}
-	if implNode != nil {
-		children = append(children, implNode)
-	}
-
-	flowNode, err := buildGroup(modDir, "flow", dataFlowContents(modSpec.DataFlows))
-	if err != nil {
-		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-	}
-	if flowNode != nil {
-		children = append(children, flowNode)
-	}
-
-	childHashes := make([]string, len(children))
-	for i, c := range children {
-		childHashes[i] = c.Hash
-	}
-
-	return &Node{
-		Name:     mod.Name,
-		Hash:     HashChildren(childHashes),
-		Type:     "module",
-		Children: children,
-	}, nil
-}
-
-func buildGroup(modDir, groupType string, contentPaths []string) (*Node, error) {
-	if len(contentPaths) == 0 {
-		return nil, nil
-	}
-
-	sort.Strings(contentPaths)
-
-	var leaves []*Node
-	for _, rel := range contentPaths {
-		absPath := filepath.Join(modDir, rel)
-		leaf, err := hashLeaf(absPath, rel)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build group %s: %w", groupType, err)
+	for _, c := range modSpec.Components {
+		if c.Content == "" {
+			continue
 		}
-		leaves = append(leaves, leaf)
+		key := nodeKey(mod.ID, "component", c.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), key, "component", mod.ID)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, leaf)
 	}
 
-	childHashes := make([]string, len(leaves))
-	for i, l := range leaves {
-		childHashes[i] = l.Hash
+	for _, s := range modSpec.ImplSections {
+		if s.Content == "" {
+			continue
+		}
+		key := nodeKey(mod.ID, "impl_section", s.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), key, "impl_section", mod.ID)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, leaf)
 	}
+
+	for _, f := range modSpec.DataFlows {
+		if f.Content == "" {
+			continue
+		}
+		key := nodeKey(mod.ID, "data_flow", f.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, f.Content), key, "data_flow", mod.ID)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, leaf)
+	}
+
+	// Sort leaf children by key for deterministic hashing (meta is always first by key order).
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Key < children[j].Key
+	})
+
+	childHashes := collectHashes(children)
 
 	return &Node{
-		Name:     groupType,
-		Hash:     HashChildren(childHashes),
-		Type:     groupType,
-		Children: leaves,
+		Key:        fmt.Sprintf("module/%d", mod.ID),
+		Hash:       HashChildren(childHashes),
+		Type:       "module",
+		Module:     mod.ID,
+		Children:   children,
+		moduleName: mod.Name,
 	}, nil
 }
 
-func hashLeaf(path, name string) (*Node, error) {
+// nodeKey builds a spec-ID key: module/<moduleID>/<nodeType>/<nodeID>.
+func nodeKey(moduleID int, nodeType string, nodeID int) string {
+	return fmt.Sprintf("module/%d/%s/%d", moduleID, nodeType, nodeID)
+}
+
+func hashLeaf(path, key, nodeType string, module int) (*Node, error) {
 	h, err := HashFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("merkle: hash leaf %s: %w", name, err)
+		return nil, fmt.Errorf("merkle: hash leaf %s: %w", key, err)
 	}
 	return &Node{
-		Name: name,
-		Hash: h,
-		Type: "leaf",
+		Key:      key,
+		Hash:     h,
+		Type:     "leaf",
+		NodeType: nodeType,
+		Module:   module,
 	}, nil
+}
+
+func collectHashes(nodes []*Node) []string {
+	hashes := make([]string, len(nodes))
+	for i, n := range nodes {
+		hashes[i] = n.Hash
+	}
+	return hashes
 }
 
 func readProject(specDir string) (*schema.Project, error) {
@@ -174,34 +192,4 @@ func readModuleSpec(path string) (*schema.ModuleSpec, error) {
 		return nil, fmt.Errorf("merkle: parse %s: %w", path, err)
 	}
 	return &spec, nil
-}
-
-func componentContents(components []schema.Component) []string {
-	var paths []string
-	for _, c := range components {
-		if c.Content != "" {
-			paths = append(paths, c.Content)
-		}
-	}
-	return paths
-}
-
-func implSectionContents(sections []schema.ImplSection) []string {
-	var paths []string
-	for _, s := range sections {
-		if s.Content != "" {
-			paths = append(paths, s.Content)
-		}
-	}
-	return paths
-}
-
-func dataFlowContents(flows []schema.DataFlow) []string {
-	var paths []string
-	for _, f := range flows {
-		if f.Content != "" {
-			paths = append(paths, f.Content)
-		}
-	}
-	return paths
 }

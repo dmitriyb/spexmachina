@@ -67,22 +67,18 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	// Expect flat keys like "test-project", "test-project/project.json",
-	// "test-project/Alpha", "test-project/Alpha/module.json", etc.
+	// Expect flat keys using spec-ID format
 	expectedKeys := []string{
-		"test-project",
-		"test-project/project.json",
-		"test-project/Alpha",
-		"test-project/Alpha/module.json",
-		"test-project/Alpha/arch",
-		"test-project/Alpha/arch/arch_comp1.md",
-		"test-project/Alpha/arch/arch_comp2.md",
-		"test-project/Alpha/impl",
-		"test-project/Alpha/impl/impl_comp1.md",
-		"test-project/Beta",
-		"test-project/Beta/module.json",
-		"test-project/Beta/arch",
-		"test-project/Beta/arch/arch_beta.md",
+		"project",
+		"project/meta",
+		"module/1",
+		"module/1/meta",
+		"module/1/component/1",
+		"module/1/component/2",
+		"module/1/impl_section/1",
+		"module/2",
+		"module/2/meta",
+		"module/2/component/1",
 	}
 
 	for _, key := range expectedKeys {
@@ -93,6 +89,18 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 
 	if len(snap.Nodes) != len(expectedKeys) {
 		t.Errorf("node count: want %d, got %d", len(expectedKeys), len(snap.Nodes))
+		for k := range snap.Nodes {
+			found := false
+			for _, ek := range expectedKeys {
+				if k == ek {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("unexpected key: %q", k)
+			}
+		}
 	}
 }
 
@@ -118,12 +126,11 @@ func TestREQ3_Save_NodeTypes(t *testing.T) {
 		key      string
 		wantType string
 	}{
-		{"test-project", "project"},
-		{"test-project/project.json", "leaf"},
-		{"test-project/Alpha", "module"},
-		{"test-project/Alpha/arch", "arch"},
-		{"test-project/Alpha/impl", "impl"},
-		{"test-project/Alpha/arch/arch_comp1.md", "leaf"},
+		{"project", "project"},
+		{"project/meta", "leaf"},
+		{"module/1", "module"},
+		{"module/1/meta", "leaf"},
+		{"module/1/component/1", "leaf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
@@ -138,7 +145,7 @@ func TestREQ3_Save_NodeTypes(t *testing.T) {
 	}
 }
 
-func TestREQ3_Save_ChildrenArePaths(t *testing.T) {
+func TestREQ3_Save_ChildrenAreKeys(t *testing.T) {
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -156,20 +163,22 @@ func TestREQ3_Save_ChildrenArePaths(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	archNode := snap.Nodes["test-project/Alpha/arch"]
-	if archNode == nil {
-		t.Fatal("arch node not found")
+	moduleNode := snap.Nodes["module/1"]
+	if moduleNode == nil {
+		t.Fatal("module/1 node not found")
 	}
 	wantChildren := []string{
-		"test-project/Alpha/arch/arch_comp1.md",
-		"test-project/Alpha/arch/arch_comp2.md",
+		"module/1/component/1",
+		"module/1/component/2",
+		"module/1/impl_section/1",
+		"module/1/meta",
 	}
-	if len(archNode.Children) != len(wantChildren) {
-		t.Fatalf("children count: want %d, got %d", len(wantChildren), len(archNode.Children))
+	if len(moduleNode.Children) != len(wantChildren) {
+		t.Fatalf("children count: want %d, got %d", len(wantChildren), len(moduleNode.Children))
 	}
 	for i, want := range wantChildren {
-		if archNode.Children[i] != want {
-			t.Errorf("child[%d]: want %s, got %s", i, want, archNode.Children[i])
+		if moduleNode.Children[i] != want {
+			t.Errorf("child[%d]: want %s, got %s", i, want, moduleNode.Children[i])
 		}
 	}
 }
@@ -192,9 +201,9 @@ func TestREQ3_Save_LeafNoChildren(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	leaf := snap.Nodes["test-project/project.json"]
+	leaf := snap.Nodes["project/meta"]
 	if leaf == nil {
-		t.Fatal("project.json node not found")
+		t.Fatal("project/meta node not found")
 	}
 	if len(leaf.Children) != 0 {
 		t.Fatalf("leaf should have no children, got %d", len(leaf.Children))
@@ -221,8 +230,8 @@ func TestREQ3_LoadSave_RoundTrip(t *testing.T) {
 	if loaded.Hash != tree.Hash {
 		t.Fatalf("root hash: want %s, got %s", tree.Hash, loaded.Hash)
 	}
-	if loaded.Name != tree.Name {
-		t.Fatalf("root name: want %s, got %s", tree.Name, loaded.Name)
+	if loaded.Key != tree.Key {
+		t.Fatalf("root key: want %s, got %s", tree.Key, loaded.Key)
 	}
 	if loaded.Type != tree.Type {
 		t.Fatalf("root type: want %s, got %s", tree.Type, loaded.Type)
@@ -250,8 +259,8 @@ func TestREQ3_LoadSave_PreservesStructure(t *testing.T) {
 
 func assertTreeEqual(t *testing.T, want, got *Node, path string) {
 	t.Helper()
-	if want.Name != got.Name {
-		t.Fatalf("%s name: want %s, got %s", path, want.Name, got.Name)
+	if want.Key != got.Key {
+		t.Fatalf("%s key: want %s, got %s", path, want.Key, got.Key)
 	}
 	if want.Hash != got.Hash {
 		t.Fatalf("%s hash: want %s, got %s", path, want.Hash, got.Hash)
@@ -259,11 +268,17 @@ func assertTreeEqual(t *testing.T, want, got *Node, path string) {
 	if want.Type != got.Type {
 		t.Fatalf("%s type: want %s, got %s", path, want.Type, got.Type)
 	}
+	if want.NodeType != got.NodeType {
+		t.Fatalf("%s node_type: want %s, got %s", path, want.NodeType, got.NodeType)
+	}
+	if want.Module != got.Module {
+		t.Fatalf("%s module: want %d, got %d", path, want.Module, got.Module)
+	}
 	if len(want.Children) != len(got.Children) {
 		t.Fatalf("%s children count: want %d, got %d", path, len(want.Children), len(got.Children))
 	}
 	for i := range want.Children {
-		assertTreeEqual(t, want.Children[i], got.Children[i], path+"/"+want.Children[i].Name)
+		assertTreeEqual(t, want.Children[i], got.Children[i], path+"/"+want.Children[i].Key)
 	}
 }
 
@@ -334,5 +349,35 @@ func TestREQ3_Save_Deterministic(t *testing.T) {
 
 	if string(data1) != string(data2) {
 		t.Fatal("snapshot files are not byte-identical")
+	}
+}
+
+func TestREQ3_Save_NodeTypeAndModulePreserved(t *testing.T) {
+	specDir := setupSpecDir(t)
+	tree, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, Save(tree, snapPath, time.Now().UTC()))
+
+	data, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+
+	var snap Snapshot
+	must(t, json.Unmarshal(data, &snap))
+
+	compNode := snap.Nodes["module/1/component/1"]
+	if compNode == nil {
+		t.Fatal("module/1/component/1 node not found")
+	}
+	if compNode.NodeType != "component" {
+		t.Errorf("node_type: want component, got %s", compNode.NodeType)
+	}
+	if compNode.Module != 1 {
+		t.Errorf("module: want 1, got %d", compNode.Module)
 	}
 }

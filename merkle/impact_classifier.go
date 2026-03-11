@@ -1,7 +1,7 @@
 package merkle
 
 import (
-	"path"
+	"strconv"
 	"strings"
 )
 
@@ -31,48 +31,62 @@ func (il ImpactLevel) String() string {
 type ClassifiedChange struct {
 	Change
 	Impact ImpactLevel
-	Module string // owning module name; empty for project-level changes
+	Module string // module name; empty for project-level changes
 }
 
 // Classify assigns an impact level and owning module to each change based on
-// its path. Paths follow the merkle tree convention: project/Module/group/file.
-func Classify(changes []Change) []ClassifiedChange {
+// its spec-ID key. Keys follow the pattern: module/<id>/<node_type>/<node_id>.
+// The moduleNames map resolves module IDs to human-readable names. If nil,
+// the module ID string is used as-is.
+func Classify(changes []Change, moduleNames map[int]string) []ClassifiedChange {
 	result := make([]ClassifiedChange, len(changes))
 	for i, c := range changes {
 		result[i] = ClassifiedChange{
 			Change: c,
-			Impact: classifyPath(c.Path),
-			Module: extractModule(c.Path),
+			Impact: classifyKey(c.Path),
+			Module: resolveModuleName(c.Path, moduleNames),
 		}
 	}
 	return result
 }
 
-// classifyPath determines the impact level from a leaf path.
-func classifyPath(p string) ImpactLevel {
-	name := path.Base(p)
-
-	if name == "project.json" || name == "module.json" {
+// classifyKey determines the impact level from a spec-ID key.
+func classifyKey(key string) ImpactLevel {
+	// Meta nodes (project/meta, module/<id>/meta) are structural changes.
+	if strings.HasSuffix(key, "/meta") {
 		return Structural
 	}
-	if strings.HasPrefix(name, "arch_") {
-		return ArchImpl
+
+	// Parse key segments to determine node type.
+	parts := strings.Split(key, "/")
+	if len(parts) >= 3 {
+		nodeType := parts[2]
+		switch nodeType {
+		case "component":
+			return ArchImpl
+		case "impl_section", "data_flow":
+			return ImplOnly
+		}
 	}
-	if strings.HasPrefix(name, "impl_") || strings.HasPrefix(name, "flow_") {
-		return ImplOnly
-	}
+
 	return 0
 }
 
-// extractModule returns the module name from a merkle tree path.
-// Paths are structured as "project/Module/group/file" — the module is the
-// second segment. Project-level leaves like "project/project.json" have no
-// module (returns "").
-func extractModule(path string) string {
-	parts := strings.Split(path, "/")
-	// project-level leaf: "project/project.json"
-	if len(parts) <= 2 {
+// resolveModuleName extracts the module ID from a spec-ID key and resolves it
+// to a name using the provided map. Returns "" for project-level keys.
+func resolveModuleName(key string, moduleNames map[int]string) string {
+	parts := strings.Split(key, "/")
+	if len(parts) < 2 || parts[0] != "module" {
 		return ""
+	}
+	id, err := strconv.Atoi(parts[1])
+	if err != nil {
+		return parts[1]
+	}
+	if moduleNames != nil {
+		if name, ok := moduleNames[id]; ok {
+			return name
+		}
 	}
 	return parts[1]
 }

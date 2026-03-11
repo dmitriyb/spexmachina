@@ -298,11 +298,11 @@ func TestFR4_BuildNodeMaps(t *testing.T) {
 		t.Fatalf("expected NodeMap for module alpha, got keys: %v", mapKeys(modules))
 	}
 
-	if nm["arch_comp1.md"] != "Comp1" {
-		t.Errorf("want arch_comp1.md → Comp1, got %q", nm["arch_comp1.md"])
+	if nm["component/1"] != "Comp1" {
+		t.Errorf("want component/1 → Comp1, got %q", nm["component/1"])
 	}
-	if nm["impl_comp1.md"] != "Impl1" {
-		t.Errorf("want impl_comp1.md → Impl1, got %q", nm["impl_comp1.md"])
+	if nm["impl_section/1"] != "Impl1" {
+		t.Errorf("want impl_section/1 → Impl1, got %q", nm["impl_section/1"])
 	}
 }
 
