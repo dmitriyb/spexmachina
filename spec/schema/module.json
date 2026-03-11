@@ -29,6 +29,20 @@
       "title": "Numeric ID constraints",
       "preq_id": 1,
       "description": "All IDs are integers >= 1, unique within their containing array. Schema enforces minimum value; uniqueness enforced by validator."
+    },
+    {
+      "id": 5,
+      "type": "functional",
+      "title": "Define test_sections in module schema",
+      "preq_id": 13,
+      "description": "Add test_sections array to module.json schema, parallel to impl_sections. Each test_section has id, name, content (path to test_*.md), and describes (component IDs)."
+    },
+    {
+      "id": 6,
+      "type": "functional",
+      "title": "Define test_plan in project schema",
+      "preq_id": 13,
+      "description": "Add test_plan object to project.json schema with a scenarios array. Each scenario has id, name, content (path to test_*.md), and modules (module IDs)."
     }
   ],
   "components": [
@@ -37,14 +51,14 @@
       "name": "ProjectSchema",
       "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements, module declarations, and milestones.",
       "content": "arch_project_schema.md",
-      "implements": [1, 4]
+      "implements": [1, 4, 6]
     },
     {
       "id": 2,
       "name": "ModuleSchema",
       "description": "The module.json JSON Schema definition. Defines the structure for module requirements, components, impl_sections, and data_flows.",
       "content": "arch_module_schema.md",
-      "implements": [2, 4]
+      "implements": [2, 4, 5]
     },
     {
       "id": 3,
@@ -66,6 +80,26 @@
       "id": 2,
       "name": "Go embedding",
       "content": "impl_go_embedding.md",
+      "describes": [3]
+    },
+    {
+      "id": 3,
+      "name": "Test schema definitions",
+      "content": "impl_test_schema_definitions.md",
+      "describes": [1, 2]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Schema validation tests",
+      "content": "test_schema_validation.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Schema loading tests",
+      "content": "test_schema_loading.md",
       "describes": [3]
     }
   ]

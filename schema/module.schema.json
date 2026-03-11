@@ -35,6 +35,11 @@
       "type": "array",
       "description": "Data flow definitions between components.",
       "items": { "$ref": "#/$defs/data_flow" }
+    },
+    "test_sections": {
+      "type": "array",
+      "description": "Test sections describing module integration and acceptance tests for components.",
+      "items": { "$ref": "#/$defs/test_section" }
     }
   },
   "$defs": {
@@ -144,6 +149,36 @@
         "describes": {
           "type": "array",
           "description": "Component IDs described by this section (describes edge).",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "uniqueItems": true
+        }
+      }
+    },
+    "test_section": {
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Numeric ID, unique within the test_sections array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Test section name."
+        },
+        "content": {
+          "type": "string",
+          "description": "Relative path to the markdown file with test details (described_in edge to content leaf)."
+        },
+        "describes": {
+          "type": "array",
+          "description": "Component IDs described by this test section (describes edge).",
           "items": {
             "type": "integer",
             "minimum": 1

@@ -1,11 +1,11 @@
 # NodeMatcher
 
-Matches changed spec nodes from the merkle diff to existing beads.
+Matches changed spec nodes from the ID-based merkle diff to existing beads using spec node IDs from the mapping file.
 
 ## Responsibilities
 
-- Take classified changes (from merkle diff) and bead spec metadata
-- Match each changed spec node to the bead(s) that reference it
+- Take classified changes (from merkle diff) and bead-to-record mappings
+- Match each changed spec node to the bead(s) that reference it via mapping records
 - Identify unmatched changes (new spec nodes without beads)
 - Identify unmatched beads (beads referencing removed spec nodes)
 
@@ -13,25 +13,34 @@ Matches changed spec nodes from the merkle diff to existing beads.
 
 ```go
 type Match struct {
-    Change ClassifiedChange
-    Beads  []BeadSpec // beads that reference this spec node
+    Change  ClassifiedChange
+    Records []Record // mapping records linking this spec node to beads
 }
 
 type Unmatched struct {
-    Change ClassifiedChange // new spec node, no bead
+    Change ClassifiedChange // new spec node, no mapping record
 }
 
 type Orphaned struct {
-    Bead BeadSpec // bead references removed spec node
+    Record Record // mapping record references removed spec node
 }
 
-func MatchNodes(changes []ClassifiedChange, beads []BeadSpec, modules map[string]NodeMap) ([]Match, []Unmatched, []Orphaned)
+func MatchNodes(changes []ClassifiedChange, records []Record) ([]Match, []Unmatched, []Orphaned)
 ```
 
 ## Matching Logic
 
-A bead matches a changed spec node when:
-- `bead.Module` matches the change's module name, AND
-- `bead.Component` or `bead.ImplSection` matches the specific node that changed
+A mapping record matches a changed spec node when:
+- `record.SpecNodeID` matches the change's spec ID key (e.g., `"module/3/component/2"`)
 
-For structural changes (module.json/project.json), all beads in the affected module are considered impacted.
+This is a direct ID comparison — no string manipulation, no case conversion, no naming convention coupling.
+
+For structural changes (module.json), all mapping records in the affected module are considered impacted.
+
+## Advantages over Path-Based Matching
+
+The previous approach matched by parsing bead labels (`spec_module:...`, `spec_component:...`) and correlating them with change paths via filename conventions. The ID-based approach eliminates:
+- Module name → directory name mapping
+- Component name → filename slug conversion
+- Case manipulation (PascalCase → snake_case)
+- Fragile string concatenation to reconstruct paths

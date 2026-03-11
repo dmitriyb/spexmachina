@@ -21,11 +21,18 @@ project.json
 │   ├── path (string, required)
 │   ├── description (string)
 │   └── requires_module (int[])
-└── milestones[]
-    ├── id (int >= 1)
-    ├── title (string, required)
-    ├── description (string)
-    └── groups (int[])
+├── milestones[]
+│   ├── id (int >= 1)
+│   ├── title (string, required)
+│   ├── description (string)
+│   └── groups (int[])
+└── test_plan
+    └── scenarios[]
+        ├── id (int >= 1)
+        ├── name (string, required)
+        ├── description (string)
+        ├── content (string, path to test_*.md)
+        └── modules (int[])
 ```
 
 ## Edge Types
@@ -33,6 +40,7 @@ project.json
 - `depends_on`: requirement → requirement (within project-level requirements)
 - `requires_module`: module → module (inter-module dependency)
 - `groups`: milestone → module (milestone grouping)
+- `modules` (test_plan): test_scenario → module (cross-module test coverage)
 
 ## Design Rationale
 

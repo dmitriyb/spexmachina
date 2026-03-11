@@ -1,10 +1,10 @@
 # SnapshotStore
 
-Reads and writes merkle tree snapshots as JSON files committed to git.
+Reads and writes ID-keyed merkle tree snapshots as JSON files committed to git.
 
 ## Responsibilities
 
-- Serialize a merkle tree to a JSON snapshot file
+- Serialize an ID-keyed merkle tree to a JSON snapshot file
 - Deserialize a stored snapshot back into a tree
 - Manage snapshot file location within the spec directory
 
@@ -24,7 +24,7 @@ Snapshots are stored at `spec/.snapshot.json`. This file is committed to git alo
 
 ## File Format
 
-The snapshot is a JSON serialization of the merkle tree with node names, hashes, types, and children. The format mirrors the `Node` struct directly.
+The snapshot is a flat JSON map keyed by spec ID. Each entry contains the node's hash, type, and metadata. The format is `id → {hash, type, node_type, module}` rather than a nested tree, making diff comparison a straightforward map key intersection.
 
 ## Design Rationale
 
@@ -35,3 +35,7 @@ One snapshot is sufficient. Git history provides access to any previous snapshot
 ### JSON format
 
 JSON is human-readable and diff-friendly in git. When a spec changes, the snapshot diff shows exactly which hashes changed, making it easy to review in PRs.
+
+### ID-keyed, not path-keyed
+
+Keying by spec ID instead of file path makes the snapshot rename-stable. Renaming a module directory or content file does not invalidate the snapshot — the IDs remain the same.

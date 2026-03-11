@@ -3,24 +3,11 @@
 ## Command Construction
 
 ```go
-func createBead(ctx context.Context, bin string, action Action) (string, error) {
-    labels := []string{
-        fmt.Sprintf("spec_module:%s", action.Module),
-        fmt.Sprintf("spec_hash:%s", action.SpecHash),
-    }
-
-    // Add component or impl_section label based on node type
-    if action.NodeType == "component" {
-        labels = append(labels, fmt.Sprintf("spec_component:%s", action.Node))
-    } else if action.NodeType == "impl_section" {
-        labels = append(labels, fmt.Sprintf("spec_impl_section:%s", action.Node))
-    }
-
+func createBead(ctx context.Context, bin string, store map.Store, action Action) (string, error) {
     args := []string{
         "create",
         "--title", fmt.Sprintf("%s: %s", action.Module, action.Node),
         "--type", "task",
-        "--labels", strings.Join(labels, ","),
         "--silent",
     }
 
@@ -28,7 +15,28 @@ func createBead(ctx context.Context, bin string, action Action) (string, error) 
     if err != nil {
         return "", fmt.Errorf("apply: create bead for %s/%s: %w", action.Module, action.Node, err)
     }
-    return strings.TrimRight(string(out), "\n"), nil
+    beadID := strings.TrimRight(string(out), "\n")
+
+    // Create mapping record
+    recordID, err := store.Create(map.Record{
+        SpecNodeID:  action.SpecNodeID,
+        BeadID:      beadID,
+        Module:      action.Module,
+        Component:   action.Node,
+        ContentFile: action.ContentFile,
+        SpecHash:    action.SpecHash,
+    })
+    if err != nil {
+        return "", fmt.Errorf("apply: create mapping for %s: %w", beadID, err)
+    }
+
+    // Set the bead label to the mapping record ID
+    labelArgs := []string{"update", beadID, "--add-label", fmt.Sprintf("spex:%d", recordID)}
+    if _, err := exec.CommandContext(ctx, bin, labelArgs...).Output(); err != nil {
+        return "", fmt.Errorf("apply: set label on %s: %w", beadID, err)
+    }
+
+    return beadID, nil
 }
 ```
 
@@ -36,4 +44,4 @@ The `bin` parameter is the bead CLI binary name (`"br"` or `"bd"`), allowing the
 
 ## Batch Processing
 
-Create actions are processed sequentially. Parallel creation could cause race conditions in the bead store. Each creation returns the new bead ID, which is accumulated for proposal tagging.
+Create actions are processed sequentially. Parallel creation could cause race conditions in the bead store and the mapping file. Each creation returns the new bead ID, which is accumulated for proposal tagging.

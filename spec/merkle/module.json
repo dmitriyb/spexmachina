@@ -55,6 +55,13 @@
       "title": "Deterministic hashing",
       "preq_id": 9,
       "description": "Same file content always produces the same hash. Hash computation is order-independent for interior nodes (children sorted before hashing)."
+    },
+    {
+      "id": 7,
+      "type": "functional",
+      "title": "ID-based tree keying",
+      "preq_id": 2,
+      "description": "Tree nodes are keyed by spec ID (module ID, component ID, etc.) instead of file path. Renaming a directory or file with the same ID is detected as a modification, not a delete + add."
     }
   ],
   "components": [
@@ -71,10 +78,11 @@
     {
       "id": 2,
       "name": "TreeBuilder",
-      "description": "Builds the merkle tree by walking the spec directory structure. Maps spec hierarchy to tree nodes.",
+      "description": "Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, etc.) as their key, not the file path. Maps spec hierarchy to tree nodes.",
       "content": "arch_tree_builder.md",
       "implements": [
-        2
+        2,
+        7
       ],
       "uses": [
         1
@@ -83,7 +91,7 @@
     {
       "id": 3,
       "name": "SnapshotStore",
-      "description": "Reads and writes snapshot files. Serializes the hash tree to a JSON file for git storage.",
+      "description": "Reads and writes snapshot files. Serializes the ID-keyed hash tree to a JSON file for git storage. The flat map is keyed by spec ID (id → {hash, type, ...}), not by file path.",
       "content": "arch_snapshot_store.md",
       "implements": [
         3
@@ -92,7 +100,7 @@
     {
       "id": 4,
       "name": "DiffEngine",
-      "description": "Compares two hash trees (current vs snapshot) and identifies changed nodes at every level.",
+      "description": "Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash = modified. ID in current but not snapshot = added. ID in snapshot but not current = removed.",
       "content": "arch_diff_engine.md",
       "implements": [
         4
@@ -105,7 +113,7 @@
     {
       "id": 5,
       "name": "ImpactClassifier",
-      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural.",
+      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
         5
@@ -226,6 +234,32 @@
         4,
         5
       ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Hashing tests",
+      "content": "test_hashing.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Snapshot tests",
+      "content": "test_snapshots.md",
+      "describes": [3]
+    },
+    {
+      "id": 3,
+      "name": "Diff and classification tests",
+      "content": "test_diff_classification.md",
+      "describes": [4, 5]
+    },
+    {
+      "id": 4,
+      "name": "Merkle command tests",
+      "content": "test_merkle_commands.md",
+      "describes": [6, 7]
     }
   ]
 }

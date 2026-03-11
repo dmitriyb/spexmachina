@@ -80,6 +80,21 @@
       "title": "Module name consistency",
       "preq_id": 1,
       "description": "Module names in project.json must match the corresponding module.json name field exactly. Lowercase convention enforced. Mismatches reported with both values and a suggested fix."
+    },
+    {
+      "id": 11,
+      "type": "functional",
+      "title": "Test content path resolution",
+      "preq_id": 1,
+      "description": "All test content paths (test_*.md) in module.json test_sections and project.json test_plan scenarios resolve to existing markdown files.",
+      "depends_on": [1]
+    },
+    {
+      "id": 12,
+      "type": "functional",
+      "title": "Test coverage checking",
+      "preq_id": 13,
+      "description": "Every component must be described by at least one test_section. Report uncovered components as validation errors."
     }
   ],
   "components": [
@@ -100,7 +115,8 @@
       "description": "Walks all content paths in module.json files and verifies the referenced markdown files exist.",
       "content": "arch_content_resolver.md",
       "implements": [
-        2
+        2,
+        11
       ]
     },
     {
@@ -159,7 +175,8 @@
         4,
         5,
         6,
-        8
+        8,
+        9
       ]
     },
     {
@@ -169,6 +186,15 @@
       "content": "arch_name_consistency_checker.md",
       "implements": [
         10
+      ]
+    },
+    {
+      "id": 9,
+      "name": "TestCoverageChecker",
+      "description": "Checks that every component in each module is described by at least one test_section. Reports uncovered components as validation errors.",
+      "content": "arch_test_coverage_checker.md",
+      "implements": [
+        12
       ]
     }
   ],
@@ -236,6 +262,14 @@
       "describes": [
         8
       ]
+    },
+    {
+      "id": 9,
+      "name": "Test coverage check implementation",
+      "content": "impl_test_coverage.md",
+      "describes": [
+        9
+      ]
     }
   ],
   "data_flows": [
@@ -251,8 +285,35 @@
         4,
         5,
         6,
-        8
+        8,
+        9
       ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Conformance and content tests",
+      "content": "test_conformance_and_content.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 2,
+      "name": "Graph structure tests",
+      "content": "test_graph_structure.md",
+      "describes": [3, 4, 5]
+    },
+    {
+      "id": 3,
+      "name": "Name and coverage tests",
+      "content": "test_name_and_coverage.md",
+      "describes": [8, 9]
+    },
+    {
+      "id": 4,
+      "name": "Validation pipeline tests",
+      "content": "test_validation_pipeline.md",
+      "describes": [6, 7]
     }
   ]
 }
