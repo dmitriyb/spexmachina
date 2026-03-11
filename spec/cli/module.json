@@ -1,0 +1,74 @@
+{
+  "name": "cli",
+  "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra.",
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Root command and subcommand registration",
+      "description": "A top-level cobra root command that registers all module subcommands, sets global flags, and prints help when invoked with no args or an unknown command.",
+      "preq_id": 14
+    },
+    {
+      "id": 2,
+      "type": "functional",
+      "title": "Version command",
+      "description": "A `spex version` subcommand that prints version string and build info injected at build time via ldflags.",
+      "preq_id": 14
+    }
+  ],
+  "components": [
+    {
+      "id": 1,
+      "name": "RootCommand",
+      "description": "Top-level `spex` command. Registers all subcommands, sets global flags, prints help when invoked with no args.",
+      "content": "arch_root_command.md",
+      "implements": [1]
+    },
+    {
+      "id": 2,
+      "name": "VersionCommand",
+      "description": "`spex version` — prints version and build info injected via ldflags at build time.",
+      "content": "arch_version_command.md",
+      "implements": [2],
+      "uses": [1]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": 1,
+      "name": "Cobra Setup and Registration",
+      "content": "impl_cobra_setup.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Version Injection",
+      "content": "impl_version_injection.md",
+      "describes": [2]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": 1,
+      "name": "Command Dispatch",
+      "description": "How user input flows from argv through cobra to the correct subcommand handler.",
+      "content": "flow_command_dispatch.md",
+      "uses": [1, 2]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Root Command Tests",
+      "content": "test_root_command.md",
+      "describes": [1]
+    },
+    {
+      "id": 2,
+      "name": "Version Command Tests",
+      "content": "test_version_command.md",
+      "describes": [2]
+    }
+  ]
+}

@@ -84,6 +84,12 @@
       "type": "functional",
       "title": "Spec test strategy",
       "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios."
+    },
+    {
+      "id": 14,
+      "type": "functional",
+      "title": "CLI infrastructure",
+      "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling."
     }
   ],
   "modules": [
@@ -133,6 +139,12 @@
       "path": "render",
       "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
       "requires_module": [1]
+    },
+    {
+      "id": 8,
+      "name": "cli",
+      "path": "cli",
+      "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra."
     }
   ],
   "milestones": [
@@ -159,6 +171,22 @@
       "title": "Lifecycle",
       "description": "Proposal management and spec rendering for human consumption.",
       "groups": [6, 7]
+    },
+    {
+      "id": 5,
+      "title": "CLI Infrastructure",
+      "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
+      "groups": [8]
     }
-  ]
+  ],
+  "test_plan": {
+    "scenarios": [
+      {
+        "id": 1,
+        "name": "CLI subcommand registration and help",
+        "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
+        "modules": [8]
+      }
+    ]
+  }
 }

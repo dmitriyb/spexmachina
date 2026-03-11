@@ -148,13 +148,9 @@ Ask the user:
 - Write `spec/<module-path>/module.json` for each module
 - Use 2-space indentation for JSON
 
-### 4. Write markdown content leaves
+### 4. Write test sections
 
-- Create each markdown file referenced by `content` fields
-- Write substantive content synthesized from the proposal — not stubs
-- If the proposal lacks detail for a particular node, write what you can and mark gaps with `<!-- TODO: detail needed -->` comments
-
-### 5. Write test sections
+Write tests BEFORE implementation content to avoid confirmation bias — test scenarios should be derived from requirements and component contracts, not influenced by implementation decisions.
 
 - For each module, create `test_sections` entries in `module.json` that cover all components
 - Each test_section's `describes` array must reference component IDs — every component must be covered by at least one test_section
@@ -164,6 +160,12 @@ Ask the user:
   - **Edge cases**: boundary conditions, error paths, invalid inputs
 - Group related components into shared test_sections where they have natural testing affinity (e.g., components that form a pipeline)
 - If applicable, add cross-module `test_plan` scenarios to `project.json`
+
+### 5. Write implementation content leaves
+
+- Create each markdown file referenced by `content` fields in components, impl_sections, and data_flows
+- Write substantive content synthesized from the proposal — not stubs
+- If the proposal lacks detail for a particular node, write what you can and mark gaps with `<!-- TODO: detail needed -->` comments
 
 ### 6. Validate
 
