@@ -9,25 +9,17 @@ import (
 	"testing"
 )
 
-func TestFR1_ReadBeadsExtractsSpecMetadata(t *testing.T) {
+func TestFR1_ReadBeadsExtractsRecordID(t *testing.T) {
 	stub := writeStubCLI(t, []rawBead{
 		{
 			ID:     "abc-123",
 			Status: "open",
-			Labels: []string{
-				"spec_module:validator",
-				"spec_component:SchemaChecker",
-				"spec_hash:deadbeef",
-			},
+			Labels: []string{"spex:42"},
 		},
 		{
 			ID:     "def-456",
 			Status: "in_progress",
-			Labels: []string{
-				"spec_module:merkle",
-				"spec_impl_section:Hashing algorithm",
-				"spec_hash:cafebabe",
-			},
+			Labels: []string{"spex:7"},
 		},
 	})
 
@@ -46,19 +38,16 @@ func TestFR1_ReadBeadsExtractsSpecMetadata(t *testing.T) {
 	if b.Status != "open" {
 		t.Errorf("want status open, got %s", b.Status)
 	}
-	if b.Module != "validator" {
-		t.Errorf("want module validator, got %s", b.Module)
-	}
-	if b.Component != "SchemaChecker" {
-		t.Errorf("want component SchemaChecker, got %s", b.Component)
-	}
-	if b.SpecHash != "deadbeef" {
-		t.Errorf("want spec_hash deadbeef, got %s", b.SpecHash)
+	if b.RecordID != 42 {
+		t.Errorf("want RecordID 42, got %d", b.RecordID)
 	}
 
 	b2 := beads[1]
-	if b2.ImplSection != "Hashing algorithm" {
-		t.Errorf("want impl_section 'Hashing algorithm', got %s", b2.ImplSection)
+	if b2.ID != "def-456" {
+		t.Errorf("want ID def-456, got %s", b2.ID)
+	}
+	if b2.RecordID != 7 {
+		t.Errorf("want RecordID 7, got %d", b2.RecordID)
 	}
 }
 
@@ -67,7 +56,7 @@ func TestFR1_ReadBeadsIgnoresNonSpecBeads(t *testing.T) {
 		{
 			ID:     "spec-bead",
 			Status: "open",
-			Labels: []string{"spec_module:validator", "spec_component:X"},
+			Labels: []string{"spex:1"},
 		},
 		{
 			ID:     "plain-bead",
@@ -132,54 +121,80 @@ func TestFR1_ReadBeadsCLIBadJSON(t *testing.T) {
 	}
 }
 
-func TestFR1_ParseLabels(t *testing.T) {
+func TestFR1_ReadBeadsNoSpecLabelsReturnsEmpty(t *testing.T) {
+	stub := writeStubCLI(t, []rawBead{
+		{
+			ID:     "task-1",
+			Status: "open",
+			Labels: []string{"team:backend", "priority:high"},
+		},
+	})
+
+	beads, err := ReadBeads(context.Background(), stub)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(beads) != 0 {
+		t.Errorf("want 0 beads (no spex labels), got %d", len(beads))
+	}
+}
+
+func TestFR1_ExtractRecordID(t *testing.T) {
 	tests := []struct {
-		name string
-		raw  rawBead
-		want BeadSpec
+		name   string
+		labels []string
+		wantID int
+		wantOK bool
 	}{
 		{
-			name: "all spec labels",
-			raw: rawBead{
-				ID:     "x",
-				Status: "open",
-				Labels: []string{
-					"spec_module:impact",
-					"spec_component:BeadReader",
-					"spec_impl_section:Bead metadata reading",
-					"spec_hash:abc123",
-				},
-			},
-			want: BeadSpec{
-				ID:          "x",
-				Status:      "open",
-				Module:      "impact",
-				Component:   "BeadReader",
-				ImplSection: "Bead metadata reading",
-				SpecHash:    "abc123",
-			},
+			name:   "valid spex label",
+			labels: []string{"spex:42"},
+			wantID: 42,
+			wantOK: true,
 		},
 		{
-			name: "no spec labels",
-			raw:  rawBead{ID: "y", Status: "open", Labels: []string{"priority:high"}},
-			want: BeadSpec{ID: "y", Status: "open"},
+			name:   "spex label among others",
+			labels: []string{"team:backend", "spex:7", "priority:high"},
+			wantID: 7,
+			wantOK: true,
 		},
 		{
-			name: "label without colon",
-			raw:  rawBead{ID: "z", Status: "open", Labels: []string{"nocolon"}},
-			want: BeadSpec{ID: "z", Status: "open"},
+			name:   "no spex label",
+			labels: []string{"priority:high"},
+			wantID: 0,
+			wantOK: false,
 		},
 		{
-			name: "colon in value",
-			raw:  rawBead{ID: "w", Status: "open", Labels: []string{"spec_module:a:b"}},
-			want: BeadSpec{ID: "w", Status: "open", Module: "a:b"},
+			name:   "empty labels",
+			labels: []string{},
+			wantID: 0,
+			wantOK: false,
+		},
+		{
+			name:   "nil labels",
+			labels: nil,
+			wantID: 0,
+			wantOK: false,
+		},
+		{
+			name:   "spex label with non-numeric value",
+			labels: []string{"spex:abc"},
+			wantID: 0,
+			wantOK: false,
+		},
+		{
+			name:   "spex label with zero",
+			labels: []string{"spex:0"},
+			wantID: 0,
+			wantOK: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseLabels(tt.raw)
-			if got != tt.want {
-				t.Errorf("parseLabels() = %+v, want %+v", got, tt.want)
+			gotID, gotOK := extractRecordID(tt.labels)
+			if gotID != tt.wantID || gotOK != tt.wantOK {
+				t.Errorf("extractRecordID(%v) = (%d, %v), want (%d, %v)",
+					tt.labels, gotID, gotOK, tt.wantID, tt.wantOK)
 			}
 		})
 	}
