@@ -22,6 +22,7 @@ type Record struct {
 	Component   string `json:"component"`
 	ContentFile string `json:"content_file"`
 	SpecHash    string `json:"spec_hash"`
+	BeadStatus  string `json:"bead_status,omitempty"`
 }
 
 // Store defines CRUD operations on mapping records.
