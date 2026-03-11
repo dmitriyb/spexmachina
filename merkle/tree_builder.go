@@ -19,8 +19,8 @@ type Node struct {
 	Type     string  `json:"type"`                // "leaf", "module", "project"
 	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "meta"
 	Module   int     `json:"module,omitempty"`     // module ID (0 for project-level nodes)
-	Children   []*Node `json:"children,omitempty"`
-	moduleName string  // unexported; module name for ModuleNames extraction
+	Children []*Node `json:"children,omitempty"`
+	moduleName string // unexported; module name for ModuleNames extraction
 }
 
 // ModuleNames extracts a map of module ID → module name from the tree.

@@ -206,6 +206,8 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
 			}
 		}
 
+		// TODO(spexmachina-3ta): add data_flow entries once DataFlows carry bead references.
+
 		modules[m.Name] = nm
 	}
 	return modules, nil

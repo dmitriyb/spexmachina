@@ -141,6 +141,9 @@ func lookupBeads(
 					return copyBeads(compIdx[indexKey(c.Module, name)])
 				case "impl_section":
 					return copyBeads(implIdx[indexKey(c.Module, name)])
+				case "data_flow":
+					// TODO(spexmachina-3ta): data_flow bead matching not yet implemented.
+					return nil
 				}
 			}
 		}
