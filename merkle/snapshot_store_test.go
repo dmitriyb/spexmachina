@@ -448,6 +448,16 @@ func TestREQ3_Save_EmptyTree(t *testing.T) {
 	snapPath := filepath.Join(t.TempDir(), ".snapshot.json")
 	must(t, Save(root, snapPath, time.Now().UTC()))
 
+	data, err := os.ReadFile(snapPath)
+	if err != nil {
+		t.Fatalf("read snapshot: %v", err)
+	}
+	var snap Snapshot
+	must(t, json.Unmarshal(data, &snap))
+	if len(snap.Nodes) != 1 {
+		t.Fatalf("nodes: want 1, got %d", len(snap.Nodes))
+	}
+
 	loaded, err := Load(snapPath)
 	if err != nil {
 		t.Fatalf("Load: %v", err)
