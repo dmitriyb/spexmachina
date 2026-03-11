@@ -29,6 +29,9 @@ func TestREQ4_Diff_NoSnapshot_AllAdded(t *testing.T) {
 		if c.OldHash != "" {
 			t.Errorf("expected empty OldHash for added %s, got %q", c.Path, c.OldHash)
 		}
+		if c.NodeType == "" {
+			t.Errorf("expected non-empty NodeType for %s", c.Path)
+		}
 	}
 }
 
@@ -78,6 +81,12 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 	}
 	if modified[0].Path != "module/1/component/1" {
 		t.Errorf("expected modified path module/1/component/1, got %s", modified[0].Path)
+	}
+	if modified[0].NodeType != "component" {
+		t.Errorf("expected NodeType 'component', got %q", modified[0].NodeType)
+	}
+	if modified[0].Module != 1 {
+		t.Errorf("expected Module 1, got %d", modified[0].Module)
 	}
 	if modified[0].OldHash == "" || modified[0].NewHash == "" {
 		t.Error("expected both OldHash and NewHash to be non-empty for modified change")
@@ -129,6 +138,12 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 	for _, c := range added {
 		if c.Path == "module/1/impl_section/2" {
 			foundNewImpl = true
+			if c.NodeType != "impl_section" {
+				t.Errorf("expected NodeType 'impl_section', got %q", c.NodeType)
+			}
+			if c.Module != 1 {
+				t.Errorf("expected Module 1, got %d", c.Module)
+			}
 		}
 	}
 	if !foundNewImpl {
@@ -176,6 +191,12 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 	for _, c := range removed {
 		if strings.HasPrefix(c.Path, "module/2") {
 			foundBeta = true
+			if c.Module != 2 {
+				t.Errorf("expected Module 2 for removed beta node, got %d", c.Module)
+			}
+			if c.NodeType == "" {
+				t.Errorf("expected non-empty NodeType for removed %s", c.Path)
+			}
 		}
 	}
 	if !foundBeta {
@@ -291,6 +312,46 @@ func TestREQ4_Diff_SaveLoadRoundtrip(t *testing.T) {
 			t.Errorf("roundtrip mismatch at %d: %v vs %v", i, changesOrig[i], changesLoaded[i])
 		}
 	}
+}
+
+func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	changes := Diff(mustBuildTree(t, specDir), nil)
+	if len(changes) == 0 {
+		t.Fatal("expected changes, got none")
+	}
+
+	// Collect the node types present across all added leaves.
+	nodeTypes := make(map[string]bool)
+	for _, c := range changes {
+		nodeTypes[c.NodeType] = true
+
+		// Every leaf must carry metadata.
+		if c.NodeType == "" {
+			t.Errorf("missing NodeType for %s", c.Path)
+		}
+		// project/meta has Module 0; all others must be > 0.
+		if c.Path != "project/meta" && c.Module == 0 {
+			t.Errorf("missing Module for %s", c.Path)
+		}
+	}
+
+	// The test fixture has component, impl_section, and meta nodes at minimum.
+	for _, want := range []string{"component", "impl_section", "meta"} {
+		if !nodeTypes[want] {
+			t.Errorf("expected at least one %s node type in changes", want)
+		}
+	}
+}
+
+func mustBuildTree(t *testing.T, specDir string) *Node {
+	t.Helper()
+	tree, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+	return tree
 }
 
 // fixedTime is a deterministic timestamp for snapshot tests.

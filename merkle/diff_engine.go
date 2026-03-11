@@ -26,20 +26,29 @@ func (ct ChangeType) String() string {
 
 // Change represents a single leaf-level difference between two merkle trees.
 type Change struct {
-	Path    string     // spec ID key, e.g. "module/1/component/2"
-	Type    ChangeType // Added, Removed, or Modified
-	OldHash string     // empty for Added
-	NewHash string     // empty for Removed
+	Path     string     // spec ID key, e.g. "module/1/component/2"
+	Type     ChangeType // Added, Removed, or Modified
+	NodeType string     // "component", "impl_section", "data_flow", "test_section", "meta"
+	Module   int        // module ID (0 for project-level nodes)
+	OldHash  string     // empty for Added
+	NewHash  string     // empty for Removed
+}
+
+// leafInfo holds leaf-level metadata extracted during tree flattening.
+type leafInfo struct {
+	Hash     string
+	NodeType string
+	Module   int
 }
 
 // Diff compares two merkle trees (current vs snapshot) and returns leaf-level
 // changes sorted by path. If snapshot is nil (first run), all current leaves
 // are reported as "added".
 func Diff(current, snapshot *Node) []Change {
-	currentLeaves := make(map[string]string)
+	currentLeaves := make(map[string]leafInfo)
 	flattenLeaves(currentLeaves, current)
 
-	snapshotLeaves := make(map[string]string)
+	snapshotLeaves := make(map[string]leafInfo)
 	if snapshot != nil {
 		flattenLeaves(snapshotLeaves, snapshot)
 	}
@@ -47,31 +56,37 @@ func Diff(current, snapshot *Node) []Change {
 	var changes []Change
 
 	// Added and modified: paths in current
-	for path, curHash := range currentLeaves {
-		oldHash, exists := snapshotLeaves[path]
+	for path, cur := range currentLeaves {
+		old, exists := snapshotLeaves[path]
 		if !exists {
 			changes = append(changes, Change{
-				Path:    path,
-				Type:    Added,
-				NewHash: curHash,
+				Path:     path,
+				Type:     Added,
+				NodeType: cur.NodeType,
+				Module:   cur.Module,
+				NewHash:  cur.Hash,
 			})
-		} else if curHash != oldHash {
+		} else if cur.Hash != old.Hash {
 			changes = append(changes, Change{
-				Path:    path,
-				Type:    Modified,
-				OldHash: oldHash,
-				NewHash: curHash,
+				Path:     path,
+				Type:     Modified,
+				NodeType: cur.NodeType,
+				Module:   cur.Module,
+				OldHash:  old.Hash,
+				NewHash:  cur.Hash,
 			})
 		}
 	}
 
 	// Removed: paths in snapshot but not in current
-	for path, oldHash := range snapshotLeaves {
+	for path, old := range snapshotLeaves {
 		if _, exists := currentLeaves[path]; !exists {
 			changes = append(changes, Change{
-				Path:    path,
-				Type:    Removed,
-				OldHash: oldHash,
+				Path:     path,
+				Type:     Removed,
+				NodeType: old.NodeType,
+				Module:   old.Module,
+				OldHash:  old.Hash,
 			})
 		}
 	}
@@ -83,11 +98,15 @@ func Diff(current, snapshot *Node) []Change {
 	return changes
 }
 
-// flattenLeaves walks the tree and collects only leaf nodes into a key → hash map.
+// flattenLeaves walks the tree and collects only leaf nodes into a key → metadata map.
 // Each leaf's Key is used directly (no path building needed with spec-ID keys).
-func flattenLeaves(leaves map[string]string, n *Node) {
+func flattenLeaves(leaves map[string]leafInfo, n *Node) {
 	if n.Type == "leaf" {
-		leaves[n.Key] = n.Hash
+		leaves[n.Key] = leafInfo{
+			Hash:     n.Hash,
+			NodeType: n.NodeType,
+			Module:   n.Module,
+		}
 		return
 	}
 
