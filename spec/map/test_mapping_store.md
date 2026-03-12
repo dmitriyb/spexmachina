@@ -66,7 +66,7 @@
 - Attempt to create two records with the same bead_id
 - Expected: error — each bead maps to exactly one spec node
 
-### Duplicate spec node ID
+### Multiple beads per spec node
 
-- Attempt to create two records with the same spec_node_id
-- Expected: error — each spec node maps to at most one bead
+- Attempt to create two records with the same spec_node_id but different bead_ids
+- Expected: success — one spec node may have many beads (e.g., superseded + rework)

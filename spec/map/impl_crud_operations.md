@@ -12,13 +12,10 @@ func (s *fileStore) Create(r Record) (int, error) {
         return 0, err
     }
 
-    // Uniqueness checks
+    // Uniqueness check — bead ID must be unique; spec node ID may repeat
     for _, existing := range data.Records {
         if existing.BeadID == r.BeadID {
             return 0, fmt.Errorf("map: duplicate bead_id %q", r.BeadID)
-        }
-        if existing.SpecNodeID == r.SpecNodeID {
-            return 0, fmt.Errorf("map: duplicate spec_node_id %q", r.SpecNodeID)
         }
     }
 
@@ -37,7 +34,8 @@ Lookup methods scan the records array. Three access patterns:
 - **By bead ID**: `GetByBead(beadID string)` — used by `spex check`
 - **By spec node ID**: `GetBySpecNode(specNodeID string)` — used by impact analysis
 
-All return `(Record, error)` where error is a not-found sentinel if no match.
+`Get` and `GetByBead` return `(Record, error)` where error is a not-found sentinel if no match.
+`GetBySpecNode` returns `([]Record, error)` since one spec node may have many beads.
 
 ## Update
 
