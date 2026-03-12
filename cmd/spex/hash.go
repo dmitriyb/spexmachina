@@ -2,51 +2,46 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
-	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/spf13/cobra"
 )
 
-func runHash(args []string) int {
-	fs := flag.NewFlagSet("hash", flag.ContinueOnError)
-	jsonOut := fs.Bool("json", false, "output as JSON")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "spex hash: %v\n", err)
-		return 1
+func newHashCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "hash",
+		Short: "Build merkle tree and save snapshot",
+		RunE:  runHashE,
 	}
+	cmd.Flags().Bool("json", false, "output as JSON")
+	return cmd
+}
 
-	specDir := "spec"
-	if fs.NArg() > 0 {
-		specDir = fs.Arg(0)
-	}
-
-	specDir, err := filepath.Abs(specDir)
+func runHashE(cmd *cobra.Command, args []string) error {
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex hash: resolve path: %v\n", err)
-		return 1
+		return err
 	}
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex hash: %v\n", err)
-		return 1
+		return fmt.Errorf("hash: %w", err)
 	}
 
 	snapshotPath := filepath.Join(specDir, ".snapshot.json")
 	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		fmt.Fprintf(os.Stderr, "spex hash: %v\n", err)
-		return 1
+		return fmt.Errorf("hash: %w", err)
 	}
 
-	if *jsonOut {
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	if jsonOut {
 		return printJSON(tree)
 	}
 	printSummary(tree)
-	return 0
+	return nil
 }
 
 // hashOutput is the JSON representation of the hash command result.
@@ -61,17 +56,16 @@ type hashNode struct {
 	Type string `json:"type"`
 }
 
-func printJSON(tree *merkle.Node) int {
+func printJSON(tree *merkle.Node) error {
 	out := hashOutput{RootHash: tree.Hash}
 	collectNodes(&out.Nodes, tree)
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex hash: marshal json: %v\n", err)
-		return 1
+		return fmt.Errorf("hash: marshal json: %w", err)
 	}
 	fmt.Println(string(data))
-	return 0
+	return nil
 }
 
 func collectNodes(nodes *[]hashNode, n *merkle.Node) {

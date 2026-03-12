@@ -2,41 +2,37 @@ package main
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/spf13/cobra"
 )
 
-func runDiff(args []string) int {
-	fs := flag.NewFlagSet("diff", flag.ContinueOnError)
-	snapshotFlag := fs.String("snapshot", "", "path to snapshot file (default: <dir>/.snapshot.json)")
-	jsonOut := fs.Bool("json", false, "output as JSON")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "spex diff: %v\n", err)
-		return 1
+func newDiffCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "diff",
+		Short: "Compute changes between snapshot and current spec",
+		RunE:  runDiffE,
 	}
+	cmd.Flags().String("snapshot", "", "path to snapshot file (default: <dir>/.snapshot.json)")
+	cmd.Flags().Bool("json", false, "output as JSON")
+	return cmd
+}
 
-	specDir := "spec"
-	if fs.NArg() > 0 {
-		specDir = fs.Arg(0)
-	}
-
-	specDir, err := filepath.Abs(specDir)
+func runDiffE(cmd *cobra.Command, args []string) error {
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex diff: resolve path: %v\n", err)
-		return 1
+		return err
 	}
 
 	current, err := merkle.BuildTree(specDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex diff: %v\n", err)
-		return 1
+		return fmt.Errorf("diff: %w", err)
 	}
 
-	snapshotPath := *snapshotFlag
+	snapshotPath, _ := cmd.Flags().GetString("snapshot")
 	if snapshotPath == "" {
 		snapshotPath = filepath.Join(specDir, ".snapshot.json")
 	}
@@ -45,8 +41,7 @@ func runDiff(args []string) int {
 	if _, statErr := os.Stat(snapshotPath); statErr == nil {
 		snapshot, err = merkle.Load(snapshotPath)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "spex diff: %v\n", err)
-			return 1
+			return fmt.Errorf("diff: %w", err)
 		}
 	}
 
@@ -54,11 +49,12 @@ func runDiff(args []string) int {
 	moduleNames := merkle.ModuleNames(current)
 	classified := merkle.Classify(changes, moduleNames)
 
-	if *jsonOut {
+	jsonOut, _ := cmd.Flags().GetBool("json")
+	if jsonOut {
 		return printDiffJSON(classified)
 	}
 	printDiffSummary(classified)
-	return 0
+	return nil
 }
 
 // diffOutput is the JSON representation of the diff command result.
@@ -77,12 +73,12 @@ type diffChange struct {
 }
 
 type diffSummary struct {
-	Total      int            `json:"total"`
-	ByType     map[string]int `json:"by_type"`
-	ByImpact   map[string]int `json:"by_impact"`
+	Total    int            `json:"total"`
+	ByType   map[string]int `json:"by_type"`
+	ByImpact map[string]int `json:"by_impact"`
 }
 
-func printDiffJSON(classified []merkle.ClassifiedChange) int {
+func printDiffJSON(classified []merkle.ClassifiedChange) error {
 	out := diffOutput{
 		Changes: make([]diffChange, len(classified)),
 		Summary: diffSummary{
@@ -107,11 +103,10 @@ func printDiffJSON(classified []merkle.ClassifiedChange) int {
 
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex diff: marshal json: %v\n", err)
-		return 1
+		return fmt.Errorf("diff: marshal json: %w", err)
 	}
 	fmt.Println(string(data))
-	return 0
+	return nil
 }
 
 func printDiffSummary(classified []merkle.ClassifiedChange) {

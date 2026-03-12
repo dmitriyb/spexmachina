@@ -3,126 +3,116 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/dmitriyb/spexmachina/apply"
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/spf13/cobra"
 )
 
-func runApply(args []string) int {
-	fs := flag.NewFlagSet("apply", flag.ContinueOnError)
-	reportFlag := fs.String("report", "", "path to impact report JSON (default: stdin)")
-	beadCLI := fs.String("bead-cli", "br", "bead CLI binary name")
-	proposalFlag := fs.String("proposal", "", "proposal reference to tag on affected beads")
-	dryRunFlag := fs.Bool("dry-run", false, "print actions without executing")
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+func newApplyCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "apply",
+		Short: "Execute bead actions from impact report",
+		RunE:  runApplyE,
 	}
+	cmd.Flags().String("report", "", "path to impact report JSON (default: stdin)")
+	cmd.Flags().String("bead-cli", "br", "bead CLI binary name")
+	cmd.Flags().String("proposal", "", "proposal reference to tag on affected beads")
+	cmd.Flags().Bool("dry-run", false, "print actions without executing")
+	return cmd
+}
 
-	specDir := "spec"
-	if fs.NArg() > 0 {
-		specDir = fs.Arg(0)
-	}
-
-	// Read impact report.
-	reportData, err := readReport(*reportFlag)
+func runApplyE(cmd *cobra.Command, args []string) error {
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return err
+	}
+
+	reportFlag, _ := cmd.Flags().GetString("report")
+	reportData, err := readReport(reportFlag)
+	if err != nil {
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	var report impact.ImpactReport
 	if err := json.Unmarshal(reportData, &report); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: parse report: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: parse report: %w", err)
 	}
 
 	if report.Summary.CreateCount == 0 && report.Summary.CloseCount == 0 && report.Summary.ReviewCount == 0 {
 		fmt.Fprintln(os.Stderr, "spex apply: nothing to do")
-		return 0
+		return nil
 	}
 
-	if *dryRunFlag {
-		return printDryRun(report)
-	}
-
-	absSpec, err := filepath.Abs(specDir)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: resolve spec path: %v\n", err)
-		return 1
+	dryRunFlag, _ := cmd.Flags().GetBool("dry-run")
+	if dryRunFlag {
+		printDryRun(report)
+		return nil
 	}
 
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	cli, err := apply.NewBeadCLI(ctx, *beadCLI)
+	beadCLI, _ := cmd.Flags().GetString("bead-cli")
+	cli, err := apply.NewBeadCLI(ctx, beadCLI)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	// Build merkle tree for hash lookup and node maps for name resolution.
-	tree, err := merkle.BuildTree(absSpec)
+	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 	hashes := flattenTree(tree)
 
-	modules, err := buildNodeMaps(absSpec)
+	modules, err := buildNodeMaps(specDir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	// 1. Creates
 	createActions := convertCreateActions(report.Creates, modules, hashes)
 	createdIDs, err := apply.CreateBeads(ctx, cli, createActions)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	// 2. Updates (reviews)
 	updateActions := convertReviewActions(report.Reviews, hashes)
 	if err := apply.UpdateBeads(ctx, cli, updateActions, logger); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	// 3. Closes
 	closeActions := convertCloseActions(report.Closes)
 	if err := apply.CloseBeads(ctx, cli, closeActions, logger); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	// 4. Tag all affected beads with proposal.
-	if *proposalFlag != "" {
+	proposalFlag, _ := cmd.Flags().GetString("proposal")
+	if proposalFlag != "" {
 		allIDs := collectAffectedIDs(createdIDs, report.Reviews, report.Closes)
-		if err := apply.TagWithProposal(ctx, cli, allIDs, *proposalFlag, logger); err != nil {
+		if err := apply.TagWithProposal(ctx, cli, allIDs, proposalFlag, logger); err != nil {
 			fmt.Fprintf(os.Stderr, "spex apply: tag warnings: %v\n", err)
 		}
 	}
 
 	// 5. Save snapshot.
-	if err := apply.SaveSnapshot(ctx, absSpec, time.Now()); err != nil {
-		fmt.Fprintf(os.Stderr, "spex apply: %v\n", err)
-		return 1
+	if err := apply.SaveSnapshot(ctx, specDir, time.Now()); err != nil {
+		return fmt.Errorf("apply: %w", err)
 	}
 
 	fmt.Fprintf(os.Stderr, "spex apply: done (created=%d updated=%d closed=%d)\n",
 		len(createdIDs), len(report.Reviews), len(report.Closes))
-	return 0
+	return nil
 }
 
 // readReport reads the impact report from a file or stdin.
@@ -142,7 +132,7 @@ func readReport(path string) ([]byte, error) {
 }
 
 // printDryRun prints the impact report summary without executing any actions.
-func printDryRun(report impact.ImpactReport) int {
+func printDryRun(report impact.ImpactReport) {
 	fmt.Printf("dry-run: %d creates, %d reviews, %d closes\n",
 		report.Summary.CreateCount, report.Summary.ReviewCount, report.Summary.CloseCount)
 	for _, a := range report.Creates {
@@ -154,7 +144,6 @@ func printDryRun(report impact.ImpactReport) int {
 	for _, a := range report.Closes {
 		fmt.Printf("  close:  %s (bead %s)\n", a.Node, a.BeadID)
 	}
-	return 0
 }
 
 // flattenTree walks a merkle tree and returns a map of key → hash for all leaves.
@@ -297,67 +286,4 @@ func collectAffectedIDs(createdIDs []string, reviews, closes []impact.Action) []
 		}
 	}
 	return ids
-}
-
-// moduleJSON is the subset of module.json we need for building NodeMaps.
-type moduleJSON struct {
-	Components []struct {
-		ID      int    `json:"id"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	} `json:"components"`
-	ImplSections []struct {
-		ID      int    `json:"id"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	} `json:"impl_sections"`
-}
-
-// projectJSON is the subset of project.json we need for module name→path mapping.
-type projectJSON struct {
-	Modules []struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
-	} `json:"modules"`
-}
-
-// buildNodeMaps reads project.json and each module's module.json to build
-// a map of module name → NodeMap for resolving spec-ID keys to human-readable names.
-func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
-	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
-	if err != nil {
-		return nil, fmt.Errorf("read project.json: %w", err)
-	}
-	var proj projectJSON
-	if err := json.Unmarshal(projData, &proj); err != nil {
-		return nil, fmt.Errorf("parse project.json: %w", err)
-	}
-
-	modules := map[string]impact.NodeMap{}
-	for _, m := range proj.Modules {
-		modPath := filepath.Join(specDir, m.Path, "module.json")
-		data, err := os.ReadFile(modPath)
-		if err != nil {
-			continue // module directory may not have module.json yet
-		}
-		var mod moduleJSON
-		if err := json.Unmarshal(data, &mod); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", modPath, err)
-		}
-
-		nm := impact.NodeMap{}
-		for _, c := range mod.Components {
-			if c.Content != "" {
-				nm["component/"+strconv.Itoa(c.ID)] = c.Name
-			}
-		}
-		for _, s := range mod.ImplSections {
-			if s.Content != "" {
-				nm["impl_section/"+strconv.Itoa(s.ID)] = s.Name
-			}
-		}
-
-		modules[m.Name] = nm
-	}
-	return modules, nil
 }

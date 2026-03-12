@@ -39,7 +39,6 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	writeTestFile(t, alphaDir, "arch_comp2.md", "# Comp2\n")
 	writeTestFile(t, alphaDir, "impl_comp1.md", "# Impl1\n")
 
-	// Create .bead-map.json with two records.
 	mapPath := filepath.Join(dir, ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)
 	if _, err := store.Create(mapping.Record{
@@ -71,12 +70,10 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 func TestFR3_MapGet_ValidRecord(t *testing.T) {
 	_, mapFile := setupMapTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runMapGet([]string{"-map-file", mapFile, "1"})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "map", "get", "--map-file", mapFile, "1")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var record mapping.Record
 	if err := json.Unmarshal([]byte(out), &record); err != nil {
@@ -105,39 +102,37 @@ func TestFR3_MapGet_ValidRecord(t *testing.T) {
 func TestFR3_MapGet_UnknownRecord(t *testing.T) {
 	_, mapFile := setupMapTestSpec(t)
 
-	code := runMapGet([]string{"-map-file", mapFile, "999"})
-	if code != 1 {
-		t.Fatalf("want exit 1 for unknown record, got %d", code)
+	_, err := runSpex(t, "map", "get", "--map-file", mapFile, "999")
+	if err == nil {
+		t.Fatal("want error for unknown record, got nil")
 	}
 }
 
 func TestFR3_MapGet_InvalidID(t *testing.T) {
 	_, mapFile := setupMapTestSpec(t)
 
-	code := runMapGet([]string{"-map-file", mapFile, "notanumber"})
-	if code != 1 {
-		t.Fatalf("want exit 1 for invalid ID, got %d", code)
+	_, err := runSpex(t, "map", "get", "--map-file", mapFile, "notanumber")
+	if err == nil {
+		t.Fatal("want error for invalid ID, got nil")
 	}
 }
 
 func TestFR3_MapGet_MissingArg(t *testing.T) {
 	_, mapFile := setupMapTestSpec(t)
 
-	code := runMapGet([]string{"-map-file", mapFile})
-	if code != 1 {
-		t.Fatalf("want exit 1 for missing arg, got %d", code)
+	_, err := runSpex(t, "map", "get", "--map-file", mapFile)
+	if err == nil {
+		t.Fatal("want error for missing arg, got nil")
 	}
 }
 
 func TestFR3_MapList_AllRecords(t *testing.T) {
 	_, mapFile := setupMapTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runMapList([]string{"-map-file", mapFile})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "map", "list", "--map-file", mapFile)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var records []mapping.Record
 	if err := json.Unmarshal([]byte(out), &records); err != nil {
@@ -158,12 +153,10 @@ func TestFR3_MapList_EmptyMappingFile(t *testing.T) {
 	dir := t.TempDir()
 	mapFile := filepath.Join(dir, ".bead-map.json")
 
-	out := captureStdout(t, func() {
-		code := runMapList([]string{"-map-file", mapFile})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "map", "list", "--map-file", mapFile)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var records []mapping.Record
 	if err := json.Unmarshal([]byte(out), &records); err != nil {
@@ -178,12 +171,10 @@ func TestFR3_MapList_NoMappingFile(t *testing.T) {
 	dir := t.TempDir()
 	mapFile := filepath.Join(dir, "nonexistent.json")
 
-	out := captureStdout(t, func() {
-		code := runMapList([]string{"-map-file", mapFile})
-		if code != 0 {
-			t.Fatalf("want exit 0 when no mapping file exists, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "map", "list", "--map-file", mapFile)
+	if err != nil {
+		t.Fatalf("want no error when no mapping file exists, got %v", err)
+	}
 
 	var records []mapping.Record
 	if err := json.Unmarshal([]byte(out), &records); err != nil {
@@ -197,7 +188,6 @@ func TestFR3_MapList_NoMappingFile(t *testing.T) {
 func TestFR3_Check_ReadyBead(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	// Update record 1 hash to match the actual merkle tree hash.
 	spec, err := mapping.NewSpecGraph(specDir)
 	if err != nil {
 		t.Fatalf("build spec graph: %v", err)
@@ -211,13 +201,10 @@ func TestFR3_Check_ReadyBead(t *testing.T) {
 		t.Fatalf("update hash: %v", err)
 	}
 
-	// Comp1 has no uses, so it should be ready.
-	out := captureStdout(t, func() {
-		code := runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "test-abc"})
-		if code != 0 {
-			t.Fatalf("want exit 0 for ready bead, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
+	if err != nil {
+		t.Fatalf("want no error for ready bead, got %v", err)
+	}
 
 	var result mapping.PreflightResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -234,7 +221,6 @@ func TestFR3_Check_ReadyBead(t *testing.T) {
 func TestFR3_Check_BlockedBead(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	// Update record 2 hash to match actual merkle hash.
 	spec, err := mapping.NewSpecGraph(specDir)
 	if err != nil {
 		t.Fatalf("build spec graph: %v", err)
@@ -248,8 +234,6 @@ func TestFR3_Check_BlockedBead(t *testing.T) {
 		t.Fatalf("update hash: %v", err)
 	}
 
-	// Comp2 uses Comp1, and Comp1's bead_status is "closed", so it should be ready.
-	// But let's make Comp1 open to test blocking.
 	rec, err := store.Get(1)
 	if err != nil {
 		t.Fatalf("get record 1: %v", err)
@@ -258,12 +242,10 @@ func TestFR3_Check_BlockedBead(t *testing.T) {
 	rec.BeadStatus = "open"
 	store.Create(rec)
 
-	out := captureStdout(t, func() {
-		code := runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "test-def"})
-		if code != 1 {
-			t.Fatalf("want exit 1 for blocked bead, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-def")
+	if err == nil {
+		t.Fatal("want error for blocked bead, got nil")
+	}
 
 	var result mapping.PreflightResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -280,23 +262,19 @@ func TestFR3_Check_BlockedBead(t *testing.T) {
 func TestFR3_Check_UnknownBead(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	code := runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "unknown-bead-id"})
-	if code != 1 {
-		t.Fatalf("want exit 1 for unknown bead, got %d", code)
+	_, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "unknown-bead-id")
+	if err == nil {
+		t.Fatal("want error for unknown bead, got nil")
 	}
 }
 
 func TestFR3_Check_StaleBead(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	// Record 1 has spec_hash "hash1" which won't match the actual merkle hash.
-	// This should trigger a stale result.
-	out := captureStdout(t, func() {
-		code := runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "test-abc"})
-		if code != 1 {
-			t.Fatalf("want exit 1 for stale bead, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
+	if err == nil {
+		t.Fatal("want error for stale bead, got nil")
+	}
 
 	var result mapping.PreflightResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -310,17 +288,12 @@ func TestFR3_Check_StaleBead(t *testing.T) {
 	}
 }
 
-func TestFR3_MapCommand_Dispatch(t *testing.T) {
-	code := runMap(nil)
-	if code != 1 {
-		t.Fatalf("want exit 1 for no subcommand, got %d", code)
-	}
-}
-
-func TestFR3_MapCommand_UnknownSubcommand(t *testing.T) {
-	code := runMap([]string{"unknown"})
-	if code != 1 {
-		t.Fatalf("want exit 1 for unknown subcommand, got %d", code)
+func TestFR3_MapCommand_NoSubcommand(t *testing.T) {
+	_, err := runSpex(t, "map")
+	// cobra prints help for group commands with no subcommand — no error
+	// but also no action taken
+	if err != nil {
+		t.Fatalf("map with no subcommand should not error, got %v", err)
 	}
 }
 
@@ -340,12 +313,8 @@ func TestNFR4_Check_Deterministic(t *testing.T) {
 		t.Fatalf("update hash: %v", err)
 	}
 
-	out1 := captureStdout(t, func() {
-		runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "test-abc"})
-	})
-	out2 := captureStdout(t, func() {
-		runCheck([]string{"-map-file", mapFile, "-spec-dir", specDir, "test-abc"})
-	})
+	out1, _ := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
+	out2, _ := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
 
 	if out1 != out2 {
 		t.Fatalf("determinism: outputs differ:\nrun1: %s\nrun2: %s", out1, out2)

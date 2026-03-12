@@ -1,32 +1,27 @@
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"golang.org/x/term"
 
 	"github.com/dmitriyb/spexmachina/validator"
+	"github.com/spf13/cobra"
 )
 
-func runValidate(args []string) int {
-	fs := flag.NewFlagSet("validate", flag.ContinueOnError)
-	if err := fs.Parse(args); err != nil {
-		fmt.Fprintf(os.Stderr, "spex validate: %v\n", err)
-		return 1
+func newValidateCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "validate",
+		Short: "Validate spec directory structure",
+		RunE:  runValidateE,
 	}
+}
 
-	specDir := "spec"
-	if fs.NArg() > 0 {
-		specDir = fs.Arg(0)
-	}
-
-	specDir, err := filepath.Abs(specDir)
+func runValidateE(cmd *cobra.Command, args []string) error {
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "spex validate: resolve path: %v\n", err)
-		return 1
+		return err
 	}
 
 	var errs []validator.ValidationError
@@ -38,14 +33,13 @@ func runValidate(args []string) int {
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
 	if err := validator.Report(errs, os.Stdout, isTTY); err != nil {
-		fmt.Fprintf(os.Stderr, "spex validate: %v\n", err)
-		return 1
+		return fmt.Errorf("validate: %w", err)
 	}
 
 	for _, e := range errs {
 		if e.Severity == "error" {
-			return 1
+			return fmt.Errorf("validation failed")
 		}
 	}
-	return 0
+	return nil
 }

@@ -1,12 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dmitriyb/spexmachina/cli"
 )
 
 func setupTestSpec(t *testing.T) string {
@@ -70,12 +73,38 @@ func captureStdout(t *testing.T, fn func()) string {
 	return string(out)
 }
 
+// runSpex executes the full spex CLI with the given args, capturing stdout.
+// Returns captured stdout and any error from cobra.
+func runSpex(t *testing.T, args ...string) (string, error) {
+	t.Helper()
+	rootCmd := cli.NewRootCmd()
+	rootCmd.AddCommand(
+		newHashCmd(),
+		newDiffCmd(),
+		newValidateCmd(),
+		newImpactCmd(),
+		newApplyCmd(),
+		newMapCmd(),
+		newCheckCmd(),
+	)
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(args)
+
+	var execErr error
+	stdout := captureStdout(t, func() {
+		execErr = rootCmd.Execute()
+	})
+	return stdout, execErr
+}
+
 func TestFR1_FR2_FR3_HashCommand_BuildsTreeAndSavesSnapshot(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	code := runHash([]string{specDir})
-	if code != 0 {
-		t.Fatalf("want exit 0, got %d", code)
+	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
 	}
 
 	snapshotPath := filepath.Join(specDir, ".snapshot.json")
@@ -104,12 +133,10 @@ func TestFR1_FR2_FR3_HashCommand_BuildsTreeAndSavesSnapshot(t *testing.T) {
 func TestFR1_FR2_HashCommand_HumanOutput(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runHash([]string{specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "hash", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	if !strings.HasPrefix(out, "root: ") {
 		t.Fatalf("human output should start with 'root: ', got: %s", out)
@@ -128,12 +155,10 @@ func TestFR1_FR2_HashCommand_HumanOutput(t *testing.T) {
 func TestFR1_FR2_HashCommand_JSONOutput(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runHash([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "hash", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result hashOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -147,7 +172,6 @@ func TestFR1_FR2_HashCommand_JSONOutput(t *testing.T) {
 		t.Fatal("JSON output should contain nodes")
 	}
 
-	// Check that nodes include paths with hierarchy
 	foundModule := false
 	foundLeaf := false
 	for _, n := range result.Nodes {
@@ -167,9 +191,8 @@ func TestFR1_FR2_HashCommand_JSONOutput(t *testing.T) {
 }
 
 func TestFR1_FR2_HashCommand_DefaultDir(t *testing.T) {
-	// When no dir is specified, it defaults to "spec/" which won't exist in temp
-	code := runHash([]string{"/nonexistent/path"})
-	if code == 0 {
+	_, err := runSpex(t, "hash", "--spec-dir", "/nonexistent/path")
+	if err == nil {
 		t.Fatal("should fail with nonexistent dir")
 	}
 }
@@ -177,15 +200,10 @@ func TestFR1_FR2_HashCommand_DefaultDir(t *testing.T) {
 func TestNFR9_HashCommand_Deterministic(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	var out1, out2 string
-	out1 = captureStdout(t, func() {
-		runHash([]string{"--json", specDir})
-	})
+	out1, _ := runSpex(t, "hash", "--json", "--spec-dir", specDir)
 	// Remove the snapshot so we recompute
 	os.Remove(filepath.Join(specDir, ".snapshot.json"))
-	out2 = captureStdout(t, func() {
-		runHash([]string{"--json", specDir})
-	})
+	out2, _ := runSpex(t, "hash", "--json", "--spec-dir", specDir)
 
 	var r1, r2 hashOutput
 	if err := json.Unmarshal([]byte(out1), &r1); err != nil {

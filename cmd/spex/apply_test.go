@@ -34,7 +34,7 @@ func TestREQ4_NodeType(t *testing.T) {
 func TestREQ4_ResolveNodeName(t *testing.T) {
 	modules := map[string]impact.NodeMap{
 		"1": {
-			"component/1": "BeadCreator",
+			"component/1":    "BeadCreator",
 			"impl_section/2": "Bead creation commands",
 		},
 	}
@@ -219,7 +219,6 @@ func TestREQ4_CollectAffectedIDs(t *testing.T) {
 
 	ids := collectAffectedIDs(created, reviews, closes)
 
-	// Should be 4 unique IDs: new-1, new-2, rev-1, close-1
 	if len(ids) != 4 {
 		t.Fatalf("want 4 unique IDs, got %d: %v", len(ids), ids)
 	}
@@ -247,12 +246,11 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 		Summary: impact.Summary{CreateCount: 1, ReviewCount: 1, CloseCount: 1},
 	}
 
-	// Capture stdout to verify output.
 	oldStdout := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	code := printDryRun(report)
+	printDryRun(report)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -260,9 +258,6 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 	out, _ := io.ReadAll(r)
 	output := string(out)
 
-	if code != 0 {
-		t.Errorf("want exit code 0, got %d", code)
-	}
 	if !strings.Contains(output, "1 creates") {
 		t.Errorf("want output to contain '1 creates', got %q", output)
 	}
@@ -278,7 +273,6 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 }
 
 func TestREQ4_EmptyReport(t *testing.T) {
-	// Verify nothing-to-do path — readReport + parse tested indirectly.
 	report := impact.ImpactReport{
 		Creates: []impact.Action{},
 		Reviews: []impact.Action{},
@@ -291,7 +285,6 @@ func TestREQ4_EmptyReport(t *testing.T) {
 }
 
 func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
-	// When NodeMap has no entry, the node key is used as-is.
 	modules := map[string]impact.NodeMap{}
 	hashes := map[string]string{}
 

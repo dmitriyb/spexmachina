@@ -14,12 +14,10 @@ import (
 func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result diffOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -40,7 +38,6 @@ func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
 func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	// Create a snapshot first
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -50,12 +47,10 @@ func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result diffOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -70,7 +65,6 @@ func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 func TestFR4_DiffCommand_Modified(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	// Snapshot the initial state
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -80,18 +74,15 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Modify a file
 	implPath := filepath.Join(specDir, "alpha", "impl_comp1.md")
 	if err := os.WriteFile(implPath, []byte("# Changed implementation\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result diffOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -116,7 +107,6 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	// Snapshot the initial state
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -126,18 +116,15 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Modify an arch file (should be arch_impl impact)
 	archPath := filepath.Join(specDir, "alpha", "arch_comp1.md")
 	if err := os.WriteFile(archPath, []byte("# Changed architecture\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result diffOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -161,7 +148,6 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 func TestFR4_DiffCommand_CustomSnapshotPath(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	// Save snapshot to a custom location
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -171,12 +157,10 @@ func TestFR4_DiffCommand_CustomSnapshotPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{"--json", "--snapshot", customPath, specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--json", "--snapshot", customPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var result diffOutput
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
@@ -199,12 +183,10 @@ func TestFR4_DiffCommand_HumanOutput_NoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	if !strings.Contains(out, "no changes") {
 		t.Fatalf("human output should say 'no changes', got: %s", out)
@@ -214,12 +196,10 @@ func TestFR4_DiffCommand_HumanOutput_NoChanges(t *testing.T) {
 func TestFR4_DiffCommand_HumanOutput_WithChanges(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runDiff([]string{specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "diff", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	if !strings.Contains(out, "change(s)") {
 		t.Fatalf("human output should contain change summary, got: %s", out)
@@ -230,8 +210,8 @@ func TestFR4_DiffCommand_HumanOutput_WithChanges(t *testing.T) {
 }
 
 func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
-	code := runDiff([]string{"/nonexistent/path"})
-	if code == 0 {
+	_, err := runSpex(t, "diff", "--spec-dir", "/nonexistent/path")
+	if err == nil {
 		t.Fatal("should fail with nonexistent dir")
 	}
 }
@@ -239,13 +219,8 @@ func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
 func TestNFR6_DiffCommand_Deterministic(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	var out1, out2 string
-	out1 = captureStdout(t, func() {
-		runDiff([]string{"--json", specDir})
-	})
-	out2 = captureStdout(t, func() {
-		runDiff([]string{"--json", specDir})
-	})
+	out1, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	out2, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 
 	var r1, r2 diffOutput
 	if err := json.Unmarshal([]byte(out1), &r1); err != nil {

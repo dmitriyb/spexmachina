@@ -147,6 +147,34 @@ func TestFR1_CompletionSubcommand(t *testing.T) {
 	}
 }
 
+// Scenario 6: subcommand --help exits 0
+func TestFR1_SubcommandHelpExitsZero(t *testing.T) {
+	cmd := withSubcommands(NewRootCmd())
+	buf := new(bytes.Buffer)
+	cmd.SetOut(buf)
+	cmd.SetErr(buf)
+
+	// Every subcommand's --help must succeed (exit 0)
+	for _, name := range []string{"validate", "hash", "diff", "impact", "apply", "map", "check"} {
+		t.Run(name, func(t *testing.T) {
+			c := withSubcommands(NewRootCmd())
+			b := new(bytes.Buffer)
+			c.SetOut(b)
+			c.SetErr(b)
+			c.SetArgs([]string{name, "--help"})
+
+			if err := c.Execute(); err != nil {
+				t.Fatalf("spex %s --help should exit 0, got error: %v", name, err)
+			}
+
+			out := b.String()
+			if !strings.Contains(out, "Usage:") && !strings.Contains(out, "usage:") {
+				t.Errorf("spex %s --help should print usage, got:\n%s", name, out)
+			}
+		})
+	}
+}
+
 func TestFR1_SpecDirInheritedBySubcommand(t *testing.T) {
 	cmd := NewRootCmd()
 	var got string
