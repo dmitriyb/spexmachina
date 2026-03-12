@@ -180,8 +180,11 @@ func TestFR1_GetBySpecNode(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetBySpecNode: %v", err)
 	}
-	if got.ID != id {
-		t.Fatalf("ID: want %d, got %d", id, got.ID)
+	if len(got) != 1 {
+		t.Fatalf("count: want 1, got %d", len(got))
+	}
+	if got[0].ID != id {
+		t.Fatalf("ID: want %d, got %d", id, got[0].ID)
 	}
 }
 
@@ -194,6 +197,43 @@ func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
 	}
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("want ErrNotFound, got: %v", err)
+	}
+}
+
+func TestFR1_GetBySpecNode_MultipleBeads(t *testing.T) {
+	s := testStore(t)
+
+	r1 := Record{
+		SpecNodeID:  "schema/component/1",
+		BeadID:      "bead-old",
+		Module:      "schema",
+		Component:   "ProjectSchema",
+		ContentFile: "spec/schema/arch_project_schema.md",
+		SpecHash:    "h1",
+		BeadStatus:  "closed",
+	}
+	r2 := Record{
+		SpecNodeID:  "schema/component/1",
+		BeadID:      "bead-new",
+		Module:      "schema",
+		Component:   "ProjectSchema",
+		ContentFile: "spec/schema/arch_project_schema.md",
+		SpecHash:    "h2",
+		BeadStatus:  "open",
+	}
+	if _, err := s.Create(r1); err != nil {
+		t.Fatalf("Create r1: %v", err)
+	}
+	if _, err := s.Create(r2); err != nil {
+		t.Fatalf("Create r2: %v", err)
+	}
+
+	got, err := s.GetBySpecNode("schema/component/1")
+	if err != nil {
+		t.Fatalf("GetBySpecNode: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("count: want 2, got %d", len(got))
 	}
 }
 
@@ -363,7 +403,7 @@ func TestFR1_DuplicateBeadID(t *testing.T) {
 	}
 }
 
-func TestFR1_DuplicateSpecNodeID(t *testing.T) {
+func TestFR1_MultipleBeadsPerSpecNode(t *testing.T) {
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -372,7 +412,7 @@ func TestFR1_DuplicateSpecNodeID(t *testing.T) {
 	}
 
 	r2 := Record{
-		SpecNodeID:  "schema/component/1", // same spec node ID
+		SpecNodeID:  "schema/component/1", // same spec node ID, different bead
 		BeadID:      "different-bead",
 		Module:      "schema",
 		Component:   "ProjectSchema",
@@ -380,11 +420,8 @@ func TestFR1_DuplicateSpecNodeID(t *testing.T) {
 		SpecHash:    "h",
 	}
 	_, err := s.Create(r2)
-	if err == nil {
-		t.Fatal("want error for duplicate spec_node_id, got nil")
-	}
-	if !strings.Contains(err.Error(), "duplicate spec_node_id") {
-		t.Fatalf("error should mention duplicate spec_node_id, got: %v", err)
+	if err != nil {
+		t.Fatalf("Create with same spec_node_id should succeed: %v", err)
 	}
 }
 

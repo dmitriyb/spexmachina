@@ -29,6 +29,13 @@
       "title": "Deterministic preflight",
       "preq_id": 9,
       "description": "Same mapping state + same spec state always produces the same preflight result. No LLM calls, no external state."
+    },
+    {
+      "id": 5,
+      "type": "functional",
+      "title": "Validate mapping file against schema",
+      "preq_id": 3,
+      "description": "MappingStore validates .bead-map.json against the bead-map JSON Schema on load. Invalid files produce a clear error before any CRUD operation."
     }
   ],
   "components": [
@@ -37,7 +44,7 @@
       "name": "MappingStore",
       "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node ID to a bead ID with structured metadata.",
       "content": "arch_mapping_store.md",
-      "implements": [1]
+      "implements": [1, 5]
     },
     {
       "id": 2,

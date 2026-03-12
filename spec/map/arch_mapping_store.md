@@ -5,7 +5,7 @@ Owns the `.bead-map.json` file — the single source of truth for spec-to-bead c
 ## Responsibilities
 
 - CRUD operations on mapping records
-- Ensure referential uniqueness (one spec node → one bead, one bead → one spec node)
+- Ensure bead uniqueness (one bead → one spec node; one spec node may have many beads)
 - Provide lookup by record ID, bead ID, or spec node ID
 - Atomic file writes to prevent corruption
 
@@ -52,7 +52,7 @@ type Store interface {
     Create(r Record) (int, error)
     Get(id int) (Record, error)
     GetByBead(beadID string) (Record, error)
-    GetBySpecNode(specNodeID string) (Record, error)
+    GetBySpecNode(specNodeID string) ([]Record, error)
     Update(id int, updates map[string]string) error
     Delete(id int) error
     List() ([]Record, error)
