@@ -12,7 +12,7 @@ Classifies diff changes by their impact level. Uses node metadata (type, module 
 
 | Level | Condition | Meaning |
 |-------|-----------|---------|
-| `impl_only` | Node type is `impl_section` or `data_flow` | Implementation detail changed, architecture stable |
+| `impl_only` | Node type is `impl_section`, `data_flow`, or `test_section` | Implementation detail changed, architecture stable |
 | `arch_impl` | Node type is `component` | Architecture changed, dependent modules may be affected |
 | `structural` | Node type is `meta` (module.json or project.json) | Spec structure changed — new/removed nodes, changed edges |
 
@@ -33,7 +33,7 @@ The module association is already carried in `Change.Module` from the DiffEngine
 
 Classification uses the node metadata (NodeType, Module) attached to each change by the DiffEngine, not path parsing:
 
-1. If change.NodeType is `"impl_section"` or `"data_flow"` → `impl_only`
+1. If change.NodeType is `"impl_section"`, `"data_flow"`, or `"test_section"` → `impl_only`
 2. If change.NodeType is `"component"` → `arch_impl`
 3. If change.NodeType is `"meta"` (module.json or project.json) → `structural`
 4. If a module has changes at multiple levels, the highest level wins (structural > arch_impl > impl_only)
