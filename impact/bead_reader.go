@@ -16,13 +16,11 @@ type BeadSpec struct {
 	ID       string // bead ID
 	Status   string // bead status
 	RecordID int    // mapping record ID from "spex:<id>" label
-
-	// Legacy fields — still used by NodeMatcher (spexmachina-3ta will remove).
-	Module      string
-	Component   string
-	ImplSection string
-	SpecHash    string
 }
+
+// NodeMap maps node identifiers to their canonical spec node names.
+// Used by the apply command for resolving spec-ID keys to human-readable names.
+type NodeMap map[string]string
 
 // rawBead is the JSON shape returned by `<bin> list --json`.
 type rawBead struct {

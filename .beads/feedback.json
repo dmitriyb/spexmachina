@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "created_at": "2026-03-12T11:22:39.150431589+01:00",
-  "updated_at": "2026-03-12T11:22:41.484959613+01:00",
+  "updated_at": "2026-03-12T12:00:14.851530256+01:00",
   "events": [
     {
       "issue_id": "spexmachina-1m8",
@@ -14,62 +14,74 @@
       "action": "ignore",
       "score": 0.16321426546735526,
       "timestamp": "2026-03-12T11:22:41.484957068+01:00"
+    },
+    {
+      "issue_id": "spexmachina-3ta",
+      "action": "accept",
+      "score": 0.1657619912550479,
+      "timestamp": "2026-03-12T11:59:52.236483829+01:00"
+    },
+    {
+      "issue_id": "spexmachina-3fx",
+      "action": "ignore",
+      "score": 0.1634232123194819,
+      "timestamp": "2026-03-12T12:00:14.851528463+01:00"
     }
   ],
   "adjustments": [
     {
       "name": "PageRank",
-      "adjustment": 0.9970540513080445,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484958421+01:00"
+      "adjustment": 0.9941081026160887,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529335+01:00"
     },
     {
       "name": "Betweenness",
       "adjustment": 1,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484958581+01:00"
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529455+01:00"
     },
     {
       "name": "BlockerRatio",
-      "adjustment": 0.9971428571428572,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484958741+01:00"
+      "adjustment": 0.9942857142857146,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529595+01:00"
     },
     {
       "name": "Staleness",
-      "adjustment": 0.9994559040190745,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484958882+01:00"
+      "adjustment": 0.9989094758601087,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529695+01:00"
     },
     {
       "name": "PriorityBoost",
-      "adjustment": 1.0100000000000002,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484959002+01:00"
+      "adjustment": 1.0200000000000005,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529805+01:00"
     },
     {
       "name": "TimeToImpact",
-      "adjustment": 0.9986,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484959122+01:00"
+      "adjustment": 0.9972000000000001,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851529906+01:00"
     },
     {
       "name": "Urgency",
-      "adjustment": 1.000000212243658,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484959242+01:00"
+      "adjustment": 0.999974352584639,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851530006+01:00"
     },
     {
       "name": "Risk",
-      "adjustment": 1.00225,
-      "samples": 2,
-      "last_updated": "2026-03-12T11:22:41.484959362+01:00"
+      "adjustment": 1.0046122023622037,
+      "samples": 4,
+      "last_updated": "2026-03-12T12:00:14.851530116+01:00"
     }
   ],
   "stats": {
-    "total_accepted": 1,
-    "total_ignored": 1,
-    "avg_accept_score": 0.16512822255038861,
-    "avg_ignore_score": 0.16321426546735526
+    "total_accepted": 2,
+    "total_ignored": 2,
+    "avg_accept_score": 0.16544510690271824,
+    "avg_ignore_score": 0.16331873889341858
   }
 }

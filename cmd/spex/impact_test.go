@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/impact"
+	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
@@ -51,47 +52,29 @@ func setupImpactDiffFile(t *testing.T) (string, string) {
 	return specDir, diffFile
 }
 
-// fakeBR writes a fake bead CLI script that returns the given JSON.
-func fakeBR(t *testing.T, beadsJSON string) string {
+// setupMappingFile creates a .bead-map.json with the given records.
+func setupMappingFile(t *testing.T, dir string, records []mapping.Record) string {
 	t.Helper()
-	dir := t.TempDir()
-	jsonFile := filepath.Join(dir, "beads.json")
-	if err := os.WriteFile(jsonFile, []byte(beadsJSON), 0644); err != nil {
-		t.Fatal(err)
+	mapPath := filepath.Join(dir, ".bead-map.json")
+	store := mapping.NewFileStore(mapPath)
+	for _, r := range records {
+		if _, err := store.Create(r); err != nil {
+			t.Fatal(err)
+		}
 	}
-	script := filepath.Join(dir, "fake-br")
-	content := "#!/bin/sh\ncat " + jsonFile + "\n"
-	if err := os.WriteFile(script, []byte(content), 0755); err != nil {
-		t.Fatal(err)
-	}
-	return script
+	return mapPath
 }
 
 func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
-	// Use spex:<record-id> labels (new format). ReadBeads extracts RecordID
-	// but NodeMatcher doesn't yet correlate by RecordID (spexmachina-3ta),
-	// so beads come back as unmatched → create actions are produced.
-	beads := []struct {
-		ID     string   `json:"id"`
-		Status string   `json:"status"`
-		Labels []string `json:"labels"`
-	}{
-		{
-			ID:     "bead-1",
-			Status: "open",
-			Labels: []string{"spex:1"},
-		},
-	}
-	beadsJSON, err := json.Marshal(beads)
-	if err != nil {
-		t.Fatal(err)
-	}
-	brScript := fakeBR(t, string(beadsJSON))
+	// Create a mapping record that matches the changed arch file.
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
+		{SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
+	})
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
+		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -102,22 +85,19 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// With the new label format, NodeMatcher can't yet correlate beads to
-	// nodes by RecordID (pending spexmachina-3ta). Changed nodes produce
-	// create actions instead of review actions.
-	if report.Summary.CreateCount == 0 {
-		t.Fatal("expected at least one create action for changed arch file")
+	if report.Summary.ReviewCount == 0 {
+		t.Fatal("expected at least one review action for changed arch file with matching record")
 	}
 }
 
 func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
-	// No beads at all — should produce create actions.
-	brScript := fakeBR(t, "[]")
+	// Empty mapping file — no records → changed nodes produce create actions.
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
+		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -157,10 +137,10 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	brScript := fakeBR(t, "[]")
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
 
 	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--bead-cli", brScript, specDir})
+		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
 		if code != 0 {
 			t.Fatalf("want exit 0, got %d", code)
 		}
@@ -180,24 +160,11 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
-	beads := []struct {
-		ID     string   `json:"id"`
-		Status string   `json:"status"`
-		Labels []string `json:"labels"`
-	}{
-		{
-			ID:     "bead-1",
-			Status: "open",
-			Labels: []string{"spex:1"},
-		},
-	}
-	beadsJSON, err := json.Marshal(beads)
-	if err != nil {
-		t.Fatal(err)
-	}
-	brScript := fakeBR(t, string(beadsJSON))
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
+		{SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
+	})
 
-	args := []string{"--diff", diffFile, "--bead-cli", brScript, specDir}
+	args := []string{"--diff", diffFile, "--map", mapPath, specDir}
 
 	out1 := captureStdout(t, func() {
 		runImpact(args)
@@ -217,7 +184,7 @@ func TestFR4_ImpactCommand_InvalidDiffJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code := runImpact([]string{"--diff", diffFile, "--bead-cli", "echo", "--spec", t.TempDir()})
+	code := runImpact([]string{"--diff", diffFile})
 	if code == 0 {
 		t.Fatal("should fail with invalid diff JSON")
 	}
@@ -233,9 +200,9 @@ func TestFR4_ImpactCommand_NonexistentDiffFile(t *testing.T) {
 func TestFR4_ParseDiffJSON(t *testing.T) {
 	input := `{
 		"changes": [
-			{"path": "project/alpha/arch/arch_comp1.md", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"},
-			{"path": "project/alpha/impl/impl_comp1.md", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
-			{"path": "project/alpha/arch/arch_removed.md", "type": "removed", "impact": "arch_impl", "module": "alpha", "old_hash": "ddd"}
+			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"},
+			{"path": "module/1/impl_section/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
+			{"path": "module/1/component/2", "type": "removed", "impact": "arch_impl", "module": "alpha", "old_hash": "ddd"}
 		]
 	}`
 
@@ -278,49 +245,5 @@ func TestFR4_ParseDiffJSON_InvalidImpact(t *testing.T) {
 	_, err := parseDiffJSON([]byte(input))
 	if err == nil || !strings.Contains(err.Error(), "unknown impact level") {
 		t.Fatalf("want error about unknown impact level, got %v", err)
-	}
-}
-
-func TestFR4_BuildNodeMaps(t *testing.T) {
-	specDir := setupTestSpec(t)
-
-	modules, err := buildNodeMaps(specDir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// project.json and module.json both use "alpha".
-	nm, ok := modules["alpha"]
-	if !ok {
-		t.Fatalf("expected NodeMap for module alpha, got keys: %v", mapKeys(modules))
-	}
-
-	if nm["component/1"] != "Comp1" {
-		t.Errorf("want component/1 → Comp1, got %q", nm["component/1"])
-	}
-	if nm["impl_section/1"] != "Impl1" {
-		t.Errorf("want impl_section/1 → Impl1, got %q", nm["impl_section/1"])
-	}
-}
-
-func mapKeys(m map[string]impact.NodeMap) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-func TestFR4_BuildNodeMaps_NoModules(t *testing.T) {
-	dir := t.TempDir()
-	// Write a project.json with no modules.
-	writeTestFile(t, dir, "project.json", `{"name":"empty","modules":[]}`)
-
-	modules, err := buildNodeMaps(dir)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(modules) != 0 {
-		t.Fatalf("expected empty NodeMaps, got %d", len(modules))
 	}
 }

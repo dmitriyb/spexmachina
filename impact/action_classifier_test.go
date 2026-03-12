@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
@@ -11,11 +12,11 @@ func TestFR3_ClassifyActions_ReviewOnModified(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_comp1.md", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
+				Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
-			Beads: []BeadSpec{{ID: "bead-1", Module: "alpha", Component: "Comp1"}},
+			Records: []mapping.Record{{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha"}},
 		},
 	}
 
@@ -39,15 +40,15 @@ func TestFR3_ClassifyActions_ReviewOnModified(t *testing.T) {
 	}
 }
 
-func TestFR3_ClassifyActions_ReviewOnAddedWithBead(t *testing.T) {
+func TestFR3_ClassifyActions_ReviewOnAddedWithRecord(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_comp1.md", Type: merkle.Added, NewHash: "aaa"},
+				Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Added, NewHash: "aaa"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
-			Beads: []BeadSpec{{ID: "bead-1", Module: "alpha", Component: "Comp1"}},
+			Records: []mapping.Record{{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha"}},
 		},
 	}
 
@@ -68,7 +69,7 @@ func TestFR3_ClassifyActions_CreateOnAddedUnmatched(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_new.md", Type: merkle.Added, NewHash: "aaa"},
+				Change: merkle.Change{Path: "module/1/component/5", Type: merkle.Added, NewHash: "aaa"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
@@ -96,7 +97,7 @@ func TestFR3_ClassifyActions_CreateOnModifiedUnmatched(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/impl/impl_data.md", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
+				Change: merkle.Change{Path: "module/1/impl_section/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
 				Impact: merkle.ImplOnly,
 				Module: "alpha",
 			},
@@ -115,7 +116,7 @@ func TestFR3_ClassifyActions_CreateOnModifiedUnmatched(t *testing.T) {
 
 func TestFR3_ClassifyActions_CloseOnOrphaned(t *testing.T) {
 	orphaned := []Orphaned{
-		{Bead: BeadSpec{ID: "bead-old", Module: "alpha", Component: "OldComp"}},
+		{Record: mapping.Record{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-old", Module: "alpha"}},
 	}
 
 	actions := ClassifyActions(nil, nil, orphaned)
@@ -136,13 +137,10 @@ func TestFR3_ClassifyActions_CloseOnOrphaned(t *testing.T) {
 }
 
 func TestFR3_ClassifyActions_NoActionOnRemovedUnmatched(t *testing.T) {
-	// Removed nodes without beads should produce no action.
-	// NodeMatcher filters these out (doesn't include them in unmatched),
-	// but if somehow passed, ClassifyActions should still produce nothing.
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_gone.md", Type: merkle.Removed, OldHash: "aaa"},
+				Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Removed, OldHash: "aaa"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
@@ -156,17 +154,17 @@ func TestFR3_ClassifyActions_NoActionOnRemovedUnmatched(t *testing.T) {
 	}
 }
 
-func TestFR3_ClassifyActions_MultipleBeadsPerMatch(t *testing.T) {
+func TestFR3_ClassifyActions_MultipleRecordsPerMatch(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_comp1.md", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
+				Change: merkle.Change{Path: "module/1/component/1", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
-			Beads: []BeadSpec{
-				{ID: "bead-a", Module: "alpha", Component: "Comp1"},
-				{ID: "bead-b", Module: "alpha", Component: "Comp1"},
+			Records: []mapping.Record{
+				{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-a", Module: "alpha"},
+				{ID: 2, SpecNodeID: "module/1/component/1", BeadID: "bead-b", Module: "alpha"},
 			},
 		},
 	}
@@ -174,7 +172,7 @@ func TestFR3_ClassifyActions_MultipleBeadsPerMatch(t *testing.T) {
 	actions := ClassifyActions(matches, nil, nil)
 
 	if len(actions) != 2 {
-		t.Fatalf("want 2 actions (one per bead), got %d", len(actions))
+		t.Fatalf("want 2 actions (one per record), got %d", len(actions))
 	}
 	if actions[0].BeadID != "bead-a" || actions[1].BeadID != "bead-b" {
 		t.Errorf("want bead IDs [bead-a, bead-b], got [%s, %s]", actions[0].BeadID, actions[1].BeadID)
@@ -185,24 +183,24 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/beta/arch/arch_b.md", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
+				Change: merkle.Change{Path: "module/2/component/1", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
 				Impact: merkle.ArchImpl,
 				Module: "beta",
 			},
-			Beads: []BeadSpec{{ID: "bead-2", Module: "beta", Component: "B"}},
+			Records: []mapping.Record{{ID: 1, SpecNodeID: "module/2/component/1", BeadID: "bead-2", Module: "beta"}},
 		},
 	}
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/arch/arch_new.md", Type: merkle.Added, NewHash: "x"},
+				Change: merkle.Change{Path: "module/1/component/5", Type: merkle.Added, NewHash: "x"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
 		},
 	}
 	orphaned := []Orphaned{
-		{Bead: BeadSpec{ID: "bead-old", Module: "alpha", Component: "Gone"}},
+		{Record: mapping.Record{ID: 2, SpecNodeID: "module/1/component/3", BeadID: "bead-old", Module: "alpha"}},
 	}
 
 	actions := ClassifyActions(matches, unmatched, orphaned)
@@ -231,11 +229,11 @@ func TestFR3_ClassifyActions_ImplOnlyImpact(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "proj/alpha/impl/impl_data.md", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
+				Change: merkle.Change{Path: "module/1/impl_section/1", Type: merkle.Modified, OldHash: "a", NewHash: "b"},
 				Impact: merkle.ImplOnly,
 				Module: "alpha",
 			},
-			Beads: []BeadSpec{{ID: "bead-1", Module: "alpha", ImplSection: "Data processing"}},
+			Records: []mapping.Record{{ID: 1, SpecNodeID: "module/1/impl_section/1", BeadID: "bead-1", Module: "alpha"}},
 		},
 	}
 
@@ -249,9 +247,9 @@ func TestFR3_ClassifyActions_ImplOnlyImpact(t *testing.T) {
 	}
 }
 
-func TestFR3_ClassifyActions_OrphanedUsesImplSection(t *testing.T) {
+func TestFR3_ClassifyActions_OrphanedUsesSpecNodeID(t *testing.T) {
 	orphaned := []Orphaned{
-		{Bead: BeadSpec{ID: "bead-1", Module: "alpha", ImplSection: "Data flow"}},
+		{Record: mapping.Record{ID: 1, SpecNodeID: "module/1/impl_section/2", BeadID: "bead-1", Module: "alpha"}},
 	}
 
 	actions := ClassifyActions(nil, nil, orphaned)
@@ -259,7 +257,7 @@ func TestFR3_ClassifyActions_OrphanedUsesImplSection(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
 	}
-	if actions[0].Node != "Data flow" {
-		t.Errorf("want node 'Data flow', got %q", actions[0].Node)
+	if actions[0].Node != "module/1/impl_section/2" {
+		t.Errorf("want node 'module/1/impl_section/2', got %q", actions[0].Node)
 	}
 }

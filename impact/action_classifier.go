@@ -12,7 +12,7 @@ type Action struct {
 	Type   string `json:"type"`              // "create", "close", "review"
 	BeadID string `json:"bead_id,omitempty"` // existing bead ID (empty for "create")
 	Module string `json:"module"`            // affected module
-	Node   string `json:"node"`              // affected spec node (component/impl_section name)
+	Node   string `json:"node"`              // affected spec node (spec node ID path)
 	Impact string `json:"impact,omitempty"`  // impact level from merkle classification
 	Reason string `json:"reason"`            // human-readable explanation
 }
@@ -25,15 +25,15 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 
 	for _, m := range matches {
 		impact := m.Change.Impact.String()
-		node := nodeFromChange(m.Change)
+		node := m.Change.Path
 
 		switch m.Change.Type {
 		case merkle.Added, merkle.Modified:
 			reason := matchedChangeReason(m.Change.Type, impact, m.Change.Module, node)
-			for _, b := range m.Beads {
+			for _, r := range m.Records {
 				actions = append(actions, Action{
 					Type:   "review",
-					BeadID: b.ID,
+					BeadID: r.BeadID,
 					Module: m.Change.Module,
 					Node:   node,
 					Impact: impact,
@@ -41,12 +41,12 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 				})
 			}
 		}
-		// Removed + matched beads are handled as orphaned by NodeMatcher, not here.
+		// Removed + matched records are handled as orphaned by NodeMatcher, not here.
 	}
 
 	for _, u := range unmatched {
 		impact := u.Change.Impact.String()
-		node := nodeFromChange(u.Change)
+		node := u.Change.Path
 
 		switch u.Change.Type {
 		case merkle.Added:
@@ -58,7 +58,7 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 				Reason: fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
 			})
 		case merkle.Modified:
-			// Modified node with no bead — create.
+			// Modified node with no record — create.
 			actions = append(actions, Action{
 				Type:   "create",
 				Module: u.Change.Module,
@@ -67,16 +67,16 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 				Reason: fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
 			})
 		}
-		// Removed + no bead = no action (nothing to close).
+		// Removed + no record = no action (nothing to close).
 	}
 
 	for _, o := range orphaned {
 		actions = append(actions, Action{
 			Type:   "close",
-			BeadID: o.Bead.ID,
-			Module: o.Bead.Module,
-			Node:   beadNode(o.Bead),
-			Reason: fmt.Sprintf("Spec node removed: %s/%s", o.Bead.Module, beadNode(o.Bead)),
+			BeadID: o.Record.BeadID,
+			Module: o.Record.Module,
+			Node:   o.Record.SpecNodeID,
+			Reason: fmt.Sprintf("Spec node removed: %s/%s", o.Record.Module, o.Record.SpecNodeID),
 		})
 	}
 
@@ -104,22 +104,4 @@ func matchedChangeReason(changeType merkle.ChangeType, impact, module, node stri
 	default:
 		return fmt.Sprintf("Spec node modified (%s): %s/%s", impact, module, node)
 	}
-}
-
-// nodeFromChange extracts the spec node identifier from the change path.
-// For spec-ID keys like "module/1/component/2", returns the full path.
-// For legacy paths, returns the base filename.
-func nodeFromChange(c merkle.ClassifiedChange) string {
-	return c.Path
-}
-
-// beadNode returns the best available node name from a bead's spec metadata.
-func beadNode(b BeadSpec) string {
-	if b.Component != "" {
-		return b.Component
-	}
-	if b.ImplSection != "" {
-		return b.ImplSection
-	}
-	return ""
 }
