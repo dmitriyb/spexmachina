@@ -13,8 +13,8 @@ current tree          stored snapshot
            │ changes[]
            ▼
 ┌──────────────────┐
-│ ImpactClassifier  │── classify by filename pattern
-│ (path analysis)   │   aggregate by module
+│ ImpactClassifier  │── classify by node metadata
+│ (NodeType switch) │   aggregate by module
 └──────────┬───────┘
            │ classified_changes[]
            ▼
