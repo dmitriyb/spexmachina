@@ -49,16 +49,7 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		node := u.Change.Path
 
 		switch u.Change.Type {
-		case merkle.Added:
-			actions = append(actions, Action{
-				Type:   "create",
-				Module: u.Change.Module,
-				Node:   node,
-				Impact: impact,
-				Reason: fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
-			})
-		case merkle.Modified:
-			// Modified node with no record — create.
+		case merkle.Added, merkle.Modified:
 			actions = append(actions, Action{
 				Type:   "create",
 				Module: u.Change.Module,
