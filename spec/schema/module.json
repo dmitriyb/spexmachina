@@ -43,6 +43,13 @@
       "title": "Define test_plan in project schema",
       "preq_id": 13,
       "description": "Add test_plan object to project.json schema with a scenarios array. Each scenario has id, name, content (path to test_*.md), and modules (module IDs)."
+    },
+    {
+      "id": 7,
+      "type": "functional",
+      "title": "Define bead-map schema",
+      "preq_id": 3,
+      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, module, component, content_file, spec_hash, optional bead_status). spec_node_id format validated via pattern."
     }
   ],
   "components": [
@@ -66,7 +73,14 @@
       "description": "Go package that embeds JSON Schema files and exposes them for programmatic use by the validator and other modules.",
       "content": "arch_schema_loader.md",
       "implements": [3],
-      "uses": [1, 2]
+      "uses": [1, 2, 4]
+    },
+    {
+      "id": 4,
+      "name": "BeadMapSchema",
+      "description": "The .bead-map.json JSON Schema definition. Defines the structure for the mapping envelope (next_id, records) and individual mapping records.",
+      "content": "arch_bead_map_schema.md",
+      "implements": [7]
     }
   ],
   "impl_sections": [
@@ -74,13 +88,13 @@
       "id": 1,
       "name": "Schema definitions",
       "content": "impl_schema_definitions.md",
-      "describes": [1, 2]
+      "describes": [1, 2, 4]
     },
     {
       "id": 2,
       "name": "Go embedding",
       "content": "impl_go_embedding.md",
-      "describes": [3]
+      "describes": [3, 4]
     },
     {
       "id": 3,

@@ -1,16 +1,17 @@
 {
-  "root_hash": "3b8f019bb790b9e392c363fcfe787fdc11dfb3557930ae40227649a3e1c3183c",
+  "root_hash": "247a8145a80e5f067fa9f3f2423ff89d9622e138fc1000055e4616af7cb5aa7f",
   "root_key": "project",
-  "created_at": "2026-03-12T18:07:19.429631203+01:00",
+  "created_at": "2026-03-12T18:39:40.16975779+01:00",
   "nodes": {
     "module/1": {
-      "hash": "ae93747984a0d8171d000095e2536eda9d13e344c550941c52a35a00584de433",
+      "hash": "4d8414d0df3edb6c038d7b7081a191fe8fac8b00e018b3099ed97798e9a187bb",
       "type": "module",
       "module": 1,
       "children": [
         "module/1/component/1",
         "module/1/component/2",
         "module/1/component/3",
+        "module/1/component/4",
         "module/1/impl_section/1",
         "module/1/impl_section/2",
         "module/1/impl_section/3",
@@ -35,6 +36,12 @@
       "node_type": "component",
       "module": 1
     },
+    "module/1/component/4": {
+      "hash": "05b8892d9984ddced7677240d5c9e5ecbeed91a6819e24c189106bc2681d095e",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 1
+    },
     "module/1/impl_section/1": {
       "hash": "32431b4f09f657bc48a775136d250f901a20e1293d1758f46d2cfe75814bc476",
       "type": "leaf",
@@ -54,7 +61,7 @@
       "module": 1
     },
     "module/1/meta": {
-      "hash": "25aab8d3c4771826f222c65512971a84d94c825273519e39adbb3a086bfef977",
+      "hash": "8180fcd16237c4aa34a81417972941b741feeeaaa893bb0494931d08b7dbe414",
       "type": "leaf",
       "node_type": "meta",
       "module": 1
@@ -746,7 +753,7 @@
       "module": 8
     },
     "module/9": {
-      "hash": "57e7f98809b357b69742e540386b1372cc79d087c92b0ac00bc7ef5d50ab4395",
+      "hash": "72008e438e6433f115e4e4603175e0a90e0c7bcb02d5d2e7e14b3755ccf711fc",
       "type": "module",
       "module": 9,
       "children": [
@@ -817,13 +824,13 @@
       "module": 9
     },
     "module/9/meta": {
-      "hash": "9f6aa21294efcb4f8b6d6d2fedce62700e4b617c39472d59873bdfed354586fc",
+      "hash": "2e301f7772599dd3714dd2f03a69a404d51887a81af08bdf216c7bd8983c1db7",
       "type": "leaf",
       "node_type": "meta",
       "module": 9
     },
     "project": {
-      "hash": "3b8f019bb790b9e392c363fcfe787fdc11dfb3557930ae40227649a3e1c3183c",
+      "hash": "247a8145a80e5f067fa9f3f2423ff89d9622e138fc1000055e4616af7cb5aa7f",
       "type": "project",
       "children": [
         "project/meta",

@@ -1,5 +1,5 @@
 {
-  "next_id": 48,
+  "next_id": 50,
   "records": [
     {
       "id": 1,
@@ -419,6 +419,24 @@
       "id": 47,
       "spec_node_id": "map/component/1",
       "bead_id": "spexmachina-3n8",
+      "module": "map",
+      "component": "MappingStore",
+      "content_file": "spec/map/arch_mapping_store.md",
+      "spec_hash": "07a4e3de9d7883c8c0c62164f760c8fe0f67e85c22f605b62bb8055a8c2e9895"
+    },
+    {
+      "id": 48,
+      "spec_node_id": "schema/component/4",
+      "bead_id": "spexmachina-uqp",
+      "module": "schema",
+      "component": "BeadMapSchema",
+      "content_file": "spec/schema/arch_bead_map_schema.md",
+      "spec_hash": "05b8892d9984ddced7677240d5c9e5ecbeed91a6819e24c189106bc2681d095e"
+    },
+    {
+      "id": 49,
+      "spec_node_id": "map/component/1",
+      "bead_id": "spexmachina-b91",
       "module": "map",
       "component": "MappingStore",
       "content_file": "spec/map/arch_mapping_store.md",
