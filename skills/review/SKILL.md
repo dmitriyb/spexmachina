@@ -39,13 +39,15 @@ Check **both** sources of review feedback:
 A prior review exists if **either** source has feedback.
 
 - **No prior feedback from either source** → first review. Proceed to Step 2.
-- **Prior feedback exists but unaddressed** → **Stop. Do nothing.** Tell the user.
-- **Prior feedback exists and addressed** → proceed to Step 3 (Follow-up Review).
+- **Prior feedback exists but no response** → **Stop. Do nothing.** Tell the user.
+- **Prior feedback exists and responded to** → proceed to Step 3 (Follow-up Review).
 
-How to determine if feedback is "addressed":
+How to determine if feedback has been "responded to" (this is NOT the same as "fixed" — that determination happens in Step 3):
 
-- **Inline comments**: a top-level comment (no `in_reply_to_id`) is addressed if at least one reply references its `id`.
-- **Review-body comments**: addressed if at least one commit exists **after** the review's `submitted_at` timestamp. Check with `gh api repos/{owner}/{repo}/pulls/{number}/commits` and compare dates.
+- **Inline comments**: a top-level comment (no `in_reply_to_id`) is responded to if at least one reply references its `id`.
+- **Review-body comments**: responded to if at least one commit exists **after** the review's `submitted_at` timestamp. Check with `gh api repos/{owner}/{repo}/pulls/{number}/commits` and compare dates.
+
+This gate only checks whether the author **attempted** a response. Replies like "Fixed" are not evidence of an actual fix — Step 3 verifies that independently.
 
 ### Step 2: First Review
 
@@ -58,12 +60,17 @@ How to determine if feedback is "addressed":
 
 ### Step 3: Follow-up Review
 
+**Replies and commit messages are not evidence.** The author saying "Fixed" or a commit titled "Fix review feedback" means nothing until you verify the actual code. Only the current state of the files determines whether an item is fixed.
+
 Collect all feedback items from both sources (review bodies and inline comments). For each item:
 
-1. Read the original feedback to understand what was requested
-2. For inline comments: read the reply. For review-body items: identify the post-review commit(s).
-3. Read the **current code** (not just the diff) to verify the fix
-4. Classify each item as **fixed** or **not fixed**
+1. Read the original feedback to understand what was specifically requested
+2. Read the **current file** (not the diff, not the reply) where the fix should appear
+3. Verify the fix is genuine:
+   - Does the code/spec actually contain the requested change?
+   - Is the change correct, not just present? (e.g., if the review asked to add error handling, is the error handling right?)
+   - Did the fix introduce any new issues?
+4. Classify each item as **fixed** or **not fixed** based solely on what the code shows
 
 Then decide:
 
