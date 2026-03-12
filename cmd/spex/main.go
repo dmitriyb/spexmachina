@@ -29,6 +29,7 @@ func main() {
 // wrapCmd creates a cobra command that delegates to an existing run* handler.
 // The handler receives all arguments after the subcommand name, preserving
 // the original flag.FlagSet parsing within each handler.
+// TODO: remove wrapCmd once all handlers migrate to cobra RunE
 func wrapCmd(name, short string, fn func([]string) int) *cobra.Command {
 	return &cobra.Command{
 		Use:                name,
