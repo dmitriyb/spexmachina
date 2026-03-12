@@ -1,9 +1,6 @@
 package merkle
 
-import (
-	"strconv"
-	"strings"
-)
+import "strconv"
 
 // ImpactLevel represents the severity of a spec change.
 type ImpactLevel int
@@ -35,7 +32,7 @@ type ClassifiedChange struct {
 }
 
 // Classify assigns an impact level and owning module to each change based on
-// its spec-ID key. Keys follow the pattern: module/<id>/<node_type>/<node_id>.
+// node metadata (NodeType, Module) carried by each Change from the DiffEngine.
 // The moduleNames map resolves module IDs to human-readable names. If nil,
 // the module ID string is used as-is.
 func Classify(changes []Change, moduleNames map[int]string) []ClassifiedChange {
@@ -43,50 +40,37 @@ func Classify(changes []Change, moduleNames map[int]string) []ClassifiedChange {
 	for i, c := range changes {
 		result[i] = ClassifiedChange{
 			Change: c,
-			Impact: classifyKey(c.Path),
-			Module: resolveModuleName(c.Path, moduleNames),
+			Impact: classifyNodeType(c.NodeType),
+			Module: resolveModule(c.Module, moduleNames),
 		}
 	}
 	return result
 }
 
-// classifyKey determines the impact level from a spec-ID key.
-func classifyKey(key string) ImpactLevel {
-	// Meta nodes (project/meta, module/<id>/meta) are structural changes.
-	if strings.HasSuffix(key, "/meta") {
+// classifyNodeType determines the impact level from node metadata.
+func classifyNodeType(nodeType string) ImpactLevel {
+	switch nodeType {
+	case "impl_section", "data_flow", "test_section":
+		return ImplOnly
+	case "component":
+		return ArchImpl
+	case "meta":
 		return Structural
+	default:
+		return 0
 	}
-
-	// Parse key segments to determine node type.
-	parts := strings.Split(key, "/")
-	if len(parts) >= 3 {
-		nodeType := parts[2]
-		switch nodeType {
-		case "component":
-			return ArchImpl
-		case "impl_section", "data_flow":
-			return ImplOnly
-		}
-	}
-
-	return 0
 }
 
-// resolveModuleName extracts the module ID from a spec-ID key and resolves it
-// to a name using the provided map. Returns "" for project-level keys.
-func resolveModuleName(key string, moduleNames map[int]string) string {
-	parts := strings.Split(key, "/")
-	if len(parts) < 2 || parts[0] != "module" {
+// resolveModule maps a module ID to a name. Returns "" for project-level nodes
+// (module ID 0).
+func resolveModule(moduleID int, moduleNames map[int]string) string {
+	if moduleID == 0 {
 		return ""
 	}
-	id, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return parts[1]
-	}
 	if moduleNames != nil {
-		if name, ok := moduleNames[id]; ok {
+		if name, ok := moduleNames[moduleID]; ok {
 			return name
 		}
 	}
-	return parts[1]
+	return strconv.Itoa(moduleID)
 }
