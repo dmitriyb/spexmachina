@@ -19,6 +19,7 @@ Read these documents:
    - Read `spec/<module>/impl_<snake_case(component)>.md` for implementation details
    - Glob for `spec/<module>/flow_*.md` and read all matching files for data flow context
    - Read `spec/<module>/module.json` for requirements the component implements (check `implements` field)
+   - Glob for `spec/<module>/test_<snake_case(component)>.md` and read all matching test spec files — these define required integration test scenarios
 4. If no spec labels exist, fall back to reading any spec references in the description
 
 ## Review Flow
@@ -124,6 +125,11 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input /tmp/re
 ## What to Check
 
 - **Spec traceability**: code maps to bead requirements, no unrelated changes
+- **Bead completion** (critical — this is the most important check):
+  1. Re-read the bead title and description line by line. For each stated requirement, find the code in the diff that implements it. If a requirement has no corresponding code, the PR is incomplete.
+  2. Take the bead's verbs literally: "replaces" means the old thing is gone, "adds" means the new thing exists and works, "removes" means the thing is absent. If a verb is not satisfied, flag it.
+  3. Search the diff for `TODO`, `FIXME`, `HACK`, `WORKAROUND`, shim functions, and compatibility wrappers that defer work the bead is supposed to deliver. These are automatic rejections — the bead's work is not done if it leaves TODOs for itself.
 - **Correctness**: error paths handled, edge cases, no resource leaks
 - **Patterns**: follows existing conventions, idiomatic Go
 - **Tests**: verify requirements not implementation details, failure cases tested
+- **Integration testing**: If the spec includes integration test scenarios (in `test_*.md` files), verify that the PR includes tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.

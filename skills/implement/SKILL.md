@@ -22,6 +22,7 @@ Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-speci
    - Read `spec/<module>/impl_<snake_case(component)>.md` for implementation details
    - Glob for `spec/<module>/flow_*.md` and read all matching files for data flow context
    - Read `spec/<module>/module.json` for requirements the component implements (check `implements` field)
+   - Glob for `spec/<module>/test_<snake_case(component)>.md` and read all matching test spec files — these define required integration test scenarios
 3. If no spec labels exist, fall back to reading any spec references in the description
 
 ## Pre-flight Checks
@@ -58,15 +59,25 @@ This ensures all commits will be signed. Do NOT bypass signing with `--no-gpg-si
 
 The bead must map to exactly one spec component. Only write code for that component. If the component's `uses` list references other components, those components must already be implemented (their beads must be closed per Check 2). Do NOT implement dependency components inline — that is scope creep.
 
-## Workflow
+## Workflow (TDD)
 
 1. Read the bead fully. Understand acceptance criteria before writing code.
 2. Claim the bead: `br update $ARGUMENTS --status in_progress`
 3. Create a feature branch: `git checkout -b <short-descriptive-name> origin/main`
-4. Write code that traces to requirements described in the bead. Only implement the single component this bead covers.
-5. Follow patterns in existing codebase. No unrelated changes.
-6. Write tests that verify requirements, not just coverage.
-7. Run `go test ./...` and `go vet ./...` to confirm everything passes.
-8. Commit and push.
-9. Create a PR using `.github/pull_request_template.md`. Fill in the bead ID, spec references from the bead metadata, and changes summary.
-10. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`, then commit `.beads/issues.jsonl` and push so the bead state is tracked in git. Then check the box in the PR body: `gh pr edit <number> --body "$(gh pr view <number> --json body --jq '.body' | sed 's/- \[ \] Bead linked to PR/- [x] Bead linked to PR/')"`
+4. **Write integration tests first.** Read the `test_*.md` spec files loaded during context loading. Write tests that cover every scenario defined there. These tests should compile but fail — they exercise behavior that does not exist yet. Run `go test ./...` to confirm they fail for the right reasons (missing functions, wrong output, etc. — not compilation errors).
+5. **Write unit tests.** Based on the impl spec and architecture, write unit tests for internal functions and edge cases. These also fail initially.
+6. **Write the implementation.** Write code that traces to requirements described in the bead. Only implement the single component this bead covers. Follow patterns in existing codebase. No unrelated changes.
+7. **Run tests.** Run `go test ./...` and `go vet ./...`. All tests from steps 4-5 must now pass. If any test still fails, fix the implementation — do not weaken or delete the test.
+8. **Completion gate** (see below). Do NOT proceed until every item passes.
+9. Commit and push.
+10. Create a PR using `.github/pull_request_template.md`. Fill in the bead ID, spec references from the bead metadata, and changes summary.
+11. Link the bead to the PR: `br update $ARGUMENTS --external-ref "PR#<number>"`, then commit `.beads/issues.jsonl` and push so the bead state is tracked in git. Then check the box in the PR body: `gh pr edit <number> --body "$(gh pr view <number> --json body --jq '.body' | sed 's/- \[ \] Bead linked to PR/- [x] Bead linked to PR/')"
+
+## Completion Gate
+
+Before committing, re-read the bead description and verify **every** claim is met. This is mandatory — do not skip it.
+
+1. **Requirements satisfied**: Re-read the bead title and description line by line. For each stated requirement or behavior, identify the code that implements it. If you cannot point to concrete code for a requirement, it is not done.
+2. **No deferred work**: Search your changes for `TODO`, `FIXME`, `HACK`, `WORKAROUND`, shim functions, and compatibility wrappers. If any of these exist for work that the bead is supposed to deliver, the implementation is incomplete. Either finish the work or stop and tell the user you cannot complete the bead as scoped.
+3. **Verbs are true**: If the bead says "replaces", the old thing must be gone. If it says "adds", the new thing must exist and work. If it says "removes", the thing must not be present. Do not reinterpret the bead's language — take it literally.
+4. **Tests cover requirements**: Each requirement from the bead must have at least one test that would fail if the requirement were not implemented. Tests that only assert happy-path output are insufficient if the bead specifies error behavior or edge cases.`
