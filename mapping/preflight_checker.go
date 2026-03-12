@@ -130,21 +130,7 @@ func checkModuleDeps(store Store, spec SpecGraph, mod ModuleInfo, stack map[int]
 		// Check all components in the dep module have closed beads.
 		for _, comp := range depMod.Components {
 			specNodeID := fmt.Sprintf("%s/component/%d", depMod.Name, comp.ID)
-			rec, err := store.GetBySpecNode(specNodeID)
-			if err != nil {
-				*blockers = append(*blockers, Blocker{
-					SpecNodeID: specNodeID,
-					Reason:     "no mapping record",
-				})
-				continue
-			}
-			if rec.BeadStatus != "closed" {
-				*blockers = append(*blockers, Blocker{
-					SpecNodeID: specNodeID,
-					BeadID:     rec.BeadID,
-					Reason:     fmt.Sprintf("dependency not implemented (status: %s)", rec.BeadStatus),
-				})
-			}
+			checkAllBeadsClosed(store, specNodeID, blockers)
 		}
 	}
 	return nil
@@ -166,14 +152,23 @@ func checkComponentUses(store Store, spec SpecGraph, mod ModuleInfo, componentID
 
 	for _, usedID := range comp.Uses {
 		specNodeID := fmt.Sprintf("%s/component/%d", mod.Name, usedID)
-		rec, err := store.GetBySpecNode(specNodeID)
-		if err != nil {
-			*blockers = append(*blockers, Blocker{
-				SpecNodeID: specNodeID,
-				Reason:     "no mapping record",
-			})
-			continue
-		}
+		checkAllBeadsClosed(store, specNodeID, blockers)
+	}
+	return nil
+}
+
+// checkAllBeadsClosed verifies that every bead mapped to a spec node is closed.
+// If any bead is not closed, the dependency is not satisfied.
+func checkAllBeadsClosed(store Store, specNodeID string, blockers *[]Blocker) {
+	recs, err := store.GetBySpecNode(specNodeID)
+	if err != nil {
+		*blockers = append(*blockers, Blocker{
+			SpecNodeID: specNodeID,
+			Reason:     "no mapping record",
+		})
+		return
+	}
+	for _, rec := range recs {
 		if rec.BeadStatus != "closed" {
 			*blockers = append(*blockers, Blocker{
 				SpecNodeID: specNodeID,
@@ -182,7 +177,6 @@ func checkComponentUses(store Store, spec SpecGraph, mod ModuleInfo, componentID
 			})
 		}
 	}
-	return nil
 }
 
 // parseComponentID extracts the component ID from a spec_node_id like

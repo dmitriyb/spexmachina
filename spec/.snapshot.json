@@ -1,652 +1,847 @@
 {
-  "root_hash": "4c176201e16aeb74cc4c5f96ee35c3f97b4d0ae69b76095daa7ce3b7e32b1245",
-  "root_key": "spex-machina",
-  "created_at": "2026-03-09T19:11:40.597360222+01:00",
+  "root_hash": "3b8f019bb790b9e392c363fcfe787fdc11dfb3557930ae40227649a3e1c3183c",
+  "root_key": "project",
+  "created_at": "2026-03-12T18:07:19.429631203+01:00",
   "nodes": {
-    "spex-machina": {
-      "hash": "4c176201e16aeb74cc4c5f96ee35c3f97b4d0ae69b76095daa7ce3b7e32b1245",
+    "module/1": {
+      "hash": "ae93747984a0d8171d000095e2536eda9d13e344c550941c52a35a00584de433",
+      "type": "module",
+      "module": 1,
+      "children": [
+        "module/1/component/1",
+        "module/1/component/2",
+        "module/1/component/3",
+        "module/1/impl_section/1",
+        "module/1/impl_section/2",
+        "module/1/impl_section/3",
+        "module/1/meta"
+      ]
+    },
+    "module/1/component/1": {
+      "hash": "a68acedca6ede7483e14bc2509805c9c39e3979acca1575492ca822ce9f8a409",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 1
+    },
+    "module/1/component/2": {
+      "hash": "95e3dc5974819ece4100b9f4a5c5a735183b693ea57804761408f978154e08b0",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 1
+    },
+    "module/1/component/3": {
+      "hash": "6c9e1bdc39b9cc81498b18e516acaf5011f36b61896a3df6fa18b34fcf777d96",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 1
+    },
+    "module/1/impl_section/1": {
+      "hash": "32431b4f09f657bc48a775136d250f901a20e1293d1758f46d2cfe75814bc476",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 1
+    },
+    "module/1/impl_section/2": {
+      "hash": "fdc65ff190dc9d0c05b8777e14f0e5e7eaa9c74206a95a0e274988e45e92f055",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 1
+    },
+    "module/1/impl_section/3": {
+      "hash": "3f53fbd1c18e6af088cd5addb41166402b9035666f9cb0c8ab56ee718f53d3df",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 1
+    },
+    "module/1/meta": {
+      "hash": "25aab8d3c4771826f222c65512971a84d94c825273519e39adbb3a086bfef977",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 1
+    },
+    "module/2": {
+      "hash": "25b26a3c1672d8f3e0d2f9cfac0072a462d0baf1ddbe735971ff8377e43c6153",
+      "type": "module",
+      "module": 2,
+      "children": [
+        "module/2/component/1",
+        "module/2/component/2",
+        "module/2/component/3",
+        "module/2/component/4",
+        "module/2/component/5",
+        "module/2/component/6",
+        "module/2/component/7",
+        "module/2/component/8",
+        "module/2/component/9",
+        "module/2/data_flow/1",
+        "module/2/impl_section/1",
+        "module/2/impl_section/2",
+        "module/2/impl_section/3",
+        "module/2/impl_section/4",
+        "module/2/impl_section/5",
+        "module/2/impl_section/6",
+        "module/2/impl_section/7",
+        "module/2/impl_section/8",
+        "module/2/impl_section/9",
+        "module/2/meta"
+      ]
+    },
+    "module/2/component/1": {
+      "hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/2": {
+      "hash": "938203a5f4e1fdf46e697083b636b155346333497530b3929dd974dbad7d6805",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/3": {
+      "hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/4": {
+      "hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/5": {
+      "hash": "4d8c56545bb01486d9f224665ccb01b2a17e25361fe7b48b5407e50564ab0ed9",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/6": {
+      "hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/7": {
+      "hash": "8e5a6ebe08c92aaf678e6223e70a4527ae6ef8d00c498517308923d89cc318ed",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/8": {
+      "hash": "77d5810f55d05c3abad7828c9ee3325d6fd61bf50c6c84029beff915fa33d1a9",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/component/9": {
+      "hash": "aef33f9286137e26281f1e8e017bdee5100375856280042ca6312c9001dd393b",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 2
+    },
+    "module/2/data_flow/1": {
+      "hash": "452350833a58e7efdca43dc5e35f019576c0f15dd78d735f747ce01011f63644",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 2
+    },
+    "module/2/impl_section/1": {
+      "hash": "10628acbc2a37017bb3a3096f206ecd9572759e4ae5d83175000d4276baa57af",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/2": {
+      "hash": "71d9f6241179f2eeaed56258ba43e63ce7fb3623dd96f6c45caf9d21907c61ce",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/3": {
+      "hash": "424c68f4cdfee0afc6ae291ff0dab99a3a703ad77608a8b2dc3dafa18e79f77f",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/4": {
+      "hash": "e64b0ac97324db1219e00876f8bc9a72e3cf876969e8180aef4db5de312cb67c",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/5": {
+      "hash": "8f9378b9b4f59dd1bc5a85816941056297662632406da58a8e08c32859081961",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/6": {
+      "hash": "dcb3cc671820383bef539ac999bab8ef469c36cde2db8d8ea67600dcabd51e41",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/7": {
+      "hash": "801ffa4b459d848b8ecad1adef8835993e66f4ae43c8bbb20e430694fd747d89",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/8": {
+      "hash": "d887a4957e717183928732b3f4e146caea4249ce1c49122d37457487a0163d32",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/impl_section/9": {
+      "hash": "a215d13db6f24e123257a34fffcca9630b402d57582410c80671932e3bd23072",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 2
+    },
+    "module/2/meta": {
+      "hash": "cd3f0f6aa8eb26dbe2763637be32e074e1f1eace014c2cc995255be565a93ba5",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 2
+    },
+    "module/3": {
+      "hash": "3262a9cb804602c0668d85b61c8fe1057fca919426bf4c06dadbf7200a4c7ff6",
+      "type": "module",
+      "module": 3,
+      "children": [
+        "module/3/component/1",
+        "module/3/component/2",
+        "module/3/component/3",
+        "module/3/component/4",
+        "module/3/component/5",
+        "module/3/component/6",
+        "module/3/component/7",
+        "module/3/data_flow/1",
+        "module/3/data_flow/2",
+        "module/3/impl_section/1",
+        "module/3/impl_section/2",
+        "module/3/impl_section/3",
+        "module/3/impl_section/4",
+        "module/3/impl_section/5",
+        "module/3/impl_section/6",
+        "module/3/impl_section/7",
+        "module/3/meta"
+      ]
+    },
+    "module/3/component/1": {
+      "hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/2": {
+      "hash": "c5429a7ca05eaabd0abc68c59e0d341674085d31df4299389198e93f02b45d35",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/3": {
+      "hash": "326aeb71ca94c9294fff8d71532db605adc5198f51607dc671054db0fe9ed0d2",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/4": {
+      "hash": "5fdf56e45a6374ed61fee5a6bd91a2222fb6718227e637b455f02e6524f9d125",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/5": {
+      "hash": "65f44c2339debfff759dada322a59e62b55753afd864e753d90d965da1fb5696",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/6": {
+      "hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/component/7": {
+      "hash": "f4e891916636feacd3321ad6dccee5ac232122abcd8f6739442b1a2b61fe7464",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 3
+    },
+    "module/3/data_flow/1": {
+      "hash": "4efdd362502af700cc09f0d581472b5ea8f4776043b00f01abb528c9d1830f6d",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 3
+    },
+    "module/3/data_flow/2": {
+      "hash": "6329234ec561daa07c9771df83a73aa069d22570fabaf026fa5ee41e7adf99b9",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 3
+    },
+    "module/3/impl_section/1": {
+      "hash": "8146b15acf63400849247923e24b416f2c141fee221edd3268ab6515388cfdb5",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/2": {
+      "hash": "a0b1d38f4db1fcb8b614a829255ffd19b52706452dabbf1a0a577da2029d29da",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/3": {
+      "hash": "8ca7cb7698263540f2056b4e18d846a719176dcc0b88ec0a999795ce7c7ed8a2",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/4": {
+      "hash": "6ed7f04351268ebb39cf908dc36a690aa23d6365614c0980cf35778105e391a6",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/5": {
+      "hash": "6db9f9104119088804ce54cbe38bd025e9ec9c78921a1b386a234db3f4ec7a88",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/6": {
+      "hash": "8dce6a3928bc70e77e547504e8d2e718ec6b67b925518ed2060bb511cfeb4dbf",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/impl_section/7": {
+      "hash": "4e047649e86cc3c993329ed648ee7eed26117ff67a660c68ecee5eca9a9d862f",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 3
+    },
+    "module/3/meta": {
+      "hash": "469b1881eda3dfe74379836e9ea42cec1134d39e41d786912142953243606cf1",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 3
+    },
+    "module/4": {
+      "hash": "e61ff4e8b0493622ee97401ff01b6722552c0afe869ca422f20159416b1da5a0",
+      "type": "module",
+      "module": 4,
+      "children": [
+        "module/4/component/1",
+        "module/4/component/2",
+        "module/4/component/3",
+        "module/4/component/4",
+        "module/4/component/5",
+        "module/4/data_flow/1",
+        "module/4/impl_section/1",
+        "module/4/impl_section/2",
+        "module/4/impl_section/3",
+        "module/4/impl_section/4",
+        "module/4/impl_section/5",
+        "module/4/meta"
+      ]
+    },
+    "module/4/component/1": {
+      "hash": "ef904d037780f278150405d1fc827abf7e6d02e9fa962375d1024992a1788974",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 4
+    },
+    "module/4/component/2": {
+      "hash": "0245d61a4e432254840bdb3ef6b25a9eb009e8dfb0c9a9d5c67e4d7b0c114546",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 4
+    },
+    "module/4/component/3": {
+      "hash": "03f063632e280fa6b806f173a18e90375cf815d3ed3043641ebd7c7c2ac42f26",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 4
+    },
+    "module/4/component/4": {
+      "hash": "ea019aa898922fab60acf981b06b6b34d1cefe6ae31a308e24b36a3568b540b7",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 4
+    },
+    "module/4/component/5": {
+      "hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 4
+    },
+    "module/4/data_flow/1": {
+      "hash": "9a278bacebebc4cf294ee58774d902d5de762c2b678ab5e2ae497008630474a1",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 4
+    },
+    "module/4/impl_section/1": {
+      "hash": "0d4d42adc29eae47a51764a8078035799fe4926a73e3fe0822076846a05eecbb",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 4
+    },
+    "module/4/impl_section/2": {
+      "hash": "ca982a457f8a3bb6c7db9a0199a6769e261b23b122ec239b5fd705af60bc6a39",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 4
+    },
+    "module/4/impl_section/3": {
+      "hash": "60faba9e9d0d437204ca3c84da6c9e6139073a1b50b31c1974de127e259e1bdc",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 4
+    },
+    "module/4/impl_section/4": {
+      "hash": "cbc21baa1f8f6ab727dfdd87a7df9ba020b938fd4a939d681e4c25c018018b99",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 4
+    },
+    "module/4/impl_section/5": {
+      "hash": "221cee68eaaa406aee621e27f657fe0bc82aa0388a2181abc4d1e514d9ec3856",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 4
+    },
+    "module/4/meta": {
+      "hash": "0493e00ff96b4b6006209ff15486378b715ad36c2722af0335f9a72b63239e7f",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 4
+    },
+    "module/5": {
+      "hash": "01ff1fdca36bfd81385f80eeb3cdfab264276f4939fc2f5f10228577f9ac6c9f",
+      "type": "module",
+      "module": 5,
+      "children": [
+        "module/5/component/1",
+        "module/5/component/2",
+        "module/5/component/3",
+        "module/5/component/4",
+        "module/5/component/5",
+        "module/5/component/6",
+        "module/5/data_flow/1",
+        "module/5/impl_section/1",
+        "module/5/impl_section/2",
+        "module/5/impl_section/3",
+        "module/5/impl_section/4",
+        "module/5/impl_section/5",
+        "module/5/impl_section/6",
+        "module/5/meta"
+      ]
+    },
+    "module/5/component/1": {
+      "hash": "cfc26a324b3a875511dc769179cdf6967e77f793a0fd317ad9d479da5533cd4b",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/component/2": {
+      "hash": "826c29d8d35ecdd0bf8de619146431aacfadefc4adfacddf8209325cbdc1e7ce",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/component/3": {
+      "hash": "cfe1f2ff32c511dc895d3cbedc0006000c053036c232f93b2f466d8a8aca7149",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/component/4": {
+      "hash": "33d47a041aa5477be7e5c0c5aad89efc99112a2967cbc1bddc03913a6417118b",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/component/5": {
+      "hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/component/6": {
+      "hash": "c4937ca4e44b4ca907b64d87ab7584f976ae4e098e6773a1f4155999c9028d21",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 5
+    },
+    "module/5/data_flow/1": {
+      "hash": "b558e88f2909b319fbe0614a1a106e09da7a4aed5f1d78f59415ab1d1a24d0f0",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 5
+    },
+    "module/5/impl_section/1": {
+      "hash": "d1ecf792017a1688b3f1a24607e59dad6fdb09fe9d15f4dc495aa5a9e744206a",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/impl_section/2": {
+      "hash": "4390aa55afece4054b1a7bc2c95bbdd2c9bed1bfcb6dae1a06af23665a9497c9",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/impl_section/3": {
+      "hash": "75d00e4d5a1bfed17285cc8196e9a7f9dcf37376bac38a105c3f0e955cfabaae",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/impl_section/4": {
+      "hash": "b27030d114b1f648fc3d647c8e4df7049b7cf5046fcbe43c92923b2ed2cd3e10",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/impl_section/5": {
+      "hash": "9c740160ab6a16f4ec6f49f5b42c135ad392ee78157ef893aee85ea42e8bf99a",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/impl_section/6": {
+      "hash": "f7aebb3bff5fa0a23fa176574e3c3b0c42d16ea45483b224bee20a4cb54fbc6f",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 5
+    },
+    "module/5/meta": {
+      "hash": "af10d650f8b7191d92a22871025500d064f25972dd41883be6f107045985f184",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 5
+    },
+    "module/6": {
+      "hash": "c986aa31772ac4a201f969f767e6fd071e6f311c9937874cf0d9d8c273d6f916",
+      "type": "module",
+      "module": 6,
+      "children": [
+        "module/6/component/1",
+        "module/6/component/2",
+        "module/6/component/3",
+        "module/6/component/4",
+        "module/6/data_flow/1",
+        "module/6/impl_section/1",
+        "module/6/impl_section/2",
+        "module/6/impl_section/3",
+        "module/6/impl_section/4",
+        "module/6/meta"
+      ]
+    },
+    "module/6/component/1": {
+      "hash": "bd785d2cfa6d2ad8e77567e9eab84ed74bffaf42a1eb192c299d67bc978c16dc",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 6
+    },
+    "module/6/component/2": {
+      "hash": "e9588013113734f667dc0ee130b4cae7658b462c6cb56f9d647859d716107679",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 6
+    },
+    "module/6/component/3": {
+      "hash": "b68cf00d0f93d2e0cd99b8e9dd99cf9798955617d247a4b29b69495c83e8c6a5",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 6
+    },
+    "module/6/component/4": {
+      "hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 6
+    },
+    "module/6/data_flow/1": {
+      "hash": "db25a6c3891a913aca16dbba61b34311afcdf98f85719567af9408e7b00cda83",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 6
+    },
+    "module/6/impl_section/1": {
+      "hash": "a8ed7c365325fa1808314890f15caa5713d0307bf8fc71707e6b071e32a4af7c",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 6
+    },
+    "module/6/impl_section/2": {
+      "hash": "014459859bf2541edda6def472bea3925fefe60f4e09573e3144f8252950e3d9",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 6
+    },
+    "module/6/impl_section/3": {
+      "hash": "70331a5608bda0986b6b9dc9c8e166fe96035f4f713e9aec8d96c1f36b186e36",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 6
+    },
+    "module/6/impl_section/4": {
+      "hash": "517b117d7f1ac9bca6f46e453393bbaa9ffe00de5f54a5fc468367863691a3bd",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 6
+    },
+    "module/6/meta": {
+      "hash": "1469b887f68f235d4c53a224449bde7994d109fcad34bf6efa3f0e943731ffbe",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 6
+    },
+    "module/7": {
+      "hash": "669f2f87e5ad29f49212e636dc87b158af2c290ae8349d841078d54fee371b8a",
+      "type": "module",
+      "module": 7,
+      "children": [
+        "module/7/component/1",
+        "module/7/component/2",
+        "module/7/component/3",
+        "module/7/component/4",
+        "module/7/component/5",
+        "module/7/data_flow/1",
+        "module/7/impl_section/1",
+        "module/7/impl_section/2",
+        "module/7/impl_section/3",
+        "module/7/impl_section/4",
+        "module/7/impl_section/5",
+        "module/7/meta"
+      ]
+    },
+    "module/7/component/1": {
+      "hash": "e94f5e3b500c041e4b6d3502a9bfa303940f36904a6503528514c54629bb5d0a",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 7
+    },
+    "module/7/component/2": {
+      "hash": "063c8b721674d6951c7932dbde4b78a4c681e3823e3e93dd343246a74f628e13",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 7
+    },
+    "module/7/component/3": {
+      "hash": "3a4ba76100ea99d0b802850c05551afbfe5250ce3009d4af5aed548d09fa680d",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 7
+    },
+    "module/7/component/4": {
+      "hash": "15267bb5b3bb0b07465cc444d61f9d9fe39c08f01686405fe45374f67ea0bea9",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 7
+    },
+    "module/7/component/5": {
+      "hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 7
+    },
+    "module/7/data_flow/1": {
+      "hash": "739fe78a0f2cd65d6991e4c0188868dac0f0a699574f6e6fb3978ca45c9012bb",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 7
+    },
+    "module/7/impl_section/1": {
+      "hash": "91baca45a96b509a24b0cb93911c72c6b24439148594d97271cbfb8e19ceb3af",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 7
+    },
+    "module/7/impl_section/2": {
+      "hash": "2333d81122f1f51b557393161676db04c77b98f7de5b4510a5c7810dbc3bcc14",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 7
+    },
+    "module/7/impl_section/3": {
+      "hash": "93537f16e2f3a84ae8aeea13ae53ac5452630ada5882b32ed55a1eb5724c71d4",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 7
+    },
+    "module/7/impl_section/4": {
+      "hash": "7ddcd34b5a08fcdc8929f473f7ddaf49234cba0c532c7d49d360daf0c233583c",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 7
+    },
+    "module/7/impl_section/5": {
+      "hash": "6a165472ee31433189b26aa3157f41d143b2fcbde477ba7ad3544ca432e4e26c",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 7
+    },
+    "module/7/meta": {
+      "hash": "5d7423024e24615760086876eeb7879c9f0c7da6b38399fe3e56bc2789b52502",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 7
+    },
+    "module/8": {
+      "hash": "e10a9f299139c16784c71a05f3e501074da0bd4957dba7dcb7fac11f639a4483",
+      "type": "module",
+      "module": 8,
+      "children": [
+        "module/8/component/1",
+        "module/8/component/2",
+        "module/8/data_flow/1",
+        "module/8/impl_section/1",
+        "module/8/impl_section/2",
+        "module/8/meta"
+      ]
+    },
+    "module/8/component/1": {
+      "hash": "99e0160f486c344a40609a6fb36e71de118145283c5769ed5779367ba3a17417",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 8
+    },
+    "module/8/component/2": {
+      "hash": "ef2ea5ff511d960077ca5fe7380dd94c754b1a244fe9fce8bc5458b168fbd466",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 8
+    },
+    "module/8/data_flow/1": {
+      "hash": "bd7d7802a146538b5729834b3a6d15f1d37fe725663df65a64b5d543dc57238a",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 8
+    },
+    "module/8/impl_section/1": {
+      "hash": "6228b9bf146ab2c64f8b1f3f7ba39c6732bd202f73d8822f4f7f5c1d67bfc406",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 8
+    },
+    "module/8/impl_section/2": {
+      "hash": "121c11375df8e9acd5cd8573b58bcdeb467d36198096b2047baac283cbbd00a2",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 8
+    },
+    "module/8/meta": {
+      "hash": "9bbff41e7283c121a74d5fc9dc135889fca8b1fedefffa132b777bce33605360",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 8
+    },
+    "module/9": {
+      "hash": "57e7f98809b357b69742e540386b1372cc79d087c92b0ac00bc7ef5d50ab4395",
+      "type": "module",
+      "module": 9,
+      "children": [
+        "module/9/component/1",
+        "module/9/component/2",
+        "module/9/component/3",
+        "module/9/data_flow/1",
+        "module/9/data_flow/2",
+        "module/9/impl_section/1",
+        "module/9/impl_section/2",
+        "module/9/impl_section/3",
+        "module/9/impl_section/4",
+        "module/9/meta"
+      ]
+    },
+    "module/9/component/1": {
+      "hash": "07a4e3de9d7883c8c0c62164f760c8fe0f67e85c22f605b62bb8055a8c2e9895",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 9
+    },
+    "module/9/component/2": {
+      "hash": "c6e5eac67278f33c1d663402d1d016927e687d0b49016b8a30bd958c33a515fe",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 9
+    },
+    "module/9/component/3": {
+      "hash": "21fad5e0adb0805a21819467966d6e86f0adcfc4a02e64efed7f584c157f6eb5",
+      "type": "leaf",
+      "node_type": "component",
+      "module": 9
+    },
+    "module/9/data_flow/1": {
+      "hash": "d9def6f9d947b679f5eef136419b1e2f7e812a29d9ea8d0e2f8bd028be0fba1b",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 9
+    },
+    "module/9/data_flow/2": {
+      "hash": "15ef6f88f169910b9e6c53a7df904bca9e83b7abce93b568592454a851cc2789",
+      "type": "leaf",
+      "node_type": "data_flow",
+      "module": 9
+    },
+    "module/9/impl_section/1": {
+      "hash": "110d312ca39ce8ed525617cb9c0dbeeda470c269ebd556c9681a856c4cec5d91",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 9
+    },
+    "module/9/impl_section/2": {
+      "hash": "3199762457e3b1f3166eb8d5f52728f92940b2c25ac26ae1054828e6703432b3",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 9
+    },
+    "module/9/impl_section/3": {
+      "hash": "58fff3a5375f5773f619916deb5e2005b00698f95f13e060c3089d5ebae98829",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 9
+    },
+    "module/9/impl_section/4": {
+      "hash": "b8da5b46cbaed1360e75065212a1ac76f42b7e3bf26ee095b49c28f2e3344c7e",
+      "type": "leaf",
+      "node_type": "impl_section",
+      "module": 9
+    },
+    "module/9/meta": {
+      "hash": "9f6aa21294efcb4f8b6d6d2fedce62700e4b617c39472d59873bdfed354586fc",
+      "type": "leaf",
+      "node_type": "meta",
+      "module": 9
+    },
+    "project": {
+      "hash": "3b8f019bb790b9e392c363fcfe787fdc11dfb3557930ae40227649a3e1c3183c",
       "type": "project",
       "children": [
-        "spex-machina/project.json",
-        "spex-machina/schema",
-        "spex-machina/validator",
-        "spex-machina/merkle",
-        "spex-machina/impact",
-        "spex-machina/apply",
-        "spex-machina/proposal",
-        "spex-machina/render"
+        "project/meta",
+        "module/1",
+        "module/2",
+        "module/3",
+        "module/4",
+        "module/5",
+        "module/6",
+        "module/7",
+        "module/8",
+        "module/9"
       ]
     },
-    "spex-machina/apply": {
-      "hash": "0e48d9f00d4e8abcb7363c803fe23f53ce9739396b386606fb442f8f72e9b091",
-      "type": "module",
-      "children": [
-        "spex-machina/apply/module.json",
-        "spex-machina/apply/arch",
-        "spex-machina/apply/impl",
-        "spex-machina/apply/flow"
-      ]
-    },
-    "spex-machina/apply/arch": {
-      "hash": "a419810111dabc597d8729022645a4defee3cdaa4bab2e96a292cd2cf57758ab",
-      "type": "arch",
-      "children": [
-        "spex-machina/apply/arch/arch_apply_command.md",
-        "spex-machina/apply/arch/arch_bead_closer.md",
-        "spex-machina/apply/arch/arch_bead_creator.md",
-        "spex-machina/apply/arch/arch_bead_updater.md",
-        "spex-machina/apply/arch/arch_proposal_tagger.md",
-        "spex-machina/apply/arch/arch_snapshot_saver.md"
-      ]
-    },
-    "spex-machina/apply/arch/arch_apply_command.md": {
-      "hash": "c4937ca4e44b4ca907b64d87ab7584f976ae4e098e6773a1f4155999c9028d21",
-      "type": "leaf"
-    },
-    "spex-machina/apply/arch/arch_bead_closer.md": {
-      "hash": "90a166783bced7d37b61499af377c4f0ff49c98ad3cfcec72788a98e0464b810",
-      "type": "leaf"
-    },
-    "spex-machina/apply/arch/arch_bead_creator.md": {
-      "hash": "93166746b302b9789a633060b6a92f69bb717f18bde53535ca00117900d4dc52",
-      "type": "leaf"
-    },
-    "spex-machina/apply/arch/arch_bead_updater.md": {
-      "hash": "dc65d1f0c1eb27c6f7c1362f24e8243b619e5006bf07b89b0b103341a46cfd42",
-      "type": "leaf"
-    },
-    "spex-machina/apply/arch/arch_proposal_tagger.md": {
-      "hash": "33d47a041aa5477be7e5c0c5aad89efc99112a2967cbc1bddc03913a6417118b",
-      "type": "leaf"
-    },
-    "spex-machina/apply/arch/arch_snapshot_saver.md": {
-      "hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3",
-      "type": "leaf"
-    },
-    "spex-machina/apply/flow": {
-      "hash": "6248d88364f196d4cafe96bc1d5aad80cf08ddf5ed755087e3f017abfff67d20",
-      "type": "flow",
-      "children": [
-        "spex-machina/apply/flow/flow_apply.md"
-      ]
-    },
-    "spex-machina/apply/flow/flow_apply.md": {
-      "hash": "744e23d4dff052a782806073bd5c0233a806af1030d14bf229a245dfcbe7ff86",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl": {
-      "hash": "f2a9df45a6f3c3b2ef71651a64ed708ad4b3032d5674c1c915555e091563325d",
-      "type": "impl",
-      "children": [
-        "spex-machina/apply/impl/impl_apply_command.md",
-        "spex-machina/apply/impl/impl_bead_closure.md",
-        "spex-machina/apply/impl/impl_bead_creation.md",
-        "spex-machina/apply/impl/impl_metadata_update.md",
-        "spex-machina/apply/impl/impl_proposal_tagging.md",
-        "spex-machina/apply/impl/impl_snapshot_saving.md"
-      ]
-    },
-    "spex-machina/apply/impl/impl_apply_command.md": {
-      "hash": "f7aebb3bff5fa0a23fa176574e3c3b0c42d16ea45483b224bee20a4cb54fbc6f",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl/impl_bead_closure.md": {
-      "hash": "7330a1c051e280b96a36bd5a88734a514657b3b8e8cdb27be6ce90252abc37ee",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl/impl_bead_creation.md": {
-      "hash": "a52dbd4959d45d97bd29f9f82bcaa3027b7f7d74d41d0e770c54789d17aae254",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl/impl_metadata_update.md": {
-      "hash": "94acea948d060806a5cd9fba75b02c9aa7c155b8c8e8ff191a164e1e676f87db",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl/impl_proposal_tagging.md": {
-      "hash": "b27030d114b1f648fc3d647c8e4df7049b7cf5046fcbe43c92923b2ed2cd3e10",
-      "type": "leaf"
-    },
-    "spex-machina/apply/impl/impl_snapshot_saving.md": {
-      "hash": "9c740160ab6a16f4ec6f49f5b42c135ad392ee78157ef893aee85ea42e8bf99a",
-      "type": "leaf"
-    },
-    "spex-machina/apply/module.json": {
-      "hash": "af88a9d4635f0cb0af10d3204b483f75c7281f94b56287e66293accb6832ab7b",
-      "type": "leaf"
-    },
-    "spex-machina/impact": {
-      "hash": "3c60ae2796bbc520c4f634105ae0215f5b07ffc26f4b5e01330692104151145f",
-      "type": "module",
-      "children": [
-        "spex-machina/impact/module.json",
-        "spex-machina/impact/arch",
-        "spex-machina/impact/impl",
-        "spex-machina/impact/flow"
-      ]
-    },
-    "spex-machina/impact/arch": {
-      "hash": "e9128df088267d92b9af84ea017c7f7fe27333f87e99e0b81e69474f83659c10",
-      "type": "arch",
-      "children": [
-        "spex-machina/impact/arch/arch_action_classifier.md",
-        "spex-machina/impact/arch/arch_bead_reader.md",
-        "spex-machina/impact/arch/arch_impact_command.md",
-        "spex-machina/impact/arch/arch_node_matcher.md",
-        "spex-machina/impact/arch/arch_report_generator.md"
-      ]
-    },
-    "spex-machina/impact/arch/arch_action_classifier.md": {
-      "hash": "03f063632e280fa6b806f173a18e90375cf815d3ed3043641ebd7c7c2ac42f26",
-      "type": "leaf"
-    },
-    "spex-machina/impact/arch/arch_bead_reader.md": {
-      "hash": "2e03f7dd876c2559e3f90667ed658bacc11a86d5b05e186c366c9c70668cb0be",
-      "type": "leaf"
-    },
-    "spex-machina/impact/arch/arch_impact_command.md": {
-      "hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28",
-      "type": "leaf"
-    },
-    "spex-machina/impact/arch/arch_node_matcher.md": {
-      "hash": "b0c54355a616db603b78fd15f39cd87234190370e50becb33c0f6e9d8ed4aa9b",
-      "type": "leaf"
-    },
-    "spex-machina/impact/arch/arch_report_generator.md": {
-      "hash": "ea019aa898922fab60acf981b06b6b34d1cefe6ae31a308e24b36a3568b540b7",
-      "type": "leaf"
-    },
-    "spex-machina/impact/flow": {
-      "hash": "9d445a8998ff7f487a42cab821b08a118ed14a68853494ca966437ac607e6962",
-      "type": "flow",
-      "children": [
-        "spex-machina/impact/flow/flow_impact_analysis.md"
-      ]
-    },
-    "spex-machina/impact/flow/flow_impact_analysis.md": {
-      "hash": "9a278bacebebc4cf294ee58774d902d5de762c2b678ab5e2ae497008630474a1",
-      "type": "leaf"
-    },
-    "spex-machina/impact/impl": {
-      "hash": "23f5b2bbf3ec40779605773637951277aaebcac960bf4e94719048871e13042a",
-      "type": "impl",
-      "children": [
-        "spex-machina/impact/impl/impl_action_classification.md",
-        "spex-machina/impact/impl/impl_bead_reading.md",
-        "spex-machina/impact/impl/impl_impact_command.md",
-        "spex-machina/impact/impl/impl_node_matching.md",
-        "spex-machina/impact/impl/impl_report_format.md"
-      ]
-    },
-    "spex-machina/impact/impl/impl_action_classification.md": {
-      "hash": "60faba9e9d0d437204ca3c84da6c9e6139073a1b50b31c1974de127e259e1bdc",
-      "type": "leaf"
-    },
-    "spex-machina/impact/impl/impl_bead_reading.md": {
-      "hash": "9b8fb3e0a7270f80b0838492ddafb54f409ad3cad2a61d825d4187314cbb5c2f",
-      "type": "leaf"
-    },
-    "spex-machina/impact/impl/impl_impact_command.md": {
-      "hash": "221cee68eaaa406aee621e27f657fe0bc82aa0388a2181abc4d1e514d9ec3856",
-      "type": "leaf"
-    },
-    "spex-machina/impact/impl/impl_node_matching.md": {
-      "hash": "d7bf214174e4d73e5faedf3ded67213e59af195efb3d4969129a8bb2743cadad",
-      "type": "leaf"
-    },
-    "spex-machina/impact/impl/impl_report_format.md": {
-      "hash": "cbc21baa1f8f6ab727dfdd87a7df9ba020b938fd4a939d681e4c25c018018b99",
-      "type": "leaf"
-    },
-    "spex-machina/impact/module.json": {
-      "hash": "eb1d6ffa4d33e7036ebc091e9967cdc659ec52cabdcfa9cef3c636e08dacf299",
-      "type": "leaf"
-    },
-    "spex-machina/merkle": {
-      "hash": "6dd197d4a4b9c8a07f99258701a69c4b70c8ea8279fff9df0b24fcea453cc7ab",
-      "type": "module",
-      "children": [
-        "spex-machina/merkle/module.json",
-        "spex-machina/merkle/arch",
-        "spex-machina/merkle/impl",
-        "spex-machina/merkle/flow"
-      ]
-    },
-    "spex-machina/merkle/arch": {
-      "hash": "c83f5117a927de5c137262cf471ad7101f1008fc64538e66243f0a8a59e0b197",
-      "type": "arch",
-      "children": [
-        "spex-machina/merkle/arch/arch_diff_command.md",
-        "spex-machina/merkle/arch/arch_diff_engine.md",
-        "spex-machina/merkle/arch/arch_hash_command.md",
-        "spex-machina/merkle/arch/arch_hasher.md",
-        "spex-machina/merkle/arch/arch_impact_classifier.md",
-        "spex-machina/merkle/arch/arch_snapshot_store.md",
-        "spex-machina/merkle/arch/arch_tree_builder.md"
-      ]
-    },
-    "spex-machina/merkle/arch/arch_diff_command.md": {
-      "hash": "f4e891916636feacd3321ad6dccee5ac232122abcd8f6739442b1a2b61fe7464",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_diff_engine.md": {
-      "hash": "69f39f281907423d1ae92bdac725b56bc30e62fe55c992fdf50a7d3c36e65a71",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_hash_command.md": {
-      "hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_hasher.md": {
-      "hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_impact_classifier.md": {
-      "hash": "eba753b76e761f34952b948f3cd0eea6bc7352229ebf9e6094149b9d818d8a4e",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_snapshot_store.md": {
-      "hash": "65c79ae4225865ee9c3d49d8911140a39257aa1950f96197eed8a61e84de449f",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/arch/arch_tree_builder.md": {
-      "hash": "adad3c8db5dc53d4e777066e619fd70c219f269f569659fe5600863570b9a1eb",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/flow": {
-      "hash": "7a55c1e355ad750f0b3e556d7ef7c825519fae61bb676d8fb8381b93a147d224",
-      "type": "flow",
-      "children": [
-        "spex-machina/merkle/flow/flow_diff_classification.md",
-        "spex-machina/merkle/flow/flow_hash_computation.md"
-      ]
-    },
-    "spex-machina/merkle/flow/flow_diff_classification.md": {
-      "hash": "545626527d5a9fa74b27eb6e9e4ca9e17b055a6e8717304dee866eb56ef45923",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/flow/flow_hash_computation.md": {
-      "hash": "4efdd362502af700cc09f0d581472b5ea8f4776043b00f01abb528c9d1830f6d",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl": {
-      "hash": "a5c5ba3991d5a6245fe862ad8a98eca6bf43335eb8d18c352744cb257e8d7d8b",
-      "type": "impl",
-      "children": [
-        "spex-machina/merkle/impl/impl_diff_algorithm.md",
-        "spex-machina/merkle/impl/impl_diff_command.md",
-        "spex-machina/merkle/impl/impl_hash_command.md",
-        "spex-machina/merkle/impl/impl_hash_computation.md",
-        "spex-machina/merkle/impl/impl_impact_classification.md",
-        "spex-machina/merkle/impl/impl_snapshot_format.md",
-        "spex-machina/merkle/impl/impl_tree_construction.md"
-      ]
-    },
-    "spex-machina/merkle/impl/impl_diff_algorithm.md": {
-      "hash": "b942e481dfd10b36f15bb9c224a4f0445d5c336ae952bac7fe269c4cc46fa290",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_diff_command.md": {
-      "hash": "4e047649e86cc3c993329ed648ee7eed26117ff67a660c68ecee5eca9a9d862f",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_hash_command.md": {
-      "hash": "8dce6a3928bc70e77e547504e8d2e718ec6b67b925518ed2060bb511cfeb4dbf",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_hash_computation.md": {
-      "hash": "8146b15acf63400849247923e24b416f2c141fee221edd3268ab6515388cfdb5",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_impact_classification.md": {
-      "hash": "9850c4f4a6dbdf2569415353a741bd78fa86ae086521764c86bac2efb8bdf5cf",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_snapshot_format.md": {
-      "hash": "4310fa094658c6224c5491bb194b972535c9d7d5b31c9819b8a5d896691f2ded",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/impl/impl_tree_construction.md": {
-      "hash": "0a1625eb7d6c5098139d70cb09660adee44909b4338c69acb6d20ccd153ae619",
-      "type": "leaf"
-    },
-    "spex-machina/merkle/module.json": {
-      "hash": "fc2da2f84fdc7fd2bf05c7f413f5d984ef4c256c8982e97df5a3f06f7019dc82",
-      "type": "leaf"
-    },
-    "spex-machina/project.json": {
-      "hash": "7667b034155da7ab83d77dfbbb6fac5c19ef9d7d07933aa9dc50e34b8707d444",
-      "type": "leaf"
-    },
-    "spex-machina/proposal": {
-      "hash": "c981f50038dd452aae9abf653b972f09ae6170cda5698b286640a885cdd6af4d",
-      "type": "module",
-      "children": [
-        "spex-machina/proposal/module.json",
-        "spex-machina/proposal/arch",
-        "spex-machina/proposal/impl",
-        "spex-machina/proposal/flow"
-      ]
-    },
-    "spex-machina/proposal/arch": {
-      "hash": "539dc045d6adeb08d30eed1f702eed8c08c5e9c9e7acddcdf6dee423c6c0e16f",
-      "type": "arch",
-      "children": [
-        "spex-machina/proposal/arch/arch_history_viewer.md",
-        "spex-machina/proposal/arch/arch_proposal_commands.md",
-        "spex-machina/proposal/arch/arch_registrar.md",
-        "spex-machina/proposal/arch/arch_template_provider.md"
-      ]
-    },
-    "spex-machina/proposal/arch/arch_history_viewer.md": {
-      "hash": "e9588013113734f667dc0ee130b4cae7658b462c6cb56f9d647859d716107679",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/arch/arch_proposal_commands.md": {
-      "hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/arch/arch_registrar.md": {
-      "hash": "bd785d2cfa6d2ad8e77567e9eab84ed74bffaf42a1eb192c299d67bc978c16dc",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/arch/arch_template_provider.md": {
-      "hash": "b68cf00d0f93d2e0cd99b8e9dd99cf9798955617d247a4b29b69495c83e8c6a5",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/flow": {
-      "hash": "1ffe2217e84bf800ae0c7c5313f669e4cd659a4d0b3726c4e89057b718f1de79",
-      "type": "flow",
-      "children": [
-        "spex-machina/proposal/flow/flow_proposal_lifecycle.md"
-      ]
-    },
-    "spex-machina/proposal/flow/flow_proposal_lifecycle.md": {
-      "hash": "db25a6c3891a913aca16dbba61b34311afcdf98f85719567af9408e7b00cda83",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/impl": {
-      "hash": "cac7bd0696751f7bd08b14fb4ec729038739572901650338089970da92356493",
-      "type": "impl",
-      "children": [
-        "spex-machina/proposal/impl/impl_history_tracking.md",
-        "spex-machina/proposal/impl/impl_proposal_commands.md",
-        "spex-machina/proposal/impl/impl_registration.md",
-        "spex-machina/proposal/impl/impl_template_management.md"
-      ]
-    },
-    "spex-machina/proposal/impl/impl_history_tracking.md": {
-      "hash": "014459859bf2541edda6def472bea3925fefe60f4e09573e3144f8252950e3d9",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/impl/impl_proposal_commands.md": {
-      "hash": "517b117d7f1ac9bca6f46e453393bbaa9ffe00de5f54a5fc468367863691a3bd",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/impl/impl_registration.md": {
-      "hash": "a8ed7c365325fa1808314890f15caa5713d0307bf8fc71707e6b071e32a4af7c",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/impl/impl_template_management.md": {
-      "hash": "70331a5608bda0986b6b9dc9c8e166fe96035f4f713e9aec8d96c1f36b186e36",
-      "type": "leaf"
-    },
-    "spex-machina/proposal/module.json": {
-      "hash": "51a3085c83cb4c049e68dba97535045b541823e14d2afa54a27952baf5ff085a",
-      "type": "leaf"
-    },
-    "spex-machina/render": {
-      "hash": "74623939c3991b9c54be1f2cc11be66cb27e2b3a1333061db009b354a42d5deb",
-      "type": "module",
-      "children": [
-        "spex-machina/render/module.json",
-        "spex-machina/render/arch",
-        "spex-machina/render/impl",
-        "spex-machina/render/flow"
-      ]
-    },
-    "spex-machina/render/arch": {
-      "hash": "64d05ddf2ce9d6557f93025dcb74989a898d16ebb389b75df453661035f79a6d",
-      "type": "arch",
-      "children": [
-        "spex-machina/render/arch/arch_dot_renderer.md",
-        "spex-machina/render/arch/arch_json_renderer.md",
-        "spex-machina/render/arch/arch_markdown_renderer.md",
-        "spex-machina/render/arch/arch_render_command.md",
-        "spex-machina/render/arch/arch_spec_reader.md"
-      ]
-    },
-    "spex-machina/render/arch/arch_dot_renderer.md": {
-      "hash": "3a4ba76100ea99d0b802850c05551afbfe5250ce3009d4af5aed548d09fa680d",
-      "type": "leaf"
-    },
-    "spex-machina/render/arch/arch_json_renderer.md": {
-      "hash": "15267bb5b3bb0b07465cc444d61f9d9fe39c08f01686405fe45374f67ea0bea9",
-      "type": "leaf"
-    },
-    "spex-machina/render/arch/arch_markdown_renderer.md": {
-      "hash": "063c8b721674d6951c7932dbde4b78a4c681e3823e3e93dd343246a74f628e13",
-      "type": "leaf"
-    },
-    "spex-machina/render/arch/arch_render_command.md": {
-      "hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a",
-      "type": "leaf"
-    },
-    "spex-machina/render/arch/arch_spec_reader.md": {
-      "hash": "e94f5e3b500c041e4b6d3502a9bfa303940f36904a6503528514c54629bb5d0a",
-      "type": "leaf"
-    },
-    "spex-machina/render/flow": {
-      "hash": "f990a55219504330328c06c83dfb0bda4479ab15b5ba8e15a1cc164ac075a889",
-      "type": "flow",
-      "children": [
-        "spex-machina/render/flow/flow_render_pipeline.md"
-      ]
-    },
-    "spex-machina/render/flow/flow_render_pipeline.md": {
-      "hash": "739fe78a0f2cd65d6991e4c0188868dac0f0a699574f6e6fb3978ca45c9012bb",
-      "type": "leaf"
-    },
-    "spex-machina/render/impl": {
-      "hash": "71addffd47456c172b6e0e8912dfa9649215bd956aeb393a2477faede511d0ba",
-      "type": "impl",
-      "children": [
-        "spex-machina/render/impl/impl_dot_generation.md",
-        "spex-machina/render/impl/impl_json_serialization.md",
-        "spex-machina/render/impl/impl_markdown_rendering.md",
-        "spex-machina/render/impl/impl_render_command.md",
-        "spex-machina/render/impl/impl_spec_reading.md"
-      ]
-    },
-    "spex-machina/render/impl/impl_dot_generation.md": {
-      "hash": "93537f16e2f3a84ae8aeea13ae53ac5452630ada5882b32ed55a1eb5724c71d4",
-      "type": "leaf"
-    },
-    "spex-machina/render/impl/impl_json_serialization.md": {
-      "hash": "7ddcd34b5a08fcdc8929f473f7ddaf49234cba0c532c7d49d360daf0c233583c",
-      "type": "leaf"
-    },
-    "spex-machina/render/impl/impl_markdown_rendering.md": {
-      "hash": "2333d81122f1f51b557393161676db04c77b98f7de5b4510a5c7810dbc3bcc14",
-      "type": "leaf"
-    },
-    "spex-machina/render/impl/impl_render_command.md": {
-      "hash": "6a165472ee31433189b26aa3157f41d143b2fcbde477ba7ad3544ca432e4e26c",
-      "type": "leaf"
-    },
-    "spex-machina/render/impl/impl_spec_reading.md": {
-      "hash": "91baca45a96b509a24b0cb93911c72c6b24439148594d97271cbfb8e19ceb3af",
-      "type": "leaf"
-    },
-    "spex-machina/render/module.json": {
-      "hash": "bb27a9e132617767aee6a08ae5ef577d7d2c7e7707032a2e55cdb3ec75e2025c",
-      "type": "leaf"
-    },
-    "spex-machina/schema": {
-      "hash": "deafeac4c08e29d3312d227615c4e30c32f55a00e87b7beda014253ef60fce0f",
-      "type": "module",
-      "children": [
-        "spex-machina/schema/module.json",
-        "spex-machina/schema/arch",
-        "spex-machina/schema/impl"
-      ]
-    },
-    "spex-machina/schema/arch": {
-      "hash": "5dd7911fcf73dd65f9dd5327b62b98701a9b109e67d4db001b0eb7627c7deda5",
-      "type": "arch",
-      "children": [
-        "spex-machina/schema/arch/arch_module_schema.md",
-        "spex-machina/schema/arch/arch_project_schema.md",
-        "spex-machina/schema/arch/arch_schema_loader.md"
-      ]
-    },
-    "spex-machina/schema/arch/arch_module_schema.md": {
-      "hash": "6c88e38b9e315cd388a94cf676974f6b400ef671c8ae27ed92378faf4378aa19",
-      "type": "leaf"
-    },
-    "spex-machina/schema/arch/arch_project_schema.md": {
-      "hash": "d8c479f9fe0c04d3a678d519a44917e83047095eda9ae169b71162c28fc261db",
-      "type": "leaf"
-    },
-    "spex-machina/schema/arch/arch_schema_loader.md": {
-      "hash": "6c9e1bdc39b9cc81498b18e516acaf5011f36b61896a3df6fa18b34fcf777d96",
-      "type": "leaf"
-    },
-    "spex-machina/schema/impl": {
-      "hash": "1e2ccb9a22e2916e9f0e72820f8f65844578c24817b4a0d6cfc702ecc06b135a",
-      "type": "impl",
-      "children": [
-        "spex-machina/schema/impl/impl_go_embedding.md",
-        "spex-machina/schema/impl/impl_schema_definitions.md"
-      ]
-    },
-    "spex-machina/schema/impl/impl_go_embedding.md": {
-      "hash": "fdc65ff190dc9d0c05b8777e14f0e5e7eaa9c74206a95a0e274988e45e92f055",
-      "type": "leaf"
-    },
-    "spex-machina/schema/impl/impl_schema_definitions.md": {
-      "hash": "32431b4f09f657bc48a775136d250f901a20e1293d1758f46d2cfe75814bc476",
-      "type": "leaf"
-    },
-    "spex-machina/schema/module.json": {
-      "hash": "ec70abed6dca1c9f3c5a2a938678a11872321d4429667732ae612eced052d67d",
-      "type": "leaf"
-    },
-    "spex-machina/validator": {
-      "hash": "eb703868fb1391b790f0fa53fe5886dfd41162db9b633695db325824feefadc4",
-      "type": "module",
-      "children": [
-        "spex-machina/validator/module.json",
-        "spex-machina/validator/arch",
-        "spex-machina/validator/impl",
-        "spex-machina/validator/flow"
-      ]
-    },
-    "spex-machina/validator/arch": {
-      "hash": "0f0b3d8b6a9f7940e7b06f6aa070b4bfa1d65f86a476a9c070ac789ece356cb2",
-      "type": "arch",
-      "children": [
-        "spex-machina/validator/arch/arch_content_resolver.md",
-        "spex-machina/validator/arch/arch_dag_checker.md",
-        "spex-machina/validator/arch/arch_error_reporter.md",
-        "spex-machina/validator/arch/arch_id_validator.md",
-        "spex-machina/validator/arch/arch_name_consistency_checker.md",
-        "spex-machina/validator/arch/arch_orphan_detector.md",
-        "spex-machina/validator/arch/arch_schema_checker.md",
-        "spex-machina/validator/arch/arch_validate_command.md"
-      ]
-    },
-    "spex-machina/validator/arch/arch_content_resolver.md": {
-      "hash": "ad79d81e82fff86dacba258a142a51e3967d865f720871c67d07b27950b5e238",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_dag_checker.md": {
-      "hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_error_reporter.md": {
-      "hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_id_validator.md": {
-      "hash": "4d8c56545bb01486d9f224665ccb01b2a17e25361fe7b48b5407e50564ab0ed9",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_name_consistency_checker.md": {
-      "hash": "77d5810f55d05c3abad7828c9ee3325d6fd61bf50c6c84029beff915fa33d1a9",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_orphan_detector.md": {
-      "hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_schema_checker.md": {
-      "hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3",
-      "type": "leaf"
-    },
-    "spex-machina/validator/arch/arch_validate_command.md": {
-      "hash": "8e5a6ebe08c92aaf678e6223e70a4527ae6ef8d00c498517308923d89cc318ed",
-      "type": "leaf"
-    },
-    "spex-machina/validator/flow": {
-      "hash": "7f1438adc0f542e59af7daf6bc9ae762bf4c63b72204a89ac0badfa5f534ef55",
-      "type": "flow",
-      "children": [
-        "spex-machina/validator/flow/flow_validation_pipeline.md"
-      ]
-    },
-    "spex-machina/validator/flow/flow_validation_pipeline.md": {
-      "hash": "452350833a58e7efdca43dc5e35f019576c0f15dd78d735f747ce01011f63644",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl": {
-      "hash": "8a9199b6eca2d90a8aac130774efee57fd097d6950cea7243fff610df5928fad",
-      "type": "impl",
-      "children": [
-        "spex-machina/validator/impl/impl_content_resolution.md",
-        "spex-machina/validator/impl/impl_cycle_detection.md",
-        "spex-machina/validator/impl/impl_error_output.md",
-        "spex-machina/validator/impl/impl_id_validation.md",
-        "spex-machina/validator/impl/impl_name_consistency.md",
-        "spex-machina/validator/impl/impl_orphan_detection.md",
-        "spex-machina/validator/impl/impl_schema_validation.md",
-        "spex-machina/validator/impl/impl_validate_command.md"
-      ]
-    },
-    "spex-machina/validator/impl/impl_content_resolution.md": {
-      "hash": "71d9f6241179f2eeaed56258ba43e63ce7fb3623dd96f6c45caf9d21907c61ce",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_cycle_detection.md": {
-      "hash": "424c68f4cdfee0afc6ae291ff0dab99a3a703ad77608a8b2dc3dafa18e79f77f",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_error_output.md": {
-      "hash": "dcb3cc671820383bef539ac999bab8ef469c36cde2db8d8ea67600dcabd51e41",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_id_validation.md": {
-      "hash": "8f9378b9b4f59dd1bc5a85816941056297662632406da58a8e08c32859081961",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_name_consistency.md": {
-      "hash": "d887a4957e717183928732b3f4e146caea4249ce1c49122d37457487a0163d32",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_orphan_detection.md": {
-      "hash": "e64b0ac97324db1219e00876f8bc9a72e3cf876969e8180aef4db5de312cb67c",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_schema_validation.md": {
-      "hash": "10628acbc2a37017bb3a3096f206ecd9572759e4ae5d83175000d4276baa57af",
-      "type": "leaf"
-    },
-    "spex-machina/validator/impl/impl_validate_command.md": {
-      "hash": "801ffa4b459d848b8ecad1adef8835993e66f4ae43c8bbb20e430694fd747d89",
-      "type": "leaf"
-    },
-    "spex-machina/validator/module.json": {
-      "hash": "a94cc8b163b3211d493c2f251614239dad5a592123c8754d42247268f52b1f29",
-      "type": "leaf"
+    "project/meta": {
+      "hash": "06b4847ed9814b30d322a1578cc453547edfcb4eac5447d95cf63d301db1b673",
+      "type": "leaf",
+      "node_type": "meta"
     }
   }
 }

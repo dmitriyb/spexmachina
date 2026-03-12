@@ -30,7 +30,7 @@ type Store interface {
 	Create(r Record) (int, error)
 	Get(id int) (Record, error)
 	GetByBead(beadID string) (Record, error)
-	GetBySpecNode(specNodeID string) (Record, error)
+	GetBySpecNode(specNodeID string) ([]Record, error)
 	UpdateSpecHash(id int, hash string) error
 	Delete(id int) error
 	List() ([]Record, error)
@@ -65,9 +65,6 @@ func (s *fileStore) Create(r Record) (int, error) {
 	for _, existing := range data.Records {
 		if existing.BeadID == r.BeadID {
 			return 0, fmt.Errorf("map: duplicate bead_id %q", r.BeadID)
-		}
-		if existing.SpecNodeID == r.SpecNodeID {
-			return 0, fmt.Errorf("map: duplicate spec_node_id %q", r.SpecNodeID)
 		}
 	}
 
@@ -111,21 +108,25 @@ func (s *fileStore) GetByBead(beadID string) (Record, error) {
 	return Record{}, fmt.Errorf("map: %w: bead_id %q", ErrNotFound, beadID)
 }
 
-func (s *fileStore) GetBySpecNode(specNodeID string) (Record, error) {
+func (s *fileStore) GetBySpecNode(specNodeID string) ([]Record, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	data, err := s.load()
 	if err != nil {
-		return Record{}, err
+		return nil, err
 	}
 
+	var matches []Record
 	for _, r := range data.Records {
 		if r.SpecNodeID == specNodeID {
-			return r, nil
+			matches = append(matches, r)
 		}
 	}
-	return Record{}, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
+	}
+	return matches, nil
 }
 
 func (s *fileStore) UpdateSpecHash(id int, hash string) error {

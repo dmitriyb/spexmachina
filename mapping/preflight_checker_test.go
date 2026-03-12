@@ -43,13 +43,17 @@ func (s *stubStore) GetByBead(beadID string) (Record, error) {
 	return Record{}, fmt.Errorf("map: %w: bead_id %q", ErrNotFound, beadID)
 }
 
-func (s *stubStore) GetBySpecNode(specNodeID string) (Record, error) {
+func (s *stubStore) GetBySpecNode(specNodeID string) ([]Record, error) {
+	var matches []Record
 	for _, r := range s.records {
 		if r.SpecNodeID == specNodeID {
-			return r, nil
+			matches = append(matches, r)
 		}
 	}
-	return Record{}, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
+	}
+	return matches, nil
 }
 
 func (s *stubStore) UpdateSpecHash(id int, hash string) error {
@@ -598,6 +602,69 @@ func TestFR2_Check_DiamondDependency(t *testing.T) {
 	}
 	if result.Status != "ready" {
 		t.Fatalf("status: want ready, got %s (blockers: %v)", result.Status, result.Blockers)
+	}
+}
+
+func TestFR2_Check_Blocked_SupersededClosedPlusOpenRework(t *testing.T) {
+	store := newStubStore()
+	spec := newStubSpecGraph()
+
+	// Module B has one component with two beads: old closed + new open rework.
+	spec.modules["modB"] = ModuleInfo{
+		ID:   2,
+		Name: "modB",
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompB1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modB/component/1",
+		BeadID:     "bead-b1-old",
+		Module:     "modB",
+		Component:  "CompB1",
+		SpecHash:   "hashB1",
+		BeadStatus: "closed",
+	})
+	store.Create(Record{
+		SpecNodeID: "modB/component/1",
+		BeadID:     "bead-b1-rework",
+		Module:     "modB",
+		Component:  "CompB1",
+		SpecHash:   "hashB1-new",
+		BeadStatus: "open",
+	})
+
+	// Module A depends on B.
+	spec.modules["modA"] = ModuleInfo{
+		ID:             1,
+		Name:           "modA",
+		RequiresModule: []int{2},
+		Components: []ComponentInfo{
+			{ID: 1, Name: "CompA1"},
+		},
+	}
+	store.Create(Record{
+		SpecNodeID: "modA/component/1",
+		BeadID:     "bead-a1",
+		Module:     "modA",
+		Component:  "CompA1",
+		SpecHash:   "hashA1",
+	})
+
+	spec.hashes["modA/component/1"] = "hashA1"
+
+	result, err := Check(context.Background(), store, spec, "bead-a1")
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	if result.Status != "blocked" {
+		t.Fatalf("status: want blocked (open rework bead exists), got %s", result.Status)
+	}
+	if len(result.Blockers) != 1 {
+		t.Fatalf("blockers count: want 1, got %d", len(result.Blockers))
+	}
+	if result.Blockers[0].BeadID != "bead-b1-rework" {
+		t.Fatalf("blocker bead_id: want bead-b1-rework, got %s", result.Blockers[0].BeadID)
 	}
 }
 
