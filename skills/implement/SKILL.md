@@ -46,7 +46,15 @@ Read `spec/<module>/module.json`. Find the component matching `spec_component`. 
 > Cannot implement $ARGUMENTS — the spec component uses other components that have no beads:
 > - <ComponentName> (component id <N> in module.json) — no bead found
 
-### Check 4: Scope is single component
+### Check 4: Git signing key available
+
+Run `ssh-add -l` and verify at least one key is loaded. If no keys are found (or the agent is not running), stop and tell the user:
+
+> Cannot implement $ARGUMENTS — no SSH signing key available in the agent. Run `ssh-add` to load your key before proceeding.
+
+This ensures all commits will be signed. Do NOT bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`.
+
+### Check 5: Scope is single component
 
 The bead must map to exactly one spec component. Only write code for that component. If the component's `uses` list references other components, those components must already be implemented (their beads must be closed per Check 2). Do NOT implement dependency components inline — that is scope creep.
 
