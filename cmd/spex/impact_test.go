@@ -20,7 +20,6 @@ func setupImpactDiffFile(t *testing.T) (string, string) {
 	t.Helper()
 	specDir := setupTestSpec(t)
 
-	// Snapshot the initial state.
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -30,19 +29,15 @@ func setupImpactDiffFile(t *testing.T) (string, string) {
 		t.Fatal(err)
 	}
 
-	// Modify a file to produce changes.
 	archPath := filepath.Join(specDir, "alpha", "arch_comp1.md")
 	if err := os.WriteFile(archPath, []byte("# Changed architecture\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	// Capture diff JSON output.
-	diffJSON := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("diff command failed with exit code %d", code)
-		}
-	})
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff command failed: %v", err)
+	}
 
 	diffFile := filepath.Join(t.TempDir(), "diff.json")
 	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
@@ -68,17 +63,14 @@ func setupMappingFile(t *testing.T, dir string, records []mapping.Record) string
 func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
-	// Create a mapping record that matches the changed arch file.
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
 		{SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
 	})
 
-	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var report impact.ImpactReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -93,15 +85,12 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
-	// Empty mapping file — no records → changed nodes produce create actions.
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
 
-	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var report impact.ImpactReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -116,7 +105,6 @@ func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
 func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	// Snapshot, then diff with no modifications → empty changes.
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -125,12 +113,10 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	diffJSON := captureStdout(t, func() {
-		code := runDiff([]string{"--json", specDir})
-		if code != 0 {
-			t.Fatalf("diff failed: %d", code)
-		}
-	})
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff failed: %v", err)
+	}
 
 	diffFile := filepath.Join(t.TempDir(), "diff.json")
 	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
@@ -139,12 +125,10 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
 
-	out := captureStdout(t, func() {
-		code := runImpact([]string{"--diff", diffFile, "--map", mapPath, specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
 
 	var report impact.ImpactReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -164,14 +148,8 @@ func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 		{SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
 	})
 
-	args := []string{"--diff", diffFile, "--map", mapPath, specDir}
-
-	out1 := captureStdout(t, func() {
-		runImpact(args)
-	})
-	out2 := captureStdout(t, func() {
-		runImpact(args)
-	})
+	out1, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	out2, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
 
 	if out1 != out2 {
 		t.Fatalf("determinism: outputs differ\nrun1: %s\nrun2: %s", out1, out2)
@@ -184,15 +162,15 @@ func TestFR4_ImpactCommand_InvalidDiffJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code := runImpact([]string{"--diff", diffFile})
-	if code == 0 {
+	_, err := runSpex(t, "impact", "--diff", diffFile)
+	if err == nil {
 		t.Fatal("should fail with invalid diff JSON")
 	}
 }
 
 func TestFR4_ImpactCommand_NonexistentDiffFile(t *testing.T) {
-	code := runImpact([]string{"--diff", "/nonexistent/diff.json"})
-	if code == 0 {
+	_, err := runSpex(t, "impact", "--diff", "/nonexistent/diff.json")
+	if err == nil {
 		t.Fatal("should fail with nonexistent diff file")
 	}
 }

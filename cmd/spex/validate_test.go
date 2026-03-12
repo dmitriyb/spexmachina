@@ -11,12 +11,10 @@ import (
 func TestFR7_ValidateCommand_ValidSpec(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runValidate([]string{specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0 for valid spec, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "validate", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error for valid spec, got %v", err)
+	}
 
 	var report validator.ValidationReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -33,12 +31,10 @@ func TestFR7_ValidateCommand_ValidSpec(t *testing.T) {
 func TestFR7_ValidateCommand_InvalidSpec_Exit1(t *testing.T) {
 	specDir := setupInvalidTestSpec(t)
 
-	out := captureStdout(t, func() {
-		code := runValidate([]string{specDir})
-		if code != 1 {
-			t.Fatalf("want exit 1 for invalid spec, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "validate", "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error for invalid spec, got nil")
+	}
 
 	var report validator.ValidationReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -53,30 +49,26 @@ func TestFR7_ValidateCommand_InvalidSpec_Exit1(t *testing.T) {
 }
 
 func TestFR7_ValidateCommand_NonexistentDir(t *testing.T) {
-	code := runValidate([]string{"/nonexistent/spec/dir"})
-	if code != 1 {
-		t.Fatalf("want exit 1 for nonexistent dir, got %d", code)
+	_, err := runSpex(t, "validate", "--spec-dir", "/nonexistent/spec/dir")
+	if err == nil {
+		t.Fatal("want error for nonexistent dir, got nil")
 	}
 }
 
 func TestFR7_ValidateCommand_AggregatesAllCheckers(t *testing.T) {
 	specDir := setupInvalidTestSpec(t)
 
-	out := captureStdout(t, func() {
-		runValidate([]string{specDir})
-	})
+	out, _ := runSpex(t, "validate", "--spec-dir", specDir)
 
 	var report validator.ValidationReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
 		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
 	}
 
-	// Check that errors from multiple checkers are aggregated
 	checks := map[string]bool{}
 	for _, e := range report.Errors {
 		checks[e.Check] = true
 	}
-	// Invalid spec should trigger at least content errors
 	if len(checks) == 0 {
 		t.Fatal("want errors from at least one checker")
 	}
@@ -85,16 +77,13 @@ func TestFR7_ValidateCommand_AggregatesAllCheckers(t *testing.T) {
 func TestFR7_ValidateCommand_StructuredJSON(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	out := captureStdout(t, func() {
-		runValidate([]string{specDir})
-	})
+	out, _ := runSpex(t, "validate", "--spec-dir", specDir)
 
 	var report validator.ValidationReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
 		t.Fatalf("output should be valid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// Verify report structure has required fields
 	raw := map[string]json.RawMessage{}
 	if err := json.Unmarshal([]byte(out), &raw); err != nil {
 		t.Fatalf("output should be valid JSON: %v", err)
@@ -108,21 +97,19 @@ func TestFR7_ValidateCommand_StructuredJSON(t *testing.T) {
 
 func TestFR7_ValidateCommand_DefaultDir(t *testing.T) {
 	t.Chdir(t.TempDir())
-	code := runValidate(nil)
-	if code != 1 {
-		t.Fatalf("want exit 1 when default spec/ missing, got %d", code)
+	_, err := runSpex(t, "validate")
+	if err == nil {
+		t.Fatal("want error when default spec/ missing, got nil")
 	}
 }
 
 func TestFR7_ValidateCommand_WarningsDoNotFail(t *testing.T) {
 	specDir := setupSpecWithOrphans(t)
 
-	out := captureStdout(t, func() {
-		code := runValidate([]string{specDir})
-		if code != 0 {
-			t.Fatalf("want exit 0 when only warnings, got %d", code)
-		}
-	})
+	out, err := runSpex(t, "validate", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error when only warnings, got %v", err)
+	}
 
 	var report validator.ValidationReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
@@ -152,7 +139,6 @@ func setupInvalidTestSpec(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
-	// Component references arch_comp1.md but we don't create it
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
@@ -182,7 +168,6 @@ func setupSpecWithOrphans(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
-	// Requirement 2 is not implemented by any component -> orphan warning
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"requirements": [
