@@ -44,6 +44,33 @@ $ spex map list
 
 Exit code 0. Empty array `[]` if no mappings exist.
 
+### spex map context \<record-id\>
+
+Resolves the full spec context for a component. Reads the mapping record, parses the component ID from `spec_node_id`, reads `spec/<module>/module.json`, and returns all spec files relevant to that component.
+
+Algorithm:
+1. `map get <id>` → record with `module`, `spec_node_id`, `content_file`
+2. Parse component ID from `spec_node_id` (e.g. `schema/component/1` → component ID 1)
+3. Read `spec/<module>/module.json`
+4. Find `impl_sections` where `describes` contains component ID → their content paths
+5. Find `test_sections` where `describes` contains component ID → their content paths
+6. Find `data_flows` where `uses` contains component ID → their content paths
+7. The arch file is already `content_file` on the record
+
+```
+$ spex map context 42
+{
+  "record": {"id": 42, "module": "impact", "component": "ActionClassifier", ...},
+  "arch_file": "spec/impact/arch_action_classifier.md",
+  "impl_files": ["spec/impact/impl_action_classification.md"],
+  "test_files": ["spec/impact/test_action_classifier.md"],
+  "flow_files": ["spec/impact/flow_impact_pipeline.md"],
+  "module_file": "spec/impact/module.json"
+}
+```
+
+All from the record ID, all deterministic, no duplication. Exit code 0 on success, 1 if record not found or module.json unreadable.
+
 ### spex check \<bead-id\>
 
 Runs preflight checking for a bead.
