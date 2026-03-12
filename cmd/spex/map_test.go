@@ -42,7 +42,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	// Create .bead-map.json with two records.
 	mapPath := filepath.Join(dir, ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)
-	store.Create(mapping.Record{
+	if _, err := store.Create(mapping.Record{
 		SpecNodeID:  "alpha/component/1",
 		BeadID:      "test-abc",
 		Module:      "alpha",
@@ -50,8 +50,10 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 		ContentFile: "spec/alpha/arch_comp1.md",
 		SpecHash:    "hash1",
 		BeadStatus:  "closed",
-	})
-	store.Create(mapping.Record{
+	}); err != nil {
+		t.Fatalf("create record: %v", err)
+	}
+	if _, err := store.Create(mapping.Record{
 		SpecNodeID:  "alpha/component/2",
 		BeadID:      "test-def",
 		Module:      "alpha",
@@ -59,7 +61,9 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 		ContentFile: "spec/alpha/arch_comp2.md",
 		SpecHash:    "hash2",
 		BeadStatus:  "open",
-	})
+	}); err != nil {
+		t.Fatalf("create record: %v", err)
+	}
 
 	return dir, mapPath
 }
