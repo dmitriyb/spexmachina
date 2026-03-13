@@ -77,12 +77,8 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// Note: review count may be 0 because the diff change path uses merkle format
-	// (module/1/component/1) which doesn't match the mapping format (alpha/component/1).
-	// This is a known format mismatch tracked separately from this bead.
-	if len(out) == 0 {
-		t.Fatal("expected non-empty impact report output")
-	}
+	// Format mismatch between merkle paths and mapping spec_node_id
+	// prevents matching here. Tracked separately from this bead.
 }
 
 func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
