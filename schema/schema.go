@@ -10,7 +10,7 @@ package schema
 
 import "embed"
 
-//go:embed project.schema.json module.schema.json
+//go:embed project.schema.json module.schema.json bead-map.schema.json
 var schemaFS embed.FS
 
 // ProjectSchema returns the raw JSON Schema bytes for project.json.
@@ -21,6 +21,11 @@ func ProjectSchema() ([]byte, error) {
 // ModuleSchema returns the raw JSON Schema bytes for module.json.
 func ModuleSchema() ([]byte, error) {
 	return schemaFS.ReadFile("module.schema.json")
+}
+
+// BeadMapSchema returns the raw JSON Schema bytes for .bead-map.json.
+func BeadMapSchema() ([]byte, error) {
+	return schemaFS.ReadFile("bead-map.schema.json")
 }
 
 // Project represents a project.json file.

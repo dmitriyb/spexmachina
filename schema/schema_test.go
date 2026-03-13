@@ -41,6 +41,86 @@ func TestFR1_ModuleSchemaLoads(t *testing.T) {
 	}
 }
 
+func TestFR7_BeadMapSchemaLoads(t *testing.T) {
+	data, err := BeadMapSchema()
+	if err != nil {
+		t.Fatalf("BeadMapSchema() error: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("BeadMapSchema() returned empty bytes")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("BeadMapSchema() is not valid JSON: %v", err)
+	}
+	if raw["$schema"] == nil {
+		t.Fatal("BeadMapSchema() missing $schema field")
+	}
+}
+
+func TestFR7_BeadMapSchemaDefinesFields(t *testing.T) {
+	data, err := BeadMapSchema()
+	if err != nil {
+		t.Fatalf("BeadMapSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal bead-map schema: %v", err)
+	}
+
+	// Verify top-level properties
+	props := raw["properties"].(map[string]any)
+	for _, key := range []string{"next_id", "records"} {
+		if props[key] == nil {
+			t.Fatalf("bead-map schema missing top-level property %q", key)
+		}
+	}
+
+	// Verify record definition has all required fields
+	defs := raw["$defs"].(map[string]any)
+	recordDef := defs["record"].(map[string]any)
+	recordProps := recordDef["properties"].(map[string]any)
+	for _, key := range []string{"id", "spec_node_id", "bead_id", "module", "component", "content_file", "spec_hash"} {
+		if recordProps[key] == nil {
+			t.Fatalf("bead-map record definition missing property %q", key)
+		}
+	}
+
+	// Verify bead_status is defined (optional field)
+	if recordProps["bead_status"] == nil {
+		t.Fatal("bead-map record definition missing optional property \"bead_status\"")
+	}
+
+	// Verify spec_node_id has a pattern constraint
+	specNodeDef := recordProps["spec_node_id"].(map[string]any)
+	if specNodeDef["pattern"] == nil {
+		t.Fatal("spec_node_id missing pattern constraint")
+	}
+}
+
+func TestFR7_BeadMapSchemaRejectsAdditionalProperties(t *testing.T) {
+	data, err := BeadMapSchema()
+	if err != nil {
+		t.Fatalf("BeadMapSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	// Top level
+	if raw["additionalProperties"] != false {
+		t.Fatal("bead-map schema should have additionalProperties: false at top level")
+	}
+
+	// Record level
+	defs := raw["$defs"].(map[string]any)
+	recordDef := defs["record"].(map[string]any)
+	if recordDef["additionalProperties"] != false {
+		t.Fatal("bead-map record definition should have additionalProperties: false")
+	}
+}
+
 func TestFR2_ProjectRoundTrip(t *testing.T) {
 	tests := []struct {
 		name string
