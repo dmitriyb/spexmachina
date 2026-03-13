@@ -1,5 +1,5 @@
 {
-  "next_id": 50,
+  "next_id": 51,
   "records": [
     {
       "id": 1,
@@ -323,7 +323,7 @@
       "module": "map",
       "component": "MapCommand",
       "content_file": "spec/map/arch_map_command.md",
-      "spec_hash": "21fad5e0adb0805a21819467966d6e86f0adcfc4a02e64efed7f584c157f6eb5"
+      "spec_hash": "a96bda9cd04c0b65406fff0fc22d27c6dcd97feae91b61ea9aaec62ce8ea05e9"
     },
     {
       "id": 37,
@@ -441,6 +441,15 @@
       "component": "MappingStore",
       "content_file": "spec/map/arch_mapping_store.md",
       "spec_hash": "07a4e3de9d7883c8c0c62164f760c8fe0f67e85c22f605b62bb8055a8c2e9895"
+    },
+    {
+      "id": 50,
+      "spec_node_id": "map/component/4",
+      "bead_id": "spexmachina-2pu",
+      "module": "map",
+      "component": "ContextResolver",
+      "content_file": "spec/map/arch_context_resolver.md",
+      "spec_hash": "6acf817dbd76409c7be082dc879e638242307b8885314da08ef9af86fe03bfa3"
     }
   ]
 }

@@ -36,6 +36,13 @@
       "title": "Validate mapping file against schema",
       "preq_id": 3,
       "description": "MappingStore validates .bead-map.json against the bead-map JSON Schema on load. Invalid files produce a clear error before any CRUD operation."
+    },
+    {
+      "id": 6,
+      "type": "functional",
+      "title": "Resolve full spec context from record",
+      "preq_id": 3,
+      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), impl_sections whose describes array contains the component ID, test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
     }
   ],
   "components": [
@@ -57,10 +64,18 @@
     {
       "id": 3,
       "name": "MapCommand",
-      "description": "CLI entry point for spex map and spex check. Wires MappingStore and PreflightChecker to serve queries and preflight checks.",
+      "description": "CLI entry point for spex map and spex check. Wires MappingStore, PreflightChecker, and ContextResolver to serve queries, preflight checks, and context resolution.",
       "content": "arch_map_command.md",
       "implements": [3],
-      "uses": [1, 2]
+      "uses": [1, 2, 4]
+    },
+    {
+      "id": 4,
+      "name": "ContextResolver",
+      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Pure function over spec directory — deterministic and cacheable.",
+      "content": "arch_context_resolver.md",
+      "implements": [6],
+      "uses": [1]
     }
   ],
   "impl_sections": [
