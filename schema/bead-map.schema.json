@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/bead-map.json",
+  "title": "Spex Machina Bead Map",
+  "description": "Schema for .bead-map.json. Links spec node IDs to bead IDs with structured metadata.",
+  "type": "object",
+  "required": ["next_id", "records"],
+  "additionalProperties": false,
+  "properties": {
+    "next_id": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Next auto-increment ID for new records."
+    },
+    "records": {
+      "type": "array",
+      "description": "Mapping records linking spec nodes to beads.",
+      "items": { "$ref": "#/$defs/record" }
+    }
+  },
+  "$defs": {
+    "record": {
+      "type": "object",
+      "required": ["id", "spec_node_id", "bead_id", "module", "component", "content_file", "spec_hash"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Unique record ID, auto-assigned by MappingStore."
+        },
+        "spec_node_id": {
+          "type": "string",
+          "pattern": "^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$",
+          "description": "Spec node identifier in format module_name/node_type/node_id."
+        },
+        "bead_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Bead ID from the issue tracker."
+        },
+        "module": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Module name containing the spec node."
+        },
+        "component": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Component or section name within the module."
+        },
+        "content_file": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Relative path to the spec content markdown file."
+        },
+        "spec_hash": {
+          "type": "string",
+          "minLength": 1,
+          "description": "SHA-256 hash of the spec content at time of mapping."
+        },
+        "bead_status": {
+          "type": "string",
+          "description": "Bead status populated at runtime by preflight/apply operations."
+        }
+      }
+    }
+  }
+}
