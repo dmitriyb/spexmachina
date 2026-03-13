@@ -71,5 +71,13 @@
       "content": "flow_validation_pipeline.md",
       "uses": [1, 2]
     }
+  ],
+  "test_sections": [
+    {
+      "id": 1,
+      "name": "Test coverage for C1 and C2",
+      "content": "test_components.md",
+      "describes": [1, 2]
+    }
   ]
 }

@@ -84,6 +84,15 @@ type ModuleSpec struct {
 	Components   []Component   `json:"components,omitempty"`
 	ImplSections []ImplSection `json:"impl_sections,omitempty"`
 	DataFlows    []DataFlow    `json:"data_flows,omitempty"`
+	TestSections []TestSection `json:"test_sections,omitempty"`
+}
+
+// TestSection represents a test section in a module.
+type TestSection struct {
+	ID        int    `json:"id"`
+	Name      string `json:"name"`
+	Content   string `json:"content,omitempty"`
+	Describes []int  `json:"describes,omitempty"`
 }
 
 // Component represents an architecture component in a module.
