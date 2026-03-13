@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -45,21 +46,21 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 
 	var implFiles []string
 	for _, sec := range ms.ImplSections {
-		if containsInt(sec.Describes, compID) {
+		if slices.Contains(sec.Describes, compID) {
 			implFiles = append(implFiles, filepath.Join(modDir, sec.Content))
 		}
 	}
 
 	var testFiles []string
 	for _, sec := range ms.TestSections {
-		if containsInt(sec.Describes, compID) {
+		if slices.Contains(sec.Describes, compID) {
 			testFiles = append(testFiles, filepath.Join(modDir, sec.Content))
 		}
 	}
 
 	var flowFiles []string
 	for _, df := range ms.DataFlows {
-		if containsInt(df.Uses, compID) {
+		if slices.Contains(df.Uses, compID) {
 			flowFiles = append(flowFiles, filepath.Join(modDir, df.Content))
 		}
 	}
@@ -90,14 +91,4 @@ func parseContextComponentID(specNodeID string) (int, error) {
 		return 0, fmt.Errorf("context: invalid spec_node_id: %q (non-numeric id)", specNodeID)
 	}
 	return id, nil
-}
-
-// containsInt returns true if the slice contains the value.
-func containsInt(slice []int, val int) bool {
-	for _, v := range slice {
-		if v == val {
-			return true
-		}
-	}
-	return false
 }
