@@ -41,7 +41,7 @@ func TestFR1_ModuleSchemaLoads(t *testing.T) {
 	}
 }
 
-func TestFR1_BeadMapSchemaLoads(t *testing.T) {
+func TestFR7_BeadMapSchemaLoads(t *testing.T) {
 	data, err := BeadMapSchema()
 	if err != nil {
 		t.Fatalf("BeadMapSchema() error: %v", err)
