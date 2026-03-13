@@ -131,6 +131,7 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 		{"components", len(mod.Components)},
 		{"impl_sections", len(mod.ImplSections)},
 		{"data_flows", len(mod.DataFlows)},
+		{"test_sections", len(mod.TestSections)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -186,6 +187,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},
 		{"modules (test_scenario)", proj.TestPlan != nil && len(proj.TestPlan.Scenarios) > 0 && len(proj.TestPlan.Scenarios[0].Modules) > 0},
+		{"describes (test_section)", len(mod.TestSections) > 0 && len(mod.TestSections[0].Describes) > 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -221,6 +223,12 @@ func TestFR5_IDsAreNumeric(t *testing.T) {
 	for _, d := range mod.DataFlows {
 		if d.ID < 1 {
 			t.Fatalf("data_flow ID must be >= 1, got %d", d.ID)
+		}
+	}
+
+	for _, ts := range mod.TestSections {
+		if ts.ID < 1 {
+			t.Fatalf("test_section ID must be >= 1, got %d", ts.ID)
 		}
 	}
 
@@ -272,6 +280,11 @@ func TestFR6_ContentPaths(t *testing.T) {
 			found++
 		}
 	}
+	for _, ts := range mod.TestSections {
+		if ts.Content != "" {
+			found++
+		}
+	}
 	projData := readTestdata(t, "valid_project.json")
 	var proj Project
 	if err := json.Unmarshal(projData, &proj); err != nil {
@@ -315,10 +328,53 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 		t.Fatalf("unmarshal module schema: %v", err)
 	}
 	modProps := modRaw["properties"].(map[string]any)
-	for _, key := range []string{"requirements", "components", "impl_sections", "data_flows"} {
+	for _, key := range []string{"requirements", "components", "impl_sections", "data_flows", "test_sections"} {
 		if modProps[key] == nil {
 			t.Fatalf("module schema missing property %q", key)
 		}
+	}
+}
+
+func TestFR5_TestSectionsRoundTrip(t *testing.T) {
+	data := readTestdata(t, "valid_module.json")
+	var mod ModuleSpec
+	if err := json.Unmarshal(data, &mod); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(mod.TestSections) == 0 {
+		t.Fatal("expected test_sections in fixture, got 0")
+	}
+
+	ts := mod.TestSections[0]
+	if ts.ID < 1 {
+		t.Fatalf("test_section ID must be >= 1, got %d", ts.ID)
+	}
+	if ts.Name == "" {
+		t.Fatal("test_section name is empty")
+	}
+	if ts.Content == "" {
+		t.Fatal("test_section content is empty")
+	}
+	if len(ts.Describes) == 0 {
+		t.Fatal("test_section describes is empty")
+	}
+
+	out, err := json.Marshal(&mod)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var mod2 ModuleSpec
+	if err := json.Unmarshal(out, &mod2); err != nil {
+		t.Fatalf("unmarshal round-trip: %v", err)
+	}
+	if len(mod2.TestSections) != len(mod.TestSections) {
+		t.Fatalf("round-trip test_sections length mismatch: want %d, got %d", len(mod.TestSections), len(mod2.TestSections))
+	}
+	if mod2.TestSections[0].ID != ts.ID {
+		t.Fatalf("round-trip test_section ID mismatch: want %d, got %d", ts.ID, mod2.TestSections[0].ID)
+	}
+	if mod2.TestSections[0].Name != ts.Name {
+		t.Fatalf("round-trip test_section name mismatch: want %q, got %q", ts.Name, mod2.TestSections[0].Name)
 	}
 }
 
