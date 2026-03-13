@@ -450,6 +450,162 @@ func TestFR1_MissingFile_CreatedOnFirstWrite(t *testing.T) {
 	}
 }
 
+func TestFR5_InvalidSchema_RejectsExtraField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	// Write a bead-map with an extra field on a record
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "schema/component/1",
+			"bead_id": "abc-123",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44",
+			"extra_field": "should fail"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for extra field, got nil")
+	}
+	if !strings.Contains(err.Error(), "schema") {
+		t.Fatalf("error should mention schema validation, got: %v", err)
+	}
+}
+
+func TestFR5_InvalidSchema_BadSpecNodeIDPattern(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "INVALID FORMAT",
+			"bead_id": "abc-123",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for bad spec_node_id, got nil")
+	}
+}
+
+func TestFR5_InvalidSchema_MissingRequiredField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	// Record missing required "module" field
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "schema/component/1",
+			"bead_id": "abc-123",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for missing required field, got nil")
+	}
+}
+
+func TestFR5_InvalidSchema_EnvelopeExtraField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	invalid := `{
+		"next_id": 1,
+		"records": [],
+		"version": "1.0"
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for envelope extra field, got nil")
+	}
+}
+
+func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	valid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "schema/component/1",
+			"bead_id": "abc-123",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44",
+			"bead_status": "closed"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List should succeed with optional bead_status: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("want 1 record, got %d", len(list))
+	}
+}
+
+func TestFR5_ValidSchema_EmptyRecords(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	valid := `{"next_id": 1, "records": []}`
+	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List should succeed with empty records: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("want 0 records, got %d", len(list))
+	}
+}
+
 func TestFR1_ConcurrentCreate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".bead-map.json")

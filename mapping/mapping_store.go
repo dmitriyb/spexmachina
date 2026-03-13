@@ -1,6 +1,7 @@
 package mapping
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,9 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+
+	"github.com/dmitriyb/spexmachina/schema"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
 // ErrNotFound is returned when a record lookup finds no match.
@@ -40,6 +44,35 @@ type Store interface {
 type mapFile struct {
 	NextID  int      `json:"next_id"`
 	Records []Record `json:"records"`
+}
+
+var (
+	beadMapSchema    *jsonschema.Schema
+	beadMapSchemaErr error
+	beadMapOnce      sync.Once
+)
+
+// getBeadMapSchema compiles the embedded bead-map JSON Schema once and caches it.
+func getBeadMapSchema() (*jsonschema.Schema, error) {
+	beadMapOnce.Do(func() {
+		raw, err := schema.BeadMapSchema()
+		if err != nil {
+			beadMapSchemaErr = fmt.Errorf("map: load bead-map schema: %w", err)
+			return
+		}
+		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+		if err != nil {
+			beadMapSchemaErr = fmt.Errorf("map: parse bead-map schema: %w", err)
+			return
+		}
+		c := jsonschema.NewCompiler()
+		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
+			beadMapSchemaErr = fmt.Errorf("map: add bead-map schema: %w", err)
+			return
+		}
+		beadMapSchema, beadMapSchemaErr = c.Compile("bead-map.schema.json")
+	})
+	return beadMapSchema, beadMapSchemaErr
 }
 
 // fileStore implements Store backed by a JSON file.
@@ -188,6 +221,19 @@ func (s *fileStore) load() (*mapFile, error) {
 			return &mapFile{NextID: 1, Records: []Record{}}, nil
 		}
 		return nil, fmt.Errorf("map: read %s: %w", s.path, err)
+	}
+
+	// Validate against bead-map JSON Schema before parsing.
+	sch, err := getBeadMapSchema()
+	if err != nil {
+		return nil, err
+	}
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return nil, fmt.Errorf("map: parse %s: %w", s.path, err)
+	}
+	if err := sch.Validate(doc); err != nil {
+		return nil, fmt.Errorf("map: schema validation %s: %w", s.path, err)
 	}
 
 	var data mapFile
