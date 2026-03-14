@@ -1,44 +1,72 @@
 ---
 name: propose
-description: "Guide a free-form conversation into a structured spec proposal (project or change)"
+description: "Research the spec and draft a structured proposal in plan mode"
 argument-hint: "[proposal-name]"
 ---
 
 # /propose — Create a Spec Proposal
 
-Guide the user through a conversation to produce a structured proposal document in `spec/proposals/`.
+Draft a structured proposal by researching the spec, code, and existing proposals, then present the full draft in plan mode for user approval.
 
-## Detect Proposal Type
+## Step 1: Detect Proposal Type
 
 Check whether `spec/project.json` exists:
 
 - **Does not exist** → this is a **project proposal** (bootstrapping a new project)
 - **Exists** → this is a **change proposal** (modifying an existing spec)
 
-## Conversation Flow
+## Step 2: Enter Plan Mode
 
-Start by telling the user which proposal type was detected and why. Then gather information through conversation — ask questions, clarify scope, surface trade-offs. Do not dump a template and ask the user to fill it in. Instead, have a natural conversation and build the proposal from the answers.
+Call `EnterPlanMode`. The system assigns a plan file path — you will write the full proposal draft there.
 
-### Project Proposal — gather these sections
+## Step 3: Clarify Intent
+
+If `$ARGUMENTS` is empty and the user's intent is unclear, use `AskUserQuestion` to ask **one focused question** about what the proposal should cover. Do not present a checklist or menu. If $ARGUMENTS or prior conversation make the intent clear, skip this step.
+
+## Step 4: Research
+
+Read relevant files silently — do not narrate each file you read. Go straight to drafting after research.
+
+### For change proposals, read:
+
+1. `spec/project.json` — project requirements, modules, milestones
+2. All `spec/*/module.json` — module requirements, components, edges
+3. All markdown files (`*.md`) in affected module directories — every content leaf (arch, impl, test, flow, etc.)
+4. All `spec/proposals/*.md` — prior proposals (avoid duplication/contradiction)
+5. `CLAUDE.md` at the repo root — language, frameworks, build tools, conventions
+6. Relevant source code if the proposal involves implementation changes
+
+### For project proposals, read:
+
+1. `spec/proposals/*.md` if the directory exists
+2. `CLAUDE.md` at the repo root — language, frameworks, build tools, conventions
+3. Existing source code to understand what already exists
+4. Any existing `spec/` content
+
+**Language/framework discovery:** Do NOT hardcode any programming language. Read `CLAUDE.md` at the repo root to determine the project's language, frameworks, build tools, and conventions. Use that info to guide which source files to read.
+
+## Step 5: Draft Proposal as the Plan File
+
+Write the FULL proposal text to the plan file using the appropriate template below. This is the exact text that will become the proposal file — not an outline, not a summary.
+
+The draft should:
+- Reference specific modules, components, and requirements by name and ID
+- Note what existing proposals have already covered (avoid duplication)
+- For change proposals: identify which spec nodes are affected
+- Be substantive prose, not placeholders
+
+### Project Proposal — address these sections
 
 1. **Vision** — What problem does this project solve? What is the core idea in one paragraph?
 2. **Modules** — What are the major components? For each: name, purpose, and what it depends on.
 3. **Key requirements** — Functional requirements (what it does) and non-functional requirements (how well it does it).
 4. **Design decisions** — What are the important choices and why? What alternatives were considered?
 
-### Change Proposal — gather these sections
+### Change Proposal — address these sections
 
 1. **Context** — What is the current state? What triggered this change?
 2. **Proposed change** — What specifically will change in the spec? Which modules, requirements, or components are affected?
 3. **Impact expectation** — What beads will be created, modified, or closed? What is the expected scope of work?
-
-## Writing the Proposal
-
-Once the conversation has covered all sections, write the proposal:
-
-1. **Filename**: `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided $ARGUMENTS, use that as the name slug. If $ARGUMENTS is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
-2. **Format**: Use the appropriate template below.
-3. **Content**: Synthesize the conversation into clear, concise prose. Do not include the raw Q&A — distill it.
 
 ### Project Proposal Template
 
@@ -98,9 +126,17 @@ Once the conversation has covered all sections, write the proposal:
 <What beads will be created, modified, or closed? Estimated scope.>
 ```
 
-## After Writing
+## Step 6: Exit Plan Mode
 
-- Create `spec/proposals/` if it does not exist.
-- Tell the user the file path and summarize what was written.
-- Remind them to review the proposal and commit it to git.
-- Note: once `spex register` is available, it will validate the proposal structure and link it to the spec. For now, the proposal is a plain markdown file committed to `spec/proposals/`.
+Call `ExitPlanMode`. The user reviews the full proposal draft in the plan UI and approves or requests changes.
+
+If the user requests changes, revise the draft and re-present — this happens naturally in the conversation flow after plan mode exits. Re-enter plan mode if substantial revisions are needed.
+
+## Step 7: Write Proposal File
+
+After the user approves:
+
+1. Create `spec/proposals/` directory if it does not exist.
+2. Write the approved draft to `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
+3. Tell the user the file path.
+4. Remind them to review and commit to git.
