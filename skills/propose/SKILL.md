@@ -47,13 +47,27 @@ Read relevant files silently — do not narrate each file you read. Go straight 
 
 ## Step 5: Draft Proposal as the Plan File
 
-Write the FULL proposal text to the plan file using the appropriate template below. This is the exact text that will become the proposal file — not an outline, not a summary.
+The plan file has TWO parts: **instructions header** then **proposal content**, separated by `---`. Both are required.
 
-The draft should:
-- Reference specific modules, components, and requirements by name and ID
-- Note what existing proposals have already covered (avoid duplication)
-- For change proposals: identify which spec nodes are affected
-- Be substantive prose, not placeholders
+### Part 1: Instructions header
+
+The plan file MUST start with:
+
+1. **Output statement**: `The result of this session is a proposal file YYYY-MM-DD-<slug>.md placed in spec/proposals/.`
+2. **Proposal type**: State whether this is a project proposal or change proposal.
+3. **Template**: Copy the FULL template for the detected proposal type (from the templates below) into the plan file. State: "Write the proposal file using this exact markdown structure."
+4. **Conformance rule**: "The proposal MUST contain ONLY the sections defined in the template. No extra top-level sections."
+5. **Quality requirements**: Reference specific modules, components, and requirements by name and ID. Note what existing proposals have already covered. For change proposals: identify which spec nodes are affected. Be substantive prose, not placeholders.
+6. **Post-write instructions**: "After writing the file, tell the user the file path and remind them to review and commit to git."
+7. A `---` separator before Part 2.
+
+### Part 2: Proposal content
+
+Write the FULL proposal text using the appropriate template. The proposal MUST contain ONLY the sections defined in the template — no extra top-level sections (no "Assessment notes", no "What doesn't change", no "Deferred" as standalone sections). Subsections within the template's sections are fine for organizing content.
+
+### Revisions
+
+If the user discusses changes to the draft, update the proposal content in Part 2 but NEVER remove or reduce the instructions in Part 1. The instructions header is what allows a future session to correctly produce the output file.
 
 ### Project Proposal — address these sections
 
@@ -140,3 +154,5 @@ After the user approves:
 2. Write the approved draft to `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
 3. Tell the user the file path.
 4. Remind them to review and commit to git.
+
+**STOP after writing the file.** Do NOT explore code, do NOT attempt implementation, do NOT start any other work. The proposal skill produces exactly one artifact: the proposal file.
