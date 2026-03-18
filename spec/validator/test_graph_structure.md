@@ -242,6 +242,26 @@ tmp/spec/
 **When** the full validation pipeline runs.
 **Then** exit code is 0 because warnings do not cause failure. The report includes the warning in the `errors` array with `severity: "warning"`.
 
+#### I15: Module requirement missing preq_id fails validation
+
+**Given** alpha has a requirement with no `preq_id` field (preq_id is now required on every module requirement).
+**When** `CheckIDs(project, modules)` is called.
+**Then** one error identifying the requirement in alpha as missing `preq_id`. The error message indicates that every module requirement must trace to a project requirement.
+
+#### I16: Project requirement missing priority field
+
+**Given** a project.json with a requirement that has no `priority` field.
+**When** `CheckIDs(project, modules)` is called.
+**Then** one error identifying the project requirement as missing `priority`. The error message indicates that every project requirement must have a priority (integer 0-4).
+
+#### I17: Project requirement with out-of-range priority
+
+**Given** a project.json with a requirement that has `priority: 5`.
+**When** `CheckIDs(project, modules)` is called.
+**Then** one error identifying the invalid priority value. Priority must be 0-4.
+
+---
+
 ### E5: test_section `describes` references non-existent component
 
 **Given** alpha has a test_section with `describes: [99]` and no component 99 exists.

@@ -1,15 +1,28 @@
 # BeadCreator
 
-Creates new beads via the bead CLI (`br` or `bd`) for spec nodes that don't yet have tracking beads. After creation, creates a mapping record in `.bead-map.json` and sets the bead label to the record ID.
+Creates new beads via the bead CLI (`br` or `bd`) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. After creation, creates or updates the mapping record in `.bead-map.json` and sets the bead label to the record ID.
 
 ## Responsibilities
 
 - Read "create" actions from the impact report
-- Construct bead create commands with the component description as bead description
+- Determine bead type from spec node type (module→epic, component→feature, test_section→task)
+- Set `--parent` to establish hierarchy (component under module epic, test under component feature)
+- Set `--deps blocks:<old-bead-id>` for lineage when replacing an obsoleted bead
+- Set `--priority` derived from project requirement chain
 - Execute bead creation and capture the new bead ID
-- Create a mapping record in `.bead-map.json` linking the spec node to the bead
+- Create or update the mapping record in `.bead-map.json`
 - Set the bead label to `spex:<record-id>`
 - Return created bead IDs for subsequent tagging
+
+## Type Assignment Table
+
+| Spec Node Type | Bead Type | Rationale |
+|---------------|-----------|-----------|
+| module | `epic` | Grouping container for a module's work |
+| component | `feature` | Each component is a distinct capability to build |
+| test_section | `task` | Distinct verification effort |
+
+The type is a pure function of the spec node type — no history queries needed.
 
 ## Interface
 
@@ -27,26 +40,44 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store map.Store, creates []Ac
 For each create action:
 ```
 <bin> create --title "<module>: <node_name>" \
-  --type task \
+  --type <type_from_table> \
+  --parent <parent-bead-id> \
+  --deps blocks:<old-bead-id> \
+  --priority <priority> \
   --silent
 ```
 
-After creation, the mapping record is created and the bead label is set:
+After creation, the mapping record is created/updated and the bead label is set:
 ```
 <bin> update <bead_id> --add-label spex:<record-id>
 ```
 
-Where `<bin>` is the configured bead CLI binary (`br` or `bd`). The single `spex:<record-id>` label replaces the previous multi-label approach (`spec_module`, `spec_component`, `spec_hash`).
+Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 
-## Mapping Record Creation
+## Priority Derivation
 
-After creating the bead, BeadCreator calls `store.Create()` with:
-- `spec_node_id`: from the impact action (e.g., `"module/3/component/2"`)
-- `bead_id`: from the bead CLI create output
-- `module`: module name from the spec graph
-- `component`: component/section name from the spec graph
-- `content_file`: resolved content file path
-- `spec_hash`: current merkle hash of the spec node
+```
+component.implements[] → module requirement.preq_id → project requirement.priority
+bead_priority = min(all project requirement priorities in that set)
+```
+
+The lowest priority number (highest urgency) wins. Passed via `--priority` on bead creation.
+
+## Mapping Record Maintenance
+
+For new nodes: call `store.Create()` with all fields including `bead_type`.
+
+For modified nodes (replacing an obsoleted bead): call `store.Update()` on the existing record, setting new `bead_id`, `spec_hash`.
+
+## Cleanup Bead Handling
+
+When the create action is a cleanup (reason starts with "Code cleanup:"), the bead is created differently:
+
+- Title: `"Code cleanup: <ComponentName>"`
+- No mapping record is created (the component no longer exists in the spec)
+- Label: `spex:cleanup` (not `spex:<record-id>`)
+- `--deps blocks:<old-bead-id>` for lineage tracking to the obsoleted bead
+- Type: `task` (cleanup is a discrete work item)
 
 ## Idempotency
 
@@ -57,6 +88,6 @@ Before creating, check if a bead with a matching `spex:` label already exists an
 BeadCreator shells out to `br` or `bd` — both are external binaries outside our control. Strategy:
 
 - **Detection**: At construction time, verify the binary exists on PATH. Fail with a clear error if missing: `"apply: bead CLI not found: <bin>"`.
-- **Probe**: Run `<bin> create --dry-run --title probe --type task --labels probe --silent` once at construction. If this fails, the CLI flags are incompatible and we report the error with the binary version.
+- **Probe**: Run `<bin> create --dry-run --title probe --type task --silent` once at construction. If this fails, the CLI flags are incompatible and we report the error with the binary version.
 - **Minimum versions**: Tested with `br >= 0.1.20`, `bd >= 0.56.1`. No upper bound enforced — only add one if a breaking change is discovered.
 - **No version parsing**: We probe behavior, not version strings. This avoids brittleness from non-semver or pre-release versioning.

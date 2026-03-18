@@ -14,6 +14,7 @@ project.json
 │   ├── type ("functional" | "non_functional")
 │   ├── title (string, required)
 │   ├── description (string)
+│   ├── priority (int, 0-4, optional)
 │   └── depends_on (int[])
 ├── modules[] (required, minItems: 1)
 │   ├── id (int >= 1)

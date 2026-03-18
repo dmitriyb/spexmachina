@@ -10,8 +10,8 @@
 
 ### Create mapping record
 
-- **Input**: spec_node_id="schema/component/1", bead_id="abc-123", module="schema", component="ProjectSchema", content_file="spec/schema/arch_project_schema.md", spec_hash="e3b0c44..."
-- **Expected**: Record is written to `.bead-map.json` with a sequential integer ID. File is valid JSON. Record contains all supplied fields.
+- **Input**: spec_node_id="schema/component/1", bead_id="abc-123", bead_type="feature", module="schema", component="ProjectSchema", content_file="spec/schema/arch_project_schema.md", spec_hash="e3b0c44..."
+- **Expected**: Record is written to `.bead-map.json` with a sequential integer ID. File is valid JSON. Record contains all supplied fields including `bead_type`.
 
 ### Read mapping record by ID
 
@@ -69,4 +69,14 @@
 ### Multiple beads per spec node
 
 - Attempt to create two records with the same spec_node_id but different bead_ids
-- Expected: success — one spec node may have many beads (e.g., superseded + rework)
+- Expected: error — with the obsolete+create model, the mapping file is current state only (one record per active spec node). The old record is updated with the new bead_id, not duplicated.
+
+### bead_type field is preserved
+
+- Create a record with bead_type="feature", read it back
+- Expected: bead_type field is present and matches "feature"
+
+### Update bead_id and spec_hash on existing record
+
+- Create a record, then update its bead_id and spec_hash (used when obsolete+create replaces a bead)
+- Expected: Record's bead_id and spec_hash are updated. Other fields (spec_node_id, module, component, content_file, bead_type) are unchanged.

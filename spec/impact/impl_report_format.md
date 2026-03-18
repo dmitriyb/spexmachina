@@ -9,36 +9,31 @@
       "type": "create",
       "module": "validator",
       "node": "ContentResolver",
-      "impact": "arch_impl",
-      "reason": "New spec node: validator/ContentResolver"
+      "node_type": "component",
+      "spec_hash": "abc123",
+      "old_bead_id": "spexmachina-77",
+      "reason": "Spec node modified (new): validator/ContentResolver"
     }
   ],
-  "closes": [
+  "obsoletes": [
     {
-      "type": "close",
-      "bead_id": "spexmachina-abc",
+      "type": "obsolete",
+      "bead_id": "spexmachina-77",
       "module": "validator",
-      "node": "LegacyChecker",
-      "reason": "Spec node removed: validator/LegacyChecker"
-    }
-  ],
-  "reviews": [
-    {
-      "type": "review",
-      "bead_id": "spexmachina-def",
-      "module": "merkle",
-      "node": "Hasher",
-      "impact": "impl_only",
-      "reason": "Spec node modified (impl_only): merkle/Hasher"
+      "node": "ContentResolver",
+      "reason": "Spec node modified: validator/ContentResolver"
     }
   ],
   "summary": {
     "create_count": 1,
-    "close_count": 1,
-    "review_count": 1
+    "obsolete_count": 1
   }
 }
 ```
+
+Two action groups replace the previous three (creates/closes/reviews):
+- `creates` — new beads to be created (for added and modified nodes)
+- `obsoletes` — existing beads to be obsoleted (for modified and removed nodes)
 
 ## Serialization
 

@@ -1,6 +1,6 @@
 # ReportGenerator
 
-Produces the structured JSON impact report.
+Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete.
 
 ## Responsibilities
 
@@ -12,16 +12,14 @@ Produces the structured JSON impact report.
 
 ```go
 type ImpactReport struct {
-    Creates []Action `json:"creates"`
-    Closes  []Action `json:"closes"`
-    Reviews []Action `json:"reviews"`
-    Summary Summary  `json:"summary"`
+    Creates   []Action `json:"creates"`
+    Obsoletes []Action `json:"obsoletes"`
+    Summary   Summary  `json:"summary"`
 }
 
 type Summary struct {
-    CreateCount int `json:"create_count"`
-    CloseCount  int `json:"close_count"`
-    ReviewCount int `json:"review_count"`
+    CreateCount   int `json:"create_count"`
+    ObsoleteCount int `json:"obsolete_count"`
 }
 
 func GenerateReport(actions []Action, w io.Writer) error
@@ -32,12 +30,10 @@ func GenerateReport(actions []Action, w io.Writer) error
 ```json
 {
   "creates": [...],
-  "closes": [...],
-  "reviews": [...],
+  "obsoletes": [...],
   "summary": {
     "create_count": 5,
-    "close_count": 1,
-    "review_count": 3
+    "obsolete_count": 3
   }
 }
 ```

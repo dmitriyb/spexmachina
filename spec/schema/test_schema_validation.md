@@ -431,6 +431,68 @@ This is the boundary test for the `minimum: 1` constraint on all ID fields.
 ```
 **Expected:** Validation passes at the schema level. JSON Schema does not enforce referential integrity — that is the validator module's responsibility. This edge case documents the boundary between schema validation and structural validation.
 
+### S19: Priority field accepted on project requirements
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "requirements": [
+    { "id": 1, "type": "functional", "title": "R", "priority": 1 }
+  ]
+}
+```
+**Expected:** Validation passes. The `priority` field (integer 0-4) is accepted on project requirements.
+
+**Input (priority out of range):**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "requirements": [
+    { "id": 1, "type": "functional", "title": "R", "priority": 5 }
+  ]
+}
+```
+**Expected:** Validation fails. `priority` value 5 exceeds `maximum: 4`.
+
+**Input (negative priority):**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "requirements": [
+    { "id": 1, "type": "functional", "title": "R", "priority": -1 }
+  ]
+}
+```
+**Expected:** Validation fails. `priority` value -1 is below `minimum: 0`.
+
+### S20: preq_id required on module requirements
+
+**Input (module requirement without preq_id):**
+```json
+{
+  "name": "m",
+  "requirements": [
+    { "id": 1, "type": "functional", "title": "R" }
+  ]
+}
+```
+**Expected:** Validation fails. Error references `requirements/0`, missing required `preq_id`.
+
+**Input (module requirement with preq_id):**
+```json
+{
+  "name": "m",
+  "requirements": [
+    { "id": 1, "type": "functional", "title": "R", "preq_id": 1 }
+  ]
+}
+```
+**Expected:** Validation passes. `preq_id` satisfies the required constraint.
+
 ### E8: preq_id present in project-level requirement
 
 **Input:**

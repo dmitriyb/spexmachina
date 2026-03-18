@@ -12,6 +12,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
       "id": 1,
       "spec_node_id": "schema/component/1",
       "bead_id": "abc-001",
+      "bead_type": "feature",
       "module": "schema",
       "component": "ProjectSchema",
       "content_file": "spec/schema/arch_project_schema.md",
@@ -21,6 +22,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
       "id": 2,
       "spec_node_id": "schema/component/2",
       "bead_id": "abc-002",
+      "bead_type": "feature",
       "module": "schema",
       "component": "ModuleSchema",
       "content_file": "spec/schema/arch_module_schema.md",
@@ -30,6 +32,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
       "id": 3,
       "spec_node_id": "validator/component/1",
       "bead_id": "abc-003",
+      "bead_type": "feature",
       "module": "validator",
       "component": "SchemaChecker",
       "content_file": "spec/validator/arch_schema_checker.md",
@@ -55,6 +58,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
 | `id` | int | Unique record ID, assigned by MappingStore |
 | `spec_node_id` | string | `<module>/<node_type>/<node_id>` — e.g., `"impact/component/3"` |
 | `bead_id` | string | Bead ID from `br` or `bd` |
+| `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) |
 | `module` | string | Module name (matches `module.json` name) |
 | `component` | string | Component or section name (human-readable) |
 | `content_file` | string | Relative path to the spec content file |

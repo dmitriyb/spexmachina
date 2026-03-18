@@ -7,32 +7,28 @@ impact report (JSON, stdin)
      │
      ▼
 ┌─────────────┐
-│ Parse report │── deserialize creates, closes, reviews
+│ Parse report │── deserialize creates, obsoletes
 └──────┬──────┘
        │
        ▼
 ┌─────────────────┐
-│ BeadCreator      │── bead create for each new spec node
-│                  │   create mapping record in .bead-map.json
+│ BeadCloser       │── <bin> close with spex:obsolete + commit:<HEAD>
+│                  │   for removed nodes: delete mapping record
+│                  │   for modified nodes: leave record (BeadCreator updates it)
+└──────┬──────────┘
+       │
+       ▼
+┌─────────────────┐
+│ BeadCreator      │── <bin> create with --type, --parent, --deps, --priority
+│                  │   hierarchy order: epics → features → tasks
+│                  │   create/update mapping record in .bead-map.json
 │                  │   set bead label to spex:<record-id>
-│                  │   returns new bead IDs
-└──────┬──────────┘
-       │
-       ▼
-┌─────────────────┐
-│ BeadUpdater      │── bead update spec_hash for modified nodes
-│                  │   update mapping record spec_hash
-└──────┬──────────┘
-       │
-       ▼
-┌─────────────────┐
-│ BeadCloser       │── bead close for removed spec nodes
-│                  │   remove mapping record from .bead-map.json
+│                  │   cleanup beads: spex:cleanup label, no mapping record
 └──────┬──────────┘
        │
        ▼
 ┌────────────────┐
-│ ProposalTagger  │── bead update metadata with proposal ref
+│ ProposalTagger  │── <bin> update metadata with proposal ref
 │                 │   for all affected beads
 └──────┬─────────┘
        │
@@ -46,20 +42,23 @@ impact report (JSON, stdin)
   (exit 0)
 ```
 
+Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
+
 ## Execution Order
 
-1. Creates first — new beads and mapping records exist before tagging
-2. Updates second — existing beads and mapping records get new spec_hash
-3. Closes third — obsolete beads and mapping records removed after everything else succeeds
-4. Tag all affected beads with proposal reference
-5. Save snapshot last — marks apply as complete
+1. Obsoletes first — close beads being replaced or removed, with `spex:obsolete` + `commit:<HEAD>` labels
+2. Creates in hierarchy order — epics (modules) first, then features (components), then tasks (test_sections). Each level's parent IDs are resolved from the mapping file.
+3. Tag all affected beads with proposal reference
+4. Save snapshot last — marks apply as complete
 
 ## Mapping File Maintenance
 
-Each bead operation stage (create/update/close) also maintains the corresponding mapping record in `.bead-map.json`:
-- **Create**: Adds a record with the new bead ID and spec metadata, then labels the bead with `spex:<record-id>`
-- **Update**: Updates the record's `spec_hash` to match the new spec content hash
-- **Close**: Removes the record from the mapping file
+Each bead operation stage also maintains the corresponding mapping record in `.bead-map.json`:
+- **Obsolete (removed)**: Removes the record from the mapping file
+- **Obsolete (modified)**: Leaves the record intact for BeadCreator to update
+- **Create (new)**: Adds a record with the new bead ID, bead type, and spec metadata, then labels the bead with `spex:<record-id>`
+- **Create (modified)**: Updates the existing record with the new bead ID and spec hash
+- **Create (cleanup)**: No mapping record (component removed from spec); bead labeled `spex:cleanup`
 
 The mapping file is committed to git alongside `.snapshot.json` after apply completes.
 

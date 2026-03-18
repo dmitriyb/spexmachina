@@ -1,10 +1,13 @@
-# Bead Closure Commands
+# Bead Obsolescence Commands
 
 ## Command Construction
 
 ```go
-func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
-    args := []string{"close", id, "--reason", reason}
+func (c *execCLI) Close(ctx context.Context, id string, labels []string) error {
+    args := []string{"close", id}
+    for _, label := range labels {
+        args = append(args, "--add-label", label)
+    }
     out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
     if err != nil {
         return fmt.Errorf("apply: %s close %s: %w\n%s", c.bin, id, err, out)
@@ -15,30 +18,41 @@ func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
 
 The `bin` parameter is the bead CLI binary name (`"br"` or `"bd"`), allowing the same logic to work with either tool.
 
-## Mapping Record Removal
+## Label Assignment
 
-After closing the bead, remove the corresponding mapping record:
+Every obsoleted bead receives exactly two labels:
+- `spex:obsolete` — lifecycle marker identifying the bead as superseded
+- `commit:<HEAD>` — the git HEAD at the moment of obsolescence, stamping the last commit where the bead's spec was valid
 
 ```go
-func closeBead(ctx context.Context, cli BeadCLI, store map.Store, action Action) error {
-    if err := cli.Close(ctx, action.BeadID, reason); err != nil {
+func obsoleteBead(ctx context.Context, cli BeadCLI, store map.Store, action Action) error {
+    head, err := gitHEAD()
+    if err != nil {
+        return fmt.Errorf("apply: resolve HEAD: %w", err)
+    }
+    labels := []string{"spex:obsolete", fmt.Sprintf("commit:%s", head)}
+    if err := cli.Close(ctx, action.BeadID, labels); err != nil {
         return err
     }
-    record, err := store.GetByBead(action.BeadID)
-    if err != nil {
-        // Log warning — orphaned record will be cleaned up later
-        return nil
+
+    // Only delete mapping record for removed nodes
+    if action.ChangeType == "removed" {
+        record, err := store.GetByBead(action.BeadID)
+        if err != nil {
+            return nil // Log warning — orphaned record will be cleaned up later
+        }
+        return store.Delete(record.ID)
     }
-    return store.Delete(record.ID)
+    return nil
 }
 ```
 
 ## Batch Processing
 
-Close actions are processed sequentially. Each failure is logged as a warning and accumulated. The batch continues even if individual closes fail.
+Obsolete actions are processed sequentially. Each failure is logged as a warning and accumulated. The batch continues even if individual closes fail.
 
 ## Error Tolerance
 
-Any non-zero exit code from the close command is treated as a warning, not a fatal error. This covers already-closed beads, missing bead IDs, and other transient issues. The warning is logged with the bead ID and command output for debuggability.
+Any non-zero exit code from the close command is treated as a warning, not a fatal error. This covers already-closed beads, missing bead IDs, and other transient issues.
 
-If the bead close succeeds but the mapping record deletion fails, the orphaned record is logged as a warning and will be cleaned up on the next `spex apply` run.
+`CloseBeads` returns a summary error aggregating all warnings, or nil if all succeeded.
