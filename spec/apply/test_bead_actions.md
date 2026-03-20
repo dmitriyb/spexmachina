@@ -211,3 +211,48 @@ And no mapping record is created in `.bead-map.json` (the component no longer ex
 ### E6: Type table is exhaustive
 
 Attempt to create a bead for each spec node type that produces beads (module, component, test_section). Assert each maps to the correct bead type (epic, feature, task). Attempt to create for node types that do NOT produce beads (impl_section, data_flow). Assert these are rejected or skipped.
+
+## Spec-Graph Dependency Scenarios
+
+These scenarios test that BeadCreator passes `--deps depends:<bead-id>` for spec-graph dependencies carried in the action's `DepBeadIDs` field (requirement 10). The `depends` relationship type is separate from `blocks` (lineage).
+
+### D1: BeadCreator passes --deps depends for each DepBeadID
+
+Given a create action with `DepBeadIDs: ["spex-200", "spex-201"]` and no `OldBeadID`.
+
+When `CreateBeads` is called:
+
+Then the fake receives one `Create` call with:
+- `--deps depends:spex-200`
+- `--deps depends:spex-201`
+- No `--deps blocks:` flag (no lineage)
+
+Multiple `--deps` flags are passed — one per dependency.
+
+### D2: BeadCreator passes both blocks and depends deps
+
+Given a create action with `OldBeadID: "spex-100"` and `DepBeadIDs: ["spex-200"]`.
+
+When `CreateBeads` is called:
+
+Then the fake receives one `Create` call with:
+- `--deps blocks:spex-100` (lineage)
+- `--deps depends:spex-200` (spec-graph dependency)
+
+Both relationship types coexist on the same bead.
+
+### D3: BeadCreator skips --deps depends when DepBeadIDs is empty
+
+Given a create action with `DepBeadIDs: []` (empty) or nil.
+
+When `CreateBeads` is called:
+
+Then no `--deps depends:` flags are passed. Only `--deps blocks:` is passed if `OldBeadID` is set.
+
+### D4: BeadCreator passes multiple depends deps for large dependency sets
+
+Given a create action with `DepBeadIDs: ["a", "b", "c", "d", "e"]` (5 dependencies).
+
+When `CreateBeads` is called:
+
+Then the fake receives five `--deps depends:` flags in the order they appear in `DepBeadIDs`. Order is deterministic.

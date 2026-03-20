@@ -219,3 +219,53 @@ Given `--bead-cli bd` instead of the default `br`.
 When `spex apply --bead-cli bd --report report_creates_only.json --proposal ref` runs:
 
 Then the fake is constructed with binary name `bd`. All commands use `bd`. This validates the `--bead-cli` flag threading.
+
+## Topological Ordering Scenarios
+
+These scenarios test that ApplyCommand performs topological ordering within each type level when spec-graph dependencies exist between beads being created in the same run (requirement 11).
+
+### T1: Topological ordering within feature level based on DepBeadIDs
+
+Given a report with three component create actions:
+- Component A in module M (no DepBeadIDs)
+- Component B in module M (DepBeadIDs references the bead that will be created for A)
+- Component C in module M (DepBeadIDs references the bead that will be created for B)
+
+When `spex apply` runs:
+
+Then `Create` calls for features occur in order: A, B, C. A is created first because B depends on it, and B before C.
+
+### T2: Topological ordering does not affect cross-type ordering
+
+Given a report with:
+- One module create (epic)
+- Two component creates where component X depends on component Y (both features)
+- One test_section create (task)
+
+When `spex apply` runs:
+
+Then the overall order is: epic first, then features (Y before X due to topological sort), then task last. Type-level ordering (epic→feature→task) is preserved; topological sort only reorders within the feature level.
+
+### T3: Independent beads within a type level maintain stable order
+
+Given three component create actions with no DepBeadIDs (no dependencies between them).
+
+When `spex apply` runs:
+
+Then the three features are created in their original order from the impact report. Topological sort is stable — when no dependency constraints exist, input order is preserved.
+
+### T4: Circular dependency within a type level is detected
+
+Given two component create actions where A's DepBeadIDs references B and B's DepBeadIDs references A (circular — should not happen with valid spec, but must not hang).
+
+When `spex apply` runs:
+
+Then the command detects the cycle and exits with code 1 and an error message indicating the circular dependency. No beads are created for the cycle.
+
+### T5: DepBeadIDs referencing already-existing beads do not affect ordering
+
+Given two component create actions: A with `DepBeadIDs: ["spex-existing"]` (an already-created bead, not in the current create batch) and B with no dependencies.
+
+When `spex apply` runs:
+
+Then A and B are created in their original order. The `--deps depends:spex-existing` flag is passed for A, but since `spex-existing` is not being created in this batch, it doesn't affect topological ordering.

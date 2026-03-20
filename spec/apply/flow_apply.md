@@ -21,6 +21,8 @@ impact report (JSON, stdin)
 ┌─────────────────┐
 │ BeadCreator      │── <bin> create with --type, --parent, --deps, --priority
 │                  │   hierarchy order: epics → features → tasks
+│                  │   topological sort within each type level (DepBeadIDs)
+│                  │   --deps blocks:<old> (lineage) + --deps depends:<dep> (spec-graph)
 │                  │   create/update mapping record in .bead-map.json
 │                  │   set bead label to spex:<record-id>
 │                  │   cleanup beads: spex:cleanup label, no mapping record
@@ -47,7 +49,7 @@ Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 ## Execution Order
 
 1. Obsoletes first — close beads being replaced or removed, with `spex:obsolete` + `commit:<HEAD>` labels
-2. Creates in hierarchy order — epics (modules) first, then features (components), then tasks (test_sections). Each level's parent IDs are resolved from the mapping file.
+2. Creates in hierarchy order with topological sort — epics (modules) first, then features (components), then tasks (test_sections). Within each type level, topological sort by `DepBeadIDs` ensures dependency beads are created before dependents. Each level's parent IDs are resolved from the mapping file. Each create passes `--deps depends:<id>` for spec-graph dependencies in addition to `--deps blocks:<id>` for lineage.
 3. Tag all affected beads with proposal reference
 4. Save snapshot last — marks apply as complete
 

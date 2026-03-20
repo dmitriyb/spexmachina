@@ -39,6 +39,11 @@ func createBead(ctx context.Context, bin string, store map.Store, action Action)
         args = append(args, "--deps", fmt.Sprintf("blocks:%s", action.OldBeadID))
     }
 
+    // Spec-graph dependencies via deps
+    for _, depID := range action.DepBeadIDs {
+        args = append(args, "--deps", fmt.Sprintf("depends:%s", depID))
+    }
+
     // Priority propagation
     if action.Priority >= 0 {
         args = append(args, "--priority", strconv.Itoa(action.Priority))

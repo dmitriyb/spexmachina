@@ -29,7 +29,17 @@ func GenerateReport(actions []Action, w io.Writer) error
 
 ```json
 {
-  "creates": [...],
+  "creates": [
+    {
+      "type": "create",
+      "module": "validator",
+      "node": "ContentResolver",
+      "node_type": "component",
+      "spec_hash": "abc123",
+      "dep_bead_ids": ["spex-050", "spex-060"],
+      "reason": "Spec node modified (new): validator/ContentResolver"
+    }
+  ],
   "obsoletes": [...],
   "summary": {
     "create_count": 5,
@@ -37,6 +47,8 @@ func GenerateReport(actions []Action, w io.Writer) error
   }
 }
 ```
+
+The `dep_bead_ids` field on create actions carries resolved spec-graph dependency bead IDs. It may be empty or omitted when no spec-graph dependencies exist. Downstream, `spex apply` reads this field to pass `--deps depends:<bead-id>` flags to the bead CLI.
 
 ## Composability
 
