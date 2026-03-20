@@ -18,6 +18,7 @@ Each mapping record contains:
   "id": 42,
   "spec_node_id": "impact/component/3",
   "bead_id": "abc-123",
+  "bead_type": "feature",
   "module": "impact",
   "component": "ActionClassifier",
   "content_file": "spec/impact/arch_action_classifier.md",
@@ -30,6 +31,7 @@ Each mapping record contains:
 | `id` | int | Auto-incrementing record ID, unique within the mapping file |
 | `spec_node_id` | string | Composite key: `<module>/<node_type>/<node_id>` |
 | `bead_id` | string | Bead ID from `br` or `bd` |
+| `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) — determined by spec node type |
 | `module` | string | Module name |
 | `component` | string | Component or section name (human-readable) |
 | `content_file` | string | Path to the spec content markdown file |
@@ -42,6 +44,7 @@ type Record struct {
     ID          int    `json:"id"`
     SpecNodeID  string `json:"spec_node_id"`
     BeadID      string `json:"bead_id"`
+    BeadType    string `json:"bead_type"`
     Module      string `json:"module"`
     Component   string `json:"component"`
     ContentFile string `json:"content_file"`

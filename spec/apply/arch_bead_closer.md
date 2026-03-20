@@ -1,13 +1,13 @@
 # BeadCloser
 
-Closes obsolete beads whose spec nodes have been removed. Removes the corresponding mapping record from `.bead-map.json`.
+Obsoletes beads via bead CLI (`br` or `bd`) with `spex:obsolete` label and `commit:<HEAD>` label. Uniform path for both modified and removed spec nodes.
 
 ## Responsibilities
 
-- Read "close" actions from the impact report
-- Construct bead close commands with descriptive reasons
-- Execute bead closure via `br` or `bd`
-- Remove the corresponding mapping record from `.bead-map.json`
+- Read "obsolete" actions from the impact report
+- Close beads with `spex:obsolete` and `commit:<HEAD>` labels
+- For removed nodes, delete the corresponding mapping record from `.bead-map.json`
+- For modified nodes, leave the mapping record (BeadCreator will update it with the new bead)
 
 ## Interface
 
@@ -17,35 +17,38 @@ Reuses the `BeadCLI` interface from BeadCreator, extended with a `Close` method:
 type BeadCLI interface {
     Create(ctx context.Context, opts CreateOpts) (string, error)
     FindExisting(ctx context.Context, labels []string) (string, error)
-    Close(ctx context.Context, id string, reason string) error
+    Close(ctx context.Context, id string, labels []string) error
 }
 
-func CloseBeads(ctx context.Context, cli BeadCLI, store map.Store, closes []Action, logger *slog.Logger) error
+func CloseBeads(ctx context.Context, cli BeadCLI, store map.Store, obsoletes []Action, logger *slog.Logger) error
 ```
 
 ## Command Construction
 
-For each close action:
+For each obsolete action:
 ```
-<bin> close <bead_id> --reason "Spec node removed: <module>/<node_name>"
+<bin> close <bead_id> --add-label spex:obsolete --add-label commit:<HEAD>
 ```
 
-Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
+Where `<bin>` is the configured bead CLI binary (`br` or `bd`). The `commit:<HEAD>` label stamps the last commit where the bead's spec was valid. Active beads carry no commit label — the commit label only appears at the moment of obsolescence.
 
-## Mapping Record Removal
+## Mapping Record Handling
 
-After closing the bead, BeadCloser calls `store.Delete(recordID)` to remove the mapping record. The record ID is obtained from the bead's `spex:<record-id>` label or from the mapping store lookup by spec node ID.
+- **Removed nodes**: After closing the bead, call `store.Delete(recordID)` to remove the mapping record.
+- **Modified nodes**: Leave the mapping record intact — BeadCreator will update it with the new bead ID and spec hash.
+
+The distinction is determined by the action's `change_type` field: `"removed"` triggers deletion, `"modified"` does not.
+
+## Lineage
+
+History is a dependency chain walk in the bead CLI: bead-v3 → bead-v2 → bead-v1. Each obsoleted bead's `commit:<hash>` label provides a precise pointer for historical lookup: `git show <that-commit>:spec/...` recovers the exact spec state.
 
 ## Idempotency & Error Handling
 
-Close errors are logged as warnings but do not abort the batch. Exit code 0 means success; any non-zero exit is treated as a warning. This covers:
+Close errors are logged as warnings but do not abort the batch. This covers:
 
 - Bead already closed (idempotent)
 - Bead ID no longer exists (manually closed between diff and apply)
-
-If the bead close succeeds but the mapping record deletion fails, the error is logged as a warning. The orphaned record will be cleaned up on the next `spex apply`.
-
-Only binary-not-found errors (from `NewBeadCLI` construction) are fatal.
 
 `CloseBeads` returns a summary error aggregating all warnings, or nil if all succeeded.
 

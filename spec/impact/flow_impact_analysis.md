@@ -16,10 +16,12 @@ merkle diff                bead metadata
            ▼
 ┌──────────────────┐
 │ ActionClassifier  │
-│ apply decision    │
+│ state transition  │
 │ table per match   │
+│ modified →        │
+│   obsolete+create │
 └──────────┬───────┘
-           │ actions[]
+           │ actions[] (create, obsolete)
            ▼
 ┌──────────────────┐
 │ ReportGenerator   │

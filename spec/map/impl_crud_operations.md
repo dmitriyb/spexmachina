@@ -54,6 +54,9 @@ func (s *fileStore) Update(id int, updates map[string]string) error {
             if v, ok := updates["spec_hash"]; ok {
                 data.Records[i].SpecHash = v
             }
+            if v, ok := updates["bead_id"]; ok {
+                data.Records[i].BeadID = v
+            }
             return s.save(data)
         }
     }
@@ -61,7 +64,9 @@ func (s *fileStore) Update(id int, updates map[string]string) error {
 }
 ```
 
-Only `spec_hash` is updatable. Other fields are immutable after creation — changing them would break the mapping identity.
+Both `spec_hash` and `bead_id` are updatable — `bead_id` changes when a bead is obsoleted and replaced by a new one. Other fields (`spec_node_id`, `bead_type`, `module`, `component`, `content_file`) are immutable after creation.
+
+A `CreateOrUpdate` method combines create and update: if a record with the same `spec_node_id` exists, update its `bead_id` and `spec_hash`; otherwise create a new record.
 
 ## Delete
 

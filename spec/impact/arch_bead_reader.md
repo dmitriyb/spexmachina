@@ -14,6 +14,7 @@ Reads bead metadata from the bead CLI (`br` or `bd`). Extracts the mapping recor
 type BeadSpec struct {
     ID       string // bead ID
     RecordID int    // mapping record ID from "spex:<id>" label
+    Status   string // bead status ("open", "in_progress", "closed")
 }
 
 func ReadBeads(ctx context.Context) ([]BeadSpec, error)
@@ -21,7 +22,7 @@ func ReadBeads(ctx context.Context) ([]BeadSpec, error)
 
 ## Bead CLI Interaction
 
-Uses `exec.CommandContext(ctx, bin, "list", "--json")` to get bead data, where `bin` is `"br"` or `"bd"`. The `--json` flag outputs machine-readable JSON with a `labels` array of `key:value` strings. Parse the output and extract the `spex` label (e.g., `spex:42`).
+Uses `exec.CommandContext(ctx, bin, "list", "--json")` to get bead data, where `bin` is `"br"` or `"bd"`. The `--json` flag outputs machine-readable JSON with a `labels` array of `key:value` strings and a `status` field. Parse the output and extract the `spex` label (e.g., `spex:42`) and the `status` field.
 
 ## Label Format
 

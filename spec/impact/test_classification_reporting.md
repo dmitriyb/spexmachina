@@ -1,6 +1,6 @@
 # Classification and Reporting Tests
 
-Integration and acceptance tests for ActionClassifier (component 3) and ReportGenerator (component 4). These tests verify that matched, unmatched, and orphaned node results are correctly classified into create/close/review actions, and that the structured JSON impact report is correctly generated with accurate summary statistics.
+Integration and acceptance tests for ActionClassifier (component 3) and ReportGenerator (component 4). These tests verify that matched, unmatched, and orphaned node results are correctly classified into create/obsolete actions, and that the structured JSON impact report is correctly generated with accurate summary statistics.
 
 ## Setup
 
@@ -64,14 +64,18 @@ orphaned := []Orphaned{
 
 ### S1: ActionClassifier produces correct actions for each category
 
-Call `ClassifyActions(matches, unmatched, orphaned)`. Assert the returned `[]Action` contains exactly four actions:
+Call `ClassifyActions(matches, unmatched, orphaned)`. Assert the returned `[]Action` contains exactly six actions:
 
-| # | Type | BeadID | Module | Node | Impact | Reason |
-|---|---|---|---|---|---|---|
-| 1 | review | spex-001 | validator | SchemaChecker | arch_impl | Spec node modified (arch_impl): validator/SchemaChecker |
-| 2 | review | spex-003 | merkle | Hash computation | impl_only | Spec node modified (impl_only): merkle/Hash computation |
-| 3 | create | (empty) | validator | OrphanDetector | arch_impl | New spec node: validator/OrphanDetector |
-| 4 | close | spex-010 | merkle | LegacyHasher | (empty) | Spec node removed: merkle/LegacyHasher |
+| # | Type | BeadID | Module | Node | Reason |
+|---|------|--------|--------|------|--------|
+| 1 | obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
+| 2 | create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
+| 3 | obsolete | spex-003 | merkle | Hash computation | Spec node modified: merkle/Hash computation |
+| 4 | create | (empty) | merkle | Hash computation | Spec node modified (new): merkle/Hash computation |
+| 5 | create | (empty) | validator | OrphanDetector | New spec node: validator/OrphanDetector |
+| 6 | obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
+
+Modified nodes produce TWO actions (obsolete old + create new). Added nodes produce one create. Removed nodes produce one obsolete.
 
 ### S2: ActionClassifier handles modified node without a matching bead
 
@@ -90,7 +94,7 @@ unmatched := []Unmatched{
 }
 ```
 
-Assert the action type is `"create"` — a modified spec node with no tracking bead needs a new bead created, per the decision table row: modified + no bead = create.
+Assert the action type is `"create"` — a modified spec node with no tracking bead needs a new bead created. No obsolete action is generated since there is no old bead to obsolete.
 
 ### S3: ActionClassifier handles added node with an existing bead (unexpected case)
 
@@ -112,7 +116,7 @@ matches := []Match{
 }
 ```
 
-Assert the action type is `"review"` — per the decision table, added + existing bead = review for consistency.
+Assert the actions are `"obsolete"` (old bead) + `"create"` (new bead) — even for an "added" change type, the presence of an existing bead triggers the obsolete+create flow for consistency.
 
 ### S4: ActionClassifier handles removed node without a matching bead
 
@@ -131,7 +135,7 @@ unmatched := []Unmatched{
 }
 ```
 
-Assert no action is generated — per the decision table, removed + no bead = no action (nothing to close).
+Assert no action is generated — removed + no bead = no action (nothing to obsolete).
 
 ### S5: ActionClassifier handles multiple beads per matched node
 
@@ -154,35 +158,61 @@ matches := []Match{
 }
 ```
 
-Assert two separate `review` actions are generated, one for each bead ID (spex-001 and spex-005). Each bead that tracks the same spec node must be independently flagged for review.
+Assert four actions are generated: two obsolete actions (one for each old bead) and two create actions (new beads to replace them). Each old bead is independently obsoleted.
+
+### S5b: ActionClassifier handles removed node with closed bead (cleanup)
+
+Provide an Orphaned entry where the bead status is "closed":
+
+```go
+orphaned := []Orphaned{
+    {
+        Bead: BeadSpec{ID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000", Status: "closed"},
+    },
+}
+```
+
+Assert two actions are generated:
+1. `"obsolete"` with BeadID `"spex-010"` and reason `"Spec node removed: merkle/LegacyHasher"`
+2. `"create"` with reason `"Code cleanup: merkle/LegacyHasher"` — a cleanup bead for deleting shipped code
+
+### S5c: ActionClassifier handles removed node with open bead (no cleanup)
+
+Provide an Orphaned entry where the bead status is "open":
+
+```go
+orphaned := []Orphaned{
+    {
+        Bead: BeadSpec{ID: "spex-011", Module: "merkle", Component: "DraftHasher", SpecHash: "yyy000", Status: "open"},
+    },
+}
+```
+
+Assert only one action is generated: `"obsolete"` with BeadID `"spex-011"`. No cleanup bead is created because no code has shipped to main.
 
 ### S6: Impact level appears in action metadata but does not change action type
 
-Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce action type `"review"` but with different `Impact` and `Reason` fields. Specifically verify the reason string includes the impact level:
-- `"Spec node modified (impl_only): merkle/Hasher"`
-- `"Spec node modified (arch_impl): merkle/Hasher"`
-- `"Spec node modified (structural): merkle/Hasher"`
+Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce the same action types (obsolete + create) regardless of impact level. Verify the reason string includes the impact level for traceability.
 
 ### S7: ReportGenerator produces valid JSON with correct structure
 
-Call `GenerateReport(actions, &buf)` with the four actions from S1. Parse the output JSON and assert:
+Call `GenerateReport(actions, &buf)` with the six actions from S1. Parse the output JSON and assert:
 
 ```json
 {
   "creates": [
-    {"type": "create", "module": "validator", "node": "OrphanDetector", "impact": "arch_impl", "reason": "New spec node: validator/OrphanDetector"}
+    {"type": "create", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified (new): validator/SchemaChecker"},
+    {"type": "create", "module": "merkle", "node": "Hash computation", "reason": "Spec node modified (new): merkle/Hash computation"},
+    {"type": "create", "module": "validator", "node": "OrphanDetector", "reason": "New spec node: validator/OrphanDetector"}
   ],
-  "closes": [
-    {"type": "close", "bead_id": "spex-010", "module": "merkle", "node": "LegacyHasher", "reason": "Spec node removed: merkle/LegacyHasher"}
-  ],
-  "reviews": [
-    {"type": "review", "bead_id": "spex-001", "module": "validator", "node": "SchemaChecker", "impact": "arch_impl", "reason": "Spec node modified (arch_impl): validator/SchemaChecker"},
-    {"type": "review", "bead_id": "spex-003", "module": "merkle", "node": "Hash computation", "impact": "impl_only", "reason": "Spec node modified (impl_only): merkle/Hash computation"}
+  "obsoletes": [
+    {"type": "obsolete", "bead_id": "spex-001", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified: validator/SchemaChecker"},
+    {"type": "obsolete", "bead_id": "spex-003", "module": "merkle", "node": "Hash computation", "reason": "Spec node modified: merkle/Hash computation"},
+    {"type": "obsolete", "bead_id": "spex-010", "module": "merkle", "node": "LegacyHasher", "reason": "Spec node removed: merkle/LegacyHasher"}
   ],
   "summary": {
-    "create_count": 1,
-    "close_count": 1,
-    "review_count": 2
+    "create_count": 3,
+    "obsolete_count": 3
   }
 }
 ```
@@ -193,13 +223,11 @@ Call `GenerateReport` and inspect the raw bytes written to the writer. Assert th
 
 ### S9: ReportGenerator groups actions correctly
 
-Provide six actions: 2 creates, 1 close, 3 reviews. Assert:
+Provide five actions: 2 creates, 3 obsoletes. Assert:
 - `report.Creates` has length 2
-- `report.Closes` has length 1
-- `report.Reviews` has length 3
+- `report.Obsoletes` has length 3
 - `report.Summary.CreateCount == 2`
-- `report.Summary.CloseCount == 1`
-- `report.Summary.ReviewCount == 3`
+- `report.Summary.ObsoleteCount == 3`
 
 ### S10: Full pipeline — ClassifyActions into GenerateReport
 
@@ -214,9 +242,8 @@ Call `ClassifyActions(nil, nil, nil)`. Assert the result is an empty `[]Action`.
 ```json
 {
   "creates": [],
-  "closes": [],
-  "reviews": [],
-  "summary": {"create_count": 0, "close_count": 0, "review_count": 0}
+  "obsoletes": [],
+  "summary": {"create_count": 0, "obsolete_count": 0}
 }
 ```
 
@@ -230,7 +257,7 @@ Create an action where Module and Node are empty strings. Assert `GenerateReport
 
 ### E4: Very large action list
 
-Generate 10,000 actions (mix of creates, closes, reviews). Assert `ClassifyActions` completes without error and `GenerateReport` produces valid JSON with correct summary counts. This validates that no O(n^2) algorithms are hiding in the pipeline.
+Generate 10,000 actions (mix of creates and obsoletes). Assert `ClassifyActions` completes without error and `GenerateReport` produces valid JSON with correct summary counts. This validates that no O(n^2) algorithms are hiding in the pipeline.
 
 ### E5: Duplicate actions are preserved, not deduplicated
 

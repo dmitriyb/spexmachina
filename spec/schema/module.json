@@ -7,14 +7,14 @@
       "type": "functional",
       "title": "Define project schema",
       "preq_id": 1,
-      "description": "JSON Schema for project.json covering name, description, version, requirements, module declarations with inter-module dependencies, and milestones."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), module declarations with inter-module dependencies, and milestones."
     },
     {
       "id": 2,
       "type": "functional",
       "title": "Define module schema",
       "preq_id": 1,
-      "description": "JSON Schema for module.json covering requirements (with preq_id), architecture components (with content links), implementation sections (with content links), and data flows."
+      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), implementation sections (with content links), and data flows."
     },
     {
       "id": 3,
@@ -49,21 +49,21 @@
       "type": "functional",
       "title": "Define bead-map schema",
       "preq_id": 3,
-      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, module, component, content_file, spec_hash, optional bead_status). spec_node_id format validated via pattern."
+      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional bead_status). spec_node_id format validated via pattern."
     }
   ],
   "components": [
     {
       "id": 1,
       "name": "ProjectSchema",
-      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements, module declarations, and milestones.",
+      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and milestones.",
       "content": "arch_project_schema.md",
       "implements": [1, 4, 6]
     },
     {
       "id": 2,
       "name": "ModuleSchema",
-      "description": "The module.json JSON Schema definition. Defines the structure for module requirements, components, impl_sections, and data_flows.",
+      "description": "The module.json JSON Schema definition. Defines the structure for module requirements (with preq_id required), components, impl_sections, test_sections, and data_flows.",
       "content": "arch_module_schema.md",
       "implements": [2, 4, 5]
     },
@@ -78,7 +78,7 @@
     {
       "id": 4,
       "name": "BeadMapSchema",
-      "description": "The .bead-map.json JSON Schema definition. Defines the structure for the mapping envelope (next_id, records) and individual mapping records.",
+      "description": "The .bead-map.json JSON Schema definition. Defines the structure for the mapping envelope (next_id, records) and individual mapping records including bead_type field.",
       "content": "arch_bead_map_schema.md",
       "implements": [7]
     }

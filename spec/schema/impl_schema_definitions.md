@@ -8,7 +8,11 @@ Schemas are authored as standard JSON Schema (draft 2020-12) files stored in `sc
 
 ### Shared requirement definition
 
-The requirement `$def` is duplicated between project and module schemas rather than extracted to a shared schema file. This keeps each schema self-contained and avoidable `$ref` resolution across files. The duplication is small (one definition) and documented with a `$comment` noting the need to keep both in sync.
+The requirement `$def` is duplicated between project and module schemas rather than extracted to a shared schema file. This keeps each schema self-contained and avoids `$ref` resolution across files. The duplication is small (one definition) and documented with a `$comment` noting the need to keep both in sync.
+
+The two definitions differ in two ways:
+- **Module requirements** have `preq_id` in their `required` array — every module requirement must trace to a project requirement.
+- **Project requirements** have an optional `priority` field (integer 0-4) — the validator enforces its presence, but the schema allows omission for migration flexibility.
 
 ### No `additionalProperties` in nested objects
 

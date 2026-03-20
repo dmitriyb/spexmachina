@@ -10,7 +10,7 @@ module.json
 ├── description (string)
 ├── requirements[]
 │   ├── id (int >= 1)
-│   ├── preq_id (int >= 1, traces to project requirement)
+│   ├── preq_id (int >= 1, required, traces to project requirement)
 │   ├── type ("functional" | "non_functional")
 │   ├── title (string, required)
 │   ├── description (string)
@@ -53,6 +53,6 @@ module.json
 
 ## Design Rationale
 
-Only `name` is required at the module level. All arrays are optional, enabling incremental authoring. The `preq_id` field on requirements creates the traceability chain: project requirement → module requirement → component → impl_section. The `test_sections` array adds a parallel verification chain: component → test_section, enabling test coverage analysis.
+Only `name` is required at the module level. All arrays are optional, enabling incremental authoring. The `preq_id` field on requirements is required (not optional) — every module requirement must trace to a project requirement. This creates the traceability chain: project requirement → module requirement → component → impl_section. The `test_sections` array adds a parallel verification chain: component → test_section, enabling test coverage analysis.
 
 Content paths are relative to the module directory, keeping file references local and relocatable.

@@ -22,14 +22,44 @@ For each module:
   Check: comp.uses ⊆ compIDs
   Check: impl.describes ⊆ compIDs
   Check: flow.uses ⊆ compIDs
+  Check: test.describes ⊆ compIDs
   Check: req.depends_on ⊆ reqIDs
-  Check: req.preq_id ∈ projectReqIDs (if set)
+  Check: req.preq_id ∈ projectReqIDs (mandatory — see below)
 
 Check: mod.requires_module ⊆ moduleIDs
 Check: milestone.groups ⊆ moduleIDs
 ```
 
 Each failed check produces an error with the source node, the reference field, and the dangling target ID.
+
+## Mandatory preq_id Check
+
+Every module requirement must have a `preq_id` field, and it must reference an existing project requirement ID:
+
+```
+For each module:
+  For each requirement in module.requirements:
+    If req.preq_id == 0 (unset):
+      Error: "module %s: requirement %d missing preq_id"
+    Else if req.preq_id ∉ projectReqIDs:
+      Error: "module %s: requirement %d preq_id %d not found in project requirements"
+```
+
+This enforces that no orphan module requirements exist — every module requirement must derive from a project goal.
+
+## Priority Presence Check
+
+Every project requirement must have a `priority` field (integer 0-4):
+
+```
+For each requirement in project.requirements:
+  If req.priority is not set:
+    Error: "project requirement %d missing priority"
+  Else if req.priority < 0 or req.priority > 4:
+    Error: "project requirement %d priority %d out of range (must be 0-4)"
+```
+
+Migration note: existing project requirements without a `priority` field will fail validation. Users must add priority values manually. Default recommendation: P1 (high).
 
 ## Ordering
 

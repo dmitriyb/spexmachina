@@ -7,7 +7,7 @@
       "type": "functional",
       "title": "Store mapping records",
       "preq_id": 3,
-      "description": "Read/write .bead-map.json. Each record links a spec node ID to a bead ID with structured metadata: module name, component/section name, content file path, spec hash at time of mapping."
+      "description": "Read/write .bead-map.json. Each record links a spec node ID to a bead ID with structured metadata: module name, component/section name, content file path, spec hash at time of mapping, and bead type."
     },
     {
       "id": 2,
@@ -49,7 +49,7 @@
     {
       "id": 1,
       "name": "MappingStore",
-      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node ID to a bead ID with structured metadata.",
+      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node ID to a bead ID with structured metadata including bead_type field. Supports record updates for obsolete+create flows.",
       "content": "arch_mapping_store.md",
       "implements": [1, 5]
     },
