@@ -8,6 +8,7 @@ Creates new beads via the bead CLI (`br` or `bd`) with deterministic type assign
 - Determine bead type from spec node type (module→epic, component→feature, test_section→task)
 - Set `--parent` to establish hierarchy (component under module epic, test under component feature)
 - Set `--deps blocks:<old-bead-id>` for lineage when replacing an obsoleted bead
+- Set `--deps depends:<dep-bead-id>` for each spec-graph dependency from `DepBeadIDs`
 - Set `--priority` derived from project requirement chain
 - Execute bead creation and capture the new bead ID
 - Create or update the mapping record in `.bead-map.json`
@@ -43,9 +44,13 @@ For each create action:
   --type <type_from_table> \
   --parent <parent-bead-id> \
   --deps blocks:<old-bead-id> \
+  --deps depends:<dep-bead-id-1> \
+  --deps depends:<dep-bead-id-2> \
   --priority <priority> \
   --silent
 ```
+
+The `--deps blocks:` flag is for lineage (replacing an obsoleted bead). The `--deps depends:` flags are for spec-graph dependencies resolved from `uses` and `requires_module` edges. Multiple `--deps` flags are supported by `br create`. The `depends` relationship type means "don't start this until that is done."
 
 After creation, the mapping record is created/updated and the bead label is set:
 ```

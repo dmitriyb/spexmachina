@@ -118,7 +118,7 @@
       "name": "impact",
       "path": "impact",
       "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/obsolete).",
-      "requires_module": [3]
+      "requires_module": [3, 9]
     },
     {
       "id": 5,

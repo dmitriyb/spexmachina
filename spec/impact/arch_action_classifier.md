@@ -22,18 +22,29 @@ Determines the action for each affected bead or unmatched spec node using a simp
 
 The "review" action is eliminated. Any spec change to a node with an existing bead always obsoletes the old bead. If the node still exists (added or modified), a fresh bead is created.
 
+## Spec-Graph Dependency Resolution
+
+After classification, the ActionClassifier resolves spec-graph dependencies for each create action:
+
+1. **Component `uses` edges** (direct only): For each component the created node uses, look up the current bead from the mapping file. If open, add to `DepBeadIDs`.
+2. **Module `requires_module` edges** (transitive): Walk the module dependency graph, collecting open component beads from each required module. Uses cycle detection to handle invalid graphs.
+3. **Closed beads are skipped**: If a dependency's bead is closed, the work is done — no edge needed.
+
+This resolves structural dependencies into concrete bead IDs that flow through the impact report to BeadCreator, which passes them as `--deps depends:<bead-id>`.
+
 ## Interface
 
 ```go
 type Action struct {
-    Type      string   // "create" or "obsolete"
-    BeadID    string   // existing bead ID (for "obsolete"); empty for "create"
-    Module    string   // affected module
-    Node      string   // affected spec node (component/test_section name)
-    NodeType  string   // spec node type (module/component/test_section)
-    SpecHash  string   // current merkle hash (for "create")
-    OldBeadID string   // predecessor bead ID (for "create" replacing an obsoleted bead)
-    Reason    string   // human-readable explanation
+    Type       string   // "create" or "obsolete"
+    BeadID     string   // existing bead ID (for "obsolete"); empty for "create"
+    Module     string   // affected module
+    Node       string   // affected spec node (component/test_section name)
+    NodeType   string   // spec node type (module/component/test_section)
+    SpecHash   string   // current merkle hash (for "create")
+    OldBeadID  string   // predecessor bead ID (for "create" replacing an obsoleted bead)
+    DepBeadIDs []string // bead IDs this action's bead should depend on (from spec graph)
+    Reason     string   // human-readable explanation
 }
 
 func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned) []Action

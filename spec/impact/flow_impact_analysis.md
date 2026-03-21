@@ -3,30 +3,31 @@
 ## Data Flow
 
 ```
-merkle diff                bead metadata
-(classified changes)       (from bead list --json)
-     │                          │
-     ▼                          ▼
-┌──────────────────────────────────┐
-│ NodeMatcher                       │
-│ index beads by spec coords        │
-│ look up each changed node         │
-└──────────┬───────────────────────┘
-           │ matched[], unmatched[], orphaned[]
-           ▼
-┌──────────────────┐
-│ ActionClassifier  │
-│ state transition  │
-│ table per match   │
-│ modified →        │
-│   obsolete+create │
-└──────────┬───────┘
-           │ actions[] (create, obsolete)
+merkle diff                bead metadata        mapping file
+(classified changes)       (from bead list)     (.bead-map.json)
+     │                          │                     │
+     ▼                          ▼                     │
+┌──────────────────────────────────┐                  │
+│ NodeMatcher                       │                  │
+│ index beads by spec coords        │                  │
+│ look up each changed node         │                  │
+└──────────┬───────────────────────┘                  │
+           │ matched[], unmatched[], orphaned[]        │
+           ▼                                           │
+┌──────────────────────────┐                           │
+│ ActionClassifier          │                           │
+│ state transition table    │◄──────────────────────────┘
+│ + dependency resolution   │  resolve uses + requires_module
+│ modified → obsolete+create│  to bead IDs via mapping file
+│ create → attach DepBeadIDs│
+└──────────┬───────────────┘
+           │ actions[] (create w/ DepBeadIDs, obsolete)
            ▼
 ┌──────────────────┐
 │ ReportGenerator   │
 │ format JSON       │
-│ write to stdout   │
+│ include dep_bead_ │
+│ ids on creates    │
 └──────────┬───────┘
            │
            ▼

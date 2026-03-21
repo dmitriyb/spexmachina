@@ -59,6 +59,22 @@
       "title": "Priority propagation",
       "preq_id": 9,
       "description": "Derive bead priority from project requirements via the chain: component.implements[] \u2192 module requirement.preq_id \u2192 project requirement.priority. Lowest priority number (highest urgency) wins. Passed via --priority on bead CLI create."
+    },
+    {
+      "id": 10,
+      "type": "functional",
+      "title": "Pass spec-graph dependencies to bead create",
+      "preq_id": 5,
+      "description": "For each create action with DepBeadIDs, pass --deps depends:<bead-id> for each entry. The depends relationship type means 'don't start this until that is done.' This is separate from --deps blocks:<old-bead-id> which tracks lineage.",
+      "depends_on": [1]
+    },
+    {
+      "id": 11,
+      "type": "functional",
+      "title": "Topological creation ordering within type levels",
+      "preq_id": 9,
+      "description": "Extend creation ordering beyond type-based (epics→features→tasks) to include topological ordering within each type level. When bead A depends on bead B and both are created in the same apply run, B must be created first so its bead ID is available for A's --deps depends: flag.",
+      "depends_on": [8]
     }
   ],
   "components": [
@@ -67,7 +83,7 @@
       "name": "BeadCreator",
       "description": "Creates new beads via bead CLI (br or bd) with deterministic type assignment from spec node type table, --parent for hierarchy, --deps blocks:<old-bead-id> for lineage, and --priority from project requirement chain. After creation, creates or updates the mapping record in .bead-map.json and sets the bead label to spex:<record-id>.",
       "content": "arch_bead_creator.md",
-      "implements": [1, 6, 7, 8, 9]
+      "implements": [1, 6, 7, 8, 9, 10]
     },
     {
       "id": 2,
@@ -96,7 +112,7 @@
       "name": "ApplyCommand",
       "description": "CLI entry point for spex apply. Reads impact report, enforces creation ordering (epics \u2192 features \u2192 tasks), wires BeadCreator, BeadCloser, ProposalTagger, SnapshotSaver, executes all bead actions.",
       "content": "arch_apply_command.md",
-      "implements": [4, 5, 8],
+      "implements": [4, 5, 8, 11],
       "uses": [1, 2, 4, 5]
     }
   ],
@@ -136,7 +152,7 @@
     {
       "id": 1,
       "name": "Apply flow",
-      "description": "Impact report is read. Bead actions execute in type order: obsoletes first (for modified/removed nodes), then creates in hierarchy order (epics \u2192 features \u2192 tasks). All are tagged with the proposal. New snapshot saved.",
+      "description": "Impact report is read. Bead actions execute in label\u2192create\u2192close order: label obsoletes (keep open), creates in hierarchy order (epics \u2192 features \u2192 tasks), close obsoletes, tag all with proposal. New snapshot saved.",
       "content": "flow_apply.md",
       "uses": [1, 2, 4, 5]
     }

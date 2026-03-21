@@ -47,6 +47,14 @@
       "preq_id": 5,
       "description": "When a removed spec node has a closed bead (code shipped to main), classify as obsolete + cleanup create. When the bead is open or in_progress (no code shipped), classify as obsolete only.",
       "depends_on": [3]
+    },
+    {
+      "id": 7,
+      "type": "functional",
+      "title": "Resolve spec-graph dependencies for create actions",
+      "preq_id": 4,
+      "description": "For each create action, resolve uses (intra-module component edges) and requires_module (inter-module edges, transitive) to current bead IDs via the mapping file. Attach resolved open-bead dependency IDs to the action for downstream propagation to bead CLI --deps depends: flags.",
+      "depends_on": [3]
     }
   ],
   "components": [
@@ -68,15 +76,15 @@
     {
       "id": 3,
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads, also creates a cleanup bead.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file.",
       "content": "arch_action_classifier.md",
-      "implements": [3, 6],
-      "uses": [2]
+      "implements": [3, 6, 7],
+      "uses": [1, 2]
     },
     {
       "id": 4,
       "name": "ReportGenerator",
-      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete.",
+      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepBeadIDs field carrying resolved spec-graph dependency bead IDs.",
       "content": "arch_report_generator.md",
       "implements": [4],
       "uses": [3]
@@ -120,6 +128,12 @@
       "name": "Impact command implementation",
       "content": "impl_impact_command.md",
       "describes": [5]
+    },
+    {
+      "id": 6,
+      "name": "Dependency resolution algorithm",
+      "content": "impl_dependency_resolution.md",
+      "describes": [3]
     }
   ],
   "data_flows": [
