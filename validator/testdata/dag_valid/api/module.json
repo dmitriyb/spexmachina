@@ -1,9 +1,17 @@
 {
   "name": "api",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "API endpoint"}
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "API endpoint",
+      "preq_id": 1
+    }
   ],
   "components": [
-    {"id": 1, "name": "Handler"}
+    {
+      "id": 1,
+      "name": "Handler"
+    }
   ]
 }

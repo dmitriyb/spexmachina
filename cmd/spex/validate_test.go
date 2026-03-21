@@ -159,6 +159,9 @@ func setupSpecWithOrphans(t *testing.T) string {
 
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Project req"}
+		],
 		"modules": [
 			{"id": 1, "name": "alpha", "path": "alpha"}
 		]
@@ -171,8 +174,8 @@ func setupSpecWithOrphans(t *testing.T) string {
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req1"},
-			{"id": 2, "type": "functional", "title": "Req2"}
+			{"id": 1, "type": "functional", "title": "Req1", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Req2", "preq_id": 1}
 		],
 		"components": [
 			{"id": 1, "name": "Comp1", "content": "arch_comp1.md", "implements": [1]}

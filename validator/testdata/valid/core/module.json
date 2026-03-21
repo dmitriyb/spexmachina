@@ -5,7 +5,8 @@
     {
       "id": 1,
       "type": "functional",
-      "title": "Do something"
+      "title": "Do something",
+      "preq_id": 1
     }
   ],
   "components": [
