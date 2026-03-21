@@ -184,20 +184,20 @@
     {
       "id": 21,
       "spec_node_id": "impact/component/3",
-      "bead_id": "spexmachina-ycy",
+      "bead_id": "spexmachina-6jf",
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "8106aa3f0fd586a6b7953b7832de51950c25f87d35ffb751e6381d8f65882d46"
+      "spec_hash": "6ca27459f0d4db0ba05a6261962bf81c5ed3739d6ae573c9421889100aaf546b"
     },
     {
       "id": 22,
       "spec_node_id": "impact/component/4",
-      "bead_id": "spexmachina-szt",
+      "bead_id": "spexmachina-ncw",
       "module": "impact",
       "component": "ReportGenerator",
       "content_file": "spec/impact/arch_report_generator.md",
-      "spec_hash": "6f2adf129fc3482dd1fcf9c15c177763df44e4dec868b099941f3eccb26d0bb8"
+      "spec_hash": "97f25db569bd88690eecddba570764161d9c6e485d0664762e4441ce1908afef"
     },
     {
       "id": 23,
@@ -211,11 +211,11 @@
     {
       "id": 24,
       "spec_node_id": "apply/component/1",
-      "bead_id": "spexmachina-y57",
+      "bead_id": "spexmachina-igq",
       "module": "apply",
       "component": "BeadCreator",
       "content_file": "spec/apply/arch_bead_creator.md",
-      "spec_hash": "35b9899c600f4522e9d021b0d7ed6cc6fcf4f71416a3f8ca63857405bed1af07"
+      "spec_hash": "98707113c897ece4992f6dcec65571ca91d7666df623b2fee107eb8411d26d99"
     },
     {
       "id": 25,
@@ -247,11 +247,11 @@
     {
       "id": 29,
       "spec_node_id": "apply/component/6",
-      "bead_id": "spexmachina-iup",
+      "bead_id": "spexmachina-riw",
       "module": "apply",
       "component": "ApplyCommand",
       "content_file": "spec/apply/arch_apply_command.md",
-      "spec_hash": "b9273e8cd086ac8fa2dd88b1488908442e032bd3350829d5bf956b4c565e4134"
+      "spec_hash": "0905bfaff627eae73d7b2c1c393b9a6c088a69b005a39a855fbf70119b732b29"
     },
     {
       "id": 30,
