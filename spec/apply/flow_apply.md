@@ -12,7 +12,8 @@ impact report (JSON, stdin)
        │
        ▼
 ┌─────────────────┐
-│ BeadCloser       │── <bin> close with spex:obsolete + commit:<HEAD>
+│ BeadCloser       │── LABEL PHASE: <bin> update with spex:obsolete + commit:<HEAD>
+│ (label phase)    │   beads stay open — marks intent
 │                  │   for removed nodes: delete mapping record
 │                  │   for modified nodes: leave record (BeadCreator updates it)
 └──────┬──────────┘
@@ -23,9 +24,16 @@ impact report (JSON, stdin)
 │                  │   hierarchy order: epics → features → tasks
 │                  │   topological sort within each type level (DepBeadIDs)
 │                  │   --deps blocks:<old> (lineage) + --deps depends:<dep> (spec-graph)
+│                  │   old beads still open — lineage refs are valid
 │                  │   create/update mapping record in .bead-map.json
 │                  │   set bead label to spex:<record-id>
 │                  │   cleanup beads: spex:cleanup label, no mapping record
+└──────┬──────────┘
+       │
+       ▼
+┌─────────────────┐
+│ BeadCloser       │── CLOSE PHASE: <bin> close <bead_id>
+│ (close phase)    │   replacements exist — safe to close
 └──────┬──────────┘
        │
        ▼
@@ -48,10 +56,11 @@ Where `<bin>` is the configured bead CLI binary (`br` or `bd`).
 
 ## Execution Order
 
-1. Obsoletes first — close beads being replaced or removed, with `spex:obsolete` + `commit:<HEAD>` labels
-2. Creates in hierarchy order with topological sort — epics (modules) first, then features (components), then tasks (test_sections). Within each type level, topological sort by `DepBeadIDs` ensures dependency beads are created before dependents. Each level's parent IDs are resolved from the mapping file. Each create passes `--deps depends:<id>` for spec-graph dependencies in addition to `--deps blocks:<id>` for lineage.
-3. Tag all affected beads with proposal reference
-4. Save snapshot last — marks apply as complete
+1. Label obsoletes — mark beads with `spex:obsolete` + `commit:<HEAD>` labels via `<bin> update`, keep open. Delete mapping records for removed nodes.
+2. Creates in hierarchy order with topological sort — epics (modules) first, then features (components), then tasks (test_sections). Within each type level, topological sort by `DepBeadIDs` ensures dependency beads are created before dependents. Each level's parent IDs are resolved from the mapping file. Each create passes `--deps depends:<id>` for spec-graph dependencies in addition to `--deps blocks:<id>` for lineage. Old beads are still open at this point.
+3. Close obsoletes — `<bin> close` all beads labeled in step 1. Replacements already exist.
+4. Tag all affected beads with proposal reference
+5. Save snapshot last — marks apply as complete
 
 ## Mapping File Maintenance
 

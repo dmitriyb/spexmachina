@@ -65,12 +65,13 @@ Given `report_mixed.json` as input and proposal `2026-02-23-spex-machina`.
 When `spex apply --report report_mixed.json --proposal 2026-02-23-spex-machina` runs:
 
 Then the fake BeadCLI records calls in this exact order:
-1. Three `Close` calls with `spex:obsolete` + `commit:<HEAD>` labels (obsolete first)
+1. Three `Update` calls adding `spex:obsolete` + `commit:<HEAD>` labels (label phase — beads stay open)
 2. Two `Create` calls with correct types, `--parent`, and `--deps blocks` where applicable
-3. Five `Update` calls for proposal tagging (one per affected bead: 2 created + 3 obsoleted)
-4. `.snapshot.json` is written after all bead actions
+3. Three `Close` calls on the obsoleted beads (close phase — replacements exist)
+4. Five `Update` calls for proposal tagging (one per affected bead: 2 created + 3 closed)
+5. `.snapshot.json` is written after all bead actions
 
-This order matches the flow spec: obsoletes first, then creates in hierarchy order, then tag all, then snapshot.
+This order matches the flow spec: label obsoletes, then creates in hierarchy order, then close obsoletes, then tag all, then snapshot.
 
 ### S2: Apply command enforces creation ordering (epics before features before tasks)
 
@@ -132,11 +133,14 @@ Given `report_mixed.json` as input.
 When `spex apply --report report_mixed.json --proposal 2026-02-23-spex-machina --dry-run` runs:
 
 Then stdout contains a human-readable listing of planned actions:
-- `obsolete spexmachina-77 (spex:obsolete, commit:<HEAD>)`
-- `obsolete spexmachina-78 (spex:obsolete, commit:<HEAD>)`
-- `obsolete spexmachina-42 (spex:obsolete, commit:<HEAD>)`
+- `label spexmachina-77 (spex:obsolete, commit:<HEAD>)`
+- `label spexmachina-78 (spex:obsolete, commit:<HEAD>)`
+- `label spexmachina-42 (spex:obsolete, commit:<HEAD>)`
 - `create validator/ContentResolver --type feature`
 - `create merkle/SnapshotFormat --type feature`
+- `close spexmachina-77`
+- `close spexmachina-78`
+- `close spexmachina-42`
 - `tag 5 beads with proposal 2026-02-23-spex-machina`
 - `save snapshot`
 
@@ -206,7 +210,7 @@ Given an impact report with 50 creates and 50 obsoletes.
 
 When `spex apply` runs:
 
-Then all 100 actions are processed in the correct order (obsoletes first, then creates in hierarchy order). All 100 beads are tagged with the proposal. Exit code 0.
+Then all 100 actions are processed in the correct order (label obsoletes, then creates in hierarchy order, then close obsoletes). All 100 beads are tagged with the proposal. Exit code 0.
 
 ### E5: Concurrent apply runs are not supported
 

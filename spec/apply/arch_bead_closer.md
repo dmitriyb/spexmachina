@@ -5,9 +5,8 @@ Obsoletes beads via bead CLI (`br` or `bd`) with `spex:obsolete` label and `comm
 ## Responsibilities
 
 - Read "obsolete" actions from the impact report
-- Close beads with `spex:obsolete` and `commit:<HEAD>` labels
-- For removed nodes, delete the corresponding mapping record from `.bead-map.json`
-- For modified nodes, leave the mapping record (BeadCreator will update it with the new bead)
+- **Label phase**: Add `spex:obsolete` and `commit:<HEAD>` labels to beads, but keep them open. For removed nodes, delete the corresponding mapping record from `.bead-map.json`. For modified nodes, leave the mapping record (BeadCreator will update it with the new bead).
+- **Close phase**: Close the labeled beads after BeadCreator has created replacements. This two-phase approach ensures `br` auto-flush correctly persists all bead states to the JSONL.
 
 ## Interface
 
@@ -25,12 +24,17 @@ func CloseBeads(ctx context.Context, cli BeadCLI, store map.Store, obsoletes []A
 
 ## Command Construction
 
-For each obsolete action:
+**Label phase** (before creates):
 ```
-<bin> close <bead_id> --add-label spex:obsolete --add-label commit:<HEAD>
+<bin> update <bead_id> --add-label spex:obsolete --add-label commit:<HEAD>
 ```
 
-Where `<bin>` is the configured bead CLI binary (`br` or `bd`). The `commit:<HEAD>` label stamps the last commit where the bead's spec was valid. Active beads carry no commit label — the commit label only appears at the moment of obsolescence.
+**Close phase** (after creates):
+```
+<bin> close <bead_id>
+```
+
+Where `<bin>` is the configured bead CLI binary (`br` or `bd`). The `commit:<HEAD>` label stamps the last commit where the bead's spec was valid. Active beads carry no commit label — the commit label only appears at the moment of obsolescence. The label is applied before close so the bead is marked as obsolete while still open, giving `br` auto-flush a clean state transition.
 
 ## Mapping Record Handling
 

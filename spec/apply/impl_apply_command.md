@@ -7,11 +7,12 @@
 ## Flow
 
 1. Parse flags, read impact report from stdin or file
-2. For each obsolete action: `BeadCloser.Close(action)` with `spex:obsolete` + `commit:<HEAD>` labels
-3. For each create action (in hierarchy order: epics → features → tasks): `BeadCreator.Create(action)` with type, parent, deps, priority
-4. Call `ProposalTagger.Tag(allAffected, proposalRef)`
-5. Call `SnapshotSaver.Save(currentTree)`
-6. In dry-run mode, print actions without executing
+2. For each obsolete action: `BeadCloser.Label(action)` — add `spex:obsolete` + `commit:<HEAD>` labels, delete mapping records for removed nodes. Beads stay open.
+3. For each create action (in hierarchy order: epics → features → tasks): `BeadCreator.Create(action)` with type, parent, deps, priority. Old beads are still open, so `--deps blocks:<old-bead-id>` references valid beads.
+4. For each obsolete action: `BeadCloser.Close(action)` — close the labeled beads. Replacements already exist.
+5. Call `ProposalTagger.Tag(allAffected, proposalRef)`
+6. Call `SnapshotSaver.Save(currentTree)`
+7. In dry-run mode, print actions without executing
 
 ## Creation Ordering
 

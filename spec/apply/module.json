@@ -152,7 +152,7 @@
     {
       "id": 1,
       "name": "Apply flow",
-      "description": "Impact report is read. Bead actions execute in type order: obsoletes first (for modified/removed nodes), then creates in hierarchy order (epics \u2192 features \u2192 tasks). All are tagged with the proposal. New snapshot saved.",
+      "description": "Impact report is read. Bead actions execute in label\u2192create\u2192close order: label obsoletes (keep open), creates in hierarchy order (epics \u2192 features \u2192 tasks), close obsoletes, tag all with proposal. New snapshot saved.",
       "content": "flow_apply.md",
       "uses": [1, 2, 4, 5]
     }
