@@ -12,10 +12,13 @@ func (s *fileStore) Create(r Record) (int, error) {
         return 0, err
     }
 
-    // Uniqueness check — bead ID must be unique; spec node ID may repeat
+    // Uniqueness check — both bead ID and spec node ID must be unique
     for _, existing := range data.Records {
         if existing.BeadID == r.BeadID {
             return 0, fmt.Errorf("map: duplicate bead_id %q", r.BeadID)
+        }
+        if existing.SpecNodeID == r.SpecNodeID {
+            return 0, fmt.Errorf("map: duplicate spec_node_id %q (record %d)", r.SpecNodeID, existing.ID)
         }
     }
 
@@ -55,6 +58,11 @@ func (s *fileStore) Update(id int, updates map[string]string) error {
                 data.Records[i].SpecHash = v
             }
             if v, ok := updates["bead_id"]; ok {
+                for _, other := range data.Records {
+                    if other.ID != id && other.BeadID == v {
+                        return fmt.Errorf("map: duplicate bead_id %q (record %d)", v, other.ID)
+                    }
+                }
                 data.Records[i].BeadID = v
             }
             return s.save(data)

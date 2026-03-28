@@ -202,42 +202,29 @@ func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
 	}
 }
 
-func TestFR1_GetBySpecNode_MultipleBeads(t *testing.T) {
+func TestFR1_BeadTypePreserved(t *testing.T) {
 	s := testStore(t)
 
-	r1 := Record{
-		SpecNodeID:  "schema/component/1",
-		BeadID:      "bead-old",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ProjectSchema",
-		ContentFile: "spec/schema/arch_project_schema.md",
-		SpecHash:    "h1",
-		BeadStatus:  "closed",
+	r := Record{
+		SpecNodeID:  "impact/component/3",
+		BeadID:      "feat-001",
+		BeadType:    "feature",
+		Module:      "impact",
+		Component:   "ActionClassifier",
+		ContentFile: "spec/impact/arch_action_classifier.md",
+		SpecHash:    "abc123",
 	}
-	r2 := Record{
-		SpecNodeID:  "schema/component/1",
-		BeadID:      "bead-new",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ProjectSchema",
-		ContentFile: "spec/schema/arch_project_schema.md",
-		SpecHash:    "h2",
-		BeadStatus:  "open",
-	}
-	if _, err := s.Create(r1); err != nil {
-		t.Fatalf("Create r1: %v", err)
-	}
-	if _, err := s.Create(r2); err != nil {
-		t.Fatalf("Create r2: %v", err)
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
-	got, err := s.GetBySpecNode("schema/component/1")
+	got, err := s.Get(id)
 	if err != nil {
-		t.Fatalf("GetBySpecNode: %v", err)
+		t.Fatalf("Get: %v", err)
 	}
-	if len(got) != 2 {
-		t.Fatalf("count: want 2, got %d", len(got))
+	if got.BeadType != "feature" {
+		t.Fatalf("BeadType: want feature, got %s", got.BeadType)
 	}
 }
 
@@ -250,7 +237,7 @@ func TestFR1_Update_SpecHash(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	err = s.UpdateSpecHash(id, "new-hash")
+	err = s.Update(id, map[string]string{"spec_hash": "new-hash"})
 	if err != nil {
 		t.Fatalf("Update: %v", err)
 	}
@@ -267,10 +254,82 @@ func TestFR1_Update_SpecHash(t *testing.T) {
 	}
 }
 
+func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = s.Update(id, map[string]string{
+		"bead_id":   "replaced-bead",
+		"spec_hash": "updated-hash",
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := s.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BeadID != "replaced-bead" {
+		t.Fatalf("BeadID: want replaced-bead, got %s", got.BeadID)
+	}
+	if got.SpecHash != "updated-hash" {
+		t.Fatalf("SpecHash: want updated-hash, got %s", got.SpecHash)
+	}
+	// Immutable fields must be unchanged
+	if got.SpecNodeID != r.SpecNodeID {
+		t.Fatalf("SpecNodeID changed: want %s, got %s", r.SpecNodeID, got.SpecNodeID)
+	}
+	if got.Module != r.Module {
+		t.Fatalf("Module changed: want %s, got %s", r.Module, got.Module)
+	}
+	if got.Component != r.Component {
+		t.Fatalf("Component changed: want %s, got %s", r.Component, got.Component)
+	}
+	if got.ContentFile != r.ContentFile {
+		t.Fatalf("ContentFile changed: want %s, got %s", r.ContentFile, got.ContentFile)
+	}
+	if got.BeadType != r.BeadType {
+		t.Fatalf("BeadType changed: want %s, got %s", r.BeadType, got.BeadType)
+	}
+}
+
+func TestFR1_Update_DuplicateBeadID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	_, err := s.Create(r1)
+	if err != nil {
+		t.Fatalf("Create r1: %v", err)
+	}
+
+	r2 := testRecord()
+	r2.SpecNodeID = "map/component/2"
+	r2.BeadID = "other-bead"
+	id2, err := s.Create(r2)
+	if err != nil {
+		t.Fatalf("Create r2: %v", err)
+	}
+
+	// Updating r2's bead_id to r1's bead_id must fail.
+	err = s.Update(id2, map[string]string{"bead_id": r1.BeadID})
+	if err == nil {
+		t.Fatal("want duplicate bead_id error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate bead_id") {
+		t.Fatalf("want duplicate bead_id error, got: %v", err)
+	}
+}
+
 func TestFR1_Update_NotFound(t *testing.T) {
 	s := testStore(t)
 
-	err := s.UpdateSpecHash(999, "x")
+	err := s.Update(999, map[string]string{"spec_hash": "x"})
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -409,7 +468,7 @@ func TestFR1_DuplicateBeadID(t *testing.T) {
 	}
 }
 
-func TestFR1_MultipleBeadsPerSpecNode(t *testing.T) {
+func TestFR1_DuplicateSpecNodeID(t *testing.T) {
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -427,8 +486,11 @@ func TestFR1_MultipleBeadsPerSpecNode(t *testing.T) {
 		SpecHash:    "h",
 	}
 	_, err := s.Create(r2)
-	if err != nil {
-		t.Fatalf("Create with same spec_node_id should succeed: %v", err)
+	if err == nil {
+		t.Fatal("want error for duplicate spec_node_id, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate spec_node_id") {
+		t.Fatalf("error should mention duplicate spec_node_id, got: %v", err)
 	}
 }
 
