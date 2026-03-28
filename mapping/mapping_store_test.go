@@ -20,6 +20,7 @@ func testRecord() Record {
 	return Record{
 		SpecNodeID:  "schema/component/1",
 		BeadID:      "abc-123",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "spec/schema/arch_project_schema.md",
@@ -42,6 +43,7 @@ func TestFR1_Create_AssignsSequentialID(t *testing.T) {
 	r2 := Record{
 		SpecNodeID:  "schema/component/2",
 		BeadID:      "abc-456",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ModuleSchema",
 		ContentFile: "spec/schema/arch_module_schema.md",
@@ -206,6 +208,7 @@ func TestFR1_GetBySpecNode_MultipleBeads(t *testing.T) {
 	r1 := Record{
 		SpecNodeID:  "schema/component/1",
 		BeadID:      "bead-old",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "spec/schema/arch_project_schema.md",
@@ -215,6 +218,7 @@ func TestFR1_GetBySpecNode_MultipleBeads(t *testing.T) {
 	r2 := Record{
 		SpecNodeID:  "schema/component/1",
 		BeadID:      "bead-new",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "spec/schema/arch_project_schema.md",
@@ -324,6 +328,7 @@ func TestFR1_Delete_IDsNeverReused(t *testing.T) {
 	r2 := Record{
 		SpecNodeID:  "schema/component/2",
 		BeadID:      "abc-456",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ModuleSchema",
 		ContentFile: "spec/schema/arch_module_schema.md",
@@ -342,9 +347,9 @@ func TestFR1_List_Sorted(t *testing.T) {
 	s := testStore(t)
 
 	records := []Record{
-		{SpecNodeID: "a/component/1", BeadID: "b1", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
-		{SpecNodeID: "a/component/2", BeadID: "b2", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
-		{SpecNodeID: "a/component/3", BeadID: "b3", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
+		{SpecNodeID: "a/component/1", BeadID: "b1", BeadType: "task", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
+		{SpecNodeID: "a/component/2", BeadID: "b2", BeadType: "task", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
+		{SpecNodeID: "a/component/3", BeadID: "b3", BeadType: "task", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
 	}
 	for _, r := range records {
 		if _, err := s.Create(r); err != nil {
@@ -389,6 +394,7 @@ func TestFR1_DuplicateBeadID(t *testing.T) {
 	r2 := Record{
 		SpecNodeID:  "different/component/1",
 		BeadID:      "abc-123", // same bead ID
+		BeadType:    "task",
 		Module:      "different",
 		Component:   "Other",
 		ContentFile: "f",
@@ -414,6 +420,7 @@ func TestFR1_MultipleBeadsPerSpecNode(t *testing.T) {
 	r2 := Record{
 		SpecNodeID:  "schema/component/1", // same spec node ID, different bead
 		BeadID:      "different-bead",
+		BeadType:    "task",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "f",
@@ -566,6 +573,7 @@ func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
 			"id": 1,
 			"spec_node_id": "schema/component/1",
 			"bead_id": "abc-123",
+			"bead_type": "task",
 			"module": "schema",
 			"component": "ProjectSchema",
 			"content_file": "spec/schema/arch_project_schema.md",
@@ -622,6 +630,7 @@ func TestFR1_ConcurrentCreate(t *testing.T) {
 			r := Record{
 				SpecNodeID:  strings.Replace("mod/component/X", "X", string(rune('0'+idx)), 1),
 				BeadID:      strings.Replace("bead-X", "X", string(rune('0'+idx)), 1),
+				BeadType:    "task",
 				Module:      "mod",
 				Component:   strings.Replace("CompX", "X", string(rune('0'+idx)), 1),
 				ContentFile: "f",

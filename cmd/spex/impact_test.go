@@ -64,7 +64,7 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
+		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
 	})
 
 	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
@@ -144,7 +144,7 @@ func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
+		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
 	})
 
 	out1, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)

@@ -1,0 +1,26 @@
+{
+  "next_id": 3,
+  "records": [
+    {
+      "id": 1,
+      "spec_node_id": "schema/component/1",
+      "bead_id": "spexmachina-abc",
+      "bead_type": "task",
+      "module": "schema",
+      "component": "ProjectSchema",
+      "content_file": "arch_project_schema.md",
+      "spec_hash": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2"
+    },
+    {
+      "id": 2,
+      "spec_node_id": "schema/impl_section/1",
+      "bead_id": "spexmachina-def",
+      "bead_type": "bug",
+      "module": "schema",
+      "component": "SchemaLoader",
+      "content_file": "impl_schema_definitions.md",
+      "spec_hash": "b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3",
+      "bead_status": "closed"
+    }
+  ]
+}

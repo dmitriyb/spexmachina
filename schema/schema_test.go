@@ -80,7 +80,7 @@ func TestFR7_BeadMapSchemaDefinesFields(t *testing.T) {
 	defs := raw["$defs"].(map[string]any)
 	recordDef := defs["record"].(map[string]any)
 	recordProps := recordDef["properties"].(map[string]any)
-	for _, key := range []string{"id", "spec_node_id", "bead_id", "module", "component", "content_file", "spec_hash"} {
+	for _, key := range []string{"id", "spec_node_id", "bead_id", "bead_type", "module", "component", "content_file", "spec_hash"} {
 		if recordProps[key] == nil {
 			t.Fatalf("bead-map record definition missing property %q", key)
 		}

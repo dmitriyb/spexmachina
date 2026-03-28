@@ -44,6 +44,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	if _, err := store.Create(mapping.Record{
 		SpecNodeID:  "alpha/component/1",
 		BeadID:      "test-abc",
+		BeadType:    "task",
 		Module:      "alpha",
 		Component:   "Comp1",
 		ContentFile: "spec/alpha/arch_comp1.md",
@@ -55,6 +56,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	if _, err := store.Create(mapping.Record{
 		SpecNodeID:  "alpha/component/2",
 		BeadID:      "test-def",
+		BeadType:    "task",
 		Module:      "alpha",
 		Component:   "Comp2",
 		ContentFile: "spec/alpha/arch_comp2.md",
