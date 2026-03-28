@@ -178,7 +178,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 
 	// 2. Resolve `requires_module` edges (transitive, with cycle detection)
 	visited := make(map[int]bool)
-	moduleDeps := resolveModuleDeps(graph, records, mod.ID, visited)
+	moduleDeps := resolveModuleDeps(graph, recordIdx, mod.ID, visited)
 	for _, depID := range moduleDeps {
 		if !seen[depID] {
 			deps = append(deps, depID)
@@ -191,7 +191,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 
 // resolveModuleDeps transitively walks requires_module edges, collecting
 // open bead IDs from each required module's components.
-func resolveModuleDeps(graph mapping.SpecGraph, records []mapping.Record, moduleID int, visited map[int]bool) []string {
+func resolveModuleDeps(graph mapping.SpecGraph, recordIdx map[string]mapping.Record, moduleID int, visited map[int]bool) []string {
 	if visited[moduleID] {
 		return nil
 	}
@@ -212,15 +212,13 @@ func resolveModuleDeps(graph mapping.SpecGraph, records []mapping.Record, module
 		// Collect open component beads in the required module
 		for _, comp := range reqMod.Components {
 			nodeKey := fmt.Sprintf("%s/component/%d", reqMod.Name, comp.ID)
-			for _, r := range records {
-				if r.SpecNodeID == nodeKey && r.BeadStatus != "closed" {
-					deps = append(deps, r.BeadID)
-				}
+			if r, ok := recordIdx[nodeKey]; ok && r.BeadStatus != "closed" {
+				deps = append(deps, r.BeadID)
 			}
 		}
 
 		// Recurse into transitive dependencies
-		deps = append(deps, resolveModuleDeps(graph, records, reqID, visited)...)
+		deps = append(deps, resolveModuleDeps(graph, recordIdx, reqID, visited)...)
 	}
 
 	return deps
