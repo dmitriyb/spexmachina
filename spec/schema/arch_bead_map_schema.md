@@ -7,7 +7,7 @@ The `.bead-map.json` JSON Schema definition. Validates the mapping file structur
 Defines the JSON Schema for `.bead-map.json`, covering:
 
 - **Envelope**: `next_id` (integer >= 1), `records` (array)
-- **Record fields**: `id`, `spec_node_id`, `bead_id`, `module`, `component`, `content_file`, `spec_hash` (all required), `bead_status` (optional)
+- **Record fields**: `id`, `spec_node_id`, `bead_id`, `bead_type`, `module`, `component`, `content_file`, `spec_hash` (all required), `bead_status` (optional)
 - **Format constraints**: `spec_node_id` validated by pattern `^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$`
 
 ## Design Notes
