@@ -28,6 +28,25 @@ func BeadMapSchema() ([]byte, error) {
 	return schemaFS.ReadFile("bead-map.schema.json")
 }
 
+// BeadMap represents a .bead-map.json file.
+type BeadMap struct {
+	NextID  int             `json:"next_id"`
+	Records []BeadMapRecord `json:"records"`
+}
+
+// BeadMapRecord represents a single mapping record linking a spec node to a bead.
+type BeadMapRecord struct {
+	ID         int    `json:"id"`
+	SpecNodeID string `json:"spec_node_id"`
+	BeadID     string `json:"bead_id"`
+	BeadType   string `json:"bead_type"`
+	Module     string `json:"module"`
+	Component  string `json:"component"`
+	ContentFile string `json:"content_file"`
+	SpecHash   string `json:"spec_hash"`
+	BeadStatus string `json:"bead_status,omitempty"`
+}
+
 // Project represents a project.json file.
 type Project struct {
 	Name         string        `json:"name"`

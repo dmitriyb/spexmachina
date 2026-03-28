@@ -22,6 +22,7 @@ type Record struct {
 	ID          int    `json:"id"`
 	SpecNodeID  string `json:"spec_node_id"`
 	BeadID      string `json:"bead_id"`
+	BeadType    string `json:"bead_type"`
 	Module      string `json:"module"`
 	Component   string `json:"component"`
 	ContentFile string `json:"content_file"`

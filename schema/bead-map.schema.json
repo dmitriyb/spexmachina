@@ -21,7 +21,7 @@
   "$defs": {
     "record": {
       "type": "object",
-      "required": ["id", "spec_node_id", "bead_id", "module", "component", "content_file", "spec_hash"],
+      "required": ["id", "spec_node_id", "bead_id", "bead_type", "module", "component", "content_file", "spec_hash"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -38,6 +38,11 @@
           "type": "string",
           "minLength": 1,
           "description": "Bead ID from the issue tracker."
+        },
+        "bead_type": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Bead issue type (e.g. task, bug)."
         },
         "module": {
           "type": "string",
