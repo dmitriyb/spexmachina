@@ -181,6 +181,11 @@ func (s *fileStore) Update(id int, updates map[string]string) error {
 				data.Records[i].SpecHash = v
 			}
 			if v, ok := updates["bead_id"]; ok {
+				for _, other := range data.Records {
+					if other.ID != id && other.BeadID == v {
+						return fmt.Errorf("map: duplicate bead_id %q (record %d)", v, other.ID)
+					}
+				}
 				data.Records[i].BeadID = v
 			}
 			return s.save(data)

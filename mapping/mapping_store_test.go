@@ -299,6 +299,33 @@ func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
 	}
 }
 
+func TestFR1_Update_DuplicateBeadID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	_, err := s.Create(r1)
+	if err != nil {
+		t.Fatalf("Create r1: %v", err)
+	}
+
+	r2 := testRecord()
+	r2.SpecNodeID = "map/component/2"
+	r2.BeadID = "other-bead"
+	id2, err := s.Create(r2)
+	if err != nil {
+		t.Fatalf("Create r2: %v", err)
+	}
+
+	// Updating r2's bead_id to r1's bead_id must fail.
+	err = s.Update(id2, map[string]string{"bead_id": r1.BeadID})
+	if err == nil {
+		t.Fatal("want duplicate bead_id error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate bead_id") {
+		t.Fatalf("want duplicate bead_id error, got: %v", err)
+	}
+}
+
 func TestFR1_Update_NotFound(t *testing.T) {
 	s := testStore(t)
 
