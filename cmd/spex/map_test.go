@@ -199,7 +199,7 @@ func TestFR3_Check_ReadyBead(t *testing.T) {
 		t.Fatalf("get node hash: %v", err)
 	}
 	store := mapping.NewFileStore(mapFile)
-	if err := store.UpdateSpecHash(1, actualHash); err != nil {
+	if err := store.Update(1, map[string]string{"spec_hash": actualHash}); err != nil {
 		t.Fatalf("update hash: %v", err)
 	}
 
@@ -232,7 +232,7 @@ func TestFR3_Check_BlockedBead(t *testing.T) {
 		t.Fatalf("get node hash: %v", err)
 	}
 	store := mapping.NewFileStore(mapFile)
-	if err := store.UpdateSpecHash(2, actualHash); err != nil {
+	if err := store.Update(2, map[string]string{"spec_hash": actualHash}); err != nil {
 		t.Fatalf("update hash: %v", err)
 	}
 
@@ -311,7 +311,7 @@ func TestNFR4_Check_Deterministic(t *testing.T) {
 		t.Fatalf("get node hash: %v", err)
 	}
 	store := mapping.NewFileStore(mapFile)
-	if err := store.UpdateSpecHash(1, actualHash); err != nil {
+	if err := store.Update(1, map[string]string{"spec_hash": actualHash}); err != nil {
 		t.Fatalf("update hash: %v", err)
 	}
 

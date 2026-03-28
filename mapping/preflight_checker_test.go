@@ -56,10 +56,15 @@ func (s *stubStore) GetBySpecNode(specNodeID string) ([]Record, error) {
 	return matches, nil
 }
 
-func (s *stubStore) UpdateSpecHash(id int, hash string) error {
+func (s *stubStore) Update(id int, updates map[string]string) error {
 	for i, r := range s.records {
 		if r.ID == id {
-			s.records[i].SpecHash = hash
+			if v, ok := updates["spec_hash"]; ok {
+				s.records[i].SpecHash = v
+			}
+			if v, ok := updates["bead_id"]; ok {
+				s.records[i].BeadID = v
+			}
 			return nil
 		}
 	}
