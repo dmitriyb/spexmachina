@@ -45,7 +45,7 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("apply: parse report: %w", err)
 	}
 
-	if report.Summary.CreateCount == 0 && report.Summary.CloseCount == 0 && report.Summary.ReviewCount == 0 {
+	if report.Summary.CreateCount == 0 && report.Summary.ObsoleteCount == 0 {
 		fmt.Fprintln(os.Stderr, "spex apply: nothing to do")
 		return nil
 	}
@@ -84,34 +84,28 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("apply: %w", err)
 	}
 
-	// 2. Updates (reviews)
-	updateActions := convertReviewActions(report.Reviews, hashes)
-	if err := apply.UpdateBeads(ctx, cli, updateActions, logger); err != nil {
+	// 2. Obsoletes
+	obsoleteActions := convertObsoleteActions(report.Obsoletes)
+	if err := apply.CloseBeads(ctx, cli, obsoleteActions, logger); err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 
-	// 3. Closes
-	closeActions := convertCloseActions(report.Closes)
-	if err := apply.CloseBeads(ctx, cli, closeActions, logger); err != nil {
-		return fmt.Errorf("apply: %w", err)
-	}
-
-	// 4. Tag all affected beads with proposal.
+	// 3. Tag all affected beads with proposal.
 	proposalFlag, _ := cmd.Flags().GetString("proposal")
 	if proposalFlag != "" {
-		allIDs := collectAffectedIDs(createdIDs, report.Reviews, report.Closes)
+		allIDs := collectAffectedIDs(createdIDs, report.Obsoletes)
 		if err := apply.TagWithProposal(ctx, cli, allIDs, proposalFlag, logger); err != nil {
 			fmt.Fprintf(os.Stderr, "spex apply: tag warnings: %v\n", err)
 		}
 	}
 
-	// 5. Save snapshot.
+	// 4. Save snapshot.
 	if err := apply.SaveSnapshot(ctx, specDir, time.Now()); err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 
-	fmt.Fprintf(os.Stderr, "spex apply: done (created=%d updated=%d closed=%d)\n",
-		len(createdIDs), len(report.Reviews), len(report.Closes))
+	fmt.Fprintf(os.Stderr, "spex apply: done (created=%d obsoleted=%d)\n",
+		len(createdIDs), len(report.Obsoletes))
 	return nil
 }
 
@@ -133,16 +127,13 @@ func readReport(path string) ([]byte, error) {
 
 // printDryRun prints the impact report summary without executing any actions.
 func printDryRun(report impact.ImpactReport) {
-	fmt.Printf("dry-run: %d creates, %d reviews, %d closes\n",
-		report.Summary.CreateCount, report.Summary.ReviewCount, report.Summary.CloseCount)
+	fmt.Printf("dry-run: %d creates, %d obsoletes\n",
+		report.Summary.CreateCount, report.Summary.ObsoleteCount)
 	for _, a := range report.Creates {
-		fmt.Printf("  create: %s/%s\n", a.Module, a.Node)
+		fmt.Printf("  create:   %s/%s\n", a.Module, a.Node)
 	}
-	for _, a := range report.Reviews {
-		fmt.Printf("  review: %s (bead %s)\n", a.Node, a.BeadID)
-	}
-	for _, a := range report.Closes {
-		fmt.Printf("  close:  %s (bead %s)\n", a.Node, a.BeadID)
+	for _, a := range report.Obsoletes {
+		fmt.Printf("  obsolete: %s (bead %s)\n", a.Node, a.BeadID)
 	}
 }
 
@@ -236,35 +227,21 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 	return actions
 }
 
-// convertReviewActions converts impact review actions to apply actions.
-func convertReviewActions(reviews []impact.Action, hashes map[string]string) []apply.Action {
-	actions := make([]apply.Action, 0, len(reviews))
-	for _, r := range reviews {
+// convertObsoleteActions converts impact obsolete actions to apply actions.
+func convertObsoleteActions(obsoletes []impact.Action) []apply.Action {
+	actions := make([]apply.Action, 0, len(obsoletes))
+	for _, o := range obsoletes {
 		actions = append(actions, apply.Action{
-			BeadID:   r.BeadID,
-			Module:   r.Module,
-			Node:     r.Node,
-			SpecHash: lookupHash(hashes, r.Node),
-		})
-	}
-	return actions
-}
-
-// convertCloseActions converts impact close actions to apply actions.
-func convertCloseActions(closes []impact.Action) []apply.Action {
-	actions := make([]apply.Action, 0, len(closes))
-	for _, c := range closes {
-		actions = append(actions, apply.Action{
-			BeadID: c.BeadID,
-			Module: c.Module,
-			Node:   c.Node,
+			BeadID: o.BeadID,
+			Module: o.Module,
+			Node:   o.Node,
 		})
 	}
 	return actions
 }
 
 // collectAffectedIDs gathers all bead IDs affected by the apply operation.
-func collectAffectedIDs(createdIDs []string, reviews, closes []impact.Action) []string {
+func collectAffectedIDs(createdIDs []string, obsoletes []impact.Action) []string {
 	seen := make(map[string]bool)
 	var ids []string
 	for _, id := range createdIDs {
@@ -273,16 +250,10 @@ func collectAffectedIDs(createdIDs []string, reviews, closes []impact.Action) []
 			ids = append(ids, id)
 		}
 	}
-	for _, r := range reviews {
-		if !seen[r.BeadID] {
-			seen[r.BeadID] = true
-			ids = append(ids, r.BeadID)
-		}
-	}
-	for _, c := range closes {
-		if !seen[c.BeadID] {
-			seen[c.BeadID] = true
-			ids = append(ids, c.BeadID)
+	for _, o := range obsoletes {
+		if !seen[o.BeadID] {
+			seen[o.BeadID] = true
+			ids = append(ids, o.BeadID)
 		}
 	}
 	return ids

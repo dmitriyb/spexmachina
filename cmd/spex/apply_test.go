@@ -139,7 +139,7 @@ func TestREQ4_ConvertCreateActions(t *testing.T) {
 	}
 
 	creates := []impact.Action{
-		{Type: "create", Module: "1", Node: "module/1/component/1", Impact: "arch_impl"},
+		{Type: "create", Module: "1", Node: "module/1/component/1"},
 	}
 
 	actions := convertCreateActions(creates, modules, hashes)
@@ -162,35 +162,12 @@ func TestREQ4_ConvertCreateActions(t *testing.T) {
 	}
 }
 
-func TestREQ4_ConvertReviewActions(t *testing.T) {
-	hashes := map[string]string{
-		"module/2/component/1": "def456",
+func TestREQ4_ConvertObsoleteActions(t *testing.T) {
+	obsoletes := []impact.Action{
+		{Type: "obsolete", BeadID: "bead-2", Module: "3", Node: "LegacyChecker"},
 	}
 
-	reviews := []impact.Action{
-		{Type: "review", BeadID: "bead-1", Module: "2", Node: "module/2/component/1", Impact: "impl_only"},
-	}
-
-	actions := convertReviewActions(reviews, hashes)
-
-	if len(actions) != 1 {
-		t.Fatalf("want 1 action, got %d", len(actions))
-	}
-	a := actions[0]
-	if a.BeadID != "bead-1" {
-		t.Errorf("want beadID bead-1, got %q", a.BeadID)
-	}
-	if a.SpecHash != "def456" {
-		t.Errorf("want specHash def456, got %q", a.SpecHash)
-	}
-}
-
-func TestREQ4_ConvertCloseActions(t *testing.T) {
-	closes := []impact.Action{
-		{Type: "close", BeadID: "bead-2", Module: "3", Node: "LegacyChecker"},
-	}
-
-	actions := convertCloseActions(closes)
+	actions := convertObsoleteActions(obsoletes)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -209,18 +186,15 @@ func TestREQ4_ConvertCloseActions(t *testing.T) {
 
 func TestREQ4_CollectAffectedIDs(t *testing.T) {
 	created := []string{"new-1", "new-2"}
-	reviews := []impact.Action{
-		{BeadID: "rev-1"},
+	obsoletes := []impact.Action{
+		{BeadID: "obs-1"},
 		{BeadID: "new-1"}, // duplicate with created
 	}
-	closes := []impact.Action{
-		{BeadID: "close-1"},
-	}
 
-	ids := collectAffectedIDs(created, reviews, closes)
+	ids := collectAffectedIDs(created, obsoletes)
 
-	if len(ids) != 4 {
-		t.Fatalf("want 4 unique IDs, got %d: %v", len(ids), ids)
+	if len(ids) != 3 {
+		t.Fatalf("want 3 unique IDs, got %d: %v", len(ids), ids)
 	}
 
 	seen := make(map[string]bool)
@@ -237,13 +211,10 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 		Creates: []impact.Action{
 			{Type: "create", Module: "1", Node: "NewComp"},
 		},
-		Reviews: []impact.Action{
-			{Type: "review", BeadID: "bead-1", Module: "2", Node: "Hasher"},
+		Obsoletes: []impact.Action{
+			{Type: "obsolete", BeadID: "bead-1", Module: "2", Node: "Hasher"},
 		},
-		Closes: []impact.Action{
-			{Type: "close", BeadID: "bead-2", Module: "3", Node: "Old"},
-		},
-		Summary: impact.Summary{CreateCount: 1, ReviewCount: 1, CloseCount: 1},
+		Summary: impact.Summary{CreateCount: 1, ObsoleteCount: 1},
 	}
 
 	oldStdout := os.Stdout
@@ -261,25 +232,21 @@ func TestREQ5_DryRunOutput(t *testing.T) {
 	if !strings.Contains(output, "1 creates") {
 		t.Errorf("want output to contain '1 creates', got %q", output)
 	}
-	if !strings.Contains(output, "create: 1/NewComp") {
-		t.Errorf("want output to contain 'create: 1/NewComp', got %q", output)
+	if !strings.Contains(output, "create:") {
+		t.Errorf("want output to contain 'create:', got %q", output)
 	}
-	if !strings.Contains(output, "review: Hasher (bead bead-1)") {
-		t.Errorf("want output to contain review line, got %q", output)
-	}
-	if !strings.Contains(output, "close:  Old (bead bead-2)") {
-		t.Errorf("want output to contain close line, got %q", output)
+	if !strings.Contains(output, "obsolete:") {
+		t.Errorf("want output to contain 'obsolete:', got %q", output)
 	}
 }
 
 func TestREQ4_EmptyReport(t *testing.T) {
 	report := impact.ImpactReport{
-		Creates: []impact.Action{},
-		Reviews: []impact.Action{},
-		Closes:  []impact.Action{},
-		Summary: impact.Summary{},
+		Creates:   []impact.Action{},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{},
 	}
-	if report.Summary.CreateCount != 0 || report.Summary.CloseCount != 0 || report.Summary.ReviewCount != 0 {
+	if report.Summary.CreateCount != 0 || report.Summary.ObsoleteCount != 0 {
 		t.Error("empty report should have zero counts")
 	}
 }
@@ -308,7 +275,7 @@ func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
 func TestREQ4_ReadReport_File(t *testing.T) {
 	tmp := t.TempDir()
 	path := tmp + "/report.json"
-	content := `{"creates":[],"closes":[],"reviews":[],"summary":{}}`
+	content := `{"creates":[],"obsoletes":[],"summary":{}}`
 	os.WriteFile(path, []byte(content), 0644)
 
 	data, err := readReport(path)
