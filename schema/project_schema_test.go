@@ -329,6 +329,11 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 			}
 		}
 	}
+	if len(proj.Requirements) > 0 && proj.Requirements[0].Priority != nil {
+		if proj2.Requirements[0].Priority == nil || *proj.Requirements[0].Priority != *proj2.Requirements[0].Priority {
+			t.Fatal("priority mismatch")
+		}
+	}
 	if len(proj.Milestones) > 0 {
 		if len(proj.Milestones[0].Groups) != len(proj2.Milestones[0].Groups) {
 			t.Fatal("groups length mismatch")
@@ -476,6 +481,20 @@ func TestFR1_E8_PreqIDInProjectRequirementFails(t *testing.T) {
 	}`)
 	if err == nil {
 		t.Fatal("expected validation error for preq_id in project requirement, got nil")
+	}
+}
+
+func TestFR1_E3_LargeIDValuePasses(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": 2147483647, "name": "m", "path": "m/"}],
+		"requirements": [
+			{"id": 2147483647, "type": "functional", "title": "R"}
+		]
+	}`)
+	if err != nil {
+		t.Fatalf("large ID value (2147483647) should pass validation: %v", err)
 	}
 }
 
