@@ -134,7 +134,7 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
 	}
 
-	total := report.Summary.CreateCount + report.Summary.CloseCount + report.Summary.ReviewCount
+	total := report.Summary.CreateCount + report.Summary.ObsoleteCount
 	if total != 0 {
 		t.Fatalf("expected 0 actions with no changes, got %d", total)
 	}
