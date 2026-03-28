@@ -284,18 +284,33 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 	if len(mod.Components[0].Implements) != len(mod2.Components[0].Implements) {
 		t.Fatalf("implements length mismatch")
 	}
+	for i, v := range mod.Components[0].Implements {
+		if v != mod2.Components[0].Implements[i] {
+			t.Fatalf("implements[%d] mismatch: want %d, got %d", i, v, mod2.Components[0].Implements[i])
+		}
+	}
 	if len(mod.ImplSections[0].Describes) != len(mod2.ImplSections[0].Describes) {
 		t.Fatalf("describes length mismatch")
 	}
+	for i, v := range mod.ImplSections[0].Describes {
+		if v != mod2.ImplSections[0].Describes[i] {
+			t.Fatalf("describes[%d] mismatch: want %d, got %d", i, v, mod2.ImplSections[0].Describes[i])
+		}
+	}
 	if len(mod.DataFlows[0].Uses) != len(mod2.DataFlows[0].Uses) {
 		t.Fatalf("data_flow uses length mismatch")
+	}
+	for i, v := range mod.DataFlows[0].Uses {
+		if v != mod2.DataFlows[0].Uses[i] {
+			t.Fatalf("uses[%d] mismatch: want %d, got %d", i, v, mod2.DataFlows[0].Uses[i])
+		}
 	}
 	if len(mod.TestSections) != len(mod2.TestSections) {
 		t.Fatalf("test_sections length mismatch")
 	}
 }
 
-func TestFR5_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
+func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	sch := compileModuleSchema(t)
 
 	t.Run("missing preq_id fails", func(t *testing.T) {
@@ -407,7 +422,7 @@ func TestFR2_E7_DependsOnNonExistentIDPasses(t *testing.T) {
 	}
 }
 
-func TestFR2_S4_ModuleSchemaStructure(t *testing.T) {
+func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 	data, err := ModuleSchema()
 	if err != nil {
 		t.Fatalf("ModuleSchema(): %v", err)
