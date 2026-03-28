@@ -28,7 +28,8 @@
       "id": 4,
       "type": "non_functional",
       "title": "Structured error output",
-      "description": "Exit 1 with structured JSON errors listing every violation."
+      "description": "Exit 1 with structured JSON errors listing every violation.",
+      "preq_id": 1
     }
   ],
   "components": [

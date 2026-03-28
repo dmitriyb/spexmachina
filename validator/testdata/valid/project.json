@@ -1,6 +1,9 @@
 {
   "name": "test-project",
   "description": "A test project for schema validation.",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Project requirement"}
+  ],
   "modules": [
     {
       "id": 1,

@@ -46,7 +46,7 @@
     "requirement": {
       "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements.",
       "type": "object",
-      "required": ["id", "type", "title"],
+      "required": ["id", "type", "title", "preq_id"],
       "additionalProperties": false,
       "properties": {
         "id": {
