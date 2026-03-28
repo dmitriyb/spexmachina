@@ -75,6 +75,12 @@
           "type": "string",
           "description": "Detailed requirement description."
         },
+        "priority": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "Requirement priority (0-4). Optional; enforced by validator when present."
+        },
         "depends_on": {
           "type": "array",
           "description": "IDs of other requirements this one depends on (depends_on edge).",

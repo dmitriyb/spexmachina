@@ -69,12 +69,14 @@ type Module struct {
 
 // Requirement represents a requirement node (used in both project.json and module.json).
 // PreqID is only used in module.json to trace derivation from project-level requirements.
+// Priority is only used in project.json (integer 0-4, optional).
 type Requirement struct {
 	ID          int    `json:"id"`
 	PreqID      int    `json:"preq_id,omitempty"`
 	Type        string `json:"type"`
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
+	Priority    *int   `json:"priority,omitempty"`
 	DependsOn   []int  `json:"depends_on,omitempty"`
 }
 
