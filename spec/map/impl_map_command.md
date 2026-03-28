@@ -13,20 +13,9 @@ func NewMapCmd(store Store) *cobra.Command {
     return cmd
 }
 
-func NewCheckCmd(store Store, spec SpecGraph) *cobra.Command {
-    return &cobra.Command{
-        Use:   "check <bead-id>",
-        Short: "Run preflight check for a bead",
-        Args:  cobra.ExactArgs(1),
-        RunE: func(cmd *cobra.Command, args []string) error {
-            result, err := Check(cmd.Context(), store, spec, args[0])
-            // ...
-        },
-    }
-}
 ```
 
-Both commands are registered on the root `spex` command in `cmd/spex/main.go` via the CLI module's subcommand registration framework.
+The map command is registered on the root `spex` command in `cmd/spex/main.go` via the CLI module's subcommand registration framework.
 
 ## spex map get
 
@@ -66,12 +55,6 @@ func newMapListCmd(store Store) *cobra.Command {
     }
 }
 ```
-
-## spex check
-
-Parses the bead ID from the first argument, calls `PreflightChecker.Check`, and encodes the result as JSON. Exit code is set based on the result status:
-- "ready" → exit 0
-- "blocked" or "stale" → exit 1
 
 ## Error Output
 
