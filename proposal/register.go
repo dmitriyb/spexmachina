@@ -72,11 +72,6 @@ func detectType(content string) (string, error) {
 	return "", fmt.Errorf("proposal: cannot detect type from headings")
 }
 
-// DetectType is the exported version for use by HistoryViewer.
-func DetectType(content string) (string, error) {
-	return detectType(content)
-}
-
 // validateSections checks that all required sections for the given type are present.
 func validateSections(content, ptype string) error {
 	headings := extractH2Headings(content)

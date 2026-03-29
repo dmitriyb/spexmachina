@@ -33,10 +33,10 @@ type ProposalEntry struct {
 
 // BeadEntry represents a bead linked to a proposal.
 type BeadEntry struct {
-	ID     string `json:"id"`
-	Action string `json:"action"`
-	Module string `json:"module"`
-	Node   string `json:"node"`
+	ID        string `json:"id"`
+	Action    string `json:"action"`
+	Module    string `json:"module"`
+	Component string `json:"component"`
 }
 
 // BeadLister is the interface for listing beads. It allows testing without
@@ -125,12 +125,16 @@ func ShowHistory(ctx context.Context, specDir string, lister BeadLister, w io.Wr
 		var beadEntries []BeadEntry
 		if matched, ok := beadsByProposal[p]; ok {
 			for _, b := range matched {
-				module, node := parseBeadTitle(b.Title)
+				module, component := parseBeadTitle(b.Title)
+				action := b.Metadata["action"]
+				if action == "" {
+					action = "created"
+				}
 				beadEntries = append(beadEntries, BeadEntry{
-					ID:     b.ID,
-					Action: "Created",
-					Module: module,
-					Node:   node,
+					ID:        b.ID,
+					Action:    action,
+					Module:    module,
+					Component: component,
 				})
 			}
 		}
@@ -156,7 +160,8 @@ func ShowHistory(ctx context.Context, specDir string, lister BeadLister, w io.Wr
 	for _, entry := range result {
 		fmt.Fprintf(w, "%s (%s proposal)\n", entry.Proposal, entry.Type)
 		for _, b := range entry.Beads {
-			fmt.Fprintf(w, "  %s: %s (%s: %s)\n", b.Action, b.ID, b.Module, b.Node)
+			label := strings.ToUpper(b.Action[:1]) + b.Action[1:]
+			fmt.Fprintf(w, "  %s: %s (%s: %s)\n", label, b.ID, b.Module, b.Component)
 		}
 	}
 	return nil
@@ -169,7 +174,7 @@ func detectProposalType(path string) string {
 	if err != nil {
 		return "unknown"
 	}
-	ptype, err := DetectType(string(content))
+	ptype, err := detectType(string(content))
 	if err != nil {
 		return "unknown"
 	}
@@ -187,7 +192,7 @@ func extractDate(filename string) string {
 
 // parseBeadTitle parses "Module: Component" from a bead title.
 // Falls back to empty strings if the format doesn't match.
-func parseBeadTitle(title string) (module, node string) {
+func parseBeadTitle(title string) (module, component string) {
 	if idx := strings.Index(title, ": "); idx >= 0 {
 		return title[:idx], title[idx+2:]
 	}

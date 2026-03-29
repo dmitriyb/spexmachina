@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -10,6 +11,15 @@ import (
 	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
 )
+
+// stubBeadLister is a test double for proposal.BeadLister.
+type stubBeadLister struct {
+	beads []proposal.BeadRecord
+}
+
+func (s *stubBeadLister) ListBeads(_ context.Context) ([]proposal.BeadRecord, error) {
+	return s.beads, nil
+}
 
 // --- spex register ---
 
@@ -202,8 +212,8 @@ func TestREQ30_S6_LogHumanReadable(t *testing.T) {
 	projContent := "# Project Proposal: Test\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
 	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-test.md"), []byte(projContent), 0644)
 
-	lister := &proposal.StubBeadLister{
-		Beads: []proposal.BeadRecord{
+	lister := &stubBeadLister{
+		beads: []proposal.BeadRecord{
 			{
 				ID:       "spexmachina-abc",
 				Title:    "schema: ProjectSchema",
@@ -239,8 +249,8 @@ func TestREQ30_S7_LogJSON(t *testing.T) {
 	projContent := "# Project Proposal: Test\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
 	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-test.md"), []byte(projContent), 0644)
 
-	lister := &proposal.StubBeadLister{
-		Beads: []proposal.BeadRecord{
+	lister := &stubBeadLister{
+		beads: []proposal.BeadRecord{
 			{
 				ID:       "spexmachina-abc",
 				Title:    "schema: ProjectSchema",
@@ -281,7 +291,7 @@ func TestREQ30_S8_LogEmptyProposals(t *testing.T) {
 	specDir := filepath.Join(tmp, "spec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
 
-	lister := &proposal.StubBeadLister{Beads: []proposal.BeadRecord{}}
+	lister := &stubBeadLister{beads: []proposal.BeadRecord{}}
 
 	// Human-readable.
 	var out strings.Builder
@@ -320,7 +330,7 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 	}
 
 	// Log (JSON mode, no beads tagged yet).
-	lister := &proposal.StubBeadLister{Beads: []proposal.BeadRecord{}}
+	lister := &stubBeadLister{beads: []proposal.BeadRecord{}}
 	var out strings.Builder
 	err = proposal.ShowHistory(t.Context(), specDir, lister, &out, true)
 	if err != nil {
