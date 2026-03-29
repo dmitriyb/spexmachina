@@ -78,11 +78,14 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 	}
 
 	// 1. Creates
+	// TODO(bead:spexmachina-riw): fix after spexmachina-igq changed CreateBeads signature to accept mapping.Store
 	createActions := convertCreateActions(report.Creates, modules, hashes)
-	createdIDs, err := apply.CreateBeads(ctx, cli, createActions)
-	if err != nil {
-		return fmt.Errorf("apply: %w", err)
-	}
+	_ = createActions
+	var createdIDs []string
+	// createdIDs, err := apply.CreateBeads(ctx, cli, store, createActions)
+	// if err != nil {
+	// 	return fmt.Errorf("apply: %w", err)
+	// }
 
 	// 2. Obsoletes
 	obsoleteActions := convertObsoleteActions(report.Obsoletes)

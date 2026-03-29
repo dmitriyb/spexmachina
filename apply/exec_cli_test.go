@@ -84,9 +84,9 @@ func TestIntegration_Create(t *testing.T) {
 	ctx := context.Background()
 
 	id, err := cli.Create(ctx, CreateOpts{
-		Title:  "test: Widget",
-		Type:   "task",
-		Labels: []string{"spec_module:test", "spec_hash:abc123", "spec_component:Widget"},
+		Title:    "test: Widget",
+		Type:     "task",
+		Priority: -1,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -102,13 +102,50 @@ func TestIntegration_Create(t *testing.T) {
 	if got := bead["issue_type"].(string); got != "task" {
 		t.Errorf("type: want %q, got %q", "task", got)
 	}
+}
 
-	labels := toStringSlice(t, bead["labels"])
-	wantLabels := []string{"spec_module:test", "spec_hash:abc123", "spec_component:Widget"}
-	for _, want := range wantLabels {
-		if !containsStr(labels, want) {
-			t.Errorf("want label %q in %v", want, labels)
-		}
+func TestIntegration_Create_WithParentAndDeps(t *testing.T) {
+	cli := initSandbox(t)
+	ctx := context.Background()
+
+	// Create a parent bead first.
+	parentID, err := cli.Create(ctx, CreateOpts{
+		Title:    "test: ParentEpic",
+		Type:     "epic",
+		Priority: -1,
+	})
+	if err != nil {
+		t.Fatalf("Create parent: %v", err)
+	}
+
+	// Create a dep bead.
+	depID, err := cli.Create(ctx, CreateOpts{
+		Title:    "test: Dep",
+		Type:     "feature",
+		Priority: -1,
+	})
+	if err != nil {
+		t.Fatalf("Create dep: %v", err)
+	}
+
+	// Create child with parent and deps.
+	childID, err := cli.Create(ctx, CreateOpts{
+		Title:    "test: Child",
+		Type:     "feature",
+		Parent:   parentID,
+		Deps:     []string{"blocked-by:" + depID},
+		Priority: 2,
+	})
+	if err != nil {
+		t.Fatalf("Create child: %v", err)
+	}
+	if childID == "" {
+		t.Fatal("Create child returned empty ID")
+	}
+
+	bead := brShow(t, cli.bin, childID)
+	if got := bead["title"].(string); got != "test: Child" {
+		t.Errorf("title: want %q, got %q", "test: Child", got)
 	}
 }
 
@@ -116,18 +153,23 @@ func TestIntegration_FindExisting(t *testing.T) {
 	cli := initSandbox(t)
 	ctx := context.Background()
 
-	// Create a bead to find.
+	// Create a bead and add a label to find it by.
 	id, err := cli.Create(ctx, CreateOpts{
-		Title:  "find: Target",
-		Type:   "task",
-		Labels: []string{"spec_module:find", "spec_component:Target"},
+		Title:    "find: Target",
+		Type:     "task",
+		Priority: -1,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
 	}
 
-	// Find by matching labels.
-	found, err := cli.FindExisting(ctx, []string{"spec_module:find", "spec_component:Target"})
+	// Add label via Update.
+	if err := cli.Update(ctx, id, map[string]string{"spex": "42"}); err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	// Find by matching label.
+	found, err := cli.FindExisting(ctx, []string{"spex:42"})
 	if err != nil {
 		t.Fatalf("FindExisting: %v", err)
 	}
@@ -136,7 +178,7 @@ func TestIntegration_FindExisting(t *testing.T) {
 	}
 
 	// Non-matching labels return empty.
-	notFound, err := cli.FindExisting(ctx, []string{"spec_module:nonexistent"})
+	notFound, err := cli.FindExisting(ctx, []string{"spex:999"})
 	if err != nil {
 		t.Fatalf("FindExisting (no match): %v", err)
 	}
@@ -150,9 +192,9 @@ func TestIntegration_Close(t *testing.T) {
 	ctx := context.Background()
 
 	id, err := cli.Create(ctx, CreateOpts{
-		Title:  "close: Victim",
-		Type:   "task",
-		Labels: []string{"spec_module:close"},
+		Title:    "close: Victim",
+		Type:     "task",
+		Priority: -1,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -173,9 +215,9 @@ func TestIntegration_Update(t *testing.T) {
 	ctx := context.Background()
 
 	id, err := cli.Create(ctx, CreateOpts{
-		Title:  "update: Target",
-		Type:   "task",
-		Labels: []string{"spec_module:update"},
+		Title:    "update: Target",
+		Type:     "task",
+		Priority: -1,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -195,12 +237,13 @@ func TestIntegration_Update(t *testing.T) {
 func TestIntegration_CreateBeads_Idempotency(t *testing.T) {
 	cli := initSandbox(t)
 	ctx := context.Background()
+	store := newMockStore()
 
 	actions := []Action{
-		{Module: "idem", Node: "Widget", NodeType: "component", SpecHash: "h1"},
+		{Module: "idem", Node: "Widget", NodeType: "component", SpecHash: "h1", SpecNodeID: "idem/component/1", Priority: -1},
 	}
 
-	ids1, err := CreateBeads(ctx, cli, actions)
+	ids1, err := CreateBeads(ctx, cli, store, actions)
 	if err != nil {
 		t.Fatalf("CreateBeads first call: %v", err)
 	}
@@ -208,7 +251,7 @@ func TestIntegration_CreateBeads_Idempotency(t *testing.T) {
 		t.Fatalf("want 1 ID, got %d", len(ids1))
 	}
 
-	ids2, err := CreateBeads(ctx, cli, actions)
+	ids2, err := CreateBeads(ctx, cli, store, actions)
 	if err != nil {
 		t.Fatalf("CreateBeads second call: %v", err)
 	}
@@ -226,11 +269,11 @@ func TestIntegration_CloseBeads(t *testing.T) {
 	ctx := context.Background()
 
 	// Create two beads to close.
-	id1, err := cli.Create(ctx, CreateOpts{Title: "close: A", Type: "task", Labels: []string{"spec_module:cb"}})
+	id1, err := cli.Create(ctx, CreateOpts{Title: "close: A", Type: "task", Priority: -1})
 	if err != nil {
 		t.Fatalf("Create A: %v", err)
 	}
-	id2, err := cli.Create(ctx, CreateOpts{Title: "close: B", Type: "task", Labels: []string{"spec_module:cb"}})
+	id2, err := cli.Create(ctx, CreateOpts{Title: "close: B", Type: "task", Priority: -1})
 	if err != nil {
 		t.Fatalf("Create B: %v", err)
 	}
@@ -257,9 +300,9 @@ func TestIntegration_UpdateBeads(t *testing.T) {
 	ctx := context.Background()
 
 	id, err := cli.Create(ctx, CreateOpts{
-		Title:  "update: Comp",
-		Type:   "task",
-		Labels: []string{"spec_module:ub", "spec_hash:old"},
+		Title:    "update: Comp",
+		Type:     "task",
+		Priority: -1,
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -284,11 +327,11 @@ func TestIntegration_TagWithProposal(t *testing.T) {
 	cli := initSandbox(t)
 	ctx := context.Background()
 
-	id1, err := cli.Create(ctx, CreateOpts{Title: "tag: X", Type: "task", Labels: []string{"spec_module:tag"}})
+	id1, err := cli.Create(ctx, CreateOpts{Title: "tag: X", Type: "task", Priority: -1})
 	if err != nil {
 		t.Fatalf("Create X: %v", err)
 	}
-	id2, err := cli.Create(ctx, CreateOpts{Title: "tag: Y", Type: "task", Labels: []string{"spec_module:tag"}})
+	id2, err := cli.Create(ctx, CreateOpts{Title: "tag: Y", Type: "task", Priority: -1})
 	if err != nil {
 		t.Fatalf("Create Y: %v", err)
 	}
