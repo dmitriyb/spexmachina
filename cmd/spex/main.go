@@ -19,6 +19,7 @@ func main() {
 		newRegisterCmd(),
 		newLogCmd(),
 		newTemplateCmd(),
+		newVersionCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
