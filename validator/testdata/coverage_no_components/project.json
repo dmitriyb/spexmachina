@@ -1,0 +1,9 @@
+{
+  "name": "coverage-no-components-test",
+  "modules": [
+    {"id": 1, "name": "beta", "path": "beta"}
+  ],
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req", "priority": 1}
+  ]
+}

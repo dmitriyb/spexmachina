@@ -1,0 +1,9 @@
+{
+  "name": "coverage-multi-covered-test",
+  "modules": [
+    {"id": 1, "name": "alpha", "path": "alpha"}
+  ],
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req", "priority": 1}
+  ]
+}
