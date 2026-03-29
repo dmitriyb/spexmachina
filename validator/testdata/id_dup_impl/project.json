@@ -1,0 +1,9 @@
+{
+  "name": "id-dup-impl-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A", "priority": 1}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}

@@ -11,5 +11,8 @@
   ],
   "data_flows": [
     {"id": 1, "name": "Ingest", "uses": [99]}
+  ],
+  "test_sections": [
+    {"id": 1, "name": "Engine tests", "describes": [99]}
   ]
 }

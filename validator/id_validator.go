@@ -36,8 +36,9 @@ func CheckIDs(specDir string) []ValidationError {
 		return result
 	}
 
-	// Phase 2: Cross-reference integrity.
+	// Phase 2: Cross-reference integrity and mandatory fields.
 	result = append(result, checkProjectRefs(project)...)
+	result = append(result, checkProjectPriority(project)...)
 	for _, modName := range modNames {
 		result = append(result, checkModuleRefs(modName, modules[modName], project)...)
 	}
@@ -142,6 +143,29 @@ func checkProjectRefs(project *schema.Project) []ValidationError {
 	return errs
 }
 
+// checkProjectPriority validates that every project requirement has a priority in range 0-4.
+func checkProjectPriority(project *schema.Project) []ValidationError {
+	var errs []ValidationError
+	for _, req := range project.Requirements {
+		if req.Priority == nil {
+			errs = append(errs, ValidationError{
+				Check:    "id",
+				Severity: "error",
+				Path:     fmt.Sprintf("project.json:/requirements/%d", req.ID),
+				Message:  fmt.Sprintf("project requirement %d missing priority", req.ID),
+			})
+		} else if *req.Priority < 0 || *req.Priority > 4 {
+			errs = append(errs, ValidationError{
+				Check:    "id",
+				Severity: "error",
+				Path:     fmt.Sprintf("project.json:/requirements/%d", req.ID),
+				Message:  fmt.Sprintf("project requirement %d priority %d out of range (must be 0-4)", req.ID, *req.Priority),
+			})
+		}
+	}
+	return errs
+}
+
 // checkModuleRefs validates cross-references within a single module.
 func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Project) []ValidationError {
 	var errs []ValidationError
@@ -204,6 +228,20 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 		}
 	}
 
+	// test_section.describes → component IDs within the same module.
+	for _, ts := range mod.TestSections {
+		for _, descID := range ts.Describes {
+			if !compSet[descID] {
+				errs = append(errs, ValidationError{
+					Check:    "id",
+					Severity: "error",
+					Path:     fmt.Sprintf("%s/test_sections/%d", prefix, ts.ID),
+					Message:  fmt.Sprintf("describes references non-existent component %d", descID),
+				})
+			}
+		}
+	}
+
 	// requirement.depends_on → requirement IDs within the same module.
 	for _, req := range mod.Requirements {
 		for _, depID := range req.DependsOn {
@@ -216,8 +254,15 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				})
 			}
 		}
-		// requirement.preq_id → project requirement IDs.
-		if req.PreqID != 0 && !projReqSet[req.PreqID] {
+		// requirement.preq_id — mandatory, must reference a valid project requirement.
+		if req.PreqID == 0 {
+			errs = append(errs, ValidationError{
+				Check:    "id",
+				Severity: "error",
+				Path:     fmt.Sprintf("%s/requirements/%d", prefix, req.ID),
+				Message:  fmt.Sprintf("requirement %d missing preq_id", req.ID),
+			})
+		} else if !projReqSet[req.PreqID] {
 			errs = append(errs, ValidationError{
 				Check:    "id",
 				Severity: "error",

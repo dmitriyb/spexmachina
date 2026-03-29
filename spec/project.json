@@ -7,89 +7,112 @@
       "id": 1,
       "type": "functional",
       "title": "Validate spec structure",
-      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references. Structured error output."
+      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references. Structured error output.",
+      "priority": 1
     },
     {
       "id": 2,
       "type": "functional",
       "title": "Compute merkle tree",
       "description": "Hash every node, store snapshots, diff against previous snapshots, classify change impact paths.",
-      "depends_on": [1]
+      "depends_on": [
+        1
+      ],
+      "priority": 1
     },
     {
       "id": 3,
       "type": "functional",
       "title": "Map spec nodes to beads",
-      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal)."
+      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal).",
+      "priority": 1
     },
     {
       "id": 4,
       "type": "functional",
       "title": "Compute impact",
       "description": "Given changed spec nodes, find all affected beads and classify actions (create/obsolete).",
-      "depends_on": [2, 3]
+      "depends_on": [
+        2,
+        3
+      ],
+      "priority": 1
     },
     {
       "id": 5,
       "type": "functional",
       "title": "Apply changes",
       "description": "Execute bead actions via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tag with proposal, save snapshot.",
-      "depends_on": [4]
+      "depends_on": [
+        4
+      ],
+      "priority": 1
     },
     {
       "id": 6,
       "type": "functional",
       "title": "Manage proposals",
-      "description": "Register proposals, validate structure, link to spec changes and bead actions, show history."
+      "description": "Register proposals, validate structure, link to spec changes and bead actions, show history.",
+      "priority": 1
     },
     {
       "id": 7,
       "type": "functional",
       "title": "Render spec",
       "description": "Generate markdown, DOT, or JSON from spec structure.",
-      "depends_on": [1]
+      "depends_on": [
+        1
+      ],
+      "priority": 1
     },
     {
       "id": 8,
       "type": "non_functional",
       "title": "Self-hosting",
-      "description": "Spex Machina's own spec is managed by Spex Machina (after bootstrap)."
+      "description": "Spex Machina's own spec is managed by Spex Machina (after bootstrap).",
+      "priority": 2
     },
     {
       "id": 9,
       "type": "non_functional",
       "title": "Deterministic",
-      "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions. No LLM calls."
+      "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions. No LLM calls.",
+      "priority": 2
     },
     {
       "id": 10,
       "type": "non_functional",
       "title": "Composable",
-      "description": "Every subcommand reads stdin or files, writes stdout or files, exits 0/1. Pipeable."
+      "description": "Every subcommand reads stdin or files, writes stdout or files, exits 0/1. Pipeable.",
+      "priority": 2
     },
     {
       "id": 11,
       "type": "non_functional",
       "title": "Fast",
-      "description": "Validating a spec with 100 modules and 1000 nodes should take less than 1 second."
+      "description": "Validating a spec with 100 modules and 1000 nodes should take less than 1 second.",
+      "priority": 2
     },
     {
       "id": 12,
       "type": "non_functional",
       "title": "Git-native",
-      "description": "Snapshots are files committed to git. Proposals are files committed to git. No external state."
+      "description": "Snapshots are files committed to git. Proposals are files committed to git. No external state.",
+      "priority": 2
     },
     {
       "id": 13,
       "type": "functional",
       "title": "Spec test strategy",
-      "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios."
+      "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios.",
+      "priority": 1
     },
     {
       "id": 14,
       "type": "functional",
       "title": "CLI infrastructure",
-      "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling."
+      "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling.",
+      "priority": 1
     }
   ],
   "modules": [
@@ -104,28 +127,38 @@
       "name": "validator",
       "path": "validator",
       "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
-      "requires_module": [1]
+      "requires_module": [
+        1
+      ]
     },
     {
       "id": 3,
       "name": "merkle",
       "path": "merkle",
       "description": "Merkle hash tree over the spec: leaf hashes, interior hashes, snapshots, diff, and impact classification.",
-      "requires_module": [1]
+      "requires_module": [
+        1
+      ]
     },
     {
       "id": 4,
       "name": "impact",
       "path": "impact",
       "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/obsolete).",
-      "requires_module": [3, 9]
+      "requires_module": [
+        3,
+        9
+      ]
     },
     {
       "id": 5,
       "name": "apply",
       "path": "apply",
       "description": "Executes impact report: creates and obsoletes beads via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tags with proposal, saves new merkle snapshot, maintains mapping records.",
-      "requires_module": [4, 9]
+      "requires_module": [
+        4,
+        9
+      ]
     },
     {
       "id": 6,
@@ -138,7 +171,9 @@
       "name": "render",
       "path": "render",
       "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
-      "requires_module": [1]
+      "requires_module": [
+        1
+      ]
     },
     {
       "id": 8,
@@ -151,7 +186,9 @@
       "name": "map",
       "path": "map",
       "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
-      "requires_module": [1]
+      "requires_module": [
+        1
+      ]
     }
   ],
   "milestones": [
@@ -159,37 +196,52 @@
       "id": 1,
       "title": "Bootstrap",
       "description": "Core schema and validation working. Spec can be authored and validated.",
-      "groups": [1, 2]
+      "groups": [
+        1,
+        2
+      ]
     },
     {
       "id": 2,
       "title": "Change Tracking",
       "description": "Merkle tree and impact analysis. Spec changes detected and mapped to beads.",
-      "groups": [3, 4]
+      "groups": [
+        3,
+        4
+      ]
     },
     {
       "id": 3,
       "title": "Automation",
-      "description": "Full pipeline: spec change → impact → bead actions executed automatically.",
-      "groups": [5]
+      "description": "Full pipeline: spec change \u2192 impact \u2192 bead actions executed automatically.",
+      "groups": [
+        5
+      ]
     },
     {
       "id": 4,
       "title": "Lifecycle",
       "description": "Proposal management and spec rendering for human consumption.",
-      "groups": [6, 7]
+      "groups": [
+        6,
+        7
+      ]
     },
     {
       "id": 5,
       "title": "CLI Infrastructure",
       "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
-      "groups": [8]
+      "groups": [
+        8
+      ]
     },
     {
       "id": 6,
       "title": "Mapping Layer",
       "description": "Spec-to-bead bridge via mapping file, deterministic preflight checking, and CLI query interface.",
-      "groups": [9]
+      "groups": [
+        9
+      ]
     }
   ],
   "test_plan": {
@@ -198,13 +250,20 @@
         "id": 1,
         "name": "CLI subcommand registration and help",
         "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
-        "modules": [8]
+        "modules": [
+          8
+        ]
       },
       {
         "id": 2,
         "name": "Cross-module mapping integration",
         "description": "Merkle ID-based diff feeds impact analysis, impact report drives apply with mapping record maintenance, skills query mappings via spex map CLI.",
-        "modules": [3, 4, 5, 9]
+        "modules": [
+          3,
+          4,
+          5,
+          9
+        ]
       }
     ]
   }

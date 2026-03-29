@@ -1,7 +1,7 @@
 {
   "name": "id-dangling-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req A", "depends_on": [99]}
+    {"id": 1, "type": "functional", "title": "Req A", "depends_on": [99], "priority": 1}
   ],
   "modules": [
     {"id": 1, "name": "core", "path": "core", "requires_module": [99]}
