@@ -11,6 +11,7 @@ import (
 // initSandbox creates a temporary br workspace for integration tests.
 // Uses t.Chdir so br discovers the sandbox .beads/ database.
 // Skips the test if br is not on PATH.
+// Also initializes a git repo so gitHEAD() works.
 func initSandbox(t *testing.T) *execCLI {
 	t.Helper()
 
@@ -20,6 +21,18 @@ func initSandbox(t *testing.T) *execCLI {
 	}
 
 	dir := t.TempDir()
+
+	// Initialize a git repo so gitHEAD() works in tests.
+	gitInit := exec.Command("git", "init")
+	gitInit.Dir = dir
+	if out, err := gitInit.CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	gitCommit := exec.Command("git", "-c", "user.email=test@test.com", "-c", "user.name=test", "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "init")
+	gitCommit.Dir = dir
+	if out, err := gitCommit.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
 
 	// br init needs to run inside the workspace directory.
 	cmd := exec.Command(bin, "init", "--prefix", "test", "--no-auto-flush", "--no-auto-import")
@@ -200,13 +213,20 @@ func TestIntegration_Close(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	if err := cli.Close(ctx, id, "spec node removed"); err != nil {
+	if err := cli.Close(ctx, id, []string{"spex:obsolete", "commit:abc123"}); err != nil {
 		t.Fatalf("Close: %v", err)
 	}
 
 	bead := brShow(t, cli.bin, id)
 	if got := bead["status"].(string); got != "closed" {
 		t.Errorf("status after close: want %q, got %q", "closed", got)
+	}
+	labels := toStringSlice(t, bead["labels"])
+	if !containsStr(labels, "spex:obsolete") {
+		t.Errorf("want label spex:obsolete after close, got %v", labels)
+	}
+	if !containsStr(labels, "commit:abc123") {
+		t.Errorf("want label commit:abc123 after close, got %v", labels)
 	}
 }
 
