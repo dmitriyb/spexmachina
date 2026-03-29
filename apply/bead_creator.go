@@ -27,6 +27,7 @@ type Action struct {
 	ContentFile      string   // spec content file path
 	ParentSpecNodeID string   // parent spec node ID (for test_sections)
 	Reason           string   // human-readable reason
+	ChangeType       string   // "removed" or "modified" (for obsolete actions)
 }
 
 // CreateOpts holds parameters for creating a single bead.
@@ -43,7 +44,7 @@ type CreateOpts struct {
 type BeadCLI interface {
 	Create(ctx context.Context, opts CreateOpts) (string, error)
 	FindExisting(ctx context.Context, labels []string) (string, error)
-	Close(ctx context.Context, id string, reason string) error
+	Close(ctx context.Context, id string, labels []string) error
 	Update(ctx context.Context, id string, metadata map[string]string) error
 }
 
@@ -155,10 +156,20 @@ func (c *execCLI) FindExisting(ctx context.Context, labels []string) (string, er
 	return "", nil
 }
 
-// Close closes a bead with the given reason.
-func (c *execCLI) Close(ctx context.Context, id string, reason string) error {
-	args := []string{"close", id, "--reason", reason}
-	out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+// Close closes a bead, first adding the given labels via update, then closing.
+// Labels are applied before close so the bead is marked while still open,
+// giving br auto-flush a clean state transition.
+func (c *execCLI) Close(ctx context.Context, id string, labels []string) error {
+	// Add labels via update (br close does not support --add-label).
+	for _, label := range labels {
+		args := []string{"update", id, "--add-label", label}
+		out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("apply: %s update %s (label %s): %w\n%s", c.bin, id, label, err, out)
+		}
+	}
+
+	out, err := exec.CommandContext(ctx, c.bin, "close", id).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("apply: %s close %s: %w\n%s", c.bin, id, err, out)
 	}

@@ -16,7 +16,7 @@ type mockCLI struct {
 	findResult map[string]string // label key → bead ID for FindExisting
 	findErr    error             // error to return from FindExisting
 	createFn   func(CreateOpts) (string, error)
-	closeFn    func(id, reason string) error
+	closeFn    func(id string, labels []string) error
 	updateFn   func(id string, metadata map[string]string) error
 	closed     []closedBead    // recorded Close calls
 	updated    []updatedBead   // recorded Update calls
@@ -25,7 +25,7 @@ type mockCLI struct {
 
 type closedBead struct {
 	ID     string
-	Reason string
+	Labels []string
 }
 
 type updatedBead struct {
@@ -60,11 +60,11 @@ func (m *mockCLI) FindExisting(_ context.Context, labels []string) (string, erro
 	return "", nil
 }
 
-func (m *mockCLI) Close(_ context.Context, id string, reason string) error {
+func (m *mockCLI) Close(_ context.Context, id string, labels []string) error {
 	if m.closeFn != nil {
-		return m.closeFn(id, reason)
+		return m.closeFn(id, labels)
 	}
-	m.closed = append(m.closed, closedBead{ID: id, Reason: reason})
+	m.closed = append(m.closed, closedBead{ID: id, Labels: labels})
 	return nil
 }
 
