@@ -160,7 +160,7 @@ func setupSpecWithOrphans(t *testing.T) string {
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Project req"}
+			{"id": 1, "type": "functional", "title": "Project req", "priority": 1}
 		],
 		"modules": [
 			{"id": 1, "name": "alpha", "path": "alpha"}

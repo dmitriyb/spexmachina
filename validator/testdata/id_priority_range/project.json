@@ -1,0 +1,10 @@
+{
+  "name": "id-priority-range-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A", "priority": 5},
+    {"id": 2, "type": "functional", "title": "Req B", "priority": -1}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}

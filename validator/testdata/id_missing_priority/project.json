@@ -1,0 +1,10 @@
+{
+  "name": "id-missing-priority-test",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req A"},
+    {"id": 2, "type": "functional", "title": "Req B", "priority": 1}
+  ],
+  "modules": [
+    {"id": 1, "name": "core", "path": "core"}
+  ]
+}
