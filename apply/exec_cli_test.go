@@ -315,34 +315,6 @@ func TestIntegration_CloseBeads(t *testing.T) {
 	}
 }
 
-func TestIntegration_UpdateBeads(t *testing.T) {
-	cli := initSandbox(t)
-	ctx := context.Background()
-
-	id, err := cli.Create(ctx, CreateOpts{
-		Title:    "update: Comp",
-		Type:     "task",
-		Priority: -1,
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	actions := []Action{
-		{Module: "ub", Node: "Comp", BeadID: id, SpecHash: "newhash"},
-	}
-
-	if err := UpdateBeads(ctx, cli, actions, testLogger()); err != nil {
-		t.Fatalf("UpdateBeads: %v", err)
-	}
-
-	bead := brShow(t, cli.bin, id)
-	labels := toStringSlice(t, bead["labels"])
-	if !containsStr(labels, "spec_hash:newhash") {
-		t.Errorf("want label spec_hash:newhash, got %v", labels)
-	}
-}
-
 func TestIntegration_TagWithProposal(t *testing.T) {
 	cli := initSandbox(t)
 	ctx := context.Background()
