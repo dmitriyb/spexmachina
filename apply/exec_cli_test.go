@@ -315,8 +315,6 @@ func TestIntegration_CloseBeads(t *testing.T) {
 	}
 }
 
-
-
 func TestIntegration_TagWithProposal(t *testing.T) {
 	cli := initSandbox(t)
 	ctx := context.Background()
