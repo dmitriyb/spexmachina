@@ -20,6 +20,7 @@ type Action struct {
 	SpecHash   string   `json:"spec_hash,omitempty"`     // current merkle hash (for "create")
 	OldBeadID  string   `json:"old_bead_id,omitempty"`   // predecessor bead ID (for "create" replacing an obsoleted bead)
 	DepBeadIDs []string `json:"dep_bead_ids,omitempty"`  // bead IDs this action depends on (from spec graph)
+	ChangeType string   `json:"change_type,omitempty"`   // "modified" or "removed" (set by classifier for obsolete actions)
 	Reason     string   `json:"reason"`                  // human-readable explanation
 }
 
@@ -40,12 +41,13 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 				node := nodeName(r)
 				// Obsolete the old bead
 				actions = append(actions, Action{
-					Type:     "obsolete",
-					BeadID:   r.BeadID,
-					Module:   m.Change.Module,
-					Node:     node,
-					NodeType: nodeType,
-					Reason:   fmt.Sprintf("Spec node modified: %s/%s", m.Change.Module, node),
+					Type:       "obsolete",
+					BeadID:     r.BeadID,
+					Module:     m.Change.Module,
+					Node:       node,
+					NodeType:   nodeType,
+					ChangeType: "modified",
+					Reason:     fmt.Sprintf("Spec node modified: %s/%s", m.Change.Module, node),
 				})
 				// Create a new replacement bead
 				actions = append(actions, Action{
@@ -94,12 +96,13 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 
 		// Always obsolete the orphaned bead
 		actions = append(actions, Action{
-			Type:     "obsolete",
-			BeadID:   o.Record.BeadID,
-			Module:   o.Record.Module,
-			Node:     node,
-			NodeType: nodeType,
-			Reason:   fmt.Sprintf("Spec node removed: %s/%s", o.Record.Module, node),
+			Type:       "obsolete",
+			BeadID:     o.Record.BeadID,
+			Module:     o.Record.Module,
+			Node:       node,
+			NodeType:   nodeType,
+			ChangeType: "removed",
+			Reason:     fmt.Sprintf("Spec node removed: %s/%s", o.Record.Module, node),
 		})
 
 		// If the bead is closed, code has shipped — create a cleanup bead

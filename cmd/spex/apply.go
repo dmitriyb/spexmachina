@@ -8,7 +8,6 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/dmitriyb/spexmachina/apply"
 	"github.com/dmitriyb/spexmachina/impact"
@@ -188,9 +187,9 @@ func deriveSpecNodeID(moduleName, node, nodeType string) string {
 func convertObsoleteActions(obsoletes []impact.Action) []apply.Action {
 	actions := make([]apply.Action, 0, len(obsoletes))
 	for _, o := range obsoletes {
-		ct := "modified"
-		if strings.Contains(o.Reason, "removed") {
-			ct = "removed"
+		ct := o.ChangeType
+		if ct == "" {
+			ct = "modified"
 		}
 		actions = append(actions, apply.Action{
 			BeadID:     o.BeadID,

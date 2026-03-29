@@ -131,8 +131,8 @@ func TestREQ4_ConvertCreateActions_OldBeadIDLookup(t *testing.T) {
 
 func TestREQ4_ConvertObsoleteActions(t *testing.T) {
 	obsoletes := []impact.Action{
-		{Type: "obsolete", BeadID: "bead-2", Module: "3", Node: "LegacyChecker", Reason: "Spec node removed: 3/LegacyChecker"},
-		{Type: "obsolete", BeadID: "bead-3", Module: "3", Node: "Hasher", Reason: "Spec node modified: 3/Hasher"},
+		{Type: "obsolete", BeadID: "bead-2", Module: "3", Node: "LegacyChecker", ChangeType: "removed", Reason: "Spec node removed: 3/LegacyChecker"},
+		{Type: "obsolete", BeadID: "bead-3", Module: "3", Node: "Hasher", ChangeType: "modified", Reason: "Spec node modified: 3/Hasher"},
 	}
 
 	actions := convertObsoleteActions(obsoletes)
@@ -201,6 +201,20 @@ func TestREQ4_ReadReport_MissingFile(t *testing.T) {
 	_, err := readReport("/nonexistent/report.json")
 	if err == nil {
 		t.Fatal("want error for missing file, got nil")
+	}
+}
+
+// --- S12: --proposal flag is required ---
+
+func TestREQ8_S12_ProposalFlagRequired(t *testing.T) {
+	cmd := newApplyCmd()
+	cmd.SetArgs([]string{"--report", "/dev/null"})
+	err := cmd.Execute()
+	if err == nil {
+		t.Fatal("want error when --proposal is omitted, got nil")
+	}
+	if !strings.Contains(err.Error(), "proposal") {
+		t.Errorf("want error mentioning 'proposal', got: %v", err)
 	}
 }
 
