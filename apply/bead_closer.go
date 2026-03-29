@@ -12,8 +12,8 @@ import (
 )
 
 // gitHEAD returns the current git HEAD commit hash.
-func gitHEAD() (string, error) {
-	out, err := exec.Command("git", "rev-parse", "HEAD").Output()
+func gitHEAD(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, "git", "rev-parse", "HEAD").Output()
 	if err != nil {
 		return "", fmt.Errorf("apply: resolve HEAD: %w", err)
 	}
@@ -30,7 +30,7 @@ func LabelObsoletes(ctx context.Context, cli BeadCLI, store mapping.Store, actio
 		return nil
 	}
 
-	head, err := gitHEAD()
+	head, err := gitHEAD(ctx)
 	if err != nil {
 		return err
 	}
@@ -78,7 +78,7 @@ func LabelObsoletes(ctx context.Context, cli BeadCLI, store mapping.Store, actio
 }
 
 // CloseBeads is the close phase of the two-phase obsolescence flow.
-// It closes each bead with spex:obsolete and commit:<HEAD> labels.
+// It closes each bead that was previously labeled by LabelObsoletes.
 // Each failure is logged as a warning and accumulated. The batch continues
 // even if individual closes fail. Returns an aggregated error of all
 // warnings, or nil if all succeeded.
@@ -87,16 +87,10 @@ func CloseBeads(ctx context.Context, cli BeadCLI, actions []Action, logger *slog
 		return nil
 	}
 
-	head, err := gitHEAD()
-	if err != nil {
-		return err
-	}
-
 	var errs []error
-	labels := []string{"spex:obsolete", fmt.Sprintf("commit:%s", head)}
 
 	for _, a := range actions {
-		if err := cli.Close(ctx, a.BeadID, labels); err != nil {
+		if err := cli.Close(ctx, a.BeadID, nil); err != nil {
 			logger.WarnContext(ctx, "close bead failed",
 				"bead_id", a.BeadID,
 				"module", a.Module,

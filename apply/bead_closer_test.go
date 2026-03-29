@@ -14,9 +14,9 @@ func testLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(&strings.Builder{}, nil))
 }
 
-// --- S12: BeadCloser obsoletes bead with correct labels ---
+// --- S12: BeadCloser closes bead without labels (labels applied in label phase) ---
 
-func TestREQ2_S12_CloseBeads_CorrectLabels(t *testing.T) {
+func TestREQ2_S12_CloseBeads_NoLabels(t *testing.T) {
 	cli := newMockCLI()
 	actions := []Action{
 		{Module: "validator", Node: "LegacyChecker", BeadID: "spexmachina-42"},
@@ -34,19 +34,8 @@ func TestREQ2_S12_CloseBeads_CorrectLabels(t *testing.T) {
 	if got.ID != "spexmachina-42" {
 		t.Errorf("ID: want %q, got %q", "spexmachina-42", got.ID)
 	}
-	if len(got.Labels) != 2 {
-		t.Fatalf("want 2 labels, got %d: %v", len(got.Labels), got.Labels)
-	}
-	if got.Labels[0] != "spex:obsolete" {
-		t.Errorf("labels[0]: want %q, got %q", "spex:obsolete", got.Labels[0])
-	}
-	if !strings.HasPrefix(got.Labels[1], "commit:") {
-		t.Errorf("labels[1]: want commit:<HEAD> prefix, got %q", got.Labels[1])
-	}
-	// Commit hash should be a hex string of at least 7 chars.
-	commitHash := strings.TrimPrefix(got.Labels[1], "commit:")
-	if len(commitHash) < 7 {
-		t.Errorf("commit hash too short: %q", commitHash)
+	if len(got.Labels) != 0 {
+		t.Errorf("want 0 labels (close phase only closes), got %d: %v", len(got.Labels), got.Labels)
 	}
 }
 
@@ -101,17 +90,10 @@ func TestREQ2_S14_CloseBeads_AllSucceed(t *testing.T) {
 		t.Fatalf("want 2 Close calls, got %d", len(cli.closed))
 	}
 
-	// Both should have spex:obsolete and commit:<HEAD> labels.
+	// Close phase passes nil labels (labeling was done in label phase).
 	for i, c := range cli.closed {
-		if len(c.Labels) < 2 {
-			t.Errorf("call %d: want at least 2 labels, got %v", i, c.Labels)
-			continue
-		}
-		if c.Labels[0] != "spex:obsolete" {
-			t.Errorf("call %d labels[0]: want %q, got %q", i, "spex:obsolete", c.Labels[0])
-		}
-		if !strings.HasPrefix(c.Labels[1], "commit:") {
-			t.Errorf("call %d labels[1]: want commit: prefix, got %q", i, c.Labels[1])
+		if len(c.Labels) != 0 {
+			t.Errorf("call %d: want 0 labels, got %v", i, c.Labels)
 		}
 	}
 }
