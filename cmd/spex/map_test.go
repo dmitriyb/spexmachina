@@ -187,106 +187,44 @@ func TestFR3_MapList_NoMappingFile(t *testing.T) {
 	}
 }
 
-func TestFR3_Check_ReadyBead(t *testing.T) {
+func TestFR3_MapContext_ValidRecord(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	spec, err := mapping.NewSpecGraph(specDir)
+	out, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "1")
 	if err != nil {
-		t.Fatalf("build spec graph: %v", err)
-	}
-	actualHash, err := spec.NodeHash("alpha/component/1")
-	if err != nil {
-		t.Fatalf("get node hash: %v", err)
-	}
-	store := mapping.NewFileStore(mapFile)
-	if err := store.Update(1, map[string]string{"spec_hash": actualHash}); err != nil {
-		t.Fatalf("update hash: %v", err)
+		t.Fatalf("want no error, got %v", err)
 	}
 
-	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
-	if err != nil {
-		t.Fatalf("want no error for ready bead, got %v", err)
-	}
-
-	var result mapping.PreflightResult
+	var result mapping.ContextResult
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
 	}
-	if result.Status != "ready" {
-		t.Fatalf("want status ready, got %s", result.Status)
+	if result.Record.ID != 1 {
+		t.Errorf("want record ID 1, got %d", result.Record.ID)
 	}
-	if result.Record.BeadID != "test-abc" {
-		t.Fatalf("want bead_id test-abc, got %s", result.Record.BeadID)
+	if result.ArchFile == "" {
+		t.Error("want non-empty arch_file")
 	}
-}
-
-func TestFR3_Check_BlockedBead(t *testing.T) {
-	specDir, mapFile := setupMapTestSpec(t)
-
-	spec, err := mapping.NewSpecGraph(specDir)
-	if err != nil {
-		t.Fatalf("build spec graph: %v", err)
-	}
-	actualHash, err := spec.NodeHash("alpha/component/2")
-	if err != nil {
-		t.Fatalf("get node hash: %v", err)
-	}
-	store := mapping.NewFileStore(mapFile)
-	if err := store.Update(2, map[string]string{"spec_hash": actualHash}); err != nil {
-		t.Fatalf("update hash: %v", err)
-	}
-
-	rec, err := store.Get(1)
-	if err != nil {
-		t.Fatalf("get record 1: %v", err)
-	}
-	store.Delete(1)
-	rec.BeadStatus = "open"
-	store.Create(rec)
-
-	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-def")
-	if err == nil {
-		t.Fatal("want error for blocked bead, got nil")
-	}
-
-	var result mapping.PreflightResult
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
-	}
-	if result.Status != "blocked" {
-		t.Fatalf("want status blocked, got %s", result.Status)
-	}
-	if len(result.Blockers) == 0 {
-		t.Fatal("want at least one blocker")
+	if result.ModuleFile == "" {
+		t.Error("want non-empty module_file")
 	}
 }
 
-func TestFR3_Check_UnknownBead(t *testing.T) {
+func TestFR3_MapContext_UnknownRecord(t *testing.T) {
 	specDir, mapFile := setupMapTestSpec(t)
 
-	_, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "unknown-bead-id")
+	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "999")
 	if err == nil {
-		t.Fatal("want error for unknown bead, got nil")
+		t.Fatal("want error for unknown record, got nil")
 	}
 }
 
-func TestFR3_Check_StaleBead(t *testing.T) {
-	specDir, mapFile := setupMapTestSpec(t)
+func TestFR3_MapContext_InvalidID(t *testing.T) {
+	_, mapFile := setupMapTestSpec(t)
 
-	out, err := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
+	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "notanumber")
 	if err == nil {
-		t.Fatal("want error for stale bead, got nil")
-	}
-
-	var result mapping.PreflightResult
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
-	}
-	if result.Status != "stale" {
-		t.Fatalf("want status stale, got %s", result.Status)
-	}
-	if result.StaleHash == "" {
-		t.Fatal("stale result should include current hash")
+		t.Fatal("want error for invalid ID, got nil")
 	}
 }
 
@@ -299,26 +237,3 @@ func TestFR3_MapCommand_NoSubcommand(t *testing.T) {
 	}
 }
 
-func TestNFR4_Check_Deterministic(t *testing.T) {
-	specDir, mapFile := setupMapTestSpec(t)
-
-	spec, err := mapping.NewSpecGraph(specDir)
-	if err != nil {
-		t.Fatalf("build spec graph: %v", err)
-	}
-	actualHash, err := spec.NodeHash("alpha/component/1")
-	if err != nil {
-		t.Fatalf("get node hash: %v", err)
-	}
-	store := mapping.NewFileStore(mapFile)
-	if err := store.Update(1, map[string]string{"spec_hash": actualHash}); err != nil {
-		t.Fatalf("update hash: %v", err)
-	}
-
-	out1, _ := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
-	out2, _ := runSpex(t, "check", "--map-file", mapFile, "--spec-dir", specDir, "test-abc")
-
-	if out1 != out2 {
-		t.Fatalf("determinism: outputs differ:\nrun1: %s\nrun2: %s", out1, out2)
-	}
-}

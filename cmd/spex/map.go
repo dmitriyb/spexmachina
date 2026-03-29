@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -32,7 +31,15 @@ func newMapCmd() *cobra.Command {
 	}
 	listCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
-	mapCmd.AddCommand(getCmd, listCmd)
+	contextCmd := &cobra.Command{
+		Use:   "context <record-id>",
+		Short: "Resolve full spec context for a mapping record",
+		Args:  cobra.ExactArgs(1),
+		RunE:  runMapContextE,
+	}
+	contextCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
+
+	mapCmd.AddCommand(getCmd, listCmd, contextCmd)
 	return mapCmd
 }
 
@@ -71,18 +78,7 @@ func runMapListE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func newCheckCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "check <bead-id>",
-		Short: "Validate mapping status for a bead",
-		Args:  cobra.ExactArgs(1),
-		RunE:  runCheckE,
-	}
-	cmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
-	return cmd
-}
-
-func runCheckE(cmd *cobra.Command, args []string) error {
+func runMapContextE(cmd *cobra.Command, args []string) error {
 	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
 		return err
@@ -90,24 +86,26 @@ func runCheckE(cmd *cobra.Command, args []string) error {
 
 	mapFile, _ := cmd.Flags().GetString("map-file")
 
+	id, err := strconv.Atoi(args[0])
+	if err != nil {
+		return fmt.Errorf("map context: invalid record ID: %s", args[0])
+	}
+
 	store := mapping.NewFileStore(mapFile)
-	spec, err := mapping.NewSpecGraph(specDir)
+	record, err := store.Get(id)
 	if err != nil {
-		return fmt.Errorf("check: %w", err)
+		return fmt.Errorf("map context: %w", err)
 	}
 
-	ctx := context.Background()
-	result, err := mapping.Check(ctx, store, spec, args[0])
+	result, err := mapping.ResolveContext(specDir, record)
 	if err != nil {
-		return fmt.Errorf("check: %w", err)
+		return fmt.Errorf("map context: %w", err)
 	}
 
-	if err := json.NewEncoder(os.Stdout).Encode(result); err != nil {
-		return fmt.Errorf("check: %w", err)
-	}
-
-	if result.Status != "ready" {
-		return fmt.Errorf("check: status is %s, not ready", result.Status)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(result); err != nil {
+		return fmt.Errorf("map context: %w", err)
 	}
 	return nil
 }

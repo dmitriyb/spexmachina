@@ -16,7 +16,6 @@ func main() {
 		newImpactCmd(),
 		newApplyCmd(),
 		newMapCmd(),
-		newCheckCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

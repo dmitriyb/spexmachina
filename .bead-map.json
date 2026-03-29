@@ -8,7 +8,8 @@
       "module": "schema",
       "component": "ProjectSchema",
       "content_file": "spec/schema/arch_project_schema.md",
-      "spec_hash": "8cd7cd43ad7581706b2f110e8e7467c322f83e0aff4de215177982d8ef6b5da9"
+      "spec_hash": "8cd7cd43ad7581706b2f110e8e7467c322f83e0aff4de215177982d8ef6b5da9",
+      "bead_type": "task"
     },
     {
       "id": 2,
@@ -17,7 +18,8 @@
       "module": "schema",
       "component": "ModuleSchema",
       "content_file": "spec/schema/arch_module_schema.md",
-      "spec_hash": "94bf4f35f470bb761e1865d02dffa72e0a40160f293d801f2f60b239432b2b91"
+      "spec_hash": "94bf4f35f470bb761e1865d02dffa72e0a40160f293d801f2f60b239432b2b91",
+      "bead_type": "task"
     },
     {
       "id": 3,
@@ -26,7 +28,8 @@
       "module": "validator",
       "component": "SchemaChecker",
       "content_file": "spec/validator/arch_schema_checker.md",
-      "spec_hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3"
+      "spec_hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3",
+      "bead_type": "task"
     },
     {
       "id": 4,
@@ -35,7 +38,8 @@
       "module": "validator",
       "component": "ContentResolver",
       "content_file": "spec/validator/arch_content_resolver.md",
-      "spec_hash": "938203a5f4e1fdf46e697083b636b155346333497530b3929dd974dbad7d6805"
+      "spec_hash": "938203a5f4e1fdf46e697083b636b155346333497530b3929dd974dbad7d6805",
+      "bead_type": "task"
     },
     {
       "id": 5,
@@ -44,7 +48,8 @@
       "module": "validator",
       "component": "DAGChecker",
       "content_file": "spec/validator/arch_dag_checker.md",
-      "spec_hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9"
+      "spec_hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9",
+      "bead_type": "task"
     },
     {
       "id": 6,
@@ -53,7 +58,8 @@
       "module": "validator",
       "component": "OrphanDetector",
       "content_file": "spec/validator/arch_orphan_detector.md",
-      "spec_hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928"
+      "spec_hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928",
+      "bead_type": "task"
     },
     {
       "id": 7,
@@ -62,7 +68,8 @@
       "module": "validator",
       "component": "IDValidator",
       "content_file": "spec/validator/arch_id_validator.md",
-      "spec_hash": "9f59d645bcbc76f8578e2e382ec768d92c2e4706459885be59f1a022066be963"
+      "spec_hash": "9f59d645bcbc76f8578e2e382ec768d92c2e4706459885be59f1a022066be963",
+      "bead_type": "task"
     },
     {
       "id": 8,
@@ -71,7 +78,8 @@
       "module": "validator",
       "component": "ErrorReporter",
       "content_file": "spec/validator/arch_error_reporter.md",
-      "spec_hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10"
+      "spec_hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10",
+      "bead_type": "task"
     },
     {
       "id": 9,
@@ -80,7 +88,8 @@
       "module": "validator",
       "component": "ValidateCommand",
       "content_file": "spec/validator/arch_validate_command.md",
-      "spec_hash": "8e5a6ebe08c92aaf678e6223e70a4527ae6ef8d00c498517308923d89cc318ed"
+      "spec_hash": "8e5a6ebe08c92aaf678e6223e70a4527ae6ef8d00c498517308923d89cc318ed",
+      "bead_type": "task"
     },
     {
       "id": 10,
@@ -89,7 +98,8 @@
       "module": "validator",
       "component": "NameConsistencyChecker",
       "content_file": "spec/validator/arch_name_consistency_checker.md",
-      "spec_hash": "77d5810f55d05c3abad7828c9ee3325d6fd61bf50c6c84029beff915fa33d1a9"
+      "spec_hash": "77d5810f55d05c3abad7828c9ee3325d6fd61bf50c6c84029beff915fa33d1a9",
+      "bead_type": "task"
     },
     {
       "id": 11,
@@ -98,7 +108,8 @@
       "module": "validator",
       "component": "TestCoverageChecker",
       "content_file": "spec/validator/arch_test_coverage_checker.md",
-      "spec_hash": "aef33f9286137e26281f1e8e017bdee5100375856280042ca6312c9001dd393b"
+      "spec_hash": "aef33f9286137e26281f1e8e017bdee5100375856280042ca6312c9001dd393b",
+      "bead_type": "task"
     },
     {
       "id": 12,
@@ -107,7 +118,8 @@
       "module": "merkle",
       "component": "Hasher",
       "content_file": "spec/merkle/arch_hasher.md",
-      "spec_hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f"
+      "spec_hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f",
+      "bead_type": "task"
     },
     {
       "id": 13,
@@ -116,7 +128,8 @@
       "module": "merkle",
       "component": "TreeBuilder",
       "content_file": "spec/merkle/arch_tree_builder.md",
-      "spec_hash": "c5429a7ca05eaabd0abc68c59e0d341674085d31df4299389198e93f02b45d35"
+      "spec_hash": "c5429a7ca05eaabd0abc68c59e0d341674085d31df4299389198e93f02b45d35",
+      "bead_type": "task"
     },
     {
       "id": 14,
@@ -125,7 +138,8 @@
       "module": "merkle",
       "component": "SnapshotStore",
       "content_file": "spec/merkle/arch_snapshot_store.md",
-      "spec_hash": "326aeb71ca94c9294fff8d71532db605adc5198f51607dc671054db0fe9ed0d2"
+      "spec_hash": "326aeb71ca94c9294fff8d71532db605adc5198f51607dc671054db0fe9ed0d2",
+      "bead_type": "task"
     },
     {
       "id": 15,
@@ -134,7 +148,8 @@
       "module": "merkle",
       "component": "DiffEngine",
       "content_file": "spec/merkle/arch_diff_engine.md",
-      "spec_hash": "5fdf56e45a6374ed61fee5a6bd91a2222fb6718227e637b455f02e6524f9d125"
+      "spec_hash": "5fdf56e45a6374ed61fee5a6bd91a2222fb6718227e637b455f02e6524f9d125",
+      "bead_type": "task"
     },
     {
       "id": 16,
@@ -143,7 +158,8 @@
       "module": "merkle",
       "component": "ImpactClassifier",
       "content_file": "spec/merkle/arch_impact_classifier.md",
-      "spec_hash": "65f44c2339debfff759dada322a59e62b55753afd864e753d90d965da1fb5696"
+      "spec_hash": "65f44c2339debfff759dada322a59e62b55753afd864e753d90d965da1fb5696",
+      "bead_type": "task"
     },
     {
       "id": 17,
@@ -152,7 +168,8 @@
       "module": "merkle",
       "component": "HashCommand",
       "content_file": "spec/merkle/arch_hash_command.md",
-      "spec_hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683"
+      "spec_hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683",
+      "bead_type": "task"
     },
     {
       "id": 18,
@@ -161,7 +178,8 @@
       "module": "merkle",
       "component": "DiffCommand",
       "content_file": "spec/merkle/arch_diff_command.md",
-      "spec_hash": "f4e891916636feacd3321ad6dccee5ac232122abcd8f6739442b1a2b61fe7464"
+      "spec_hash": "f4e891916636feacd3321ad6dccee5ac232122abcd8f6739442b1a2b61fe7464",
+      "bead_type": "task"
     },
     {
       "id": 19,
@@ -170,7 +188,8 @@
       "module": "impact",
       "component": "BeadReader",
       "content_file": "spec/impact/arch_bead_reader.md",
-      "spec_hash": "ef904d037780f278150405d1fc827abf7e6d02e9fa962375d1024992a1788974"
+      "spec_hash": "ef904d037780f278150405d1fc827abf7e6d02e9fa962375d1024992a1788974",
+      "bead_type": "task"
     },
     {
       "id": 20,
@@ -179,7 +198,8 @@
       "module": "impact",
       "component": "NodeMatcher",
       "content_file": "spec/impact/arch_node_matcher.md",
-      "spec_hash": "0245d61a4e432254840bdb3ef6b25a9eb009e8dfb0c9a9d5c67e4d7b0c114546"
+      "spec_hash": "0245d61a4e432254840bdb3ef6b25a9eb009e8dfb0c9a9d5c67e4d7b0c114546",
+      "bead_type": "task"
     },
     {
       "id": 21,
@@ -188,7 +208,8 @@
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "6ca27459f0d4db0ba05a6261962bf81c5ed3739d6ae573c9421889100aaf546b"
+      "spec_hash": "6ca27459f0d4db0ba05a6261962bf81c5ed3739d6ae573c9421889100aaf546b",
+      "bead_type": "feature"
     },
     {
       "id": 22,
@@ -197,7 +218,8 @@
       "module": "impact",
       "component": "ReportGenerator",
       "content_file": "spec/impact/arch_report_generator.md",
-      "spec_hash": "97f25db569bd88690eecddba570764161d9c6e485d0664762e4441ce1908afef"
+      "spec_hash": "97f25db569bd88690eecddba570764161d9c6e485d0664762e4441ce1908afef",
+      "bead_type": "feature"
     },
     {
       "id": 23,
@@ -206,7 +228,8 @@
       "module": "impact",
       "component": "ImpactCommand",
       "content_file": "spec/impact/arch_impact_command.md",
-      "spec_hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28"
+      "spec_hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28",
+      "bead_type": "task"
     },
     {
       "id": 24,
@@ -215,7 +238,8 @@
       "module": "apply",
       "component": "BeadCreator",
       "content_file": "spec/apply/arch_bead_creator.md",
-      "spec_hash": "98707113c897ece4992f6dcec65571ca91d7666df623b2fee107eb8411d26d99"
+      "spec_hash": "98707113c897ece4992f6dcec65571ca91d7666df623b2fee107eb8411d26d99",
+      "bead_type": "feature"
     },
     {
       "id": 25,
@@ -224,7 +248,8 @@
       "module": "apply",
       "component": "BeadCloser",
       "content_file": "spec/apply/arch_bead_closer.md",
-      "spec_hash": "0cdfb338e44c5386857d64495be13fecd9e6e1ee3ab892a2cfcc2cdcc4ddc057"
+      "spec_hash": "0cdfb338e44c5386857d64495be13fecd9e6e1ee3ab892a2cfcc2cdcc4ddc057",
+      "bead_type": "task"
     },
     {
       "id": 27,
@@ -233,7 +258,8 @@
       "module": "apply",
       "component": "ProposalTagger",
       "content_file": "spec/apply/arch_proposal_tagger.md",
-      "spec_hash": "33d47a041aa5477be7e5c0c5aad89efc99112a2967cbc1bddc03913a6417118b"
+      "spec_hash": "33d47a041aa5477be7e5c0c5aad89efc99112a2967cbc1bddc03913a6417118b",
+      "bead_type": "task"
     },
     {
       "id": 28,
@@ -242,7 +268,8 @@
       "module": "apply",
       "component": "SnapshotSaver",
       "content_file": "spec/apply/arch_snapshot_saver.md",
-      "spec_hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3"
+      "spec_hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3",
+      "bead_type": "task"
     },
     {
       "id": 29,
@@ -251,7 +278,8 @@
       "module": "apply",
       "component": "ApplyCommand",
       "content_file": "spec/apply/arch_apply_command.md",
-      "spec_hash": "0905bfaff627eae73d7b2c1c393b9a6c088a69b005a39a855fbf70119b732b29"
+      "spec_hash": "0905bfaff627eae73d7b2c1c393b9a6c088a69b005a39a855fbf70119b732b29",
+      "bead_type": "feature"
     },
     {
       "id": 30,
@@ -260,7 +288,8 @@
       "module": "proposal",
       "component": "ProposalCommands",
       "content_file": "spec/proposal/arch_proposal_commands.md",
-      "spec_hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612"
+      "spec_hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612",
+      "bead_type": "task"
     },
     {
       "id": 31,
@@ -269,7 +298,8 @@
       "module": "render",
       "component": "RenderCommand",
       "content_file": "spec/render/arch_render_command.md",
-      "spec_hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a"
+      "spec_hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a",
+      "bead_type": "task"
     },
     {
       "id": 32,
@@ -278,7 +308,8 @@
       "module": "cli",
       "component": "RootCommand",
       "content_file": "spec/cli/arch_root_command.md",
-      "spec_hash": "99e0160f486c344a40609a6fb36e71de118145283c5769ed5779367ba3a17417"
+      "spec_hash": "99e0160f486c344a40609a6fb36e71de118145283c5769ed5779367ba3a17417",
+      "bead_type": "task"
     },
     {
       "id": 33,
@@ -287,7 +318,8 @@
       "module": "cli",
       "component": "VersionCommand",
       "content_file": "spec/cli/arch_version_command.md",
-      "spec_hash": "ef2ea5ff511d960077ca5fe7380dd94c754b1a244fe9fce8bc5458b168fbd466"
+      "spec_hash": "ef2ea5ff511d960077ca5fe7380dd94c754b1a244fe9fce8bc5458b168fbd466",
+      "bead_type": "task"
     },
     {
       "id": 34,
@@ -296,7 +328,8 @@
       "module": "map",
       "component": "MappingStore",
       "content_file": "spec/map/arch_mapping_store.md",
-      "spec_hash": "b8b5536077094851c9b61861be543ea4d80032daf8621153f7114e43509b848b"
+      "spec_hash": "b8b5536077094851c9b61861be543ea4d80032daf8621153f7114e43509b848b",
+      "bead_type": "task"
     },
     {
       "id": 35,
@@ -305,7 +338,8 @@
       "module": "map",
       "component": "PreflightChecker",
       "content_file": "spec/map/arch_preflight_checker.md",
-      "spec_hash": "c6e5eac67278f33c1d663402d1d016927e687d0b49016b8a30bd958c33a515fe"
+      "spec_hash": "c6e5eac67278f33c1d663402d1d016927e687d0b49016b8a30bd958c33a515fe",
+      "bead_type": "task"
     },
     {
       "id": 36,
@@ -314,7 +348,8 @@
       "module": "map",
       "component": "MapCommand",
       "content_file": "spec/map/arch_map_command.md",
-      "spec_hash": "a96bda9cd04c0b65406fff0fc22d27c6dcd97feae91b61ea9aaec62ce8ea05e9"
+      "spec_hash": "a96bda9cd04c0b65406fff0fc22d27c6dcd97feae91b61ea9aaec62ce8ea05e9",
+      "bead_type": "task"
     },
     {
       "id": 48,
@@ -323,7 +358,8 @@
       "module": "schema",
       "component": "BeadMapSchema",
       "content_file": "spec/schema/arch_bead_map_schema.md",
-      "spec_hash": "05b8892d9984ddced7677240d5c9e5ecbeed91a6819e24c189106bc2681d095e"
+      "spec_hash": "05b8892d9984ddced7677240d5c9e5ecbeed91a6819e24c189106bc2681d095e",
+      "bead_type": "task"
     },
     {
       "id": 50,
@@ -332,7 +368,8 @@
       "module": "map",
       "component": "ContextResolver",
       "content_file": "spec/map/arch_context_resolver.md",
-      "spec_hash": "6acf817dbd76409c7be082dc879e638242307b8885314da08ef9af86fe03bfa3"
+      "spec_hash": "6acf817dbd76409c7be082dc879e638242307b8885314da08ef9af86fe03bfa3",
+      "bead_type": "task"
     }
   ]
 }

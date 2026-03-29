@@ -1,13 +1,13 @@
 # MapCommand
 
-CLI entry point for `spex map` and `spex check` subcommands.
+CLI entry point for `spex map` subcommands.
 
 ## Responsibilities
 
 - Parse CLI arguments and flags
-- Wire MappingStore and PreflightChecker
+- Wire MappingStore and ContextResolver
 - Output structured JSON to stdout
-- Set exit codes: 0 for success/ready, 1 for errors/blocked
+- Set exit codes: 0 for success, 1 for errors
 
 ## Subcommands
 
@@ -71,34 +71,15 @@ $ spex map context 42
 
 All from the record ID, all deterministic, no duplication. Exit code 0 on success, 1 if record not found or module.json unreadable.
 
-### spex check \<bead-id\>
-
-Runs preflight checking for a bead.
-
-```
-$ spex check abc-123
-{
-  "status": "ready",
-  "record": {"id": 42, ...}
-}
-```
-
-Exit code 0 if ready, 1 if blocked or stale.
-
 ## Interface
 
 ```go
 func NewMapCmd(store Store) *cobra.Command
-func NewCheckCmd(store Store, spec SpecGraph) *cobra.Command
 ```
 
-Both commands are registered on the root `spex` command via the CLI module's subcommand registration framework.
+The map command is registered on the root `spex` command via the CLI module's subcommand registration framework.
 
 ## Design Rationale
-
-### Two top-level commands
-
-`spex map` groups mapping CRUD operations. `spex check` is a separate top-level command because it's the most common entry point for skills — keeping it at the top level makes it easier to call.
 
 ### JSON-only output
 

@@ -27,20 +27,15 @@
 - **Input**: `spex map list` with no records in `.bead-map.json`
 - **Expected**: Empty JSON array `[]`. Exit code 0.
 
-### spex check — bead with ready dependencies
+### spex map context — valid record ID
 
-- **Input**: `spex check <bead-id>` where all dependencies are satisfied
-- **Expected**: JSON output with status "ready", resolved spec node info. Exit code 0.
+- **Input**: `spex map context 1`
+- **Expected**: JSON output with record, arch_file, impl_files, test_files, flow_files, module_file. Exit code 0.
 
-### spex check — bead with blocked dependencies
+### spex map context — unknown record ID
 
-- **Input**: `spex check <bead-id>` where a dependency module is not yet implemented
-- **Expected**: JSON output with status "blocked", list of blockers. Exit code 1.
-
-### spex check — unknown bead
-
-- **Input**: `spex check unknown-bead-id`
-- **Expected**: Error message "no mapping record for bead unknown-bead-id". Exit code 1.
+- **Input**: `spex map context 999`
+- **Expected**: Error message. Exit code 1.
 
 ### Output format consistency
 
