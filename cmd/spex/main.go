@@ -16,6 +16,9 @@ func main() {
 		newImpactCmd(),
 		newApplyCmd(),
 		newMapCmd(),
+		newRegisterCmd(),
+		newLogCmd(),
+		newTemplateCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
