@@ -3,14 +3,14 @@
 ## Command Registration
 
 ```go
-func NewMapCmd(store Store) *cobra.Command {
-    cmd := &cobra.Command{
+func newMapCmd() *cobra.Command {
+    mapCmd := &cobra.Command{
         Use:   "map",
-        Short: "Query spec-to-bead mapping records",
+        Short: "Manage bead mapping records",
     }
-    cmd.AddCommand(newMapGetCmd(store))
-    cmd.AddCommand(newMapListCmd(store))
-    return cmd
+    // ... getCmd, listCmd, contextCmd setup ...
+    mapCmd.AddCommand(getCmd, listCmd, contextCmd)
+    return mapCmd
 }
 
 ```
@@ -55,6 +55,44 @@ func newMapListCmd(store Store) *cobra.Command {
     }
 }
 ```
+
+## spex map context
+
+```go
+func runMapContextE(cmd *cobra.Command, args []string) error {
+    specDir, err := resolveSpecDir(cmd)
+    if err != nil {
+        return err
+    }
+
+    mapFile, _ := cmd.Flags().GetString("map-file")
+
+    id, err := strconv.Atoi(args[0])
+    if err != nil {
+        return fmt.Errorf("map context: invalid record ID: %s", args[0])
+    }
+
+    store := mapping.NewFileStore(mapFile)
+    record, err := store.Get(id)
+    if err != nil {
+        return fmt.Errorf("map context: %w", err)
+    }
+
+    result, err := mapping.ResolveContext(specDir, record)
+    if err != nil {
+        return fmt.Errorf("map context: %w", err)
+    }
+
+    enc := json.NewEncoder(os.Stdout)
+    enc.SetIndent("", "  ")
+    if err := enc.Encode(result); err != nil {
+        return fmt.Errorf("map context: %w", err)
+    }
+    return nil
+}
+```
+
+Resolves the full spec context for a component by looking up the mapping record, then calling `mapping.ResolveContext` which reads `spec/<module>/module.json` and collects all arch, impl, test, and flow files relevant to that component.
 
 ## Error Output
 
