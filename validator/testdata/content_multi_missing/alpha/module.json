@@ -1,0 +1,12 @@
+{
+  "name": "alpha",
+  "components": [
+    {"id": 1, "name": "Widget", "content": "arch_widget.md"}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Widget logic", "content": "impl_widget_logic.md", "describes": [1]}
+  ],
+  "test_sections": [
+    {"id": 1, "name": "Widget behavior", "content": "test_widget_behavior.md", "describes": [1]}
+  ]
+}

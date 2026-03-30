@@ -9,5 +9,8 @@
   ],
   "data_flows": [
     {"id": 1, "name": "Ingest", "content": "flow_ingest.md", "uses": [1]}
+  ],
+  "test_sections": [
+    {"id": 1, "name": "Engine tests", "content": "test_engine.md", "describes": [1]}
   ]
 }

@@ -43,6 +43,7 @@ func setupTestSpec(t *testing.T) string {
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
 	writeTestFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
+	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
 	return dir
 }

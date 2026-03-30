@@ -99,6 +99,77 @@ func TestREQ2_AllContentErrorsTagged(t *testing.T) {
 	}
 }
 
+// REQ-11: Test content path resolution — verify test_sections content paths
+// are walked and validated by ContentResolver.
+
+func TestREQ11_ValidTestSectionContent(t *testing.T) {
+	// S7 extended: content_valid fixture now includes a test_section with existing file.
+	errs := CheckContentPaths(filepath.Join("testdata", "content_valid"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for valid content paths including test_sections, got %d: %v", len(errs), errs)
+	}
+}
+
+func TestREQ11_MissingTestSectionContent(t *testing.T) {
+	// S10: test_section references test_widget_behavior.md but file is missing.
+	errs := CheckContentPaths(filepath.Join("testdata", "content_missing_test_section"))
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing test_section content file, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Message, "test_widget_behavior.md") {
+			if e.Check != "content" {
+				t.Fatalf("expected check=content, got %q", e.Check)
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected error mentioning test_widget_behavior.md, got: %v", errs)
+	}
+}
+
+func TestREQ11_MultiMissingAcrossSections(t *testing.T) {
+	// S13: component, impl_section, and test_section content all missing.
+	errs := CheckContentPaths(filepath.Join("testdata", "content_multi_missing"))
+	if len(errs) != 3 {
+		t.Fatalf("expected exactly 3 errors (component + impl + test_section), got %d: %v", len(errs), errs)
+	}
+	wants := []string{"arch_widget.md", "impl_widget_logic.md", "test_widget_behavior.md"}
+	for _, want := range wants {
+		found := false
+		for _, e := range errs {
+			if strings.Contains(e.Message, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("expected error mentioning %q, got: %v", want, errs)
+		}
+	}
+}
+
+func TestREQ11_TestSectionPathTraversal(t *testing.T) {
+	// S11 extended to test_sections: path traversal in test_section content.
+	errs := CheckContentPaths(filepath.Join("testdata", "content_test_section_traversal"))
+	if len(errs) == 0 {
+		t.Fatal("expected error for path traversal in test_section, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Message, "..") && strings.Contains(e.Path, "test_section") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected error about '..' in test_section path, got: %v", errs)
+	}
+}
+
 func TestREQ2_SelfValidateContent(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckContentPaths(specDir)

@@ -37,7 +37,7 @@ func CheckContentPaths(specDir string) []ValidationError {
 type contentRef struct {
 	content  string
 	nodeName string
-	nodeKind string // "component", "impl_section", "data_flow"
+	nodeKind string // "component", "impl_section", "data_flow", "test_section"
 }
 
 // checkModuleContent collects all content references from a module and checks each.
@@ -57,6 +57,11 @@ func checkModuleContent(specDir, modPath, modName string, mod *schema.ModuleSpec
 	for _, d := range mod.DataFlows {
 		if d.Content != "" {
 			refs = append(refs, contentRef{content: d.Content, nodeName: d.Name, nodeKind: "data_flow"})
+		}
+	}
+	for _, ts := range mod.TestSections {
+		if ts.Content != "" {
+			refs = append(refs, contentRef{content: ts.Content, nodeName: ts.Name, nodeKind: "test_section"})
 		}
 	}
 

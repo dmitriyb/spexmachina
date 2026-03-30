@@ -1,0 +1,17 @@
+{
+  "name": "content-test-section",
+  "modules": [
+    {
+      "id": 1,
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "requirements": [
+    {
+      "id": 1,
+      "type": "functional",
+      "title": "Project requirement"
+    }
+  ]
+}
