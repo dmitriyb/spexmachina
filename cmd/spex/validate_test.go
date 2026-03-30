@@ -189,6 +189,7 @@ func setupSpecWithOrphans(t *testing.T) string {
 	}`)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")
 	writeTestFile(t, alphaDir, "impl_comp1.md", "# Impl1\n")
+	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
 	return dir
 }
