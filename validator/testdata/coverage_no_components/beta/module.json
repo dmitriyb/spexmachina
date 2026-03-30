@@ -1,0 +1,8 @@
+{
+  "name": "beta",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1}
+  ],
+  "components": [],
+  "impl_sections": []
+}

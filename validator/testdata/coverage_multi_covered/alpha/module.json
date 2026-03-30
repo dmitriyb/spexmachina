@@ -1,0 +1,16 @@
+{
+  "name": "alpha",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1}
+  ],
+  "components": [
+    {"id": 1, "name": "Parser", "implements": [1]}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Parser impl", "describes": [1]}
+  ],
+  "test_sections": [
+    {"id": 1, "name": "Parser tests A", "content": "test_parser_a.md", "describes": [1]},
+    {"id": 2, "name": "Parser tests B", "content": "test_parser_b.md", "describes": [1]}
+  ]
+}

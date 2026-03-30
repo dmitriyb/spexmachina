@@ -1,0 +1,19 @@
+{
+  "name": "alpha",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1},
+    {"id": 2, "type": "functional", "title": "Feat B", "preq_id": 1}
+  ],
+  "components": [
+    {"id": 1, "name": "Parser", "implements": [1]},
+    {"id": 2, "name": "Renderer", "implements": [2]}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Parser impl", "describes": [1]},
+    {"id": 2, "name": "Renderer impl", "describes": [2]}
+  ],
+  "test_sections": [
+    {"id": 1, "name": "Parser tests", "content": "test_parser.md", "describes": [1]},
+    {"id": 2, "name": "Renderer tests", "content": "test_renderer.md", "describes": [2]}
+  ]
+}

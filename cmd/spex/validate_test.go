@@ -182,6 +182,9 @@ func setupSpecWithOrphans(t *testing.T) string {
 		],
 		"impl_sections": [
 			{"id": 1, "name": "Impl1", "content": "impl_comp1.md", "describes": [1]}
+		],
+		"test_sections": [
+			{"id": 1, "name": "Comp1 tests", "content": "test_comp1.md", "describes": [1]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")
