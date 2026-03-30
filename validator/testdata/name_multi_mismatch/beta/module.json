@@ -1,0 +1,7 @@
+{
+  "name": "gamma",
+  "components": [{"id": 1, "name": "Encoder", "implements": [1]}],
+  "requirements": [{"id": 1, "type": "functional", "title": "Feat", "preq_id": 1}],
+  "impl_sections": [{"id": 1, "name": "Impl", "describes": [1]}],
+  "test_sections": [{"id": 1, "name": "Tests", "describes": [1]}]
+}
