@@ -30,6 +30,7 @@ func runValidateE(cmd *cobra.Command, args []string) error {
 	errs = append(errs, validator.CheckIDs(specDir)...)
 	errs = append(errs, validator.CheckDAG(specDir)...)
 	errs = append(errs, validator.CheckOrphans(specDir)...)
+	errs = append(errs, validator.CheckNameConsistency(specDir)...)
 	errs = append(errs, validator.CheckTestCoverage(specDir)...)
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))

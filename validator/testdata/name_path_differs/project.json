@@ -1,0 +1,9 @@
+{
+  "name": "name-test",
+  "modules": [
+    {"id": 1, "name": "core-lib", "path": "core"}
+  ],
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Req", "priority": 1}
+  ]
+}
