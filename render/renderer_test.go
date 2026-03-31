@@ -147,8 +147,8 @@ func TestFR1_M3_RequirementsFormatting(t *testing.T) {
 	if !strings.Contains(out, "FR1: Parse input") {
 		t.Fatalf("expected 'FR1: Parse input' in output:\n%s", out)
 	}
-	if !strings.Contains(out, "NFR1: Performance") {
-		t.Fatalf("expected 'NFR1: Performance' in output:\n%s", out)
+	if !strings.Contains(out, "NFR3: Performance") {
+		t.Fatalf("expected 'NFR3: Performance' in output:\n%s", out)
 	}
 }
 

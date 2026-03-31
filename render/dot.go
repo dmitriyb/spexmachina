@@ -13,6 +13,14 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "  node [fontsize=10];\n")
 	fmt.Fprintf(w, "  edge [fontsize=8];\n\n")
 
+	// Project requirement nodes
+	for _, r := range spec.Project.Requirements {
+		nid := fmt.Sprintf("preq_%d", r.ID)
+		fmt.Fprintf(w, "  %s [label=%q, shape=box, fillcolor=lightblue, style=filled];\n",
+			nid, r.Title)
+	}
+	fmt.Fprintf(w, "\n")
+
 	// Module subgraphs
 	for _, mg := range spec.Modules {
 		modID := sanitizeDOTID(mg.Module.Name)
@@ -27,7 +35,7 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 		// Requirements
 		for _, r := range mg.Spec.Requirements {
 			nid := fmt.Sprintf("%s_req_%d", modID, r.ID)
-			fmt.Fprintf(w, "    %s [label=%q, shape=box, fillcolor=lightblue, style=filled];\n",
+			fmt.Fprintf(w, "    %s [label=%q, shape=box, fillcolor=lightgreen, style=filled];\n",
 				nid, r.Title)
 		}
 
