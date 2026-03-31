@@ -20,6 +20,7 @@ func main() {
 		newLogCmd(),
 		newTemplateCmd(),
 		newVersionCmd(),
+		newRenderCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

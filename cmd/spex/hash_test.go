@@ -89,6 +89,7 @@ func runSpex(t *testing.T, args ...string) (string, error) {
 		newImpactCmd(),
 		newApplyCmd(),
 		newMapCmd(),
+		newRenderCmd(),
 	)
 
 	errBuf := new(bytes.Buffer)
