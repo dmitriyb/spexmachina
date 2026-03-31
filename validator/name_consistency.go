@@ -1,10 +1,7 @@
 package validator
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -15,42 +12,21 @@ import (
 // both values. Case-insensitive comparison detects likely matches and suggests
 // fixes. Lowercase convention is enforced.
 func CheckNameConsistency(specDir string) []ValidationError {
-	project, _, errs := loadSpec(specDir, "name_consistency")
+	project, modules, errs := loadSpec(specDir, "name_consistency")
 	if len(errs) > 0 {
 		return errs
 	}
 
 	var result []ValidationError
 	for _, mod := range project.Modules {
-		result = append(result, checkModuleName(specDir, mod)...)
+		result = append(result, checkModuleName(mod, modules[mod.Name])...)
 	}
 	return result
 }
 
 // checkModuleName compares a single module's project.json name against its
 // module.json name and enforces the lowercase convention.
-func checkModuleName(specDir string, mod schema.Module) []ValidationError {
-	modPath := filepath.Join(specDir, mod.Path, "module.json")
-	data, err := os.ReadFile(modPath)
-	if err != nil {
-		return []ValidationError{{
-			Check:    "name_consistency",
-			Severity: "error",
-			Path:     mod.Path + "/module.json",
-			Message:  fmt.Sprintf("read file: %s", err),
-		}}
-	}
-
-	var modSpec schema.ModuleSpec
-	if err := json.Unmarshal(data, &modSpec); err != nil {
-		return []ValidationError{{
-			Check:    "name_consistency",
-			Severity: "error",
-			Path:     mod.Path + "/module.json",
-			Message:  fmt.Sprintf("parse JSON: %s", err),
-		}}
-	}
-
+func checkModuleName(mod schema.Module, modSpec *schema.ModuleSpec) []ValidationError {
 	var errs []ValidationError
 	projName := mod.Name
 	modName := modSpec.Name
