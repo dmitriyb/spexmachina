@@ -15,6 +15,23 @@
 
 The same Go structs used by the validator can be reused here. Both modules parse the same JSON files into the same structures. The render module imports the schema package for struct definitions.
 
+## Sections Parsing
+
+If `project.json` includes a `sections` array, the reader preserves it in the `SpecGraph`:
+
+1. During `project.json` unmarshal, sections are parsed into both a typed slice (envelope fields) and raw `json.RawMessage` entries (full content)
+2. The raw entries are stored so renderers can access freeform content without knowing the schema
+3. No `section.schema.json` loading occurs during reading — validation is the validator's responsibility
+
+```go
+type Section struct {
+    ID   int             `json:"id"`
+    Name string          `json:"name"`
+    Type string          `json:"type"`
+    Raw  json.RawMessage `json:"-"` // full section entry for renderer access
+}
+```
+
 ## Error Handling
 
 - Missing `project.json`: return error

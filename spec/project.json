@@ -113,6 +113,13 @@
       "title": "CLI infrastructure",
       "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling.",
       "priority": 1
+    },
+    {
+      "id": 15,
+      "type": "functional",
+      "title": "Coupled sections",
+      "description": "Project.json supports a sections array with typed entries. Sections with type 'coupled' require a corresponding module and a section.schema.json in the module's spec directory. Spex validates the envelope generically and delegates content validation to the module's schema.",
+      "priority": 1
     }
   ],
   "modules": [
@@ -263,6 +270,16 @@
           4,
           5,
           9
+        ]
+      },
+      {
+        "id": 3,
+        "name": "Coupled sections integration",
+        "description": "Sections array in project.json validated by schema, coupled module enforcement by validator, generic section rendering by render module.",
+        "modules": [
+          1,
+          2,
+          7
         ]
       }
     ]

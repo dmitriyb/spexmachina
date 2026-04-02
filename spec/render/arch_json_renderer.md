@@ -35,6 +35,17 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error
 
 Synthetic IDs are constructed from the path: `module:<name>:<type>:<id>`. This creates globally unique identifiers for the flat graph representation.
 
+## Sections
+
+Section nodes use the ID format `section:<name>` (e.g., `section:delivery`). The node includes:
+
+- `type: "section"`
+- `name`: the section name
+- `section_type`: the section type (e.g., "coupled")
+- All freeform content fields from the section entry
+
+For coupled sections, an edge `{"from": "section:<name>", "to": "module:<name>", "type": "coupled"}` represents the coupling relationship.
+
 ## Composability
 
 The JSON graph is designed for piping to tools like `jq` for querying, or to visualization tools that consume graph JSON.

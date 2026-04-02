@@ -54,6 +54,25 @@ func RenderMarkdown(spec *SpecGraph, w io.Writer) error
 <Inlined content from flow_*.md>
 ```
 
+## Sections Rendering
+
+If the spec contains a `sections` array, a `## Sections` heading appears after project requirements and before modules. Each section is rendered as:
+
+```markdown
+## Sections
+
+### <section name> (type)
+
+<Freeform content fields rendered as key-value pairs or structured lists>
+```
+
+The renderer iterates sections generically — no hardcoded logic for specific section types. Freeform content is rendered by walking the raw JSON structure:
+- Objects render as nested lists or subsections
+- Arrays render as ordered lists
+- Scalars render inline
+
+For coupled sections, the module's own components/impl_sections appear in the module's `## Module:` section, not duplicated under the sections heading.
+
 ## Content Inlining
 
 Markdown content is included verbatim from the content files. Headings within content files are adjusted (indented by the appropriate level) to fit the document hierarchy.

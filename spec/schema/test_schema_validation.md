@@ -532,3 +532,77 @@ This is the boundary test for the `minimum: 1` constraint on all ID fields.
 }
 ```
 **Expected:** Validation fails. `modules` array on test_scenario has `uniqueItems: true`.
+
+### S21: Sections array accepted in project.json
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "sections": [
+    { "id": 1, "name": "delivery", "type": "coupled", "versioning": { "scheme": "semver" } }
+  ]
+}
+```
+**Expected:** Validation passes. The `sections` array is accepted. Each section requires `id`, `name`, `type` in the envelope. Additional properties (`versioning`) are allowed — they are freeform content validated by the coupled module's `section.schema.json`, not by the project schema.
+
+### S22: Section missing required envelope field fails
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "sections": [
+    { "id": 1, "type": "coupled" }
+  ]
+}
+```
+**Expected:** Validation fails. Error references `sections/0`, missing required `name`.
+
+### S23: Section with invalid ID type fails
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "sections": [
+    { "id": "one", "name": "delivery", "type": "coupled" }
+  ]
+}
+```
+**Expected:** Validation fails. Error references `sections/0/id` — expected integer, got string.
+
+### S24: Empty sections array passes
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "sections": []
+}
+```
+**Expected:** Validation passes. Empty sections array is valid.
+
+### E11: Section with arbitrary content properties passes schema validation
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "sections": [
+    {
+      "id": 1,
+      "name": "performance",
+      "type": "coupled",
+      "budgets": [{ "metric": "p99_latency", "threshold_ms": 200 }],
+      "monitoring": { "dashboard": "grafana.internal/perf" }
+    }
+  ]
+}
+```
+**Expected:** Validation passes. The project schema allows additional properties on section entries beyond the envelope. Content validation is delegated to the coupled module's `section.schema.json`.

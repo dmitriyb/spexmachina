@@ -29,6 +29,13 @@
       "title": "Composable output",
       "preq_id": 10,
       "description": "All render output goes to stdout. Format is selected via subcommand or flag. Output is pipeable to other tools."
+    },
+    {
+      "id": 5,
+      "type": "functional",
+      "title": "Render sections",
+      "preq_id": 15,
+      "description": "The spec reader and all three renderers (markdown, DOT, JSON) handle the project-level sections array generically. Iterate sections by name, render each section's envelope and content, pull related content from the coupled module. No hardcoded section-type logic."
     }
   ],
   "components": [
@@ -41,7 +48,8 @@
         1,
         2,
         3,
-        4
+        4,
+        5
       ]
     },
     {
@@ -50,7 +58,8 @@
       "description": "Generates a collated markdown document from the parsed spec, inlining content from markdown files.",
       "content": "arch_markdown_renderer.md",
       "implements": [
-        1
+        1,
+        5
       ],
       "uses": [
         1
@@ -62,7 +71,8 @@
       "description": "Generates a graphviz DOT graph from the parsed spec.",
       "content": "arch_dot_renderer.md",
       "implements": [
-        2
+        2,
+        5
       ],
       "uses": [
         1
@@ -74,7 +84,8 @@
       "description": "Generates a full JSON graph from the parsed spec.",
       "content": "arch_json_renderer.md",
       "implements": [
-        3
+        3,
+        5
       ],
       "uses": [
         1

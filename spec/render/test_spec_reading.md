@@ -170,3 +170,35 @@ spec/
 **When** `ReadSpec(specDir)` is called.
 
 **Then:** Returns a `*SpecGraph` with no error. The `Content` map for that module is empty (length 0). No file reads are attempted for missing content fields.
+
+### S7: Sections array parsed into SpecGraph
+
+**Given** a `project.json` with a `sections` array containing one coupled section:
+```json
+{
+  "sections": [
+    {
+      "id": 1,
+      "name": "delivery",
+      "type": "coupled",
+      "versioning": { "scheme": "semver", "source": "git-tag" },
+      "artifacts": [{ "id": 1, "name": "app", "type": "binary" }]
+    }
+  ]
+}
+```
+
+**When** `ReadSpec(specDir)` is called.
+
+**Then:**
+- `SpecGraph.Project.Sections` has length 1
+- The section preserves `id`, `name`, `type`, and all freeform content fields
+- The freeform content (versioning, artifacts) is accessible as a generic structure (e.g., `map[string]interface{}` or `json.RawMessage`)
+
+### S8: Sections absent from project.json
+
+**Given** a `project.json` with no `sections` field.
+
+**When** `ReadSpec(specDir)` is called.
+
+**Then:** `SpecGraph.Project.Sections` is nil or empty. No error — sections are optional.

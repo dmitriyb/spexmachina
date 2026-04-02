@@ -32,6 +32,26 @@ for _, comp := range module.Components {
 }
 ```
 
+## Sections
+
+Section nodes are emitted before module subgraphs, at the project level:
+
+```go
+for _, section := range project.Sections {
+    fmt.Fprintf(w, "  section_%d [label=%q, shape=tab, style=filled, fillcolor=mistyrose];\n",
+        section.ID, section.Name)
+    if section.Type == "coupled" {
+        module := findModuleByName(project.Modules, section.Name)
+        if module != nil {
+            fmt.Fprintf(w, "  section_%d -> %s [style=bold, label=\"coupled\"];\n",
+                section.ID, moduleNodeID(module))
+        }
+    }
+}
+```
+
+The renderer doesn't need to know about specific section content — it just renders the node and the coupling edge. Module-internal details appear in the module's subgraph as usual.
+
 ## Layout
 
 Use `rankdir=LR` for left-to-right layout, which reads more naturally for dependency graphs. Modules are clustered visually using subgraphs.

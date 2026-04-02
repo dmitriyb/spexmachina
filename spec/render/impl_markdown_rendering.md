@@ -25,6 +25,30 @@ func adjustHeadings(content string, baseLevel int) string {
 }
 ```
 
+## Sections Rendering
+
+After project requirements and before modules, if `sections` is non-empty:
+
+1. Write `## Sections` heading
+2. For each section in declaration order:
+   - Write `### <name>` heading with type annotation (e.g., `### delivery (coupled)`)
+   - Walk the raw JSON content (excluding envelope fields) and render:
+     - Objects as nested bullet lists with bold keys
+     - Arrays as ordered lists
+     - Scalars as inline values
+3. No heading adjustment needed — section content is rendered from structured data, not from markdown files
+
+```go
+func renderSectionContent(w io.Writer, raw map[string]interface{}, indent int) {
+    for key, val := range raw {
+        if key == "id" || key == "name" || key == "type" {
+            continue // skip envelope
+        }
+        // render key-value pair based on val's type
+    }
+}
+```
+
 ## Output
 
 Pure markdown, no front matter or metadata. The output is suitable for rendering with any markdown viewer or converting to HTML/PDF with pandoc.
