@@ -11,4 +11,5 @@
 3. Load stored snapshot via SnapshotStore
 4. Call `DiffEngine.Diff(current, stored)` to get changed nodes
 5. Call `ImpactClassifier.Classify(changes)` to determine impact level
-6. Output diff report (JSON or human-readable)
+6. Call `CompletenessChecker.CheckCompleteness(classified, specDir)` to validate requirement-component consistency
+7. Output diff report (JSON or human-readable), including errors from step 6

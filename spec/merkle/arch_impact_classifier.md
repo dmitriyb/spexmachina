@@ -14,7 +14,7 @@ Classifies diff changes by their impact level. Uses node metadata (type, module 
 |-------|-----------|---------|
 | `impl_only` | Node type is `impl_section`, `data_flow`, or `test_section` | Implementation detail changed, architecture stable |
 | `arch_impl` | Node type is `component` | Architecture changed, dependent modules may be affected |
-| `structural` | Node type is `meta` (module.json or project.json) | Spec structure changed — new/removed nodes, changed edges |
+| `structural` | Node type is `meta` or `requirement` | Spec structure changed — new/removed nodes, changed edges, changed requirements |
 
 ## Interface
 
@@ -36,4 +36,5 @@ Classification uses the node metadata (NodeType, Module) attached to each change
 1. If change.NodeType is `"impl_section"`, `"data_flow"`, or `"test_section"` → `impl_only`
 2. If change.NodeType is `"component"` → `arch_impl`
 3. If change.NodeType is `"meta"` (module.json or project.json) → `structural`
-4. If a module has changes at multiple levels, the highest level wins (structural > arch_impl > impl_only)
+4. If change.NodeType is `"requirement"` → `structural`
+5. If a module has changes at multiple levels, the highest level wins (structural > arch_impl > impl_only)

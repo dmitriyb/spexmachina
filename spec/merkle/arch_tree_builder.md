@@ -1,11 +1,12 @@
 # TreeBuilder
 
-Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, etc.) as their key, not the file path.
+Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, requirement ID, etc.) as their key, not the file path.
 
 ## Responsibilities
 
 - Parse the spec graph from project.json and module.json files
 - Create leaf nodes keyed by spec ID for each content file
+- Create leaf nodes keyed by spec ID for each requirement (module-level and project-level)
 - Create interior nodes keyed by module ID
 - Compute hashes bottom-up
 
@@ -16,14 +17,19 @@ Nodes are keyed by spec ID, not file path. This makes the tree rename-stable —
 ```
 project (root, key: "project")
 ├── project.json (leaf, key: "project/meta")
+├── project req 1 (leaf, key: "project/requirement/1")
+├── project req 2 (leaf, key: "project/requirement/2")
 ├── module 1: schema (interior, key: "module/1")
 │   ├── module.json (leaf, key: "module/1/meta")
+│   ├── requirement 1 (leaf, key: "module/1/requirement/1")
+│   ├── requirement 2 (leaf, key: "module/1/requirement/2")
 │   ├── component 1 (leaf, key: "module/1/component/1")
 │   ├── component 2 (leaf, key: "module/1/component/2")
 │   ├── impl_section 1 (leaf, key: "module/1/impl_section/1")
 │   └── impl_section 2 (leaf, key: "module/1/impl_section/2")
 ├── module 2: validator (interior, key: "module/2")
 │   ├── module.json (leaf, key: "module/2/meta")
+│   ├── requirement 1 (leaf, key: "module/2/requirement/1")
 │   └── ...
 └── ...
 ```
@@ -35,7 +41,7 @@ type Node struct {
     Key      string   // spec ID, e.g. "module/1/component/2"
     Hash     string
     Type     string   // "leaf", "module", "project"
-    NodeType string   // "component", "impl_section", "data_flow", "test_section", "meta"
+    NodeType string   // "component", "impl_section", "data_flow", "test_section", "meta", "requirement"
     Module   int      // module ID (0 for project-level nodes)
     Children []*Node
 }
@@ -45,16 +51,30 @@ func BuildTree(specDir string) (*Node, error)
 
 ## Algorithm
 
-1. Read `project.json` to discover module IDs and paths
-2. For each module, read `module.json` to discover components, impl_sections, data_flows, test_sections
-3. Hash each content file, keying the leaf node by its spec ID (e.g., `"module/3/component/2"`)
-4. Compute module interior hash from sorted child hashes
-5. Compute project root hash from sorted module hashes + project.json hash
+1. Read `project.json` to discover module IDs and paths, and project-level requirements
+2. For each project-level requirement, create a leaf node with deterministic JSON hash
+3. For each module, read `module.json` to discover requirements, components, impl_sections, data_flows, test_sections
+4. For each module-level requirement, create a leaf node with deterministic JSON hash
+5. Hash each content file, keying the leaf node by its spec ID (e.g., `"module/3/component/2"`)
+6. Compute module interior hash from sorted child hashes
+7. Compute project root hash from sorted module hashes + project.json hash + project requirement hashes
 
 ## Key Format
 
 The spec ID key follows the pattern `module/<module_id>/<node_type>/<node_id>`:
 - `module/1/component/1` — component 1 in module 1
 - `module/3/impl_section/2` — impl_section 2 in module 3
+- `module/1/requirement/2` — requirement 2 in module 1
 - `module/1/meta` — module.json for module 1
 - `project/meta` — project.json
+- `project/requirement/3` — project-level requirement 3
+
+## Requirement Leaf Hashing
+
+Requirements do not have content files. Instead, their hash is computed from a deterministic JSON serialization of the requirement's fields. Fields are sorted by key and zero-value/omitted fields are excluded (matching `omitempty` semantics).
+
+For module-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `preq_id`, `title`, `type`.
+
+For project-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `priority`, `title`, `type`.
+
+This ensures that any change to a requirement's text, type, dependencies, or derivation produces a different hash, making it visible as an individual change in the diff.
