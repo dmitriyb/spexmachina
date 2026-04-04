@@ -1,0 +1,9 @@
+{
+  "name": "reqcov-uncovered-module",
+  "modules": [
+    {"id": 1, "name": "alpha", "path": "alpha"}
+  ],
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Feature A", "priority": 1}
+  ]
+}

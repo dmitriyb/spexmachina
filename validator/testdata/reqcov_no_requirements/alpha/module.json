@@ -1,0 +1,10 @@
+{
+  "name": "alpha",
+  "requirements": [],
+  "components": [
+    {"id": 1, "name": "CompA"}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Impl A", "describes": [1]}
+  ]
+}
