@@ -55,6 +55,14 @@
       "preq_id": 4,
       "description": "For each create action, resolve uses (intra-module component edges) and requires_module (inter-module edges, transitive) to current bead IDs via the mapping file. Attach resolved open-bead dependency IDs to the action for downstream propagation to bead CLI --deps depends: flags.",
       "depends_on": [3]
+    },
+    {
+      "id": 8,
+      "type": "functional",
+      "title": "Validate diff input",
+      "preq_id": 4,
+      "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed — print errors to stderr and exit non-zero.",
+      "depends_on": [2]
     }
   ],
   "components": [
@@ -92,9 +100,9 @@
     {
       "id": 5,
       "name": "ImpactCommand",
-      "description": "CLI entry point for spex impact. Reads merkle diff, wires BeadReader, NodeMatcher, ActionClassifier, ReportGenerator, outputs impact report as JSON.",
+      "description": "CLI entry point for spex impact. Reads merkle diff, validates diff input for errors, wires BeadReader, NodeMatcher, ActionClassifier, ReportGenerator, outputs impact report as JSON.",
       "content": "arch_impact_command.md",
-      "implements": [4],
+      "implements": [4, 8],
       "uses": [1, 2, 3, 4]
     }
   ],

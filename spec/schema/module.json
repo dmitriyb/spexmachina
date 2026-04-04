@@ -115,6 +115,12 @@
       "name": "Schema loading tests",
       "content": "test_schema_loading.md",
       "describes": [3]
+    },
+    {
+      "id": 3,
+      "name": "Bead map schema tests",
+      "content": "test_bead_map_schema.md",
+      "describes": [4]
     }
   ]
 }

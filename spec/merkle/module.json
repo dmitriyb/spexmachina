@@ -62,6 +62,14 @@
       "title": "ID-based tree keying",
       "preq_id": 2,
       "description": "Tree nodes are keyed by spec ID (module ID, component ID, etc.) instead of file path. Renaming a directory or file with the same ID is detected as a modification, not a delete + add."
+    },
+    {
+      "id": 8,
+      "type": "functional",
+      "title": "Change completeness validation",
+      "preq_id": 2,
+      "description": "When a structural meta change is detected (project/meta or module/X/meta), verify that affected leaf nodes also changed in the same diff. If a requirement description changed but no implementing component content leaf changed, report an error in the diff output. Errors are included alongside changes in the JSON output.",
+      "depends_on": [4]
     }
   ],
   "components": [
@@ -141,17 +149,27 @@
     {
       "id": 7,
       "name": "DiffCommand",
-      "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier.",
+      "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker.",
       "content": "arch_diff_command.md",
       "implements": [
         4,
-        5
+        5,
+        8
       ],
       "uses": [
         3,
         4,
-        5
+        5,
+        8
       ]
+    },
+    {
+      "id": 8,
+      "name": "CompletenessChecker",
+      "description": "Validates that structural meta changes are accompanied by corresponding leaf-level changes. Reads the spec graph (project.json, module.json) to resolve requirement-to-component edges and checks that implementing components have content leaf changes in the diff.",
+      "content": "arch_completeness_checker.md",
+      "implements": [8],
+      "uses": [4, 5]
     }
   ],
   "impl_sections": [
@@ -210,6 +228,12 @@
       "describes": [
         7
       ]
+    },
+    {
+      "id": 8,
+      "name": "Change completeness algorithm",
+      "content": "impl_completeness_algorithm.md",
+      "describes": [8]
     }
   ],
   "data_flows": [
@@ -253,7 +277,7 @@
       "id": 3,
       "name": "Diff and classification tests",
       "content": "test_diff_classification.md",
-      "describes": [4, 5]
+      "describes": [4, 5, 8]
     },
     {
       "id": 4,

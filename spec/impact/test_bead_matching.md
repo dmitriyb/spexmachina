@@ -6,149 +6,92 @@ Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (c
 
 All scenarios share a common fixture layout:
 
-- A spec tree with two modules: `validator` (components: SchemaChecker, DagChecker; impl_sections: Schema validation, Cycle detection) and `merkle` (components: Hasher, DiffEngine; impl_sections: Hash computation, Diff algorithm).
-- A set of beads returned by the mock bead CLI, each carrying spec labels in the `labels` array as `key:value` strings:
+- A set of mapping records linking spec node IDs to bead IDs:
 
 ```json
 [
-  {
-    "id": "spex-001",
-    "title": "Implement SchemaChecker",
-    "labels": [
-      "spec_module:validator",
-      "spec_component:SchemaChecker",
-      "spec_hash:abc123"
-    ]
-  },
-  {
-    "id": "spex-002",
-    "title": "Implement Hasher",
-    "labels": [
-      "spec_module:merkle",
-      "spec_component:Hasher",
-      "spec_hash:def456"
-    ]
-  },
-  {
-    "id": "spex-003",
-    "title": "Implement hash computation",
-    "labels": [
-      "spec_module:merkle",
-      "spec_impl_section:Hash computation",
-      "spec_hash:ghi789"
-    ]
-  },
-  {
-    "id": "spex-004",
-    "title": "Unrelated task",
-    "labels": ["team:backend"]
-  }
+  {"id": 1, "spec_node_id": "module/2/component/1", "bead_id": "spex-001", "module": "validator", "component": "SchemaChecker"},
+  {"id": 2, "spec_node_id": "module/3/component/1", "bead_id": "spex-002", "module": "merkle", "component": "Hasher"},
+  {"id": 3, "spec_node_id": "module/3/impl_section/1", "bead_id": "spex-003", "module": "merkle", "component": "Hash computation"}
 ]
 ```
 
-- A merkle diff with classified changes, provided as the second input to NodeMatcher:
+- A merkle diff with classified changes:
 
 ```json
 [
-  {"path": "validator/arch_schema_checker.md", "type": "modified", "impact": "arch_impl", "module": "validator"},
-  {"path": "merkle/impl_hash_computation.md", "type": "modified", "impact": "impl_only", "module": "merkle"},
-  {"path": "validator/arch_orphan_detector.md", "type": "added", "impact": "arch_impl", "module": "validator"},
-  {"path": "merkle/arch_diff_engine.md", "type": "removed", "impact": "arch_impl", "module": "merkle"}
+  {"path": "module/2/component/1", "type": "modified", "impact": "arch_impl", "module": "validator"},
+  {"path": "module/3/impl_section/1", "type": "modified", "impact": "impl_only", "module": "merkle"},
+  {"path": "module/2/component/4", "type": "added", "impact": "arch_impl", "module": "validator"},
+  {"path": "module/3/component/4", "type": "removed", "impact": "arch_impl", "module": "merkle"}
 ]
 ```
-
-Tests use a mock `exec.CommandContext` that returns the fixture bead JSON instead of calling a real bead CLI binary.
 
 ## Scenarios
 
-### S1: BeadReader extracts spec labels correctly
+### S1: BeadReader extracts mapping records correctly
 
-Call `ReadBeads(ctx, "br")` with the fixture JSON. Assert the returned `[]BeadSpec` contains exactly three entries (spex-001, spex-002, spex-003). The fourth bead (spex-004) has no spec labels and must be excluded. Verify each field:
+Call the mapping store to list records. Assert the returned records contain the expected fields (spec_node_id, bead_id, module, component).
 
-| BeadSpec field | spex-001 | spex-002 | spex-003 |
-|---|---|---|---|
-| ID | "spex-001" | "spex-002" | "spex-003" |
-| Module | "validator" | "merkle" | "merkle" |
-| Component | "SchemaChecker" | "Hasher" | "" |
-| ImplSection | "" | "" | "Hash computation" |
-| SpecHash | "abc123" | "def456" | "ghi789" |
+### S2: BeadReader returns empty slice when no records exist
 
-### S2: BeadReader returns empty slice when no beads have spec labels
-
-Mock CLI returns beads with only non-spec labels (e.g., `["team:backend", "priority:high"]`). Assert `ReadBeads` returns `([]BeadSpec{}, nil)` — an empty slice, not an error.
+Empty mapping file. Assert an empty slice, not an error.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 
-Call `MatchNodes(changes, beads, modules)` with the fixture data. Expected results:
+Call `MatchNodes(changes, records)` with the fixture data. Expected:
 
-- **Matched (1 entry):** `validator/arch_schema_checker.md` (modified) matches bead spex-001 because `spex-001.Module == "validator"` and `spex-001.Component == "SchemaChecker"` corresponds to filename `arch_schema_checker.md`.
-- **Matched (1 entry):** `merkle/impl_hash_computation.md` (modified) matches bead spex-003 because `spex-003.Module == "merkle"` and `spex-003.ImplSection == "Hash computation"` corresponds to filename `impl_hash_computation.md`.
-- **Unmatched (1 entry):** `validator/arch_orphan_detector.md` (added) has no bead with `Module == "validator"` and `Component == "OrphanDetector"`.
-- **Orphaned (1 entry):** bead spex-002 references `merkle/Hasher`, but `merkle/arch_diff_engine.md` was removed (not `arch_hasher.md`). However, since no change removes `arch_hasher.md`, spex-002 is not orphaned in this scenario. Instead, `merkle/arch_diff_engine.md` (removed) has no matching bead and produces no orphan. Correct the expectation: no orphaned beads in this fixture because no bead references DiffEngine.
-
-Revised expected results:
-- Matched: 2 entries (SchemaChecker, Hash computation)
-- Unmatched: 1 entry (OrphanDetector — added node, no bead)
-- Unmatched-removed: 1 entry (DiffEngine — removed node, no bead referencing it, so no close action either)
+- **Matched (2 entries):** `module/2/component/1` matches spex-001, `module/3/impl_section/1` matches spex-003
+- **Unmatched (1 entry):** `module/2/component/4` (added, no record)
+- **Orphaned:** none in this fixture (no removed node has a matching record)
 
 ### S4: NodeMatcher handles multiple beads per spec node
 
-Add a second bead referencing the same spec node:
+Add a second record for `module/2/component/1`. Assert the match contains both records.
+
+### S5: NodeMatcher uses direct ID comparison
+
+The spec node ID `module/2/component/1` matches by exact string comparison, not by parsing paths or resolving names. Different IDs never match, even if they reference the same logical component.
+
+### S6: Structural changes produce zero matches
+
+Add structural changes to the diff:
 
 ```json
-{
-  "id": "spex-005",
-  "title": "Review SchemaChecker",
-  "labels": [
-    "spec_module:validator",
-    "spec_component:SchemaChecker",
-    "spec_hash:abc123"
-  ]
-}
+{"path": "project/meta", "type": "modified", "impact": "structural", "module": ""},
+{"path": "module/2/meta", "type": "modified", "impact": "structural", "module": "validator"}
 ```
 
-Call `MatchNodes` with the modified change for `validator/arch_schema_checker.md`. Assert the resulting `Match.Beads` slice contains both spex-001 and spex-005.
+Assert that structural changes produce zero matches, zero unmatched, zero orphans. They are filtered out before the matching loop.
 
-### S5: NodeMatcher resolves filename slugs to component names via module.json
+### S7: Deterministic matching — identical inputs produce identical output
 
-The filename `arch_schema_checker.md` must resolve to component name "SchemaChecker" by looking up the module's component list. Provide a module where the component name uses mixed case ("SchemaChecker") that does not trivially match the snake_case filename. Assert the match succeeds by confirming the module.json lookup correctly maps `arch_schema_checker.md` to the component whose `content` field equals `"arch_schema_checker.md"`.
+Run `MatchNodes` twice with the same inputs (shuffling record order between runs). Assert output is identical in content and order.
 
-### S6: Structural changes flag all beads in affected module
+### S8: Structural changes coexist with leaf-level changes
 
-Add a structural change to the diff:
+Diff contains both structural and leaf-level changes:
 
 ```json
-{"path": "validator/module.json", "type": "modified", "impact": "structural", "module": "validator"}
+[
+  {"path": "project/meta", "type": "modified", "impact": "structural", "module": ""},
+  {"path": "module/2/meta", "type": "modified", "impact": "structural", "module": "validator"},
+  {"path": "module/2/component/1", "type": "modified", "impact": "arch_impl", "module": "validator"}
+]
 ```
 
-Assert that all beads with `spec_module:validator` appear in the matched list, regardless of which specific component or impl_section they reference. Bead spex-001 (SchemaChecker) should be matched to this structural change.
-
-### S7: Deterministic matching — identical inputs always produce identical output
-
-Run `MatchNodes` twice with the same inputs (shuffling the order of the beads slice between runs). Assert the output slices (matched, unmatched, orphaned) are identical in both content and order. This validates requirement 5 (deterministic matching).
+Assert that only the leaf-level change (`module/2/component/1`) produces a match. The two structural changes are skipped. Total matches: 1.
 
 ## Edge Cases
 
-### E1: Bead CLI not installed
+### E1: Change path with no corresponding module in the modules map
 
-Mock `exec.CommandContext` to return `exec.ErrNotFound`. Assert `ReadBeads` returns an error wrapping the message `"impact: read beads: ..."`.
+A change referencing a module not present in mapping records. Assert it appears as unmatched (not a panic).
 
-### E2: Bead CLI returns invalid JSON
+### E2: Bead references a module that has no changes
 
-Mock CLI returns `"not json at all"`. Assert `ReadBeads` returns a JSON parse error wrapped with `"impact: read beads: ..."`.
+A record for `module/7` exists but no changes affect module 7. Assert this record does not appear in any output list.
 
-### E3: Bead CLI returns empty list
+### E3: Removed change with no matching record
 
-Mock CLI returns `[]`. Assert `ReadBeads` returns `([]BeadSpec{}, nil)`.
-
-### E4: Labels with colons in values
-
-A bead label `"spec_component:Foo:Bar"` should parse the key as `"spec_component"` and the value as `"Foo:Bar"` (split on first colon only). Assert the `Component` field is `"Foo:Bar"`.
-
-### E5: Change path with no corresponding module in the modules map
-
-A change path referencing a module name not present in the `modules` parameter. Assert `MatchNodes` treats this as an unmatched change and does not panic.
-
-### E6: Bead references a module that has no changes
-
-A bead with `spec_module:render` exists, but no changes affect the `render` module. Assert this bead does not appear in any output list (matched, unmatched, or orphaned) — it is simply unaffected.
+A removed change for a spec node that has no mapping record. Assert no orphan is created (removed + no record = no action).
