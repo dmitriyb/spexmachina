@@ -1,7 +1,6 @@
 package impact
 
 import (
-	"sort"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -111,8 +110,14 @@ func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 	}
 }
 
-func TestFR2_StructuralChangeMatchesAllModuleRecords(t *testing.T) {
+// S6: Structural changes produce zero matches, zero unmatched, zero orphans.
+func TestFR2_S6_StructuralChangesSkipped(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
+		{
+			Change: merkle.Change{Path: "project/meta", Type: merkle.Modified},
+			Impact: merkle.Structural,
+			Module: "",
+		},
 		{
 			Change: merkle.Change{Path: "module/1/meta", Type: merkle.Modified},
 			Impact: merkle.Structural,
@@ -125,41 +130,55 @@ func TestFR2_StructuralChangeMatchesAllModuleRecords(t *testing.T) {
 		{ID: 3, SpecNodeID: "module/2/component/1", BeadID: "b3", Module: "merkle"},
 	}
 
-	matches, _, _ := MatchNodes(changes, records)
+	matches, unmatched, orphaned := MatchNodes(changes, records)
 
-	if len(matches) != 1 {
-		t.Fatalf("want 1 match, got %d", len(matches))
+	if len(matches) != 0 {
+		t.Errorf("want 0 matches for structural changes, got %d", len(matches))
 	}
-	if len(matches[0].Records) != 2 {
-		t.Fatalf("want 2 records matched, got %d", len(matches[0].Records))
+	if len(unmatched) != 0 {
+		t.Errorf("want 0 unmatched for structural changes, got %d", len(unmatched))
 	}
-	ids := []string{matches[0].Records[0].BeadID, matches[0].Records[1].BeadID}
-	sort.Strings(ids)
-	if ids[0] != "b1" || ids[1] != "b2" {
-		t.Errorf("want beads b1 and b2, got %v", ids)
+	if len(orphaned) != 0 {
+		t.Errorf("want 0 orphaned for structural changes, got %d", len(orphaned))
 	}
 }
 
-func TestFR2_ProjectMetaMatchesAllRecords(t *testing.T) {
+// S8: Structural changes coexist with leaf-level changes — only leaf changes produce matches.
+func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Path: "project/meta", Type: merkle.Modified},
 			Impact: merkle.Structural,
 			Module: "",
 		},
+		{
+			Change: merkle.Change{Path: "module/2/meta", Type: merkle.Modified},
+			Impact: merkle.Structural,
+			Module: "validator",
+		},
+		{
+			Change: merkle.Change{Path: "module/2/component/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb"},
+			Impact: merkle.ArchImpl,
+			Module: "validator",
+		},
 	}
 	records := []mapping.Record{
-		{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "b1", Module: "impact"},
-		{ID: 2, SpecNodeID: "module/2/component/1", BeadID: "b2", Module: "merkle"},
+		{ID: 1, SpecNodeID: "module/2/component/1", BeadID: "spex-001", Module: "validator", Component: "SchemaChecker"},
 	}
 
-	matches, _, _ := MatchNodes(changes, records)
+	matches, unmatched, orphaned := MatchNodes(changes, records)
 
 	if len(matches) != 1 {
-		t.Fatalf("want 1 match, got %d", len(matches))
+		t.Fatalf("want 1 match (leaf only), got %d", len(matches))
 	}
-	if len(matches[0].Records) != 2 {
-		t.Fatalf("want 2 records, got %d", len(matches[0].Records))
+	if matches[0].Change.Path != "module/2/component/1" {
+		t.Errorf("want matched path module/2/component/1, got %s", matches[0].Change.Path)
+	}
+	if len(unmatched) != 0 {
+		t.Errorf("want 0 unmatched, got %d", len(unmatched))
+	}
+	if len(orphaned) != 0 {
+		t.Errorf("want 0 orphaned, got %d", len(orphaned))
 	}
 }
 
