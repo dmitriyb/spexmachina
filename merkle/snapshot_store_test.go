@@ -71,8 +71,12 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 	expectedKeys := []string{
 		"project",
 		"project/meta",
+		"project/requirement/1",
+		"project/requirement/2",
 		"module/1",
 		"module/1/meta",
+		"module/1/requirement/1",
+		"module/1/requirement/2",
 		"module/1/component/1",
 		"module/1/component/2",
 		"module/1/impl_section/1",
@@ -172,6 +176,8 @@ func TestREQ3_Save_ChildrenAreKeys(t *testing.T) {
 		"module/1/component/2",
 		"module/1/impl_section/1",
 		"module/1/meta",
+		"module/1/requirement/1",
+		"module/1/requirement/2",
 	}
 	if len(moduleNode.Children) != len(wantChildren) {
 		t.Fatalf("children count: want %d, got %d", len(wantChildren), len(moduleNode.Children))

@@ -17,7 +17,7 @@ type Node struct {
 	Key      string  `json:"key"`
 	Hash     string  `json:"hash"`
 	Type     string  `json:"type"`                // "leaf", "module", "project"
-	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "meta"
+	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "meta", "requirement"
 	Module   int     `json:"module,omitempty"`     // module ID (0 for project-level nodes)
 	Children []*Node `json:"children,omitempty"`
 	moduleName string // unexported; module name for ModuleNames extraction
@@ -53,6 +53,16 @@ func BuildTree(specDir string) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
+	var projReqNodes []*Node
+	for _, req := range proj.Requirements {
+		key := fmt.Sprintf("project/requirement/%d", req.ID)
+		node, err := hashRequirement(req, key, 0)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build tree: %w", err)
+		}
+		projReqNodes = append(projReqNodes, node)
+	}
+
 	var moduleNodes []*Node
 	for _, mod := range proj.Modules {
 		mNode, err := buildModule(specDir, mod)
@@ -62,7 +72,14 @@ func BuildTree(specDir string) (*Node, error) {
 		moduleNodes = append(moduleNodes, mNode)
 	}
 
-	children := append([]*Node{projLeaf}, moduleNodes...)
+	children := []*Node{projLeaf}
+	children = append(children, projReqNodes...)
+	children = append(children, moduleNodes...)
+
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].Key < children[j].Key
+	})
+
 	childHashes := collectHashes(children)
 
 	return &Node{
@@ -89,6 +106,15 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 	}
 
 	children := []*Node{modLeaf}
+
+	for _, req := range modSpec.Requirements {
+		key := nodeKey(mod.ID, "requirement", req.ID)
+		node, err := hashRequirement(req, key, mod.ID)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, node)
+	}
 
 	for _, c := range modSpec.Components {
 		if c.Content == "" {
@@ -168,6 +194,44 @@ func collectHashes(nodes []*Node) []string {
 		hashes[i] = n.Hash
 	}
 	return hashes
+}
+
+// hashRequirement creates a leaf node for a requirement by hashing its
+// deterministic JSON serialization. Fields are sorted by key and zero-value
+// fields are excluded (matching omitempty semantics).
+func hashRequirement(req schema.Requirement, key string, module int) (*Node, error) {
+	fields := map[string]interface{}{}
+	if len(req.DependsOn) > 0 {
+		fields["depends_on"] = req.DependsOn
+	}
+	if req.Description != "" {
+		fields["description"] = req.Description
+	}
+	fields["id"] = req.ID
+	if req.PreqID != 0 {
+		fields["preq_id"] = req.PreqID
+	}
+	if req.Priority != nil {
+		fields["priority"] = *req.Priority
+	}
+	if req.Title != "" {
+		fields["title"] = req.Title
+	}
+	if req.Type != "" {
+		fields["type"] = req.Type
+	}
+
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: hash requirement %s: %w", key, err)
+	}
+	return &Node{
+		Key:      key,
+		Hash:     HashBytes(data),
+		Type:     "leaf",
+		NodeType: "requirement",
+		Module:   module,
+	}, nil
 }
 
 func readProject(specDir string) (*schema.Project, error) {

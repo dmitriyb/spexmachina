@@ -14,9 +14,13 @@ func setupSpecDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	// project.json with two modules
+	// project.json with two modules and project-level requirements
 	proj := `{
 		"name": "test-project",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": 2, "type": "non_functional", "title": "Be fast", "priority": 2}
+		],
 		"modules": [
 			{"id": 1, "name": "Alpha", "path": "alpha"},
 			{"id": 2, "name": "Beta", "path": "beta"}
@@ -24,11 +28,15 @@ func setupSpecDir(t *testing.T) string {
 	}`
 	writeFile(t, dir, "project.json", proj)
 
-	// Module alpha: has components and impl_sections
+	// Module alpha: has components, impl_sections, and requirements
 	alphaDir := filepath.Join(dir, "alpha")
 	must(t, os.MkdirAll(alphaDir, 0755))
 	alphaMod := `{
 		"name": "alpha",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Alpha req 1", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": [1]}
+		],
 		"components": [
 			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"},
 			{"id": 2, "name": "Comp2", "content": "arch_comp2.md"}
@@ -71,6 +79,18 @@ func must(t *testing.T, err error) {
 	}
 }
 
+// findChild finds a child node by key. Fails the test if not found.
+func findChild(t *testing.T, parent *Node, key string) *Node {
+	t.Helper()
+	for _, c := range parent.Children {
+		if c.Key == key {
+			return c
+		}
+	}
+	t.Fatalf("child %q not found in %q", key, parent.Key)
+	return nil
+}
+
 func TestREQ7_BuildTree_SpecIDKeys(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -84,24 +104,21 @@ func TestREQ7_BuildTree_SpecIDKeys(t *testing.T) {
 	}
 
 	// project/meta leaf
-	projLeaf := root.Children[0]
-	if projLeaf.Key != "project/meta" {
-		t.Fatalf("project meta key: want project/meta, got %s", projLeaf.Key)
-	}
+	projLeaf := findChild(t, root, "project/meta")
 	if projLeaf.NodeType != "meta" {
 		t.Fatalf("project meta node_type: want meta, got %s", projLeaf.NodeType)
 	}
 
 	// module/1 (Alpha)
-	alpha := root.Children[1]
-	if alpha.Key != "module/1" {
-		t.Fatalf("alpha key: want module/1, got %s", alpha.Key)
+	alpha := findChild(t, root, "module/1")
+	if alpha.Type != "module" {
+		t.Fatalf("alpha type: want module, got %s", alpha.Type)
 	}
 
 	// module/2 (Beta)
-	beta := root.Children[2]
-	if beta.Key != "module/2" {
-		t.Fatalf("beta key: want module/2, got %s", beta.Key)
+	beta := findChild(t, root, "module/2")
+	if beta.Type != "module" {
+		t.Fatalf("beta type: want module, got %s", beta.Type)
 	}
 }
 
@@ -118,24 +135,30 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 		t.Fatalf("root type: want project, got %s", root.Type)
 	}
 
-	// Children: project/meta leaf + 2 module nodes
-	if len(root.Children) != 3 {
-		t.Fatalf("root children: want 3, got %d", len(root.Children))
+	// Children: project/meta leaf + 2 project requirements + 2 module nodes = 5
+	if len(root.Children) != 5 {
+		t.Fatalf("root children: want 5, got %d", len(root.Children))
 	}
 
-	projLeaf := root.Children[0]
-	if projLeaf.Type != "leaf" {
-		t.Fatalf("first child type: want leaf, got %s", projLeaf.Type)
-	}
-
-	alpha := root.Children[1]
-	if alpha.Type != "module" {
-		t.Fatalf("second child type: want module, got %s", alpha.Type)
-	}
-
-	beta := root.Children[2]
-	if beta.Type != "module" {
-		t.Fatalf("third child type: want module, got %s", beta.Type)
+	// Children are sorted by key, so order is:
+	// module/1, module/2, project/meta, project/requirement/1, project/requirement/2
+	for _, child := range root.Children {
+		switch child.Key {
+		case "project/meta":
+			if child.Type != "leaf" {
+				t.Fatalf("project/meta type: want leaf, got %s", child.Type)
+			}
+		case "project/requirement/1", "project/requirement/2":
+			if child.Type != "leaf" {
+				t.Fatalf("%s type: want leaf, got %s", child.Key, child.Type)
+			}
+		case "module/1", "module/2":
+			if child.Type != "module" {
+				t.Fatalf("%s type: want module, got %s", child.Key, child.Type)
+			}
+		default:
+			t.Fatalf("unexpected root child: %s", child.Key)
+		}
 	}
 }
 
@@ -147,10 +170,10 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	alpha := root.Children[1]
-	// Alpha should have: module.json meta + 2 components + 1 impl_section = 4 children
-	if len(alpha.Children) != 4 {
-		t.Fatalf("alpha children: want 4, got %d", len(alpha.Children))
+	alpha := findChild(t, root, "module/1")
+	// Alpha should have: meta + 2 requirements + 2 components + 1 impl_section = 6 children
+	if len(alpha.Children) != 6 {
+		t.Fatalf("alpha children: want 6, got %d", len(alpha.Children))
 	}
 
 	// All children should be leaf type (no intermediate group nodes)
@@ -173,6 +196,8 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		"module/1/component/1":    "component",
 		"module/1/component/2":    "component",
 		"module/1/impl_section/1": "impl_section",
+		"module/1/requirement/1":  "requirement",
+		"module/1/requirement/2":  "requirement",
 	}
 	for _, child := range alpha.Children {
 		wantType, ok := wantKeys[child.Key]
@@ -202,7 +227,7 @@ func TestREQ7_BuildTree_ModuleID(t *testing.T) {
 	}
 
 	// All module 1 leaves should have Module=1
-	alpha := root.Children[1]
+	alpha := findChild(t, root, "module/1")
 	for _, child := range alpha.Children {
 		if child.Module != 1 {
 			t.Errorf("alpha child %s: want module 1, got %d", child.Key, child.Module)
@@ -215,7 +240,7 @@ func TestREQ7_BuildTree_ModuleID(t *testing.T) {
 	}
 
 	// Beta children should have Module=2
-	beta := root.Children[2]
+	beta := findChild(t, root, "module/2")
 	for _, child := range beta.Children {
 		if child.Module != 2 {
 			t.Errorf("beta child %s: want module 2, got %d", child.Key, child.Module)
@@ -262,12 +287,16 @@ func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
 	}
 
 	// Module alpha hash should differ
-	if root1.Children[1].Hash == root2.Children[1].Hash {
+	alpha1 := findChild(t, root1, "module/1")
+	alpha2 := findChild(t, root2, "module/1")
+	if alpha1.Hash == alpha2.Hash {
 		t.Fatal("alpha module hash should change")
 	}
 
 	// Module beta hash should be unchanged
-	if root1.Children[2].Hash != root2.Children[2].Hash {
+	beta1 := findChild(t, root1, "module/2")
+	beta2 := findChild(t, root2, "module/2")
+	if beta1.Hash != beta2.Hash {
 		t.Fatal("beta module hash should not change")
 	}
 }
@@ -410,7 +439,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	fullMod := root.Children[1]
+	fullMod := findChild(t, root, "module/1")
 	// meta + 1 component + 1 impl_section + 1 data_flow = 4 children
 	if len(fullMod.Children) != 4 {
 		t.Fatalf("fullmod children: want 4, got %d", len(fullMod.Children))
@@ -456,12 +485,298 @@ func TestREQ2_BuildTree_EmptyModule(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	emptyMod := root.Children[1]
+	emptyMod := findChild(t, root, "module/1")
 	// Only module meta leaf
 	if len(emptyMod.Children) != 1 {
 		t.Fatalf("empty module children: want 1, got %d", len(emptyMod.Children))
 	}
 	if emptyMod.Children[0].Key != "module/1/meta" {
 		t.Fatalf("empty module child: want module/1/meta, got %s", emptyMod.Children[0].Key)
+	}
+}
+
+func TestREQ7_BuildTree_ModuleRequirementLeaves(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	alpha := findChild(t, root, "module/1")
+
+	// Module-level requirements should be leaf nodes
+	req1 := findChild(t, alpha, "module/1/requirement/1")
+	if req1.Type != "leaf" {
+		t.Fatalf("req1 type: want leaf, got %s", req1.Type)
+	}
+	if req1.NodeType != "requirement" {
+		t.Fatalf("req1 node_type: want requirement, got %s", req1.NodeType)
+	}
+	if req1.Module != 1 {
+		t.Fatalf("req1 module: want 1, got %d", req1.Module)
+	}
+	if req1.Hash == "" {
+		t.Fatal("req1 hash should not be empty")
+	}
+
+	req2 := findChild(t, alpha, "module/1/requirement/2")
+	if req2.Type != "leaf" {
+		t.Fatalf("req2 type: want leaf, got %s", req2.Type)
+	}
+	if req2.NodeType != "requirement" {
+		t.Fatalf("req2 node_type: want requirement, got %s", req2.NodeType)
+	}
+
+	// Different requirements should produce different hashes
+	if req1.Hash == req2.Hash {
+		t.Fatal("different requirements should have different hashes")
+	}
+}
+
+func TestREQ7_BuildTree_ProjectRequirementLeaves(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	// Project-level requirements should be leaf nodes at root level
+	req1 := findChild(t, root, "project/requirement/1")
+	if req1.Type != "leaf" {
+		t.Fatalf("project req1 type: want leaf, got %s", req1.Type)
+	}
+	if req1.NodeType != "requirement" {
+		t.Fatalf("project req1 node_type: want requirement, got %s", req1.NodeType)
+	}
+	if req1.Module != 0 {
+		t.Fatalf("project req1 module: want 0, got %d", req1.Module)
+	}
+	if req1.Hash == "" {
+		t.Fatal("project req1 hash should not be empty")
+	}
+
+	req2 := findChild(t, root, "project/requirement/2")
+	if req2.Type != "leaf" {
+		t.Fatalf("project req2 type: want leaf, got %s", req2.Type)
+	}
+	if req2.NodeType != "requirement" {
+		t.Fatalf("project req2 node_type: want requirement, got %s", req2.NodeType)
+	}
+	if req2.Module != 0 {
+		t.Fatalf("project req2 module: want 0, got %d", req2.Module)
+	}
+
+	// Different project requirements should produce different hashes
+	if req1.Hash == req2.Hash {
+		t.Fatal("different project requirements should have different hashes")
+	}
+}
+
+func TestREQ7_BuildTree_RequirementHashDeterministic(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root1, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+
+	root2, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+
+	// Module requirement hashes should be identical across builds
+	alpha1 := findChild(t, root1, "module/1")
+	alpha2 := findChild(t, root2, "module/1")
+	req1a := findChild(t, alpha1, "module/1/requirement/1")
+	req1b := findChild(t, alpha2, "module/1/requirement/1")
+	if req1a.Hash != req1b.Hash {
+		t.Fatalf("module requirement hash not deterministic: %s vs %s", req1a.Hash, req1b.Hash)
+	}
+
+	// Project requirement hashes should be identical across builds
+	preq1a := findChild(t, root1, "project/requirement/1")
+	preq1b := findChild(t, root2, "project/requirement/1")
+	if preq1a.Hash != preq1b.Hash {
+		t.Fatalf("project requirement hash not deterministic: %s vs %s", preq1a.Hash, preq1b.Hash)
+	}
+}
+
+func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
+	dir := t.TempDir()
+
+	proj := `{
+		"name": "req-change-test",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Original title"}
+		],
+		"modules": [{"id": 1, "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+	modDir := filepath.Join(dir, "m")
+	must(t, os.MkdirAll(modDir, 0755))
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	root1, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	hash1 := findChild(t, root1, "project/requirement/1").Hash
+
+	// Change the requirement title
+	proj2 := `{
+		"name": "req-change-test",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Updated title"}
+		],
+		"modules": [{"id": 1, "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj2)
+
+	root2, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+	hash2 := findChild(t, root2, "project/requirement/1").Hash
+
+	if hash1 == hash2 {
+		t.Fatal("requirement hash should change when title changes")
+	}
+
+	// Root hash should also change
+	if root1.Hash == root2.Hash {
+		t.Fatal("root hash should change when a project requirement changes")
+	}
+}
+
+func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
+	// Verify that requirement hashing uses sorted JSON keys for determinism.
+	// Two requirements with the same fields but potentially different struct
+	// field order should still produce the same hash.
+	dir := t.TempDir()
+
+	proj := `{
+		"name": "sorted-keys-test",
+		"modules": [{"id": 1, "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+	modDir := filepath.Join(dir, "m")
+	must(t, os.MkdirAll(modDir, 0755))
+	modJSON := `{
+		"name": "m",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Test", "description": "Desc", "preq_id": 1, "depends_on": [2]}
+		]
+	}`
+	writeFile(t, modDir, "module.json", modJSON)
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	alpha := findChild(t, root, "module/1")
+	req := findChild(t, alpha, "module/1/requirement/1")
+
+	// Hash should be 64 chars (SHA-256 hex)
+	if len(req.Hash) != 64 {
+		t.Fatalf("requirement hash length: want 64, got %d", len(req.Hash))
+	}
+
+	// Compute expected hash from deterministic JSON
+	expected := hashRequirementJSON(t, map[string]interface{}{
+		"depends_on":  []int{2},
+		"description": "Desc",
+		"id":          1,
+		"preq_id":     1,
+		"title":       "Test",
+		"type":        "functional",
+	})
+	if req.Hash != expected {
+		t.Fatalf("requirement hash mismatch: want %s, got %s", expected, req.Hash)
+	}
+}
+
+// hashRequirementJSON is a test helper that computes expected hash from a map.
+func hashRequirementJSON(t *testing.T, fields map[string]interface{}) string {
+	t.Helper()
+	data, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	return HashBytes(data)
+}
+
+func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
+	dir := t.TempDir()
+
+	proj := `{
+		"name": "omitempty-test",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Minimal"}
+		],
+		"modules": [{"id": 1, "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+	modDir := filepath.Join(dir, "m")
+	must(t, os.MkdirAll(modDir, 0755))
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	req := findChild(t, root, "project/requirement/1")
+
+	// Minimal requirement: only id, title, type are set.
+	// Hash should match a JSON object with only those fields (sorted keys).
+	expected := hashRequirementJSON(t, map[string]interface{}{
+		"id":    1,
+		"title": "Minimal",
+		"type":  "functional",
+	})
+	if req.Hash != expected {
+		t.Fatalf("minimal requirement hash mismatch: want %s, got %s", expected, req.Hash)
+	}
+}
+
+func TestREQ7_BuildTree_ModuleRequirementHashIncludesModuleHash(t *testing.T) {
+	// When a module has requirements, the module's interior hash should include
+	// the requirement leaf hashes alongside content leaf hashes.
+	dir := t.TempDir()
+
+	proj := `{
+		"name": "mod-req-hash",
+		"modules": [{"id": 1, "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+	modDir := filepath.Join(dir, "m")
+	must(t, os.MkdirAll(modDir, 0755))
+
+	// First: module with no requirements
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+	root1, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	mod1 := findChild(t, root1, "module/1")
+
+	// Second: module with a requirement
+	writeFile(t, modDir, "module.json", `{
+		"name": "m",
+		"requirements": [{"id": 1, "type": "functional", "title": "New req"}]
+	}`)
+	root2, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+	mod2 := findChild(t, root2, "module/1")
+
+	// Module hash should differ (meta changed AND requirement was added)
+	if mod1.Hash == mod2.Hash {
+		t.Fatal("module hash should change when requirement is added")
 	}
 }
