@@ -216,6 +216,207 @@ func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
 	}
 }
 
+// setupTestSpecWithRequirements creates a spec fixture with requirements and
+// implements edges so completeness checking can detect incomplete changes.
+func setupTestSpecWithRequirements(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	proj := `{
+		"name": "test-project",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Proj Req 1"}
+		],
+		"modules": [
+			{"id": 1, "name": "alpha", "path": "alpha"}
+		]
+	}`
+	writeTestFile(t, dir, "project.json", proj)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Req 1", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Req 2"}
+		],
+		"components": [
+			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
+			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", alphaMod)
+	writeTestFile(t, alphaDir, "arch_comp_a.md", "# CompA architecture\n")
+	writeTestFile(t, alphaDir, "arch_comp_b.md", "# CompB architecture\n")
+	writeTestFile(t, alphaDir, "impl_comp_a.md", "# CompA implementation\n")
+
+	return dir
+}
+
+func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
+	specDir := setupTestSpecWithRequirements(t)
+
+	// Create initial snapshot.
+	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify a requirement leaf by changing the module.json requirement description.
+	// This changes the requirement node hash but NOT the implementing component.
+	alphaDir := filepath.Join(specDir, "alpha")
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Req 2"}
+		],
+		"components": [
+			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
+			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", alphaMod)
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if len(result.Errors) == 0 {
+		t.Fatal("expected completeness errors when requirement changed without component change")
+	}
+
+	foundIncomplete := false
+	for _, e := range result.Errors {
+		if e.Type == "incomplete_change" && strings.Contains(e.Message, "CompA") {
+			foundIncomplete = true
+		}
+	}
+	if !foundIncomplete {
+		t.Fatalf("expected incomplete_change error mentioning CompA, got: %+v", result.Errors)
+	}
+}
+
+func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
+	specDir := setupTestSpecWithRequirements(t)
+
+	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify requirement without component change.
+	alphaDir := filepath.Join(specDir, "alpha")
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Req 2"}
+		],
+		"components": [
+			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
+			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", alphaMod)
+
+	out, err := runSpex(t, "diff", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	if !strings.Contains(out, "warning:") {
+		t.Fatalf("human output should contain warning for completeness errors, got: %s", out)
+	}
+	if !strings.Contains(out, "incomplete_change") {
+		t.Fatalf("human output should contain error type, got: %s", out)
+	}
+}
+
+func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
+	specDir := setupTestSpecWithRequirements(t)
+
+	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify both the requirement AND all implementing components.
+	// Changing module.json (requirement title) also triggers meta-only checks
+	// for all components, so both must change.
+	alphaDir := filepath.Join(specDir, "alpha")
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
+			{"id": 2, "type": "functional", "title": "Req 2"}
+		],
+		"components": [
+			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
+			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", alphaMod)
+	writeTestFile(t, alphaDir, "arch_comp_a.md", "# CompA architecture CHANGED\n")
+	writeTestFile(t, alphaDir, "arch_comp_b.md", "# CompB architecture CHANGED\n")
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no completeness errors when both requirement and component changed, got: %+v", result.Errors)
+	}
+}
+
+func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
+	specDir := setupTestSpecWithRequirements(t)
+
+	// With no snapshot, all nodes are "added" — completeness errors may appear
+	// but the command should still succeed (exit 0).
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	// All added — should have changes but command exits 0 regardless.
+	if result.Summary.Total == 0 {
+		t.Fatal("expected changes when no snapshot exists")
+	}
+}
+
 func TestNFR6_DiffCommand_Deterministic(t *testing.T) {
 	specDir := setupTestSpec(t)
 

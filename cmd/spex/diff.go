@@ -48,19 +48,21 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	changes := merkle.Diff(current, snapshot)
 	moduleNames := merkle.ModuleNames(current)
 	classified := merkle.Classify(changes, moduleNames)
+	completenessErrors := merkle.CheckCompleteness(classified, specDir)
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		return printDiffJSON(classified)
+		return printDiffJSON(classified, completenessErrors)
 	}
-	printDiffSummary(classified)
+	printDiffSummary(classified, completenessErrors)
 	return nil
 }
 
 // diffOutput is the JSON representation of the diff command result.
 type diffOutput struct {
-	Changes []diffChange `json:"changes"`
-	Summary diffSummary  `json:"summary"`
+	Changes []diffChange    `json:"changes"`
+	Errors  []merkle.DiffError `json:"errors"`
+	Summary diffSummary     `json:"summary"`
 }
 
 type diffChange struct {
@@ -78,14 +80,18 @@ type diffSummary struct {
 	ByImpact map[string]int `json:"by_impact"`
 }
 
-func printDiffJSON(classified []merkle.ClassifiedChange) error {
+func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffError) error {
 	out := diffOutput{
 		Changes: make([]diffChange, len(classified)),
+		Errors:  errors,
 		Summary: diffSummary{
 			Total:    len(classified),
 			ByType:   make(map[string]int),
 			ByImpact: make(map[string]int),
 		},
+	}
+	if out.Errors == nil {
+		out.Errors = []merkle.DiffError{}
 	}
 
 	for i, cc := range classified {
@@ -109,8 +115,8 @@ func printDiffJSON(classified []merkle.ClassifiedChange) error {
 	return nil
 }
 
-func printDiffSummary(classified []merkle.ClassifiedChange) {
-	if len(classified) == 0 {
+func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.DiffError) {
+	if len(classified) == 0 && len(errors) == 0 {
 		fmt.Println("no changes")
 		return
 	}
@@ -136,6 +142,19 @@ func printDiffSummary(classified []merkle.ClassifiedChange) {
 	for _, imp := range []string{"impl_only", "arch_impl", "structural"} {
 		if c, ok := byImpact[imp]; ok {
 			fmt.Printf("  %d %s\n", c, imp)
+		}
+	}
+
+	if len(errors) > 0 {
+		fmt.Printf("\n%d warning(s):\n", len(errors))
+		for _, e := range errors {
+			fmt.Printf("  warning: [%s] %s\n", e.Type, e.Message)
+			if e.Path != "" {
+				fmt.Printf("    path: %s\n", e.Path)
+			}
+			for _, r := range e.Related {
+				fmt.Printf("    related: %s\n", r)
+			}
 		}
 	}
 }
