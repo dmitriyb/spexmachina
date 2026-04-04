@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
@@ -183,7 +185,7 @@ func TestFR4_ParseDiffJSON(t *testing.T) {
 		]
 	}`
 
-	changes, err := parseDiffJSON([]byte(input))
+	changes, _, err := parseDiffJSON([]byte(input))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -211,7 +213,7 @@ func TestFR4_ParseDiffJSON(t *testing.T) {
 
 func TestFR4_ParseDiffJSON_InvalidType(t *testing.T) {
 	input := `{"changes": [{"path": "x", "type": "bogus", "impact": "impl_only", "module": "m"}]}`
-	_, err := parseDiffJSON([]byte(input))
+	_, _, err := parseDiffJSON([]byte(input))
 	if err == nil || !strings.Contains(err.Error(), "unknown change type") {
 		t.Fatalf("want error about unknown change type, got %v", err)
 	}
@@ -219,8 +221,178 @@ func TestFR4_ParseDiffJSON_InvalidType(t *testing.T) {
 
 func TestFR4_ParseDiffJSON_InvalidImpact(t *testing.T) {
 	input := `{"changes": [{"path": "x", "type": "added", "impact": "bogus", "module": "m"}]}`
-	_, err := parseDiffJSON([]byte(input))
+	_, _, err := parseDiffJSON([]byte(input))
 	if err == nil || !strings.Contains(err.Error(), "unknown impact level") {
 		t.Fatalf("want error about unknown impact level, got %v", err)
+	}
+}
+
+// runSpexWithStderr is like runSpex but also returns stderr output.
+func runSpexWithStderr(t *testing.T, args ...string) (string, string, error) {
+	t.Helper()
+	rootCmd := cli.NewRootCmd()
+	rootCmd.AddCommand(
+		newHashCmd(),
+		newDiffCmd(),
+		newValidateCmd(),
+		newImpactCmd(),
+		newApplyCmd(),
+		newMapCmd(),
+		newRenderCmd(),
+	)
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(args)
+
+	var execErr error
+	stdout := captureStdout(t, func() {
+		execErr = rootCmd.Execute()
+	})
+	return stdout, errBuf.String(), execErr
+}
+
+func TestFR8_ImpactCommand_RejectsDiffWithErrors(t *testing.T) {
+	specDir := setupTestSpec(t)
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
+
+	diffJSON := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"}
+		],
+		"errors": [
+			{
+				"type": "incomplete_change",
+				"message": "Requirement 2 (impact) description changed but implementing component NodeMatcher content leaf unchanged",
+				"path": "module/4/meta",
+				"related": ["module/4/component/2"]
+			}
+		]
+	}`
+
+	diffFile := filepath.Join(t.TempDir(), "diff_with_errors.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("expected error when diff contains errors, got nil")
+	}
+	if !strings.Contains(err.Error(), "diff contains 1 error(s)") {
+		t.Fatalf("expected error about diff errors, got: %v", err)
+	}
+	if out != "" {
+		t.Fatalf("expected empty stdout when diff has errors, got: %s", out)
+	}
+}
+
+func TestFR8_ImpactCommand_EmptyErrorsArrayProceeds(t *testing.T) {
+	specDir := setupTestSpec(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a diff with empty errors array — should proceed normally.
+	diffJSON := `{"changes": [], "errors": []}`
+	diffFile := filepath.Join(t.TempDir(), "empty_errors.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("expected no error with empty errors array, got: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+}
+
+func TestFR8_ParseDiffJSON_ExtractsErrors(t *testing.T) {
+	input := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"}
+		],
+		"errors": [
+			{"type": "incomplete_change", "message": "something broken", "path": "module/1/meta", "related": ["module/1/component/1"]}
+		]
+	}`
+
+	changes, diffErrors, err := parseDiffJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("want 1 change, got %d", len(changes))
+	}
+	if len(diffErrors) != 1 {
+		t.Fatalf("want 1 error, got %d", len(diffErrors))
+	}
+	if diffErrors[0].Type != "incomplete_change" {
+		t.Errorf("want error type incomplete_change, got %s", diffErrors[0].Type)
+	}
+	if diffErrors[0].Message != "something broken" {
+		t.Errorf("want error message 'something broken', got %s", diffErrors[0].Message)
+	}
+}
+
+func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
+	input := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"}
+		]
+	}`
+
+	changes, diffErrors, err := parseDiffJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("want 1 change, got %d", len(changes))
+	}
+	if len(diffErrors) != 0 {
+		t.Fatalf("want 0 errors when field absent, got %d", len(diffErrors))
+	}
+}
+
+func TestFR8_ImpactCommand_MultipleErrorsAllPrinted(t *testing.T) {
+	specDir := setupTestSpec(t)
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
+
+	diffJSON := `{
+		"changes": [],
+		"errors": [
+			{"type": "incomplete_change", "message": "first error message", "path": "module/1/meta", "related": []},
+			{"type": "incomplete_change", "message": "second error message", "path": "module/2/meta", "related": []}
+		]
+	}`
+
+	diffFile := filepath.Join(t.TempDir(), "multi_errors.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := runSpexWithStderr(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("expected error when diff contains errors, got nil")
+	}
+	if !strings.Contains(err.Error(), "diff contains 2 error(s)") {
+		t.Fatalf("expected error about 2 diff errors, got: %v", err)
+	}
+	if !strings.Contains(stderr, "first error message") {
+		t.Fatalf("expected first error in stderr, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "second error message") {
+		t.Fatalf("expected second error in stderr, got: %s", stderr)
 	}
 }

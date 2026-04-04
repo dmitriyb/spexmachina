@@ -47,9 +47,16 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	changes, err := parseDiffJSON(diffData)
+	changes, diffErrors, err := parseDiffJSON(diffData)
 	if err != nil {
 		return fmt.Errorf("impact: %w", err)
+	}
+
+	if len(diffErrors) > 0 {
+		for _, de := range diffErrors {
+			fmt.Fprintf(cmd.ErrOrStderr(), "error: [%s] %s\n", de.Type, de.Message)
+		}
+		return fmt.Errorf("impact: diff contains %d error(s), refusing to proceed", len(diffErrors))
 	}
 
 	// Resolve map path relative to spec dir if not absolute.
@@ -75,8 +82,8 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 }
 
 // parseDiffJSON converts the JSON output of `spex diff --json` into
-// []merkle.ClassifiedChange for the impact pipeline.
-func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, error) {
+// []merkle.ClassifiedChange and []merkle.DiffError for the impact pipeline.
+func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, error) {
 	var raw struct {
 		Changes []struct {
 			Path    string `json:"path"`
@@ -86,20 +93,21 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, error) {
 			OldHash string `json:"old_hash"`
 			NewHash string `json:"new_hash"`
 		} `json:"changes"`
+		Errors []merkle.DiffError `json:"errors"`
 	}
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse diff JSON: %w", err)
+		return nil, nil, fmt.Errorf("parse diff JSON: %w", err)
 	}
 
 	changes := make([]merkle.ClassifiedChange, len(raw.Changes))
 	for i, c := range raw.Changes {
 		ct, err := parseChangeType(c.Type)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		il, err := parseImpactLevel(c.Impact)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		changes[i] = merkle.ClassifiedChange{
 			Change: merkle.Change{
@@ -112,7 +120,7 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, error) {
 			Module: c.Module,
 		}
 	}
-	return changes, nil
+	return changes, raw.Errors, nil
 }
 
 func parseChangeType(s string) (merkle.ChangeType, error) {
