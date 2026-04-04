@@ -225,6 +225,43 @@ func TestREQ5_ImpactLevel_String(t *testing.T) {
 	}
 }
 
+func TestREQ5_Classify_RequirementIsStructural(t *testing.T) {
+	changes := []Change{
+		{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: 1},
+	}
+	names := map[int]string{1: "Alpha"}
+
+	classified := Classify(changes, names)
+
+	if len(classified) != 1 {
+		t.Fatalf("expected 1 classified change, got %d", len(classified))
+	}
+	if classified[0].Impact != Structural {
+		t.Errorf("expected structural for requirement, got %s", classified[0].Impact)
+	}
+	if classified[0].Module != "Alpha" {
+		t.Errorf("expected module Alpha, got %q", classified[0].Module)
+	}
+}
+
+func TestREQ5_Classify_ProjectRequirementIsStructural(t *testing.T) {
+	changes := []Change{
+		{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: 0},
+	}
+
+	classified := Classify(changes, nil)
+
+	if len(classified) != 1 {
+		t.Fatalf("expected 1 classified change, got %d", len(classified))
+	}
+	if classified[0].Impact != Structural {
+		t.Errorf("expected structural for project requirement, got %s", classified[0].Impact)
+	}
+	if classified[0].Module != "" {
+		t.Errorf("expected empty module for project requirement, got %q", classified[0].Module)
+	}
+}
+
 func TestREQ5_Classify_NilModuleNames_FallsBackToID(t *testing.T) {
 	changes := []Change{
 		{Path: "module/3/component/1", Type: Modified, NodeType: "component", Module: 3},
