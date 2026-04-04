@@ -32,12 +32,6 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 		index[r.SpecNodeID] = append(index[r.SpecNodeID], r)
 	}
 
-	// Index records by module name for structural changes.
-	modIdx := make(map[string][]mapping.Record)
-	for _, r := range records {
-		modIdx[r.Module] = append(modIdx[r.Module], r)
-	}
-
 	matched := map[int]bool{}
 	orphanCandidates := map[int]mapping.Record{}
 
@@ -45,19 +39,13 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 	var unmatched []Unmatched
 
 	for _, c := range changes {
-		var found []mapping.Record
-
+		// Structural changes do not produce bead actions.
 		if c.Impact == merkle.Structural {
-			// Structural changes affect all records in the module (or all for project meta).
-			if c.Module == "" {
-				found = copyRecords(records)
-			} else {
-				found = copyRecords(modIdx[c.Module])
-			}
-		} else {
-			// Direct ID lookup: change.Path == record.SpecNodeID.
-			found = copyRecords(index[c.Path])
+			continue
 		}
+
+		// Direct ID lookup: change.Path == record.SpecNodeID.
+		found := copyRecords(index[c.Path])
 
 		if len(found) > 0 {
 			sort.Slice(found, func(i, j int) bool {
