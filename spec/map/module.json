@@ -74,6 +74,12 @@
       "name": "Map command implementation",
       "content": "impl_map_command.md",
       "describes": [3]
+    },
+    {
+      "id": 5,
+      "name": "Context resolution implementation",
+      "content": "impl_context_resolution.md",
+      "describes": [4]
     }
   ],
   "data_flows": [
@@ -97,6 +103,12 @@
       "name": "Map command tests",
       "content": "test_map_command.md",
       "describes": [3]
+    },
+    {
+      "id": 4,
+      "name": "Context resolver tests",
+      "content": "test_context_resolver.md",
+      "describes": [4]
     }
   ]
 }

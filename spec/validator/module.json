@@ -96,6 +96,13 @@
       "title": "Validate priority on project requirements",
       "preq_id": 1,
       "description": "Every project requirement must have a priority field (integer 0-4). Report missing or out-of-range priority values as validation errors."
+    },
+    {
+      "id": 14,
+      "type": "functional",
+      "title": "Requirement coverage validation",
+      "preq_id": 1,
+      "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors."
     }
   ],
   "components": [
@@ -148,7 +155,7 @@
       "description": "CLI entry point for spex validate. Parses flags, wires all checkers through ErrorReporter, exits 0/1.",
       "content": "arch_validate_command.md",
       "implements": [7, 8],
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9]
+      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10]
     },
     {
       "id": 8,
@@ -163,6 +170,13 @@
       "description": "Checks that every component in each module is described by at least one test_section. Reports uncovered components as validation errors.",
       "content": "arch_test_coverage_checker.md",
       "implements": [12]
+    },
+    {
+      "id": 10,
+      "name": "RequirementCoverageChecker",
+      "description": "Checks that every project requirement is derived into at least one module requirement (preq_id), and every module requirement is implemented by at least one component (implements). Reports uncovered requirements as validation errors.",
+      "content": "arch_requirement_coverage_checker.md",
+      "implements": [14]
     }
   ],
   "impl_sections": [
@@ -219,6 +233,12 @@
       "name": "Test coverage check implementation",
       "content": "impl_test_coverage.md",
       "describes": [9]
+    },
+    {
+      "id": 10,
+      "name": "Requirement coverage check implementation",
+      "content": "impl_requirement_coverage.md",
+      "describes": [10]
     }
   ],
   "data_flows": [
@@ -227,7 +247,7 @@
       "name": "Validation pipeline",
       "description": "Spec directory flows through schema check, content check, DAG check, orphan check, and ID check. All errors are aggregated into a single structured report.",
       "content": "flow_validation_pipeline.md",
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9]
+      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10]
     }
   ],
   "test_sections": [
@@ -247,7 +267,7 @@
       "id": 3,
       "name": "Name and coverage tests",
       "content": "test_name_and_coverage.md",
-      "describes": [8, 9]
+      "describes": [8, 9, 10]
     },
     {
       "id": 4,

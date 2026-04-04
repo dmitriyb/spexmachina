@@ -181,3 +181,33 @@ Provide a diff referencing modules that do not exist in the spec tree. Assert th
 ### E8: Bead CLI returns beads with duplicate IDs
 
 Mock bead CLI returns two beads with the same ID but different spec labels. Assert the command handles this gracefully — both entries are processed, and if they match different spec nodes, both matches appear in the report.
+
+### E9: Diff input contains errors — impact refuses to proceed
+
+Provide a diff JSON with a non-empty `errors` array:
+
+```json
+{
+  "changes": [
+    {"path": "module/4/component/2", "type": "modified", "impact": "arch_impl", "module": "impact"}
+  ],
+  "errors": [
+    {
+      "type": "incomplete_change",
+      "message": "Requirement 2 (impact) description changed but implementing component NodeMatcher content leaf unchanged",
+      "path": "module/4/meta",
+      "related": ["module/4/component/2"]
+    }
+  ]
+}
+```
+
+Assert:
+- Exit code is 1
+- stderr contains the error message from the errors array
+- stdout is empty (no report generated)
+- NodeMatcher, ActionClassifier, and ReportGenerator are never invoked
+
+### E10: Diff input contains empty errors array — impact proceeds normally
+
+Provide a diff JSON with `"errors": []`. Assert impact processes normally — empty errors array is not a rejection condition.
