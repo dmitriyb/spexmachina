@@ -1,0 +1,7 @@
+{
+  "name": "reqcov-no-requirements",
+  "modules": [
+    {"id": 1, "name": "alpha", "path": "alpha"}
+  ],
+  "requirements": []
+}

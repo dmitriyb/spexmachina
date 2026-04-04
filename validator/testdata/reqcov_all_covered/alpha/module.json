@@ -1,0 +1,15 @@
+{
+  "name": "alpha",
+  "requirements": [
+    {"id": 1, "type": "functional", "title": "Mod Feat A", "preq_id": 1},
+    {"id": 2, "type": "functional", "title": "Mod Feat B", "preq_id": 2}
+  ],
+  "components": [
+    {"id": 1, "name": "CompA", "implements": [1]},
+    {"id": 2, "name": "CompB", "implements": [2]}
+  ],
+  "impl_sections": [
+    {"id": 1, "name": "Impl A", "describes": [1]},
+    {"id": 2, "name": "Impl B", "describes": [2]}
+  ]
+}
