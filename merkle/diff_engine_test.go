@@ -331,8 +331,9 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		if c.NodeType == "" {
 			t.Errorf("missing NodeType for %s", c.Path)
 		}
-		// project/meta has Module 0; all others must be > 0.
-		if c.Path != "project/meta" && c.Module == 0 {
+		// project-level nodes have Module 0; all others must be > 0.
+		isProjectLevel := c.Path == "project/meta" || strings.HasPrefix(c.Path, "project/requirement/")
+		if !isProjectLevel && c.Module == 0 {
 			t.Errorf("missing Module for %s", c.Path)
 		}
 	}

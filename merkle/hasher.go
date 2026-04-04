@@ -24,6 +24,13 @@ func HashFile(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
+// HashBytes computes the SHA-256 hash of a byte slice.
+// Returns the hex-encoded hash string.
+func HashBytes(data []byte) string {
+	h := sha256.Sum256(data)
+	return hex.EncodeToString(h[:])
+}
+
 // HashChildren computes a deterministic SHA-256 hash for an interior node
 // by sorting child hashes lexicographically before concatenation.
 // Inputs must be fixed-length hex hash strings (e.g. from HashFile).
