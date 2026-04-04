@@ -61,14 +61,14 @@
       "type": "functional",
       "title": "ID-based tree keying",
       "preq_id": 2,
-      "description": "Tree nodes are keyed by spec ID (module ID, component ID, etc.) instead of file path. Renaming a directory or file with the same ID is detected as a modification, not a delete + add."
+      "description": "Tree nodes are keyed by spec ID (module ID, component ID, requirement ID, etc.) instead of file path. Requirements are individual leaf nodes keyed as module/<id>/requirement/<req_id> and project/requirement/<req_id>. Renaming a directory or file with the same ID is detected as a modification, not a delete + add."
     },
     {
       "id": 8,
       "type": "functional",
       "title": "Change completeness validation",
       "preq_id": 2,
-      "description": "When a structural meta change is detected (project/meta or module/X/meta), verify that affected leaf nodes also changed in the same diff. If a requirement description changed but no implementing component content leaf changed, report an error in the diff output. Errors are included alongside changes in the JSON output.",
+      "description": "When individual requirement leaf nodes change in the diff (added, modified, or removed), verify that implementing components' content leaves also changed. For modified/added requirements, each implementing component's content leaf must also appear in the diff. For removed requirements, no component may still reference them. For project-level requirement changes, the chain must propagate through module requirements to component leaves. Errors are included alongside changes in the diff JSON output.",
       "depends_on": [4]
     }
   ],
@@ -86,7 +86,7 @@
     {
       "id": 2,
       "name": "TreeBuilder",
-      "description": "Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, etc.) as their key, not the file path. Maps spec hierarchy to tree nodes.",
+      "description": "Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, requirement ID, etc.) as their key, not the file path. Requirements are individual leaf nodes with hashes computed from deterministic JSON serialization. Maps spec hierarchy to tree nodes.",
       "content": "arch_tree_builder.md",
       "implements": [
         2,
@@ -121,7 +121,7 @@
     {
       "id": 5,
       "name": "ImpactClassifier",
-      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural. Uses node metadata (type, module association) instead of parsing path prefixes.",
+      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural. Requirement leaf nodes are classified as structural. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
         5
@@ -149,7 +149,7 @@
     {
       "id": 7,
       "name": "DiffCommand",
-      "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker.",
+      "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker. Outputs changes and errors in JSON or human-readable format.",
       "content": "arch_diff_command.md",
       "implements": [
         4,
@@ -166,7 +166,7 @@
     {
       "id": 8,
       "name": "CompletenessChecker",
-      "description": "Validates that structural meta changes are accompanied by corresponding leaf-level changes. Reads the spec graph (project.json, module.json) to resolve requirement-to-component edges and checks that implementing components have content leaf changes in the diff.",
+      "description": "Validates that requirement leaf changes are accompanied by corresponding component content leaf changes. Reads the current spec graph (project.json, module.json) to resolve requirement-to-component edges via implements arrays. Checks added, modified, and removed requirements for completeness. Also validates component edge changes when meta nodes change without requirement leaf changes.",
       "content": "arch_completeness_checker.md",
       "implements": [8],
       "uses": [4, 5]

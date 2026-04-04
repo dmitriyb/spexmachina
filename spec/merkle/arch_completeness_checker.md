@@ -1,42 +1,51 @@
 # CompletenessChecker
 
-Validates that structural meta changes in the diff are accompanied by corresponding leaf-level changes. Ensures that spec edits are complete before the impact pipeline processes them.
+Validates that requirement leaf changes in the diff are accompanied by corresponding component content leaf changes. Ensures that spec edits are complete before the impact pipeline processes them.
 
 ## Responsibilities
 
-- Read the spec graph (project.json, module.json) to resolve which components implement which requirements
-- For each structural meta change in the diff, check whether the affected leaf nodes also changed
-- Report errors for incomplete edits (structural change without corresponding leaf changes)
+- Read the current spec graph (project.json, module.json) to resolve which components implement which requirements
+- For each requirement leaf change in the diff, check whether the implementing components' content leaves also changed
+- For meta-only changes (no requirement leaf changes), check whether component content leaves changed
+- Report errors for incomplete edits
 
 ## Checks
 
-### Requirement description changed → implementing component content must change
+### Modified requirement → implementing component content must change
 
-When `module/X/meta` changed and a requirement's description text changed (detected by comparing current vs snapshot module.json), resolve which components implement that requirement via `implements` edges. At least one of those components' content leaves must also appear as `arch_impl` or `impl_only` changes in the same diff.
+When a requirement leaf changed (`module/X/requirement/Y` modified), resolve which components implement that requirement via `implements` edges. For each such component, its content leaf must also appear as a change in the diff.
 
-If none do, report an error:
+For each component whose content leaf did NOT change, report an error:
 
 ```json
 {
   "type": "incomplete_change",
-  "message": "Requirement 2 (impact) description changed but implementing component NodeMatcher content leaf unchanged",
-  "path": "module/4/meta",
+  "message": "requirement 2 (impact) description changed but component NodeMatcher content leaf unchanged",
+  "path": "module/4/requirement/2",
   "related": ["module/4/component/2"]
 }
 ```
 
+### Added requirement → must be implemented and component content must change
+
+When a requirement leaf is added (`module/X/requirement/Y` added), check that the requirement is implemented by components and that those components' content leaves also changed. If no component implements it, report an error. For each implementing component whose content leaf did NOT change, report an error.
+
+### Removed requirement → no component may still reference it
+
+When a requirement leaf is removed (`module/X/requirement/Y` removed), check that no component in the current module.json still has the removed requirement ID in its `implements` array. For each component that still references it, report an error.
+
+### Project-level requirement changed → chain must propagate
+
+When a project-level requirement leaf changed (`project/requirement/Y`), find all module requirements with `preq_id == Y`. If none exist, report an error. For each such module requirement, find all implementing components. For each component whose content leaf did NOT change, report an error. Same logic applies for added and removed project-level requirements.
+
 ### Component edges changed → component content must change
 
-When a component's `implements` or `uses` array changed in module.json (detected via meta change), the component's content leaf should also have changed. The component's architecture description should reflect the new edges.
-
-### Project-level requirement changed → module requirement must exist
-
-When `project/meta` changed and a project requirement's description changed, check that at least one module requirement with matching `preq_id` exists AND that the chain continues to a leaf change. If the module requirement exists but no component content changed, report an error.
+When `module/X/meta` is modified but no requirement leaves in module X changed, the meta change is due to non-requirement modifications (component edges, module description, etc.). For each component in the current module.json, check whether its content leaf also changed. For each component whose content leaf did NOT change, report an error.
 
 ## Interface
 
 ```go
-func CheckCompleteness(changes []ClassifiedChange, specDir string, snapshotPath string) []DiffError
+func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError
 ```
 
-Takes the classified changes, reads current and snapshot spec state to detect what specifically changed in the meta nodes, and returns errors for incomplete edits. Returns nil if all structural changes are covered.
+Takes the classified changes and reads the current spec directory to resolve requirement-to-component edges. Returns errors for incomplete edits. Returns nil if all changes are complete.

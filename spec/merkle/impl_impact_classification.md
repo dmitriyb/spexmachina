@@ -5,7 +5,7 @@
 Each changed leaf is classified based on its node metadata, not its filename pattern or path:
 
 ```
-if change.NodeType == "meta":
+if change.NodeType in ("meta", "requirement"):
     impact = "structural"
 elif change.NodeType == "component":
     impact = "arch_impl"

@@ -2,38 +2,43 @@
 
 ## Approach
 
-Compare current and snapshot versions of changed JSON files to identify what specifically changed (which requirement, which edge). Then cross-reference against the leaf-level changes in the same diff.
+Individual requirement leaf nodes in the diff tell us exactly which requirements changed. Cross-reference each changed requirement against the current spec graph (module.json `implements` edges) to verify that implementing components' content leaves also changed.
 
 ## Algorithm
 
-1. Collect all structural changes from the diff (`impact == Structural`)
-2. For each structural change, load the current and snapshot versions of the JSON file:
-   - `project/meta` → compare current and snapshot `project.json`
-   - `module/X/meta` → compare current and snapshot `spec/<module>/module.json`
-3. Diff the JSON to identify what changed:
-   - Requirements: added, removed, or description text changed
-   - Components: `implements` or `uses` arrays changed
-   - Module declarations: `requires_module` changed
-4. For each detected JSON change, resolve the expected leaf changes:
-   - Requirement changed → find components with `implements` containing that req ID → expect their content leaves in the diff
-   - Component edges changed → expect that component's content leaf in the diff
-5. Check if the expected leaf changes are present in the diff's `arch_impl`/`impl_only` changes
-6. Report errors for any missing expected changes
+1. Build a set of all changed paths from the diff for O(1) lookup
+2. Collect all requirement leaf changes from the diff (`NodeType == "requirement"`)
+3. For each **modified** module-level requirement (`module/X/requirement/Y`):
+   - Read the current `module.json` for module X
+   - Find all components whose `implements` array contains requirement Y
+   - For each component, check whether `module/X/component/Z` is in the changed paths set
+   - For each component whose content leaf did NOT change, emit a `DiffError`
+4. For each **added** module-level requirement (`module/X/requirement/Y`):
+   - Read the current `module.json` for module X
+   - Find all components whose `implements` array contains requirement Y
+   - If no component implements it, emit a `DiffError`
+   - For each implementing component whose content leaf did NOT change, emit a `DiffError`
+5. For each **removed** module-level requirement (`module/X/requirement/Y`):
+   - Read the current `module.json` for module X
+   - For each component whose `implements` array still contains requirement Y, emit a `DiffError`
+6. For each **modified** project-level requirement (`project/requirement/Y`):
+   - Read the current `project.json` and all `module.json` files
+   - Find all module requirements with `preq_id == Y`
+   - If none exist, emit a `DiffError`
+   - For each such module requirement, find all implementing components
+   - For each component whose content leaf did NOT change, emit a `DiffError`
+7. For each **added** project-level requirement (`project/requirement/Y`):
+   - Find all module requirements with `preq_id == Y`
+   - If none exist, emit a `DiffError`
+   - For each such module requirement, find all implementing components
+   - For each component whose content leaf did NOT change, emit a `DiffError`
+8. For each **removed** project-level requirement (`project/requirement/Y`):
+   - For each module requirement that still has `preq_id == Y`, emit a `DiffError`
+9. For component edge changes: when `module/X/meta` is modified but no requirement leaves in module X changed, the meta change is due to non-requirement modifications. For each component in the current `module.json`, check whether its content leaf also changed. For each component whose content leaf did NOT change, emit a `DiffError`.
 
-## JSON diffing
+## Resolving module paths
 
-Compare field-by-field rather than full JSON diff. For requirements, compare `description` text. For components, compare `implements` and `uses` arrays. Ignore non-semantic changes (whitespace, field ordering).
-
-```go
-type metaDiff struct {
-    ChangedReqs  []reqChange      // requirements with changed description
-    ChangedEdges []edgeChange     // components with changed implements/uses
-    AddedReqs    []int            // new requirement IDs (covered by validate, not an error here)
-    RemovedReqs  []int            // removed requirement IDs (covered by validate)
-}
-```
-
-Added and removed requirements are state issues caught by `spex validate`. The completeness checker only flags **modified** requirements that lack corresponding leaf changes.
+The function receives `specDir` and reads the current `project.json` to map module IDs to directory paths. For a structural change at `module/X/meta`, the module ID X is carried in the `ClassifiedChange.Module` field — use `project.json` modules to find the directory path, then read `module.json` from that directory.
 
 ## Error output
 
