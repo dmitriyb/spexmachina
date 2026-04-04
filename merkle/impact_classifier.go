@@ -54,7 +54,7 @@ func classifyNodeType(nodeType string) ImpactLevel {
 		return ImplOnly
 	case "component":
 		return ArchImpl
-	case "meta":
+	case "meta", "requirement":
 		return Structural
 	default:
 		return 0
