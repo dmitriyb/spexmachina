@@ -399,8 +399,8 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
 
-	// With no snapshot, all nodes are "added" — completeness errors may appear
-	// but the command should still succeed (exit 0).
+	// With no snapshot, all nodes are "added" — requirements and their
+	// implementing components are both added, so no completeness errors.
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
@@ -411,9 +411,11 @@ func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
 	}
 
-	// All added — should have changes but command exits 0 regardless.
 	if result.Summary.Total == 0 {
 		t.Fatal("expected changes when no snapshot exists")
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("expected no completeness errors when all nodes are added, got: %+v", result.Errors)
 	}
 }
 
