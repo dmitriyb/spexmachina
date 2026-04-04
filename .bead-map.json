@@ -1,5 +1,5 @@
 {
-  "next_id": 51,
+  "next_id": 53,
   "records": [
     {
       "id": 1,
@@ -194,11 +194,11 @@
     {
       "id": 20,
       "spec_node_id": "impact/component/2",
-      "bead_id": "spexmachina-3ta",
+      "bead_id": "spexmachina-i72",
       "module": "impact",
       "component": "NodeMatcher",
       "content_file": "spec/impact/arch_node_matcher.md",
-      "spec_hash": "0245d61a4e432254840bdb3ef6b25a9eb009e8dfb0c9a9d5c67e4d7b0c114546",
+      "spec_hash": "e89fd72af44bb1aa2a5746d1bdbcf1dc467885b66e08ce608fb13cc9e8e390af",
       "bead_type": "task"
     },
     {
@@ -224,11 +224,11 @@
     {
       "id": 23,
       "spec_node_id": "impact/component/5",
-      "bead_id": "spexmachina-3ve",
+      "bead_id": "spexmachina-uo6",
       "module": "impact",
       "component": "ImpactCommand",
       "content_file": "spec/impact/arch_impact_command.md",
-      "spec_hash": "29eebce76dd1d2300c87ad4447280722b0b1009b431f7d34ec01f083c64c0f28",
+      "spec_hash": "5d821cac9c72a6d0b92cef8f1ad99eac6dddec3b1ff0a1dcdc86098fecaaa20d",
       "bead_type": "task"
     },
     {
@@ -369,6 +369,26 @@
       "component": "ContextResolver",
       "content_file": "spec/map/arch_context_resolver.md",
       "spec_hash": "6acf817dbd76409c7be082dc879e638242307b8885314da08ef9af86fe03bfa3",
+      "bead_type": "task"
+    },
+    {
+      "id": 51,
+      "spec_node_id": "validator/component/10",
+      "bead_id": "spexmachina-yxg",
+      "module": "validator",
+      "component": "RequirementCoverageChecker",
+      "content_file": "spec/validator/arch_requirement_coverage_checker.md",
+      "spec_hash": "d993f758ee3e8b3fbbdfe4a0af95a7753838049f8ba7b0d896b517f5c4baa441",
+      "bead_type": "task"
+    },
+    {
+      "id": 52,
+      "spec_node_id": "merkle/component/8",
+      "bead_id": "spexmachina-2aw",
+      "module": "merkle",
+      "component": "CompletenessChecker",
+      "content_file": "spec/merkle/arch_completeness_checker.md",
+      "spec_hash": "9b0fb31267f62562266726b295c2eb3bcd5cb16af21b1b9f547583f462ec12af",
       "bead_type": "task"
     }
   ]
