@@ -109,12 +109,13 @@ func toSpecNodeID(c merkle.ClassifiedChange) string {
 func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, error) {
 	var raw struct {
 		Changes []struct {
-			Path    string `json:"path"`
-			Type    string `json:"type"`
-			Impact  string `json:"impact"`
-			Module  string `json:"module"`
-			OldHash string `json:"old_hash"`
-			NewHash string `json:"new_hash"`
+			Path     string `json:"path"`
+			Type     string `json:"type"`
+			Impact   string `json:"impact"`
+			Module   string `json:"module"`
+			NodeType string `json:"node_type"`
+			OldHash  string `json:"old_hash"`
+			NewHash  string `json:"new_hash"`
 		} `json:"changes"`
 		Errors []merkle.DiffError `json:"errors"`
 	}
@@ -134,10 +135,11 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 		}
 		changes[i] = merkle.ClassifiedChange{
 			Change: merkle.Change{
-				Path:    c.Path,
-				Type:    ct,
-				OldHash: c.OldHash,
-				NewHash: c.NewHash,
+				Path:     c.Path,
+				Type:     ct,
+				NodeType: c.NodeType,
+				OldHash:  c.OldHash,
+				NewHash:  c.NewHash,
 			},
 			Impact: il,
 			Module: c.Module,
