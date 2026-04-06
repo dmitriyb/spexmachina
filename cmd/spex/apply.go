@@ -53,14 +53,14 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 	mapPath := filepath.Join(filepath.Dir(specDir), ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)
 
-	// Build NodeMaps for name resolution.
-	modules, err := buildNodeMaps(specDir)
+	// Build NodeMaps for name and content file resolution.
+	modules, contents, err := buildNodeMaps(specDir)
 	if err != nil {
 		return fmt.Errorf("apply: %w", err)
 	}
 
 	// Convert impact actions to apply actions.
-	creates := convertCreateActions(report.Creates, modules, store)
+	creates := convertCreateActions(report.Creates, modules, contents, store)
 	obsoletes := convertObsoleteActions(report.Obsoletes)
 
 	opts := apply.ApplyOpts{
@@ -137,7 +137,7 @@ func splitKey(key string) []string {
 }
 
 // convertCreateActions converts impact create actions to apply actions.
-func convertCreateActions(creates []impact.Action, modules map[string]impact.NodeMap, store mapping.Store) []apply.Action {
+func convertCreateActions(creates []impact.Action, modules map[string]impact.NodeMap, contents map[string]ContentMap, store mapping.Store) []apply.Action {
 	actions := make([]apply.Action, 0, len(creates))
 	for _, c := range creates {
 		name := resolveNodeName(modules, c.Module, c.Node)
@@ -152,19 +152,45 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 			specNID = deriveSpecNodeID(c.Module, c.Node, c.NodeType)
 		}
 
+		// Resolve content file from the spec graph.
+		contentFile := ""
+		if c.OldBeadID != "" {
+			if rec, err := store.GetByBead(c.OldBeadID); err == nil {
+				contentFile = rec.ContentFile
+			}
+		}
+		if contentFile == "" {
+			contentFile = resolveContentFile(contents, c.Module, c.Node)
+		}
+
 		actions = append(actions, apply.Action{
-			Module:     c.Module,
-			Node:       name,
-			NodeType:   c.NodeType,
-			SpecHash:   c.SpecHash,
-			SpecNodeID: specNID,
-			OldBeadID:  c.OldBeadID,
-			DepBeadIDs: c.DepBeadIDs,
-			Priority:   -1,
-			Reason:     c.Reason,
+			Module:      c.Module,
+			Node:        name,
+			NodeType:    c.NodeType,
+			SpecHash:    c.SpecHash,
+			SpecNodeID:  specNID,
+			ContentFile: contentFile,
+			OldBeadID:   c.OldBeadID,
+			DepBeadIDs:  c.DepBeadIDs,
+			Priority:    -1,
+			Reason:      c.Reason,
 		})
 	}
 	return actions
+}
+
+// resolveContentFile looks up the content file path for a node from the ContentMap.
+func resolveContentFile(contents map[string]ContentMap, module, node string) string {
+	parts := splitKey(node)
+	if len(parts) >= 4 && parts[0] == "module" {
+		key := parts[2] + "/" + parts[3]
+		if cm, ok := contents[module]; ok {
+			if cf, ok := cm[key]; ok {
+				return cf
+			}
+		}
+	}
+	return ""
 }
 
 // deriveSpecNodeID constructs a SpecNodeID from a merkle key path or falls back

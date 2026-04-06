@@ -224,19 +224,25 @@ type projectJSON struct {
 	} `json:"modules"`
 }
 
+// ContentMap maps node keys (e.g., "component/1") to content file paths
+// (e.g., "spec/render/arch_spec_reader.md") within a module.
+type ContentMap map[string]string
+
 // buildNodeMaps reads project.json and each module's module.json to build
 // a map of module name → NodeMap for resolving spec-ID keys to human-readable names.
-func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
+// Also returns a map of module name → ContentMap for resolving content file paths.
+func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]ContentMap, error) {
 	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
 	if err != nil {
-		return nil, fmt.Errorf("read project.json: %w", err)
+		return nil, nil, fmt.Errorf("read project.json: %w", err)
 	}
 	var proj projectJSON
 	if err := json.Unmarshal(projData, &proj); err != nil {
-		return nil, fmt.Errorf("parse project.json: %w", err)
+		return nil, nil, fmt.Errorf("parse project.json: %w", err)
 	}
 
 	modules := map[string]impact.NodeMap{}
+	contents := map[string]ContentMap{}
 	for _, m := range proj.Modules {
 		modPath := filepath.Join(specDir, m.Path, "module.json")
 		data, err := os.ReadFile(modPath)
@@ -245,22 +251,28 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
 		}
 		var mod moduleJSON
 		if err := json.Unmarshal(data, &mod); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", modPath, err)
+			return nil, nil, fmt.Errorf("parse %s: %w", modPath, err)
 		}
 
 		nm := impact.NodeMap{}
+		cm := ContentMap{}
 		for _, c := range mod.Components {
+			key := "component/" + strconv.Itoa(c.ID)
 			if c.Content != "" {
-				nm["component/"+strconv.Itoa(c.ID)] = c.Name
+				nm[key] = c.Name
+				cm[key] = filepath.Join("spec", m.Path, c.Content)
 			}
 		}
 		for _, s := range mod.ImplSections {
+			key := "impl_section/" + strconv.Itoa(s.ID)
 			if s.Content != "" {
-				nm["impl_section/"+strconv.Itoa(s.ID)] = s.Name
+				nm[key] = s.Name
+				cm[key] = filepath.Join("spec", m.Path, s.Content)
 			}
 		}
 
 		modules[m.Name] = nm
+		contents[m.Name] = cm
 	}
-	return modules, nil
+	return modules, contents, nil
 }
