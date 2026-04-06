@@ -72,13 +72,13 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: read mapping records: %w", err)
 	}
 
-	// Translate merkle paths (module/<id>/<type>/<id>) to bead-map format
-	// (module_name/<type>/<id>) so NodeMatcher's direct comparison works.
-	for i := range changes {
-		changes[i].Change.Path = toSpecNodeID(changes[i])
-	}
+	// Build a reverse index: bead-map spec_node_id → records, keyed by
+	// the merkle path format so NodeMatcher can match directly.
+	// This avoids mutating Change.Path (which apply's deriveSpecNodeID needs
+	// in original merkle format).
+	merkleIndex := buildMerkleIndex(records, changes)
 
-	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
+	matches, unmatched, orphaned := impact.MatchNodes(changes, merkleIndex)
 	actions := impact.ClassifyActions(matches, unmatched, orphaned)
 
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
@@ -102,6 +102,34 @@ func toSpecNodeID(c merkle.ClassifiedChange) string {
 		return "project/" + parts[1]
 	}
 	return c.Change.Path
+}
+
+// buildMerkleIndex re-keys bead-map records from their spec_node_id format
+// (moduleName/nodeType/nodeID) to the merkle path format (module/moduleID/nodeType/nodeID)
+// so that NodeMatcher's direct string comparison works against Change.Path.
+func buildMerkleIndex(records []mapping.Record, changes []merkle.ClassifiedChange) []mapping.Record {
+	// Build module name → merkle ID prefix mapping from the changes.
+	moduleIDs := map[string]string{}
+	for _, c := range changes {
+		parts := splitKey(c.Change.Path)
+		if len(parts) >= 2 && parts[0] == "module" && c.Module != "" {
+			moduleIDs[c.Module] = parts[1] // e.g., "render" → "7"
+		}
+	}
+
+	// Re-key each record's SpecNodeID to merkle format.
+	rekeyed := make([]mapping.Record, len(records))
+	copy(rekeyed, records)
+	for i, r := range rekeyed {
+		parts := splitKey(r.SpecNodeID)
+		if len(parts) == 3 {
+			// "schema/component/1" → "module/<moduleID>/component/1"
+			if modID, ok := moduleIDs[parts[0]]; ok {
+				rekeyed[i].SpecNodeID = "module/" + modID + "/" + parts[1] + "/" + parts[2]
+			}
+		}
+	}
+	return rekeyed
 }
 
 // parseDiffJSON converts the JSON output of `spex diff --json` into
