@@ -72,6 +72,12 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: read mapping records: %w", err)
 	}
 
+	// Translate merkle paths (module/<id>/<type>/<id>) to bead-map format
+	// (module_name/<type>/<id>) so NodeMatcher's direct comparison works.
+	for i := range changes {
+		changes[i].Change.Path = toSpecNodeID(changes[i])
+	}
+
 	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
 	actions := impact.ClassifyActions(matches, unmatched, orphaned)
 
@@ -79,6 +85,23 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: %w", err)
 	}
 	return nil
+}
+
+// toSpecNodeID translates a merkle key (module/<moduleID>/<nodeType>/<nodeID>)
+// to a bead-map spec_node_id (moduleName/<nodeType>/<nodeID>), using the
+// module name already carried in the ClassifiedChange.
+func toSpecNodeID(c merkle.ClassifiedChange) string {
+	parts := splitKey(c.Change.Path)
+	if len(parts) >= 4 && parts[0] == "module" {
+		return c.Module + "/" + parts[2] + "/" + parts[3]
+	}
+	if len(parts) >= 2 && parts[0] == "module" {
+		return c.Module + "/module"
+	}
+	if len(parts) >= 2 && parts[0] == "project" {
+		return "project/" + parts[1]
+	}
+	return c.Change.Path
 }
 
 // parseDiffJSON converts the JSON output of `spex diff --json` into
