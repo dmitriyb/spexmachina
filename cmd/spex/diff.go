@@ -66,12 +66,13 @@ type diffOutput struct {
 }
 
 type diffChange struct {
-	Path    string `json:"path"`
-	Type    string `json:"type"`
-	Impact  string `json:"impact"`
-	Module  string `json:"module"`
-	OldHash string `json:"old_hash,omitempty"`
-	NewHash string `json:"new_hash,omitempty"`
+	Path     string `json:"path"`
+	Type     string `json:"type"`
+	Impact   string `json:"impact"`
+	Module   string `json:"module"`
+	NodeType string `json:"node_type,omitempty"`
+	OldHash  string `json:"old_hash,omitempty"`
+	NewHash  string `json:"new_hash,omitempty"`
 }
 
 type diffSummary struct {
@@ -96,12 +97,13 @@ func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffErr
 
 	for i, cc := range classified {
 		out.Changes[i] = diffChange{
-			Path:    cc.Path,
-			Type:    cc.Type.String(),
-			Impact:  cc.Impact.String(),
-			Module:  cc.Module,
-			OldHash: cc.OldHash,
-			NewHash: cc.NewHash,
+			Path:     cc.Path,
+			Type:     cc.Type.String(),
+			Impact:   cc.Impact.String(),
+			Module:   cc.Module,
+			NodeType: cc.NodeType,
+			OldHash:  cc.OldHash,
+			NewHash:  cc.NewHash,
 		}
 		out.Summary.ByType[cc.Type.String()]++
 		out.Summary.ByImpact[cc.Impact.String()]++

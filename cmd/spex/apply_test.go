@@ -61,7 +61,7 @@ func TestREQ4_ConvertCreateActions(t *testing.T) {
 		{Type: "create", Module: "1", Node: "module/1/component/1", NodeType: "component", SpecHash: "abc123"},
 	}
 
-	actions := convertCreateActions(creates, modules, &noopStore{})
+	actions := convertCreateActions(creates, modules, nil, &noopStore{})
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -91,7 +91,7 @@ func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
 		{Type: "create", Module: "1", Node: "module/1/component/5", NodeType: "component", SpecHash: "xyz"},
 	}
 
-	actions := convertCreateActions(creates, modules, &noopStore{})
+	actions := convertCreateActions(creates, modules, nil, &noopStore{})
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -116,7 +116,7 @@ func TestREQ4_ConvertCreateActions_OldBeadIDLookup(t *testing.T) {
 		{Type: "create", Module: "validator", Node: "ContentResolver", NodeType: "component", OldBeadID: "old-bead-1", SpecHash: "h1"},
 	}
 
-	actions := convertCreateActions(creates, modules, store)
+	actions := convertCreateActions(creates, modules, nil, store)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))

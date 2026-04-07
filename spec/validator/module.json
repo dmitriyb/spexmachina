@@ -103,6 +103,13 @@
       "title": "Requirement coverage validation",
       "preq_id": 1,
       "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors."
+    },
+    {
+      "id": 15,
+      "type": "functional",
+      "title": "Validate sections and coupled modules",
+      "preq_id": 15,
+      "description": "Validate the sections array: unique IDs, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/<module-path>/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
     }
   ],
   "components": [
@@ -155,7 +162,7 @@
       "description": "CLI entry point for spex validate. Parses flags, wires all checkers through ErrorReporter, exits 0/1.",
       "content": "arch_validate_command.md",
       "implements": [7, 8],
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10]
+      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
     },
     {
       "id": 8,
@@ -177,6 +184,14 @@
       "description": "Checks that every project requirement is derived into at least one module requirement (preq_id), and every module requirement is implemented by at least one component (implements). Reports uncovered requirements as validation errors.",
       "content": "arch_requirement_coverage_checker.md",
       "implements": [14]
+    },
+    {
+      "id": 11,
+      "name": "CoupledSectionChecker",
+      "description": "Validates sections array generically: envelope validation (ID uniqueness, required fields), coupled module enforcement (matching module must exist, bidirectional), and schema delegation (load section.schema.json from coupled module, validate section content against it).",
+      "content": "arch_coupled_section_checker.md",
+      "implements": [15],
+      "uses": [1]
     }
   ],
   "impl_sections": [
@@ -239,6 +254,12 @@
       "name": "Requirement coverage check implementation",
       "content": "impl_requirement_coverage.md",
       "describes": [10]
+    },
+    {
+      "id": 11,
+      "name": "Coupled section validation implementation",
+      "content": "impl_coupled_section_validation.md",
+      "describes": [11]
     }
   ],
   "data_flows": [
@@ -247,7 +268,7 @@
       "name": "Validation pipeline",
       "description": "Spec directory flows through schema check, content check, DAG check, orphan check, and ID check. All errors are aggregated into a single structured report.",
       "content": "flow_validation_pipeline.md",
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10]
+      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
     }
   ],
   "test_sections": [
@@ -274,6 +295,12 @@
       "name": "Validation pipeline tests",
       "content": "test_validation_pipeline.md",
       "describes": [6, 7]
+    },
+    {
+      "id": 5,
+      "name": "Coupled section tests",
+      "content": "test_coupled_sections.md",
+      "describes": [11]
     }
   ]
 }

@@ -25,3 +25,27 @@ Requirements, components, impl_sections, and data_flows are arrays (not maps) in
 ### Numeric IDs
 
 IDs are integers starting from 1 (`minimum: 1`). The schema enforces the minimum but not uniqueness within an array — uniqueness is a structural constraint enforced by the validator module.
+
+### Sections array design
+
+The `sections` array in project.schema.json uses a different `additionalProperties` strategy than the rest of the schema. Each section item requires envelope fields (`id`, `name`, `type`) but sets `additionalProperties: true` (the default) to allow freeform content. This is deliberate:
+
+- The envelope validates structurally (spex core knows about id/name/type)
+- The content validates semantically (the coupled module's `section.schema.json` knows about the domain-specific fields)
+
+The section `$def` defines only the envelope:
+```json
+"section": {
+  "type": "object",
+  "required": ["id", "name", "type"],
+  "properties": {
+    "id": { "type": "integer", "minimum": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "type": { "type": "string", "minLength": 1 }
+  }
+}
+```
+
+### section.schema.json convention
+
+The convention that coupled modules provide `section.schema.json` is a file-system contract, not a JSON Schema constraint. The project schema cannot express "if type == coupled, then a file must exist at a certain path." This cross-cutting validation is handled by the validator module's CoupledSectionChecker, not by JSON Schema itself.

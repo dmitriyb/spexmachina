@@ -91,8 +91,8 @@ func TestFR3_S2_ClassifyActions_ModifiedUnmatched(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "module/7/impl_section/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "impl_section"},
-				Impact: merkle.ImplOnly,
+				Change: merkle.Change{Path: "module/7/component/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
+				Impact: merkle.ArchImpl,
 				Module: "render",
 			},
 		},
@@ -288,6 +288,25 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 				t.Error("want both obsolete and create regardless of impact level")
 			}
 		})
+	}
+}
+
+// --- Non-bead node types are filtered ---
+
+func TestFR3_ClassifyActions_NonBeadTypesFiltered(t *testing.T) {
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: "module/7/impl_section/1", Type: merkle.Added, NewHash: "aaa", NodeType: "impl_section"},
+			Impact: merkle.ImplOnly, Module: "render",
+		}},
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: "module/7/data_flow/1", Type: merkle.Added, NewHash: "bbb", NodeType: "data_flow"},
+			Impact: merkle.ImplOnly, Module: "render",
+		}},
+	}
+	actions := ClassifyActions(nil, unmatched, nil)
+	if len(actions) != 0 {
+		t.Errorf("want 0 actions for non-bead types, got %d: %+v", len(actions), actions)
 	}
 }
 

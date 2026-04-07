@@ -40,6 +40,32 @@ type GraphEdge struct {
 }
 ```
 
+## Sections
+
+Section nodes are added after the project node and before module nodes:
+
+```go
+for _, section := range project.Sections {
+    node := GraphNode{
+        ID:   fmt.Sprintf("section:%s", section.Name),
+        Type: "section",
+        Name: section.Name,
+    }
+    // Include freeform content from raw JSON
+    nodes = append(nodes, node)
+
+    if section.Type == "coupled" {
+        edges = append(edges, GraphEdge{
+            From: node.ID,
+            To:   fmt.Sprintf("module:%s", section.Name),
+            Type: "coupled",
+        })
+    }
+}
+```
+
+Section nodes include all freeform content fields from the raw section JSON, making the JSON output self-contained for section content as well.
+
 ## Content Inclusion
 
 The `content` field on nodes contains the full markdown content (inlined, not the file path). This makes the JSON self-contained — consumers don't need filesystem access.

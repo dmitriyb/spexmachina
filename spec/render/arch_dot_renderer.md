@@ -36,6 +36,20 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error
 | describes | solid arrow (green) |
 | preq_id | dashed arrow (blue) |
 
+## Sections
+
+Section nodes are project-level nodes rendered outside any module subgraph. Each section gets a distinct shape (e.g., `shape=tab`) to differentiate from other node types.
+
+For coupled sections, a coupling edge connects the section node to its matching module node, showing the structural relationship.
+
+| Spec Node | DOT Shape | Color |
+|-----------|-----------|-------|
+| Section | tab | light pink |
+
+| Spec Edge | DOT Style |
+|-----------|-----------|
+| coupled (section → module) | bold solid arrow |
+
 ## Subgraphs
 
 Each module is rendered as a DOT subgraph (cluster). This visually groups module contents together.

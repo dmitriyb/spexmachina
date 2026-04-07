@@ -301,3 +301,66 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - MarkdownRenderer: produces `# <project>` and `## Module: <name>` with no subsections
 - DOTRenderer: produces a digraph with one subgraph containing one module node and no edges
 - JSONRenderer: produces nodes array with project node and one module node, empty edges array
+
+## Sections Rendering
+
+### SM1: Markdown renders sections after requirements
+
+**Given** a spec with a `sections` array containing one coupled section named "delivery" with versioning, artifacts, and channels content. The coupled module "delivery" exists.
+
+**When** `RenderMarkdown(spec, &buf)` is called.
+
+**Then:**
+- A `## Sections` heading appears after project requirements and before module sections
+- Under it, `### delivery` heading with the section type noted (e.g., "(coupled)")
+- The section's freeform content is rendered: versioning scheme, artifacts list, channels list
+- Content from the coupled module (components, impl_sections) is NOT duplicated here — it appears in the module's own `## Module: delivery` section
+
+### SM2: DOT renders section nodes and coupling edges
+
+**Given** a spec with a coupled "delivery" section and a delivery module.
+
+**When** `RenderDOT(spec, &buf)` is called.
+
+**Then:**
+- A section node `section_1` appears with a distinct shape (e.g., `shape=tab` or `shape=house`) and label "delivery"
+- An edge from `section_1` to the delivery module node represents the coupling relationship
+- The section node is outside any module subgraph (it's a project-level node)
+
+### SM3: JSON includes section nodes and coupling edges
+
+**Given** a spec with a coupled "delivery" section.
+
+**When** `RenderJSON(spec, &buf)` is called.
+
+**Then:**
+- The nodes array contains an entry with `"id": "section:delivery"`, `"type": "section"`, `"name": "delivery"`
+- The section node includes the freeform content fields (versioning, artifacts, channels)
+- The edges array contains `{"from": "section:delivery", "to": "module:delivery", "type": "coupled"}`
+
+### SM4: Multiple sections rendered in declaration order
+
+**Given** a spec with two sections: "delivery" (id: 1) and "performance" (id: 2).
+
+**When** any renderer is called.
+
+**Then:** Sections appear in declaration order (delivery before performance). The ordering follows the `sections` array order in project.json.
+
+### SM5: Non-coupled section rendered without module link
+
+**Given** a spec with a section `{ id: 1, name: "notes", type: "informational" }` and no module named "notes".
+
+**When** any renderer is called.
+
+**Then:**
+- MarkdownRenderer: renders the section heading and any content fields, no module cross-reference
+- DOTRenderer: section node exists with no coupling edge
+- JSONRenderer: section node exists with no coupling edge
+
+### SM6: Spec with no sections array omits sections heading
+
+**Given** a spec with no `sections` field in project.json.
+
+**When** `RenderMarkdown(spec, &buf)` is called.
+
+**Then:** No `## Sections` heading appears. The output is identical to current behavior for specs without sections.

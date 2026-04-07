@@ -79,8 +79,22 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// Format mismatch between merkle paths and mapping spec_node_id
-	// prevents matching here. Tracked separately from this bead.
+	// Merkle paths (module/1/component/1) are translated to bead-map format
+	// (alpha/component/1) before matching. Verify the match produced an
+	// obsolete+create pair for the existing bead.
+	if report.Summary.ObsoleteCount != 1 {
+		t.Errorf("want 1 obsolete, got %d", report.Summary.ObsoleteCount)
+	}
+	if report.Summary.CreateCount < 1 {
+		t.Errorf("want at least 1 create, got %d", report.Summary.CreateCount)
+	}
+	// Check that the create has the old bead ID as lineage
+	for _, c := range report.Creates {
+		if c.OldBeadID == "bead-1" {
+			return // found the replacement create
+		}
+	}
+	t.Error("want create with old_bead_id=bead-1, not found")
 }
 
 func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {

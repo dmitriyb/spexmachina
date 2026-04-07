@@ -72,7 +72,13 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: read mapping records: %w", err)
 	}
 
-	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
+	// Build a reverse index: bead-map spec_node_id → records, keyed by
+	// the merkle path format so NodeMatcher can match directly.
+	// This avoids mutating Change.Path (which apply's deriveSpecNodeID needs
+	// in original merkle format).
+	merkleIndex := buildMerkleIndex(records, changes)
+
+	matches, unmatched, orphaned := impact.MatchNodes(changes, merkleIndex)
 	actions := impact.ClassifyActions(matches, unmatched, orphaned)
 
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
@@ -81,17 +87,46 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// buildMerkleIndex re-keys bead-map records from their spec_node_id format
+// (moduleName/nodeType/nodeID) to the merkle path format (module/moduleID/nodeType/nodeID)
+// so that NodeMatcher's direct string comparison works against Change.Path.
+func buildMerkleIndex(records []mapping.Record, changes []merkle.ClassifiedChange) []mapping.Record {
+	// Build module name → merkle ID prefix mapping from the changes.
+	moduleIDs := map[string]string{}
+	for _, c := range changes {
+		parts := splitKey(c.Change.Path)
+		if len(parts) >= 2 && parts[0] == "module" && c.Module != "" {
+			moduleIDs[c.Module] = parts[1] // e.g., "render" → "7"
+		}
+	}
+
+	// Re-key each record's SpecNodeID to merkle format.
+	rekeyed := make([]mapping.Record, len(records))
+	copy(rekeyed, records)
+	for i, r := range rekeyed {
+		parts := splitKey(r.SpecNodeID)
+		if len(parts) == 3 {
+			// "schema/component/1" → "module/<moduleID>/component/1"
+			if modID, ok := moduleIDs[parts[0]]; ok {
+				rekeyed[i].SpecNodeID = "module/" + modID + "/" + parts[1] + "/" + parts[2]
+			}
+		}
+	}
+	return rekeyed
+}
+
 // parseDiffJSON converts the JSON output of `spex diff --json` into
 // []merkle.ClassifiedChange and []merkle.DiffError for the impact pipeline.
 func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, error) {
 	var raw struct {
 		Changes []struct {
-			Path    string `json:"path"`
-			Type    string `json:"type"`
-			Impact  string `json:"impact"`
-			Module  string `json:"module"`
-			OldHash string `json:"old_hash"`
-			NewHash string `json:"new_hash"`
+			Path     string `json:"path"`
+			Type     string `json:"type"`
+			Impact   string `json:"impact"`
+			Module   string `json:"module"`
+			NodeType string `json:"node_type"`
+			OldHash  string `json:"old_hash"`
+			NewHash  string `json:"new_hash"`
 		} `json:"changes"`
 		Errors []merkle.DiffError `json:"errors"`
 	}
@@ -111,10 +146,11 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 		}
 		changes[i] = merkle.ClassifiedChange{
 			Change: merkle.Change{
-				Path:    c.Path,
-				Type:    ct,
-				OldHash: c.OldHash,
-				NewHash: c.NewHash,
+				Path:     c.Path,
+				Type:     ct,
+				NodeType: c.NodeType,
+				OldHash:  c.OldHash,
+				NewHash:  c.NewHash,
 			},
 			Impact: il,
 			Module: c.Module,
@@ -171,19 +207,25 @@ type projectJSON struct {
 	} `json:"modules"`
 }
 
+// ContentMap maps node keys (e.g., "component/1") to content file paths
+// (e.g., "spec/render/arch_spec_reader.md") within a module.
+type ContentMap map[string]string
+
 // buildNodeMaps reads project.json and each module's module.json to build
 // a map of module name → NodeMap for resolving spec-ID keys to human-readable names.
-func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
+// Also returns a map of module name → ContentMap for resolving content file paths.
+func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]ContentMap, error) {
 	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
 	if err != nil {
-		return nil, fmt.Errorf("read project.json: %w", err)
+		return nil, nil, fmt.Errorf("read project.json: %w", err)
 	}
 	var proj projectJSON
 	if err := json.Unmarshal(projData, &proj); err != nil {
-		return nil, fmt.Errorf("parse project.json: %w", err)
+		return nil, nil, fmt.Errorf("parse project.json: %w", err)
 	}
 
 	modules := map[string]impact.NodeMap{}
+	contents := map[string]ContentMap{}
 	for _, m := range proj.Modules {
 		modPath := filepath.Join(specDir, m.Path, "module.json")
 		data, err := os.ReadFile(modPath)
@@ -192,22 +234,28 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, error) {
 		}
 		var mod moduleJSON
 		if err := json.Unmarshal(data, &mod); err != nil {
-			return nil, fmt.Errorf("parse %s: %w", modPath, err)
+			return nil, nil, fmt.Errorf("parse %s: %w", modPath, err)
 		}
 
 		nm := impact.NodeMap{}
+		cm := ContentMap{}
 		for _, c := range mod.Components {
+			key := "component/" + strconv.Itoa(c.ID)
 			if c.Content != "" {
-				nm["component/"+strconv.Itoa(c.ID)] = c.Name
+				nm[key] = c.Name
+				cm[key] = filepath.Join("spec", m.Path, c.Content)
 			}
 		}
 		for _, s := range mod.ImplSections {
+			key := "impl_section/" + strconv.Itoa(s.ID)
 			if s.Content != "" {
-				nm["impl_section/"+strconv.Itoa(s.ID)] = s.Name
+				nm[key] = s.Name
+				cm[key] = filepath.Join("spec", m.Path, s.Content)
 			}
 		}
 
 		modules[m.Name] = nm
+		contents[m.Name] = cm
 	}
-	return modules, nil
+	return modules, contents, nil
 }

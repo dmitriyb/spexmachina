@@ -50,6 +50,20 @@
       "title": "Define bead-map schema",
       "preq_id": 3,
       "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional bead_status). spec_node_id format validated via pattern."
+    },
+    {
+      "id": 8,
+      "type": "functional",
+      "title": "Define sections array in project schema",
+      "preq_id": 15,
+      "description": "Add a sections array to project.json schema. Each entry requires id (integer >= 1), name (string), type (string). Additional properties allowed on section entries (freeform content validated externally by coupled module schemas)."
+    },
+    {
+      "id": 9,
+      "type": "functional",
+      "title": "Define section.schema.json convention",
+      "preq_id": 15,
+      "description": "Document and enforce the convention that coupled modules provide a section.schema.json in their spec directory. This file is a standard JSON Schema that validates the freeform content of the module's project-level section."
     }
   ],
   "components": [
@@ -58,7 +72,7 @@
       "name": "ProjectSchema",
       "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and milestones.",
       "content": "arch_project_schema.md",
-      "implements": [1, 4, 6]
+      "implements": [1, 4, 6, 8, 9]
     },
     {
       "id": 2,
