@@ -8,6 +8,8 @@ Incremental integers break under parallel development. When two branches indepen
 
 The root cause: integers are order-dependent. They require coordination (strict sequential work) to avoid collisions. This is incompatible with parallel branches.
 
+A second problem surfaced during the first real pipeline run (PR #99): the dual key format between merkle tree keys (`module/2/component/1`) and bead-map spec_node_ids (`validator/component/1`) caused five pipeline bugs (spexmachina-6iv, cmp, ndl, sgr, 15v). The impact command rekeys bead-map records to merkle format via `buildMerkleIndex()`, then apply converts back via `deriveSpecNodeID()`. This translation layer is fragile — spec fixtures in `test_bead_matching.md` and `impl_node_matching.md` conflate the two formats, and apply tests use a mock store that skips schema validation, so format mismatches pass all tests. Additionally, test_plan scenario 2 ("Cross-module mapping integration", modules 3, 4, 5, 9) was never implemented — no end-to-end test exercises the full diff → impact → apply pipeline. Identity hashes eliminate the dual format entirely: the merkle tree and bead-map use the same identity hash as the key, so no rekeying is needed.
+
 ### Two hashes, two purposes
 
 The fix separates two concerns that are currently conflated:
@@ -102,12 +104,15 @@ In `spec/impact/module.json`:
 
 - Update ActionClassifier (component 3) content: `ResolveDeps()` uses identity hashes instead of `fmt.Sprintf("%s/component/%d", ...)`.
 - `nodeTypeFromSpecNodeID()` — identity hashes don't embed the node type. The node type must be carried separately (already available in `ClassifiedChange.NodeType` and `Record.BeadType`).
+- Remove `buildMerkleIndex()` rekeying in `cmd/spex/impact.go` — merkle diff keys and bead-map spec_node_ids are both identity hashes, so `MatchNodes` does direct lookup with no translation.
+- Update `spec/impact/test_bead_matching.md` (test_section 1) and `spec/impact/impl_node_matching.md` (impl_section 2): replace all `module/N/type/id` examples with identity hash format. The current fixtures conflate merkle keys with spec_node_ids; after migration both are identity hashes.
 
 ### 7. Apply module changes
 
 In `spec/apply/module.json`:
 
-- Update `deriveSpecNodeID()`: use identity hashes directly from the diff change or mapping record instead of parsing merkle keys to extract integer IDs.
+- Remove `deriveSpecNodeID()` in `cmd/spex/apply.go` — no longer needed since merkle diff already carries the identity hash that matches the bead-map directly.
+- Update `spec/apply/test_apply_command.md` (test_section 3): add scenario for test_plan scenario 2 end-to-end integration test (see section 13).
 
 ### 8. Map module changes
 
@@ -147,6 +152,35 @@ A `spex migrate-ids` command (or standalone script) that:
 
 **`/spec` skill:** Update the IDs section from "All IDs are integers >= 1, unique within their array" to "All IDs are 12-character hex identity hashes computed from the node's module, type, and name. IDs are computed automatically — never assigned manually."
 
+### 13. Cross-module integration test (test_plan scenario 2)
+
+Implement `spec/project.json` test_plan scenario 2 ("Cross-module mapping integration", modules 3, 4, 5, 9) as an end-to-end integration test. This test validates the identity hash migration across the full pipeline and closes the test gap that allowed five pipeline bugs to reach production.
+
+**Sim project fixture** (`cmd/spex/testdata/sim/`):
+
+- `spec/project.json` with 2 modules (`alpha`, `beta`) where `beta` requires `alpha`
+- `spec/alpha/module.json` with 1 component and 1 impl_section
+- `spec/beta/module.json` with 1 component that `uses` alpha's component (cross-module dependency)
+- Markdown content leaves for each node
+- `.bead-map.json` with pre-existing mapping records using identity hash spec_node_ids
+- `.snapshot.json` merkle snapshot matching the initial state
+
+All IDs in the sim project use identity hashes — no legacy integer IDs.
+
+**Test mechanics** (`cmd/spex/pipeline_integration_test.go`):
+
+1. Copy sim fixture to a temp directory
+2. Modify a markdown content leaf to create a real change
+3. Build merkle tree and diff against snapshot (real `merkle` package)
+4. Run impact analysis with real `mapping.NewFileStore()` — schema validation happens on every load, catching any format mismatches that mock stores would miss
+5. Verify impact report actions reference identity hashes (not merkle keys or integer-based paths)
+6. Run apply with mock bead CLI but real mapping store
+7. Verify new mapping records pass `bead-map.schema.json` validation
+8. Verify updated snapshot reflects the change
+9. Run the pipeline a second time with identical inputs — assert deterministic output
+
+**What this catches**: The mock store in apply tests (`apply/bead_creator_test.go`) accepts any `mapping.Record` without schema validation. The real `fileStore` validates against `bead-map.schema.json` on every load, checks duplicate `bead_id` and `spec_node_id`, and uses atomic write-rename. The integration test exercises the real store, so any format mismatch between pipeline stages fails immediately.
+
 ## Impact expectation
 
 This is a cross-cutting change affecting all modules. However, the conceptual change is small — integer → string — and the pipeline logic is unchanged.
@@ -155,19 +189,22 @@ This is a cross-cutting change affecting all modules. However, the conceptual ch
 - Schema: ProjectSchema, ModuleSchema, SchemaLoader content + requirement descriptions
 - Validator: IDValidator content + requirement descriptions
 - Merkle: TreeBuilder content + requirement 7 description
-- Impact: ActionClassifier content
-- Apply: BeadCreator / ApplyCommand content
+- Impact: ActionClassifier content, test_bead_matching.md fixtures, impl_node_matching.md examples
+- Apply: ApplyCommand content, test_apply_command.md (new E2E scenario)
 - Map: MappingStore, ContextResolver content
 
-**New beads:** Beads for each updated component's content leaf (via normal obsolete+create pipeline). Plus a bead for the migration tooling.
+**New beads:** Beads for each updated component's content leaf (via normal obsolete+create pipeline). Plus beads for: migration tooling, sim project fixture, integration test implementation.
 
 **Modified beads:** None structurally — only content leaf updates.
 
 **Closed beads:** None.
 
-**Estimated scope:** 4-5 sessions:
+**Resolved side effects:** The rekeying layer (`buildMerkleIndex` in impact.go, `deriveSpecNodeID` in apply.go) is deleted — both functions exist solely to translate between the dual key formats that identity hashes eliminate.
+
+**Estimated scope:** 5-6 sessions:
 - Session 1: Schema changes (JSON schemas, schema.go structs, IdentityHash utility)
 - Session 2: Merkle TreeBuilder + Validator IDValidator updates
-- Session 3: Impact + Apply + Map updates
+- Session 3: Impact + Apply + Map updates (including rekeying removal)
 - Session 4: Migration script + run migration + validate + update bead-map + save snapshot
-- Session 5: Integration testing across the full pipeline
+- Session 5: Sim project fixture + integration test (test_plan scenario 2) with real fileStore and schema validation
+- Session 6: Update spec fixtures (test_bead_matching.md, impl_node_matching.md, test_apply_command.md) to reflect identity hash format
