@@ -67,6 +67,11 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		nodeType := u.Change.NodeType
 		node := u.Change.Path
 
+		// Only bead-trackable node types produce actions.
+		if nodeType != "module" && nodeType != "component" && nodeType != "test_section" {
+			continue
+		}
+
 		switch u.Change.Type {
 		case merkle.Added:
 			actions = append(actions, Action{

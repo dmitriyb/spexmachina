@@ -91,8 +91,8 @@ func TestFR3_S2_ClassifyActions_ModifiedUnmatched(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: "module/7/impl_section/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "impl_section"},
-				Impact: merkle.ImplOnly,
+				Change: merkle.Change{Path: "module/7/component/1", Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
+				Impact: merkle.ArchImpl,
 				Module: "render",
 			},
 		},
