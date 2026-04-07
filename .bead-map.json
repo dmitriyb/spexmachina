@@ -4,7 +4,7 @@
     {
       "id": 1,
       "spec_node_id": "schema/component/1",
-      "bead_id": "spexmachina-zxf",
+      "bead_id": "spexmachina-w6e",
       "bead_type": "task",
       "module": "schema",
       "component": "ProjectSchema",
@@ -394,7 +394,7 @@
     {
       "id": 53,
       "spec_node_id": "render/component/1",
-      "bead_id": "spexmachina-n0w",
+      "bead_id": "spexmachina-rjg",
       "bead_type": "feature",
       "module": "render",
       "component": "SpecReader",
@@ -404,7 +404,7 @@
     {
       "id": 54,
       "spec_node_id": "render/component/2",
-      "bead_id": "spexmachina-4x9",
+      "bead_id": "spexmachina-qpn",
       "bead_type": "feature",
       "module": "render",
       "component": "MarkdownRenderer",
@@ -414,7 +414,7 @@
     {
       "id": 55,
       "spec_node_id": "render/component/3",
-      "bead_id": "spexmachina-pww",
+      "bead_id": "spexmachina-spl",
       "bead_type": "feature",
       "module": "render",
       "component": "DOTRenderer",
@@ -424,7 +424,7 @@
     {
       "id": 56,
       "spec_node_id": "render/component/4",
-      "bead_id": "spexmachina-jzq",
+      "bead_id": "spexmachina-69y",
       "bead_type": "feature",
       "module": "render",
       "component": "JSONRenderer",
@@ -434,7 +434,7 @@
     {
       "id": 57,
       "spec_node_id": "validator/component/11",
-      "bead_id": "spexmachina-jwb",
+      "bead_id": "spexmachina-b17",
       "bead_type": "feature",
       "module": "validator",
       "component": "CoupledSectionChecker",
