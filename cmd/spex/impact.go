@@ -87,23 +87,6 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// toSpecNodeID translates a merkle key (module/<moduleID>/<nodeType>/<nodeID>)
-// to a bead-map spec_node_id (moduleName/<nodeType>/<nodeID>), using the
-// module name already carried in the ClassifiedChange.
-func toSpecNodeID(c merkle.ClassifiedChange) string {
-	parts := splitKey(c.Change.Path)
-	if len(parts) >= 4 && parts[0] == "module" {
-		return c.Module + "/" + parts[2] + "/" + parts[3]
-	}
-	if len(parts) >= 2 && parts[0] == "module" {
-		return c.Module + "/module"
-	}
-	if len(parts) >= 2 && parts[0] == "project" {
-		return "project/" + parts[1]
-	}
-	return c.Change.Path
-}
-
 // buildMerkleIndex re-keys bead-map records from their spec_node_id format
 // (moduleName/nodeType/nodeID) to the merkle path format (module/moduleID/nodeType/nodeID)
 // so that NodeMatcher's direct string comparison works against Change.Path.
