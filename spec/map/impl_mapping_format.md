@@ -10,7 +10,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
   "records": [
     {
       "id": 1,
-      "spec_node_id": "schema/component/1",
+      "spec_node_id": "a1b2c3d4e5f6",
       "bead_id": "abc-001",
       "bead_type": "feature",
       "module": "schema",
@@ -20,7 +20,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
     },
     {
       "id": 2,
-      "spec_node_id": "schema/component/2",
+      "spec_node_id": "0f1e2d3c4b5a",
       "bead_id": "abc-002",
       "bead_type": "feature",
       "module": "schema",
@@ -30,7 +30,7 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
     },
     {
       "id": 3,
-      "spec_node_id": "validator/component/1",
+      "spec_node_id": "9988776655ee",
       "bead_id": "abc-003",
       "bead_type": "feature",
       "module": "validator",
@@ -48,29 +48,27 @@ The mapping file at `spec/.bead-map.json` is a JSON object with a records array:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `next_id` | int | Next auto-increment ID. Monotonically increasing, never reused. |
+| `next_id` | int | Next auto-increment record ID. Monotonically increasing, never reused. Internal to the bead-map only — not part of the spec graph. |
 | `records` | array | All mapping records, sorted by ID. |
 
 ### Record
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | int | Unique record ID, assigned by MappingStore |
-| `spec_node_id` | string | `<module>/<node_type>/<node_id>` — e.g., `"impact/component/3"` |
+| `id` | int | Unique record ID, assigned by MappingStore. Used as the bead label `spex:<id>`. Stays integer because it is internal to the bead-map. |
+| `spec_node_id` | string | The spec node's identity hash (12-char lowercase hex, pattern `^[a-f0-9]{12}$`). Identical to the merkle tree key for the same node. |
 | `bead_id` | string | Bead ID from `br` or `bd` |
-| `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) |
-| `module` | string | Module name (matches `module.json` name) |
+| `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) — carried as a separate field because identity hashes do not embed type information |
+| `module` | string | Module name (matches `module.json` name) — human-readable, for context resolution and debug output |
 | `component` | string | Component or section name (human-readable) |
 | `content_file` | string | Relative path to the spec content file |
-| `spec_hash` | string | Merkle hash of the spec node when the record was created or last updated |
+| `spec_hash` | string | Merkle content hash of the spec node when the record was created or last updated |
 
 ### spec_node_id format
 
-The composite key `<module>/<node_type>/<node_id>` uniquely identifies a spec node:
-- `node_type` is one of: `component`, `impl_section`, `data_flow`, `test_section`
-- `node_id` is the integer ID from module.json
+The `spec_node_id` is the spec node's identity hash, computed once at spec-author time by `schema.IdentityHash(module, type, name)`. It is a 12-character lowercase hex string and matches the pattern `^[a-f0-9]{12}$`.
 
-Examples: `"merkle/component/2"`, `"impact/impl_section/1"`, `"apply/data_flow/1"`
+The merkle tree uses this same hash as its leaf key for the corresponding node, so the impact command can look up changed merkle nodes in the bead-map by the change key directly — no parsing, no rekeying. The `module`, `component`, and `content_file` fields exist alongside `spec_node_id` purely as denormalized human-readable context for tooling output; they are not used as join keys.
 
 ## Design Decisions
 

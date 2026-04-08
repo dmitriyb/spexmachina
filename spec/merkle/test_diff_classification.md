@@ -203,99 +203,101 @@ beta/impl_handler.md     hash=bh1  type=leaf
 
 ## Requirement Leaf Scenarios
 
+In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`, etc. are placeholder constants that the test fixture computes via `schema.IdentityHash` at setup time. They stand in for actual 12-character hex strings so the test descriptions stay readable.
+
 ### R1: Classify requirement change as structural
 
-**Given** changes: `[{Path: "module/1/requirement/2", Type: "modified", NodeType: "requirement", Module: 1}]`
+**Given** changes: `[{Key: REQ2_HASH, Type: "modified", NodeType: "requirement", Module: ALPHA_HASH}]`
 **When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`alpha`
+**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`ALPHA_HASH`
 
 **Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (impact module) skips structural changes, so requirement leaf changes do not produce bead actions.
 
 ### R2: Classify project requirement change as structural
 
-**Given** changes: `[{Path: "project/requirement/1", Type: "modified", NodeType: "requirement", Module: 0}]`
+**Given** changes: `[{Key: PROJ_REQ1_HASH, Type: "modified", NodeType: "requirement", Module: ""}]`
 **When** `Classify(changes)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`""`
 
 ### R3: Requirement leaf added in diff
 
-**Given** a snapshot tree with module alpha containing requirement 1, and a current tree with requirements 1 and 2
+**Given** a snapshot tree with module alpha containing one requirement, and a current tree with one additional requirement (a new identity hash, `REQ2_HASH`)
 **When** `Diff(current, snapshot)` is called
-**Then** `module/1/requirement/2` appears as Type=`added`
+**Then** `REQ2_HASH` appears as Type=`added`
 
 ### R4: Requirement leaf removed in diff
 
-**Given** a snapshot tree with module alpha containing requirements 1 and 2, and a current tree with only requirement 1
+**Given** a snapshot tree with module alpha containing two requirements, and a current tree with only the first
 **When** `Diff(current, snapshot)` is called
-**Then** `module/1/requirement/2` appears as Type=`removed`
+**Then** the removed requirement's identity hash (`REQ2_HASH`) appears as Type=`removed`
 
 ### R5: Requirement description modified in diff
 
-**Given** a snapshot tree where requirement 1 has description "original", and a current tree where requirement 1 has description "updated"
+**Given** a snapshot tree where requirement `REQ1_HASH` has description "original", and a current tree where the same requirement (same identity hash, because the title is unchanged) has description "updated"
 **When** `Diff(current, snapshot)` is called
-**Then** `module/1/requirement/1` appears as Type=`modified` with different OldHash and NewHash
+**Then** `REQ1_HASH` appears as Type=`modified` with different OldHash and NewHash
 
 ## Completeness Checker Scenarios
 
 ### C1: Modified requirement with component leaf changed — no error
 
-**Given** a diff where `module/1/requirement/1` is modified and `module/1/component/1` (which implements requirement 1) is also modified
+**Given** a diff where `REQ1_HASH` is modified and `COMP1_HASH` (whose `implements` array contains `REQ1_HASH`) is also modified
 **When** `CheckCompleteness(changes, specDir)` is called
 **Then** no errors are returned
 
 ### C2: Modified requirement without component leaf changed — error
 
-**Given** a diff where `module/1/requirement/1` is modified but `module/1/component/1` (which implements requirement 1) is NOT in the diff
+**Given** a diff where `REQ1_HASH` is modified but `COMP1_HASH` (which implements it) is NOT in the diff
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned with type `"incomplete_change"`, path `"module/1/requirement/1"`, and related `["module/1/component/1"]`
+**Then** one `DiffError` is returned with type `"incomplete_change"`, path `REQ1_HASH`, and related `[COMP1_HASH]`
 
 ### C3: Added requirement with no implementing component — error
 
-**Given** a diff where `module/1/requirement/3` is added, but no component in module 1 has requirement 3 in its `implements` array
+**Given** a diff where `REQ3_HASH` is added, but no component in alpha has `REQ3_HASH` in its `implements` array
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned indicating requirement 3 is not implemented
+**Then** one `DiffError` is returned indicating the new requirement is not implemented
 
 ### C4: Added requirement with implementing component leaf unchanged — error
 
-**Given** a diff where `module/1/requirement/3` is added, component 2 implements requirement 3, but `module/1/component/2` is NOT in the diff
+**Given** a diff where `REQ3_HASH` is added, `COMP2_HASH` implements it, but `COMP2_HASH` is NOT in the diff
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned for component 2's unchanged content leaf
+**Then** one `DiffError` is returned for the implementing component's unchanged content leaf
 
 ### C5: Removed requirement still referenced by component — error
 
-**Given** a diff where `module/1/requirement/2` is removed, but component 1 in the current module.json still has 2 in its `implements` array
+**Given** a diff where `REQ2_HASH` is removed, but `COMP1_HASH` in the current module.json still has `REQ2_HASH` in its `implements` array
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned indicating component 1 still implements removed requirement 2
+**Then** one `DiffError` is returned indicating `COMP1_HASH` still implements the removed requirement
 
 ### C6: Project requirement changed with no module requirement deriving from it — error
 
-**Given** a diff where `project/requirement/5` is modified, but no module requirement has `preq_id == 5`
+**Given** a diff where `PROJ_REQ5_HASH` is modified, but no module requirement has `preq_id == PROJ_REQ5_HASH`
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned indicating no module requirement derives from project requirement 5
+**Then** one `DiffError` is returned indicating no module requirement derives from the changed project requirement
 
 ### C7: Project requirement changed, module requirement exists, component leaf unchanged — error
 
-**Given** a diff where `project/requirement/1` is modified, module requirement 2 has `preq_id == 1`, component 3 implements module requirement 2, but `module/1/component/3` is NOT in the diff
+**Given** a diff where `PROJ_REQ1_HASH` is modified, module requirement `MOD_REQ2_HASH` has `preq_id == PROJ_REQ1_HASH`, `COMP3_HASH` implements `MOD_REQ2_HASH`, but `COMP3_HASH` is NOT in the diff
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned for component 3's unchanged content leaf
+**Then** one `DiffError` is returned for the implementing component's unchanged content leaf
 
 ### C8: Project requirement changed, full chain complete — no error
 
-**Given** a diff where `project/requirement/1` is modified, module requirement 2 has `preq_id == 1`, component 3 implements module requirement 2, and `module/1/component/3` IS in the diff
+**Given** a diff where `PROJ_REQ1_HASH` is modified, `MOD_REQ2_HASH` derives from it, `COMP3_HASH` implements `MOD_REQ2_HASH`, and `COMP3_HASH` IS in the diff
 **When** `CheckCompleteness(changes, specDir)` is called
 **Then** no errors are returned
 
 ### C9: Meta changed without requirement changes — component edge check
 
-**Given** a diff where `module/1/meta` is modified but no `module/1/requirement/*` nodes changed, and no component content leaves changed
+**Given** a diff where `meta/<ALPHA_HASH>` is modified but no requirement nodes in module alpha changed, and no component content leaves changed
 **When** `CheckCompleteness(changes, specDir)` is called
 **Then** `DiffError`s are returned for each component whose content leaf did not change
 
 ### C10: Multiple requirements changed, partial coverage — errors for uncovered
 
-**Given** a diff where requirements 1 and 2 in module 1 are both modified. Component A implements req 1 and its leaf changed. Component B implements req 2 and its leaf did NOT change.
+**Given** a diff where two requirements in alpha (`REQ1_HASH`, `REQ2_HASH`) are both modified. `COMP_A_HASH` implements `REQ1_HASH` and its leaf changed. `COMP_B_HASH` implements `REQ2_HASH` and its leaf did NOT change.
 **When** `CheckCompleteness(changes, specDir)` is called
-**Then** one `DiffError` is returned for component B only — component A is covered
+**Then** one `DiffError` is returned for `COMP_B_HASH` only — `COMP_A_HASH` is covered
 
 ### C11: No structural or requirement changes — no errors
 

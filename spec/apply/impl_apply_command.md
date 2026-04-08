@@ -7,12 +7,16 @@
 ## Flow
 
 1. Parse flags, read impact report from stdin or file
-2. For each obsolete action: `BeadCloser.Label(action)` — add `spex:obsolete` + `commit:<HEAD>` labels, delete mapping records for removed nodes. Beads stay open.
-3. For each create action (in hierarchy order: epics → features → tasks): `BeadCreator.Create(action)` with type, parent, deps, priority. Old beads are still open, so `--deps blocks:<old-bead-id>` references valid beads.
+2. For each obsolete action: `BeadCloser.Label(action)` — add `spex:obsolete` + `commit:<HEAD>` labels, delete the mapping record for removed nodes (looked up by `action.SpecNodeID`). Beads stay open.
+3. For each create action (in hierarchy order: epics → features → tasks): `BeadCreator.Create(action)` with type, parent, deps, priority. The new mapping record's `spec_node_id` is `action.SpecNodeID` — passed through directly from the impact report without any reconstruction. Old beads are still open, so `--deps blocks:<old-bead-id>` references valid beads.
 4. For each obsolete action: `BeadCloser.Close(action)` — close the labeled beads. Replacements already exist.
 5. Call `ProposalTagger.Tag(allAffected, proposalRef)`
 6. Call `SnapshotSaver.Save(currentTree)`
 7. In dry-run mode, print actions without executing
+
+## No deriveSpecNodeID helper
+
+Earlier versions of this command had a `deriveSpecNodeID(action) string` helper that built the mapping-store key from `action.Module`, `action.NodeType`, and an integer ID parsed from the merkle key. That helper existed only because merkle and the bead-map used different key formats. Both formats are now identity hashes, so the impact report carries `SpecNodeID` directly and the helper is deleted. Any future code path that needs a mapping-store key must use `action.SpecNodeID` rather than re-introducing a derivation step.
 
 ## Creation Ordering
 

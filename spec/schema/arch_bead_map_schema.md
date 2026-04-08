@@ -8,9 +8,17 @@ Defines the JSON Schema for `.bead-map.json`, covering:
 
 - **Envelope**: `next_id` (integer >= 1), `records` (array)
 - **Record fields**: `id`, `spec_node_id`, `bead_id`, `bead_type`, `module`, `component`, `content_file`, `spec_hash` (all required), `bead_status` (optional)
-- **Format constraints**: `spec_node_id` validated by pattern `^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$`
+- **Format constraints**: `spec_node_id` validated by pattern `^[a-f0-9]{12}$` — the same identity hash format used by node IDs in `project.json` and `module.json`. The mapping store and the merkle tree use the same key format, so no rekeying is needed when impact analysis matches changed merkle nodes against existing mapping records.
 
 ## Design Notes
+
+### Single key format across the pipeline
+
+`spec_node_id` is the identity hash of the spec node the record points at. The merkle tree keys its leaves by the same identity hash. This means impact analysis can look up a changed merkle node directly in the mapping store with no key translation. Earlier versions of the schema used the format `<module>/<node_type>/<integer_id>` (e.g. `impact/component/2`) which required rekeying between merkle and mapping; that translation layer was deleted when identity hashes were introduced.
+
+### Internal record `id` stays integer
+
+The record `id` field is still an integer auto-incremented by MappingStore. It is internal to the bead-map file (used to generate the `spex:<record-id>` bead label) and is not referenced from the spec graph, so it does not need to be a hash.
 
 ### No uniqueness in schema
 

@@ -224,11 +224,11 @@ tmp/spec/
 **When** all three checkers run.
 **Then** DAGChecker: zero errors (no edges to form cycles). OrphanDetector: zero warnings (nothing to be orphaned). IDValidator: zero errors (no IDs to duplicate or reference).
 
-### E2: Same numeric ID reused across different array types
+### E2: Identical identity hash collision across different array types is impossible by construction
 
-**Given** alpha has requirement id 1, component id 1, and impl_section id 1. All cross-references are valid.
+**Given** alpha has a requirement, component, and impl_section all named `"Foo"`. Each gets a different identity hash because the type segment differs (`alpha/requirement/Foo` vs `alpha/component/Foo` vs `alpha/impl_section/Foo`).
 **When** `CheckIDs(project, modules)` is called.
-**Then** zero errors. IDs only need to be unique within their own array type, not globally across types.
+**Then** zero errors. The identity hash function takes the node type as a part, so two nodes with the same name in different array types always produce different hashes. Uniqueness is still checked per array (defense in depth against hand-edited collisions), but cross-array collisions cannot occur naturally.
 
 ### E3: Large graph performance
 

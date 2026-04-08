@@ -26,11 +26,11 @@ The "review" action is eliminated. Any spec change to a node with an existing be
 
 After classification, the ActionClassifier resolves spec-graph dependencies for each create action:
 
-1. **Component `uses` edges** (direct only): For each component the created node uses, look up the current bead from the mapping file. If open, add to `DepBeadIDs`.
-2. **Module `requires_module` edges** (transitive): Walk the module dependency graph, collecting open component beads from each required module. Uses cycle detection to handle invalid graphs.
+1. **Component `uses` edges** (direct only): For each component the created node uses, the `uses` array contains identity hashes. Look each hash up directly in the mapping file. If the matched bead is open, add to `DepBeadIDs`.
+2. **Module `requires_module` edges** (transitive): Walk the module dependency graph by identity hash, collecting open component beads from each required module. Uses cycle detection to handle invalid graphs.
 3. **Closed beads are skipped**: If a dependency's bead is closed, the work is done — no edge needed.
 
-This resolves structural dependencies into concrete bead IDs that flow through the impact report to BeadCreator, which passes them as `--deps depends:<bead-id>`.
+This resolves structural dependencies into concrete bead IDs that flow through the impact report to BeadCreator, which passes them as `--deps depends:<bead-id>`. There is no `fmt.Sprintf("%s/component/%d", ...)` reconstruction — the spec-graph edges are already in the form the mapping store accepts.
 
 ## Interface
 
@@ -38,10 +38,11 @@ This resolves structural dependencies into concrete bead IDs that flow through t
 type Action struct {
     Type       string   // "create" or "obsolete"
     BeadID     string   // existing bead ID (for "obsolete"); empty for "create"
-    Module     string   // affected module
-    Node       string   // affected spec node (component/test_section name)
-    NodeType   string   // spec node type (module/component/test_section)
-    SpecHash   string   // current merkle hash (for "create")
+    Module     string   // affected module name (carried alongside the identity hash for human-readable output)
+    Node       string   // affected spec node name (carried alongside the identity hash)
+    NodeType   string   // spec node type (module/component/impl_section/test_section/data_flow)
+    SpecNodeID string   // identity hash of the affected node — the lookup key into the mapping store
+    SpecHash   string   // current merkle content hash (for "create")
     OldBeadID  string   // predecessor bead ID (for "create" replacing an obsoleted bead)
     DepBeadIDs []string // bead IDs this action's bead should depend on (from spec graph)
     Reason     string   // human-readable explanation
@@ -49,6 +50,8 @@ type Action struct {
 
 func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned) []Action
 ```
+
+`NodeType` is carried as a separate field on `ClassifiedChange` and `Action` because identity hashes do not embed the node type — there is no way to tell from `abc123def456` alone whether the node is a component, impl_section, or test_section. The merkle tree records `NodeType` on every leaf when it builds the tree, and that field flows through the diff into impact and apply.
 
 ## Reason Generation
 

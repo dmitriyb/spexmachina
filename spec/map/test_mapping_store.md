@@ -10,13 +10,13 @@
 
 ### Create mapping record
 
-- **Input**: spec_node_id="schema/component/1", bead_id="abc-123", bead_type="feature", module="schema", component="ProjectSchema", content_file="spec/schema/arch_project_schema.md", spec_hash="e3b0c44..."
-- **Expected**: Record is written to `.bead-map.json` with a sequential integer ID. File is valid JSON. Record contains all supplied fields including `bead_type`.
+- **Input**: spec_node_id="a1b2c3d4e5f6" (the identity hash of schema/component/ProjectSchema), bead_id="abc-123", bead_type="feature", module="schema", component="ProjectSchema", content_file="spec/schema/arch_project_schema.md", spec_hash="e3b0c44..."
+- **Expected**: Record is written to `.bead-map.json` with a sequential integer record `id` (the internal auto-increment, used for the `spex:<id>` bead label). The record's `spec_node_id` round-trips as the supplied identity hash. File is valid JSON. Record contains all supplied fields including `bead_type`.
 
 ### Read mapping record by ID
 
-- **Input**: Create a record, then read it back by its integer ID
-- **Expected**: Returned record matches all fields that were written
+- **Input**: Create a record, then read it back by its integer record `id`
+- **Expected**: Returned record matches all fields that were written, including the identity-hash `spec_node_id`
 
 ### Update mapping record
 
