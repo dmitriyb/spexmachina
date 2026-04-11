@@ -3,7 +3,7 @@
   "records": [
     {
       "id": 1,
-      "spec_node_id": "schema/component/1",
+      "spec_node_id": "79946d618829",
       "bead_id": "spexmachina-w6e",
       "bead_type": "task",
       "module": "schema",
@@ -13,7 +13,7 @@
     },
     {
       "id": 2,
-      "spec_node_id": "schema/component/2",
+      "spec_node_id": "78883b84c32d",
       "bead_id": "spexmachina-e8t",
       "bead_type": "task",
       "module": "schema",
@@ -23,7 +23,7 @@
     },
     {
       "id": 3,
-      "spec_node_id": "validator/component/1",
+      "spec_node_id": "651d5315eebf",
       "bead_id": "spexmachina-w3f",
       "bead_type": "task",
       "module": "validator",
@@ -33,7 +33,7 @@
     },
     {
       "id": 4,
-      "spec_node_id": "validator/component/2",
+      "spec_node_id": "5dcca0dab9bd",
       "bead_id": "spexmachina-2dv",
       "bead_type": "task",
       "module": "validator",
@@ -43,7 +43,7 @@
     },
     {
       "id": 5,
-      "spec_node_id": "validator/component/3",
+      "spec_node_id": "c6c770a59d68",
       "bead_id": "spexmachina-3id",
       "bead_type": "task",
       "module": "validator",
@@ -53,7 +53,7 @@
     },
     {
       "id": 6,
-      "spec_node_id": "validator/component/4",
+      "spec_node_id": "bbb1ae43d00d",
       "bead_id": "spexmachina-wei",
       "bead_type": "task",
       "module": "validator",
@@ -63,7 +63,7 @@
     },
     {
       "id": 7,
-      "spec_node_id": "validator/component/5",
+      "spec_node_id": "00beeeda5ddd",
       "bead_id": "spexmachina-qg2",
       "bead_type": "task",
       "module": "validator",
@@ -73,7 +73,7 @@
     },
     {
       "id": 8,
-      "spec_node_id": "validator/component/6",
+      "spec_node_id": "0f98ca780873",
       "bead_id": "spexmachina-1re",
       "bead_type": "task",
       "module": "validator",
@@ -83,7 +83,7 @@
     },
     {
       "id": 9,
-      "spec_node_id": "validator/component/7",
+      "spec_node_id": "59235a75aa44",
       "bead_id": "spexmachina-378",
       "bead_type": "task",
       "module": "validator",
@@ -93,7 +93,7 @@
     },
     {
       "id": 10,
-      "spec_node_id": "validator/component/8",
+      "spec_node_id": "88dd4060cb44",
       "bead_id": "spexmachina-3m9",
       "bead_type": "task",
       "module": "validator",
@@ -103,7 +103,7 @@
     },
     {
       "id": 11,
-      "spec_node_id": "validator/component/9",
+      "spec_node_id": "ed7a40b68995",
       "bead_id": "spexmachina-2yf",
       "bead_type": "task",
       "module": "validator",
@@ -113,7 +113,7 @@
     },
     {
       "id": 12,
-      "spec_node_id": "merkle/component/1",
+      "spec_node_id": "325f48728e04",
       "bead_id": "spexmachina-16l",
       "bead_type": "task",
       "module": "merkle",
@@ -123,7 +123,7 @@
     },
     {
       "id": 13,
-      "spec_node_id": "merkle/component/2",
+      "spec_node_id": "dfe1467b7a4b",
       "bead_id": "spexmachina-kdb",
       "bead_type": "task",
       "module": "merkle",
@@ -133,7 +133,7 @@
     },
     {
       "id": 14,
-      "spec_node_id": "merkle/component/3",
+      "spec_node_id": "b2fcd9457a28",
       "bead_id": "spexmachina-zel",
       "bead_type": "task",
       "module": "merkle",
@@ -143,7 +143,7 @@
     },
     {
       "id": 15,
-      "spec_node_id": "merkle/component/4",
+      "spec_node_id": "cb262b280963",
       "bead_id": "spexmachina-lg2",
       "bead_type": "task",
       "module": "merkle",
@@ -153,7 +153,7 @@
     },
     {
       "id": 16,
-      "spec_node_id": "merkle/component/5",
+      "spec_node_id": "f1a672216ce9",
       "bead_id": "spexmachina-s85",
       "bead_type": "task",
       "module": "merkle",
@@ -163,7 +163,7 @@
     },
     {
       "id": 17,
-      "spec_node_id": "merkle/component/6",
+      "spec_node_id": "ef841f48d313",
       "bead_id": "spexmachina-103",
       "bead_type": "task",
       "module": "merkle",
@@ -173,7 +173,7 @@
     },
     {
       "id": 18,
-      "spec_node_id": "merkle/component/7",
+      "spec_node_id": "c8b958ec310d",
       "bead_id": "spexmachina-ec7",
       "bead_type": "task",
       "module": "merkle",
@@ -183,7 +183,7 @@
     },
     {
       "id": 19,
-      "spec_node_id": "impact/component/1",
+      "spec_node_id": "bec96486c6b2",
       "bead_id": "spexmachina-31x",
       "bead_type": "task",
       "module": "impact",
@@ -193,7 +193,7 @@
     },
     {
       "id": 20,
-      "spec_node_id": "impact/component/2",
+      "spec_node_id": "06035e7f0c39",
       "bead_id": "spexmachina-x9w",
       "bead_type": "task",
       "module": "impact",
@@ -203,7 +203,7 @@
     },
     {
       "id": 21,
-      "spec_node_id": "impact/component/3",
+      "spec_node_id": "76d72cbe00f3",
       "bead_id": "spexmachina-r4o",
       "bead_type": "feature",
       "module": "impact",
@@ -213,7 +213,7 @@
     },
     {
       "id": 22,
-      "spec_node_id": "impact/component/4",
+      "spec_node_id": "60d4747021ec",
       "bead_id": "spexmachina-ncw",
       "bead_type": "feature",
       "module": "impact",
@@ -223,7 +223,7 @@
     },
     {
       "id": 23,
-      "spec_node_id": "impact/component/5",
+      "spec_node_id": "5d6813710879",
       "bead_id": "spexmachina-ir6",
       "bead_type": "task",
       "module": "impact",
@@ -233,7 +233,7 @@
     },
     {
       "id": 24,
-      "spec_node_id": "apply/component/1",
+      "spec_node_id": "59fab0fedef7",
       "bead_id": "spexmachina-igq",
       "bead_type": "feature",
       "module": "apply",
@@ -243,7 +243,7 @@
     },
     {
       "id": 25,
-      "spec_node_id": "apply/component/2",
+      "spec_node_id": "995b5e116b5b",
       "bead_id": "spexmachina-wya",
       "bead_type": "task",
       "module": "apply",
@@ -253,7 +253,7 @@
     },
     {
       "id": 27,
-      "spec_node_id": "apply/component/4",
+      "spec_node_id": "867bb1dd804f",
       "bead_id": "spexmachina-i6x",
       "bead_type": "task",
       "module": "apply",
@@ -263,7 +263,7 @@
     },
     {
       "id": 28,
-      "spec_node_id": "apply/component/5",
+      "spec_node_id": "1acc0e1fff76",
       "bead_id": "spexmachina-29q",
       "bead_type": "task",
       "module": "apply",
@@ -273,7 +273,7 @@
     },
     {
       "id": 29,
-      "spec_node_id": "apply/component/6",
+      "spec_node_id": "78a551ef7b74",
       "bead_id": "spexmachina-tjs",
       "bead_type": "feature",
       "module": "apply",
@@ -283,7 +283,7 @@
     },
     {
       "id": 30,
-      "spec_node_id": "proposal/component/4",
+      "spec_node_id": "21bc124a46c0",
       "bead_id": "spexmachina-das",
       "bead_type": "task",
       "module": "proposal",
@@ -293,7 +293,7 @@
     },
     {
       "id": 31,
-      "spec_node_id": "render/component/5",
+      "spec_node_id": "c56eefd05f42",
       "bead_id": "spexmachina-1no",
       "bead_type": "task",
       "module": "render",
@@ -303,7 +303,7 @@
     },
     {
       "id": 32,
-      "spec_node_id": "cli/component/1",
+      "spec_node_id": "b6758cdfabc4",
       "bead_id": "spexmachina-3fx",
       "bead_type": "task",
       "module": "cli",
@@ -313,7 +313,7 @@
     },
     {
       "id": 33,
-      "spec_node_id": "cli/component/2",
+      "spec_node_id": "bbdb70e6f9f7",
       "bead_id": "spexmachina-3h8",
       "bead_type": "task",
       "module": "cli",
@@ -323,7 +323,7 @@
     },
     {
       "id": 34,
-      "spec_node_id": "map/component/1",
+      "spec_node_id": "205e67ca4aad",
       "bead_id": "spexmachina-jgj",
       "bead_type": "task",
       "module": "map",
@@ -333,7 +333,7 @@
     },
     {
       "id": 35,
-      "spec_node_id": "map/component/2",
+      "spec_node_id": "b4e2ae65373e",
       "bead_id": "spexmachina-3vt",
       "bead_type": "task",
       "module": "map",
@@ -343,7 +343,7 @@
     },
     {
       "id": 36,
-      "spec_node_id": "map/component/3",
+      "spec_node_id": "08909d62930b",
       "bead_id": "spexmachina-0re",
       "bead_type": "task",
       "module": "map",
@@ -353,7 +353,7 @@
     },
     {
       "id": 48,
-      "spec_node_id": "schema/component/4",
+      "spec_node_id": "d125b5e775b4",
       "bead_id": "spexmachina-hd6",
       "bead_type": "task",
       "module": "schema",
@@ -363,7 +363,7 @@
     },
     {
       "id": 50,
-      "spec_node_id": "map/component/4",
+      "spec_node_id": "6b79188dff4c",
       "bead_id": "spexmachina-nv9",
       "bead_type": "task",
       "module": "map",
@@ -373,7 +373,7 @@
     },
     {
       "id": 51,
-      "spec_node_id": "validator/component/10",
+      "spec_node_id": "c7d0282b0e05",
       "bead_id": "spexmachina-yxg",
       "bead_type": "task",
       "module": "validator",
@@ -383,7 +383,7 @@
     },
     {
       "id": 52,
-      "spec_node_id": "merkle/component/8",
+      "spec_node_id": "de3309dfbd3c",
       "bead_id": "spexmachina-stp",
       "bead_type": "task",
       "module": "merkle",
@@ -393,7 +393,7 @@
     },
     {
       "id": 53,
-      "spec_node_id": "render/component/1",
+      "spec_node_id": "7d1150c19724",
       "bead_id": "spexmachina-rjg",
       "bead_type": "feature",
       "module": "render",
@@ -403,7 +403,7 @@
     },
     {
       "id": 54,
-      "spec_node_id": "render/component/2",
+      "spec_node_id": "b4b4eba6b551",
       "bead_id": "spexmachina-qpn",
       "bead_type": "feature",
       "module": "render",
@@ -413,7 +413,7 @@
     },
     {
       "id": 55,
-      "spec_node_id": "render/component/3",
+      "spec_node_id": "45331bdc0bd0",
       "bead_id": "spexmachina-spl",
       "bead_type": "feature",
       "module": "render",
@@ -423,7 +423,7 @@
     },
     {
       "id": 56,
-      "spec_node_id": "render/component/4",
+      "spec_node_id": "172d16ca0eac",
       "bead_id": "spexmachina-69y",
       "bead_type": "feature",
       "module": "render",
@@ -433,7 +433,7 @@
     },
     {
       "id": 57,
-      "spec_node_id": "validator/component/11",
+      "spec_node_id": "e36112523589",
       "bead_id": "spexmachina-b17",
       "bead_type": "feature",
       "module": "validator",
@@ -443,7 +443,7 @@
     },
     {
       "id": 58,
-      "spec_node_id": "cli/component/3",
+      "spec_node_id": "a338e50fec70",
       "bead_id": "spexmachina-vki",
       "bead_type": "feature",
       "module": "cli",
@@ -453,7 +453,7 @@
     },
     {
       "id": 59,
-      "spec_node_id": "schema/component/3",
+      "spec_node_id": "ee88263d6555",
       "bead_id": "spexmachina-03l",
       "bead_type": "feature",
       "module": "schema",
