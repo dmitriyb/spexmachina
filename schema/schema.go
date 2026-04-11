@@ -8,7 +8,12 @@
 // Edge types: implements, uses, describes, described_in, depends_on, groups, requires_module, modules.
 package schema
 
-import "embed"
+import (
+	"crypto/sha256"
+	"embed"
+	"encoding/hex"
+	"strings"
+)
 
 //go:embed project.schema.json module.schema.json bead-map.schema.json
 var schemaFS embed.FS
@@ -26,6 +31,15 @@ func ModuleSchema() ([]byte, error) {
 // BeadMapSchema returns the raw JSON Schema bytes for .bead-map.json.
 func BeadMapSchema() ([]byte, error) {
 	return schemaFS.ReadFile("bead-map.schema.json")
+}
+
+// IdentityHash joins parts with "/" and returns the first 6 bytes of
+// SHA256 as a 12-character lowercase hex string. The result is the
+// canonical spec node ID for the given identity string.
+func IdentityHash(parts ...string) string {
+	identity := strings.Join(parts, "/")
+	sum := sha256.Sum256([]byte(identity))
+	return hex.EncodeToString(sum[:6])
 }
 
 // BeadMap represents a .bead-map.json file.
