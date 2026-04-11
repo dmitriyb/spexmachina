@@ -120,7 +120,14 @@ func CloseBeads(ctx context.Context, cli BeadCLI, actions []Action, logger *slog
 				"error", err,
 			)
 			errs = append(errs, fmt.Errorf("close %s (%s/%s): %w", a.BeadID, a.Module, a.Node, err))
+			continue
 		}
+
+		logger.InfoContext(ctx, "bead closed",
+			"bead_id", a.BeadID,
+			"module", a.Module,
+			"node", a.Node,
+		)
 	}
 
 	return errors.Join(errs...)

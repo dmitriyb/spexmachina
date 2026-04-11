@@ -55,7 +55,6 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 	}
 
 	// 4. Close obsoletes — replacements now exist.
-	// Errors are logged individually by CloseBeads via slog; no summary needed here.
 	if err := CloseBeads(ctx, cli, opts.Obsoletes, opts.Logger); err != nil {
 		opts.Logger.ErrorContext(ctx, "some beads failed to close", "error", err)
 	}
