@@ -130,7 +130,29 @@ func TestFR10_IH6_EmptyPartsAndEmptyInput(t *testing.T) {
 	}
 }
 
-// --- Schema loading integration tests (S3-S13, E1-E6, BM2) ---
+// --- Schema loading integration tests (S1-S13, E1-E6, BM1-BM2) ---
+
+func TestFR3_S1_ProjectSchemaLoads(t *testing.T) {
+	data, err := ProjectSchema()
+	if err != nil {
+		t.Fatalf("ProjectSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+}
+
+func TestFR3_S2_ModuleSchemaLoads(t *testing.T) {
+	data, err := ModuleSchema()
+	if err != nil {
+		t.Fatalf("ModuleSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+}
 
 func TestFR3_S3_ProjectSchemaStructure(t *testing.T) {
 	data, err := ProjectSchema()
@@ -179,6 +201,10 @@ func TestFR3_S3_ProjectSchemaStructure(t *testing.T) {
 			t.Errorf("$defs missing %q", key)
 		}
 	}
+
+	if ap, ok := raw["additionalProperties"].(bool); !ok || ap {
+		t.Error("additionalProperties should be false")
+	}
 }
 
 func TestFR3_S4_ModuleSchemaStructure(t *testing.T) {
@@ -225,6 +251,10 @@ func TestFR3_S4_ModuleSchemaStructure(t *testing.T) {
 		if defs[key] == nil {
 			t.Errorf("$defs missing %q", key)
 		}
+	}
+
+	if ap, ok := raw["additionalProperties"].(bool); !ok || ap {
+		t.Error("additionalProperties should be false")
 	}
 }
 
@@ -498,7 +528,18 @@ func TestFR3_E6_SchemaRefsResolveToDefs(t *testing.T) {
 	}
 }
 
-// --- BeadMapSchema tests (BM2) ---
+// --- BeadMapSchema tests (BM1-BM2) ---
+
+func TestFR7_BM1_BeadMapSchemaLoads(t *testing.T) {
+	data, err := BeadMapSchema()
+	if err != nil {
+		t.Fatalf("BeadMapSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+}
 
 func TestFR7_BM2_BeadMapEnforcesIdentityHashPattern(t *testing.T) {
 	schData, err := BeadMapSchema()
