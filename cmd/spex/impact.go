@@ -81,6 +81,18 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	matches, unmatched, orphaned := impact.MatchNodes(changes, merkleIndex)
 	actions := impact.ClassifyActions(matches, unmatched, orphaned)
 
+	// Post-processing: resolve spec-graph dependencies for create actions.
+	specGraph, err := mapping.NewSpecGraph(specDir)
+	if err != nil {
+		return fmt.Errorf("impact: load spec graph: %w", err)
+	}
+	for i := range actions {
+		if actions[i].Type == "create" {
+			specNID := resolveActionSpecNodeID(actions[i], records)
+			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i], specNID)
+		}
+	}
+
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
 		return fmt.Errorf("impact: %w", err)
 	}
@@ -258,4 +270,18 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]Conten
 		contents[m.Name] = cm
 	}
 	return modules, contents, nil
+}
+
+// resolveActionSpecNodeID determines the spec node ID for a create action.
+// For replacements (OldBeadID set), it looks up the existing mapping record.
+// For new nodes, it derives the ID from the merkle path in the action's Node field.
+func resolveActionSpecNodeID(action impact.Action, records []mapping.Record) string {
+	if action.OldBeadID != "" {
+		for _, r := range records {
+			if r.BeadID == action.OldBeadID {
+				return r.SpecNodeID
+			}
+		}
+	}
+	return deriveSpecNodeID(action.Module, action.Node, action.NodeType)
 }

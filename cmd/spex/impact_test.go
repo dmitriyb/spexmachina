@@ -379,6 +379,216 @@ func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
 	}
 }
 
+// TestFR7_ImpactCommand_ResolvesDepBeadIDs verifies that the impact command
+// populates DepBeadIDs on create actions via ResolveDeps post-processing.
+// Setup: module "beta" requires module "alpha". Alpha has an open bead.
+// When beta's component is modified, the create action should carry alpha's
+// open bead ID in DepBeadIDs (requires_module transitive resolution).
+func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	// Project: alpha (id 1), beta (id 2, requires alpha).
+	proj := `{
+		"name": "test-project",
+		"modules": [
+			{"id": 1, "name": "alpha", "path": "alpha"},
+			{"id": 2, "name": "beta", "path": "beta", "requires_module": [1]}
+		]
+	}`
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", proj)
+
+	alphaDir := filepath.Join(specDir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": 1, "name": "AlphaComp", "content": "arch_alpha.md"}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "AlphaImpl", "content": "impl_alpha.md"}
+		],
+		"test_sections": [
+			{"id": 1, "name": "AlphaTest", "content": "test_alpha.md", "describes": [1]}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_alpha.md", "# Alpha comp\n")
+	writeTestFile(t, alphaDir, "impl_alpha.md", "# Alpha impl\n")
+	writeTestFile(t, alphaDir, "test_alpha.md", "# Alpha test\n")
+
+	betaDir := filepath.Join(specDir, "beta")
+	if err := os.MkdirAll(betaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"components": [
+			{"id": 1, "name": "BetaComp", "content": "arch_beta.md"}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "BetaImpl", "content": "impl_beta.md"}
+		],
+		"test_sections": [
+			{"id": 1, "name": "BetaTest", "content": "test_beta.md", "describes": [1]}
+		]
+	}`)
+	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp\n")
+	writeTestFile(t, betaDir, "impl_beta.md", "# Beta impl\n")
+	writeTestFile(t, betaDir, "test_beta.md", "# Beta test\n")
+
+	// Build initial snapshot.
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify beta's arch file to trigger a change.
+	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp CHANGED\n")
+
+	// Run diff.
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffDir := t.TempDir()
+	diffFile := filepath.Join(diffDir, "diff.json")
+	writeTestFile(t, diffDir, "diff.json", diffJSON)
+
+	// Create mapping: alpha/component/1 → bead-alpha (open),
+	// beta/component/1 → bead-beta (open, will be modified).
+	mapPath := setupMappingFile(t, dir, []mapping.Record{
+		{SpecNodeID: "alpha/component/1", BeadID: "bead-alpha", BeadType: "feature", Module: "alpha", Component: "AlphaComp", ContentFile: "spec/alpha/arch_alpha.md", SpecHash: "aaa", BeadStatus: "open"},
+		{SpecNodeID: "beta/component/1", BeadID: "bead-beta", BeadType: "feature", Module: "beta", Component: "BetaComp", ContentFile: "spec/beta/arch_beta.md", SpecHash: "bbb", BeadStatus: "open"},
+	})
+
+	// Run impact.
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	// Find the create action for beta's component — it should have
+	// bead-alpha in DepBeadIDs (via requires_module resolution).
+	for _, c := range report.Creates {
+		if c.Module == "beta" && c.OldBeadID == "bead-beta" {
+			if len(c.DepBeadIDs) == 0 {
+				t.Fatal("want DepBeadIDs populated for beta create, got empty")
+			}
+			for _, dep := range c.DepBeadIDs {
+				if dep == "bead-alpha" {
+					return // success
+				}
+			}
+			t.Fatalf("want bead-alpha in DepBeadIDs, got %v", c.DepBeadIDs)
+		}
+	}
+	t.Fatal("create action for beta/component/1 with OldBeadID=bead-beta not found")
+}
+
+// TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs verifies that intra-module
+// component `uses` edges are resolved into DepBeadIDs.
+func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	proj := `{
+		"name": "test-project",
+		"modules": [
+			{"id": 1, "name": "mod", "path": "mod"}
+		]
+	}`
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", proj)
+
+	modDir := filepath.Join(specDir, "mod")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Component 2 uses component 1.
+	writeTestFile(t, modDir, "module.json", `{
+		"name": "mod",
+		"components": [
+			{"id": 1, "name": "Base", "content": "arch_base.md"},
+			{"id": 2, "name": "User", "content": "arch_user.md", "uses": [1]}
+		],
+		"impl_sections": [
+			{"id": 1, "name": "BaseImpl", "content": "impl_base.md"},
+			{"id": 2, "name": "UserImpl", "content": "impl_user.md"}
+		],
+		"test_sections": [
+			{"id": 1, "name": "BaseTest", "content": "test_base.md", "describes": [1]},
+			{"id": 2, "name": "UserTest", "content": "test_user.md", "describes": [2]}
+		]
+	}`)
+	writeTestFile(t, modDir, "arch_base.md", "# Base\n")
+	writeTestFile(t, modDir, "arch_user.md", "# User\n")
+	writeTestFile(t, modDir, "impl_base.md", "# Base impl\n")
+	writeTestFile(t, modDir, "impl_user.md", "# User impl\n")
+	writeTestFile(t, modDir, "test_base.md", "# Base test\n")
+	writeTestFile(t, modDir, "test_user.md", "# User test\n")
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Modify component 2's arch file.
+	writeTestFile(t, modDir, "arch_user.md", "# User CHANGED\n")
+
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffDir := t.TempDir()
+	diffFile := filepath.Join(diffDir, "diff.json")
+	writeTestFile(t, diffDir, "diff.json", diffJSON)
+
+	mapPath := setupMappingFile(t, dir, []mapping.Record{
+		{SpecNodeID: "mod/component/1", BeadID: "bead-base", BeadType: "feature", Module: "mod", Component: "Base", ContentFile: "spec/mod/arch_base.md", SpecHash: "aaa", BeadStatus: "open"},
+		{SpecNodeID: "mod/component/2", BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
+	})
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	for _, c := range report.Creates {
+		if c.Module == "mod" && c.OldBeadID == "bead-user" {
+			for _, dep := range c.DepBeadIDs {
+				if dep == "bead-base" {
+					return // success: uses edge resolved
+				}
+			}
+			t.Fatalf("want bead-base in DepBeadIDs (uses edge), got %v", c.DepBeadIDs)
+		}
+	}
+	t.Fatal("create action for mod/component/2 with OldBeadID=bead-user not found")
+}
+
 func TestFR8_ImpactCommand_MultipleErrorsAllPrinted(t *testing.T) {
 	specDir := setupTestSpec(t)
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
