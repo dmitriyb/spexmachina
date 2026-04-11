@@ -57,6 +57,10 @@ func (r *recordingCLI) Update(ctx context.Context, id string, metadata map[strin
 	return err
 }
 
+func (r *recordingCLI) Status(ctx context.Context, id string) (string, error) {
+	return r.mock.Status(ctx, id)
+}
+
 // classifyPhase returns the pipeline phase for an operation.
 func classifyPhase(op opRecord) string {
 	switch op.Op {
@@ -296,12 +300,16 @@ func TestREQ6_S6_IdempotencyNoExtraCreates(t *testing.T) {
 	}
 }
 
-// --- S7: Idempotency — obsoleted beads not re-closed (warning only) ---
+// --- S7: Idempotency — already-closed beads are skipped (no close attempt) ---
 
 func TestREQ6_S7_IdempotencyAlreadyClosed(t *testing.T) {
 	cli := newMockCLI()
+	cli.statusFn = func(id string) (string, error) {
+		return "closed", nil
+	}
 	cli.closeFn = func(id string, labels []string) error {
-		return fmt.Errorf("already closed")
+		t.Fatalf("Close should not be called for already-closed bead %s", id)
+		return nil
 	}
 	store := newMockStore()
 	specDir := setupSpecDir(t)
@@ -311,14 +319,13 @@ func TestREQ6_S7_IdempotencyAlreadyClosed(t *testing.T) {
 	}
 
 	opts := defaultApplyOpts(nil, obsoletes, specDir)
-	stderr := opts.Stderr.(*bytes.Buffer)
 
 	err := RunApply(context.Background(), cli, store, opts)
 	if err != nil {
-		t.Fatalf("want no error (close warnings only), got: %v", err)
+		t.Fatalf("want no error (already-closed beads skipped), got: %v", err)
 	}
-	if !strings.Contains(stderr.String(), "close warnings") {
-		t.Errorf("want close warnings in stderr, got: %s", stderr.String())
+	if len(cli.closed) != 0 {
+		t.Errorf("want 0 Close calls (bead already closed), got %d", len(cli.closed))
 	}
 }
 
@@ -424,7 +431,7 @@ func TestREQ8_S10_CreateFailureAbortsNoSnapshot(t *testing.T) {
 	}
 }
 
-// --- S11: Close warning continues, snapshot still saved ---
+// --- S11: Close error continues, snapshot still saved ---
 
 func TestREQ8_S11_CloseWarningContinues(t *testing.T) {
 	cli := newMockCLI()
@@ -432,7 +439,7 @@ func TestREQ8_S11_CloseWarningContinues(t *testing.T) {
 	cli.closeFn = func(id string, labels []string) error {
 		closeCallCount++
 		if id == "spexmachina-77" {
-			return fmt.Errorf("already closed")
+			return fmt.Errorf("network timeout")
 		}
 		return nil
 	}
@@ -445,27 +452,21 @@ func TestREQ8_S11_CloseWarningContinues(t *testing.T) {
 	}
 
 	opts := defaultApplyOpts(nil, obsoletes, specDir)
-	stderr := opts.Stderr.(*bytes.Buffer)
 
 	err := RunApply(context.Background(), cli, store, opts)
 	if err != nil {
-		t.Fatalf("want no error (warnings only), got: %v", err)
+		t.Fatalf("want no error (close errors do not abort), got: %v", err)
 	}
 
-	// Both closes attempted.
+	// Both beads are open (default mock), so both get Close calls.
 	if closeCallCount != 2 {
 		t.Errorf("want 2 Close calls (both attempted), got %d", closeCallCount)
 	}
 
-	// Warning in stderr.
-	if !strings.Contains(stderr.String(), "close warnings") {
-		t.Errorf("want close warnings in stderr, got: %s", stderr.String())
-	}
-
-	// Snapshot still saved.
+	// Snapshot still saved despite close errors.
 	snapshotPath := filepath.Join(specDir, ".snapshot.json")
 	if _, err := os.Stat(snapshotPath); err != nil {
-		t.Errorf("snapshot not written despite close warnings: %v", err)
+		t.Errorf("snapshot not written despite close errors: %v", err)
 	}
 }
 

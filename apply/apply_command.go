@@ -38,7 +38,7 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 	// 1. Label obsoletes — mark beads being replaced/removed with
 	// spex:obsolete + commit:<HEAD> labels, keep them open.
 	if err := LabelObsoletes(ctx, cli, store, opts.Obsoletes, opts.Logger); err != nil {
-		fmt.Fprintf(opts.Stderr, "spex apply: label warnings: %v\n", err)
+		opts.Logger.ErrorContext(ctx, "some beads failed to label", "error", err)
 	}
 
 	// 2. Sort creates by hierarchy (epics->features->tasks) with
@@ -55,15 +55,16 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 	}
 
 	// 4. Close obsoletes — replacements now exist.
+	// Errors are logged individually by CloseBeads via slog; no summary needed here.
 	if err := CloseBeads(ctx, cli, opts.Obsoletes, opts.Logger); err != nil {
-		fmt.Fprintf(opts.Stderr, "spex apply: close warnings: %v\n", err)
+		opts.Logger.ErrorContext(ctx, "some beads failed to close", "error", err)
 	}
 
 	// 5. Tag all affected beads with proposal reference.
 	allIDs := collectAffectedBeadIDs(createdIDs, opts.Obsoletes)
 	if opts.ProposalRef != "" {
 		if err := TagWithProposal(ctx, cli, allIDs, opts.ProposalRef, opts.Logger); err != nil {
-			fmt.Fprintf(opts.Stderr, "spex apply: tag warnings: %v\n", err)
+			opts.Logger.ErrorContext(ctx, "some beads failed to tag", "error", err)
 		}
 	}
 

@@ -46,6 +46,8 @@ type BeadCLI interface {
 	FindExisting(ctx context.Context, labels []string) (string, error)
 	Close(ctx context.Context, id string, labels []string) error
 	Update(ctx context.Context, id string, metadata map[string]string) error
+	// Status returns the current status of a bead (e.g. "open", "in_progress", "closed").
+	Status(ctx context.Context, id string) (string, error)
 }
 
 // execCLI implements BeadCLI by shelling out to br or bd.
@@ -193,6 +195,24 @@ func (c *execCLI) Update(ctx context.Context, id string, metadata map[string]str
 		}
 	}
 	return nil
+}
+
+// Status returns the current status of a bead by calling br show --json.
+func (c *execCLI) Status(ctx context.Context, id string) (string, error) {
+	out, err := exec.CommandContext(ctx, c.bin, "show", id, "--json").CombinedOutput()
+	if err != nil {
+		return "", fmt.Errorf("apply: %s show %s: %w\n%s", c.bin, id, err, out)
+	}
+	var items []struct {
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(out, &items); err != nil {
+		return "", fmt.Errorf("apply: parse %s show output: %w", c.bin, err)
+	}
+	if len(items) == 0 {
+		return "", fmt.Errorf("apply: %s show %s: empty result", c.bin, id)
+	}
+	return items[0].Status, nil
 }
 
 // beadType maps spec node types to bead types.

@@ -39,15 +39,15 @@ func TestREQ2_S12_CloseBeads_NoLabels(t *testing.T) {
 	}
 }
 
-// --- S13: BeadCloser treats individual close errors as warnings and continues ---
+// --- S13: BeadCloser treats individual close errors as errors and continues ---
 
 func TestREQ2_S13_CloseBeads_ErrorContinuesBatch(t *testing.T) {
 	cli := newMockCLI()
-	var called []string
+	var closeCalled []string
 	cli.closeFn = func(id string, labels []string) error {
-		called = append(called, id)
+		closeCalled = append(closeCalled, id)
 		if id == "bead-2" {
-			return fmt.Errorf("already closed")
+			return fmt.Errorf("network timeout")
 		}
 		return nil
 	}
@@ -65,11 +65,44 @@ func TestREQ2_S13_CloseBeads_ErrorContinuesBatch(t *testing.T) {
 	if !strings.Contains(err.Error(), "bead-2") {
 		t.Errorf("want error mentioning bead-2, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "already closed") {
+	if !strings.Contains(err.Error(), "network timeout") {
 		t.Errorf("want error containing cause, got %v", err)
 	}
-	if len(called) != 3 {
-		t.Fatalf("want 3 Close calls (all attempted), got %d", len(called))
+	// All 3 beads are open (default mock), so all 3 get Close calls.
+	if len(closeCalled) != 3 {
+		t.Fatalf("want 3 Close calls (all attempted), got %d", len(closeCalled))
+	}
+}
+
+// --- S13b: Already-closed beads are skipped without calling Close ---
+
+func TestREQ2_S13b_CloseBeads_SkipsAlreadyClosed(t *testing.T) {
+	cli := newMockCLI()
+	cli.statusFn = func(id string) (string, error) {
+		if id == "bead-2" {
+			return "closed", nil
+		}
+		return "open", nil
+	}
+
+	actions := []Action{
+		{Module: "validator", Node: "A", BeadID: "bead-1"},
+		{Module: "validator", Node: "B", BeadID: "bead-2"},
+		{Module: "validator", Node: "C", BeadID: "bead-3"},
+	}
+
+	err := CloseBeads(context.Background(), cli, actions, testLogger())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	// bead-2 is already closed, so only bead-1 and bead-3 get Close calls.
+	if len(cli.closed) != 2 {
+		t.Fatalf("want 2 Close calls (bead-2 skipped), got %d", len(cli.closed))
+	}
+	for _, c := range cli.closed {
+		if c.ID == "bead-2" {
+			t.Error("Close should not be called for already-closed bead-2")
+		}
 	}
 }
 
