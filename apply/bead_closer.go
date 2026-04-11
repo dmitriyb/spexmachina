@@ -79,9 +79,10 @@ func LabelObsoletes(ctx context.Context, cli BeadCLI, store mapping.Store, actio
 
 // CloseBeads is the close phase of the two-phase obsolescence flow.
 // It closes each bead that was previously labeled by LabelObsoletes.
-// Each failure is logged as a warning and accumulated. The batch continues
-// even if individual closes fail. Returns an aggregated error of all
-// warnings, or nil if all succeeded.
+// Before attempting close, it checks the bead's current status — beads
+// that are already closed are skipped with a Warn log. Real close failures
+// are logged at Error level. The batch continues even if individual closes
+// fail. Returns an aggregated error of real failures only, or nil.
 func CloseBeads(ctx context.Context, cli BeadCLI, actions []Action, logger *slog.Logger) error {
 	if len(actions) == 0 {
 		return nil
@@ -90,15 +91,43 @@ func CloseBeads(ctx context.Context, cli BeadCLI, actions []Action, logger *slog
 	var errs []error
 
 	for _, a := range actions {
-		if err := cli.Close(ctx, a.BeadID, nil); err != nil {
-			logger.WarnContext(ctx, "close bead failed",
+		status, err := cli.Status(ctx, a.BeadID)
+		if err != nil {
+			logger.ErrorContext(ctx, "check bead status failed",
 				"bead_id", a.BeadID,
 				"module", a.Module,
 				"node", a.Node,
 				"error", err,
 			)
 			errs = append(errs, fmt.Errorf("close %s (%s/%s): %w", a.BeadID, a.Module, a.Node, err))
+			continue
 		}
+
+		if status == "closed" {
+			logger.WarnContext(ctx, "bead already closed, skipping",
+				"bead_id", a.BeadID,
+				"module", a.Module,
+				"node", a.Node,
+			)
+			continue
+		}
+
+		if err := cli.Close(ctx, a.BeadID, nil); err != nil {
+			logger.ErrorContext(ctx, "close bead failed",
+				"bead_id", a.BeadID,
+				"module", a.Module,
+				"node", a.Node,
+				"error", err,
+			)
+			errs = append(errs, fmt.Errorf("close %s (%s/%s): %w", a.BeadID, a.Module, a.Node, err))
+			continue
+		}
+
+		logger.InfoContext(ctx, "bead closed",
+			"bead_id", a.BeadID,
+			"module", a.Module,
+			"node", a.Node,
+		)
 	}
 
 	return errors.Join(errs...)

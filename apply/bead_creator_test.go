@@ -18,6 +18,7 @@ type mockCLI struct {
 	createFn   func(CreateOpts) (string, error)
 	closeFn    func(id string, labels []string) error
 	updateFn   func(id string, metadata map[string]string) error
+	statusFn   func(id string) (string, error)
 	closed     []closedBead    // recorded Close calls
 	updated    []updatedBead   // recorded Update calls
 	nextID     int
@@ -74,6 +75,14 @@ func (m *mockCLI) Update(_ context.Context, id string, metadata map[string]strin
 	}
 	m.updated = append(m.updated, updatedBead{ID: id, Metadata: metadata})
 	return nil
+}
+
+func (m *mockCLI) Status(_ context.Context, id string) (string, error) {
+	if m.statusFn != nil {
+		return m.statusFn(id)
+	}
+	// Default: beads are open unless overridden.
+	return "open", nil
 }
 
 // mockStore is an in-memory mapping.Store for tests.
