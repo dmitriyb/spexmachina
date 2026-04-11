@@ -34,22 +34,23 @@ func setupRenderSpec(t *testing.T) string {
 
 	alphaDir := filepath.Join(dir, "alpha")
 	os.MkdirAll(alphaDir, 0755)
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"description": "Alpha module description",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Parse", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Build", "preq_id": 2}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Parse", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Build", "preq_id": "ffeeddccbbaa"}
 		],
 		"components": [
-			{"id": 1, "name": "Parser", "content": "arch_parser.md", "implements": [1]},
-			{"id": 2, "name": "Builder", "content": "arch_builder.md", "implements": [2], "uses": [1]}
+			{"id": "aabbccddeeff", "name": "Parser", "content": "arch_parser.md", "implements": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "Builder", "content": "arch_builder.md", "implements": ["ffeeddccbbaa"], "uses": ["aabbccddeeff"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Parsing Impl", "content": "impl_parsing.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Parsing Impl", "content": "impl_parsing.md", "describes": ["aabbccddeeff"]}
 		],
 		"data_flows": [
-			{"id": 1, "name": "Build Pipeline", "content": "flow_build.md", "uses": [1, 2]}
+			{"id": "aabbccddeeff", "name": "Build Pipeline", "content": "flow_build.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
@@ -64,13 +65,13 @@ func setupRenderSpec(t *testing.T) string {
 		"name": "beta",
 		"description": "Beta module description",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Consume", "preq_id": 1}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Consume", "preq_id": "aabbccddeeff"}
 		],
 		"components": [
-			{"id": 1, "name": "Consumer", "content": "arch_consumer.md", "implements": [1]}
+			{"id": "aabbccddeeff", "name": "Consumer", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Consumption Impl", "content": "impl_consumption.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Consumption Impl", "content": "impl_consumption.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, betaDir, "module.json", betaMod)
@@ -320,6 +321,7 @@ func TestFR1_E3_MissingProjectJSON(t *testing.T) {
 
 // E4: Spec with broken content reference
 func TestFR1_E4_BrokenContentRef(t *testing.T) {
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	dir := t.TempDir()
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test",
@@ -329,7 +331,7 @@ func TestFR1_E4_BrokenContentRef(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeTestFile(t, modDir, "module.json", `{
 		"name": "m",
-		"components": [{"id": 1, "name": "C", "content": "arch_missing.md"}]
+		"components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_missing.md"}]
 	}`)
 
 	out, _, err := runRenderSpex(t, "render", "--spec-dir", dir)

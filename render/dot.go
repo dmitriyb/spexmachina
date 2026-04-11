@@ -34,28 +34,28 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 		// Requirements
 		for _, r := range mg.Spec.Requirements {
-			nid := fmt.Sprintf("%s_req_%d", modID, r.ID)
+			nid := fmt.Sprintf("%s_req_%s", modID, r.ID)
 			fmt.Fprintf(w, "    %s [label=%q, shape=box, fillcolor=lightgreen, style=filled];\n",
 				nid, r.Title)
 		}
 
 		// Components
 		for _, c := range mg.Spec.Components {
-			nid := fmt.Sprintf("%s_comp_%d", modID, c.ID)
+			nid := fmt.Sprintf("%s_comp_%s", modID, c.ID)
 			fmt.Fprintf(w, "    %s [label=%q, shape=component, fillcolor=lightyellow, style=filled];\n",
 				nid, c.Name)
 		}
 
 		// Impl sections
 		for _, s := range mg.Spec.ImplSections {
-			nid := fmt.Sprintf("%s_impl_%d", modID, s.ID)
+			nid := fmt.Sprintf("%s_impl_%s", modID, s.ID)
 			fmt.Fprintf(w, "    %s [label=%q, shape=note, fillcolor=moccasin, style=filled];\n",
 				nid, s.Name)
 		}
 
 		// Data flows
 		for _, f := range mg.Spec.DataFlows {
-			nid := fmt.Sprintf("%s_flow_%d", modID, f.ID)
+			nid := fmt.Sprintf("%s_flow_%s", modID, f.ID)
 			fmt.Fprintf(w, "    %s [label=%q, shape=ellipse, fillcolor=plum1, style=filled];\n",
 				nid, f.Name)
 		}
@@ -78,45 +78,46 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 		// Component edges
 		for _, c := range mg.Spec.Components {
-			compID := fmt.Sprintf("%s_comp_%d", modID, c.ID)
+			compID := fmt.Sprintf("%s_comp_%s", modID, c.ID)
 
 			for _, reqID := range c.Implements {
-				fmt.Fprintf(w, "  %s -> %s_req_%d [label=\"implements\", color=blue];\n",
+				fmt.Fprintf(w, "  %s -> %s_req_%s [label=\"implements\", color=blue];\n",
 					compID, modID, reqID)
 			}
 			for _, useID := range c.Uses {
-				fmt.Fprintf(w, "  %s -> %s_comp_%d [label=\"uses\", style=dotted];\n",
+				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"uses\", style=dotted];\n",
 					compID, modID, useID)
 			}
 		}
 
 		// Impl section edges
 		for _, s := range mg.Spec.ImplSections {
-			implID := fmt.Sprintf("%s_impl_%d", modID, s.ID)
+			implID := fmt.Sprintf("%s_impl_%s", modID, s.ID)
 			for _, compID := range s.Describes {
-				fmt.Fprintf(w, "  %s -> %s_comp_%d [label=\"describes\", color=green];\n",
+				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"describes\", color=green];\n",
 					implID, modID, compID)
 			}
 		}
 
 		// Data flow edges
 		for _, f := range mg.Spec.DataFlows {
-			flowID := fmt.Sprintf("%s_flow_%d", modID, f.ID)
+			flowID := fmt.Sprintf("%s_flow_%s", modID, f.ID)
 			for _, compID := range f.Uses {
-				fmt.Fprintf(w, "  %s -> %s_comp_%d [label=\"uses\", style=dotted];\n",
+				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"uses\", style=dotted];\n",
 					flowID, modID, compID)
 			}
 		}
 
+		// TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed ModuleRequirement to string IDs
 		// Requirement edges
 		for _, r := range mg.Spec.Requirements {
-			reqID := fmt.Sprintf("%s_req_%d", modID, r.ID)
-			if r.PreqID != 0 {
-				fmt.Fprintf(w, "  %s -> preq_%d [label=\"preq_id\", style=dashed, color=blue];\n",
+			reqID := fmt.Sprintf("%s_req_%s", modID, r.ID)
+			if r.PreqID != "" {
+				fmt.Fprintf(w, "  %s -> preq_%s [label=\"preq_id\", style=dashed, color=blue];\n",
 					reqID, r.PreqID)
 			}
 			for _, depID := range r.DependsOn {
-				fmt.Fprintf(w, "  %s -> %s_req_%d [label=\"depends_on\", style=dashed];\n",
+				fmt.Fprintf(w, "  %s -> %s_req_%s [label=\"depends_on\", style=dashed];\n",
 					reqID, modID, depID)
 			}
 		}

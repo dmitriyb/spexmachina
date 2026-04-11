@@ -69,7 +69,7 @@ func TestFR2_S4_FullModulePasses(t *testing.T) {
 
 func TestFR2_S8_ModuleMissingNameFails(t *testing.T) {
 	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"components": [{"id": 1, "name": "C"}]}`)
+	err := validateModule(t, sch, `{"components": [{"id": "aabbccddeeff", "name": "C"}]}`)
 	if err == nil {
 		t.Fatal("expected validation error for missing name, got nil")
 	}
@@ -88,17 +88,17 @@ func TestFR2_S9_RequirementMissingRequiredFields(t *testing.T) {
 	}{
 		{
 			"missing type",
-			`{"name": "bad-req", "requirements": [{"id": 1, "title": "No type field", "preq_id": 1}]}`,
+			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "title": "No type field", "preq_id": "112233445566"}]}`,
 			"type",
 		},
 		{
 			"missing id",
-			`{"name": "bad-req", "requirements": [{"type": "functional", "title": "No id", "preq_id": 1}]}`,
+			`{"name": "bad-req", "requirements": [{"type": "functional", "title": "No id", "preq_id": "112233445566"}]}`,
 			"id",
 		},
 		{
 			"missing preq_id",
-			`{"name": "bad-req", "requirements": [{"id": 1, "type": "functional", "title": "No preq_id"}]}`,
+			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "No preq_id"}]}`,
 			"preq_id",
 		},
 	}
@@ -123,12 +123,12 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 		doc  string
 	}{
 		{
-			"string ID in component",
-			`{"name": "m", "components": [{"id": "one", "name": "C"}]}`,
+			"integer ID in component",
+			`{"name": "m", "components": [{"id": 1, "name": "C"}]}`,
 		},
 		{
-			"float ID in component",
-			`{"name": "m", "components": [{"id": 1.5, "name": "C"}]}`,
+			"integer ID in requirement",
+			`{"name": "m", "requirements": [{"id": 1, "type": "functional", "title": "R", "preq_id": "aabbccddeeff"}]}`,
 		},
 	}
 	for _, tt := range tests {
@@ -143,7 +143,7 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 
 func TestFR2_S11_InvalidRequirementTypeEnum(t *testing.T) {
 	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": 1, "type": "performance", "title": "R", "preq_id": 1}]}`)
+	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "performance", "title": "R", "preq_id": "112233445566"}]}`)
 	if err == nil {
 		t.Fatal("expected validation error for invalid requirement type enum, got nil")
 	}
@@ -161,11 +161,11 @@ func TestFR2_S12_ExtraFieldsRejected(t *testing.T) {
 	}{
 		{
 			"extra field at component level",
-			`{"name": "m", "components": [{"id": 1, "name": "C", "status": "done"}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "status": "done"}]}`,
 		},
 		{
 			"extra field at test_section level",
-			`{"name": "m", "test_sections": [{"id": 1, "name": "T", "priority": "P1"}]}`,
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "T", "priority": "P1"}]}`,
 		},
 		{
 			"extra field at module root",
@@ -182,27 +182,93 @@ func TestFR2_S12_ExtraFieldsRejected(t *testing.T) {
 	}
 }
 
-func TestNFR4_S13_IDBelowMinimum(t *testing.T) {
+func TestNFR4_IDPatternValidation(t *testing.T) {
 	sch := compileModuleSchema(t)
 
 	tests := []struct {
-		name string
-		doc  string
+		name    string
+		doc     string
+		wantErr bool
 	}{
 		{
-			"id zero in component",
-			`{"name": "m", "components": [{"id": 0, "name": "C"}]}`,
+			"valid 12-char hex ID",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C"}]}`,
+			false,
 		},
 		{
-			"negative id in requirement",
-			`{"name": "m", "requirements": [{"id": -1, "type": "functional", "title": "R", "preq_id": 1}]}`,
+			"too short ID",
+			`{"name": "m", "components": [{"id": "aabbcc", "name": "C"}]}`,
+			true,
+		},
+		{
+			"too long ID",
+			`{"name": "m", "components": [{"id": "aabbccddeeff00", "name": "C"}]}`,
+			true,
+		},
+		{
+			"uppercase hex rejected",
+			`{"name": "m", "components": [{"id": "AABBCCDDEEFF", "name": "C"}]}`,
+			true,
+		},
+		{
+			"non-hex characters rejected",
+			`{"name": "m", "components": [{"id": "aabbccddeegg", "name": "C"}]}`,
+			true,
+		},
+		{
+			"empty string rejected",
+			`{"name": "m", "components": [{"id": "", "name": "C"}]}`,
+			true,
+		},
+		{
+			"valid preq_id pattern",
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566"}]}`,
+			false,
+		},
+		{
+			"invalid preq_id pattern",
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "short"}]}`,
+			true,
+		},
+		{
+			"valid depends_on hashes",
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}]}`,
+			false,
+		},
+		{
+			"invalid depends_on item pattern",
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566", "depends_on": ["bad"]}]}`,
+			true,
+		},
+		{
+			"valid implements hashes",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "implements": ["112233445566"]}]}`,
+			false,
+		},
+		{
+			"invalid implements item pattern",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "implements": ["xyz"]}]}`,
+			true,
+		},
+		{
+			"valid uses hashes",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "uses": ["112233445566"]}]}`,
+			false,
+		},
+		{
+			"valid describes hashes",
+			`{"name": "m", "impl_sections": [{"id": "aabbccddeeff", "name": "S", "describes": ["112233445566"]}]}`,
+			false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateModule(t, sch, tt.doc)
-			if err == nil {
-				t.Fatal("expected validation error for ID below minimum, got nil")
+			if tt.wantErr && err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
 			}
 		})
 	}
@@ -221,8 +287,8 @@ func TestFR2_S15_DependsOnDuplicatesFails(t *testing.T) {
 	err := validateModule(t, sch, `{
 		"name": "m",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "R1", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "R2", "preq_id": 1, "depends_on": [1, 1]}
+			{"id": "aabbccddeeff", "type": "functional", "title": "R1", "preq_id": "112233445566"},
+			{"id": "112233445566", "type": "functional", "title": "R2", "preq_id": "112233445566", "depends_on": ["aabbccddeeff", "aabbccddeeff"]}
 		]
 	}`)
 	if err == nil {
@@ -237,7 +303,7 @@ func TestFR5_S17_TestSectionsValidation(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
 			"test_sections": [
-				{"id": 1, "name": "Unit tests", "content": "test_unit.md", "describes": [1, 2]}
+				{"id": "aabbccddeeff", "name": "Unit tests", "content": "test_unit.md", "describes": ["112233445566", "ffeeddccbbaa"]}
 			]
 		}`)
 		if err != nil {
@@ -248,7 +314,7 @@ func TestFR5_S17_TestSectionsValidation(t *testing.T) {
 	t.Run("test_section missing required name", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"test_sections": [{"id": 1}]
+			"test_sections": [{"id": "aabbccddeeff"}]
 		}`)
 		if err == nil {
 			t.Fatal("expected validation error for test_section missing name, got nil")
@@ -286,7 +352,7 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 	}
 	for i, v := range mod.Components[0].Implements {
 		if v != mod2.Components[0].Implements[i] {
-			t.Fatalf("implements[%d] mismatch: want %d, got %d", i, v, mod2.Components[0].Implements[i])
+			t.Fatalf("implements[%d] mismatch: want %s, got %s", i, v, mod2.Components[0].Implements[i])
 		}
 	}
 	if len(mod.ImplSections[0].Describes) != len(mod2.ImplSections[0].Describes) {
@@ -294,7 +360,7 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 	}
 	for i, v := range mod.ImplSections[0].Describes {
 		if v != mod2.ImplSections[0].Describes[i] {
-			t.Fatalf("describes[%d] mismatch: want %d, got %d", i, v, mod2.ImplSections[0].Describes[i])
+			t.Fatalf("describes[%d] mismatch: want %s, got %s", i, v, mod2.ImplSections[0].Describes[i])
 		}
 	}
 	if len(mod.DataFlows[0].Uses) != len(mod2.DataFlows[0].Uses) {
@@ -302,7 +368,7 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 	}
 	for i, v := range mod.DataFlows[0].Uses {
 		if v != mod2.DataFlows[0].Uses[i] {
-			t.Fatalf("uses[%d] mismatch: want %d, got %d", i, v, mod2.DataFlows[0].Uses[i])
+			t.Fatalf("uses[%d] mismatch: want %s, got %s", i, v, mod2.DataFlows[0].Uses[i])
 		}
 	}
 	if len(mod.TestSections) != len(mod2.TestSections) {
@@ -316,7 +382,7 @@ func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	t.Run("missing preq_id fails", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"requirements": [{"id": 1, "type": "functional", "title": "R"}]
+			"requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R"}]
 		}`)
 		if err == nil {
 			t.Fatal("expected validation error for missing preq_id, got nil")
@@ -329,7 +395,7 @@ func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	t.Run("with preq_id passes", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"requirements": [{"id": 1, "type": "functional", "title": "R", "preq_id": 1}]
+			"requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566"}]
 		}`)
 		if err != nil {
 			t.Fatalf("requirement with preq_id should pass: %v", err)
@@ -349,32 +415,6 @@ func TestFR2_E1_EmptyOptionalArraysValid(t *testing.T) {
 	}`)
 	if err != nil {
 		t.Fatalf("empty optional arrays should pass: %v", err)
-	}
-}
-
-func TestNFR4_E2_BoundaryIDValue(t *testing.T) {
-	sch := compileModuleSchema(t)
-
-	t.Run("id 1 passes", func(t *testing.T) {
-		err := validateModule(t, sch, `{"name": "m", "components": [{"id": 1, "name": "C"}]}`)
-		if err != nil {
-			t.Fatalf("id=1 should pass: %v", err)
-		}
-	})
-
-	t.Run("id 0 fails", func(t *testing.T) {
-		err := validateModule(t, sch, `{"name": "m", "components": [{"id": 0, "name": "C"}]}`)
-		if err == nil {
-			t.Fatal("id=0 should fail")
-		}
-	})
-}
-
-func TestNFR4_E3_LargeIDValue(t *testing.T) {
-	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"name": "m", "components": [{"id": 2147483647, "name": "MaxInt"}]}`)
-	if err != nil {
-		t.Fatalf("large ID should pass: %v", err)
 	}
 }
 
@@ -414,7 +454,7 @@ func TestFR2_E7_DependsOnNonExistentIDPasses(t *testing.T) {
 	err := validateModule(t, sch, `{
 		"name": "m",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "R1", "preq_id": 1, "depends_on": [999]}
+			{"id": "aabbccddeeff", "type": "functional", "title": "R1", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}
 		]
 	}`)
 	if err != nil {
@@ -433,7 +473,7 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 	}
 
 	tests := []struct {
-		name string
+		name  string
 		check func() bool
 	}{
 		{"$schema is 2020-12", func() bool { return raw["$schema"] == "https://json-schema.org/draft/2020-12/schema" }},
@@ -476,6 +516,44 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 		if defs[key] == nil {
 			t.Fatalf("module schema missing $def %q", key)
 		}
+	}
+}
+
+func TestNFR4_IDFieldsUseIdentityHashPattern(t *testing.T) {
+	data, err := ModuleSchema()
+	if err != nil {
+		t.Fatalf("ModuleSchema(): %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	defs := raw["$defs"].(map[string]any)
+	wantPattern := "^[a-f0-9]{12}$"
+
+	// Check all $def ID fields use identity hash pattern
+	for _, defName := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+		def := defs[defName].(map[string]any)
+		props := def["properties"].(map[string]any)
+		idProp := props["id"].(map[string]any)
+		if idProp["type"] != "string" {
+			t.Fatalf("%s.id should be type string, got %v", defName, idProp["type"])
+		}
+		if idProp["pattern"] != wantPattern {
+			t.Fatalf("%s.id should have pattern %q, got %v", defName, wantPattern, idProp["pattern"])
+		}
+	}
+
+	// Check preq_id uses identity hash pattern
+	reqDef := defs["requirement"].(map[string]any)
+	reqProps := reqDef["properties"].(map[string]any)
+	preqProp := reqProps["preq_id"].(map[string]any)
+	if preqProp["type"] != "string" {
+		t.Fatalf("requirement.preq_id should be type string, got %v", preqProp["type"])
+	}
+	if preqProp["pattern"] != wantPattern {
+		t.Fatalf("requirement.preq_id should have pattern %q, got %v", wantPattern, preqProp["pattern"])
 	}
 }
 

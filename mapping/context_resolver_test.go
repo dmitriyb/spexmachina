@@ -31,22 +31,23 @@ func TestFR6_ResolveContext_FullResolution(t *testing.T) {
 		t.Fatalf("mkdir: %v", err)
 	}
 
+	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	ms := schema.ModuleSpec{
 		Name: "map",
 		Components: []schema.Component{
-			{ID: 1, Name: "MappingStore", Content: "arch_mapping_store.md"},
-			{ID: 4, Name: "ContextResolver", Content: "arch_context_resolver.md"},
+			{ID: "aabbccddeeff", Name: "MappingStore", Content: "arch_mapping_store.md"},
+			{ID: "ffeeddccbbaa", Name: "ContextResolver", Content: "arch_context_resolver.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: 1, Name: "Mapping format", Content: "impl_mapping_format.md", Describes: []int{1}},
-			{ID: 2, Name: "CRUD ops", Content: "impl_crud_operations.md", Describes: []int{1}},
+			{ID: "aabbccddeeff", Name: "Mapping format", Content: "impl_mapping_format.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "ffeeddccbbaa", Name: "CRUD ops", Content: "impl_crud_operations.md", Describes: []string{"aabbccddeeff"}},
 		},
 		TestSections: []schema.TestSection{
-			{ID: 1, Name: "Store tests", Content: "test_mapping_store.md", Describes: []int{1}},
+			{ID: "aabbccddeeff", Name: "Store tests", Content: "test_mapping_store.md", Describes: []string{"aabbccddeeff"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: 1, Name: "Bead mapping flow", Content: "flow_bead_mapping.md", Uses: []int{1, 3}},
-			{ID: 2, Name: "Preflight flow", Content: "flow_preflight.md", Uses: []int{1, 2}},
+			{ID: "aabbccddeeff", Name: "Bead mapping flow", Content: "flow_bead_mapping.md", Uses: []string{"aabbccddeeff", "ccddee112233"}},
+			{ID: "ffeeddccbbaa", Name: "Preflight flow", Content: "flow_preflight.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
@@ -98,6 +99,7 @@ func TestFR6_ResolveContext_FullResolution(t *testing.T) {
 }
 
 func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
+	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := t.TempDir()
 	modDir := filepath.Join(specDir, "impact")
 	if err := os.MkdirAll(modDir, 0755); err != nil {
@@ -107,28 +109,28 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 	ms := schema.ModuleSpec{
 		Name: "impact",
 		Components: []schema.Component{
-			{ID: 1, Name: "ActionClassifier", Content: "arch_action_classifier.md"},
-			{ID: 2, Name: "ReportGenerator", Content: "arch_report_generator.md"},
+			{ID: "aabbccddeeff", Name: "ActionClassifier", Content: "arch_action_classifier.md"},
+			{ID: "ffeeddccbbaa", Name: "ReportGenerator", Content: "arch_report_generator.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: 1, Name: "Classification rules", Content: "impl_classification.md", Describes: []int{1}},
-			{ID: 2, Name: "Report format", Content: "impl_report_format.md", Describes: []int{2}},
-			{ID: 3, Name: "Shared helpers", Content: "impl_shared.md", Describes: []int{1, 2}},
+			{ID: "aabbccddeeff", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "ffeeddccbbaa", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "112233445566", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 		TestSections: []schema.TestSection{
-			{ID: 1, Name: "Classifier tests", Content: "test_classifier.md", Describes: []int{1}},
-			{ID: 2, Name: "Report tests", Content: "test_report.md", Describes: []int{2}},
+			{ID: "aabbccddeeff", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "ffeeddccbbaa", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: 1, Name: "Impact flow", Content: "flow_impact.md", Uses: []int{1, 2}},
-			{ID: 2, Name: "Other flow", Content: "flow_other.md", Uses: []int{2}},
+			{ID: "aabbccddeeff", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+			{ID: "ffeeddccbbaa", Name: "Other flow", Content: "flow_other.md", Uses: []string{"ffeeddccbbaa"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
 
 	rec := Record{
 		ID:          10,
-		SpecNodeID:  "impact/component/1",
+		SpecNodeID:  "impact/component/aabbccddeeff",
 		Module:      "impact",
 		Component:   "ActionClassifier",
 		ContentFile: "spec/impact/arch_action_classifier.md",
@@ -177,6 +179,7 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 }
 
 func TestFR6_ResolveContext_InvalidSpecNodeID(t *testing.T) {
+	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := t.TempDir()
 
 	tests := []struct {
@@ -186,7 +189,6 @@ func TestFR6_ResolveContext_InvalidSpecNodeID(t *testing.T) {
 	}{
 		{"too few parts", "map/component", "invalid spec_node_id"},
 		{"not a component", "map/requirement/1", "not a component node"},
-		{"non-numeric ID", "map/component/abc", "invalid spec_node_id"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -220,6 +222,7 @@ func TestFR6_ResolveContext_ModuleJsonNotFound(t *testing.T) {
 }
 
 func TestFR6_ResolveContext_Deterministic(t *testing.T) {
+	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	// Same inputs produce same outputs — pure function.
 	specDir := t.TempDir()
 	modDir := filepath.Join(specDir, "schema")
@@ -230,20 +233,20 @@ func TestFR6_ResolveContext_Deterministic(t *testing.T) {
 	ms := schema.ModuleSpec{
 		Name: "schema",
 		Components: []schema.Component{
-			{ID: 1, Name: "ProjectSchema", Content: "arch_project_schema.md"},
+			{ID: "aabbccddeeff", Name: "ProjectSchema", Content: "arch_project_schema.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: 1, Name: "Schema format", Content: "impl_format.md", Describes: []int{1}},
+			{ID: "aabbccddeeff", Name: "Schema format", Content: "impl_format.md", Describes: []string{"aabbccddeeff"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: 1, Name: "Load flow", Content: "flow_load.md", Uses: []int{1}},
+			{ID: "aabbccddeeff", Name: "Load flow", Content: "flow_load.md", Uses: []string{"aabbccddeeff"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
 
 	rec := Record{
 		ID:          1,
-		SpecNodeID:  "schema/component/1",
+		SpecNodeID:  "schema/component/aabbccddeeff",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "spec/schema/arch_project_schema.md",

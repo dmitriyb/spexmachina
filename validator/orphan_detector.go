@@ -34,10 +34,11 @@ func CheckOrphans(specDir string) []ValidationError {
 	return result
 }
 
+// TODO(bead:spexmachina-wei): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // detectOrphanRequirements finds requirements not referenced by any component's
 // implements array within the module.
 func detectOrphanRequirements(modName string, mod *schema.ModuleSpec) []ValidationError {
-	implReqs := make(map[int]bool)
+	implReqs := make(map[string]bool)
 	for _, comp := range mod.Components {
 		for _, reqID := range comp.Implements {
 			implReqs[reqID] = true
@@ -50,18 +51,19 @@ func detectOrphanRequirements(modName string, mod *schema.ModuleSpec) []Validati
 			errs = append(errs, ValidationError{
 				Check:    "orphan",
 				Severity: "warning",
-				Path:     fmt.Sprintf("%s/module.json:/requirements/%d", modName, req.ID),
-				Message:  fmt.Sprintf("requirement %d (%s) is not implemented by any component", req.ID, req.Title),
+				Path:     fmt.Sprintf("%s/module.json:/requirements/%s", modName, req.ID),
+				Message:  fmt.Sprintf("requirement %s (%s) is not implemented by any component", req.ID, req.Title),
 			})
 		}
 	}
 	return errs
 }
 
+// TODO(bead:spexmachina-wei): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // detectOrphanComponents finds components not referenced by any impl_section's
 // describes array within the module.
 func detectOrphanComponents(modName string, mod *schema.ModuleSpec) []ValidationError {
-	describedComps := make(map[int]bool)
+	describedComps := make(map[string]bool)
 	for _, sec := range mod.ImplSections {
 		for _, compID := range sec.Describes {
 			describedComps[compID] = true
@@ -74,8 +76,8 @@ func detectOrphanComponents(modName string, mod *schema.ModuleSpec) []Validation
 			errs = append(errs, ValidationError{
 				Check:    "orphan",
 				Severity: "warning",
-				Path:     fmt.Sprintf("%s/module.json:/components/%d", modName, comp.ID),
-				Message:  fmt.Sprintf("component %d (%s) is not described by any impl_section", comp.ID, comp.Name),
+				Path:     fmt.Sprintf("%s/module.json:/components/%s", modName, comp.ID),
+				Message:  fmt.Sprintf("component %s (%s) is not described by any impl_section", comp.ID, comp.Name),
 			})
 		}
 	}

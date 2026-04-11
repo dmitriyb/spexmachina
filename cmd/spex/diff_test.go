@@ -237,18 +237,19 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req 1", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Req 2"}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
 		],
 		"components": [
-			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
-			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
@@ -260,6 +261,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 }
 
 func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := setupTestSpecWithRequirements(t)
 
 	// Create initial snapshot.
@@ -274,15 +276,15 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Req 2"}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
 		],
 		"components": [
-			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
-			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
@@ -313,6 +315,7 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 }
 
 func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := setupTestSpecWithRequirements(t)
 
 	_, err := runSpex(t, "hash", "--spec-dir", specDir)
@@ -325,15 +328,15 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Req 2"}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
 		],
 		"components": [
-			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
-			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
@@ -352,6 +355,7 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 }
 
 func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := setupTestSpecWithRequirements(t)
 
 	_, err := runSpex(t, "hash", "--spec-dir", specDir)
@@ -366,15 +370,15 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req 1 CHANGED", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Req 2"}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
 		],
 		"components": [
-			{"id": 1, "name": "CompA", "content": "arch_comp_a.md", "implements": [1]},
-			{"id": 2, "name": "CompB", "content": "arch_comp_b.md", "implements": [2]}
+			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp_a.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)

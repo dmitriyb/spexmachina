@@ -18,17 +18,18 @@ func CheckRequirementCoverage(specDir string) []ValidationError {
 
 	var result []ValidationError
 
+	// TODO(bead:spexmachina-yxg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	// Phase 1: project requirement → module requirement coverage (preq_id).
-	coveredProjectReqs := make(map[int]bool)
+	coveredProjectReqs := make(map[string]bool)
 	for _, mod := range modules {
 		for _, req := range mod.Requirements {
-			if req.PreqID != 0 {
+			if req.PreqID != "" {
 				coveredProjectReqs[req.PreqID] = true
 			}
 		}
 	}
 	for _, req := range project.Requirements {
-		if !coveredProjectReqs[req.ID] {
+		if !coveredProjectReqs[fmt.Sprintf("%d", req.ID)] {
 			result = append(result, ValidationError{
 				Check:    "requirement_coverage",
 				Severity: "error",
@@ -53,10 +54,11 @@ func CheckRequirementCoverage(specDir string) []ValidationError {
 	return result
 }
 
+// TODO(bead:spexmachina-yxg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // detectUncoveredRequirements finds module requirements not referenced by any
 // component's implements array within the module.
 func detectUncoveredRequirements(modName string, mod *schema.ModuleSpec) []ValidationError {
-	coveredReqs := make(map[int]bool)
+	coveredReqs := make(map[string]bool)
 	for _, comp := range mod.Components {
 		for _, reqID := range comp.Implements {
 			coveredReqs[reqID] = true
@@ -70,7 +72,7 @@ func detectUncoveredRequirements(modName string, mod *schema.ModuleSpec) []Valid
 				Check:    "requirement_coverage",
 				Severity: "error",
 				Path:     fmt.Sprintf("%s/module.json", modName),
-				Message:  fmt.Sprintf("%s requirement %d %q is not implemented by any component", modName, req.ID, req.Title),
+				Message:  fmt.Sprintf("%s requirement %s %q is not implemented by any component", modName, req.ID, req.Title),
 			})
 		}
 	}

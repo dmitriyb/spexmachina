@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -78,17 +77,14 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 // parseContextComponentID extracts the integer component ID from a
 // spec_node_id like "module_name/component/3". Returns an error if the
 // format is invalid or the node type is not "component".
-func parseContextComponentID(specNodeID string) (int, error) {
+// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+func parseContextComponentID(specNodeID string) (string, error) {
 	parts := strings.Split(specNodeID, "/")
 	if len(parts) != 3 {
-		return 0, fmt.Errorf("context: invalid spec_node_id: %q (expected module/component/id)", specNodeID)
+		return "", fmt.Errorf("context: invalid spec_node_id: %q (expected module/component/id)", specNodeID)
 	}
 	if parts[1] != "component" {
-		return 0, fmt.Errorf("context: not a component node: %q", specNodeID)
+		return "", fmt.Errorf("context: not a component node: %q", specNodeID)
 	}
-	id, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return 0, fmt.Errorf("context: invalid spec_node_id: %q (non-numeric id)", specNodeID)
-	}
-	return id, nil
+	return parts[2], nil
 }

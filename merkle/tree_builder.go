@@ -107,9 +107,10 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 
 	children := []*Node{modLeaf}
 
+	// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	for _, req := range modSpec.Requirements {
-		key := nodeKey(mod.ID, "requirement", req.ID)
-		node, err := hashRequirement(req, key, mod.ID)
+		key := nodeKeyStr(mod.ID, "requirement", req.ID)
+		node, err := hashModuleRequirement(req, key, mod.ID)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -120,7 +121,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if c.Content == "" {
 			continue
 		}
-		key := nodeKey(mod.ID, "component", c.ID)
+		key := nodeKeyStr(mod.ID, "component", c.ID)
 		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), key, "component", mod.ID)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
@@ -132,7 +133,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if s.Content == "" {
 			continue
 		}
-		key := nodeKey(mod.ID, "impl_section", s.ID)
+		key := nodeKeyStr(mod.ID, "impl_section", s.ID)
 		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), key, "impl_section", mod.ID)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
@@ -144,7 +145,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if f.Content == "" {
 			continue
 		}
-		key := nodeKey(mod.ID, "data_flow", f.ID)
+		key := nodeKeyStr(mod.ID, "data_flow", f.ID)
 		leaf, err := hashLeaf(filepath.Join(modDir, f.Content), key, "data_flow", mod.ID)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
@@ -172,6 +173,44 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 // nodeKey builds a spec-ID key: module/<moduleID>/<nodeType>/<nodeID>.
 func nodeKey(moduleID int, nodeType string, nodeID int) string {
 	return fmt.Sprintf("module/%d/%s/%d", moduleID, nodeType, nodeID)
+}
+
+// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+// nodeKeyStr builds a spec-ID key with a string nodeID (identity hash).
+func nodeKeyStr(moduleID int, nodeType string, nodeID string) string {
+	return fmt.Sprintf("module/%d/%s/%s", moduleID, nodeType, nodeID)
+}
+
+// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed ModuleRequirement to separate type
+func hashModuleRequirement(req schema.ModuleRequirement, key string, module int) (*Node, error) {
+	fields := map[string]interface{}{}
+	if len(req.DependsOn) > 0 {
+		fields["depends_on"] = req.DependsOn
+	}
+	if req.Description != "" {
+		fields["description"] = req.Description
+	}
+	fields["id"] = req.ID
+	if req.PreqID != "" {
+		fields["preq_id"] = req.PreqID
+	}
+	if req.Title != "" {
+		fields["title"] = req.Title
+	}
+	fields["type"] = req.Type
+
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: hash requirement %s: %w", key, err)
+	}
+	h := HashBytes(data)
+	return &Node{
+		Key:      key,
+		Hash:     h,
+		Type:     "leaf",
+		NodeType: "requirement",
+		Module:   module,
+	}, nil
 }
 
 func hashLeaf(path, key, nodeType string, module int) (*Node, error) {

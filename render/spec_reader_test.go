@@ -15,6 +15,7 @@ func writeFile(t *testing.T, dir, name, content string) {
 }
 
 // setupMultiModuleSpec creates a two-module fixture matching the test spec.
+// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 func setupMultiModuleSpec(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -44,18 +45,18 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"name": "alpha",
 		"description": "Alpha module description",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Parse", "preq_id": 1, "depends_on": []},
-			{"id": 2, "type": "functional", "title": "Build", "preq_id": 2}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Parse", "preq_id": "aabbccddeeff", "depends_on": []},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Build", "preq_id": "ffeeddccbbaa"}
 		],
 		"components": [
-			{"id": 1, "name": "Parser", "description": "Parses input into AST.", "content": "arch_parser.md", "implements": [1], "uses": []},
-			{"id": 2, "name": "Builder", "description": "Builds output from AST.", "content": "arch_builder.md", "implements": [2], "uses": [1]}
+			{"id": "aabbccddeeff", "name": "Parser", "description": "Parses input into AST.", "content": "arch_parser.md", "implements": ["aabbccddeeff"], "uses": []},
+			{"id": "ffeeddccbbaa", "name": "Builder", "description": "Builds output from AST.", "content": "arch_builder.md", "implements": ["ffeeddccbbaa"], "uses": ["aabbccddeeff"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Parsing Implementation", "content": "impl_parsing.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Parsing Implementation", "content": "impl_parsing.md", "describes": ["aabbccddeeff"]}
 		],
 		"data_flows": [
-			{"id": 1, "name": "Build Pipeline", "description": "Parse then build.", "content": "flow_build_pipeline.md", "uses": [1, 2]}
+			{"id": "aabbccddeeff", "name": "Build Pipeline", "description": "Parse then build.", "content": "flow_build_pipeline.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
 		]
 	}`
 	writeFile(t, alphaDir, "module.json", alphaMod)
@@ -71,13 +72,13 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"name": "beta",
 		"description": "Beta module description",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Consume", "preq_id": 1}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Consume", "preq_id": "aabbccddeeff"}
 		],
 		"components": [
-			{"id": 1, "name": "Consumer", "description": "Consumes built output.", "content": "arch_consumer.md", "implements": [1]}
+			{"id": "aabbccddeeff", "name": "Consumer", "description": "Consumes built output.", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Consumption Implementation", "content": "impl_consumption.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Consumption Implementation", "content": "impl_consumption.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeFile(t, betaDir, "module.json", betaMod)
@@ -98,7 +99,7 @@ func TestFR1_S1_ParseMinimalSpec(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeFile(t, modDir, "module.json", `{
 		"name": "mod1",
-		"components": [{"id": 1, "name": "Comp1", "content": "arch_comp1.md"}]
+		"components": [{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}]
 	}`)
 	writeFile(t, modDir, "arch_comp1.md", "# Comp1\n")
 
@@ -194,6 +195,7 @@ func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
 
 // S5: All module-level edge types preserved
 func TestFR1_S5_EdgeTypesPreserved(t *testing.T) {
+	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	dir := setupMultiModuleSpec(t)
 
 	graph, err := ReadSpec(dir)
@@ -203,24 +205,24 @@ func TestFR1_S5_EdgeTypesPreserved(t *testing.T) {
 
 	alpha := graph.Modules[0].Spec
 	// Component implements
-	if len(alpha.Components[0].Implements) != 1 || alpha.Components[0].Implements[0] != 1 {
-		t.Fatalf("Parser should implement [1], got %v", alpha.Components[0].Implements)
+	if len(alpha.Components[0].Implements) != 1 || alpha.Components[0].Implements[0] != "aabbccddeeff" {
+		t.Fatalf("Parser should implement [aabbccddeeff], got %v", alpha.Components[0].Implements)
 	}
 	// Component uses
-	if len(alpha.Components[1].Uses) != 1 || alpha.Components[1].Uses[0] != 1 {
-		t.Fatalf("Builder should use [1], got %v", alpha.Components[1].Uses)
+	if len(alpha.Components[1].Uses) != 1 || alpha.Components[1].Uses[0] != "aabbccddeeff" {
+		t.Fatalf("Builder should use [aabbccddeeff], got %v", alpha.Components[1].Uses)
 	}
 	// Impl describes
-	if len(alpha.ImplSections[0].Describes) != 1 || alpha.ImplSections[0].Describes[0] != 1 {
-		t.Fatalf("ImplSection should describe [1], got %v", alpha.ImplSections[0].Describes)
+	if len(alpha.ImplSections[0].Describes) != 1 || alpha.ImplSections[0].Describes[0] != "aabbccddeeff" {
+		t.Fatalf("ImplSection should describe [aabbccddeeff], got %v", alpha.ImplSections[0].Describes)
 	}
 	// DataFlow uses
 	if len(alpha.DataFlows[0].Uses) != 2 {
 		t.Fatalf("DataFlow should use 2 components, got %v", alpha.DataFlows[0].Uses)
 	}
 	// Requirement preq_id
-	if alpha.Requirements[0].PreqID != 1 {
-		t.Fatalf("alpha req 1 should have preq_id 1, got %d", alpha.Requirements[0].PreqID)
+	if alpha.Requirements[0].PreqID != "aabbccddeeff" {
+		t.Fatalf("alpha req 1 should have preq_id aabbccddeeff, got %s", alpha.Requirements[0].PreqID)
 	}
 }
 
@@ -235,7 +237,7 @@ func TestFR1_S6_UnicodeContent(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeFile(t, modDir, "module.json", `{
 		"name": "u",
-		"components": [{"id": 1, "name": "Comp", "content": "arch_comp.md"}]
+		"components": [{"id": "aabbccddeeff", "name": "Comp", "content": "arch_comp.md"}]
 	}`)
 
 	unicodeContent := "# Comp\n\nUnicode: 日本語 🎉\n\n```go\nfunc main() { fmt.Println(\"hello\") }\n```\n\n" + strings.Repeat("x", 1100) + "\n"
@@ -291,7 +293,7 @@ func TestFR1_E3_MissingContentFile(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeFile(t, modDir, "module.json", `{
 		"name": "m",
-		"components": [{"id": 1, "name": "C", "content": "arch_missing.md"}]
+		"components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_missing.md"}]
 	}`)
 
 	_, err := ReadSpec(dir)
@@ -348,7 +350,7 @@ func TestFR1_E6_EmptyContentFile(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeFile(t, modDir, "module.json", `{
 		"name": "m",
-		"components": [{"id": 1, "name": "C", "content": "arch_c.md"}]
+		"components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md"}]
 	}`)
 	writeFile(t, modDir, "arch_c.md", "")
 
@@ -380,8 +382,8 @@ func TestFR1_E8_ModuleWithNoContent(t *testing.T) {
 	os.MkdirAll(modDir, 0755)
 	writeFile(t, modDir, "module.json", `{
 		"name": "m",
-		"components": [{"id": 1, "name": "C"}],
-		"impl_sections": [{"id": 1, "name": "I"}]
+		"components": [{"id": "aabbccddeeff", "name": "C"}],
+		"impl_sections": [{"id": "aabbccddeeff", "name": "I"}]
 	}`)
 
 	graph, err := ReadSpec(dir)

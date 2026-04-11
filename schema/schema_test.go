@@ -221,6 +221,14 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 		})
 	}
 
+	// Verify module IDs are identity hash strings (12-char hex)
+	if mod.Components[0].ID == "" || len(mod.Components[0].ID) != 12 {
+		t.Fatalf("component ID should be 12-char hex, got %q", mod.Components[0].ID)
+	}
+	if mod.Requirements[0].ID == "" || len(mod.Requirements[0].ID) != 12 {
+		t.Fatalf("requirement ID should be 12-char hex, got %q", mod.Requirements[0].ID)
+	}
+
 	// Project-level node types: requirement, module, milestone.
 	projData := readTestdata(t, "valid_project.json")
 	var proj Project
@@ -262,7 +270,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"uses (component)", len(mod.Components) > 1 && len(mod.Components[1].Uses) > 0},
 		{"describes", len(mod.ImplSections) > 0 && len(mod.ImplSections[0].Describes) > 0},
 		{"depends_on", len(mod.Requirements) > 2 && len(mod.Requirements[2].DependsOn) > 0},
-		{"preq_id", len(mod.Requirements) > 0 && mod.Requirements[0].PreqID > 0},
+		{"preq_id", len(mod.Requirements) > 0 && mod.Requirements[0].PreqID != ""},
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
 		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},
@@ -278,40 +286,39 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 	}
 }
 
-func TestFR5_IDsAreNumeric(t *testing.T) {
+func TestFR5_ModuleIDsAreIdentityHashes(t *testing.T) {
 	modData := readTestdata(t, "valid_module.json")
 	var mod ModuleSpec
 	if err := json.Unmarshal(modData, &mod); err != nil {
 		t.Fatalf("unmarshal module: %v", err)
 	}
 
-	for _, r := range mod.Requirements {
-		if r.ID < 1 {
-			t.Fatalf("requirement ID must be >= 1, got %d", r.ID)
+	checkHash := func(label, id string) {
+		t.Helper()
+		if len(id) != 12 {
+			t.Fatalf("%s ID must be 12 hex chars, got %q (len %d)", label, id, len(id))
 		}
+	}
+
+	for _, r := range mod.Requirements {
+		checkHash("requirement", r.ID)
+		checkHash("requirement.preq_id", r.PreqID)
 	}
 	for _, c := range mod.Components {
-		if c.ID < 1 {
-			t.Fatalf("component ID must be >= 1, got %d", c.ID)
-		}
+		checkHash("component", c.ID)
 	}
 	for _, s := range mod.ImplSections {
-		if s.ID < 1 {
-			t.Fatalf("impl_section ID must be >= 1, got %d", s.ID)
-		}
+		checkHash("impl_section", s.ID)
 	}
 	for _, d := range mod.DataFlows {
-		if d.ID < 1 {
-			t.Fatalf("data_flow ID must be >= 1, got %d", d.ID)
-		}
+		checkHash("data_flow", d.ID)
 	}
-
 	for _, ts := range mod.TestSections {
-		if ts.ID < 1 {
-			t.Fatalf("test_section ID must be >= 1, got %d", ts.ID)
-		}
+		checkHash("test_section", ts.ID)
 	}
+}
 
+func TestFR5_ProjectIDsAreNumeric(t *testing.T) {
 	projData := readTestdata(t, "valid_project.json")
 	var proj Project
 	if err := json.Unmarshal(projData, &proj); err != nil {
@@ -426,8 +433,8 @@ func TestFR5_TestSectionsRoundTrip(t *testing.T) {
 	}
 
 	ts := mod.TestSections[0]
-	if ts.ID < 1 {
-		t.Fatalf("test_section ID must be >= 1, got %d", ts.ID)
+	if len(ts.ID) != 12 {
+		t.Fatalf("test_section ID must be 12-char hex, got %q", ts.ID)
 	}
 	if ts.Name == "" {
 		t.Fatal("test_section name is empty")
@@ -451,7 +458,7 @@ func TestFR5_TestSectionsRoundTrip(t *testing.T) {
 		t.Fatalf("round-trip test_sections length mismatch: want %d, got %d", len(mod.TestSections), len(mod2.TestSections))
 	}
 	if mod2.TestSections[0].ID != ts.ID {
-		t.Fatalf("round-trip test_section ID mismatch: want %d, got %d", ts.ID, mod2.TestSections[0].ID)
+		t.Fatalf("round-trip test_section ID mismatch: want %s, got %s", ts.ID, mod2.TestSections[0].ID)
 	}
 	if mod2.TestSections[0].Name != ts.Name {
 		t.Fatalf("round-trip test_section name mismatch: want %q, got %q", ts.Name, mod2.TestSections[0].Name)
@@ -459,19 +466,18 @@ func TestFR5_TestSectionsRoundTrip(t *testing.T) {
 }
 
 func TestNegative_TypeMismatch(t *testing.T) {
-	// String IDs must fail unmarshal since Go types use int.
 	tests := []struct {
-		name string
-		json string
+		name   string
+		json   string
 		target any
 	}{
 		{
-			"string ID in component",
-			`{"name":"m","components":[{"id":"abc","name":"c"}]}`,
+			"integer ID in module component fails Go unmarshal",
+			`{"name":"m","components":[{"id":1,"name":"c"}]}`,
 			new(ModuleSpec),
 		},
 		{
-			"string ID in requirement",
+			"string ID in project requirement fails Go unmarshal",
 			`{"name":"p","modules":[{"id":1,"name":"m","path":"m/"}],"requirements":[{"id":"x","type":"functional","title":"t"}]}`,
 			new(Project),
 		},
@@ -508,6 +514,16 @@ func TestNegative_MissingRequired(t *testing.T) {
 		}
 		if mod.Name != "" {
 			t.Fatalf("expected empty Name, got %q", mod.Name)
+		}
+	})
+	t.Run("module requirement ID is string zero-value", func(t *testing.T) {
+		var mod ModuleSpec
+		err := json.Unmarshal([]byte(`{"name":"m","requirements":[{"type":"functional","title":"R","preq_id":"aabbccddeeff"}]}`), &mod)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if mod.Requirements[0].ID != "" {
+			t.Fatalf("expected empty ID, got %q", mod.Requirements[0].ID)
 		}
 	})
 }

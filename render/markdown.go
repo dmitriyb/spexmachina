@@ -124,7 +124,8 @@ func writeModule(w io.Writer, mg *ModuleGraph) {
 	}
 }
 
-func writeModuleRequirements(w io.Writer, reqs []schema.Requirement) {
+// TODO(bead:spexmachina-qpn): fix after spexmachina-e8t changed ModuleRequirement to string IDs
+func writeModuleRequirements(w io.Writer, reqs []schema.ModuleRequirement) {
 	if len(reqs) == 0 {
 		return
 	}
@@ -135,7 +136,7 @@ func writeModuleRequirements(w io.Writer, reqs []schema.Requirement) {
 		if r.Type == "non_functional" {
 			prefix = "NFR"
 		}
-		fmt.Fprintf(w, "- %s%d: %s", prefix, r.ID, r.Title)
+		fmt.Fprintf(w, "- %s%s: %s", prefix, r.ID, r.Title)
 		if r.Description != "" {
 			fmt.Fprintf(w, " — %s", r.Description)
 		}
