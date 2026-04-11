@@ -75,8 +75,9 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 		}
 
 		// Requirements
+		// TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed ModuleRequirement to string IDs
 		for _, r := range mg.Spec.Requirements {
-			nodeID := fmt.Sprintf("module:%s:req:%d", modName, r.ID)
+			nodeID := fmt.Sprintf("module:%s:req:%s", modName, r.ID)
 			out.Nodes = append(out.Nodes, GraphNode{
 				ID:          nodeID,
 				Type:        "requirement",
@@ -84,17 +85,17 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 				Description: r.Description,
 				Module:      modName,
 			})
-			if r.PreqID != 0 {
+			if r.PreqID != "" {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("project:req:%d", r.PreqID),
+					To:   fmt.Sprintf("project:req:%s", r.PreqID),
 					Type: "preq_id",
 				})
 			}
 			for _, depID := range r.DependsOn {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("module:%s:req:%d", modName, depID),
+					To:   fmt.Sprintf("module:%s:req:%s", modName, depID),
 					Type: "depends_on",
 				})
 			}
@@ -102,7 +103,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 
 		// Components
 		for _, c := range mg.Spec.Components {
-			nodeID := fmt.Sprintf("module:%s:comp:%d", modName, c.ID)
+			nodeID := fmt.Sprintf("module:%s:comp:%s", modName, c.ID)
 			contentText := ""
 			if c.Content != "" {
 				contentText = mg.Content[c.Content]
@@ -118,14 +119,14 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			for _, reqID := range c.Implements {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("module:%s:req:%d", modName, reqID),
+					To:   fmt.Sprintf("module:%s:req:%s", modName, reqID),
 					Type: "implements",
 				})
 			}
 			for _, useID := range c.Uses {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%d", modName, useID),
+					To:   fmt.Sprintf("module:%s:comp:%s", modName, useID),
 					Type: "uses",
 				})
 			}
@@ -133,7 +134,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 
 		// Impl sections
 		for _, s := range mg.Spec.ImplSections {
-			nodeID := fmt.Sprintf("module:%s:impl:%d", modName, s.ID)
+			nodeID := fmt.Sprintf("module:%s:impl:%s", modName, s.ID)
 			contentText := ""
 			if s.Content != "" {
 				contentText = mg.Content[s.Content]
@@ -149,7 +150,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			for _, compID := range s.Describes {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%d", modName, compID),
+					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
 					Type: "describes",
 				})
 			}
@@ -157,7 +158,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 
 		// Data flows
 		for _, f := range mg.Spec.DataFlows {
-			nodeID := fmt.Sprintf("module:%s:flow:%d", modName, f.ID)
+			nodeID := fmt.Sprintf("module:%s:flow:%s", modName, f.ID)
 			contentText := ""
 			if f.Content != "" {
 				contentText = mg.Content[f.Content]
@@ -173,7 +174,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			for _, compID := range f.Uses {
 				out.Edges = append(out.Edges, GraphEdge{
 					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%d", modName, compID),
+					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
 					Type: "uses",
 				})
 			}

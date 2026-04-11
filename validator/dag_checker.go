@@ -125,17 +125,18 @@ func checkModuleDAG(project *schema.Project) []ValidationError {
 	return errs
 }
 
+// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkRequirementDAG checks the requirement dependency graph for a single module.
 // Nodes are requirement IDs, edges come from depends_on.
 func checkRequirementDAG(modName string, mod *schema.ModuleSpec) []ValidationError {
-	adj := make(map[int][]int, len(mod.Requirements))
-	idToTitle := make(map[int]string, len(mod.Requirements))
+	adj := make(map[string][]string, len(mod.Requirements))
+	idToTitle := make(map[string]string, len(mod.Requirements))
 	for _, req := range mod.Requirements {
 		idToTitle[req.ID] = req.Title
 		adj[req.ID] = req.DependsOn
 	}
 
-	cycles := detectCycles(adj)
+	cycles := detectStringCycles(adj)
 	var errs []ValidationError
 	for _, cycle := range cycles {
 		names := make([]string, len(cycle))
@@ -152,17 +153,18 @@ func checkRequirementDAG(modName string, mod *schema.ModuleSpec) []ValidationErr
 	return errs
 }
 
+// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkComponentDAG checks the component uses graph for a single module.
 // Nodes are component IDs, edges come from uses.
 func checkComponentDAG(modName string, mod *schema.ModuleSpec) []ValidationError {
-	adj := make(map[int][]int, len(mod.Components))
-	idToName := make(map[int]string, len(mod.Components))
+	adj := make(map[string][]string, len(mod.Components))
+	idToName := make(map[string]string, len(mod.Components))
 	for _, comp := range mod.Components {
 		idToName[comp.ID] = comp.Name
 		adj[comp.ID] = comp.Uses
 	}
 
-	cycles := detectCycles(adj)
+	cycles := detectStringCycles(adj)
 	var errs []ValidationError
 	for _, cycle := range cycles {
 		names := make([]string, len(cycle))
@@ -250,4 +252,50 @@ func sortedKeys(m map[int][]int) []int {
 	}
 	slices.Sort(keys)
 	return keys
+}
+
+// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+// detectStringCycles is the string-keyed variant of detectCycles for identity hash IDs.
+func detectStringCycles(adj map[string][]string) [][]string {
+	color := make(map[string]int, len(adj))
+	parent := make(map[string]string, len(adj))
+	var cycles [][]string
+
+	keys := make([]string, 0, len(adj))
+	for k := range adj {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+
+	var dfs func(node string)
+	dfs = func(node string) {
+		color[node] = gray
+		for _, neighbor := range adj[node] {
+			switch color[neighbor] {
+			case white:
+				parent[neighbor] = node
+				dfs(neighbor)
+			case gray:
+				var path []string
+				for n := node; n != neighbor; n = parent[n] {
+					path = append(path, n)
+				}
+				path = append(path, neighbor)
+				for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+					path[i], path[j] = path[j], path[i]
+				}
+				path = append(path, neighbor)
+				cycles = append(cycles, path)
+			}
+		}
+		color[node] = black
+	}
+
+	for _, node := range keys {
+		if color[node] == white {
+			dfs(node)
+		}
+	}
+
+	return cycles
 }

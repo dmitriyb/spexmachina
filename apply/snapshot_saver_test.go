@@ -28,13 +28,14 @@ func setupSpecDir(t *testing.T) string {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatalf("mkdir alpha: %v", err)
 	}
+	// TODO(bead:spexmachina-29q): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"}
+			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)

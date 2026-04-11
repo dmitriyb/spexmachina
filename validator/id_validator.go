@@ -57,15 +57,16 @@ func checkProjectUniqueness(project *schema.Project) []ValidationError {
 	return errs
 }
 
+// TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkModuleUniqueness checks for duplicate IDs in module-level arrays.
 func checkModuleUniqueness(modName string, mod *schema.ModuleSpec) []ValidationError {
 	var errs []ValidationError
 	prefix := modName + "/module.json:"
 
-	errs = append(errs, checkDuplicateIDs(prefix+"/requirements", reqIDs(mod.Requirements))...)
-	errs = append(errs, checkDuplicateIDs(prefix+"/components", compIDs(mod.Components))...)
-	errs = append(errs, checkDuplicateIDs(prefix+"/impl_sections", implIDs(mod.ImplSections))...)
-	errs = append(errs, checkDuplicateIDs(prefix+"/data_flows", flowIDs(mod.DataFlows))...)
+	errs = append(errs, checkDuplicateStringIDs(prefix+"/requirements", moduleReqIDs(mod.Requirements))...)
+	errs = append(errs, checkDuplicateStringIDs(prefix+"/components", compIDs(mod.Components))...)
+	errs = append(errs, checkDuplicateStringIDs(prefix+"/impl_sections", implIDs(mod.ImplSections))...)
+	errs = append(errs, checkDuplicateStringIDs(prefix+"/data_flows", flowIDs(mod.DataFlows))...)
 
 	return errs
 }
@@ -166,13 +167,15 @@ func checkProjectPriority(project *schema.Project) []ValidationError {
 	return errs
 }
 
+// TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkModuleRefs validates cross-references within a single module.
 func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Project) []ValidationError {
 	var errs []ValidationError
 
-	reqSet := idSet(reqIDs(mod.Requirements))
-	compSet := idSet(compIDs(mod.Components))
-	projReqSet := idSet(reqIDs(project.Requirements))
+	reqSet := stringIDSet(moduleReqIDs(mod.Requirements))
+	compSet := stringIDSet(compIDs(mod.Components))
+	// TODO(bead:spexmachina-qg2): projReqSet needs string keys once project IDs are also identity hashes
+	projReqSet := stringIDSet(projReqStringIDs(project.Requirements))
 	prefix := modName + "/module.json:"
 
 	// component.implements → requirement IDs within the same module.
@@ -182,8 +185,8 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/components/%d", prefix, comp.ID),
-					Message:  fmt.Sprintf("implements references non-existent requirement %d", implID),
+					Path:     fmt.Sprintf("%s/components/%s", prefix, comp.ID),
+					Message:  fmt.Sprintf("implements references non-existent requirement %s", implID),
 				})
 			}
 		}
@@ -193,8 +196,8 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/components/%d", prefix, comp.ID),
-					Message:  fmt.Sprintf("uses references non-existent component %d", useID),
+					Path:     fmt.Sprintf("%s/components/%s", prefix, comp.ID),
+					Message:  fmt.Sprintf("uses references non-existent component %s", useID),
 				})
 			}
 		}
@@ -207,8 +210,8 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/impl_sections/%d", prefix, sec.ID),
-					Message:  fmt.Sprintf("describes references non-existent component %d", descID),
+					Path:     fmt.Sprintf("%s/impl_sections/%s", prefix, sec.ID),
+					Message:  fmt.Sprintf("describes references non-existent component %s", descID),
 				})
 			}
 		}
@@ -221,8 +224,8 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/data_flows/%d", prefix, flow.ID),
-					Message:  fmt.Sprintf("uses references non-existent component %d", useID),
+					Path:     fmt.Sprintf("%s/data_flows/%s", prefix, flow.ID),
+					Message:  fmt.Sprintf("uses references non-existent component %s", useID),
 				})
 			}
 		}
@@ -235,8 +238,8 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/test_sections/%d", prefix, ts.ID),
-					Message:  fmt.Sprintf("describes references non-existent component %d", descID),
+					Path:     fmt.Sprintf("%s/test_sections/%s", prefix, ts.ID),
+					Message:  fmt.Sprintf("describes references non-existent component %s", descID),
 				})
 			}
 		}
@@ -249,25 +252,25 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 				errs = append(errs, ValidationError{
 					Check:    "id",
 					Severity: "error",
-					Path:     fmt.Sprintf("%s/requirements/%d", prefix, req.ID),
-					Message:  fmt.Sprintf("depends_on references non-existent requirement %d", depID),
+					Path:     fmt.Sprintf("%s/requirements/%s", prefix, req.ID),
+					Message:  fmt.Sprintf("depends_on references non-existent requirement %s", depID),
 				})
 			}
 		}
 		// requirement.preq_id — mandatory, must reference a valid project requirement.
-		if req.PreqID == 0 {
+		if req.PreqID == "" {
 			errs = append(errs, ValidationError{
 				Check:    "id",
 				Severity: "error",
-				Path:     fmt.Sprintf("%s/requirements/%d", prefix, req.ID),
-				Message:  fmt.Sprintf("requirement %d missing preq_id", req.ID),
+				Path:     fmt.Sprintf("%s/requirements/%s", prefix, req.ID),
+				Message:  fmt.Sprintf("requirement %s missing preq_id", req.ID),
 			})
 		} else if !projReqSet[req.PreqID] {
 			errs = append(errs, ValidationError{
 				Check:    "id",
 				Severity: "error",
-				Path:     fmt.Sprintf("%s/requirements/%d", prefix, req.ID),
-				Message:  fmt.Sprintf("preq_id references non-existent project requirement %d", req.PreqID),
+				Path:     fmt.Sprintf("%s/requirements/%s", prefix, req.ID),
+				Message:  fmt.Sprintf("preq_id references non-existent project requirement %s", req.PreqID),
 			})
 		}
 	}
@@ -301,35 +304,83 @@ func milestoneIDs(mss []schema.Milestone) []int {
 	return ids
 }
 
-func compIDs(comps []schema.Component) []int {
-	ids := make([]int, len(comps))
+// TODO(bead:spexmachina-qg2): remove once project IDs are also identity hashes
+func projReqStringIDs(reqs []schema.Requirement) []string {
+	ids := make([]string, len(reqs))
+	for i, r := range reqs {
+		ids[i] = fmt.Sprintf("%d", r.ID)
+	}
+	return ids
+}
+
+// TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+func moduleReqIDs(reqs []schema.ModuleRequirement) []string {
+	ids := make([]string, len(reqs))
+	for i, r := range reqs {
+		ids[i] = r.ID
+	}
+	return ids
+}
+
+func compIDs(comps []schema.Component) []string {
+	ids := make([]string, len(comps))
 	for i, c := range comps {
 		ids[i] = c.ID
 	}
 	return ids
 }
 
-func implIDs(secs []schema.ImplSection) []int {
-	ids := make([]int, len(secs))
+func implIDs(secs []schema.ImplSection) []string {
+	ids := make([]string, len(secs))
 	for i, s := range secs {
 		ids[i] = s.ID
 	}
 	return ids
 }
 
-func flowIDs(flows []schema.DataFlow) []int {
-	ids := make([]int, len(flows))
+func flowIDs(flows []schema.DataFlow) []string {
+	ids := make([]string, len(flows))
 	for i, f := range flows {
 		ids[i] = f.ID
 	}
 	return ids
 }
 
-// idSet converts a slice of IDs to a set for O(1) lookup.
+// idSet converts a slice of int IDs to a set for O(1) lookup.
 func idSet(ids []int) map[int]bool {
 	s := make(map[int]bool, len(ids))
 	for _, id := range ids {
 		s[id] = true
 	}
 	return s
+}
+
+// stringIDSet converts a slice of string IDs to a set for O(1) lookup.
+func stringIDSet(ids []string) map[string]bool {
+	s := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		s[id] = true
+	}
+	return s
+}
+
+// checkDuplicateStringIDs reports any string IDs that appear more than once.
+func checkDuplicateStringIDs(path string, ids []string) []ValidationError {
+	seen := make(map[string]int, len(ids))
+	for _, id := range ids {
+		seen[id]++
+	}
+
+	var errs []ValidationError
+	for id, count := range seen {
+		if count > 1 {
+			errs = append(errs, ValidationError{
+				Check:    "id",
+				Severity: "error",
+				Path:     path,
+				Message:  fmt.Sprintf("duplicate ID %s", id),
+			})
+		}
+	}
+	return errs
 }

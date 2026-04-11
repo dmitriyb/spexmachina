@@ -139,13 +139,14 @@ func setupInvalidTestSpec(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"}
+			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 
@@ -171,21 +172,22 @@ func setupSpecWithOrphans(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Req1", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Req2", "preq_id": 1}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req1", "preq_id": "aabbccddeeff"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req2", "preq_id": "aabbccddeeff"}
 		],
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md", "implements": [1, 2]},
-			{"id": 2, "name": "Comp2", "content": "arch_comp2.md", "implements": [2]}
+			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md", "implements": ["aabbccddeeff", "ffeeddccbbaa"]},
+			{"id": "ffeeddccbbaa", "name": "Comp2", "content": "arch_comp2.md", "implements": ["ffeeddccbbaa"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
 		],
 		"test_sections": [
-			{"id": 1, "name": "Comp1 tests", "content": "test_comp1.md", "describes": [1, 2]}
+			{"id": "aabbccddeeff", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["aabbccddeeff", "ffeeddccbbaa"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")

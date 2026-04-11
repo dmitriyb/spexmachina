@@ -28,16 +28,17 @@ func setupTestSpec(t *testing.T) string {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"}
+			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md"}
+			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md"}
 		],
 		"test_sections": [
-			{"id": 1, "name": "Comp1 tests", "content": "test_comp1.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)

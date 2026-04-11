@@ -409,16 +409,17 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
-			{"id": 1, "name": "AlphaComp", "content": "arch_alpha.md"}
+			{"id": "aabbccddeeff", "name": "AlphaComp", "content": "arch_alpha.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "AlphaImpl", "content": "impl_alpha.md"}
+			{"id": "aabbccddeeff", "name": "AlphaImpl", "content": "impl_alpha.md"}
 		],
 		"test_sections": [
-			{"id": 1, "name": "AlphaTest", "content": "test_alpha.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "AlphaTest", "content": "test_alpha.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_alpha.md", "# Alpha comp\n")
@@ -432,13 +433,13 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	writeTestFile(t, betaDir, "module.json", `{
 		"name": "beta",
 		"components": [
-			{"id": 1, "name": "BetaComp", "content": "arch_beta.md"}
+			{"id": "aabbccddeeff", "name": "BetaComp", "content": "arch_beta.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "BetaImpl", "content": "impl_beta.md"}
+			{"id": "aabbccddeeff", "name": "BetaImpl", "content": "impl_beta.md"}
 		],
 		"test_sections": [
-			{"id": 1, "name": "BetaTest", "content": "test_beta.md", "describes": [1]}
+			{"id": "aabbccddeeff", "name": "BetaTest", "content": "test_beta.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp\n")
@@ -525,20 +526,21 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 	if err := os.MkdirAll(modDir, 0755); err != nil {
 		t.Fatal(err)
 	}
+	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	// Component 2 uses component 1.
 	writeTestFile(t, modDir, "module.json", `{
 		"name": "mod",
 		"components": [
-			{"id": 1, "name": "Base", "content": "arch_base.md"},
-			{"id": 2, "name": "User", "content": "arch_user.md", "uses": [1]}
+			{"id": "aabbccddeeff", "name": "Base", "content": "arch_base.md"},
+			{"id": "ffeeddccbbaa", "name": "User", "content": "arch_user.md", "uses": ["aabbccddeeff"]}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "BaseImpl", "content": "impl_base.md"},
-			{"id": 2, "name": "UserImpl", "content": "impl_user.md"}
+			{"id": "aabbccddeeff", "name": "BaseImpl", "content": "impl_base.md"},
+			{"id": "ffeeddccbbaa", "name": "UserImpl", "content": "impl_user.md"}
 		],
 		"test_sections": [
-			{"id": 1, "name": "BaseTest", "content": "test_base.md", "describes": [1]},
-			{"id": 2, "name": "UserTest", "content": "test_user.md", "describes": [2]}
+			{"id": "aabbccddeeff", "name": "BaseTest", "content": "test_base.md", "describes": ["aabbccddeeff"]},
+			{"id": "ffeeddccbbaa", "name": "UserTest", "content": "test_user.md", "describes": ["ffeeddccbbaa"]}
 		]
 	}`)
 	writeTestFile(t, modDir, "arch_base.md", "# Base\n")

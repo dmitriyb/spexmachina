@@ -9,6 +9,8 @@ import (
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
+// TODO(bead:spexmachina-r4o): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+
 // --- S1: ActionClassifier produces correct actions for each category ---
 
 func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
@@ -491,8 +493,8 @@ func TestFR7_D1_ResolveDeps_UsesOpenBead(t *testing.T) {
 				ID:   4,
 				Name: "impact",
 				Components: []mapping.ComponentInfo{
-					{ID: 2, Name: "NodeMatcher", Uses: nil},
-					{ID: 3, Name: "ActionClassifier", Uses: []int{2}},
+					{ID: "aabbccddeeff", Name: "NodeMatcher", Uses: nil},
+					{ID: "ffeeddccbbaa", Name: "ActionClassifier", Uses: []string{"aabbccddeeff"}},
 				},
 			},
 		},
@@ -522,8 +524,8 @@ func TestFR7_D2_ResolveDeps_UsesClosedBead(t *testing.T) {
 				ID:   4,
 				Name: "impact",
 				Components: []mapping.ComponentInfo{
-					{ID: 2, Name: "NodeMatcher", Uses: nil},
-					{ID: 3, Name: "ActionClassifier", Uses: []int{2}},
+					{ID: "aabbccddeeff", Name: "NodeMatcher", Uses: nil},
+					{ID: "ffeeddccbbaa", Name: "ActionClassifier", Uses: []string{"aabbccddeeff"}},
 				},
 			},
 		},
@@ -550,16 +552,16 @@ func TestFR7_D3_ResolveDeps_RequiresModuleOpenBeads(t *testing.T) {
 				Name:           "impact",
 				RequiresModule: []int{3},
 				Components: []mapping.ComponentInfo{
-					{ID: 3, Name: "ActionClassifier", Uses: nil},
+					{ID: "ffeeddccbbaa", Name: "ActionClassifier", Uses: nil},
 				},
 			},
 			"merkle": {
 				ID:   3,
 				Name: "merkle",
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "Hasher"},
-					{ID: 2, Name: "TreeBuilder"},
-					{ID: 3, Name: "SnapshotStore"},
+					{ID: "aabbccddeeff", Name: "Hasher"},
+					{ID: "112233445566", Name: "TreeBuilder"},
+					{ID: "ffeeddccbbaa", Name: "SnapshotStore"},
 				},
 			},
 		},
@@ -584,9 +586,9 @@ func TestFR7_D3_ResolveDeps_RequiresModuleOpenBeads(t *testing.T) {
 func TestFR7_D4_ResolveDeps_TransitiveRequiresModule(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: 1, Name: "CompA"}}},
-			"modB": {ID: 2, Name: "modB", RequiresModule: []int{3}, Components: []mapping.ComponentInfo{{ID: 1, Name: "CompB"}}},
-			"modC": {ID: 3, Name: "modC", Components: []mapping.ComponentInfo{{ID: 1, Name: "CompC"}}},
+			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
+			"modB": {ID: 2, Name: "modB", RequiresModule: []int{3}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
+			"modC": {ID: 3, Name: "modC", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompC"}}},
 		},
 		modulesByID: map[int]string{1: "modA", 2: "modB", 3: "modC"},
 	}
@@ -611,9 +613,9 @@ func TestFR7_D5_ResolveDeps_UsesNotTransitive(t *testing.T) {
 				ID:   1,
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "X", Uses: []int{2}},
-					{ID: 2, Name: "Y", Uses: []int{3}},
-					{ID: 3, Name: "Z"},
+					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
+					{ID: "ffeeddccbbaa", Name: "Y", Uses: []string{"112233445566"}},
+					{ID: "112233445566", Name: "Z"},
 				},
 			},
 		},
@@ -640,15 +642,15 @@ func TestFR7_D6_ResolveDeps_MixedUsesAndRequiresModule(t *testing.T) {
 				Name:           "modA",
 				RequiresModule: []int{2},
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "X", Uses: []int{2}},
-					{ID: 2, Name: "Y"},
+					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
+					{ID: "ffeeddccbbaa", Name: "Y"},
 				},
 			},
 			"modB": {
 				ID:   2,
 				Name: "modB",
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "CompB"},
+					{ID: "aabbccddeeff", Name: "CompB"},
 				},
 			},
 		},
@@ -676,11 +678,11 @@ func TestFR7_D7_ResolveDeps_AllClosed(t *testing.T) {
 				Name:           "mod",
 				RequiresModule: []int{2},
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "X", Uses: []int{2}},
-					{ID: 2, Name: "Y"},
+					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
+					{ID: "ffeeddccbbaa", Name: "Y"},
 				},
 			},
-			"modB": {ID: 2, Name: "modB", Components: []mapping.ComponentInfo{{ID: 1, Name: "CompB"}}},
+			"modB": {ID: 2, Name: "modB", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
 		},
 		modulesByID: map[int]string{1: "mod", 2: "modB"},
 	}
@@ -706,7 +708,7 @@ func TestFR7_D8_ResolveDeps_NoDeps(t *testing.T) {
 				ID:   1,
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "Standalone"},
+					{ID: "aabbccddeeff", Name: "Standalone"},
 				},
 			},
 		},
@@ -725,8 +727,8 @@ func TestFR7_D8_ResolveDeps_NoDeps(t *testing.T) {
 func TestFR7_D9_ResolveDeps_CycleDetection(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: 1, Name: "CompA"}}},
-			"modB": {ID: 2, Name: "modB", RequiresModule: []int{1}, Components: []mapping.ComponentInfo{{ID: 1, Name: "CompB"}}},
+			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
+			"modB": {ID: 2, Name: "modB", RequiresModule: []int{1}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
 		},
 		modulesByID: map[int]string{1: "modA", 2: "modB"},
 	}
@@ -752,8 +754,8 @@ func TestFR7_D12_ResolveDeps_NoBeadForNewComponent(t *testing.T) {
 				ID:   1,
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
-					{ID: 1, Name: "X", Uses: []int{2}},
-					{ID: 2, Name: "Y"},
+					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
+					{ID: "ffeeddccbbaa", Name: "Y"},
 				},
 			},
 		},

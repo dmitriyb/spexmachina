@@ -31,10 +31,11 @@ func CheckTestCoverage(specDir string) []ValidationError {
 	return result
 }
 
+// TODO(bead:spexmachina-2yf): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // detectUncoveredComponents finds components not referenced by any
 // test_section's describes array within the module.
 func detectUncoveredComponents(modName string, mod *schema.ModuleSpec) []ValidationError {
-	coveredComps := make(map[int]bool)
+	coveredComps := make(map[string]bool)
 	for _, ts := range mod.TestSections {
 		for _, compID := range ts.Describes {
 			coveredComps[compID] = true
@@ -47,8 +48,8 @@ func detectUncoveredComponents(modName string, mod *schema.ModuleSpec) []Validat
 			errs = append(errs, ValidationError{
 				Check:    "test_coverage",
 				Severity: "error",
-				Path:     fmt.Sprintf("%s/module.json:/components/%d", modName, comp.ID),
-				Message:  fmt.Sprintf("component %s (id:%d) has no test_section coverage", comp.Name, comp.ID),
+				Path:     fmt.Sprintf("%s/module.json:/components/%s", modName, comp.ID),
+				Message:  fmt.Sprintf("component %s (id:%s) has no test_section coverage", comp.Name, comp.ID),
 			})
 		}
 	}

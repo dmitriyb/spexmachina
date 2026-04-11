@@ -30,19 +30,20 @@ func fixtureGraph() *SpecGraph {
 				Spec: schema.ModuleSpec{
 					Name:        "alpha",
 					Description: "Alpha module description",
-					Requirements: []schema.Requirement{
-						{ID: 1, Type: "functional", Title: "Parse", PreqID: 1},
-						{ID: 2, Type: "functional", Title: "Build", PreqID: 2},
+					// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+					Requirements: []schema.ModuleRequirement{
+						{ID: "aabbccddeeff", Type: "functional", Title: "Parse", PreqID: "112233445566"},
+						{ID: "ffeeddccbbaa", Type: "functional", Title: "Build", PreqID: "665544332211"},
 					},
 					Components: []schema.Component{
-						{ID: 1, Name: "Parser", Description: "Parses input into AST.", Content: "arch_parser.md", Implements: []int{1}},
-						{ID: 2, Name: "Builder", Description: "Builds output from AST.", Content: "arch_builder.md", Implements: []int{2}, Uses: []int{1}},
+						{ID: "aabbccddeeff", Name: "Parser", Description: "Parses input into AST.", Content: "arch_parser.md", Implements: []string{"aabbccddeeff"}},
+						{ID: "ffeeddccbbaa", Name: "Builder", Description: "Builds output from AST.", Content: "arch_builder.md", Implements: []string{"ffeeddccbbaa"}, Uses: []string{"aabbccddeeff"}},
 					},
 					ImplSections: []schema.ImplSection{
-						{ID: 1, Name: "Parsing Implementation", Content: "impl_parsing.md", Describes: []int{1}},
+						{ID: "aabbccddeeff", Name: "Parsing Implementation", Content: "impl_parsing.md", Describes: []string{"aabbccddeeff"}},
 					},
 					DataFlows: []schema.DataFlow{
-						{ID: 1, Name: "Build Pipeline", Description: "Parse then build.", Content: "flow_build_pipeline.md", Uses: []int{1, 2}},
+						{ID: "aabbccddeeff", Name: "Build Pipeline", Description: "Parse then build.", Content: "flow_build_pipeline.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 					},
 				},
 				Content: map[string]string{
@@ -57,14 +58,15 @@ func fixtureGraph() *SpecGraph {
 				Spec: schema.ModuleSpec{
 					Name:        "beta",
 					Description: "Beta module description",
-					Requirements: []schema.Requirement{
-						{ID: 1, Type: "functional", Title: "Consume", PreqID: 1},
+					// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+					Requirements: []schema.ModuleRequirement{
+						{ID: "aabbccddeeff", Type: "functional", Title: "Consume", PreqID: "112233445566"},
 					},
 					Components: []schema.Component{
-						{ID: 1, Name: "Consumer", Description: "Consumes built output.", Content: "arch_consumer.md", Implements: []int{1}},
+						{ID: "aabbccddeeff", Name: "Consumer", Description: "Consumes built output.", Content: "arch_consumer.md", Implements: []string{"aabbccddeeff"}},
 					},
 					ImplSections: []schema.ImplSection{
-						{ID: 1, Name: "Consumption Implementation", Content: "impl_consumption.md", Describes: []int{1}},
+						{ID: "aabbccddeeff", Name: "Consumption Implementation", Content: "impl_consumption.md", Describes: []string{"aabbccddeeff"}},
 					},
 				},
 				Content: map[string]string{
@@ -552,6 +554,7 @@ func TestFR3_J8_NodeCount(t *testing.T) {
 
 // E1: Module with empty requirements array
 func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
+	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "empty-req", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
@@ -587,13 +590,14 @@ func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 
 // E3: Content containing JSON-special characters
 func TestFR3_E3_JSONSpecialChars(t *testing.T) {
+	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "special", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: 1, Name: "m", Path: "m"},
 			Spec: schema.ModuleSpec{
 				Name:       "m",
-				Components: []schema.Component{{ID: 1, Name: "C", Content: "arch.md"}},
+				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
 			},
 			Content: map[string]string{
 				"arch.md": `"quotes" and \backslashes and {braces}`,
@@ -615,13 +619,14 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 
 // E5: Content with deeply nested headings
 func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
+	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "deep", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: 1, Name: "m", Path: "m"},
 			Spec: schema.ModuleSpec{
 				Name:       "m",
-				Components: []schema.Component{{ID: 1, Name: "C", Content: "arch.md"}},
+				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
 			},
 			Content: map[string]string{
 				"arch.md": "# Level 1\n\n## Level 2\n\n### Level 3\n\n#### Level 4\n",
@@ -654,13 +659,14 @@ func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 
 // E6: Module name with special characters in DOT
 func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
+	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: 1, Name: "data-pipeline", Path: "data-pipeline"}}},
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: 1, Name: "data-pipeline", Path: "data-pipeline"},
 			Spec: schema.ModuleSpec{
 				Name:       "data-pipeline",
-				Components: []schema.Component{{ID: 1, Name: "Ingest"}},
+				Components: []schema.Component{{ID: "aabbccddeeff", Name: "Ingest"}},
 			},
 			Content: map[string]string{},
 		}},

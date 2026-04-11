@@ -154,7 +154,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 	// Find the component in the spec graph
 	var comp *mapping.ComponentInfo
 	for i := range mod.Components {
-		nodeID := fmt.Sprintf("%s/component/%d", action.Module, mod.Components[i].ID)
+		nodeID := fmt.Sprintf("%s/component/%s", action.Module, mod.Components[i].ID)
 		if nodeID == specNodeID {
 			comp = &mod.Components[i]
 			break
@@ -175,7 +175,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 
 	// 1. Resolve direct component `uses` edges (NOT transitive)
 	for _, usedID := range comp.Uses {
-		nodeKey := fmt.Sprintf("%s/component/%d", action.Module, usedID)
+		nodeKey := fmt.Sprintf("%s/component/%s", action.Module, usedID)
 		if r, ok := recordIdx[nodeKey]; ok && r.BeadStatus != "closed" {
 			if !seen[r.BeadID] {
 				deps = append(deps, r.BeadID)
@@ -219,7 +219,7 @@ func resolveModuleDeps(graph mapping.SpecGraph, recordIdx map[string]mapping.Rec
 
 		// Collect open component beads in the required module
 		for _, comp := range reqMod.Components {
-			nodeKey := fmt.Sprintf("%s/component/%d", reqMod.Name, comp.ID)
+			nodeKey := fmt.Sprintf("%s/component/%s", reqMod.Name, comp.ID)
 			if r, ok := recordIdx[nodeKey]; ok && r.BeadStatus != "closed" {
 				deps = append(deps, r.BeadID)
 			}
