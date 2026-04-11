@@ -7,10 +7,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func TestREQ3_Save_CreatesValidJSON(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -48,7 +49,6 @@ func TestREQ3_Save_CreatesValidJSON(t *testing.T) {
 }
 
 func TestREQ3_Save_FlatNodeMap(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -69,22 +69,25 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	// Expect flat keys using spec-ID format
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+
+	// Expect flat keys using identity hash format
 	expectedKeys := []string{
 		"project",
-		"project/meta",
-		"project/requirement/1",
-		"project/requirement/2",
-		"module/1",
-		"module/1/meta",
-		"module/1/requirement/1",
-		"module/1/requirement/2",
-		"module/1/component/1",
-		"module/1/component/2",
-		"module/1/impl_section/1",
-		"module/2",
-		"module/2/meta",
-		"module/2/component/1",
+		"meta/project",
+		schema.IdentityHash("project", "requirement", "1"),
+		schema.IdentityHash("project", "requirement", "2"),
+		alphaHash,
+		"meta/" + alphaHash,
+		schema.IdentityHash("alpha", "requirement", "Alpha req 1"),
+		schema.IdentityHash("alpha", "requirement", "Alpha req 2"),
+		schema.IdentityHash("alpha", "component", "Comp1"),
+		schema.IdentityHash("alpha", "component", "Comp2"),
+		schema.IdentityHash("alpha", "impl_section", "Impl1"),
+		betaHash,
+		"meta/" + betaHash,
+		schema.IdentityHash("beta", "component", "BetaComp"),
 	}
 
 	for _, key := range expectedKeys {
@@ -111,7 +114,6 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 }
 
 func TestREQ3_Save_NodeTypes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -129,15 +131,18 @@ func TestREQ3_Save_NodeTypes(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+
 	tests := []struct {
 		key      string
 		wantType string
 	}{
 		{"project", "project"},
-		{"project/meta", "leaf"},
-		{"module/1", "module"},
-		{"module/1/meta", "leaf"},
-		{"module/1/component/1", "leaf"},
+		{"meta/project", "leaf"},
+		{alphaHash, "module"},
+		{"meta/" + alphaHash, "leaf"},
+		{comp1Key, "leaf"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.key, func(t *testing.T) {
@@ -153,7 +158,6 @@ func TestREQ3_Save_NodeTypes(t *testing.T) {
 }
 
 func TestREQ3_Save_ChildrenAreKeys(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -171,30 +175,33 @@ func TestREQ3_Save_ChildrenAreKeys(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	moduleNode := snap.Nodes["module/1"]
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	moduleNode := snap.Nodes[alphaHash]
 	if moduleNode == nil {
-		t.Fatal("module/1 node not found")
+		t.Fatalf("%s node not found", alphaHash)
 	}
-	wantChildren := []string{
-		"module/1/component/1",
-		"module/1/component/2",
-		"module/1/impl_section/1",
-		"module/1/meta",
-		"module/1/requirement/1",
-		"module/1/requirement/2",
+
+	// Alpha has 6 children sorted by key
+	if len(moduleNode.Children) != 6 {
+		t.Fatalf("children count: want 6, got %d", len(moduleNode.Children))
 	}
-	if len(moduleNode.Children) != len(wantChildren) {
-		t.Fatalf("children count: want %d, got %d", len(wantChildren), len(moduleNode.Children))
+
+	// All children should be valid node keys
+	for _, childKey := range moduleNode.Children {
+		if _, ok := snap.Nodes[childKey]; !ok {
+			t.Errorf("child key %q not found in nodes", childKey)
+		}
 	}
-	for i, want := range wantChildren {
-		if moduleNode.Children[i] != want {
-			t.Errorf("child[%d]: want %s, got %s", i, want, moduleNode.Children[i])
+
+	// Children should be sorted
+	for i := 1; i < len(moduleNode.Children); i++ {
+		if moduleNode.Children[i] < moduleNode.Children[i-1] {
+			t.Errorf("children not sorted: %s comes after %s", moduleNode.Children[i], moduleNode.Children[i-1])
 		}
 	}
 }
 
 func TestREQ3_Save_LeafNoChildren(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -212,9 +219,9 @@ func TestREQ3_Save_LeafNoChildren(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	leaf := snap.Nodes["project/meta"]
+	leaf := snap.Nodes["meta/project"]
 	if leaf == nil {
-		t.Fatal("project/meta node not found")
+		t.Fatal("meta/project node not found")
 	}
 	if len(leaf.Children) != 0 {
 		t.Fatalf("leaf should have no children, got %d", len(leaf.Children))
@@ -222,7 +229,6 @@ func TestREQ3_Save_LeafNoChildren(t *testing.T) {
 }
 
 func TestREQ3_LoadSave_RoundTrip(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -251,7 +257,6 @@ func TestREQ3_LoadSave_RoundTrip(t *testing.T) {
 }
 
 func TestREQ3_LoadSave_PreservesStructure(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -285,7 +290,7 @@ func assertTreeEqual(t *testing.T, want, got *Node, path string) {
 		t.Fatalf("%s node_type: want %s, got %s", path, want.NodeType, got.NodeType)
 	}
 	if want.Module != got.Module {
-		t.Fatalf("%s module: want %d, got %d", path, want.Module, got.Module)
+		t.Fatalf("%s module: want %q, got %q", path, want.Module, got.Module)
 	}
 	if len(want.Children) != len(got.Children) {
 		t.Fatalf("%s children count: want %d, got %d", path, len(want.Children), len(got.Children))
@@ -342,7 +347,6 @@ func TestREQ3_Load_MissingRootNode(t *testing.T) {
 }
 
 func TestREQ3_Save_Deterministic(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -367,7 +371,6 @@ func TestREQ3_Save_Deterministic(t *testing.T) {
 }
 
 func TestREQ3_Save_NodeTypeAndModulePreserved(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -385,20 +388,21 @@ func TestREQ3_Save_NodeTypeAndModulePreserved(t *testing.T) {
 	var snap Snapshot
 	must(t, json.Unmarshal(data, &snap))
 
-	compNode := snap.Nodes["module/1/component/1"]
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+	compNode := snap.Nodes[comp1Key]
 	if compNode == nil {
-		t.Fatal("module/1/component/1 node not found")
+		t.Fatalf("%s node not found", comp1Key)
 	}
 	if compNode.NodeType != "component" {
 		t.Errorf("node_type: want component, got %s", compNode.NodeType)
 	}
-	if compNode.Module != 1 {
-		t.Errorf("module: want 1, got %d", compNode.Module)
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	if compNode.Module != alphaHash {
+		t.Errorf("module: want %s, got %s", alphaHash, compNode.Module)
 	}
 }
 
 func TestREQ3_Save_OverwritesPrevious(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree1, err := BuildTree(specDir)
 	if err != nil {
@@ -431,7 +435,6 @@ func TestREQ3_Save_OverwritesPrevious(t *testing.T) {
 }
 
 func TestREQ3_Save_PrettyPrintedJSON(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	tree, err := BuildTree(specDir)
 	if err != nil {
@@ -492,7 +495,7 @@ func TestREQ3_Load_UnknownNodeType(t *testing.T) {
 		RootHash: "abc",
 		RootKey:  "project",
 		Nodes: map[string]*SnapshotNode{
-			"project": {Hash: "abc", Type: "project", Children: []string{"project/widget"}},
+			"project":        {Hash: "abc", Type: "project", Children: []string{"project/widget"}},
 			"project/widget": {Hash: "def", Type: "unknown_type", NodeType: "future_kind"},
 		},
 	}

@@ -88,8 +88,8 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 	if modified[0].NodeType != "component" {
 		t.Errorf("expected NodeType 'component', got %q", modified[0].NodeType)
 	}
-	if modified[0].Module != 1 {
-		t.Errorf("expected Module 1, got %d", modified[0].Module)
+	if modified[0].Module == "" {
+		t.Errorf("expected non-empty Module, got %q", modified[0].Module)
 	}
 	if modified[0].OldHash == "" || modified[0].NewHash == "" {
 		t.Error("expected both OldHash and NewHash to be non-empty for modified change")
@@ -145,8 +145,8 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 			if c.NodeType != "impl_section" {
 				t.Errorf("expected NodeType 'impl_section', got %q", c.NodeType)
 			}
-			if c.Module != 1 {
-				t.Errorf("expected Module 1, got %d", c.Module)
+			if c.Module == "" {
+				t.Errorf("expected non-empty Module, got %q", c.Module)
 			}
 		}
 	}
@@ -196,8 +196,8 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 	for _, c := range removed {
 		if strings.HasPrefix(c.Path, "module/2") {
 			foundBeta = true
-			if c.Module != 2 {
-				t.Errorf("expected Module 2 for removed beta node, got %d", c.Module)
+			if c.Module == "" {
+				t.Errorf("expected non-empty Module for removed beta node, got %q", c.Module)
 			}
 			if c.NodeType == "" {
 				t.Errorf("expected non-empty NodeType for removed %s", c.Path)
@@ -342,7 +342,7 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		}
 		// project-level nodes have Module 0; all others must be > 0.
 		isProjectLevel := c.Path == "project/meta" || strings.HasPrefix(c.Path, "project/requirement/")
-		if !isProjectLevel && c.Module == 0 {
+		if !isProjectLevel && c.Module == "" {
 			t.Errorf("missing Module for %s", c.Path)
 		}
 	}

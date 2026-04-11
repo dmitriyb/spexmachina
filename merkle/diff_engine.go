@@ -26,10 +26,10 @@ func (ct ChangeType) String() string {
 
 // Change represents a single leaf-level difference between two merkle trees.
 type Change struct {
-	Path     string     // spec ID key, e.g. "module/1/component/2"
+	Path     string     // identity hash key
 	Type     ChangeType // Added, Removed, or Modified
-	NodeType string     // "component", "impl_section", "data_flow", "test_section", "meta"
-	Module   int        // module ID (0 for project-level nodes)
+	NodeType string     // "component", "impl_section", "data_flow", "test_section", "meta", "requirement"
+	Module   string     // identity hash of parent module ("" for project-level nodes)
 	OldHash  string     // empty for Added
 	NewHash  string     // empty for Removed
 }
@@ -38,7 +38,7 @@ type Change struct {
 type leafInfo struct {
 	Hash     string
 	NodeType string
-	Module   int
+	Module   string
 }
 
 // Diff compares two merkle trees (current vs snapshot) and returns leaf-level

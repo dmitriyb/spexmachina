@@ -6,27 +6,29 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // Node represents a node in the merkle tree. Leaf nodes correspond to spec
 // content files, interior nodes correspond to modules or the project root.
-// Nodes are keyed by spec ID (e.g., "module/1/component/2"), not file path.
+// Nodes are keyed by identity hash — the same 12-character hex string stored
+// in the JSON `id` field. Synthetic keys use "meta/" prefix for envelope leaves.
 type Node struct {
 	Key      string  `json:"key"`
 	Hash     string  `json:"hash"`
 	Type     string  `json:"type"`                // "leaf", "module", "project"
-	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "meta", "requirement"
-	Module   int     `json:"module,omitempty"`     // module ID (0 for project-level nodes)
+	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "test_section", "meta", "requirement", "module"
+	Module   string  `json:"module,omitempty"`     // identity hash of parent module ("" for project-level nodes)
 	Children []*Node `json:"children,omitempty"`
 	moduleName string // unexported; module name for ModuleNames extraction
 }
 
-// ModuleNames extracts a map of module ID → module name from the tree.
+// ModuleNames extracts a map of module identity hash → module name from the tree.
 // Module names are stored during tree construction for downstream use.
-func ModuleNames(tree *Node) map[int]string {
-	names := map[int]string{}
+func ModuleNames(tree *Node) map[string]string {
+	names := map[string]string{}
 	if tree == nil {
 		return names
 	}
@@ -40,7 +42,8 @@ func ModuleNames(tree *Node) map[int]string {
 
 // BuildTree constructs a merkle tree from the spec directory. It reads
 // project.json to discover modules, then module.json files to discover
-// content files, and hashes everything bottom-up. Nodes are keyed by spec ID.
+// content files, and hashes everything bottom-up. Nodes are keyed by
+// identity hash.
 func BuildTree(specDir string) (*Node, error) {
 	proj, err := readProject(specDir)
 	if err != nil {
@@ -48,15 +51,15 @@ func BuildTree(specDir string) (*Node, error) {
 	}
 
 	projectJSONPath := filepath.Join(specDir, "project.json")
-	projLeaf, err := hashLeaf(projectJSONPath, "project/meta", "meta", 0)
+	projLeaf, err := hashLeaf(projectJSONPath, "meta/project", "meta", "")
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
 	var projReqNodes []*Node
 	for _, req := range proj.Requirements {
-		key := fmt.Sprintf("project/requirement/%d", req.ID)
-		node, err := hashRequirement(req, key, 0)
+		key := schema.IdentityHash("project", "requirement", strconv.Itoa(req.ID))
+		node, err := hashRequirement(req, key, "")
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
@@ -99,18 +102,18 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
-	metaKey := fmt.Sprintf("module/%d/meta", mod.ID)
-	modLeaf, err := hashLeaf(modJSONPath, metaKey, "meta", mod.ID)
+	moduleHash := schema.IdentityHash("module", mod.Name)
+
+	metaKey := "meta/" + moduleHash
+	modLeaf, err := hashLeaf(modJSONPath, metaKey, "meta", moduleHash)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
 	children := []*Node{modLeaf}
 
-	// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	for _, req := range modSpec.Requirements {
-		key := nodeKeyStr(mod.ID, "requirement", req.ID)
-		node, err := hashModuleRequirement(req, key, mod.ID)
+		node, err := hashModuleRequirement(req, req.ID, moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -121,8 +124,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if c.Content == "" {
 			continue
 		}
-		key := nodeKeyStr(mod.ID, "component", c.ID)
-		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), key, "component", mod.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), c.ID, "component", moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -133,8 +135,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if s.Content == "" {
 			continue
 		}
-		key := nodeKeyStr(mod.ID, "impl_section", s.ID)
-		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), key, "impl_section", mod.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), s.ID, "impl_section", moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -145,15 +146,25 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		if f.Content == "" {
 			continue
 		}
-		key := nodeKeyStr(mod.ID, "data_flow", f.ID)
-		leaf, err := hashLeaf(filepath.Join(modDir, f.Content), key, "data_flow", mod.ID)
+		leaf, err := hashLeaf(filepath.Join(modDir, f.Content), f.ID, "data_flow", moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
 		children = append(children, leaf)
 	}
 
-	// Sort leaf children by key for deterministic hashing (meta is always first by key order).
+	for _, ts := range modSpec.TestSections {
+		if ts.Content == "" {
+			continue
+		}
+		leaf, err := hashLeaf(filepath.Join(modDir, ts.Content), ts.ID, "test_section", moduleHash)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, leaf)
+	}
+
+	// Sort leaf children by key for deterministic hashing.
 	sort.Slice(children, func(i, j int) bool {
 		return children[i].Key < children[j].Key
 	})
@@ -161,28 +172,16 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 	childHashes := collectHashes(children)
 
 	return &Node{
-		Key:        fmt.Sprintf("module/%d", mod.ID),
+		Key:        moduleHash,
 		Hash:       HashChildren(childHashes),
 		Type:       "module",
-		Module:     mod.ID,
+		Module:     moduleHash,
 		Children:   children,
 		moduleName: mod.Name,
 	}, nil
 }
 
-// nodeKey builds a spec-ID key: module/<moduleID>/<nodeType>/<nodeID>.
-func nodeKey(moduleID int, nodeType string, nodeID int) string {
-	return fmt.Sprintf("module/%d/%s/%d", moduleID, nodeType, nodeID)
-}
-
-// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs from int to identity hash strings
-// nodeKeyStr builds a spec-ID key with a string nodeID (identity hash).
-func nodeKeyStr(moduleID int, nodeType string, nodeID string) string {
-	return fmt.Sprintf("module/%d/%s/%s", moduleID, nodeType, nodeID)
-}
-
-// TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed ModuleRequirement to separate type
-func hashModuleRequirement(req schema.ModuleRequirement, key string, module int) (*Node, error) {
+func hashModuleRequirement(req schema.ModuleRequirement, key string, module string) (*Node, error) {
 	fields := map[string]interface{}{}
 	if len(req.DependsOn) > 0 {
 		fields["depends_on"] = req.DependsOn
@@ -213,7 +212,7 @@ func hashModuleRequirement(req schema.ModuleRequirement, key string, module int)
 	}, nil
 }
 
-func hashLeaf(path, key, nodeType string, module int) (*Node, error) {
+func hashLeaf(path, key, nodeType string, module string) (*Node, error) {
 	h, err := HashFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: hash leaf %s: %w", key, err)
@@ -235,10 +234,10 @@ func collectHashes(nodes []*Node) []string {
 	return hashes
 }
 
-// hashRequirement creates a leaf node for a requirement by hashing its
-// deterministic JSON serialization. Fields are sorted by key and zero-value
-// fields are excluded (matching omitempty semantics).
-func hashRequirement(req schema.Requirement, key string, module int) (*Node, error) {
+// hashRequirement creates a leaf node for a project-level requirement by
+// hashing its deterministic JSON serialization. Fields are sorted by key
+// and zero-value fields are excluded (matching omitempty semantics).
+func hashRequirement(req schema.Requirement, key string, module string) (*Node, error) {
 	fields := map[string]interface{}{}
 	if len(req.DependsOn) > 0 {
 		fields["depends_on"] = req.DependsOn

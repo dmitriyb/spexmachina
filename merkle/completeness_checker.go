@@ -9,6 +9,8 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
+// TODO(bead:spexmachina-stp): review after spexmachina-kdb changed Module from int to identity hash string
+
 // DiffError represents a completeness validation error in the diff output.
 type DiffError struct {
 	Type    string   `json:"type"`
@@ -35,17 +37,18 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 	// Collect requirement leaf changes and meta changes by module.
 	var moduleReqChanges []ClassifiedChange
 	var projectReqChanges []ClassifiedChange
-	metaModules := make(map[int]bool)    // modules with meta changes
-	reqModules := make(map[int]bool)     // modules with requirement changes
+	// TODO(bead:spexmachina-stp): review after spexmachina-kdb changed Module from int to string
+	metaModules := make(map[string]bool)    // modules with meta changes
+	reqModules := make(map[string]bool)     // modules with requirement changes
 
 	for _, c := range changes {
 		switch {
-		case c.NodeType == "requirement" && c.Change.Module > 0:
+		case c.NodeType == "requirement" && c.Change.Module != "":
 			moduleReqChanges = append(moduleReqChanges, c)
 			reqModules[c.Change.Module] = true
-		case c.NodeType == "requirement" && c.Change.Module == 0:
+		case c.NodeType == "requirement" && c.Change.Module == "":
 			projectReqChanges = append(projectReqChanges, c)
-		case c.NodeType == "meta" && c.Change.Module > 0:
+		case c.NodeType == "meta" && c.Change.Module != "":
 			metaModules[c.Change.Module] = true
 		}
 	}
@@ -62,19 +65,19 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 		return nil
 	}
 
-	// Build module ID → path map.
-	modulePathMap := make(map[int]string, len(proj.Modules))
+	// Build module identity hash → path map.
+	modulePathMap := make(map[string]string, len(proj.Modules))
 	for _, m := range proj.Modules {
-		modulePathMap[m.ID] = m.Path
+		modulePathMap[schema.IdentityHash("module", m.Name)] = m.Path
 	}
 
 	// Cache loaded module specs.
-	moduleSpecCache := make(map[int]*schema.ModuleSpec)
-	loadModule := func(moduleID int) *schema.ModuleSpec {
-		if spec, ok := moduleSpecCache[moduleID]; ok {
+	moduleSpecCache := make(map[string]*schema.ModuleSpec)
+	loadModule := func(moduleHash string) *schema.ModuleSpec {
+		if spec, ok := moduleSpecCache[moduleHash]; ok {
 			return spec
 		}
-		modPath, ok := modulePathMap[moduleID]
+		modPath, ok := modulePathMap[moduleHash]
 		if !ok {
 			return nil
 		}
@@ -82,7 +85,7 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 		if err != nil {
 			return nil
 		}
-		moduleSpecCache[moduleID] = spec
+		moduleSpecCache[moduleHash] = spec
 		return spec
 	}
 
@@ -129,12 +132,12 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 			continue
 		}
 		for _, comp := range modSpec.Components {
-			compPath := fmt.Sprintf("module/%d/component/%s", modID, comp.ID)
+			compPath := fmt.Sprintf("%s", comp.ID)
 			if !changedPaths[compPath] {
 				errs = append(errs, DiffError{
 					Type:    "incomplete_change",
-					Message: fmt.Sprintf("module %d meta changed but component %s content leaf unchanged", modID, comp.Name),
-					Path:    fmt.Sprintf("module/%d/meta", modID),
+					Message: fmt.Sprintf("module %s meta changed but component %s content leaf unchanged", modID, comp.Name),
+					Path:    "meta/" + modID,
 					Related: []string{compPath},
 				})
 			}
@@ -157,7 +160,7 @@ func checkModifiedRequirement(c ClassifiedChange, reqID string, modSpec *schema.
 		if !implementsReq(comp, reqID) {
 			continue
 		}
-		compPath := fmt.Sprintf("module/%d/component/%s", c.Change.Module, comp.ID)
+		compPath := comp.ID
 		if !changedPaths[compPath] {
 			errs = append(errs, DiffError{
 				Type:    "incomplete_change",
@@ -184,7 +187,7 @@ func checkAddedRequirement(c ClassifiedChange, reqID string, modSpec *schema.Mod
 		return errs
 	}
 	for _, comp := range implementors {
-		compPath := fmt.Sprintf("module/%d/component/%s", c.Change.Module, comp.ID)
+		compPath := comp.ID
 		if !changedPaths[compPath] {
 			errs = append(errs, DiffError{
 				Type:    "incomplete_change",
@@ -206,7 +209,7 @@ func checkRemovedRequirement(c ClassifiedChange, reqID string, modSpec *schema.M
 				Type:    "incomplete_change",
 				Message: fmt.Sprintf("component %s still implements removed requirement %s", comp.Name, reqID),
 				Path:    c.Path,
-				Related: []string{fmt.Sprintf("module/%d/component/%s", c.Change.Module, comp.ID)},
+				Related: []string{comp.ID},
 			})
 		}
 	}
@@ -215,7 +218,7 @@ func checkRemovedRequirement(c ClassifiedChange, reqID string, modSpec *schema.M
 
 // checkProjectRequirementModifiedOrAdded checks the project → module → component chain
 // for modified or added project-level requirements.
-func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, reqID int, proj *schema.Project, loadModule func(int) *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, reqID int, proj *schema.Project, loadModule func(string) *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
 	var errs []DiffError
 	derivedReqs := findDerivedModuleRequirements(reqID, proj, loadModule)
 	if len(derivedReqs) == 0 {
@@ -228,7 +231,7 @@ func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, reqID int, proj 
 	}
 	for _, dr := range derivedReqs {
 		for _, comp := range findImplementors(dr.modSpec, dr.reqID) {
-			compPath := fmt.Sprintf("module/%d/component/%s", dr.moduleID, comp.ID)
+			compPath := comp.ID
 			if !changedPaths[compPath] {
 				errs = append(errs, DiffError{
 					Type:    "incomplete_change",
@@ -244,7 +247,7 @@ func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, reqID int, proj 
 
 // checkProjectRequirementRemoved checks that no module requirement still derives
 // from the removed project requirement.
-func checkProjectRequirementRemoved(c ClassifiedChange, reqID int, proj *schema.Project, loadModule func(int) *schema.ModuleSpec) []DiffError {
+func checkProjectRequirementRemoved(c ClassifiedChange, reqID int, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []DiffError {
 	var errs []DiffError
 	derivedReqs := findDerivedModuleRequirements(reqID, proj, loadModule)
 	for _, dr := range derivedReqs {
@@ -252,7 +255,7 @@ func checkProjectRequirementRemoved(c ClassifiedChange, reqID int, proj *schema.
 			Type:    "incomplete_change",
 			Message: fmt.Sprintf("module requirement %s still derives from removed project requirement %d", dr.reqID, reqID),
 			Path:    c.Path,
-			Related: []string{fmt.Sprintf("module/%d/requirement/%s", dr.moduleID, dr.reqID)},
+			Related: []string{dr.reqID},
 		})
 	}
 	return errs
@@ -260,26 +263,27 @@ func checkProjectRequirementRemoved(c ClassifiedChange, reqID int, proj *schema.
 
 // TODO(bead:spexmachina-stp): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 type derivedRequirement struct {
-	moduleID int
-	reqID    string
-	modSpec  *schema.ModuleSpec
+	moduleHash string
+	reqID      string
+	modSpec    *schema.ModuleSpec
 }
 
 // findDerivedModuleRequirements finds all module requirements with preq_id == projectReqID.
-func findDerivedModuleRequirements(projectReqID int, proj *schema.Project, loadModule func(int) *schema.ModuleSpec) []derivedRequirement {
+func findDerivedModuleRequirements(projectReqID int, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []derivedRequirement {
 	projReqStr := strconv.Itoa(projectReqID)
 	var result []derivedRequirement
 	for _, m := range proj.Modules {
-		modSpec := loadModule(m.ID)
+		mHash := schema.IdentityHash("module", m.Name)
+		modSpec := loadModule(mHash)
 		if modSpec == nil {
 			continue
 		}
 		for _, req := range modSpec.Requirements {
 			if req.PreqID == projReqStr {
 				result = append(result, derivedRequirement{
-					moduleID: m.ID,
-					reqID:    req.ID,
-					modSpec:  modSpec,
+					moduleHash: mHash,
+					reqID:      req.ID,
+					modSpec:    modSpec,
 				})
 			}
 		}

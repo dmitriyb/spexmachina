@@ -1,6 +1,6 @@
 package merkle
 
-import "strconv"
+// TODO(bead:spexmachina-s85): review after spexmachina-kdb changed Module from int to string
 
 // ImpactLevel represents the severity of a spec change.
 type ImpactLevel int
@@ -35,7 +35,7 @@ type ClassifiedChange struct {
 // node metadata (NodeType, Module) carried by each Change from the DiffEngine.
 // The moduleNames map resolves module IDs to human-readable names. If nil,
 // the module ID string is used as-is.
-func Classify(changes []Change, moduleNames map[int]string) []ClassifiedChange {
+func Classify(changes []Change, moduleNames map[string]string) []ClassifiedChange {
 	result := make([]ClassifiedChange, len(changes))
 	for i, c := range changes {
 		result[i] = ClassifiedChange{
@@ -63,14 +63,14 @@ func classifyNodeType(nodeType string) ImpactLevel {
 
 // resolveModule maps a module ID to a name. Returns "" for project-level nodes
 // (module ID 0).
-func resolveModule(moduleID int, moduleNames map[int]string) string {
-	if moduleID == 0 {
+func resolveModule(moduleHash string, moduleNames map[string]string) string {
+	if moduleHash == "" {
 		return ""
 	}
 	if moduleNames != nil {
-		if name, ok := moduleNames[moduleID]; ok {
+		if name, ok := moduleNames[moduleHash]; ok {
 			return name
 		}
 	}
-	return strconv.Itoa(moduleID)
+	return moduleHash
 }
