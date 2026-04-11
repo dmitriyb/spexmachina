@@ -7,9 +7,9 @@ import (
 
 func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: 1},
+		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
 	}
-	names := map[int]string{1: "Alpha"}
+	names := map[string]string{"mod1": "Alpha"}
 
 	classified := Classify(changes, names)
 
@@ -26,7 +26,7 @@ func TestREQ5_Classify_ImplOnly(t *testing.T) {
 
 func TestREQ5_Classify_DataFlowIsImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/data_flow/1", Type: Added, NodeType: "data_flow", Module: 1},
+		{Path: "module/1/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod1"},
 	}
 
 	classified := Classify(changes, nil)
@@ -38,7 +38,7 @@ func TestREQ5_Classify_DataFlowIsImplOnly(t *testing.T) {
 
 func TestREQ5_Classify_TestSectionIsImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: 1},
+		{Path: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1"},
 	}
 
 	classified := Classify(changes, nil)
@@ -50,9 +50,9 @@ func TestREQ5_Classify_TestSectionIsImplOnly(t *testing.T) {
 
 func TestREQ5_Classify_ArchImpl(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: 1},
+		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
 	}
-	names := map[int]string{1: "Alpha"}
+	names := map[string]string{"mod1": "Alpha"}
 
 	classified := Classify(changes, names)
 
@@ -69,9 +69,9 @@ func TestREQ5_Classify_ArchImpl(t *testing.T) {
 
 func TestREQ5_Classify_StructuralModuleMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/meta", Type: Modified, NodeType: "meta", Module: 1},
+		{Path: "module/1/meta", Type: Modified, NodeType: "meta", Module: "mod1"},
 	}
-	names := map[int]string{1: "Alpha"}
+	names := map[string]string{"mod1": "Alpha"}
 
 	classified := Classify(changes, names)
 
@@ -85,7 +85,7 @@ func TestREQ5_Classify_StructuralModuleMeta(t *testing.T) {
 
 func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: 0},
+		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
 	}
 
 	classified := Classify(changes, nil)
@@ -100,7 +100,7 @@ func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 
 func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: 1, OldHash: "aaa", NewHash: "bbb"},
+		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1", OldHash: "aaa", NewHash: "bbb"},
 	}
 
 	classified := Classify(changes, nil)
@@ -119,12 +119,12 @@ func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 
 func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 	changes := []Change{
-		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: 0},
-		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: 1},
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: 1},
-		{Path: "module/2/data_flow/1", Type: Added, NodeType: "data_flow", Module: 2},
+		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
+		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
+		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
+		{Path: "module/2/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod2"},
 	}
-	names := map[int]string{1: "Alpha", 2: "Beta"}
+	names := map[string]string{"mod1": "Alpha", "mod2": "Beta"}
 
 	classified := Classify(changes, names)
 
@@ -228,9 +228,9 @@ func TestREQ5_ImpactLevel_String(t *testing.T) {
 
 func TestREQ5_Classify_RequirementIsStructural(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: 1},
+		{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: "mod1"},
 	}
-	names := map[int]string{1: "Alpha"}
+	names := map[string]string{"mod1": "Alpha"}
 
 	classified := Classify(changes, names)
 
@@ -247,7 +247,7 @@ func TestREQ5_Classify_RequirementIsStructural(t *testing.T) {
 
 func TestREQ5_Classify_ProjectRequirementIsStructural(t *testing.T) {
 	changes := []Change{
-		{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: 0},
+		{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: ""},
 	}
 
 	classified := Classify(changes, nil)
@@ -265,12 +265,12 @@ func TestREQ5_Classify_ProjectRequirementIsStructural(t *testing.T) {
 
 func TestREQ5_Classify_NilModuleNames_FallsBackToID(t *testing.T) {
 	changes := []Change{
-		{Path: "module/3/component/1", Type: Modified, NodeType: "component", Module: 3},
+		{Path: "module/3/component/1", Type: Modified, NodeType: "component", Module: "mod3"},
 	}
 
 	classified := Classify(changes, nil)
 
-	if classified[0].Module != "3" {
-		t.Errorf("expected module ID fallback '3', got %q", classified[0].Module)
+	if classified[0].Module != "mod3" {
+		t.Errorf("expected module hash fallback 'mod3', got %q", classified[0].Module)
 	}
 }

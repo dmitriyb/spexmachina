@@ -6,13 +6,26 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // setupSpecDir creates a minimal spec directory for testing.
+// Module-level nodes use identity hash string IDs. Project-level nodes
+// (modules, requirements) still use integer IDs — their identity hashes
+// are computed by the TreeBuilder.
 // Returns the spec dir path.
 func setupSpecDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+
+	// Compute identity hashes for module-level nodes.
+	alphaComp1 := schema.IdentityHash("alpha", "component", "Comp1")
+	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	betaComp := schema.IdentityHash("beta", "component", "BetaComp")
 
 	// project.json with two modules and project-level requirements
 	proj := `{
@@ -34,15 +47,15 @@ func setupSpecDir(t *testing.T) string {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Alpha req 1", "preq_id": 1},
-			{"id": 2, "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": [1]}
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + schema.IdentityHash("project", "requirement", "1") + `"},
+			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
 		],
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"},
-			{"id": 2, "name": "Comp2", "content": "arch_comp2.md"}
+			{"id": "` + alphaComp1 + `", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "` + alphaComp2 + `", "name": "Comp2", "content": "arch_comp2.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md"}
+			{"id": "` + alphaImpl1 + `", "name": "Impl1", "content": "impl_comp1.md"}
 		]
 	}`
 	writeFile(t, alphaDir, "module.json", alphaMod)
@@ -56,7 +69,7 @@ func setupSpecDir(t *testing.T) string {
 	betaMod := `{
 		"name": "beta",
 		"components": [
-			{"id": 1, "name": "BetaComp", "content": "arch_beta.md"}
+			{"id": "` + betaComp + `", "name": "BetaComp", "content": "arch_beta.md"}
 		]
 	}`
 	writeFile(t, betaDir, "module.json", betaMod)
@@ -87,12 +100,19 @@ func findChild(t *testing.T, parent *Node, key string) *Node {
 			return c
 		}
 	}
-	t.Fatalf("child %q not found in %q", key, parent.Key)
+	t.Fatalf("child %q not found in %q (children: %v)", key, parent.Key, childKeys(parent))
 	return nil
 }
 
-func TestREQ7_BuildTree_SpecIDKeys(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
+func childKeys(n *Node) []string {
+	keys := make([]string, len(n.Children))
+	for i, c := range n.Children {
+		keys[i] = c.Key
+	}
+	return keys
+}
+
+func TestREQ7_BuildTree_IdentityHashKeys(t *testing.T) {
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -104,27 +124,27 @@ func TestREQ7_BuildTree_SpecIDKeys(t *testing.T) {
 		t.Fatalf("root key: want project, got %s", root.Key)
 	}
 
-	// project/meta leaf
-	projLeaf := findChild(t, root, "project/meta")
+	// meta/project leaf
+	projLeaf := findChild(t, root, "meta/project")
 	if projLeaf.NodeType != "meta" {
 		t.Fatalf("project meta node_type: want meta, got %s", projLeaf.NodeType)
 	}
 
-	// module/1 (Alpha)
-	alpha := findChild(t, root, "module/1")
+	// Module nodes keyed by identity hash
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
 	if alpha.Type != "module" {
 		t.Fatalf("alpha type: want module, got %s", alpha.Type)
 	}
 
-	// module/2 (Beta)
-	beta := findChild(t, root, "module/2")
+	betaHash := schema.IdentityHash("module", "Beta")
+	beta := findChild(t, root, betaHash)
 	if beta.Type != "module" {
 		t.Fatalf("beta type: want module, got %s", beta.Type)
 	}
 }
 
 func TestREQ2_BuildTree_Structure(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -137,24 +157,27 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 		t.Fatalf("root type: want project, got %s", root.Type)
 	}
 
-	// Children: project/meta leaf + 2 project requirements + 2 module nodes = 5
+	// Children: meta/project leaf + 2 project requirements + 2 module nodes = 5
 	if len(root.Children) != 5 {
 		t.Fatalf("root children: want 5, got %d", len(root.Children))
 	}
 
-	// Children are sorted by key, so order is:
-	// module/1, module/2, project/meta, project/requirement/1, project/requirement/2
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
+	projReq2Hash := schema.IdentityHash("project", "requirement", "2")
+
 	for _, child := range root.Children {
 		switch child.Key {
-		case "project/meta":
+		case "meta/project":
 			if child.Type != "leaf" {
-				t.Fatalf("project/meta type: want leaf, got %s", child.Type)
+				t.Fatalf("meta/project type: want leaf, got %s", child.Type)
 			}
-		case "project/requirement/1", "project/requirement/2":
+		case projReq1Hash, projReq2Hash:
 			if child.Type != "leaf" {
 				t.Fatalf("%s type: want leaf, got %s", child.Key, child.Type)
 			}
-		case "module/1", "module/2":
+		case alphaHash, betaHash:
 			if child.Type != "module" {
 				t.Fatalf("%s type: want module, got %s", child.Key, child.Type)
 			}
@@ -165,7 +188,6 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -173,7 +195,8 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	alpha := findChild(t, root, "module/1")
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
 	// Alpha should have: meta + 2 requirements + 2 components + 1 impl_section = 6 children
 	if len(alpha.Children) != 6 {
 		t.Fatalf("alpha children: want 6, got %d", len(alpha.Children))
@@ -193,14 +216,14 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		}
 	}
 
-	// Verify specific keys exist
+	// Verify specific keys exist (identity hash keys)
 	wantKeys := map[string]string{
-		"module/1/meta":           "meta",
-		"module/1/component/1":    "component",
-		"module/1/component/2":    "component",
-		"module/1/impl_section/1": "impl_section",
-		"module/1/requirement/1":  "requirement",
-		"module/1/requirement/2":  "requirement",
+		"meta/" + alphaHash:                                       "meta",
+		schema.IdentityHash("alpha", "component", "Comp1"):        "component",
+		schema.IdentityHash("alpha", "component", "Comp2"):        "component",
+		schema.IdentityHash("alpha", "impl_section", "Impl1"):     "impl_section",
+		schema.IdentityHash("alpha", "requirement", "Alpha req 1"): "requirement",
+		schema.IdentityHash("alpha", "requirement", "Alpha req 2"): "requirement",
 	}
 	for _, child := range alpha.Children {
 		wantType, ok := wantKeys[child.Key]
@@ -211,8 +234,8 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		if child.NodeType != wantType {
 			t.Errorf("child %s: want node_type %s, got %s", child.Key, wantType, child.NodeType)
 		}
-		if child.Module != 1 {
-			t.Errorf("child %s: want module 1, got %d", child.Key, child.Module)
+		if child.Module != alphaHash {
+			t.Errorf("child %s: want module %s, got %s", child.Key, alphaHash, child.Module)
 		}
 		delete(wantKeys, child.Key)
 	}
@@ -221,8 +244,7 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 	}
 }
 
-func TestREQ7_BuildTree_ModuleID(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
+func TestREQ7_BuildTree_ModuleIdentityHash(t *testing.T) {
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -230,30 +252,32 @@ func TestREQ7_BuildTree_ModuleID(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// All module 1 leaves should have Module=1
-	alpha := findChild(t, root, "module/1")
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+
+	// All alpha leaves should have Module = alphaHash
+	alpha := findChild(t, root, alphaHash)
 	for _, child := range alpha.Children {
-		if child.Module != 1 {
-			t.Errorf("alpha child %s: want module 1, got %d", child.Key, child.Module)
+		if child.Module != alphaHash {
+			t.Errorf("alpha child %s: want module %s, got %s", child.Key, alphaHash, child.Module)
 		}
 	}
 
-	// Module node itself should have Module=1
-	if alpha.Module != 1 {
-		t.Errorf("alpha module: want 1, got %d", alpha.Module)
+	// Module node itself should have Module = alphaHash
+	if alpha.Module != alphaHash {
+		t.Errorf("alpha module: want %s, got %s", alphaHash, alpha.Module)
 	}
 
-	// Beta children should have Module=2
-	beta := findChild(t, root, "module/2")
+	// Beta children should have Module = betaHash
+	beta := findChild(t, root, betaHash)
 	for _, child := range beta.Children {
-		if child.Module != 2 {
-			t.Errorf("beta child %s: want module 2, got %d", child.Key, child.Module)
+		if child.Module != betaHash {
+			t.Errorf("beta child %s: want module %s, got %s", child.Key, betaHash, child.Module)
 		}
 	}
 }
 
 func TestREQ6_BuildTree_Deterministic(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root1, err := BuildTree(specDir)
@@ -272,7 +296,6 @@ func TestREQ6_BuildTree_Deterministic(t *testing.T) {
 }
 
 func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root1, err := BuildTree(specDir)
@@ -292,25 +315,28 @@ func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
 		t.Fatal("root hash should change when a leaf file changes")
 	}
 
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+
 	// Module alpha hash should differ
-	alpha1 := findChild(t, root1, "module/1")
-	alpha2 := findChild(t, root2, "module/1")
+	alpha1 := findChild(t, root1, alphaHash)
+	alpha2 := findChild(t, root2, alphaHash)
 	if alpha1.Hash == alpha2.Hash {
 		t.Fatal("alpha module hash should change")
 	}
 
 	// Module beta hash should be unchanged
-	beta1 := findChild(t, root1, "module/2")
-	beta2 := findChild(t, root2, "module/2")
+	beta1 := findChild(t, root1, betaHash)
+	beta2 := findChild(t, root2, betaHash)
 	if beta1.Hash != beta2.Hash {
 		t.Fatal("beta module hash should not change")
 	}
 }
 
 func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	dir := t.TempDir()
 
+	ghostComp := schema.IdentityHash("bad", "component", "Ghost")
 	proj := `{
 		"name": "bad-project",
 		"modules": [{"id": 1, "name": "Bad", "path": "bad"}]
@@ -322,7 +348,7 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	badMod := `{
 		"name": "bad",
 		"components": [
-			{"id": 1, "name": "Ghost", "content": "arch_ghost.md"}
+			{"id": "` + ghostComp + `", "name": "Ghost", "content": "arch_ghost.md"}
 		]
 	}`
 	writeFile(t, badDir, "module.json", badMod)
@@ -332,8 +358,8 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for missing content file, got nil")
 	}
-	if !strings.Contains(err.Error(), "module/1/component/1") {
-		t.Fatalf("error should mention spec key, got: %v", err)
+	if !strings.Contains(err.Error(), ghostComp) {
+		t.Fatalf("error should mention spec key %s, got: %v", ghostComp, err)
 	}
 }
 
@@ -368,7 +394,6 @@ func TestREQ2_BuildTree_MissingModuleJSON(t *testing.T) {
 }
 
 func TestREQ2_BuildTree_AllNodesHaveHashes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -389,7 +414,6 @@ func TestREQ2_BuildTree_AllNodesHaveHashes(t *testing.T) {
 }
 
 func TestREQ2_BuildTree_JSONRoundTrip(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -416,8 +440,11 @@ func TestREQ2_BuildTree_JSONRoundTrip(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	dir := t.TempDir()
+
+	comp1 := schema.IdentityHash("fullmod", "component", "C1")
+	impl1 := schema.IdentityHash("fullmod", "impl_section", "I1")
+	flow1 := schema.IdentityHash("fullmod", "data_flow", "F1")
 
 	proj := `{
 		"name": "full-project",
@@ -430,13 +457,13 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	modJSON := `{
 		"name": "fullmod",
 		"components": [
-			{"id": 1, "name": "C1", "content": "arch_c1.md"}
+			{"id": "` + comp1 + `", "name": "C1", "content": "arch_c1.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "I1", "content": "impl_c1.md"}
+			{"id": "` + impl1 + `", "name": "I1", "content": "impl_c1.md"}
 		],
 		"data_flows": [
-			{"id": 1, "name": "F1", "content": "flow_c1.md"}
+			{"id": "` + flow1 + `", "name": "F1", "content": "flow_c1.md"}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
@@ -449,17 +476,18 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	fullMod := findChild(t, root, "module/1")
+	fullModHash := schema.IdentityHash("module", "FullMod")
+	fullMod := findChild(t, root, fullModHash)
 	// meta + 1 component + 1 impl_section + 1 data_flow = 4 children
 	if len(fullMod.Children) != 4 {
 		t.Fatalf("fullmod children: want 4, got %d", len(fullMod.Children))
 	}
 
 	wantKeys := map[string]string{
-		"module/1/meta":           "meta",
-		"module/1/component/1":    "component",
-		"module/1/impl_section/1": "impl_section",
-		"module/1/data_flow/1":    "data_flow",
+		"meta/" + fullModHash: "meta",
+		comp1:                 "component",
+		impl1:                 "impl_section",
+		flow1:                 "data_flow",
 	}
 	for _, child := range fullMod.Children {
 		wantType, ok := wantKeys[child.Key]
@@ -495,18 +523,18 @@ func TestREQ2_BuildTree_EmptyModule(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	emptyMod := findChild(t, root, "module/1")
+	emptyHash := schema.IdentityHash("module", "Empty")
+	emptyMod := findChild(t, root, emptyHash)
 	// Only module meta leaf
 	if len(emptyMod.Children) != 1 {
 		t.Fatalf("empty module children: want 1, got %d", len(emptyMod.Children))
 	}
-	if emptyMod.Children[0].Key != "module/1/meta" {
-		t.Fatalf("empty module child: want module/1/meta, got %s", emptyMod.Children[0].Key)
+	if emptyMod.Children[0].Key != "meta/"+emptyHash {
+		t.Fatalf("empty module child: want meta/%s, got %s", emptyHash, emptyMod.Children[0].Key)
 	}
 }
 
 func TestREQ7_BuildTree_ModuleRequirementLeaves(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -514,24 +542,28 @@ func TestREQ7_BuildTree_ModuleRequirementLeaves(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	alpha := findChild(t, root, "module/1")
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+
+	req1Key := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	req2Key := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
 
 	// Module-level requirements should be leaf nodes
-	req1 := findChild(t, alpha, "module/1/requirement/1")
+	req1 := findChild(t, alpha, req1Key)
 	if req1.Type != "leaf" {
 		t.Fatalf("req1 type: want leaf, got %s", req1.Type)
 	}
 	if req1.NodeType != "requirement" {
 		t.Fatalf("req1 node_type: want requirement, got %s", req1.NodeType)
 	}
-	if req1.Module != 1 {
-		t.Fatalf("req1 module: want 1, got %d", req1.Module)
+	if req1.Module != alphaHash {
+		t.Fatalf("req1 module: want %s, got %s", alphaHash, req1.Module)
 	}
 	if req1.Hash == "" {
 		t.Fatal("req1 hash should not be empty")
 	}
 
-	req2 := findChild(t, alpha, "module/1/requirement/2")
+	req2 := findChild(t, alpha, req2Key)
 	if req2.Type != "leaf" {
 		t.Fatalf("req2 type: want leaf, got %s", req2.Type)
 	}
@@ -546,7 +578,6 @@ func TestREQ7_BuildTree_ModuleRequirementLeaves(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_ProjectRequirementLeaves(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root, err := BuildTree(specDir)
@@ -554,30 +585,33 @@ func TestREQ7_BuildTree_ProjectRequirementLeaves(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
+	req1Key := schema.IdentityHash("project", "requirement", "1")
+	req2Key := schema.IdentityHash("project", "requirement", "2")
+
 	// Project-level requirements should be leaf nodes at root level
-	req1 := findChild(t, root, "project/requirement/1")
+	req1 := findChild(t, root, req1Key)
 	if req1.Type != "leaf" {
 		t.Fatalf("project req1 type: want leaf, got %s", req1.Type)
 	}
 	if req1.NodeType != "requirement" {
 		t.Fatalf("project req1 node_type: want requirement, got %s", req1.NodeType)
 	}
-	if req1.Module != 0 {
-		t.Fatalf("project req1 module: want 0, got %d", req1.Module)
+	if req1.Module != "" {
+		t.Fatalf("project req1 module: want empty, got %q", req1.Module)
 	}
 	if req1.Hash == "" {
 		t.Fatal("project req1 hash should not be empty")
 	}
 
-	req2 := findChild(t, root, "project/requirement/2")
+	req2 := findChild(t, root, req2Key)
 	if req2.Type != "leaf" {
 		t.Fatalf("project req2 type: want leaf, got %s", req2.Type)
 	}
 	if req2.NodeType != "requirement" {
 		t.Fatalf("project req2 node_type: want requirement, got %s", req2.NodeType)
 	}
-	if req2.Module != 0 {
-		t.Fatalf("project req2 module: want 0, got %d", req2.Module)
+	if req2.Module != "" {
+		t.Fatalf("project req2 module: want empty, got %q", req2.Module)
 	}
 
 	// Different project requirements should produce different hashes
@@ -587,7 +621,6 @@ func TestREQ7_BuildTree_ProjectRequirementLeaves(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_RequirementHashDeterministic(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	root1, err := BuildTree(specDir)
@@ -600,18 +633,22 @@ func TestREQ7_BuildTree_RequirementHashDeterministic(t *testing.T) {
 		t.Fatalf("second build: %v", err)
 	}
 
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	req1Key := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+
 	// Module requirement hashes should be identical across builds
-	alpha1 := findChild(t, root1, "module/1")
-	alpha2 := findChild(t, root2, "module/1")
-	req1a := findChild(t, alpha1, "module/1/requirement/1")
-	req1b := findChild(t, alpha2, "module/1/requirement/1")
+	alpha1 := findChild(t, root1, alphaHash)
+	alpha2 := findChild(t, root2, alphaHash)
+	req1a := findChild(t, alpha1, req1Key)
+	req1b := findChild(t, alpha2, req1Key)
 	if req1a.Hash != req1b.Hash {
 		t.Fatalf("module requirement hash not deterministic: %s vs %s", req1a.Hash, req1b.Hash)
 	}
 
 	// Project requirement hashes should be identical across builds
-	preq1a := findChild(t, root1, "project/requirement/1")
-	preq1b := findChild(t, root2, "project/requirement/1")
+	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	preq1a := findChild(t, root1, projReq1Key)
+	preq1b := findChild(t, root2, projReq1Key)
 	if preq1a.Hash != preq1b.Hash {
 		t.Fatalf("project requirement hash not deterministic: %s vs %s", preq1a.Hash, preq1b.Hash)
 	}
@@ -636,7 +673,8 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first build: %v", err)
 	}
-	hash1 := findChild(t, root1, "project/requirement/1").Hash
+	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	hash1 := findChild(t, root1, projReq1Key).Hash
 
 	// Change the requirement title
 	proj2 := `{
@@ -652,7 +690,7 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second build: %v", err)
 	}
-	hash2 := findChild(t, root2, "project/requirement/1").Hash
+	hash2 := findChild(t, root2, projReq1Key).Hash
 
 	if hash1 == hash2 {
 		t.Fatal("requirement hash should change when title changes")
@@ -665,11 +703,10 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	// Verify that requirement hashing uses sorted JSON keys for determinism.
-	// Two requirements with the same fields but potentially different struct
-	// field order should still produce the same hash.
 	dir := t.TempDir()
+
+	reqID := schema.IdentityHash("m", "requirement", "Test")
 
 	proj := `{
 		"name": "sorted-keys-test",
@@ -681,7 +718,7 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 	modJSON := `{
 		"name": "m",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Test", "description": "Desc", "preq_id": 1, "depends_on": [2]}
+			{"id": "` + reqID + `", "type": "functional", "title": "Test", "description": "Desc", "preq_id": "` + schema.IdentityHash("project", "requirement", "1") + `", "depends_on": ["` + schema.IdentityHash("m", "requirement", "Other") + `"]}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
@@ -691,8 +728,9 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	alpha := findChild(t, root, "module/1")
-	req := findChild(t, alpha, "module/1/requirement/1")
+	mHash := schema.IdentityHash("module", "M")
+	mod := findChild(t, root, mHash)
+	req := findChild(t, mod, reqID)
 
 	// Hash should be 64 chars (SHA-256 hex)
 	if len(req.Hash) != 64 {
@@ -701,10 +739,10 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 
 	// Compute expected hash from deterministic JSON
 	expected := hashRequirementJSON(t, map[string]interface{}{
-		"depends_on":  []int{2},
+		"depends_on":  []string{schema.IdentityHash("m", "requirement", "Other")},
 		"description": "Desc",
-		"id":          1,
-		"preq_id":     1,
+		"id":          reqID,
+		"preq_id":     schema.IdentityHash("project", "requirement", "1"),
 		"title":       "Test",
 		"type":        "functional",
 	})
@@ -743,10 +781,10 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	req := findChild(t, root, "project/requirement/1")
+	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	req := findChild(t, root, projReq1Key)
 
 	// Minimal requirement: only id, title, type are set.
-	// Hash should match a JSON object with only those fields (sorted keys).
 	expected := hashRequirementJSON(t, map[string]interface{}{
 		"id":    1,
 		"title": "Minimal",
@@ -758,7 +796,6 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 }
 
 func TestREQ7_BuildTree_ModuleRequirementHashIncludesModuleHash(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-kdb): fix after spexmachina-e8t changed module IDs to identity hashes")
 	// When a module has requirements, the module's interior hash should include
 	// the requirement leaf hashes alongside content leaf hashes.
 	dir := t.TempDir()
@@ -771,27 +808,99 @@ func TestREQ7_BuildTree_ModuleRequirementHashIncludesModuleHash(t *testing.T) {
 	modDir := filepath.Join(dir, "m")
 	must(t, os.MkdirAll(modDir, 0755))
 
+	mHash := schema.IdentityHash("module", "M")
+
 	// First: module with no requirements
 	writeFile(t, modDir, "module.json", `{"name": "m"}`)
 	root1, err := BuildTree(dir)
 	if err != nil {
 		t.Fatalf("first build: %v", err)
 	}
-	mod1 := findChild(t, root1, "module/1")
+	mod1 := findChild(t, root1, mHash)
 
 	// Second: module with a requirement
+	reqID := schema.IdentityHash("m", "requirement", "New req")
 	writeFile(t, modDir, "module.json", `{
 		"name": "m",
-		"requirements": [{"id": 1, "type": "functional", "title": "New req"}]
+		"requirements": [{"id": "`+reqID+`", "type": "functional", "title": "New req"}]
 	}`)
 	root2, err := BuildTree(dir)
 	if err != nil {
 		t.Fatalf("second build: %v", err)
 	}
-	mod2 := findChild(t, root2, "module/1")
+	mod2 := findChild(t, root2, mHash)
 
 	// Module hash should differ (meta changed AND requirement was added)
 	if mod1.Hash == mod2.Hash {
 		t.Fatal("module hash should change when requirement is added")
+	}
+}
+
+func TestREQ7_BuildTree_MetaKeyFormat(t *testing.T) {
+	// Verify that meta keys use the "meta/" prefix format.
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	// Project meta key
+	projMeta := findChild(t, root, "meta/project")
+	if projMeta.NodeType != "meta" {
+		t.Fatalf("meta/project node_type: want meta, got %s", projMeta.NodeType)
+	}
+
+	// Module meta key
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+	metaKey := "meta/" + alphaHash
+	alphaMeta := findChild(t, alpha, metaKey)
+	if alphaMeta.NodeType != "meta" {
+		t.Fatalf("%s node_type: want meta, got %s", metaKey, alphaMeta.NodeType)
+	}
+}
+
+func TestREQ7_BuildTree_ModuleNamesMap(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	names := ModuleNames(root)
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+
+	if names[alphaHash] != "Alpha" {
+		t.Errorf("want Alpha for %s, got %q", alphaHash, names[alphaHash])
+	}
+	if names[betaHash] != "Beta" {
+		t.Errorf("want Beta for %s, got %q", betaHash, names[betaHash])
+	}
+	if len(names) != 2 {
+		t.Errorf("want 2 module names, got %d", len(names))
+	}
+}
+
+func TestREQ7_BuildTree_IgnoresExtraneousFiles(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	// Add an extra file not referenced in module.json
+	writeFile(t, filepath.Join(specDir, "alpha"), "notes.txt", "extra notes\n")
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+
+	// Still 6 children (meta + 2 reqs + 2 comps + 1 impl), no notes.txt
+	if len(alpha.Children) != 6 {
+		t.Fatalf("alpha children: want 6, got %d (extraneous file included?)", len(alpha.Children))
 	}
 }

@@ -22,7 +22,7 @@ type SnapshotNode struct {
 	Hash     string   `json:"hash"`
 	Type     string   `json:"type"`
 	NodeType string   `json:"node_type,omitempty"`
-	Module   int      `json:"module,omitempty"`
+	Module   string   `json:"module,omitempty"`
 	Children []string `json:"children,omitempty"`
 }
 

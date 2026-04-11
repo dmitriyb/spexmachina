@@ -55,8 +55,8 @@ func TestREQ8_C1_ModifiedRequirementWithComponentChanged(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
-		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: 1}, Impact: ArchImpl, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "778a8efc100a"}, Impact: ArchImpl, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -72,7 +72,7 @@ func TestREQ8_C2_ModifiedRequirementWithoutComponentChanged(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -97,7 +97,7 @@ func TestREQ8_C3_AddedRequirementNoImplementor(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/3", Type: Added, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/3", Type: Added, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -117,7 +117,7 @@ func TestREQ8_C4_AddedRequirementImplementorUnchanged(t *testing.T) {
 
 	// Req 2 is implemented by components 2 and 3. Neither is in the diff.
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/2", Type: Added, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/2", Type: Added, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -134,7 +134,7 @@ func TestREQ8_C5_RemovedRequirementStillReferenced(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/2", Type: Removed, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/2", Type: Removed, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -155,7 +155,7 @@ func TestREQ8_C6_ProjectRequirementNoModuleDerivation(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "project/requirement/5", Type: Modified, NodeType: "requirement", Module: 0}, Impact: Structural},
+		{Change: Change{Path: "project/requirement/5", Type: Modified, NodeType: "requirement", Module: ""}, Impact: Structural},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -177,7 +177,7 @@ func TestREQ8_C7_ProjectRequirementChainIncomplete(t *testing.T) {
 	// project/requirement/1 changed. Module req 2 has preq_id=1.
 	// Comp 2 and 3 implement req 2, but neither is in the diff.
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: 0}, Impact: Structural},
+		{Change: Change{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: ""}, Impact: Structural},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -199,9 +199,9 @@ func TestREQ8_C8_ProjectRequirementChainComplete(t *testing.T) {
 	// project/requirement/1 changed. Module req 2 has preq_id=1.
 	// Comp 2 and 3 implement req 2, and both are in the diff.
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: 0}, Impact: Structural},
-		{Change: Change{Path: "module/1/component/2", Type: Modified, NodeType: "component", Module: 1}, Impact: ArchImpl, Module: "Alpha"},
-		{Change: Change{Path: "module/1/component/3", Type: Modified, NodeType: "component", Module: 1}, Impact: ArchImpl, Module: "Alpha"},
+		{Change: Change{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: ""}, Impact: Structural},
+		{Change: Change{Path: "module/1/component/2", Type: Modified, NodeType: "component", Module: "778a8efc100a"}, Impact: ArchImpl, Module: "Alpha"},
+		{Change: Change{Path: "module/1/component/3", Type: Modified, NodeType: "component", Module: "778a8efc100a"}, Impact: ArchImpl, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -218,7 +218,7 @@ func TestREQ8_C9_MetaChangedWithoutRequirementChanges(t *testing.T) {
 
 	// Only meta changed, no requirement changes in module 1
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/meta", Type: Modified, NodeType: "meta", Module: 1}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/meta", Type: Modified, NodeType: "meta", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -236,9 +236,9 @@ func TestREQ8_C10_MultipleRequirementsPartialCoverage(t *testing.T) {
 
 	// Req 1 and 2 both modified. Comp 1 (implements req 1) changed. Comp 2 and 3 (implement req 2) did NOT change.
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
-		{Change: Change{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: 1}, Impact: Structural, Module: "Alpha"},
-		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: 1}, Impact: ArchImpl, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/1", Type: Modified, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: "778a8efc100a"}, Impact: Structural, Module: "Alpha"},
+		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "778a8efc100a"}, Impact: ArchImpl, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -259,8 +259,8 @@ func TestREQ8_C11_NoStructuralOrRequirementChanges(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: 1}, Impact: ImplOnly, Module: "Alpha"},
-		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: 1}, Impact: ArchImpl, Module: "Alpha"},
+		{Change: Change{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "778a8efc100a"}, Impact: ImplOnly, Module: "Alpha"},
+		{Change: Change{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "778a8efc100a"}, Impact: ArchImpl, Module: "Alpha"},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -291,7 +291,7 @@ func TestREQ8_ProjectRequirement_Added_NoDerivation(t *testing.T) {
 	specDir := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "project/requirement/5", Type: Added, NodeType: "requirement", Module: 0}, Impact: Structural},
+		{Change: Change{Path: "project/requirement/5", Type: Added, NodeType: "requirement", Module: ""}, Impact: Structural},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
@@ -308,7 +308,7 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 
 	// project/requirement/1 removed. Module req 2 still has preq_id=1.
 	changes := []ClassifiedChange{
-		{Change: Change{Path: "project/requirement/1", Type: Removed, NodeType: "requirement", Module: 0}, Impact: Structural},
+		{Change: Change{Path: "project/requirement/1", Type: Removed, NodeType: "requirement", Module: ""}, Impact: Structural},
 	}
 
 	errs := CheckCompleteness(changes, specDir)
