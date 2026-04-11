@@ -445,6 +445,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	comp1 := schema.IdentityHash("fullmod", "component", "C1")
 	impl1 := schema.IdentityHash("fullmod", "impl_section", "I1")
 	flow1 := schema.IdentityHash("fullmod", "data_flow", "F1")
+	test1 := schema.IdentityHash("fullmod", "test_section", "T1")
 
 	proj := `{
 		"name": "full-project",
@@ -464,12 +465,16 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		],
 		"data_flows": [
 			{"id": "` + flow1 + `", "name": "F1", "content": "flow_c1.md"}
+		],
+		"test_sections": [
+			{"id": "` + test1 + `", "name": "T1", "content": "test_c1.md"}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
 	writeFile(t, modDir, "arch_c1.md", "# arch\n")
 	writeFile(t, modDir, "impl_c1.md", "# impl\n")
 	writeFile(t, modDir, "flow_c1.md", "# flow\n")
+	writeFile(t, modDir, "test_c1.md", "# test\n")
 
 	root, err := BuildTree(dir)
 	if err != nil {
@@ -478,9 +483,9 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 
 	fullModHash := schema.IdentityHash("module", "FullMod")
 	fullMod := findChild(t, root, fullModHash)
-	// meta + 1 component + 1 impl_section + 1 data_flow = 4 children
-	if len(fullMod.Children) != 4 {
-		t.Fatalf("fullmod children: want 4, got %d", len(fullMod.Children))
+	// meta + 1 component + 1 impl_section + 1 data_flow + 1 test_section = 5 children
+	if len(fullMod.Children) != 5 {
+		t.Fatalf("fullmod children: want 5, got %d", len(fullMod.Children))
 	}
 
 	wantKeys := map[string]string{
@@ -488,6 +493,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		comp1:                 "component",
 		impl1:                 "impl_section",
 		flow1:                 "data_flow",
+		test1:                 "test_section",
 	}
 	for _, child := range fullMod.Children {
 		wantType, ok := wantKeys[child.Key]
