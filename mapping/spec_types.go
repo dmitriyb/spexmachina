@@ -15,7 +15,6 @@ type ModuleInfo struct {
 	Components     []ComponentInfo
 }
 
-// TODO(bead:spexmachina-jgj): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // ComponentInfo describes a component within a module.
 type ComponentInfo struct {
 	ID   string

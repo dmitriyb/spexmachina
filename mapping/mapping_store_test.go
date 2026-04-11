@@ -3,6 +3,7 @@ package mapping
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,7 +19,7 @@ func testStore(t *testing.T) Store {
 
 func testRecord() Record {
 	return Record{
-		SpecNodeID:  "schema/component/1",
+		SpecNodeID:  "79946d618829",
 		BeadID:      "abc-123",
 		BeadType:    "task",
 		Module:      "schema",
@@ -29,8 +30,6 @@ func testRecord() Record {
 }
 
 func TestFR1_Create_AssignsSequentialID(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -43,7 +42,7 @@ func TestFR1_Create_AssignsSequentialID(t *testing.T) {
 	}
 
 	r2 := Record{
-		SpecNodeID:  "schema/component/2",
+		SpecNodeID:  "78883b84c32d",
 		BeadID:      "abc-456",
 		BeadType:    "task",
 		Module:      "schema",
@@ -93,8 +92,6 @@ func TestFR1_Create_WritesValidJSON(t *testing.T) {
 }
 
 func TestFR1_Get_ByID(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -144,8 +141,6 @@ func TestFR1_Get_NotFound(t *testing.T) {
 }
 
 func TestFR1_GetByBead(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -176,8 +171,6 @@ func TestFR1_GetByBead_NotFound(t *testing.T) {
 }
 
 func TestFR1_GetBySpecNode(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -186,7 +179,7 @@ func TestFR1_GetBySpecNode(t *testing.T) {
 		t.Fatalf("Create: %v", err)
 	}
 
-	got, err := s.GetBySpecNode("schema/component/1")
+	got, err := s.GetBySpecNode("79946d618829")
 	if err != nil {
 		t.Fatalf("GetBySpecNode: %v", err)
 	}
@@ -211,12 +204,10 @@ func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
 }
 
 func TestFR1_BeadTypePreserved(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := Record{
-		SpecNodeID:  "impact/component/3",
+		SpecNodeID:  "76d72cbe00f3",
 		BeadID:      "feat-001",
 		BeadType:    "feature",
 		Module:      "impact",
@@ -239,8 +230,6 @@ func TestFR1_BeadTypePreserved(t *testing.T) {
 }
 
 func TestFR1_Update_SpecHash(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -267,8 +256,6 @@ func TestFR1_Update_SpecHash(t *testing.T) {
 }
 
 func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -314,8 +301,6 @@ func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
 }
 
 func TestFR1_Update_DuplicateBeadID(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -325,7 +310,7 @@ func TestFR1_Update_DuplicateBeadID(t *testing.T) {
 	}
 
 	r2 := testRecord()
-	r2.SpecNodeID = "map/component/2"
+	r2.SpecNodeID = "08909d62930b"
 	r2.BeadID = "other-bead"
 	id2, err := s.Create(r2)
 	if err != nil {
@@ -355,8 +340,6 @@ func TestFR1_Update_NotFound(t *testing.T) {
 }
 
 func TestFR1_Delete(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r := testRecord()
@@ -389,8 +372,6 @@ func TestFR1_Delete_NotFound(t *testing.T) {
 }
 
 func TestFR1_Delete_IDsNeverReused(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -405,7 +386,7 @@ func TestFR1_Delete_IDsNeverReused(t *testing.T) {
 	}
 
 	r2 := Record{
-		SpecNodeID:  "schema/component/2",
+		SpecNodeID:  "78883b84c32d",
 		BeadID:      "abc-456",
 		BeadType:    "task",
 		Module:      "schema",
@@ -423,14 +404,12 @@ func TestFR1_Delete_IDsNeverReused(t *testing.T) {
 }
 
 func TestFR1_List_Sorted(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	records := []Record{
-		{SpecNodeID: "a/component/1", BeadID: "b1", BeadType: "task", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
-		{SpecNodeID: "a/component/2", BeadID: "b2", BeadType: "task", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
-		{SpecNodeID: "a/component/3", BeadID: "b3", BeadType: "task", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
+		{SpecNodeID: "aabbccddeeff", BeadID: "b1", BeadType: "task", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
+		{SpecNodeID: "112233445566", BeadID: "b2", BeadType: "task", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
+		{SpecNodeID: "ffeeddccbbaa", BeadID: "b3", BeadType: "task", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
 	}
 	for _, r := range records {
 		if _, err := s.Create(r); err != nil {
@@ -465,8 +444,6 @@ func TestFR1_List_Empty(t *testing.T) {
 }
 
 func TestFR1_DuplicateBeadID(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -475,7 +452,7 @@ func TestFR1_DuplicateBeadID(t *testing.T) {
 	}
 
 	r2 := Record{
-		SpecNodeID:  "different/component/1",
+		SpecNodeID:  "aabbccddeeff",
 		BeadID:      "abc-123", // same bead ID
 		BeadType:    "task",
 		Module:      "different",
@@ -493,8 +470,6 @@ func TestFR1_DuplicateBeadID(t *testing.T) {
 }
 
 func TestFR1_DuplicateSpecNodeID(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	s := testStore(t)
 
 	r1 := testRecord()
@@ -503,7 +478,7 @@ func TestFR1_DuplicateSpecNodeID(t *testing.T) {
 	}
 
 	r2 := Record{
-		SpecNodeID:  "schema/component/1", // same spec node ID, different bead
+		SpecNodeID:  "79946d618829", // same spec node ID, different bead
 		BeadID:      "different-bead",
 		BeadType:    "task",
 		Module:      "schema",
@@ -554,8 +529,9 @@ func TestFR5_InvalidSchema_RejectsExtraField(t *testing.T) {
 		"next_id": 2,
 		"records": [{
 			"id": 1,
-			"spec_node_id": "schema/component/1",
+			"spec_node_id": "79946d618829",
 			"bead_id": "abc-123",
+			"bead_type": "task",
 			"module": "schema",
 			"component": "ProjectSchema",
 			"content_file": "spec/schema/arch_project_schema.md",
@@ -613,8 +589,9 @@ func TestFR5_InvalidSchema_MissingRequiredField(t *testing.T) {
 		"next_id": 2,
 		"records": [{
 			"id": 1,
-			"spec_node_id": "schema/component/1",
+			"spec_node_id": "79946d618829",
 			"bead_id": "abc-123",
+			"bead_type": "task",
 			"component": "ProjectSchema",
 			"content_file": "spec/schema/arch_project_schema.md",
 			"spec_hash": "e3b0c44"
@@ -652,8 +629,6 @@ func TestFR5_InvalidSchema_EnvelopeExtraField(t *testing.T) {
 }
 
 func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".bead-map.json")
 
@@ -661,7 +636,7 @@ func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
 		"next_id": 2,
 		"records": [{
 			"id": 1,
-			"spec_node_id": "schema/component/1",
+			"spec_node_id": "79946d618829",
 			"bead_id": "abc-123",
 			"bead_type": "task",
 			"module": "schema",
@@ -705,8 +680,6 @@ func TestFR5_ValidSchema_EmptyRecords(t *testing.T) {
 }
 
 func TestFR1_ConcurrentCreate(t *testing.T) {
-	// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-jgj: fixtures need identity hash IDs")
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".bead-map.json")
 	s := NewFileStore(path)
@@ -720,11 +693,11 @@ func TestFR1_ConcurrentCreate(t *testing.T) {
 		go func(idx int) {
 			defer wg.Done()
 			r := Record{
-				SpecNodeID:  strings.Replace("mod/component/X", "X", string(rune('0'+idx)), 1),
-				BeadID:      strings.Replace("bead-X", "X", string(rune('0'+idx)), 1),
+				SpecNodeID:  fmt.Sprintf("aabbccddee%02x", idx),
+				BeadID:      fmt.Sprintf("bead-%d", idx),
 				BeadType:    "task",
 				Module:      "mod",
-				Component:   strings.Replace("CompX", "X", string(rune('0'+idx)), 1),
+				Component:   fmt.Sprintf("Comp%d", idx),
 				ContentFile: "f",
 				SpecHash:    "h",
 			}
