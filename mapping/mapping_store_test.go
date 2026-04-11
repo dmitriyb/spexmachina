@@ -1,3 +1,5 @@
+// TODO(bead:spexmachina-jgj): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
+// Test fixtures use old module/type/id format which no longer passes bead-map schema validation.
 package mapping
 
 import (

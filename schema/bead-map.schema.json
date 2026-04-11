@@ -31,8 +31,8 @@
         },
         "spec_node_id": {
           "type": "string",
-          "pattern": "^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$",
-          "description": "Spec node identifier in format module_name/node_type/node_id."
+          "pattern": "^[a-f0-9]{12}$",
+          "description": "Identity hash of the spec node (12-char lowercase hex). Same format as node IDs in project.json and module.json."
         },
         "bead_id": {
           "type": "string",
