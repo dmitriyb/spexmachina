@@ -27,11 +27,11 @@ func ResolveContext(specDir string, record Record) (ContextResult, error)
 
 ## Algorithm
 
-1. Parse the component ID from `record.SpecNodeID` (e.g. `"schema/component/1"` → 1)
+1. Treat `record.SpecNodeID` as the component's identity hash directly — no parsing, no path decomposition
 2. Read `<specDir>/<record.Module>/module.json`
-3. Scan `impl_sections`: if `describes` contains the component ID, prepend `<specDir>/<module>/` to the section's `content` field
+3. Scan `impl_sections`: if `describes` contains the identity hash, prepend `<specDir>/<module>/` to the section's `content` field
 4. Scan `test_sections`: same logic
-5. Scan `data_flows`: if `uses` contains the component ID, same path resolution
+5. Scan `data_flows`: if `uses` contains the identity hash, same path resolution
 6. `ArchFile` is `record.ContentFile` (already a full path)
 7. `ModuleFile` is `<specDir>/<record.Module>/module.json`
 

@@ -19,13 +19,17 @@ spex apply [--report file] [--bead-cli br] [--proposal ref] [--dry-run]
 
 ## Execution Order
 
-1. **Label obsoletes** — mark beads being replaced or removed with `spex:obsolete` + `commit:<HEAD>` labels, but keep them open. For removed nodes, delete the mapping record. For modified nodes, leave the record for BeadCreator to update.
+1. **Label obsoletes** — mark beads being replaced or removed with `spex:obsolete` + `commit:<HEAD>` labels, but keep them open. For removed nodes, delete the mapping record (looked up by the action's `SpecNodeID` identity hash). For modified nodes, leave the record for BeadCreator to update in place.
 2. **Creates in hierarchy order with topological sort** — epics (modules) first, then features (components), then tasks (test_sections). Within each type level, beads are topologically sorted by their `DepBeadIDs` so that dependency beads are created before their dependents. Parent bead IDs are resolved from the mapping file after each level. Old beads are still open at this point, so `--deps blocks:<old-bead-id>` references valid open beads.
 3. **Close obsoletes** — close all beads that were labeled in step 1. This is safe because replacements already exist.
 4. **Tag all** — tag every affected bead (created + closed) with the proposal reference
 5. **Save snapshot** — record the new baseline state
 
 This label→create→close ordering ensures: (1) old beads are still open when new beads reference them via `--deps blocks`, (2) parent beads exist before children are created with `--parent`, (3) dependency beads within the same type level are created before dependents, and (4) `br` auto-flush correctly persists all bead states to the JSONL file that `bv` reads.
+
+## No spec_node_id derivation
+
+Each `Action` carries the affected node's identity hash in `SpecNodeID`. ApplyCommand passes this value straight through to BeadCreator (which writes it to the new mapping record) and BeadCloser (which uses it to find and delete the existing record). There is no helper that reconstructs `spec_node_id` from module name + integer ID; the earlier `deriveSpecNodeID` function is deleted. The merkle diff, the impact report, and the mapping store all use the same identity hash, so the value flows through unchanged from end to end.
 
 ## Topological Sort Within Type Levels
 

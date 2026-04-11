@@ -19,7 +19,7 @@ spex diff [dir] [--snapshot path] [--json]
 
 ## Output
 
-JSON output includes both changes and errors:
+JSON output includes both changes and errors. The `path` and `related` fields carry identity hashes (the same values used as merkle keys and bead-map `spec_node_id`s):
 
 ```json
 {
@@ -27,9 +27,9 @@ JSON output includes both changes and errors:
   "errors": [
     {
       "type": "incomplete_change",
-      "message": "requirement 2 description changed but component NodeMatcher content leaf unchanged",
-      "path": "module/4/requirement/2",
-      "related": ["module/4/component/2"]
+      "message": "requirement 'Match changed nodes to beads' description changed but component NodeMatcher content leaf unchanged",
+      "path": "7c5e2fa1b3d8",
+      "related": ["a1b2c3d4e5f6"]
     }
   ],
   "summary": { ... }

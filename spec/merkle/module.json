@@ -59,9 +59,9 @@
     {
       "id": 7,
       "type": "functional",
-      "title": "ID-based tree keying",
+      "title": "Identity-hash tree keying",
       "preq_id": 2,
-      "description": "Tree nodes are keyed by spec ID (module ID, component ID, requirement ID, etc.) instead of file path. Requirements are individual leaf nodes keyed as module/<id>/requirement/<req_id> and project/requirement/<req_id>. Renaming a directory or file with the same ID is detected as a modification, not a delete + add."
+      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, impl_section, data_flow, or test_section is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/<module-hash>` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
     },
     {
       "id": 8,
@@ -86,7 +86,7 @@
     {
       "id": 2,
       "name": "TreeBuilder",
-      "description": "Builds the merkle tree from the parsed spec graph. Nodes carry the spec ID (module ID, component ID, requirement ID, etc.) as their key, not the file path. Requirements are individual leaf nodes with hashes computed from deterministic JSON serialization. Maps spec hierarchy to tree nodes.",
+      "description": "Builds the merkle tree from the parsed spec graph. Each node's key is its spec identity hash (the 12-char hex `id` field) — no path-style keying, no module/type prefix. Requirements are individual leaf nodes with hashes computed from deterministic JSON serialization. Maps spec hierarchy to tree nodes.",
       "content": "arch_tree_builder.md",
       "implements": [
         2,
@@ -99,7 +99,7 @@
     {
       "id": 3,
       "name": "SnapshotStore",
-      "description": "Reads and writes snapshot files. Serializes the ID-keyed hash tree to a JSON file for git storage. The flat map is keyed by spec ID (id → {hash, type, ...}), not by file path.",
+      "description": "Reads and writes snapshot files. Serializes the identity-hash-keyed tree to a JSON file for git storage. The flat map is keyed by identity hash (hash → {hash, type, ...}), not by file path or integer ID.",
       "content": "arch_snapshot_store.md",
       "implements": [
         3
@@ -108,7 +108,7 @@
     {
       "id": 4,
       "name": "DiffEngine",
-      "description": "Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash = modified. ID in current but not snapshot = added. ID in snapshot but not current = removed.",
+      "description": "Compares two identity-hash-keyed trees (current vs snapshot). Same identity hash + different content hash = modified. Identity hash in current but not snapshot = added. Identity hash in snapshot but not current = removed.",
       "content": "arch_diff_engine.md",
       "implements": [
         4

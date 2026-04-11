@@ -7,9 +7,13 @@ CLI entry point for `spex impact`. Reads a merkle diff, validates it for errors,
 - Parse CLI flags: diff input (stdin or file), bead CLI binary name
 - Validate diff input: if the diff JSON contains a non-empty `errors` array (from change completeness validation in `spex diff`), refuse to proceed — print errors to stderr and exit non-zero
 - Wire BeadReader to load existing bead metadata
-- Wire NodeMatcher to correlate changed nodes with beads
+- Wire NodeMatcher to correlate changed nodes with beads using direct identity-hash lookup
 - Wire ActionClassifier to determine actions (create/obsolete)
 - Wire ReportGenerator to output the impact report as JSON
+
+## No rekeying
+
+Earlier versions of this command kept a `buildMerkleIndex` helper that rewrote each bead-map record into a synthetic merkle key (`module/<id>/component/<id>`) before passing the records to `NodeMatcher`. That helper exists only because merkle and the bead-map used different key formats. Both formats are now identity hashes, so `buildMerkleIndex` is deleted. Records flow from the mapping store into `NodeMatcher` unchanged, and changes flow from the diff into `NodeMatcher` unchanged. The two streams join on identity hash equality.
 
 ## Diff Input Validation
 

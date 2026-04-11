@@ -9,36 +9,38 @@ module.json
 ├── name (string, required)
 ├── description (string)
 ├── requirements[]
-│   ├── id (int >= 1)
-│   ├── preq_id (int >= 1, required, traces to project requirement)
+│   ├── id (string, 12-char hex identity hash)
+│   ├── preq_id (string, identity hash of project requirement, required)
 │   ├── type ("functional" | "non_functional")
 │   ├── title (string, required)
 │   ├── description (string)
-│   └── depends_on (int[])
+│   └── depends_on (string[], identity hashes)
 ├── components[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── name (string, required)
 │   ├── description (string)
 │   ├── content (string, path to arch_*.md)
-│   ├── implements (int[], requirement IDs)
-│   └── uses (int[], component IDs)
+│   ├── implements (string[], requirement identity hashes)
+│   └── uses (string[], component identity hashes)
 ├── impl_sections[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── name (string, required)
 │   ├── content (string, path to impl_*.md)
-│   └── describes (int[], component IDs)
+│   └── describes (string[], component identity hashes)
 ├── data_flows[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── name (string, required)
 │   ├── description (string)
 │   ├── content (string, path to flow_*.md)
-│   └── uses (int[], component IDs)
+│   └── uses (string[], component identity hashes)
 └── test_sections[]
-    ├── id (int >= 1)
+    ├── id (string, 12-char hex identity hash)
     ├── name (string, required)
     ├── content (string, path to test_*.md)
-    └── describes (int[], component IDs)
+    └── describes (string[], component identity hashes)
 ```
+
+All `id`, `preq_id`, and cross-reference fields use the identity hash string format `^[a-f0-9]{12}$`. The hash is computed by `schema.IdentityHash` from the node's module name, type, and human identifier (`name` or `title`). See `impl_identity_hash.md` for the full algorithm and identity-string table.
 
 ## Edge Types
 

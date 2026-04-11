@@ -10,36 +10,38 @@ project.json
 ├── description (string)
 ├── version (string)
 ├── requirements[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── type ("functional" | "non_functional")
 │   ├── title (string, required)
 │   ├── description (string)
 │   ├── priority (int, 0-4, optional)
-│   └── depends_on (int[])
+│   └── depends_on (string[], identity hashes)
 ├── modules[] (required, minItems: 1)
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── name (string, required)
 │   ├── path (string, required)
 │   ├── description (string)
-│   └── requires_module (int[])
+│   └── requires_module (string[], identity hashes)
 ├── milestones[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── title (string, required)
 │   ├── description (string)
-│   └── groups (int[])
+│   └── groups (string[], identity hashes)
 ├── sections[]
-│   ├── id (int >= 1)
+│   ├── id (string, 12-char hex identity hash)
 │   ├── name (string, required)
 │   ├── type (string, required)
 │   └── ... (additional properties allowed — freeform content)
 └── test_plan
     └── scenarios[]
-        ├── id (int >= 1)
+        ├── id (string, 12-char hex identity hash)
         ├── name (string, required)
         ├── description (string)
         ├── content (string, path to test_*.md)
-        └── modules (int[])
+        └── modules (string[], identity hashes)
 ```
+
+All `id` and cross-reference fields use the identity hash string format `^[a-f0-9]{12}$`. IDs are computed deterministically from each node's identity string by `schema.IdentityHash` — see `impl_identity_hash.md` for the algorithm and the table of identity strings per node type. IDs are never assigned manually.
 
 ## Edge Types
 

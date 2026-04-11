@@ -273,3 +273,75 @@ Given two component create actions: A with `DepBeadIDs: ["spex-existing"]` (an a
 When `spex apply` runs:
 
 Then A and B are created in their original order. The `--deps depends:spex-existing` flag is passed for A, but since `spex-existing` is not being created in this batch, it doesn't affect topological ordering.
+
+## End-to-End Pipeline Integration
+
+This scenario implements `spec/project.json` test_plan scenario 2 ("Cross-module mapping integration") as a single end-to-end test that runs the full pipeline (`diff` → `impact` → `apply`) against a real spec fixture. It exists because the unit-level apply tests above use a mock mapping store that skips schema validation, so they cannot catch format mismatches between pipeline stages. PR #99 shipped with five such mismatches surviving CI; this test closes the gap.
+
+### Sim project fixture
+
+A miniature spec lives under `cmd/spex/testdata/sim/`. It is small enough to be exhaustive and large enough to exercise cross-module behavior:
+
+```
+cmd/spex/testdata/sim/
+  spec/
+    project.json              # 2 modules: alpha, beta (beta requires alpha)
+    alpha/
+      module.json             # 1 component, 1 impl_section
+      arch_alpha_thing.md
+      impl_alpha_detail.md
+    beta/
+      module.json             # 1 component that uses alpha's component
+      arch_beta_thing.md
+  .bead-map.json              # pre-existing records keyed by identity hash
+  .snapshot.json              # baseline merkle snapshot of the initial state
+```
+
+Every `id` and cross-reference in the sim spec is an identity hash — there are no integer IDs anywhere in the fixture. The bead-map records and the snapshot keys are also identity hashes, so the fixture exercises the same format end to end.
+
+### S13: Full pipeline runs cleanly with real mapping store
+
+Given the sim fixture copied to a temp directory.
+
+When the test:
+1. Modifies a markdown content leaf (e.g., adds a paragraph to `arch_alpha_thing.md`)
+2. Builds the merkle tree with the real `merkle` package
+3. Diffs against `.snapshot.json`
+4. Runs impact analysis with `mapping.NewFileStore()` (real store, not a mock — schema validation runs on every load)
+5. Runs apply with a mock bead CLI but the same real `mapping.FileStore`
+6. Saves the new snapshot
+
+Then:
+- The diff reports a single `modified` change whose key is the alpha component's identity hash
+- The impact report's create and obsolete actions reference identity hashes in their `SpecNodeID` field — never merkle paths, never integer IDs
+- The new mapping record written by apply passes `bead-map.schema.json` validation (the real `FileStore.Save` would fail if `spec_node_id` did not match `^[a-f0-9]{12}$`)
+- The cross-module dependency from beta is preserved: beta's component still references alpha's component via the same identity hash after apply
+- The updated snapshot reflects the new content hash for `arch_alpha_thing.md` and otherwise matches the old snapshot
+
+### S14: Pipeline determinism
+
+Given the same sim fixture and the same edit.
+
+When the test runs the pipeline twice (in two separate temp directories):
+
+Then both runs produce byte-identical impact reports and byte-identical bead-map writes. This catches any non-determinism in the order records are emitted, the order beads are created, or the way identity hashes are computed.
+
+### S15: Real mapping store rejects format mismatches
+
+Given a deliberately corrupted `.bead-map.json` where one record's `spec_node_id` is `"alpha/component/1"` (the old integer-based format).
+
+When the pipeline loads the bead-map:
+
+Then `mapping.NewFileStore()` fails with a schema validation error referencing the `spec_node_id` pattern. This is the regression guard for the specific bug class that PR #99 hit — a record in the wrong format must never load successfully, even from a mock or test fixture.
+
+### S16: Cross-module create action carries dependency identity hash
+
+Given the sim fixture.
+
+When the test edits beta's component (changing `arch_beta_thing.md`) and runs the full pipeline:
+
+Then the impact report's create action for beta's component has `DepBeadIDs` populated with the bead ID of alpha's component, resolved through the mapping store by looking up alpha's component identity hash from beta's `uses` field. The lookup is a single map access — no key translation. Apply passes `--deps depends:<alpha-bead-id>` to the bead CLI for beta's create.
+
+### Why this lives in the apply tests
+
+The end-to-end test is anchored in apply because apply is the last stage and the only one that touches the real mapping store on disk. Every earlier stage's output flows through it, so a format mismatch at any stage manifests as either an apply error or a downstream schema validation failure. Putting the test here keeps the assertion site close to the failure mode.

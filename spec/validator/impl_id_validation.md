@@ -1,48 +1,62 @@
 # ID and Reference Validation Implementation
 
+All IDs are 12-character hex identity hash strings. Every check below is implemented with `map[string]bool` set membership — never integer arithmetic, never path parsing.
+
 ## ID Uniqueness
 
-For each array (requirements, components, impl_sections, data_flows, modules, milestones):
-1. Build a map of ID → count
-2. Any ID with count > 1 is a duplicate — emit error with the array location and ID
+For each array (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios):
+
+```go
+seen := make(map[string]bool)
+for _, node := range arr {
+    if seen[node.ID] {
+        errors = append(errors, dupErr(arr, node.ID))
+        continue
+    }
+    seen[node.ID] = true
+}
+```
+
+A collision in the 48-bit hash space across distinct logical nodes is mathematically improbable, but a duplicate can still appear if a file was hand-edited or merged badly, so the check is enforced.
 
 ## Cross-Reference Validation
 
-Build ID sets for each type, then check all references:
+Build identity-hash sets for each type, then check all references with set membership:
 
 ```
-projectReqIDs  = {id for req in project.requirements}
-moduleIDs      = {id for mod in project.modules}
+projectReqHashes  = {req.ID for req in project.requirements}
+moduleHashes      = {mod.ID for mod in project.modules}
 
 For each module:
-  reqIDs   = {id for req in module.requirements}
-  compIDs  = {id for comp in module.components}
+  reqHashes   = {req.ID for req in module.requirements}
+  compHashes  = {comp.ID for comp in module.components}
 
-  Check: comp.implements ⊆ reqIDs
-  Check: comp.uses ⊆ compIDs
-  Check: impl.describes ⊆ compIDs
-  Check: flow.uses ⊆ compIDs
-  Check: test.describes ⊆ compIDs
-  Check: req.depends_on ⊆ reqIDs
-  Check: req.preq_id ∈ projectReqIDs (mandatory — see below)
+  Check: comp.implements ⊆ reqHashes
+  Check: comp.uses ⊆ compHashes
+  Check: impl.describes ⊆ compHashes
+  Check: flow.uses ⊆ compHashes
+  Check: test.describes ⊆ compHashes
+  Check: req.depends_on ⊆ reqHashes
+  Check: req.preq_id ∈ projectReqHashes (mandatory — see below)
 
-Check: mod.requires_module ⊆ moduleIDs
-Check: milestone.groups ⊆ moduleIDs
+Check: mod.requires_module ⊆ moduleHashes
+Check: milestone.groups ⊆ moduleHashes
+Check: scenario.modules ⊆ moduleHashes
 ```
 
-Each failed check produces an error with the source node, the reference field, and the dangling target ID.
+Each failed check produces an error with the source node, the reference field, and the dangling target identity hash.
 
 ## Mandatory preq_id Check
 
-Every module requirement must have a `preq_id` field, and it must reference an existing project requirement ID:
+Every module requirement must have a non-empty `preq_id` field whose value is the identity hash of an existing project requirement:
 
 ```
 For each module:
   For each requirement in module.requirements:
-    If req.preq_id == 0 (unset):
-      Error: "module %s: requirement %d missing preq_id"
-    Else if req.preq_id ∉ projectReqIDs:
-      Error: "module %s: requirement %d preq_id %d not found in project requirements"
+    If req.PreqID == "":
+      Error: "module %s: requirement %s missing preq_id"
+    Else if !projectReqHashes[req.PreqID]:
+      Error: "module %s: requirement %s preq_id %s not found in project requirements"
 ```
 
 This enforces that no orphan module requirements exist — every module requirement must derive from a project goal.

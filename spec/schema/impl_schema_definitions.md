@@ -22,9 +22,11 @@ Both schemas use `additionalProperties: false` at all levels. This prevents sile
 
 Requirements, components, impl_sections, and data_flows are arrays (not maps) in JSON. This preserves ordering, which matters for rendering and consistent output. The `id` field within each item provides lookup by identifier.
 
-### Numeric IDs
+### Identity hash IDs
 
-IDs are integers starting from 1 (`minimum: 1`). The schema enforces the minimum but not uniqueness within an array — uniqueness is a structural constraint enforced by the validator module.
+IDs are 12-character lowercase hex strings, validated by the JSON Schema pattern `^[a-f0-9]{12}$`. The schema enforces the format but not uniqueness within an array — uniqueness is a structural constraint enforced by the validator module. IDs are not assigned manually; they are computed deterministically by `schema.IdentityHash` from the node's identity string (module + type + name/title). The same pattern applies to every cross-reference field (`depends_on`, `requires_module`, `implements`, `uses`, `describes`, `groups`, `preq_id`, `modules`).
+
+The reason IDs are hashes rather than integers: integers are order-dependent, so two branches that independently add nodes assign the same next integer to different things and collide on merge. Identity hashes are derived from each node's name and position, so different nodes always produce different hashes and merging is collision-free without coordination. See `impl_identity_hash.md` for the algorithm and identity-string table.
 
 ### Sections array design
 
@@ -39,7 +41,7 @@ The section `$def` defines only the envelope:
   "type": "object",
   "required": ["id", "name", "type"],
   "properties": {
-    "id": { "type": "integer", "minimum": 1 },
+    "id": { "type": "string", "pattern": "^[a-f0-9]{12}$" },
     "name": { "type": "string", "minLength": 1 },
     "type": { "type": "string", "minLength": 1 }
   }

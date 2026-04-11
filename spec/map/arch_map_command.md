@@ -13,13 +13,13 @@ CLI entry point for `spex map` subcommands.
 
 ### spex map get \<record-id\>
 
-Returns a single mapping record as JSON.
+Returns a single mapping record as JSON. The record-id argument is the integer record `id` (used in the bead label `spex:<id>`), not the identity hash.
 
 ```
 $ spex map get 42
 {
   "id": 42,
-  "spec_node_id": "impact/component/3",
+  "spec_node_id": "a1b2c3d4e5f6",
   "bead_id": "abc-123",
   "module": "impact",
   "component": "ActionClassifier",
@@ -37,8 +37,8 @@ Returns all mapping records as a JSON array.
 ```
 $ spex map list
 [
-  {"id": 1, "spec_node_id": "schema/component/1", ...},
-  {"id": 2, "spec_node_id": "schema/component/2", ...}
+  {"id": 1, "spec_node_id": "a1b2c3d4e5f6", ...},
+  {"id": 2, "spec_node_id": "0f1e2d3c4b5a", ...}
 ]
 ```
 
@@ -46,16 +46,17 @@ Exit code 0. Empty array `[]` if no mappings exist.
 
 ### spex map context \<record-id\>
 
-Resolves the full spec context for a component. Reads the mapping record, parses the component ID from `spec_node_id`, reads `spec/<module>/module.json`, and returns all spec files relevant to that component.
+Resolves the full spec context for a component. Reads the mapping record, treats `spec_node_id` as the component's identity hash directly, reads `spec/<module>/module.json`, and returns all spec files relevant to that component.
 
 Algorithm:
-1. `map get <id>` → record with `module`, `spec_node_id`, `content_file`
-2. Parse component ID from `spec_node_id` (e.g. `schema/component/1` → component ID 1)
-3. Read `spec/<module>/module.json`
-4. Find `impl_sections` where `describes` contains component ID → their content paths
-5. Find `test_sections` where `describes` contains component ID → their content paths
-6. Find `data_flows` where `uses` contains component ID → their content paths
-7. The arch file is already `content_file` on the record
+1. `map get <id>` → record with `module`, `spec_node_id` (identity hash), `content_file`
+2. Read `spec/<module>/module.json`
+3. Find `impl_sections` whose `describes` array contains the identity hash → their content paths
+4. Find `test_sections` whose `describes` array contains the identity hash → their content paths
+5. Find `data_flows` whose `uses` array contains the identity hash → their content paths
+6. The arch file is already `content_file` on the record
+
+There is no parse step — the identity hash flows from `spec_node_id` straight into the array containment checks.
 
 ```
 $ spex map context 42

@@ -35,7 +35,7 @@
     {
       "id": 1,
       "name": "MappingStore",
-      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node ID to a bead ID with structured metadata including bead_type field. Supports record updates for obsolete+create flows.",
+      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node identity hash to a bead ID with structured metadata including bead_type field. The `spec_node_id` field is the same 12-char hex identity hash that the merkle tree uses as a key, so impact and apply look up records by that hash with no translation. Supports record updates for obsolete+create flows.",
       "content": "arch_mapping_store.md",
       "implements": [1, 5]
     },
@@ -50,7 +50,7 @@
     {
       "id": 4,
       "name": "ContextResolver",
-      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Pure function over spec directory — deterministic and cacheable.",
+      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Looks up the component by matching `record.SpecNodeID` (an identity hash) against component IDs in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [6],
       "uses": [1]

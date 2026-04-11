@@ -1,8 +1,8 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader (component 3). The SchemaLoader is the Go package (`schema/schema.go`) that embeds `project.schema.json` and `module.schema.json` via `go:embed` and exposes them through `ProjectSchema()` and `ModuleSchema()` functions.
+Integration and acceptance tests for SchemaLoader (component 3). The SchemaLoader is the Go package (`schema/schema.go`) that embeds `project.schema.json`, `module.schema.json`, and `bead-map.schema.json` via `go:embed` and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like.
 
-These tests verify that the embedding works correctly, that the loaded schemas are structurally sound, and that they can be used to validate known-good fixtures.
+These tests verify that the embedding works correctly, that the loaded schemas are structurally sound, that they can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
 ## Setup
 
@@ -232,3 +232,74 @@ The current API uses fixed function names (`ProjectSchema`, `ModuleSchema`) rath
 **Expected:** All `$ref` pointers resolve to definitions within the same schema file.
 
 **Verifies:** The schemas are self-contained — no external `$ref` URIs that would fail when loaded from an embed FS (which cannot resolve external references).
+
+## IdentityHash Scenarios
+
+These scenarios cover the `schema.IdentityHash(parts ...string) string` function. The function is small but load-bearing — every other module imports it to compute or compare spec node IDs.
+
+### IH1: IdentityHash is deterministic
+
+**Call:** `IdentityHash("impact", "component", "NodeMatcher")` ten times.
+
+**Expected:** All ten calls return the same 12-character hex string.
+
+**Verifies:** The function has no hidden state, no time dependence, no randomness.
+
+### IH2: IdentityHash output matches the schema pattern
+
+**Call:** Compute hashes for ~30 representative inputs (varying part counts and lengths).
+
+**Expected:** Every output matches the regex `^[a-f0-9]{12}$` — exactly 12 characters, lowercase hex only.
+
+**Verifies:** Every value the function produces is a legal `id` field value per `project.schema.json` and `module.schema.json`. If this test fails, every other module will start emitting schema-invalid records.
+
+### IH3: Different parts produce different hashes
+
+**Call:** Hash `("a", "b", "c")` and `("a", "b", "d")` and `("a", "c", "b")` and `("d", "b", "c")`.
+
+**Expected:** All four results are distinct.
+
+**Verifies:** The function is not collapsing parts via concatenation in a way that loses positional information.
+
+### IH4: Same node identity across modules produces different hashes
+
+**Call:** `IdentityHash("validator", "component", "Foo")` and `IdentityHash("merkle", "component", "Foo")`.
+
+**Expected:** The two hashes differ.
+
+**Verifies:** Two components with the same name in different modules are correctly disambiguated by the module part. This is the property that lets the validator skip cross-module collision checks.
+
+### IH5: Joining is on `/` exactly
+
+**Call:** `IdentityHash("a", "b")` versus a manual `sha256.Sum256([]byte("a/b"))[:6]` hex-encoded.
+
+**Expected:** The two values are equal.
+
+**Verifies:** The join separator is `/`, not `.`, `,`, or `_`. This is the contract every other module relies on when re-deriving an ID by hand.
+
+### IH6: Empty parts and empty input
+
+**Call:** `IdentityHash()`, `IdentityHash("")`, `IdentityHash("a", "", "b")`.
+
+**Expected:** Each call returns *some* 12-char hex string, all three are distinct, and none panic. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
+
+**Verifies:** The function does not crash on degenerate input. It also does not silently treat empty strings as identical to absent parts.
+
+## BeadMapSchema Scenarios
+
+### BM1: BeadMapSchema() loads without error
+
+**Call:** `data, err := schema.BeadMapSchema()`
+
+**Expected:** `err` is nil; `data` is non-empty; `data` is valid JSON.
+
+### BM2: BeadMapSchema() enforces the identity hash spec_node_id pattern
+
+**Steps:**
+1. Load the bead-map schema and compile a validator.
+2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (legal identity hash).
+3. Validate a record where `spec_node_id` is `"impact/component/3"` (legacy format).
+
+**Expected:** The first passes; the second fails with a pattern violation referencing `^[a-f0-9]{12}$`.
+
+**Verifies:** The schema enforces the new identity hash format. This is the regression guard that catches any code path which tries to write a legacy-format `spec_node_id` into the bead-map.

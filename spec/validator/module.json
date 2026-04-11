@@ -37,14 +37,14 @@
       "type": "functional",
       "title": "ID uniqueness",
       "preq_id": 1,
-      "description": "All numeric IDs are unique within their containing array (requirements, components, impl_sections, data_flows, modules, milestones)."
+      "description": "All identity hash IDs are unique within their containing array (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios). Uniqueness is checked by string comparison against a set; collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
       "id": 6,
       "type": "functional",
       "title": "Cross-reference integrity",
       "preq_id": 1,
-      "description": "All cross-reference IDs point to existing nodes: implements \u2192 requirements, uses \u2192 components, describes \u2192 components, depends_on \u2192 requirements, requires_module \u2192 modules, groups \u2192 modules, preq_id \u2192 project requirements. Every module requirement must have a preq_id that references a valid project requirement ID.",
+      "description": "All cross-reference identity hashes point to existing nodes: implements \u2192 requirements, uses \u2192 components, describes \u2192 components, depends_on \u2192 requirements, requires_module \u2192 modules, groups \u2192 modules, preq_id \u2192 project requirements, modules (test_plan) \u2192 modules. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition.",
       "depends_on": [5]
     },
     {
@@ -145,7 +145,7 @@
     {
       "id": 5,
       "name": "IDValidator",
-      "description": "Checks ID uniqueness within each array, validates all cross-reference targets exist, enforces that every module requirement has a valid preq_id, and checks that every project requirement has a priority field.",
+      "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use string sets (map[string]bool) — no integer parsing or path decomposition.",
       "content": "arch_id_validator.md",
       "implements": [5, 6, 13]
     },

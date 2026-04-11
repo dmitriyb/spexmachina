@@ -184,19 +184,19 @@ Mock bead CLI returns two beads with the same ID but different spec labels. Asse
 
 ### E9: Diff input contains errors — impact refuses to proceed
 
-Provide a diff JSON with a non-empty `errors` array:
+Provide a diff JSON with a non-empty `errors` array. The `path` and `related` fields are identity hashes — `meta/<module-hash>` for the envelope leaf, and the component's identity hash for the implementing component:
 
 ```json
 {
   "changes": [
-    {"path": "module/4/component/2", "type": "modified", "impact": "arch_impl", "module": "impact"}
+    {"path": "a1b2c3d4e5f6", "type": "modified", "impact": "arch_impl", "module": "impact", "node_type": "component"}
   ],
   "errors": [
     {
       "type": "incomplete_change",
-      "message": "Requirement 2 (impact) description changed but implementing component NodeMatcher content leaf unchanged",
-      "path": "module/4/meta",
-      "related": ["module/4/component/2"]
+      "message": "Requirement 'Match changed nodes to beads' (impact) description changed but implementing component NodeMatcher content leaf unchanged",
+      "path": "meta/0011223344aa",
+      "related": ["a1b2c3d4e5f6"]
     }
   ]
 }

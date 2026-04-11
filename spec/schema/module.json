@@ -7,14 +7,14 @@
       "type": "functional",
       "title": "Define project schema",
       "preq_id": 1,
-      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), module declarations with inter-module dependencies, and milestones."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), module declarations with inter-module dependencies, and milestones. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": 2,
       "type": "functional",
       "title": "Define module schema",
       "preq_id": 1,
-      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), implementation sections (with content links), and data flows."
+      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), implementation sections (with content links), and data flows. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": 3,
@@ -26,9 +26,9 @@
     {
       "id": 4,
       "type": "non_functional",
-      "title": "Numeric ID constraints",
+      "title": "Identity hash ID constraints",
       "preq_id": 1,
-      "description": "All IDs are integers >= 1, unique within their containing array. Schema enforces minimum value; uniqueness enforced by validator."
+      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/<title>'; modules use 'module/<name>'; module requirements use '<module>/requirement/<title>'; components use '<module>/component/<name>'; impl_sections use '<module>/impl_section/<name>'; data_flows use '<module>/data_flow/<name>'; test_sections use '<module>/test_section/<name>'; milestones use 'milestone/<title>'; test_plan scenarios use 'test_plan/scenario/<name>'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
     },
     {
       "id": 5,
@@ -49,14 +49,14 @@
       "type": "functional",
       "title": "Define bead-map schema",
       "preq_id": 3,
-      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional bead_status). spec_node_id format validated via pattern."
+      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional bead_status). The spec_node_id field is validated against the identity hash pattern ^[a-f0-9]{12}$ — the same format used by node IDs in project.json and module.json — so the merkle tree key and the mapping store key are byte-identical and need no translation. The internal record `id` remains an integer, since it is used only for the spex:<id> bead label and is never referenced from the spec graph."
     },
     {
       "id": 8,
       "type": "functional",
       "title": "Define sections array in project schema",
       "preq_id": 15,
-      "description": "Add a sections array to project.json schema. Each entry requires id (integer >= 1), name (string), type (string). Additional properties allowed on section entries (freeform content validated externally by coupled module schemas)."
+      "description": "Add a sections array to project.json schema. Each entry requires id (string identity hash), name (string), type (string). Additional properties allowed on section entries (freeform content validated externally by coupled module schemas)."
     },
     {
       "id": 9,
@@ -64,6 +64,13 @@
       "title": "Define section.schema.json convention",
       "preq_id": 15,
       "description": "Document and enforce the convention that coupled modules provide a section.schema.json in their spec directory. This file is a standard JSON Schema that validates the freeform content of the module's project-level section."
+    },
+    {
+      "id": 10,
+      "type": "functional",
+      "title": "Identity hash algorithm",
+      "preq_id": 9,
+      "description": "Provide a deterministic identity hash function shared across the schema, validator, merkle, impact, apply, and map modules. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like; all other modules import it rather than reimplement it."
     }
   ],
   "components": [
@@ -84,9 +91,9 @@
     {
       "id": 3,
       "name": "SchemaLoader",
-      "description": "Go package that embeds JSON Schema files and exposes them for programmatic use by the validator and other modules.",
+      "description": "Go package that embeds JSON Schema files and exposes them for programmatic use by the validator and other modules. Also exposes the IdentityHash utility function used to compute deterministic 12-character hex node IDs from identity strings.",
       "content": "arch_schema_loader.md",
-      "implements": [3],
+      "implements": [3, 10],
       "uses": [1, 2, 4]
     },
     {
@@ -114,6 +121,12 @@
       "id": 3,
       "name": "Test schema definitions",
       "content": "impl_test_schema_definitions.md",
+      "describes": [1, 2]
+    },
+    {
+      "id": 4,
+      "name": "Identity hash algorithm",
+      "content": "impl_identity_hash.md",
       "describes": [1, 2]
     }
   ],
