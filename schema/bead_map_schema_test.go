@@ -171,7 +171,7 @@ func TestFR7_BeadMapSchemaSpecNodeIDPattern(t *testing.T) {
 	specNodeDef := recordProps["spec_node_id"].(map[string]any)
 
 	pattern := specNodeDef["pattern"].(string)
-	expected := "^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$"
+	expected := "^[a-f0-9]{12}$"
 	if pattern != expected {
 		t.Fatalf("spec_node_id pattern: want %q, got %q", expected, pattern)
 	}
@@ -246,7 +246,7 @@ func TestFR7_MissingRequiredFields(t *testing.T) {
 		},
 		{
 			"record missing id",
-			`{"next_id": 1, "records": [{"spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 			"id",
 		},
 		{
@@ -256,32 +256,32 @@ func TestFR7_MissingRequiredFields(t *testing.T) {
 		},
 		{
 			"record missing bead_id",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 			"bead_id",
 		},
 		{
 			"record missing bead_type",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 			"bead_type",
 		},
 		{
 			"record missing module",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 			"module",
 		},
 		{
 			"record missing component",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "content_file": "f.md", "spec_hash": "h"}]}`,
 			"component",
 		},
 		{
 			"record missing content_file",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "spec_hash": "h"}]}`,
 			"content_file",
 		},
 		{
 			"record missing spec_hash",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md"}]}`,
 			"spec_hash",
 		},
 	}
@@ -307,10 +307,10 @@ func TestFR7_SpecNodeIDPatternValidation(t *testing.T) {
 
 	t.Run("valid patterns", func(t *testing.T) {
 		valid := []string{
-			"schema/component/1",
-			"schema/impl_section/42",
-			"validator/data_flow/3",
-			"my_module/test_section/999",
+			"a1b2c3d4e5f6", // typical identity hash
+			"000000000000", // all zeros
+			"abcdefabcdef", // all alpha hex
+			"123456789012", // all numeric hex
 		}
 		for _, id := range valid {
 			t.Run(id, func(t *testing.T) {
@@ -324,13 +324,13 @@ func TestFR7_SpecNodeIDPatternValidation(t *testing.T) {
 
 	t.Run("invalid patterns", func(t *testing.T) {
 		invalid := []string{
-			"Schema/component/1",           // uppercase
-			"schema/requirement/1",          // invalid node type
-			"schema/component/",             // missing ID number
-			"schema/component/abc",          // non-numeric ID
-			"/component/1",                  // missing module
-			"schema/component/1/extra",      // extra segment
-			"schema/Component/1",            // uppercase node type
+			"schema/component/1",           // old module/type/id format
+			"A1B2C3D4E5F6",                // uppercase hex
+			"a1b2c3d4e5",                   // too short (10 chars)
+			"a1b2c3d4e5f6a",               // too long (13 chars)
+			"a1b2c3d4e5fg",                // non-hex char 'g'
+			"",                             // empty string
+			"a1b2c3d4e5f ",                // trailing space
 		}
 		for _, id := range invalid {
 			t.Run(id, func(t *testing.T) {
@@ -372,7 +372,7 @@ func TestFR7_RecordIDMinimum(t *testing.T) {
 	sch := compileBeadMapSchema(t)
 
 	t.Run("record id 0 fails", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 0, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
+		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 0, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
 		if err == nil {
 			t.Fatal("record id=0 should fail")
 		}
@@ -388,27 +388,27 @@ func TestFR7_EmptyStringFieldsFail(t *testing.T) {
 	}{
 		{
 			"empty bead_id",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 		},
 		{
 			"empty bead_type",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 		},
 		{
 			"empty module",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 		},
 		{
 			"empty component",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "", "content_file": "f.md", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "", "content_file": "f.md", "spec_hash": "h"}]}`,
 		},
 		{
 			"empty content_file",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "", "spec_hash": "h"}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "", "spec_hash": "h"}]}`,
 		},
 		{
 			"empty spec_hash",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": ""}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": ""}]}`,
 		},
 	}
 	for _, tt := range fields {
@@ -434,7 +434,7 @@ func TestFR7_ExtraFieldsRejected(t *testing.T) {
 		},
 		{
 			"extra field at record level",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "priority": 1}]}`,
+			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "priority": 1}]}`,
 		},
 	}
 	for _, tt := range tests {
@@ -451,14 +451,14 @@ func TestFR7_BeadStatusOptional(t *testing.T) {
 	sch := compileBeadMapSchema(t)
 
 	t.Run("without bead_status passes", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
+		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
 		if err != nil {
 			t.Fatalf("record without bead_status should pass: %v", err)
 		}
 	})
 
 	t.Run("with bead_status passes", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "schema/component/1", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "bead_status": "closed"}]}`)
+		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "bead_status": "closed"}]}`)
 		if err != nil {
 			t.Fatalf("record with bead_status should pass: %v", err)
 		}
@@ -607,7 +607,7 @@ func TestFR7_BeadMapOmitsEmptyBeadStatus(t *testing.T) {
 		Records: []BeadMapRecord{
 			{
 				ID:          1,
-				SpecNodeID:  "schema/component/1",
+				SpecNodeID:  "a1b2c3d4e5f6",
 				BeadID:      "abc",
 				BeadType:    "task",
 				Module:      "m",
