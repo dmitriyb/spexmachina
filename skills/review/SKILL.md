@@ -24,63 +24,79 @@ Read these documents:
 
 ## Review Flow
 
-This skill supports an iterative cycle: `implement → [review → fix → review] → close`.
+This skill supports an iterative cycle: `implement → [review → fix → review] → close`. A single four-step flow handles both first reviews and follow-ups. The action at the end depends on the `(mode, result)` pair from Step 2 and Step 3.
 
 ### Step 0: Resolve repo slug
 
 Run `gh repo view --json owner,name --jq '.owner.login + "/" + .name'` to get the `{owner}/{repo}` slug. Use this resolved value in all subsequent `gh api` calls. Do NOT guess the owner from the git remote or working directory name.
 
-### Step 1: Check for prior reviews
+### Step 1: Fetch review state
 
-Check **both** sources of review feedback:
+Fetch from GitHub everything needed to classify the invocation:
 
 1. **Review-level comments**: `gh api repos/{owner}/{repo}/pulls/{number}/reviews` — look for reviews with `state` = `COMMENTED`/`CHANGES_REQUESTED` and a non-empty `body`.
 2. **Inline comments**: `gh api repos/{owner}/{repo}/pulls/{number}/comments` — line-level comments on the diff.
+3. **Commits**: `gh api repos/{owner}/{repo}/pulls/{number}/commits` — used to decide whether the author responded to prior review-body feedback.
 
-A prior review exists if **either** source has feedback.
+### Step 2: Classify mode
 
-- **No prior feedback from either source** → first review. Proceed to Step 2.
-- **Prior feedback exists but no response** → **Stop. Do nothing.** Tell the user.
-- **Prior feedback exists and responded to** → proceed to Step 3 (Follow-up Review).
+Decide what this invocation is doing based on prior feedback:
+
+- **No prior feedback from either source** → `mode = REVIEW`.
+- **Prior feedback exists and the author responded** → `mode = FOLLOWUP`.
+- **Prior feedback exists but the author did not respond** → **STOP. Do nothing.** Tell the user.
 
 How to determine if feedback has been "responded to" (this is NOT the same as "fixed" — that determination happens in Step 3):
 
 - **Inline comments**: a top-level comment (no `in_reply_to_id`) is responded to if at least one reply references its `id`.
-- **Review-body comments**: responded to if at least one commit exists **after** the review's `submitted_at` timestamp. Check with `gh api repos/{owner}/{repo}/pulls/{number}/commits` and compare dates.
+- **Review-body comments**: responded to if at least one commit exists **after** the review's `submitted_at` timestamp.
 
 This gate only checks whether the author **attempted** a response. Replies like "Fixed" are not evidence of an actual fix — Step 3 verifies that independently.
 
-### Step 2: First Review
+### Step 3: Evaluate
 
-1. Read the PR description and linked bead
-2. Read the full diff
-3. Check spec traceability: does the code implement what the bead requires?
-4. Check test quality: do tests verify requirements, not just coverage?
-5. Check code quality: correctness, error handling, existing patterns followed
-6. Post review with inline comments (see Posting Comments below)
+Produce a `result` of either `CLEAN` (nothing to flag) or `ISSUES` (one or more blockers).
 
-### Step 3: Follow-up Review
+**If `mode = REVIEW`:** examine the diff against the bead and spec. Every check below must pass for `result = CLEAN`.
+
+1. **Spec traceability**: code maps to bead requirements, no unrelated changes.
+2. **Bead completion** (critical — this is the most important check):
+   - Re-read the bead title and description line by line. For each stated requirement, find the code in the diff that implements it. If a requirement has no corresponding code, the PR is incomplete.
+   - Take the bead's verbs literally: "replaces" means the old thing is gone, "adds" means the new thing exists and works, "removes" means the thing is absent. If a verb is not satisfied, flag it.
+   - Search the diff for `TODO`, `FIXME`, `HACK`, `WORKAROUND`, shim functions, and compatibility wrappers that defer work the bead is supposed to deliver. These are automatic rejections — the bead's work is not done if it leaves TODOs for itself.
+3. **Correctness**: error paths handled, edge cases, no resource leaks.
+4. **Patterns**: follows existing conventions, idiomatic Go (see `@~/.claude/skills/go-expert/SKILL.md`).
+5. **Tests**: verify requirements not implementation details, failure cases tested.
+6. **Integration testing**: if the spec includes integration test scenarios (in `test_*.md` files), the PR must include tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.
+
+**If `mode = FOLLOWUP`:** verify each prior feedback item against current files.
 
 **Replies and commit messages are not evidence.** The author saying "Fixed" or a commit titled "Fix review feedback" means nothing until you verify the actual code. Only the current state of the files determines whether an item is fixed.
 
-Collect all feedback items from both sources (review bodies and inline comments). For each item:
+For each feedback item (review body + each inline comment):
 
-1. Read the original feedback to understand what was specifically requested
-2. Read the **current file** (not the diff, not the reply) where the fix should appear
+1. Read the original feedback to understand what was specifically requested.
+2. Read the **current file** (not the diff, not the reply) where the fix should appear.
 3. Verify the fix is genuine:
    - Does the code/spec actually contain the requested change?
    - Is the change correct, not just present? (e.g., if the review asked to add error handling, is the error handling right?)
    - Did the fix introduce any new issues?
-4. Classify each item as **fixed** or **not fixed** based solely on what the code shows
+4. Classify each item as **fixed** or **not fixed** based solely on what the code shows.
 
-Then decide:
+`result = CLEAN` if every feedback item is fixed; otherwise `ISSUES`.
 
-- **All fixed** → close the linked bead (`br close <id>`), commit the bead closure, and tell the user the PR is ready to merge.
-- **Some not fixed** → for each unfixed item, post a new reply on that comment thread explaining what's still wrong. Do NOT re-review already-fixed items.
+### Step 4: Act
+
+The `(mode, result)` pair determines the action — one of four, no other paths:
+
+- **CLEAN + REVIEW** → Post a short "LGTM" review summary (see Posting Comments), then close the bead (see Closing the bead). Tell the user the PR is ready to merge.
+- **CLEAN + FOLLOWUP** → Close the bead (see Closing the bead). Do NOT post another review. Tell the user the PR is ready to merge.
+- **ISSUES + REVIEW** → Post the review with inline comments describing each blocker (see Posting Comments). Do not close.
+- **ISSUES + FOLLOWUP** → For each unfixed item, post a new reply on that comment thread explaining what's still wrong. Do NOT re-review already-fixed items. Do not close.
 
 Note: Do NOT attempt to resolve PR review threads via the GitHub GraphQL API — the `resolveReviewThread` mutation is not supported by fine-grained PATs. The closed bead serves as the approval signal.
 
-#### Closing the bead and committing
+#### Closing the bead
 
 ```bash
 br close <bead-id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."
@@ -121,15 +137,3 @@ gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input /tmp/re
 - Each comment should be short, explicit, and aligned with the code
 - Include a code example if the fix isn't obvious
 - The summary comment should be brief and not duplicate inline comments
-
-## What to Check
-
-- **Spec traceability**: code maps to bead requirements, no unrelated changes
-- **Bead completion** (critical — this is the most important check):
-  1. Re-read the bead title and description line by line. For each stated requirement, find the code in the diff that implements it. If a requirement has no corresponding code, the PR is incomplete.
-  2. Take the bead's verbs literally: "replaces" means the old thing is gone, "adds" means the new thing exists and works, "removes" means the thing is absent. If a verb is not satisfied, flag it.
-  3. Search the diff for `TODO`, `FIXME`, `HACK`, `WORKAROUND`, shim functions, and compatibility wrappers that defer work the bead is supposed to deliver. These are automatic rejections — the bead's work is not done if it leaves TODOs for itself.
-- **Correctness**: error paths handled, edge cases, no resource leaks
-- **Patterns**: follows existing conventions, idiomatic Go
-- **Tests**: verify requirements not implementation details, failure cases tested
-- **Integration testing**: If the spec includes integration test scenarios (in `test_*.md` files), verify that the PR includes tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.

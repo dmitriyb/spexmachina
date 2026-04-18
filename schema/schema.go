@@ -12,6 +12,7 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"encoding/json"
 	"strings"
 )
 
@@ -70,6 +71,37 @@ type Project struct {
 	Modules      []Module      `json:"modules"`
 	Milestones   []Milestone   `json:"milestones,omitempty"`
 	TestPlan     *TestPlan     `json:"test_plan,omitempty"`
+	Sections     []Section     `json:"sections,omitempty"`
+}
+
+// Section represents a project-level section with a typed envelope and
+// freeform content preserved as raw JSON. Renderers iterate sections
+// generically and access freeform fields via Raw without knowing the
+// coupled module's schema.
+type Section struct {
+	ID   int             `json:"id"`
+	Name string          `json:"name"`
+	Type string          `json:"type"`
+	Raw  json.RawMessage `json:"-"`
+}
+
+// UnmarshalJSON populates both the typed envelope fields and the full
+// raw entry so renderers can access freeform content without losing data.
+func (s *Section) UnmarshalJSON(data []byte) error {
+	type envelope struct {
+		ID   int    `json:"id"`
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+	var env envelope
+	if err := json.Unmarshal(data, &env); err != nil {
+		return err
+	}
+	s.ID = env.ID
+	s.Name = env.Name
+	s.Type = env.Type
+	s.Raw = append(s.Raw[:0], data...)
+	return nil
 }
 
 // Module represents a module declaration in project.json.

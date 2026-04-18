@@ -30,7 +30,6 @@ func fixtureGraph() *SpecGraph {
 				Spec: schema.ModuleSpec{
 					Name:        "alpha",
 					Description: "Alpha module description",
-					// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 					Requirements: []schema.ModuleRequirement{
 						{ID: "aabbccddeeff", Type: "functional", Title: "Parse", PreqID: "112233445566"},
 						{ID: "ffeeddccbbaa", Type: "functional", Title: "Build", PreqID: "665544332211"},
@@ -58,7 +57,6 @@ func fixtureGraph() *SpecGraph {
 				Spec: schema.ModuleSpec{
 					Name:        "beta",
 					Description: "Beta module description",
-					// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 					Requirements: []schema.ModuleRequirement{
 						{ID: "aabbccddeeff", Type: "functional", Title: "Consume", PreqID: "112233445566"},
 					},
@@ -560,7 +558,6 @@ func TestFR3_J8_NodeCount(t *testing.T) {
 
 // E1: Module with empty requirements array
 func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
-	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "empty-req", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
@@ -596,7 +593,6 @@ func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 
 // E3: Content containing JSON-special characters
 func TestFR3_E3_JSONSpecialChars(t *testing.T) {
-	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "special", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
@@ -625,7 +621,6 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 
 // E5: Content with deeply nested headings
 func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
-	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "deep", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
@@ -666,7 +661,6 @@ func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 // E6: Module name with special characters in DOT
 func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
 	t.Skip("TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed module IDs to identity hashes")
-	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: 1, Name: "data-pipeline", Path: "data-pipeline"}}},
 		Modules: []ModuleGraph{{
