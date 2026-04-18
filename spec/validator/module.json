@@ -3,304 +3,404 @@
   "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
   "requirements": [
     {
-      "id": 1,
+      "id": "8599f07272ad",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "JSON schema conformance",
-      "preq_id": 1,
       "description": "Validate project.json and module.json against their JSON Schemas. Report all violations, not just the first."
     },
     {
-      "id": 2,
+      "id": "5a1ce39e1c9d",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Content path resolution",
-      "preq_id": 1,
       "description": "All content paths in module.json resolve to existing markdown files relative to the module directory."
     },
     {
-      "id": 3,
+      "id": "d0451520f7be",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "DAG acyclicity",
-      "preq_id": 1,
       "description": "Module dependencies (requires_module), requirement dependencies (depends_on), and component dependencies (uses) form directed acyclic graphs.",
-      "depends_on": [1]
+      "depends_on": [
+        "8599f07272ad"
+      ]
     },
     {
-      "id": 4,
+      "id": "a34f8aa47fad",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Orphan detection",
-      "preq_id": 1,
       "description": "Every requirement is referenced by at least one component (implements). Every component is referenced by at least one impl_section (describes).",
-      "depends_on": [1]
+      "depends_on": [
+        "8599f07272ad"
+      ]
     },
     {
-      "id": 5,
+      "id": "707094f8868b",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "ID uniqueness",
-      "preq_id": 1,
       "description": "All identity hash IDs are unique within their containing array (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios). Uniqueness is checked by string comparison against a set; collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
-      "id": 6,
+      "id": "4b399b1c568f",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Cross-reference integrity",
-      "preq_id": 1,
-      "description": "All cross-reference identity hashes point to existing nodes: implements \u2192 requirements, uses \u2192 components, describes \u2192 components, depends_on \u2192 requirements, requires_module \u2192 modules, groups \u2192 modules, preq_id \u2192 project requirements, modules (test_plan) \u2192 modules. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition.",
-      "depends_on": [5]
+      "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, depends_on → requirements, requires_module → modules, groups → modules, preq_id → project requirements, modules (test_plan) → modules. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition.",
+      "depends_on": [
+        "707094f8868b"
+      ]
     },
     {
-      "id": 7,
+      "id": "608f8ca2e1b0",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Structured error output",
-      "preq_id": 1,
       "description": "Exit 0 if valid. Exit 1 with structured JSON errors listing every violation found."
     },
     {
-      "id": 8,
+      "id": "b42c5cdf874b",
+      "preq_id": "afc25fb6c8e8",
       "type": "non_functional",
       "title": "Fast validation",
-      "preq_id": 11,
       "description": "Validating a spec with 100 modules and 1000 nodes completes in under 1 second."
     },
     {
-      "id": 9,
+      "id": "b95862937dd0",
+      "preq_id": "54de5bdaa9a5",
       "type": "non_functional",
       "title": "Self-validate",
-      "preq_id": 8,
       "description": "The validator can validate spex-machina's own spec directory, ensuring the tool's spec remains consistent as it evolves."
     },
     {
-      "id": 10,
+      "id": "7f53c3f63360",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Module name consistency",
-      "preq_id": 1,
       "description": "Module names in project.json must match the corresponding module.json name field exactly. Lowercase convention enforced. Mismatches reported with both values and a suggested fix."
     },
     {
-      "id": 11,
+      "id": "530dc49d7135",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Test content path resolution",
-      "preq_id": 1,
       "description": "All test content paths (test_*.md) in module.json test_sections and project.json test_plan scenarios resolve to existing markdown files.",
-      "depends_on": [1]
+      "depends_on": [
+        "8599f07272ad"
+      ]
     },
     {
-      "id": 12,
+      "id": "a88e6fb4463d",
+      "preq_id": "92dfddf840b0",
       "type": "functional",
       "title": "Test coverage checking",
-      "preq_id": 13,
       "description": "Every component must be described by at least one test_section. Report uncovered components as validation errors."
     },
     {
-      "id": 13,
+      "id": "9445f0fe054d",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Validate priority on project requirements",
-      "preq_id": 1,
       "description": "Every project requirement must have a priority field (integer 0-4). Report missing or out-of-range priority values as validation errors."
     },
     {
-      "id": 14,
+      "id": "168ae8fde8e2",
+      "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Requirement coverage validation",
-      "preq_id": 1,
       "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors."
     },
     {
-      "id": 15,
+      "id": "d99ef6b9b776",
+      "preq_id": "a65bbd37c7ec",
       "type": "functional",
       "title": "Validate sections and coupled modules",
-      "preq_id": 15,
-      "description": "Validate the sections array: unique IDs, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/<module-path>/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
+      "description": "Validate the sections array: unique IDs, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/\u003cmodule-path\u003e/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "651d5315eebf",
       "name": "SchemaChecker",
       "description": "Validates project.json and module.json against embedded JSON Schemas using a JSON Schema validation library.",
       "content": "arch_schema_checker.md",
-      "implements": [1, 8, 9]
+      "implements": [
+        "8599f07272ad",
+        "b42c5cdf874b",
+        "b95862937dd0"
+      ]
     },
     {
-      "id": 2,
+      "id": "5dcca0dab9bd",
       "name": "ContentResolver",
       "description": "Walks all content paths in module.json files and verifies the referenced markdown files exist.",
       "content": "arch_content_resolver.md",
-      "implements": [2, 11]
+      "implements": [
+        "5a1ce39e1c9d",
+        "530dc49d7135"
+      ]
     },
     {
-      "id": 3,
+      "id": "c6c770a59d68",
       "name": "DAGChecker",
       "description": "Builds dependency graphs from module, requirement, and component references, then checks for cycles.",
       "content": "arch_dag_checker.md",
-      "implements": [3],
-      "uses": [1]
+      "implements": [
+        "d0451520f7be"
+      ],
+      "uses": [
+        "651d5315eebf"
+      ]
     },
     {
-      "id": 4,
+      "id": "bbb1ae43d00d",
       "name": "OrphanDetector",
       "description": "Analyzes reference coverage to find requirements not implemented by any component and components not described by any impl_section.",
       "content": "arch_orphan_detector.md",
-      "implements": [4]
+      "implements": [
+        "a34f8aa47fad"
+      ]
     },
     {
-      "id": 5,
+      "id": "00beeeda5ddd",
       "name": "IDValidator",
       "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use string sets (map[string]bool) — no integer parsing or path decomposition.",
       "content": "arch_id_validator.md",
-      "implements": [5, 6, 13]
+      "implements": [
+        "707094f8868b",
+        "4b399b1c568f",
+        "9445f0fe054d"
+      ]
     },
     {
-      "id": 6,
+      "id": "0f98ca780873",
       "name": "ErrorReporter",
       "description": "Aggregates validation errors from all checkers and formats them as structured JSON for output.",
       "content": "arch_error_reporter.md",
-      "implements": [7]
+      "implements": [
+        "608f8ca2e1b0"
+      ]
     },
     {
-      "id": 7,
+      "id": "59235a75aa44",
       "name": "ValidateCommand",
       "description": "CLI entry point for spex validate. Parses flags, wires all checkers through ErrorReporter, exits 0/1.",
       "content": "arch_validate_command.md",
-      "implements": [7, 8],
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
+      "implements": [
+        "608f8ca2e1b0",
+        "b42c5cdf874b"
+      ],
+      "uses": [
+        "651d5315eebf",
+        "5dcca0dab9bd",
+        "c6c770a59d68",
+        "bbb1ae43d00d",
+        "00beeeda5ddd",
+        "0f98ca780873",
+        "88dd4060cb44",
+        "ed7a40b68995",
+        "c7d0282b0e05",
+        "e36112523589"
+      ]
     },
     {
-      "id": 8,
+      "id": "88dd4060cb44",
       "name": "NameConsistencyChecker",
       "description": "Validates that module names in project.json match the corresponding module.json name field. Reports mismatches with both values and suggests fixes via case-insensitive comparison.",
       "content": "arch_name_consistency_checker.md",
-      "implements": [10]
+      "implements": [
+        "7f53c3f63360"
+      ]
     },
     {
-      "id": 9,
+      "id": "ed7a40b68995",
       "name": "TestCoverageChecker",
       "description": "Checks that every component in each module is described by at least one test_section. Reports uncovered components as validation errors.",
       "content": "arch_test_coverage_checker.md",
-      "implements": [12]
+      "implements": [
+        "a88e6fb4463d"
+      ]
     },
     {
-      "id": 10,
+      "id": "c7d0282b0e05",
       "name": "RequirementCoverageChecker",
       "description": "Checks that every project requirement is derived into at least one module requirement (preq_id), and every module requirement is implemented by at least one component (implements). Reports uncovered requirements as validation errors.",
       "content": "arch_requirement_coverage_checker.md",
-      "implements": [14]
+      "implements": [
+        "168ae8fde8e2"
+      ]
     },
     {
-      "id": 11,
+      "id": "e36112523589",
       "name": "CoupledSectionChecker",
       "description": "Validates sections array generically: envelope validation (ID uniqueness, required fields), coupled module enforcement (matching module must exist, bidirectional), and schema delegation (load section.schema.json from coupled module, validate section content against it).",
       "content": "arch_coupled_section_checker.md",
-      "implements": [15],
-      "uses": [1]
+      "implements": [
+        "d99ef6b9b776"
+      ],
+      "uses": [
+        "651d5315eebf"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "0d4a4c5bba70",
       "name": "Schema validation implementation",
       "content": "impl_schema_validation.md",
-      "describes": [1]
+      "describes": [
+        "651d5315eebf"
+      ]
     },
     {
-      "id": 2,
+      "id": "28073fc9a227",
       "name": "Content resolution implementation",
       "content": "impl_content_resolution.md",
-      "describes": [2]
+      "describes": [
+        "5dcca0dab9bd"
+      ]
     },
     {
-      "id": 3,
+      "id": "bffcf9735942",
       "name": "Cycle detection algorithm",
       "content": "impl_cycle_detection.md",
-      "describes": [3]
+      "describes": [
+        "c6c770a59d68"
+      ]
     },
     {
-      "id": 4,
+      "id": "9843e4075916",
       "name": "Orphan detection implementation",
       "content": "impl_orphan_detection.md",
-      "describes": [4]
+      "describes": [
+        "bbb1ae43d00d"
+      ]
     },
     {
-      "id": 5,
+      "id": "c4067e692e75",
       "name": "ID and reference validation",
       "content": "impl_id_validation.md",
-      "describes": [5]
+      "describes": [
+        "00beeeda5ddd"
+      ]
     },
     {
-      "id": 6,
+      "id": "5e8c4edcace3",
       "name": "Error aggregation and output",
       "content": "impl_error_output.md",
-      "describes": [6]
+      "describes": [
+        "0f98ca780873"
+      ]
     },
     {
-      "id": 7,
+      "id": "d11f203610f8",
       "name": "Validate command implementation",
       "content": "impl_validate_command.md",
-      "describes": [7]
+      "describes": [
+        "59235a75aa44"
+      ]
     },
     {
-      "id": 8,
+      "id": "52f8fd5f7a16",
       "name": "Name consistency check implementation",
       "content": "impl_name_consistency.md",
-      "describes": [8]
+      "describes": [
+        "88dd4060cb44"
+      ]
     },
     {
-      "id": 9,
+      "id": "d0ec7a65a5fe",
       "name": "Test coverage check implementation",
       "content": "impl_test_coverage.md",
-      "describes": [9]
+      "describes": [
+        "ed7a40b68995"
+      ]
     },
     {
-      "id": 10,
+      "id": "9f6e88d4489a",
       "name": "Requirement coverage check implementation",
       "content": "impl_requirement_coverage.md",
-      "describes": [10]
+      "describes": [
+        "c7d0282b0e05"
+      ]
     },
     {
-      "id": 11,
+      "id": "ad3347ae585c",
       "name": "Coupled section validation implementation",
       "content": "impl_coupled_section_validation.md",
-      "describes": [11]
+      "describes": [
+        "e36112523589"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "832e170fa3c0",
       "name": "Validation pipeline",
       "description": "Spec directory flows through schema check, content check, DAG check, orphan check, and ID check. All errors are aggregated into a single structured report.",
       "content": "flow_validation_pipeline.md",
-      "uses": [1, 2, 3, 4, 5, 6, 8, 9, 10, 11]
+      "uses": [
+        "651d5315eebf",
+        "5dcca0dab9bd",
+        "c6c770a59d68",
+        "bbb1ae43d00d",
+        "00beeeda5ddd",
+        "0f98ca780873",
+        "88dd4060cb44",
+        "ed7a40b68995",
+        "c7d0282b0e05",
+        "e36112523589"
+      ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "15019980fcea",
       "name": "Conformance and content tests",
       "content": "test_conformance_and_content.md",
-      "describes": [1, 2]
+      "describes": [
+        "651d5315eebf",
+        "5dcca0dab9bd"
+      ]
     },
     {
-      "id": 2,
+      "id": "78ac211428bb",
       "name": "Graph structure tests",
       "content": "test_graph_structure.md",
-      "describes": [3, 4, 5]
+      "describes": [
+        "c6c770a59d68",
+        "bbb1ae43d00d",
+        "00beeeda5ddd"
+      ]
     },
     {
-      "id": 3,
+      "id": "15d919047039",
       "name": "Name and coverage tests",
       "content": "test_name_and_coverage.md",
-      "describes": [8, 9, 10]
+      "describes": [
+        "88dd4060cb44",
+        "ed7a40b68995",
+        "c7d0282b0e05"
+      ]
     },
     {
-      "id": 4,
+      "id": "dad7c5e68169",
       "name": "Validation pipeline tests",
       "content": "test_validation_pipeline.md",
-      "describes": [6, 7]
+      "describes": [
+        "0f98ca780873",
+        "59235a75aa44"
+      ]
     },
     {
-      "id": 5,
+      "id": "7d0545b7779b",
       "name": "Coupled section tests",
       "content": "test_coupled_sections.md",
-      "describes": [11]
+      "describes": [
+        "e36112523589"
+      ]
     }
   ]
 }

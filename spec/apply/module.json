@@ -3,178 +3,237 @@
   "description": "Executes impact report: creates and obsoletes beads via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tags with proposal, saves new merkle snapshot, maintains mapping records.",
   "requirements": [
     {
-      "id": 1,
+      "id": "8a30e4fefa9e",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Create beads",
-      "preq_id": 3,
-      "description": "Create beads via bead CLI (br or bd) with deterministic type assignment from spec node type (module\u2192epic, component\u2192feature, test_section\u2192task), parent hierarchy via --parent, lineage via --deps blocks:<old-bead-id>, and priority via --priority derived from project requirements."
+      "description": "Create beads via bead CLI (br or bd) with deterministic type assignment from spec node type (module→epic, component→feature, test_section→task), parent hierarchy via --parent, lineage via --deps blocks:\u003cold-bead-id\u003e, and priority via --priority derived from project requirements."
     },
     {
-      "id": 2,
+      "id": "a9f305ba4a77",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Obsolete beads",
-      "preq_id": 5,
-      "description": "Obsolete existing beads via bead CLI (br or bd) with spex:obsolete label and commit:<HEAD> label. The commit label stamps the last commit where the bead's spec was valid. Used for both modified and removed spec nodes."
+      "description": "Obsolete existing beads via bead CLI (br or bd) with spex:obsolete label and commit:\u003cHEAD\u003e label. The commit label stamps the last commit where the bead's spec was valid. Used for both modified and removed spec nodes."
     },
     {
-      "id": 4,
+      "id": "7117e4c0a085",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Tag with proposal",
-      "preq_id": 5,
       "description": "All affected beads (created, obsoleted) are tagged with the proposal reference that triggered the change.",
-      "depends_on": [1, 2]
+      "depends_on": [
+        "8a30e4fefa9e",
+        "a9f305ba4a77"
+      ]
     },
     {
-      "id": 5,
+      "id": "23ee86dfc512",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Save snapshot",
-      "preq_id": 5,
       "description": "After applying all bead actions, save the new merkle snapshot to mark the current state as baseline.",
-      "depends_on": [4]
+      "depends_on": [
+        "7117e4c0a085"
+      ]
     },
     {
-      "id": 6,
+      "id": "ad18c46fae45",
+      "preq_id": "6faeb216618a",
       "type": "non_functional",
       "title": "Idempotent apply",
-      "preq_id": 9,
       "description": "Applying the same impact report twice produces no additional changes. Already-created beads are not duplicated, already-obsoleted beads are not re-obsoleted."
     },
     {
-      "id": 7,
+      "id": "8ce9e91dfd31",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Maintain mapping records",
-      "preq_id": 3,
-      "description": "After bead operations, write/update/remove mapping records in .bead-map.json. For modified nodes: update existing record with new bead_id and spec_hash. For removed nodes: delete record. For added nodes: insert new record. Set bead label to spex:<record-id>."
+      "description": "After bead operations, write/update/remove mapping records in .bead-map.json. For modified nodes: update existing record with new bead_id and spec_hash. For removed nodes: delete record. For added nodes: insert new record. Set bead label to spex:\u003crecord-id\u003e."
     },
     {
-      "id": 8,
+      "id": "0d24751af69f",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Deterministic type, hierarchy, and lineage",
-      "preq_id": 5,
-      "description": "Bead type is a pure function of spec node type (module\u2192epic, component\u2192feature, test_section\u2192task). Component beads get --parent <module-epic-bead-id>. Test beads get --parent <component-feature-bead-id>. Creation order: epics first, then features, then tasks. Modified nodes: obsolete old bead, create new bead with --deps blocks:<old-bead-id>."
+      "description": "Bead type is a pure function of spec node type (module→epic, component→feature, test_section→task). Component beads get --parent \u003cmodule-epic-bead-id\u003e. Test beads get --parent \u003ccomponent-feature-bead-id\u003e. Creation order: epics first, then features, then tasks. Modified nodes: obsolete old bead, create new bead with --deps blocks:\u003cold-bead-id\u003e."
     },
     {
-      "id": 9,
+      "id": "2febb1706374",
+      "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Priority propagation",
-      "preq_id": 9,
-      "description": "Derive bead priority from project requirements via the chain: component.implements[] \u2192 module requirement.preq_id \u2192 project requirement.priority. Lowest priority number (highest urgency) wins. Passed via --priority on bead CLI create."
+      "description": "Derive bead priority from project requirements via the chain: component.implements[] → module requirement.preq_id → project requirement.priority. Lowest priority number (highest urgency) wins. Passed via --priority on bead CLI create."
     },
     {
-      "id": 10,
+      "id": "35ea0058fd4e",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Pass spec-graph dependencies to bead create",
-      "preq_id": 5,
-      "description": "For each create action with DepBeadIDs, pass --deps depends:<bead-id> for each entry. The depends relationship type means 'don't start this until that is done.' This is separate from --deps blocks:<old-bead-id> which tracks lineage.",
-      "depends_on": [1]
+      "description": "For each create action with DepBeadIDs, pass --deps depends:\u003cbead-id\u003e for each entry. The depends relationship type means 'don't start this until that is done.' This is separate from --deps blocks:\u003cold-bead-id\u003e which tracks lineage.",
+      "depends_on": [
+        "8a30e4fefa9e"
+      ]
     },
     {
-      "id": 11,
+      "id": "7551c76a6c74",
+      "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Topological creation ordering within type levels",
-      "preq_id": 9,
       "description": "Extend creation ordering beyond type-based (epics→features→tasks) to include topological ordering within each type level. When bead A depends on bead B and both are created in the same apply run, B must be created first so its bead ID is available for A's --deps depends: flag.",
-      "depends_on": [8]
+      "depends_on": [
+        "0d24751af69f"
+      ]
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "59fab0fedef7",
       "name": "BeadCreator",
-      "description": "Creates new beads via bead CLI (br or bd) with deterministic type assignment from spec node type table, --parent for hierarchy, --deps blocks:<old-bead-id> for lineage, and --priority from project requirement chain. After creation, creates or updates the mapping record in .bead-map.json and sets the bead label to spex:<record-id>.",
+      "description": "Creates new beads via bead CLI (br or bd) with deterministic type assignment from spec node type table, --parent for hierarchy, --deps blocks:\u003cold-bead-id\u003e for lineage, and --priority from project requirement chain. After creation, creates or updates the mapping record in .bead-map.json and sets the bead label to spex:\u003crecord-id\u003e.",
       "content": "arch_bead_creator.md",
-      "implements": [1, 6, 7, 8, 9, 10]
+      "implements": [
+        "8a30e4fefa9e",
+        "ad18c46fae45",
+        "8ce9e91dfd31",
+        "0d24751af69f",
+        "2febb1706374",
+        "35ea0058fd4e"
+      ]
     },
     {
-      "id": 2,
+      "id": "995b5e116b5b",
       "name": "BeadCloser",
-      "description": "Obsoletes beads via bead CLI (br or bd) with spex:obsolete label and commit:<HEAD> label. Uniform path for both modified and removed spec nodes. For removed nodes, deletes the corresponding mapping record from .bead-map.json.",
+      "description": "Obsoletes beads via bead CLI (br or bd) with spex:obsolete label and commit:\u003cHEAD\u003e label. Uniform path for both modified and removed spec nodes. For removed nodes, deletes the corresponding mapping record from .bead-map.json.",
       "content": "arch_bead_closer.md",
-      "implements": [2, 7]
+      "implements": [
+        "a9f305ba4a77",
+        "8ce9e91dfd31"
+      ]
     },
     {
-      "id": 4,
+      "id": "867bb1dd804f",
       "name": "ProposalTagger",
       "description": "Tags all affected beads with the proposal reference that triggered the changes.",
       "content": "arch_proposal_tagger.md",
-      "implements": [4],
-      "uses": [1, 2]
+      "implements": [
+        "7117e4c0a085"
+      ],
+      "uses": [
+        "59fab0fedef7",
+        "995b5e116b5b"
+      ]
     },
     {
-      "id": 5,
+      "id": "1acc0e1fff76",
       "name": "SnapshotSaver",
       "description": "Saves the new merkle snapshot after all bead actions are complete.",
       "content": "arch_snapshot_saver.md",
-      "implements": [5]
+      "implements": [
+        "23ee86dfc512"
+      ]
     },
     {
-      "id": 6,
+      "id": "78a551ef7b74",
       "name": "ApplyCommand",
-      "description": "CLI entry point for spex apply. Reads impact report, enforces creation ordering (epics \u2192 features \u2192 tasks), wires BeadCreator, BeadCloser, ProposalTagger, SnapshotSaver, executes all bead actions.",
+      "description": "CLI entry point for spex apply. Reads impact report, enforces creation ordering (epics → features → tasks), wires BeadCreator, BeadCloser, ProposalTagger, SnapshotSaver, executes all bead actions.",
       "content": "arch_apply_command.md",
-      "implements": [4, 5, 8, 11],
-      "uses": [1, 2, 4, 5]
+      "implements": [
+        "7117e4c0a085",
+        "23ee86dfc512",
+        "0d24751af69f",
+        "7551c76a6c74"
+      ],
+      "uses": [
+        "59fab0fedef7",
+        "995b5e116b5b",
+        "867bb1dd804f",
+        "1acc0e1fff76"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "3f3852adf351",
       "name": "Bead creation commands",
       "content": "impl_bead_creation.md",
-      "describes": [1]
+      "describes": [
+        "59fab0fedef7"
+      ]
     },
     {
-      "id": 2,
+      "id": "bf1608ea00b8",
       "name": "Bead obsolescence commands",
       "content": "impl_bead_closure.md",
-      "describes": [2]
+      "describes": [
+        "995b5e116b5b"
+      ]
     },
     {
-      "id": 4,
+      "id": "6e1c1db0f26e",
       "name": "Proposal tagging",
       "content": "impl_proposal_tagging.md",
-      "describes": [4]
+      "describes": [
+        "867bb1dd804f"
+      ]
     },
     {
-      "id": 5,
+      "id": "d73cc137dc65",
       "name": "Snapshot saving",
       "content": "impl_snapshot_saving.md",
-      "describes": [5]
+      "describes": [
+        "1acc0e1fff76"
+      ]
     },
     {
-      "id": 6,
+      "id": "cc46f587e639",
       "name": "Apply command implementation",
       "content": "impl_apply_command.md",
-      "describes": [6]
+      "describes": [
+        "78a551ef7b74"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "e5b9907792b2",
       "name": "Apply flow",
-      "description": "Impact report is read. Bead actions execute in label\u2192create\u2192close order: label obsoletes (keep open), creates in hierarchy order (epics \u2192 features \u2192 tasks), close obsoletes, tag all with proposal. New snapshot saved.",
+      "description": "Impact report is read. Bead actions execute in label→create→close order: label obsoletes (keep open), creates in hierarchy order (epics → features → tasks), close obsoletes, tag all with proposal. New snapshot saved.",
       "content": "flow_apply.md",
-      "uses": [1, 2, 4, 5]
+      "uses": [
+        "59fab0fedef7",
+        "995b5e116b5b",
+        "867bb1dd804f",
+        "1acc0e1fff76"
+      ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "a095f3206e95",
       "name": "Bead action tests",
       "content": "test_bead_actions.md",
-      "describes": [1, 2]
+      "describes": [
+        "59fab0fedef7",
+        "995b5e116b5b"
+      ]
     },
     {
-      "id": 2,
+      "id": "6d05f87cde11",
       "name": "Tagging and snapshot tests",
       "content": "test_tagging_snapshot.md",
-      "describes": [4, 5]
+      "describes": [
+        "867bb1dd804f",
+        "1acc0e1fff76"
+      ]
     },
     {
-      "id": 3,
+      "id": "071501d12898",
       "name": "Apply command tests",
       "content": "test_apply_command.md",
-      "describes": [6]
+      "describes": [
+        "78a551ef7b74"
+      ]
     }
   ]
 }

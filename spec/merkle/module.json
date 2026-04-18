@@ -3,287 +3,308 @@
   "description": "Merkle hash tree over the spec: leaf hashes, interior hashes, snapshots, diff, and impact classification.",
   "requirements": [
     {
-      "id": 1,
+      "id": "6c556c0db942",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Compute leaf hashes",
-      "preq_id": 2,
       "description": "Hash each markdown content file and each JSON file in the spec. Leaf nodes in the merkle tree."
     },
     {
-      "id": 2,
+      "id": "97cc591528f9",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Compute interior hashes",
-      "preq_id": 2,
-      "description": "Interior node hashes are computed from the sorted concatenation of their children's hashes. Tree mirrors spec hierarchy: project \u2192 module \u2192 {arch, impl} \u2192 leaves.",
+      "description": "Interior node hashes are computed from the sorted concatenation of their children's hashes. Tree mirrors spec hierarchy: project → module → {arch, impl} → leaves.",
       "depends_on": [
-        1
+        "6c556c0db942"
       ]
     },
     {
-      "id": 3,
+      "id": "e99a846810df",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Store snapshots",
-      "preq_id": 2,
       "description": "Write the complete hash tree to a snapshot file committed to git alongside the spec.",
       "depends_on": [
-        2
+        "97cc591528f9"
       ]
     },
     {
-      "id": 4,
+      "id": "f223179a540a",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Diff against snapshot",
-      "preq_id": 2,
       "description": "Compare current hash tree against a stored snapshot. Report changed leaves and changed paths (interior nodes whose hash changed).",
       "depends_on": [
-        3
+        "e99a846810df"
       ]
     },
     {
-      "id": 5,
+      "id": "425146f32e96",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Classify impact",
-      "preq_id": 2,
       "description": "Classify each change as impl-only (only impl_section leaves changed), arch+impl (component leaves changed), or structural (module.json or project.json changed).",
       "depends_on": [
-        4
+        "f223179a540a"
       ]
     },
     {
-      "id": 6,
+      "id": "26358c05face",
+      "preq_id": "6faeb216618a",
       "type": "non_functional",
       "title": "Deterministic hashing",
-      "preq_id": 9,
       "description": "Same file content always produces the same hash. Hash computation is order-independent for interior nodes (children sorted before hashing)."
     },
     {
-      "id": 7,
+      "id": "3ada6b800cc5",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Identity-hash tree keying",
-      "preq_id": 2,
-      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, impl_section, data_flow, or test_section is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/<module-hash>` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
+      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, impl_section, data_flow, or test_section is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
     },
     {
-      "id": 8,
+      "id": "6f8284df92a2",
+      "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Change completeness validation",
-      "preq_id": 2,
       "description": "When individual requirement leaf nodes change in the diff (added, modified, or removed), verify that implementing components' content leaves also changed. For modified/added requirements, each implementing component's content leaf must also appear in the diff. For removed requirements, no component may still reference them. For project-level requirement changes, the chain must propagate through module requirements to component leaves. Errors are included alongside changes in the diff JSON output.",
-      "depends_on": [4]
+      "depends_on": [
+        "f223179a540a"
+      ]
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "325f48728e04",
       "name": "Hasher",
       "description": "Computes SHA-256 hashes for individual files (leaf nodes) and for sorted child hash lists (interior nodes).",
       "content": "arch_hasher.md",
       "implements": [
-        1,
-        6
+        "6c556c0db942",
+        "26358c05face"
       ]
     },
     {
-      "id": 2,
+      "id": "dfe1467b7a4b",
       "name": "TreeBuilder",
       "description": "Builds the merkle tree from the parsed spec graph. Each node's key is its spec identity hash (the 12-char hex `id` field) — no path-style keying, no module/type prefix. Requirements are individual leaf nodes with hashes computed from deterministic JSON serialization. Maps spec hierarchy to tree nodes.",
       "content": "arch_tree_builder.md",
       "implements": [
-        2,
-        7
+        "97cc591528f9",
+        "3ada6b800cc5"
       ],
       "uses": [
-        1
+        "325f48728e04"
       ]
     },
     {
-      "id": 3,
+      "id": "b2fcd9457a28",
       "name": "SnapshotStore",
       "description": "Reads and writes snapshot files. Serializes the identity-hash-keyed tree to a JSON file for git storage. The flat map is keyed by identity hash (hash → {hash, type, ...}), not by file path or integer ID.",
       "content": "arch_snapshot_store.md",
       "implements": [
-        3
+        "e99a846810df"
       ]
     },
     {
-      "id": 4,
+      "id": "cb262b280963",
       "name": "DiffEngine",
       "description": "Compares two identity-hash-keyed trees (current vs snapshot). Same identity hash + different content hash = modified. Identity hash in current but not snapshot = added. Identity hash in snapshot but not current = removed.",
       "content": "arch_diff_engine.md",
       "implements": [
-        4
+        "f223179a540a"
       ],
       "uses": [
-        2,
-        3
+        "dfe1467b7a4b",
+        "b2fcd9457a28"
       ]
     },
     {
-      "id": 5,
+      "id": "f1a672216ce9",
       "name": "ImpactClassifier",
       "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural. Requirement leaf nodes are classified as structural. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
-        5
+        "425146f32e96"
       ],
       "uses": [
-        4
+        "cb262b280963"
       ]
     },
     {
-      "id": 6,
+      "id": "ef841f48d313",
       "name": "HashCommand",
       "description": "CLI entry point for spex hash. Parses flags, wires Hasher and TreeBuilder to compute the merkle tree, SnapshotStore to save it.",
       "content": "arch_hash_command.md",
       "implements": [
-        1,
-        2,
-        3
+        "6c556c0db942",
+        "97cc591528f9",
+        "e99a846810df"
       ],
       "uses": [
-        1,
-        2,
-        3
+        "325f48728e04",
+        "dfe1467b7a4b",
+        "b2fcd9457a28"
       ]
     },
     {
-      "id": 7,
+      "id": "c8b958ec310d",
       "name": "DiffCommand",
       "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker. Outputs changes and errors in JSON or human-readable format.",
       "content": "arch_diff_command.md",
       "implements": [
-        4,
-        5,
-        8
+        "f223179a540a",
+        "425146f32e96",
+        "6f8284df92a2"
       ],
       "uses": [
-        3,
-        4,
-        5,
-        8
+        "b2fcd9457a28",
+        "cb262b280963",
+        "f1a672216ce9",
+        "de3309dfbd3c"
       ]
     },
     {
-      "id": 8,
+      "id": "de3309dfbd3c",
       "name": "CompletenessChecker",
       "description": "Validates that requirement leaf changes are accompanied by corresponding component content leaf changes. Reads the current spec graph (project.json, module.json) to resolve requirement-to-component edges via implements arrays. Checks added, modified, and removed requirements for completeness. Also validates component edge changes when meta nodes change without requirement leaf changes.",
       "content": "arch_completeness_checker.md",
-      "implements": [8],
-      "uses": [4, 5]
+      "implements": [
+        "6f8284df92a2"
+      ],
+      "uses": [
+        "cb262b280963",
+        "f1a672216ce9"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "4c47fc4e02a0",
       "name": "Hash computation",
       "content": "impl_hash_computation.md",
       "describes": [
-        1
+        "325f48728e04"
       ]
     },
     {
-      "id": 2,
+      "id": "50ed04374f6b",
       "name": "Tree construction",
       "content": "impl_tree_construction.md",
       "describes": [
-        2
+        "dfe1467b7a4b"
       ]
     },
     {
-      "id": 3,
+      "id": "e7f128b58acd",
       "name": "Snapshot format",
       "content": "impl_snapshot_format.md",
       "describes": [
-        3
+        "b2fcd9457a28"
       ]
     },
     {
-      "id": 4,
+      "id": "8305aa6e949a",
       "name": "Diff algorithm",
       "content": "impl_diff_algorithm.md",
       "describes": [
-        4
+        "cb262b280963"
       ]
     },
     {
-      "id": 5,
+      "id": "e80338e9c2a8",
       "name": "Impact classification rules",
       "content": "impl_impact_classification.md",
       "describes": [
-        5
+        "f1a672216ce9"
       ]
     },
     {
-      "id": 6,
+      "id": "15226d6b45d0",
       "name": "Hash command implementation",
       "content": "impl_hash_command.md",
       "describes": [
-        6
+        "ef841f48d313"
       ]
     },
     {
-      "id": 7,
+      "id": "68158fdd5e21",
       "name": "Diff command implementation",
       "content": "impl_diff_command.md",
       "describes": [
-        7
+        "c8b958ec310d"
       ]
     },
     {
-      "id": 8,
+      "id": "ec3a8da92032",
       "name": "Change completeness algorithm",
       "content": "impl_completeness_algorithm.md",
-      "describes": [8]
+      "describes": [
+        "de3309dfbd3c"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "35f39388bc76",
       "name": "Hash computation flow",
-      "description": "Spec files are hashed bottom-up: leaf files \u2192 interior nodes \u2192 tree root. The tree is then serialized to a snapshot.",
+      "description": "Spec files are hashed bottom-up: leaf files → interior nodes → tree root. The tree is then serialized to a snapshot.",
       "content": "flow_hash_computation.md",
       "uses": [
-        1,
-        2,
-        3
+        "325f48728e04",
+        "dfe1467b7a4b",
+        "b2fcd9457a28"
       ]
     },
     {
-      "id": 2,
+      "id": "45a52ae06265",
       "name": "Diff and classification flow",
       "description": "Current tree and stored snapshot are compared node-by-node. Changed paths are classified by impact level.",
       "content": "flow_diff_classification.md",
       "uses": [
-        3,
-        4,
-        5
+        "b2fcd9457a28",
+        "cb262b280963",
+        "f1a672216ce9"
       ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "31b096a76fd4",
       "name": "Hashing tests",
       "content": "test_hashing.md",
-      "describes": [1, 2]
+      "describes": [
+        "325f48728e04",
+        "dfe1467b7a4b"
+      ]
     },
     {
-      "id": 2,
+      "id": "4ff940b743d7",
       "name": "Snapshot tests",
       "content": "test_snapshots.md",
-      "describes": [3]
+      "describes": [
+        "b2fcd9457a28"
+      ]
     },
     {
-      "id": 3,
+      "id": "95a279cbdcbc",
       "name": "Diff and classification tests",
       "content": "test_diff_classification.md",
-      "describes": [4, 5, 8]
+      "describes": [
+        "cb262b280963",
+        "f1a672216ce9",
+        "de3309dfbd3c"
+      ]
     },
     {
-      "id": 4,
+      "id": "49a61e0d5737",
       "name": "Merkle command tests",
       "content": "test_merkle_commands.md",
-      "describes": [6, 7]
+      "describes": [
+        "ef841f48d313",
+        "c8b958ec310d"
+      ]
     }
   ]
 }

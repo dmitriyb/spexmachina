@@ -3,144 +3,151 @@
   "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates.",
   "requirements": [
     {
-      "id": 1,
+      "id": "2b62ad5e8ef2",
+      "preq_id": "b42bc8a9b82a",
       "type": "functional",
       "title": "Register proposal",
-      "preq_id": 6,
       "description": "Copy or link a proposal file to spec/proposals/, validate that required sections are present (Vision, Modules, Key requirements, Design decisions for project proposals; Context, Proposed change, Impact expectation for change proposals)."
     },
     {
-      "id": 2,
+      "id": "2e38135487be",
+      "preq_id": "b42bc8a9b82a",
       "type": "functional",
       "title": "Show proposal history",
-      "preq_id": 6,
       "description": "List all proposals with their dates, show which proposals led to which spec changes and which bead actions (via spec_proposal metadata on beads)."
     },
     {
-      "id": 3,
+      "id": "e8c48d1b4cde",
+      "preq_id": "b42bc8a9b82a",
       "type": "functional",
       "title": "Provide templates",
-      "preq_id": 6,
       "description": "Output a project proposal template or a change proposal template to stdout. Templates include all required sections with placeholder content."
     },
     {
-      "id": 4,
+      "id": "924cf30cbd58",
+      "preq_id": "8efae3d1ad18",
       "type": "non_functional",
       "title": "Git-native proposals",
-      "preq_id": 12,
       "description": "Proposals are plain markdown files in spec/proposals/. No database, no external state. Everything is committed to git."
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "24180f55c0b4",
       "name": "Registrar",
       "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present.",
       "content": "arch_registrar.md",
       "implements": [
-        1,
-        4
+        "2b62ad5e8ef2",
+        "924cf30cbd58"
       ]
     },
     {
-      "id": 2,
+      "id": "97f73ced5a02",
       "name": "HistoryViewer",
       "description": "Queries proposals and their linked spec changes and bead actions to show the proposal history.",
       "content": "arch_history_viewer.md",
       "implements": [
-        2
+        "2e38135487be"
       ]
     },
     {
-      "id": 3,
+      "id": "cc8adc823719",
       "name": "TemplateProvider",
       "description": "Generates and outputs proposal templates (project and change) to stdout.",
       "content": "arch_template_provider.md",
       "implements": [
-        3
+        "e8c48d1b4cde"
       ]
     },
     {
-      "id": 4,
+      "id": "21bc124a46c0",
       "name": "ProposalCommands",
       "description": "CLI entry points for spex register, spex log, and spex template. Wires Registrar, HistoryViewer, TemplateProvider into subcommands.",
       "content": "arch_proposal_commands.md",
       "implements": [
-        1,
-        2,
-        3
+        "2b62ad5e8ef2",
+        "2e38135487be",
+        "e8c48d1b4cde"
       ],
       "uses": [
-        1,
-        2,
-        3
+        "24180f55c0b4",
+        "97f73ced5a02",
+        "cc8adc823719"
       ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "e3d7f930488f",
       "name": "Registration implementation",
       "content": "impl_registration.md",
       "describes": [
-        1
+        "24180f55c0b4"
       ]
     },
     {
-      "id": 2,
+      "id": "a8ae41cdd1ea",
       "name": "History tracking implementation",
       "content": "impl_history_tracking.md",
       "describes": [
-        2
+        "97f73ced5a02"
       ]
     },
     {
-      "id": 3,
+      "id": "7267b0fc031c",
       "name": "Template management",
       "content": "impl_template_management.md",
       "describes": [
-        3
+        "cc8adc823719"
       ]
     },
     {
-      "id": 4,
+      "id": "7c93ce1da4ca",
       "name": "Proposal commands implementation",
       "content": "impl_proposal_commands.md",
       "describes": [
-        4
+        "21bc124a46c0"
       ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file \u2192 register (validate + copy) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
+      "description": "Proposal file → register (validate + copy) → spec change → impact → bead actions → history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
-        1,
-        2
+        "24180f55c0b4",
+        "97f73ced5a02"
       ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "7885ad439bb9",
       "name": "Registration tests",
       "content": "test_registration.md",
-      "describes": [1]
+      "describes": [
+        "24180f55c0b4"
+      ]
     },
     {
-      "id": 2,
+      "id": "b313b3531f32",
       "name": "History and template tests",
       "content": "test_history_templates.md",
-      "describes": [2, 3]
+      "describes": [
+        "97f73ced5a02",
+        "cc8adc823719"
+      ]
     },
     {
-      "id": 3,
+      "id": "a20cc3f7f6f1",
       "name": "Proposal command tests",
       "content": "test_proposal_commands.md",
-      "describes": [4]
+      "describes": [
+        "21bc124a46c0"
+      ]
     }
   ]
 }
