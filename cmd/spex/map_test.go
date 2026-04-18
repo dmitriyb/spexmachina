@@ -43,7 +43,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	mapPath := filepath.Join(dir, ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)
 	if _, err := store.Create(mapping.Record{
-		SpecNodeID:  "alpha/component/1",
+		SpecNodeID:  "aabbccddeeff",
 		BeadID:      "test-abc",
 		BeadType:    "task",
 		Module:      "alpha",
@@ -55,7 +55,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 		t.Fatalf("create record: %v", err)
 	}
 	if _, err := store.Create(mapping.Record{
-		SpecNodeID:  "alpha/component/2",
+		SpecNodeID:  "ffeeddccbbaa",
 		BeadID:      "test-def",
 		BeadType:    "task",
 		Module:      "alpha",
@@ -71,8 +71,6 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 }
 
 func TestFR3_MapGet_ValidRecord(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	out, err := runSpex(t, "map", "get", "--map-file", mapFile, "1")
@@ -105,8 +103,6 @@ func TestFR3_MapGet_ValidRecord(t *testing.T) {
 }
 
 func TestFR3_MapGet_UnknownRecord(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	_, err := runSpex(t, "map", "get", "--map-file", mapFile, "999")
@@ -116,8 +112,6 @@ func TestFR3_MapGet_UnknownRecord(t *testing.T) {
 }
 
 func TestFR3_MapGet_InvalidID(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	_, err := runSpex(t, "map", "get", "--map-file", mapFile, "notanumber")
@@ -127,8 +121,6 @@ func TestFR3_MapGet_InvalidID(t *testing.T) {
 }
 
 func TestFR3_MapGet_MissingArg(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	_, err := runSpex(t, "map", "get", "--map-file", mapFile)
@@ -138,8 +130,6 @@ func TestFR3_MapGet_MissingArg(t *testing.T) {
 }
 
 func TestFR3_MapList_AllRecords(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	out, err := runSpex(t, "map", "list", "--map-file", mapFile)
@@ -199,8 +189,6 @@ func TestFR3_MapList_NoMappingFile(t *testing.T) {
 }
 
 func TestFR3_MapContext_ValidRecord(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	specDir, mapFile := setupMapTestSpec(t)
 
 	out, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "1")
@@ -224,8 +212,6 @@ func TestFR3_MapContext_ValidRecord(t *testing.T) {
 }
 
 func TestFR3_MapContext_UnknownRecord(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	specDir, mapFile := setupMapTestSpec(t)
 
 	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "999")
@@ -235,8 +221,6 @@ func TestFR3_MapContext_UnknownRecord(t *testing.T) {
 }
 
 func TestFR3_MapContext_InvalidID(t *testing.T) {
-	// TODO(bead:spexmachina-0re): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-0re: fixtures need identity hash IDs")
 	_, mapFile := setupMapTestSpec(t)
 
 	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "notanumber")
