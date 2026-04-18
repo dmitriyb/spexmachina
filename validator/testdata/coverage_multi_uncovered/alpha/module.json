@@ -1,21 +1,79 @@
 {
-  "name": "alpha",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1},
-    {"id": 2, "type": "functional", "title": "Feat B", "preq_id": 1},
-    {"id": 3, "type": "functional", "title": "Feat C", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Parser", "implements": [1]},
-    {"id": 2, "name": "Renderer", "implements": [2]},
-    {"id": 3, "name": "Formatter", "implements": [3]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Parser"
+    },
+    {
+      "id": "000000000002",
+      "implements": [
+        "000000000002"
+      ],
+      "name": "Renderer"
+    },
+    {
+      "id": "000000000003",
+      "implements": [
+        "000000000003"
+      ],
+      "name": "Formatter"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Parser impl", "describes": [1]},
-    {"id": 2, "name": "Renderer impl", "describes": [2]},
-    {"id": 3, "name": "Formatter impl", "describes": [3]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser impl"
+    },
+    {
+      "describes": [
+        "000000000002"
+      ],
+      "id": "000000000002",
+      "name": "Renderer impl"
+    },
+    {
+      "describes": [
+        "000000000003"
+      ],
+      "id": "000000000003",
+      "name": "Formatter impl"
+    }
+  ],
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "preq_id": "000000000001",
+      "title": "Feat B",
+      "type": "functional"
+    },
+    {
+      "id": "000000000003",
+      "preq_id": "000000000001",
+      "title": "Feat C",
+      "type": "functional"
+    }
   ],
   "test_sections": [
-    {"id": 1, "name": "Parser tests", "content": "test_parser.md", "describes": [1]}
+    {
+      "content": "test_parser.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser tests"
+    }
   ]
 }

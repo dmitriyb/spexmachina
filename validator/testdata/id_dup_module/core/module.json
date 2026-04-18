@@ -1,8 +1,13 @@
 {
+  "components": [],
+  "impl_sections": [],
   "name": "core",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Feature A", "preq_id": 1}
-  ],
-  "components": [],
-  "impl_sections": []
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feature A",
+      "type": "functional"
+    }
+  ]
 }

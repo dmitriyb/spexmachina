@@ -1,16 +1,44 @@
 {
-  "name": "core",
   "components": [
-    {"id": 1, "name": "Engine", "content": "arch_engine.md"},
-    {"id": 2, "name": "Store"}
-  ],
-  "impl_sections": [
-    {"id": 1, "name": "Setup", "content": "impl_setup.md", "describes": [1]}
+    {
+      "content": "arch_engine.md",
+      "id": "000000000001",
+      "name": "Engine"
+    },
+    {
+      "id": "000000000002",
+      "name": "Store"
+    }
   ],
   "data_flows": [
-    {"id": 1, "name": "Ingest", "content": "flow_ingest.md", "uses": [1]}
+    {
+      "content": "flow_ingest.md",
+      "id": "000000000001",
+      "name": "Ingest",
+      "uses": [
+        "000000000001"
+      ]
+    }
   ],
+  "impl_sections": [
+    {
+      "content": "impl_setup.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Setup"
+    }
+  ],
+  "name": "core",
   "test_sections": [
-    {"id": 1, "name": "Engine tests", "content": "test_engine.md", "describes": [1]}
+    {
+      "content": "test_engine.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Engine tests"
+    }
   ]
 }

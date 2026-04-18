@@ -69,7 +69,7 @@ func TestFR1_S2_FullProjectPasses(t *testing.T) {
 
 func TestFR1_S5_ProjectMissingNameFails(t *testing.T) {
 	sch := compileProjectSchema(t)
-	err := validateProject(t, sch, `{"modules": [{"id": 1, "name": "m", "path": "m/"}]}`)
+	err := validateProject(t, sch, `{"modules": [{"id": "000000000001", "name": "m", "path": "m/"}]}`)
 	if err == nil {
 		t.Fatal("expected validation error for missing name, got nil")
 	}
@@ -107,12 +107,12 @@ func TestFR1_S9_RequirementMissingRequiredFields(t *testing.T) {
 	}{
 		{
 			"missing type",
-			`{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/"}], "requirements": [{"id": 1, "title": "No type field"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"id": "000000000001", "title": "No type field"}]}`,
 			"type",
 		},
 		{
 			"missing id",
-			`{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "title": "No id"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "title": "No id"}]}`,
 			"id",
 		},
 	}
@@ -155,8 +155,8 @@ func TestFR1_S11_InvalidRequirementTypeEnum(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
-		"requirements": [{"id": 1, "type": "performance", "title": "R"}]
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"requirements": [{"id": "000000000001", "type": "performance", "title": "R"}]
 	}`)
 	if err == nil {
 		t.Fatal("expected validation error for invalid requirement type enum, got nil")
@@ -172,11 +172,11 @@ func TestFR1_S12_ExtraFieldsRejected(t *testing.T) {
 	}{
 		{
 			"extra field at project level",
-			`{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/"}], "author": "unknown"}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "author": "unknown"}`,
 		},
 		{
 			"extra field in module declaration",
-			`{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/", "priority": "high"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/", "priority": "high"}]}`,
 		},
 	}
 	for _, tt := range tests {
@@ -189,7 +189,7 @@ func TestFR1_S12_ExtraFieldsRejected(t *testing.T) {
 	}
 }
 
-func TestNFR4_S13_IDBelowMinimumProject(t *testing.T) {
+func TestNFR4_S13_InvalidIDPatternProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 
 	tests := []struct {
@@ -197,19 +197,19 @@ func TestNFR4_S13_IDBelowMinimumProject(t *testing.T) {
 		doc  string
 	}{
 		{
-			"id zero in milestone",
-			`{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/"}], "milestones": [{"id": 0, "title": "M"}]}`,
+			"short id in milestone",
+			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "milestones": [{"id": "abc", "title": "M"}]}`,
 		},
 		{
-			"negative id in module",
-			`{"name": "p", "modules": [{"id": -1, "name": "m", "path": "m/"}]}`,
+			"non-hex id in module",
+			`{"name": "p", "modules": [{"id": "ZZZ000000000", "name": "m", "path": "m/"}]}`,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := validateProject(t, sch, tt.doc)
 			if err == nil {
-				t.Fatal("expected validation error for ID below minimum, got nil")
+				t.Fatal("expected validation error for invalid ID pattern, got nil")
 			}
 		})
 	}
@@ -224,11 +224,11 @@ func TestFR1_S14_EmptyStringNameFails(t *testing.T) {
 	}{
 		{
 			"empty project name",
-			`{"name": "", "modules": [{"id": 1, "name": "m", "path": "m/"}]}`,
+			`{"name": "", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}]}`,
 		},
 		{
 			"empty module name",
-			`{"name": "p", "modules": [{"id": 1, "name": "", "path": "m/"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "", "path": "m/"}]}`,
 		},
 	}
 	for _, tt := range tests {
@@ -245,10 +245,10 @@ func TestFR1_S15_DependsOnDuplicatesFails(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "R1"},
-			{"id": 2, "type": "functional", "title": "R2", "depends_on": [1, 1]}
+			{"id": "000000000001", "type": "functional", "title": "R1"},
+			{"id": "000000000002", "type": "functional", "title": "R2", "depends_on": ["000000000001", "000000000001"]}
 		]
 	}`)
 	if err == nil {
@@ -262,9 +262,9 @@ func TestFR6_S16_TestPlanValidation(t *testing.T) {
 	t.Run("valid test_plan with minimal scenario", func(t *testing.T) {
 		err := validateProject(t, sch, `{
 			"name": "p",
-			"modules": [{"id": 1, "name": "m", "path": "m/"}],
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"test_plan": {
-				"scenarios": [{"id": 1, "name": "Smoke test"}]
+				"scenarios": [{"id": "000000000001", "name": "Smoke test"}]
 			}
 		}`)
 		if err != nil {
@@ -275,7 +275,7 @@ func TestFR6_S16_TestPlanValidation(t *testing.T) {
 	t.Run("test_plan with extra property fails", func(t *testing.T) {
 		err := validateProject(t, sch, `{
 			"name": "p",
-			"modules": [{"id": 1, "name": "m", "path": "m/"}],
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"test_plan": {
 				"strategy": "risk-based",
 				"scenarios": []
@@ -315,7 +315,7 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 		}
 		for i, v := range proj.Modules[1].RequiresModule {
 			if v != proj2.Modules[1].RequiresModule[i] {
-				t.Fatalf("requires_module[%d] mismatch: want %d, got %d", i, v, proj2.Modules[1].RequiresModule[i])
+				t.Fatalf("requires_module[%d] mismatch: want %s, got %s", i, v, proj2.Modules[1].RequiresModule[i])
 			}
 		}
 	}
@@ -325,7 +325,7 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 		}
 		for i, v := range proj.Requirements[1].DependsOn {
 			if v != proj2.Requirements[1].DependsOn[i] {
-				t.Fatalf("depends_on[%d] mismatch: want %d, got %d", i, v, proj2.Requirements[1].DependsOn[i])
+				t.Fatalf("depends_on[%d] mismatch: want %s, got %s", i, v, proj2.Requirements[1].DependsOn[i])
 			}
 		}
 	}
@@ -340,7 +340,7 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 		}
 		for i, v := range proj.Milestones[0].Groups {
 			if v != proj2.Milestones[0].Groups[i] {
-				t.Fatalf("groups[%d] mismatch: want %d, got %d", i, v, proj2.Milestones[0].Groups[i])
+				t.Fatalf("groups[%d] mismatch: want %s, got %s", i, v, proj2.Milestones[0].Groups[i])
 			}
 		}
 	}
@@ -352,9 +352,9 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 	t.Run("priority accepted", func(t *testing.T) {
 		err := validateProject(t, sch, `{
 			"name": "p",
-			"modules": [{"id": 1, "name": "m", "path": "m/"}],
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": 1, "type": "functional", "title": "R", "priority": 1}
+				{"id": "000000000001", "type": "functional", "title": "R", "priority": 1}
 			]
 		}`)
 		if err != nil {
@@ -365,9 +365,9 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 	t.Run("priority out of range fails", func(t *testing.T) {
 		err := validateProject(t, sch, `{
 			"name": "p",
-			"modules": [{"id": 1, "name": "m", "path": "m/"}],
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": 1, "type": "functional", "title": "R", "priority": 5}
+				{"id": "000000000001", "type": "functional", "title": "R", "priority": 5}
 			]
 		}`)
 		if err == nil {
@@ -378,9 +378,9 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 	t.Run("negative priority fails", func(t *testing.T) {
 		err := validateProject(t, sch, `{
 			"name": "p",
-			"modules": [{"id": 1, "name": "m", "path": "m/"}],
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": 1, "type": "functional", "title": "R", "priority": -1}
+				{"id": "000000000001", "type": "functional", "title": "R", "priority": -1}
 			]
 		}`)
 		if err == nil {
@@ -393,7 +393,7 @@ func TestFR1_E1_EmptyOptionalArraysValidProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [],
 		"milestones": [],
 		"test_plan": {"scenarios": []}
@@ -406,17 +406,17 @@ func TestFR1_E1_EmptyOptionalArraysValidProject(t *testing.T) {
 func TestNFR4_E2_BoundaryIDValueProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 
-	t.Run("id 1 passes", func(t *testing.T) {
-		err := validateProject(t, sch, `{"name": "p", "modules": [{"id": 1, "name": "m", "path": "m/"}]}`)
+	t.Run("valid 12-char hex passes", func(t *testing.T) {
+		err := validateProject(t, sch, `{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}]}`)
 		if err != nil {
-			t.Fatalf("id=1 should pass: %v", err)
+			t.Fatalf("12-char hex should pass: %v", err)
 		}
 	})
 
-	t.Run("id 0 fails", func(t *testing.T) {
-		err := validateProject(t, sch, `{"name": "p", "modules": [{"id": 0, "name": "m", "path": "m/"}]}`)
+	t.Run("11-char hex fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{"name": "p", "modules": [{"id": "aabbccddeef", "name": "m", "path": "m/"}]}`)
 		if err == nil {
-			t.Fatal("id=0 should fail")
+			t.Fatal("11-char hex should fail")
 		}
 	})
 }
@@ -425,7 +425,7 @@ func TestFR1_E5_NullOptionalFieldFailsProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"description": null
 	}`)
 	if err == nil {
@@ -460,9 +460,9 @@ func TestFR1_E7_DependsOnNonExistentIDPassesProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "R1", "depends_on": [999]}
+			{"id": "000000000001", "type": "functional", "title": "R1", "depends_on": ["000000000999"]}
 		]
 	}`)
 	if err != nil {
@@ -474,9 +474,9 @@ func TestFR1_E8_PreqIDInProjectRequirementFails(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "R", "preq_id": 5}
+			{"id": "000000000001", "type": "functional", "title": "R", "preq_id": "000000000005"}
 		]
 	}`)
 	if err == nil {
@@ -488,9 +488,9 @@ func TestFR1_E3_LargeIDValuePasses(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 2147483647, "name": "m", "path": "m/"}],
+		"modules": [{"id": "002147483647", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": 2147483647, "type": "functional", "title": "R"}
+			{"id": "002147483647", "type": "functional", "title": "R"}
 		]
 	}`)
 	if err != nil {
@@ -502,7 +502,7 @@ func TestFR6_E9_TestPlanEmptyScenariosObject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"test_plan": {}
 	}`)
 	if err != nil {
@@ -514,9 +514,9 @@ func TestFR6_E10_TestScenarioModulesDuplicatesFails(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": 1, "name": "m", "path": "m/"}],
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"test_plan": {
-			"scenarios": [{"id": 1, "name": "S", "modules": [1, 1]}]
+			"scenarios": [{"id": "000000000001", "name": "S", "modules": ["000000000001", "000000000001"]}]
 		}
 	}`)
 	if err == nil {

@@ -1,9 +1,18 @@
 {
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
   "name": "id-dup-impl-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req A", "priority": 1}
-  ],
-  "modules": [
-    {"id": 1, "name": "core", "path": "core"}
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Req A",
+      "type": "functional"
+    }
   ]
 }

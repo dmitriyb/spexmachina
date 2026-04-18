@@ -99,16 +99,16 @@ func loadSpec(specDir, check string) (*schema.Project, map[string]*schema.Module
 }
 
 // checkModuleDAG checks the module dependency graph for cycles.
-// Nodes are module IDs, edges come from requires_module.
+// Nodes are module identity hashes, edges come from requires_module.
 func checkModuleDAG(project *schema.Project) []ValidationError {
-	idToName := make(map[int]string, len(project.Modules))
-	adj := make(map[int][]int, len(project.Modules))
+	idToName := make(map[string]string, len(project.Modules))
+	adj := make(map[string][]string, len(project.Modules))
 	for _, mod := range project.Modules {
 		idToName[mod.ID] = mod.Name
 		adj[mod.ID] = mod.RequiresModule
 	}
 
-	cycles := detectCycles(adj)
+	cycles := detectStringCycles(adj)
 	var errs []ValidationError
 	for _, cycle := range cycles {
 		names := make([]string, len(cycle))
@@ -125,7 +125,6 @@ func checkModuleDAG(project *schema.Project) []ValidationError {
 	return errs
 }
 
-// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkRequirementDAG checks the requirement dependency graph for a single module.
 // Nodes are requirement IDs, edges come from depends_on.
 func checkRequirementDAG(modName string, mod *schema.ModuleSpec) []ValidationError {
@@ -153,7 +152,6 @@ func checkRequirementDAG(modName string, mod *schema.ModuleSpec) []ValidationErr
 	return errs
 }
 
-// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // checkComponentDAG checks the component uses graph for a single module.
 // Nodes are component IDs, edges come from uses.
 func checkComponentDAG(modName string, mod *schema.ModuleSpec) []ValidationError {
@@ -188,74 +186,9 @@ const (
 	black = 2 // fully explored
 )
 
-// detectCycles finds all cycles in a directed graph using DFS with three-color marking.
-// adj maps node ID to its neighbor IDs. Returns each cycle as a slice of IDs
-// forming the cycle path (ending with the repeated start node).
-func detectCycles(adj map[int][]int) [][]int {
-	color := make(map[int]int, len(adj))
-	parent := make(map[int]int, len(adj))
-	var cycles [][]int
-
-	// Collect and sort nodes for deterministic ordering.
-	nodes := sortedKeys(adj)
-
-	var dfs func(node int)
-	dfs = func(node int) {
-		color[node] = gray
-		for _, neighbor := range adj[node] {
-			switch color[neighbor] {
-			case white:
-				parent[neighbor] = node
-				dfs(neighbor)
-			case gray:
-				// Back edge found — reconstruct cycle path.
-				cycle := reconstructCycle(parent, node, neighbor)
-				cycles = append(cycles, cycle)
-			}
-		}
-		color[node] = black
-	}
-
-	for _, node := range nodes {
-		if color[node] == white {
-			parent[node] = -1
-			dfs(node)
-		}
-	}
-
-	return cycles
-}
-
-// reconstructCycle walks the parent chain from current back to target (the node
-// that was found in the gray state), producing the cycle path.
-func reconstructCycle(parent map[int]int, current, target int) []int {
-	var path []int
-	for n := current; n != target; n = parent[n] {
-		path = append(path, n)
-	}
-	path = append(path, target)
-
-	// Reverse to get target -> ... -> current -> target order.
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-	path = append(path, target)
-
-	return path
-}
-
-// sortedKeys returns the keys of a map[int][]int in ascending order.
-func sortedKeys(m map[int][]int) []int {
-	keys := make([]int, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	slices.Sort(keys)
-	return keys
-}
-
-// TODO(bead:spexmachina-3id): fix after spexmachina-e8t changed module IDs from int to identity hash strings
-// detectStringCycles is the string-keyed variant of detectCycles for identity hash IDs.
+// detectStringCycles finds all cycles in a directed graph of identity-hash
+// string IDs using DFS with three-color marking. Returns each cycle as a
+// slice of IDs forming the cycle path (ending with the repeated start node).
 func detectStringCycles(adj map[string][]string) [][]string {
 	color := make(map[string]int, len(adj))
 	parent := make(map[string]string, len(adj))

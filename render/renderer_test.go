@@ -16,17 +16,17 @@ func fixtureGraph() *SpecGraph {
 			Name:        "test-project",
 			Description: "A test spec",
 			Requirements: []schema.Requirement{
-				{ID: 1, Type: "functional", Title: "Parse input", Description: "Accept structured input and parse it."},
-				{ID: 2, Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
-				{ID: 3, Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
+				{ID: "112233445566", Type: "functional", Title: "Parse input", Description: "Accept structured input and parse it."},
+				{ID: "665544332211", Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
+				{ID: "778899aabbcc", Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
 			},
 			Milestones: []schema.Milestone{
-				{ID: 1, Title: "MVP", Groups: []int{1, 2}},
+				{ID: "ccbbaa998877", Title: "MVP", Groups: []string{"111111111111", "222222222222"}},
 			},
 		},
 		Modules: []ModuleGraph{
 			{
-				Module: schema.Module{ID: 1, Name: "alpha", Path: "alpha", Description: "Alpha module"},
+				Module: schema.Module{ID: "111111111111", Name: "alpha", Path: "alpha", Description: "Alpha module"},
 				Spec: schema.ModuleSpec{
 					Name:        "alpha",
 					Description: "Alpha module description",
@@ -53,7 +53,7 @@ func fixtureGraph() *SpecGraph {
 				},
 			},
 			{
-				Module: schema.Module{ID: 2, Name: "beta", Path: "beta", Description: "Beta module", RequiresModule: []int{1}},
+				Module: schema.Module{ID: "222222222222", Name: "beta", Path: "beta", Description: "Beta module", RequiresModule: []string{"111111111111"}},
 				Spec: schema.ModuleSpec{
 					Name:        "beta",
 					Description: "Beta module description",
@@ -559,9 +559,9 @@ func TestFR3_J8_NodeCount(t *testing.T) {
 // E1: Module with empty requirements array
 func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 	spec := &SpecGraph{
-		Project: schema.Project{Name: "empty-req", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
+		Project: schema.Project{Name: "empty-req", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
-			Module:  schema.Module{ID: 1, Name: "m", Path: "m"},
+			Module:  schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
 			Spec:    schema.ModuleSpec{Name: "m"},
 			Content: map[string]string{},
 		}},
@@ -594,9 +594,9 @@ func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 // E3: Content containing JSON-special characters
 func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 	spec := &SpecGraph{
-		Project: schema.Project{Name: "special", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
+		Project: schema.Project{Name: "special", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
-			Module: schema.Module{ID: 1, Name: "m", Path: "m"},
+			Module: schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
 			Spec: schema.ModuleSpec{
 				Name:       "m",
 				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
@@ -622,9 +622,9 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 // E5: Content with deeply nested headings
 func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 	spec := &SpecGraph{
-		Project: schema.Project{Name: "deep", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
+		Project: schema.Project{Name: "deep", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
-			Module: schema.Module{ID: 1, Name: "m", Path: "m"},
+			Module: schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
 			Spec: schema.ModuleSpec{
 				Name:       "m",
 				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
@@ -662,9 +662,9 @@ func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
 	t.Skip("TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := &SpecGraph{
-		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: 1, Name: "data-pipeline", Path: "data-pipeline"}}},
+		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"}}},
 		Modules: []ModuleGraph{{
-			Module: schema.Module{ID: 1, Name: "data-pipeline", Path: "data-pipeline"},
+			Module: schema.Module{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"},
 			Spec: schema.ModuleSpec{
 				Name:       "data-pipeline",
 				Components: []schema.Component{{ID: "aabbccddeeff", Name: "Ingest"}},
@@ -691,9 +691,9 @@ func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
 // E7: Empty spec (project with module that has only name)
 func TestFR1_E7_EmptySpec(t *testing.T) {
 	spec := &SpecGraph{
-		Project: schema.Project{Name: "empty", Modules: []schema.Module{{ID: 1, Name: "m", Path: "m"}}},
+		Project: schema.Project{Name: "empty", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
 		Modules: []ModuleGraph{{
-			Module:  schema.Module{ID: 1, Name: "m", Path: "m"},
+			Module:  schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
 			Spec:    schema.ModuleSpec{Name: "m"},
 			Content: map[string]string{},
 		}},

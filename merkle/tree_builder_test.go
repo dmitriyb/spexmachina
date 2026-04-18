@@ -31,12 +31,12 @@ func setupSpecDir(t *testing.T) string {
 	proj := `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
-			{"id": 2, "type": "non_functional", "title": "Be fast", "priority": 2}
+			{"id": "000000000001", "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": "000000000002", "type": "non_functional", "title": "Be fast", "priority": 2}
 		],
 		"modules": [
-			{"id": 1, "name": "Alpha", "path": "alpha"},
-			{"id": 2, "name": "Beta", "path": "beta"}
+			{"id": "000000000001", "name": "Alpha", "path": "alpha"},
+			{"id": "000000000002", "name": "Beta", "path": "beta"}
 		]
 	}`
 	writeFile(t, dir, "project.json", proj)
@@ -47,7 +47,7 @@ func setupSpecDir(t *testing.T) string {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + schema.IdentityHash("project", "requirement", "1") + `"},
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + schema.IdentityHash("project", "requirement", "000000000001") + `"},
 			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
 		],
 		"components": [
@@ -164,8 +164,8 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 
 	alphaHash := schema.IdentityHash("module", "Alpha")
 	betaHash := schema.IdentityHash("module", "Beta")
-	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
-	projReq2Hash := schema.IdentityHash("project", "requirement", "2")
+	projReq1Hash := schema.IdentityHash("project", "requirement", "000000000001")
+	projReq2Hash := schema.IdentityHash("project", "requirement", "000000000002")
 
 	for _, child := range root.Children {
 		switch child.Key {
@@ -339,7 +339,7 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	ghostComp := schema.IdentityHash("bad", "component", "Ghost")
 	proj := `{
 		"name": "bad-project",
-		"modules": [{"id": 1, "name": "Bad", "path": "bad"}]
+		"modules": [{"id": "000000000001", "name": "Bad", "path": "bad"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 
@@ -378,7 +378,7 @@ func TestREQ2_BuildTree_MissingModuleJSON(t *testing.T) {
 	dir := t.TempDir()
 	proj := `{
 		"name": "no-module",
-		"modules": [{"id": 1, "name": "Ghost", "path": "ghost"}]
+		"modules": [{"id": "000000000001", "name": "Ghost", "path": "ghost"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 	must(t, os.MkdirAll(filepath.Join(dir, "ghost"), 0755))
@@ -449,7 +449,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 
 	proj := `{
 		"name": "full-project",
-		"modules": [{"id": 1, "name": "FullMod", "path": "fullmod"}]
+		"modules": [{"id": "000000000001", "name": "FullMod", "path": "fullmod"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 
@@ -516,7 +516,7 @@ func TestREQ2_BuildTree_EmptyModule(t *testing.T) {
 
 	proj := `{
 		"name": "empty-project",
-		"modules": [{"id": 1, "name": "Empty", "path": "empty"}]
+		"modules": [{"id": "000000000001", "name": "Empty", "path": "empty"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 
@@ -591,8 +591,8 @@ func TestREQ7_BuildTree_ProjectRequirementLeaves(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	req1Key := schema.IdentityHash("project", "requirement", "1")
-	req2Key := schema.IdentityHash("project", "requirement", "2")
+	req1Key := schema.IdentityHash("project", "requirement", "000000000001")
+	req2Key := schema.IdentityHash("project", "requirement", "000000000002")
 
 	// Project-level requirements should be leaf nodes at root level
 	req1 := findChild(t, root, req1Key)
@@ -652,7 +652,7 @@ func TestREQ7_BuildTree_RequirementHashDeterministic(t *testing.T) {
 	}
 
 	// Project requirement hashes should be identical across builds
-	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	projReq1Key := schema.IdentityHash("project", "requirement", "000000000001")
 	preq1a := findChild(t, root1, projReq1Key)
 	preq1b := findChild(t, root2, projReq1Key)
 	if preq1a.Hash != preq1b.Hash {
@@ -666,9 +666,9 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	proj := `{
 		"name": "req-change-test",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Original title"}
+			{"id": "000000000001", "type": "functional", "title": "Original title"}
 		],
-		"modules": [{"id": 1, "name": "M", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "M", "path": "m"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 	modDir := filepath.Join(dir, "m")
@@ -679,16 +679,16 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first build: %v", err)
 	}
-	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	projReq1Key := schema.IdentityHash("project", "requirement", "000000000001")
 	hash1 := findChild(t, root1, projReq1Key).Hash
 
 	// Change the requirement title
 	proj2 := `{
 		"name": "req-change-test",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Updated title"}
+			{"id": "000000000001", "type": "functional", "title": "Updated title"}
 		],
-		"modules": [{"id": 1, "name": "M", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "M", "path": "m"}]
 	}`
 	writeFile(t, dir, "project.json", proj2)
 
@@ -716,7 +716,7 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 
 	proj := `{
 		"name": "sorted-keys-test",
-		"modules": [{"id": 1, "name": "M", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "M", "path": "m"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 	modDir := filepath.Join(dir, "m")
@@ -724,7 +724,7 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 	modJSON := `{
 		"name": "m",
 		"requirements": [
-			{"id": "` + reqID + `", "type": "functional", "title": "Test", "description": "Desc", "preq_id": "` + schema.IdentityHash("project", "requirement", "1") + `", "depends_on": ["` + schema.IdentityHash("m", "requirement", "Other") + `"]}
+			{"id": "` + reqID + `", "type": "functional", "title": "Test", "description": "Desc", "preq_id": "` + schema.IdentityHash("project", "requirement", "000000000001") + `", "depends_on": ["` + schema.IdentityHash("m", "requirement", "Other") + `"]}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
@@ -748,7 +748,7 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 		"depends_on":  []string{schema.IdentityHash("m", "requirement", "Other")},
 		"description": "Desc",
 		"id":          reqID,
-		"preq_id":     schema.IdentityHash("project", "requirement", "1"),
+		"preq_id":     schema.IdentityHash("project", "requirement", "000000000001"),
 		"title":       "Test",
 		"type":        "functional",
 	})
@@ -773,9 +773,9 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 	proj := `{
 		"name": "omitempty-test",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Minimal"}
+			{"id": "000000000001", "type": "functional", "title": "Minimal"}
 		],
-		"modules": [{"id": 1, "name": "M", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "M", "path": "m"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 	modDir := filepath.Join(dir, "m")
@@ -787,12 +787,12 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	projReq1Key := schema.IdentityHash("project", "requirement", "1")
+	projReq1Key := schema.IdentityHash("project", "requirement", "000000000001")
 	req := findChild(t, root, projReq1Key)
 
 	// Minimal requirement: only id, title, type are set.
 	expected := hashRequirementJSON(t, map[string]interface{}{
-		"id":    1,
+		"id":    "000000000001",
 		"title": "Minimal",
 		"type":  "functional",
 	})
@@ -808,7 +808,7 @@ func TestREQ7_BuildTree_ModuleRequirementHashIncludesModuleHash(t *testing.T) {
 
 	proj := `{
 		"name": "mod-req-hash",
-		"modules": [{"id": 1, "name": "M", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "M", "path": "m"}]
 	}`
 	writeFile(t, dir, "project.json", proj)
 	modDir := filepath.Join(dir, "m")

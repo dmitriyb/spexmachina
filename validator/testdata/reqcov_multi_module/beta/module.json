@@ -1,12 +1,29 @@
 {
-  "name": "beta",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Beta Feat", "preq_id": 2}
-  ],
   "components": [
-    {"id": 1, "name": "CompB", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "CompB"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Impl B", "describes": [1]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Impl B"
+    }
+  ],
+  "name": "beta",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000002",
+      "title": "Beta Feat",
+      "type": "functional"
+    }
   ]
 }

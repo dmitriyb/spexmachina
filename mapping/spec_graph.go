@@ -67,13 +67,13 @@ func (sg *specGraph) ModuleByName(name string) (ModuleInfo, error) {
 	return ModuleInfo{}, fmt.Errorf("preflight: module %q not found", name)
 }
 
-func (sg *specGraph) ModuleByID(id int) (ModuleInfo, error) {
+func (sg *specGraph) ModuleByID(id string) (ModuleInfo, error) {
 	for _, mod := range sg.project.Modules {
 		if mod.ID == id {
 			return sg.buildModuleInfo(mod)
 		}
 	}
-	return ModuleInfo{}, fmt.Errorf("preflight: module id %d not found", id)
+	return ModuleInfo{}, fmt.Errorf("preflight: module id %s not found", id)
 }
 
 func (sg *specGraph) buildModuleInfo(mod schema.Module) (ModuleInfo, error) {
@@ -115,7 +115,7 @@ func (sg *specGraph) NodeHash(specNodeID string) (string, error) {
 	}
 
 	// Translate module name to module ID.
-	var moduleID int
+	var moduleID string
 	found := false
 	for _, mod := range sg.project.Modules {
 		if mod.Name == moduleName {
@@ -128,7 +128,7 @@ func (sg *specGraph) NodeHash(specNodeID string) (string, error) {
 		return "", fmt.Errorf("preflight: module %q not found for hash lookup", moduleName)
 	}
 
-	merkleKey := fmt.Sprintf("module/%d/%s/%d", moduleID, nodeType, nodeID)
+	merkleKey := fmt.Sprintf("module/%s/%s/%d", moduleID, nodeType, nodeID)
 	return findNodeHash(sg.tree, merkleKey)
 }
 

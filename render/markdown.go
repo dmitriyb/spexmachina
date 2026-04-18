@@ -46,7 +46,7 @@ func writeProjectRequirements(w io.Writer, reqs []schema.Requirement) {
 	if len(functional) > 0 {
 		fmt.Fprintf(w, "### Functional\n\n")
 		for i, r := range functional {
-			fmt.Fprintf(w, "- FR%d: %s", r.ID, r.Title)
+			fmt.Fprintf(w, "- FR%d: %s", i+1, r.Title)
 			if r.Description != "" {
 				fmt.Fprintf(w, " — %s", r.Description)
 			}
@@ -60,7 +60,7 @@ func writeProjectRequirements(w io.Writer, reqs []schema.Requirement) {
 	if len(nonFunctional) > 0 {
 		fmt.Fprintf(w, "### Non-functional\n\n")
 		for i, r := range nonFunctional {
-			fmt.Fprintf(w, "- NFR%d: %s", r.ID, r.Title)
+			fmt.Fprintf(w, "- NFR%d: %s", i+len(functional)+1, r.Title)
 			if r.Description != "" {
 				fmt.Fprintf(w, " — %s", r.Description)
 			}

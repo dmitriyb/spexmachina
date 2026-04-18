@@ -20,15 +20,15 @@ func setupRenderSpec(t *testing.T) string {
 		"name": "test-project",
 		"description": "A test spec",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Parse input", "description": "Accept structured input."},
-			{"id": 2, "type": "functional", "title": "Build output", "description": "Build output."},
-			{"id": 3, "type": "non_functional", "title": "Performance", "description": "Fast."}
+			{"id": "000000000001", "type": "functional", "title": "Parse input", "description": "Accept structured input."},
+			{"id": "000000000002", "type": "functional", "title": "Build output", "description": "Build output."},
+			{"id": "000000000003", "type": "non_functional", "title": "Performance", "description": "Fast."}
 		],
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha", "description": "Alpha module"},
-			{"id": 2, "name": "beta", "path": "beta", "description": "Beta module", "requires_module": [1]}
+			{"id": "000000000001", "name": "alpha", "path": "alpha", "description": "Alpha module"},
+			{"id": "000000000002", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["000000000001"]}
 		],
-		"milestones": [{"id": 1, "title": "MVP", "groups": [1, 2]}]
+		"milestones": [{"id": "000000000001", "title": "MVP", "groups": ["000000000001", "000000000002"]}]
 	}`
 	writeTestFile(t, dir, "project.json", proj)
 
@@ -325,7 +325,7 @@ func TestFR1_E4_BrokenContentRef(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "000000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)

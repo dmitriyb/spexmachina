@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strconv"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -58,7 +57,7 @@ func BuildTree(specDir string) (*Node, error) {
 
 	var projReqNodes []*Node
 	for _, req := range proj.Requirements {
-		key := schema.IdentityHash("project", "requirement", strconv.Itoa(req.ID))
+		key := schema.IdentityHash("project", "requirement", req.ID)
 		node, err := hashRequirement(req, key, "")
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
@@ -246,7 +245,7 @@ func hashRequirement(req schema.Requirement, key string, module string) (*Node, 
 		fields["description"] = req.Description
 	}
 	fields["id"] = req.ID
-	if req.PreqID != 0 {
+	if req.PreqID != "" {
 		fields["preq_id"] = req.PreqID
 	}
 	if req.Priority != nil {

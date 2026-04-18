@@ -57,9 +57,9 @@ func TestS1_ValidCoupledSectionPasses(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
+    {"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
   ]
 }`)
 
@@ -76,9 +76,9 @@ func TestS2_NonCoupledSectionSkipped(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": [
-    {"id": 1, "name": "notes", "type": "informational"}
+    {"id": "000000000001", "name": "notes", "type": "informational"}
   ]
 }`)
 
@@ -95,9 +95,9 @@ func TestS3_CoupledNoMatchingModule(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 
@@ -124,9 +124,9 @@ func TestS4_MissingSectionSchemaFile(t *testing.T) {
 	writeModule(t, dir, "delivery", "delivery")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 
@@ -151,9 +151,9 @@ func TestS5_ContentFailsSchema(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled", "versioning": {"scheme": 123}}
+    {"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": 123}}
   ]
 }`)
 
@@ -179,10 +179,10 @@ func TestS6_DuplicateSectionIDs(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": [
-    {"id": 1, "name": "alpha", "type": "informational"},
-    {"id": 1, "name": "beta", "type": "informational"}
+    {"id": "000000000001", "name": "alpha", "type": "informational"},
+    {"id": "000000000001", "name": "beta", "type": "informational"}
   ]
 }`)
 
@@ -204,9 +204,9 @@ func TestS7_MissingEnvelopeName(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": [
-    {"id": 1, "type": "coupled"}
+    {"id": "000000000001", "type": "coupled"}
   ]
 }`)
 
@@ -235,10 +235,10 @@ func TestS8_MultipleCoupledIndependent(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}},
-    {"id": 2, "name": "performance", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}},
+    {"id": "000000000002", "name": "performance", "type": "coupled"}
   ]
 }`)
 
@@ -257,7 +257,7 @@ func TestS9_EmptySectionsArray(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": []
 }`)
 
@@ -273,7 +273,7 @@ func TestS10_NoSectionsField(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}]
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}]
 }`)
 
 	errs := CheckCoupledSections(dir)
@@ -290,9 +290,9 @@ func TestE1_SectionNameCaseSensitive(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "Delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "Delivery", "type": "coupled"}
   ]
 }`)
 
@@ -320,9 +320,9 @@ func TestE2_InvalidSectionSchema(t *testing.T) {
 		`{"$schema": "https://json-schema.org/draft/2020-12/schema", "type": "invalid_type"}`)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 
@@ -349,9 +349,9 @@ func TestE3_NotValidJSON(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", `{broken json`)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 
@@ -379,9 +379,9 @@ func TestE4_EmptyContentFailsRequired(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 
@@ -408,10 +408,10 @@ func TestE5_DuplicateSectionName(t *testing.T) {
 	writeFile(t, filepath.Join(dir, "delivery"), "section.schema.json", validSectionSchema)
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+  "modules": [{"id": "000000000001", "name": "delivery", "path": "delivery"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}},
-    {"id": 2, "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
+    {"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}},
+    {"id": "000000000002", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
   ]
 }`)
 
@@ -434,9 +434,9 @@ func TestREQ_d99ef6b9b776_AllSeverityError(t *testing.T) {
 	writeModule(t, dir, "core", "core")
 	writeProject(t, dir, `{
   "name": "p",
-  "modules": [{"id": 1, "name": "core", "path": "core"}],
+  "modules": [{"id": "000000000001", "name": "core", "path": "core"}],
   "sections": [
-    {"id": 1, "name": "delivery", "type": "coupled"}
+    {"id": "000000000001", "name": "delivery", "type": "coupled"}
   ]
 }`)
 	errs := CheckCoupledSections(dir)

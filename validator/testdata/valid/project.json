@@ -1,15 +1,19 @@
 {
-  "name": "test-project",
   "description": "A test project for schema validation.",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Project requirement"}
-  ],
   "modules": [
     {
-      "id": 1,
+      "description": "Core module.",
+      "id": "000000000001",
       "name": "core",
-      "path": "core",
-      "description": "Core module."
+      "path": "core"
+    }
+  ],
+  "name": "test-project",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
     }
   ]
 }

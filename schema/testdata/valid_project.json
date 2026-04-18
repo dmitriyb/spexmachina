@@ -1,68 +1,80 @@
 {
-  "name": "spex-machina",
   "description": "The spec state machine.",
-  "version": "0.1.0",
-  "requirements": [
+  "milestones": [
     {
-      "id": 1,
-      "type": "functional",
-      "title": "Validate spec structure",
-      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references.",
-      "priority": 2
-    },
-    {
-      "id": 2,
-      "type": "functional",
-      "title": "Compute merkle tree",
-      "description": "Hash every node, store snapshots, diff against previous snapshots.",
-      "depends_on": [1]
-    },
-    {
-      "id": 3,
-      "type": "non_functional",
-      "title": "Deterministic output",
-      "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions."
+      "description": "Core schema and validation working.",
+      "groups": [
+        "000000000001",
+        "000000000002"
+      ],
+      "id": "000000000001",
+      "title": "Bootstrap"
     }
   ],
   "modules": [
     {
-      "id": 1,
+      "description": "JSON Schema definitions for project.json and module.json.",
+      "id": "000000000001",
       "name": "Schema",
-      "path": "schema",
-      "description": "JSON Schema definitions for project.json and module.json."
+      "path": "schema"
     },
     {
-      "id": 2,
+      "description": "Spec directory validation.",
+      "id": "000000000002",
       "name": "Validator",
       "path": "validator",
-      "description": "Spec directory validation.",
-      "requires_module": [1]
+      "requires_module": [
+        "000000000001"
+      ]
     },
     {
-      "id": 3,
+      "description": "Hash tree, snapshots, diff, impact classification.",
+      "id": "000000000003",
       "name": "Merkle",
       "path": "merkle",
-      "description": "Hash tree, snapshots, diff, impact classification.",
-      "requires_module": [1]
+      "requires_module": [
+        "000000000001"
+      ]
     }
   ],
-  "milestones": [
+  "name": "spex-machina",
+  "requirements": [
     {
-      "id": 1,
-      "title": "Bootstrap",
-      "description": "Core schema and validation working.",
-      "groups": [1, 2]
+      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references.",
+      "id": "000000000001",
+      "priority": 2,
+      "title": "Validate spec structure",
+      "type": "functional"
+    },
+    {
+      "depends_on": [
+        "000000000001"
+      ],
+      "description": "Hash every node, store snapshots, diff against previous snapshots.",
+      "id": "000000000002",
+      "title": "Compute merkle tree",
+      "type": "functional"
+    },
+    {
+      "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions.",
+      "id": "000000000003",
+      "title": "Deterministic output",
+      "type": "non_functional"
     }
   ],
   "test_plan": {
     "scenarios": [
       {
-        "id": 1,
-        "name": "End-to-end flow",
-        "description": "Cross-module test.",
         "content": "test_e2e.md",
-        "modules": [1, 2]
+        "description": "Cross-module test.",
+        "id": "000000000001",
+        "modules": [
+          "000000000001",
+          "000000000002"
+        ],
+        "name": "End-to-end flow"
       }
     ]
-  }
+  },
+  "version": "0.1.0"
 }

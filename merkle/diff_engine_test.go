@@ -113,7 +113,7 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
 	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
 	alphaImpl2 := schema.IdentityHash("alpha", "impl_section", "Impl2")
-	projReq1 := schema.IdentityHash("project", "requirement", "1")
+	projReq1 := schema.IdentityHash("project", "requirement", "000000000001")
 
 	alphaMod := `{
 		"name": "alpha",
@@ -179,11 +179,11 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 	proj := `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
-			{"id": 2, "type": "non_functional", "title": "Be fast", "priority": 2}
+			{"id": "000000000001", "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": "000000000002", "type": "non_functional", "title": "Be fast", "priority": 2}
 		],
 		"modules": [
-			{"id": 1, "name": "Alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "Alpha", "path": "alpha"}
 		]
 	}`
 	writeFile(t, specDir, "project.json", proj)
@@ -358,8 +358,8 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		t.Fatal("expected changes, got none")
 	}
 
-	projReq1 := schema.IdentityHash("project", "requirement", "1")
-	projReq2 := schema.IdentityHash("project", "requirement", "2")
+	projReq1 := schema.IdentityHash("project", "requirement", "000000000001")
+	projReq2 := schema.IdentityHash("project", "requirement", "000000000002")
 	projectLevelKeys := map[string]bool{
 		"meta/project": true,
 		projReq1:       true,

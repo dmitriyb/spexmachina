@@ -1,10 +1,19 @@
 {
-  "name": "alpha",
-  "requirements": [],
   "components": [
-    {"id": 1, "name": "CompA"}
+    {
+      "id": "000000000001",
+      "name": "CompA"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Impl A", "describes": [1]}
-  ]
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Impl A"
+    }
+  ],
+  "name": "alpha",
+  "requirements": []
 }

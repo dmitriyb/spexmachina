@@ -1,22 +1,80 @@
 {
-  "name": "validator",
-  "description": "Full module fixture.",
-  "requirements": [
-    { "id": "e7371017aed2", "type": "functional", "title": "R1", "preq_id": "9949fbd074f8" },
-    { "id": "72e08fd83c0a", "type": "non_functional", "title": "R2", "preq_id": "b7c3d9accd19" },
-    { "id": "72c5d27ee9a6", "type": "functional", "title": "R3", "preq_id": "9949fbd074f8", "depends_on": ["e7371017aed2"] }
-  ],
   "components": [
-    { "id": "8a52d012caac", "name": "C1", "content": "arch_c1.md", "implements": ["e7371017aed2"] },
-    { "id": "8bb848f14941", "name": "C2", "uses": ["8a52d012caac"], "implements": ["72e08fd83c0a"] }
-  ],
-  "impl_sections": [
-    { "id": "275282360e9a", "name": "Impl1", "content": "impl_c1.md", "describes": ["8a52d012caac"] }
+    {
+      "content": "arch_c1.md",
+      "id": "8a52d012caac",
+      "implements": [
+        "e7371017aed2"
+      ],
+      "name": "C1"
+    },
+    {
+      "id": "8bb848f14941",
+      "implements": [
+        "72e08fd83c0a"
+      ],
+      "name": "C2",
+      "uses": [
+        "8a52d012caac"
+      ]
+    }
   ],
   "data_flows": [
-    { "id": "99f2a4f79df0", "name": "Flow1", "description": "Data flow.", "content": "flow_main.md", "uses": ["8a52d012caac", "8bb848f14941"] }
+    {
+      "content": "flow_main.md",
+      "description": "Data flow.",
+      "id": "99f2a4f79df0",
+      "name": "Flow1",
+      "uses": [
+        "8a52d012caac",
+        "8bb848f14941"
+      ]
+    }
+  ],
+  "description": "Full module fixture.",
+  "impl_sections": [
+    {
+      "content": "impl_c1.md",
+      "describes": [
+        "8a52d012caac"
+      ],
+      "id": "275282360e9a",
+      "name": "Impl1"
+    }
+  ],
+  "name": "validator",
+  "requirements": [
+    {
+      "id": "e7371017aed2",
+      "preq_id": "9949fbd074f8",
+      "title": "R1",
+      "type": "functional"
+    },
+    {
+      "id": "72e08fd83c0a",
+      "preq_id": "b7c3d9accd19",
+      "title": "R2",
+      "type": "non_functional"
+    },
+    {
+      "depends_on": [
+        "e7371017aed2"
+      ],
+      "id": "72c5d27ee9a6",
+      "preq_id": "9949fbd074f8",
+      "title": "R3",
+      "type": "functional"
+    }
   ],
   "test_sections": [
-    { "id": "46d2a587d0df", "name": "Test coverage for C1 and C2", "content": "test_components.md", "describes": ["8a52d012caac", "8bb848f14941"] }
+    {
+      "content": "test_components.md",
+      "describes": [
+        "8a52d012caac",
+        "8bb848f14941"
+      ],
+      "id": "46d2a587d0df",
+      "name": "Test coverage for C1 and C2"
+    }
   ]
 }

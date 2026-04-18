@@ -15,7 +15,7 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 	// Project requirement nodes
 	for _, r := range spec.Project.Requirements {
-		nid := fmt.Sprintf("preq_%d", r.ID)
+		nid := fmt.Sprintf("preq_%s", r.ID)
 		fmt.Fprintf(w, "  %s [label=%q, shape=box, fillcolor=lightblue, style=filled];\n",
 			nid, r.Title)
 	}
@@ -131,7 +131,7 @@ func sanitizeDOTID(name string) string {
 	return strings.ReplaceAll(name, "-", "_")
 }
 
-func findModuleByID(spec *SpecGraph, id int) string {
+func findModuleByID(spec *SpecGraph, id string) string {
 	for _, mg := range spec.Modules {
 		if mg.Module.ID == id {
 			return mg.Module.Name

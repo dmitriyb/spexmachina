@@ -318,27 +318,30 @@ func TestFR5_ModuleIDsAreIdentityHashes(t *testing.T) {
 	}
 }
 
-func TestFR5_ProjectIDsAreNumeric(t *testing.T) {
+func TestFR5_ProjectIDsAreIdentityHashes(t *testing.T) {
 	projData := readTestdata(t, "valid_project.json")
 	var proj Project
 	if err := json.Unmarshal(projData, &proj); err != nil {
 		t.Fatalf("unmarshal project: %v", err)
 	}
-	for _, m := range proj.Modules {
-		if m.ID < 1 {
-			t.Fatalf("module ID must be >= 1, got %d", m.ID)
+	checkHash := func(label, id string) {
+		t.Helper()
+		if len(id) != 12 {
+			t.Fatalf("%s ID must be 12 hex chars, got %q (len %d)", label, id, len(id))
 		}
 	}
+	for _, r := range proj.Requirements {
+		checkHash("requirement", r.ID)
+	}
+	for _, m := range proj.Modules {
+		checkHash("module", m.ID)
+	}
 	for _, ms := range proj.Milestones {
-		if ms.ID < 1 {
-			t.Fatalf("milestone ID must be >= 1, got %d", ms.ID)
-		}
+		checkHash("milestone", ms.ID)
 	}
 	if proj.TestPlan != nil {
 		for _, s := range proj.TestPlan.Scenarios {
-			if s.ID < 1 {
-				t.Fatalf("test_scenario ID must be >= 1, got %d", s.ID)
-			}
+			checkHash("test_scenario", s.ID)
 		}
 	}
 }
@@ -498,7 +501,7 @@ func TestNegative_MissingRequired(t *testing.T) {
 	// silently pass.
 	t.Run("project missing name", func(t *testing.T) {
 		var proj Project
-		err := json.Unmarshal([]byte(`{"modules":[{"id":1,"name":"m","path":"m/"}]}`), &proj)
+		err := json.Unmarshal([]byte(`{"modules":[{"id":"000000000001","name":"m","path":"m/"}]}`), &proj)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}

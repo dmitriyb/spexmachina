@@ -10,7 +10,6 @@ import (
 // component references, detect cycles, report full cycle paths.
 
 func TestREQ3_ValidDAGReturnsNoErrors(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	errs := CheckDAG(filepath.Join("testdata", "dag_valid"))
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors for valid DAG, got %d: %v", len(errs), errs)
@@ -40,7 +39,6 @@ func TestREQ3_ModuleDependencyCycle(t *testing.T) {
 }
 
 func TestREQ3_RequirementDependencyCycle(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	errs := CheckDAG(filepath.Join("testdata", "dag_req_cycle"))
 	if len(errs) == 0 {
 		t.Fatal("expected cycle error for requirement dependencies, got none")
@@ -63,7 +61,6 @@ func TestREQ3_RequirementDependencyCycle(t *testing.T) {
 }
 
 func TestREQ3_ComponentDependencyCycle(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	errs := CheckDAG(filepath.Join("testdata", "dag_comp_cycle"))
 	if len(errs) == 0 {
 		t.Fatal("expected cycle error for component dependencies, got none")
@@ -86,7 +83,6 @@ func TestREQ3_ComponentDependencyCycle(t *testing.T) {
 }
 
 func TestREQ3_CyclePathIncludesAllNodes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	// The 3-node requirement cycle should include all three titles in the path.
 	errs := CheckDAG(filepath.Join("testdata", "dag_req_cycle"))
 	if len(errs) == 0 {
@@ -118,7 +114,6 @@ func TestREQ3_AllDAGErrorsTagged(t *testing.T) {
 }
 
 func TestREQ3_SelfValidateDAG(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)
 	if len(errs) > 0 {
@@ -129,38 +124,38 @@ func TestREQ3_SelfValidateDAG(t *testing.T) {
 func TestREQ3_DetectCyclesUnit(t *testing.T) {
 	tests := []struct {
 		name      string
-		adj       map[int][]int
+		adj       map[string][]string
 		wantCount int
 	}{
 		{
 			name:      "no edges",
-			adj:       map[int][]int{1: {}, 2: {}, 3: {}},
+			adj:       map[string][]string{"a": {}, "b": {}, "c": {}},
 			wantCount: 0,
 		},
 		{
 			name:      "linear chain",
-			adj:       map[int][]int{1: {2}, 2: {3}, 3: {}},
+			adj:       map[string][]string{"a": {"b"}, "b": {"c"}, "c": {}},
 			wantCount: 0,
 		},
 		{
 			name:      "self loop",
-			adj:       map[int][]int{1: {1}},
+			adj:       map[string][]string{"a": {"a"}},
 			wantCount: 1,
 		},
 		{
 			name:      "two node cycle",
-			adj:       map[int][]int{1: {2}, 2: {1}},
+			adj:       map[string][]string{"a": {"b"}, "b": {"a"}},
 			wantCount: 1,
 		},
 		{
 			name:      "diamond no cycle",
-			adj:       map[int][]int{1: {2, 3}, 2: {4}, 3: {4}, 4: {}},
+			adj:       map[string][]string{"a": {"b", "c"}, "b": {"d"}, "c": {"d"}, "d": {}},
 			wantCount: 0,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cycles := detectCycles(tt.adj)
+			cycles := detectStringCycles(tt.adj)
 			if len(cycles) != tt.wantCount {
 				t.Fatalf("want %d cycles, got %d: %v", tt.wantCount, len(cycles), cycles)
 			}

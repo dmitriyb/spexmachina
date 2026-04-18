@@ -1,16 +1,47 @@
 {
-  "name": "alpha",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Parser", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Parser"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Parser impl", "describes": [1]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser impl"
+    }
+  ],
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat A",
+      "type": "functional"
+    }
   ],
   "test_sections": [
-    {"id": 1, "name": "Parser tests A", "content": "test_parser_a.md", "describes": [1]},
-    {"id": 2, "name": "Parser tests B", "content": "test_parser_b.md", "describes": [1]}
+    {
+      "content": "test_parser_a.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser tests A"
+    },
+    {
+      "content": "test_parser_b.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000002",
+      "name": "Parser tests B"
+    }
   ]
 }

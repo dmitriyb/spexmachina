@@ -1,41 +1,41 @@
 {
-  "name": "core",
-  "requirements": [
-    {
-      "id": 1,
-      "type": "functional",
-      "title": "Implemented feature",
-      "preq_id": 1
-    },
-    {
-      "id": 2,
-      "type": "functional",
-      "title": "Orphan feature",
-      "preq_id": 1
-    },
-    {
-      "id": 3,
-      "type": "functional",
-      "title": "Another orphan",
-      "preq_id": 1
-    }
-  ],
   "components": [
     {
-      "id": 1,
-      "name": "Engine",
+      "id": "000000000001",
       "implements": [
-        1
-      ]
+        "000000000001"
+      ],
+      "name": "Engine"
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
-      "name": "Engine impl",
       "describes": [
-        1
-      ]
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Engine impl"
+    }
+  ],
+  "name": "core",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Implemented feature",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "preq_id": "000000000001",
+      "title": "Orphan feature",
+      "type": "functional"
+    },
+    {
+      "id": "000000000003",
+      "preq_id": "000000000001",
+      "title": "Another orphan",
+      "type": "functional"
     }
   ]
 }

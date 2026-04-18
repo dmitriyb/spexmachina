@@ -1,8 +1,20 @@
 {
-  "name": "core",
-  "requirements": [],
   "components": [
-    {"id": 1, "name": "Parser", "uses": [2]},
-    {"id": 2, "name": "Lexer", "uses": [1]}
-  ]
+    {
+      "id": "000000000001",
+      "name": "Parser",
+      "uses": [
+        "000000000002"
+      ]
+    },
+    {
+      "id": "000000000002",
+      "name": "Lexer",
+      "uses": [
+        "000000000001"
+      ]
+    }
+  ],
+  "name": "core",
+  "requirements": []
 }

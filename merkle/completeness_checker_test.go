@@ -41,18 +41,18 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 		comp1Hash: schema.IdentityHash("alpha", "component", "CompA"),
 		comp2Hash: schema.IdentityHash("alpha", "component", "CompB"),
 		comp3Hash: schema.IdentityHash("alpha", "component", "CompC"),
-		projReq1:  schema.IdentityHash("project", "requirement", "1"),
+		projReq1:  schema.IdentityHash("project", "requirement", "000000000001"),
 		projReq5:  schema.IdentityHash("project", "requirement", "5"),
 	}
 
 	proj := `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Proj Req 1"},
-			{"id": 5, "type": "functional", "title": "Proj Req 5"}
+			{"id": "000000000001", "type": "functional", "title": "Proj Req 1"},
+			{"id": "000000000005", "type": "functional", "title": "Proj Req 5"}
 		],
 		"modules": [
-			{"id": 1, "name": "Alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "Alpha", "path": "alpha"}
 		]
 	}`
 	writeFile(t, dir, "project.json", proj)

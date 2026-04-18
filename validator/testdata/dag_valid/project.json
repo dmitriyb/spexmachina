@@ -1,25 +1,25 @@
 {
-  "name": "dag-test",
   "modules": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "core",
       "path": "core"
     },
     {
-      "id": 2,
+      "id": "000000000002",
       "name": "api",
       "path": "api",
       "requires_module": [
-        1
+        "000000000001"
       ]
     }
   ],
+  "name": "dag-test",
   "requirements": [
     {
-      "id": 1,
-      "type": "functional",
-      "title": "Project requirement"
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
     }
   ]
 }

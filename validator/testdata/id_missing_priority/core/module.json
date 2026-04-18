@@ -1,12 +1,29 @@
 {
-  "name": "core",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feature A", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Engine", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Engine"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Engine impl", "describes": [1]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Engine impl"
+    }
+  ],
+  "name": "core",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feature A",
+      "type": "functional"
+    }
   ]
 }

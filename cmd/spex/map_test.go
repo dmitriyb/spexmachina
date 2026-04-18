@@ -17,7 +17,7 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
 		]
 	}`)
 

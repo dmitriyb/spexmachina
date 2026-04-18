@@ -79,7 +79,7 @@ type Project struct {
 // generically and access freeform fields via Raw without knowing the
 // coupled module's schema.
 type Section struct {
-	ID   int             `json:"id"`
+	ID   string          `json:"id"`
 	Name string          `json:"name"`
 	Type string          `json:"type"`
 	Raw  json.RawMessage `json:"-"`
@@ -89,7 +89,7 @@ type Section struct {
 // raw entry so renderers can access freeform content without losing data.
 func (s *Section) UnmarshalJSON(data []byte) error {
 	type envelope struct {
-		ID   int    `json:"id"`
+		ID   string `json:"id"`
 		Name string `json:"name"`
 		Type string `json:"type"`
 	}
@@ -105,33 +105,36 @@ func (s *Section) UnmarshalJSON(data []byte) error {
 }
 
 // Module represents a module declaration in project.json.
+// IDs are 12-character hex identity hash strings.
 type Module struct {
-	ID             int    `json:"id"`
-	Name           string `json:"name"`
-	Path           string `json:"path"`
-	Description    string `json:"description,omitempty"`
-	RequiresModule []int  `json:"requires_module,omitempty"`
+	ID             string   `json:"id"`
+	Name           string   `json:"name"`
+	Path           string   `json:"path"`
+	Description    string   `json:"description,omitempty"`
+	RequiresModule []string `json:"requires_module,omitempty"`
 }
 
 // Requirement represents a requirement node (used in both project.json and module.json).
 // PreqID is only used in module.json to trace derivation from project-level requirements.
 // Priority is only used in project.json (integer 0-4, optional).
+// IDs are 12-character hex identity hash strings.
 type Requirement struct {
-	ID          int    `json:"id"`
-	PreqID      int    `json:"preq_id,omitempty"`
-	Type        string `json:"type"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Priority    *int   `json:"priority,omitempty"`
-	DependsOn   []int  `json:"depends_on,omitempty"`
+	ID          string   `json:"id"`
+	PreqID      string   `json:"preq_id,omitempty"`
+	Type        string   `json:"type"`
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	Priority    *int     `json:"priority,omitempty"`
+	DependsOn   []string `json:"depends_on,omitempty"`
 }
 
 // Milestone represents a milestone in project.json.
+// IDs are 12-character hex identity hash strings.
 type Milestone struct {
-	ID          int    `json:"id"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
-	Groups      []int  `json:"groups,omitempty"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Description string   `json:"description,omitempty"`
+	Groups      []string `json:"groups,omitempty"`
 }
 
 // TestPlan represents the test_plan object in project.json.
@@ -140,12 +143,13 @@ type TestPlan struct {
 }
 
 // TestScenario represents a cross-module test scenario in a project's test_plan.
+// IDs are 12-character hex identity hash strings.
 type TestScenario struct {
-	ID          int    `json:"id"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Content     string `json:"content,omitempty"`
-	Modules     []int  `json:"modules,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	Content     string   `json:"content,omitempty"`
+	Modules     []string `json:"modules,omitempty"`
 }
 
 // ModuleSpec represents a module.json file.
