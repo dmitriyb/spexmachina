@@ -43,8 +43,8 @@ This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) f
 
 - Find work: `bv --robot-next` or `br ready`
 - Claim work: `br update <id> --status in_progress`
-- Complete work: `br close <id>`
 - Link PR: `br update <id> --external-ref "PR#<number>"`
+- Close work: performed by `/review` after LGTM, never by `/implement`. The command is `br close <id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."` — do not run it from any other skill or context.
 
 ## Organizational Constraints
 
