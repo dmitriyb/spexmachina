@@ -25,7 +25,7 @@ func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, impl1Hash string) {
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
 		]
 	}`)
 
@@ -269,7 +269,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
+	projReq1Hash := schema.IdentityHash("project", "requirement", "000000000001")
 	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")
@@ -279,10 +279,10 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	proj := `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Proj Req 1"}
+			{"id": "000000000001", "type": "functional", "title": "Proj Req 1"}
 		],
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
 		]
 	}`
 	writeTestFile(t, dir, "project.json", proj)
@@ -319,7 +319,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 // the diff reports requirement modifications, not add+remove pairs.
 func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
 	t.Helper()
-	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
+	projReq1Hash := schema.IdentityHash("project", "requirement", "000000000001")
 	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")

@@ -185,7 +185,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 	}
 
 	// 2. Resolve `requires_module` edges (transitive, with cycle detection)
-	visited := make(map[int]bool)
+	visited := make(map[string]bool)
 	moduleDeps := resolveModuleDeps(graph, recordIdx, mod.ID, visited)
 	for _, depID := range moduleDeps {
 		if !seen[depID] {
@@ -199,7 +199,7 @@ func ResolveDeps(graph mapping.SpecGraph, records []mapping.Record, action Actio
 
 // resolveModuleDeps transitively walks requires_module edges, collecting
 // open bead IDs from each required module's components.
-func resolveModuleDeps(graph mapping.SpecGraph, recordIdx map[string]mapping.Record, moduleID int, visited map[int]bool) []string {
+func resolveModuleDeps(graph mapping.SpecGraph, recordIdx map[string]mapping.Record, moduleID string, visited map[string]bool) []string {
 	if visited[moduleID] {
 		return nil
 	}

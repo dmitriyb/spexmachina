@@ -1,17 +1,17 @@
 {
-  "name": "multi-missing",
   "modules": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "alpha",
       "path": "alpha"
     }
   ],
+  "name": "multi-missing",
   "requirements": [
     {
-      "id": 1,
-      "type": "functional",
-      "title": "Project requirement"
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
     }
   ]
 }

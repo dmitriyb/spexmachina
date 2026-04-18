@@ -1,14 +1,43 @@
 {
-  "name": "alpha",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Parser", "implements": [1]},
-    {"id": 2, "name": "Renderer", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Parser"
+    },
+    {
+      "id": "000000000002",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Renderer"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Parser impl", "describes": [1]},
-    {"id": 2, "name": "Renderer impl", "describes": [2]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser impl"
+    },
+    {
+      "describes": [
+        "000000000002"
+      ],
+      "id": "000000000002",
+      "name": "Renderer impl"
+    }
+  ],
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat A",
+      "type": "functional"
+    }
   ]
 }

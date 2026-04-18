@@ -1,29 +1,29 @@
 {
-  "name": "core",
-  "requirements": [
-    {
-      "id": 1,
-      "type": "functional",
-      "title": "Feature A",
-      "preq_id": 1
-    },
-    {
-      "id": 1,
-      "type": "functional",
-      "title": "Feature A dup",
-      "preq_id": 1
-    }
-  ],
   "components": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "Engine"
     },
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "Engine dup"
     }
   ],
+  "data_flows": [],
   "impl_sections": [],
-  "data_flows": []
+  "name": "core",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feature A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feature A dup",
+      "type": "functional"
+    }
+  ]
 }

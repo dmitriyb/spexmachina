@@ -18,7 +18,6 @@ func CheckRequirementCoverage(specDir string) []ValidationError {
 
 	var result []ValidationError
 
-	// TODO(bead:spexmachina-yxg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	// Phase 1: project requirement → module requirement coverage (preq_id).
 	coveredProjectReqs := make(map[string]bool)
 	for _, mod := range modules {
@@ -29,12 +28,12 @@ func CheckRequirementCoverage(specDir string) []ValidationError {
 		}
 	}
 	for _, req := range project.Requirements {
-		if !coveredProjectReqs[fmt.Sprintf("%d", req.ID)] {
+		if !coveredProjectReqs[req.ID] {
 			result = append(result, ValidationError{
 				Check:    "requirement_coverage",
 				Severity: "error",
 				Path:     "project.json",
-				Message:  fmt.Sprintf("project requirement %d %q is not derived into any module requirement", req.ID, req.Title),
+				Message:  fmt.Sprintf("project requirement %s %q is not derived into any module requirement", req.ID, req.Title),
 			})
 		}
 	}
@@ -54,7 +53,6 @@ func CheckRequirementCoverage(specDir string) []ValidationError {
 	return result
 }
 
-// TODO(bead:spexmachina-yxg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 // detectUncoveredRequirements finds module requirements not referenced by any
 // component's implements array within the module.
 func detectUncoveredRequirements(modName string, mod *schema.ModuleSpec) []ValidationError {

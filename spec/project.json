@@ -4,118 +4,118 @@
   "version": "0.1.0",
   "requirements": [
     {
-      "id": 1,
+      "id": "d5a8407d38e1",
       "type": "functional",
       "title": "Validate spec structure",
       "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references. Structured error output.",
       "priority": 1
     },
     {
-      "id": 2,
+      "id": "e291989b1599",
       "type": "functional",
       "title": "Compute merkle tree",
       "description": "Hash every node, store snapshots, diff against previous snapshots, classify change impact paths.",
       "depends_on": [
-        1
+        "d5a8407d38e1"
       ],
       "priority": 1
     },
     {
-      "id": 3,
+      "id": "9120788210c9",
       "type": "functional",
       "title": "Map spec nodes to beads",
       "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal).",
       "priority": 1
     },
     {
-      "id": 4,
+      "id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Compute impact",
       "description": "Given changed spec nodes, find all affected beads and classify actions (create/obsolete).",
       "depends_on": [
-        2,
-        3
+        "e291989b1599",
+        "9120788210c9"
       ],
       "priority": 1
     },
     {
-      "id": 5,
+      "id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply changes",
       "description": "Execute bead actions via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tag with proposal, save snapshot.",
       "depends_on": [
-        4
+        "0a0f49f9be9b"
       ],
       "priority": 1
     },
     {
-      "id": 6,
+      "id": "b42bc8a9b82a",
       "type": "functional",
       "title": "Manage proposals",
       "description": "Register proposals, validate structure, link to spec changes and bead actions, show history.",
       "priority": 1
     },
     {
-      "id": 7,
+      "id": "6b00623735ac",
       "type": "functional",
       "title": "Render spec",
       "description": "Generate markdown, DOT, or JSON from spec structure.",
       "depends_on": [
-        1
+        "d5a8407d38e1"
       ],
       "priority": 1
     },
     {
-      "id": 8,
+      "id": "54de5bdaa9a5",
       "type": "non_functional",
       "title": "Self-hosting",
       "description": "Spex Machina's own spec is managed by Spex Machina (after bootstrap).",
       "priority": 2
     },
     {
-      "id": 9,
+      "id": "6faeb216618a",
       "type": "non_functional",
       "title": "Deterministic",
       "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions. No LLM calls.",
       "priority": 2
     },
     {
-      "id": 10,
+      "id": "91f6f338de19",
       "type": "non_functional",
       "title": "Composable",
       "description": "Every subcommand reads stdin or files, writes stdout or files, exits 0/1. Pipeable.",
       "priority": 2
     },
     {
-      "id": 11,
+      "id": "afc25fb6c8e8",
       "type": "non_functional",
       "title": "Fast",
       "description": "Validating a spec with 100 modules and 1000 nodes should take less than 1 second.",
       "priority": 2
     },
     {
-      "id": 12,
+      "id": "8efae3d1ad18",
       "type": "non_functional",
       "title": "Git-native",
       "description": "Snapshots are files committed to git. Proposals are files committed to git. No external state.",
       "priority": 2
     },
     {
-      "id": 13,
+      "id": "92dfddf840b0",
       "type": "functional",
       "title": "Spec test strategy",
       "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios.",
       "priority": 1
     },
     {
-      "id": 14,
+      "id": "c87aa373c2ed",
       "type": "functional",
       "title": "CLI infrastructure",
       "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling.",
       "priority": 1
     },
     {
-      "id": 15,
+      "id": "a65bbd37c7ec",
       "type": "functional",
       "title": "Coupled sections",
       "description": "Project.json supports a sections array with typed entries. Sections with type 'coupled' require a corresponding module and a section.schema.json in the module's spec directory. Spex validates the envelope generically and delegates content validation to the module's schema.",
@@ -124,162 +124,162 @@
   ],
   "modules": [
     {
-      "id": 1,
+      "id": "f03774b40bd5",
       "name": "schema",
       "path": "schema",
       "description": "JSON Schema definitions for project.json and module.json. The foundation that defines what a valid spec looks like."
     },
     {
-      "id": 2,
+      "id": "9ddd3d22e686",
       "name": "validator",
       "path": "validator",
       "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
       "requires_module": [
-        1
+        "f03774b40bd5"
       ]
     },
     {
-      "id": 3,
+      "id": "085966b6bfa1",
       "name": "merkle",
       "path": "merkle",
       "description": "Merkle hash tree over the spec: leaf hashes, interior hashes, snapshots, diff, and impact classification.",
       "requires_module": [
-        1
+        "f03774b40bd5"
       ]
     },
     {
-      "id": 4,
+      "id": "725a083f66a1",
       "name": "impact",
       "path": "impact",
       "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/obsolete).",
       "requires_module": [
-        3,
-        9
+        "085966b6bfa1",
+        "fb20a21b62f1"
       ]
     },
     {
-      "id": 5,
+      "id": "d22c02582bfe",
       "name": "apply",
       "path": "apply",
       "description": "Executes impact report: creates and obsoletes beads via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tags with proposal, saves new merkle snapshot, maintains mapping records.",
       "requires_module": [
-        4,
-        9
+        "725a083f66a1",
+        "fb20a21b62f1"
       ]
     },
     {
-      "id": 6,
+      "id": "51016138121c",
       "name": "proposal",
       "path": "proposal",
       "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates."
     },
     {
-      "id": 7,
+      "id": "8f2beb43e606",
       "name": "render",
       "path": "render",
       "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
       "requires_module": [
-        1
+        "f03774b40bd5"
       ]
     },
     {
-      "id": 8,
+      "id": "430f8b037415",
       "name": "cli",
       "path": "cli",
       "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra."
     },
     {
-      "id": 9,
+      "id": "fb20a21b62f1",
       "name": "map",
       "path": "map",
       "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
       "requires_module": [
-        1
+        "f03774b40bd5"
       ]
     }
   ],
   "milestones": [
     {
-      "id": 1,
+      "id": "b7d589082283",
       "title": "Bootstrap",
       "description": "Core schema and validation working. Spec can be authored and validated.",
       "groups": [
-        1,
-        2
+        "f03774b40bd5",
+        "9ddd3d22e686"
       ]
     },
     {
-      "id": 2,
+      "id": "2f3f6ec61342",
       "title": "Change Tracking",
       "description": "Merkle tree and impact analysis. Spec changes detected and mapped to beads.",
       "groups": [
-        3,
-        4
+        "085966b6bfa1",
+        "725a083f66a1"
       ]
     },
     {
-      "id": 3,
+      "id": "7d855b64740e",
       "title": "Automation",
       "description": "Full pipeline: spec change \u2192 impact \u2192 bead actions executed automatically.",
       "groups": [
-        5
+        "d22c02582bfe"
       ]
     },
     {
-      "id": 4,
+      "id": "a0e561d715a6",
       "title": "Lifecycle",
       "description": "Proposal management and spec rendering for human consumption.",
       "groups": [
-        6,
-        7
+        "51016138121c",
+        "8f2beb43e606"
       ]
     },
     {
-      "id": 5,
+      "id": "2acc2c4270ac",
       "title": "CLI Infrastructure",
       "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
       "groups": [
-        8
+        "430f8b037415"
       ]
     },
     {
-      "id": 6,
+      "id": "61df84a34d4f",
       "title": "Mapping Layer",
       "description": "Spec-to-bead bridge via mapping file, deterministic preflight checking, and CLI query interface.",
       "groups": [
-        9
+        "fb20a21b62f1"
       ]
     }
   ],
   "test_plan": {
     "scenarios": [
       {
-        "id": 1,
+        "id": "21305a37d0d5",
         "name": "CLI subcommand registration and help",
         "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
         "modules": [
-          8
+          "430f8b037415"
         ]
       },
       {
-        "id": 2,
+        "id": "90cba605889f",
         "name": "Cross-module mapping integration",
         "description": "Merkle ID-based diff feeds impact analysis, impact report drives apply with mapping record maintenance, skills query mappings via spex map CLI.",
         "modules": [
-          3,
-          4,
-          5,
-          9
+          "085966b6bfa1",
+          "725a083f66a1",
+          "d22c02582bfe",
+          "fb20a21b62f1"
         ]
       },
       {
-        "id": 3,
+        "id": "ff5550d79a3a",
         "name": "Coupled sections integration",
         "description": "Sections array in project.json validated by schema, coupled module enforcement by validator, generic section rendering by render module.",
         "modules": [
-          1,
-          2,
-          7
+          "f03774b40bd5",
+          "9ddd3d22e686",
+          "8f2beb43e606"
         ]
       }
     ]

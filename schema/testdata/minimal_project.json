@@ -1,10 +1,10 @@
 {
-  "name": "minimal",
   "modules": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "core",
       "path": "core"
     }
-  ]
+  ],
+  "name": "minimal"
 }

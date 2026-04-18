@@ -1,12 +1,29 @@
 {
-  "name": "beta",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feat B", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Encoder", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Encoder"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Encoder impl", "describes": [1]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Encoder impl"
+    }
+  ],
+  "name": "beta",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat B",
+      "type": "functional"
+    }
   ]
 }

@@ -1,17 +1,17 @@
 {
-  "name": "content-missing-test",
   "modules": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "core",
       "path": "core"
     }
   ],
+  "name": "content-missing-test",
   "requirements": [
     {
-      "id": 1,
-      "type": "functional",
-      "title": "Project requirement"
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
     }
   ]
 }

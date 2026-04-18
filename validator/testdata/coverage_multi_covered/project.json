@@ -1,9 +1,18 @@
 {
-  "name": "coverage-multi-covered-test",
   "modules": [
-    {"id": 1, "name": "alpha", "path": "alpha"}
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
   ],
+  "name": "coverage-multi-covered-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req", "priority": 1}
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Req",
+      "type": "functional"
+    }
   ]
 }

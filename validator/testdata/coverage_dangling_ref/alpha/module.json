@@ -1,15 +1,39 @@
 {
-  "name": "alpha",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Feat A", "preq_id": 1}
-  ],
   "components": [
-    {"id": 1, "name": "Parser", "implements": [1]}
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Parser"
+    }
   ],
   "impl_sections": [
-    {"id": 1, "name": "Parser impl", "describes": [1]}
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser impl"
+    }
+  ],
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat A",
+      "type": "functional"
+    }
   ],
   "test_sections": [
-    {"id": 1, "name": "Dangling test", "content": "test_dangling.md", "describes": [99]}
+    {
+      "content": "test_dangling.md",
+      "describes": [
+        "000000000099"
+      ],
+      "id": "000000000001",
+      "name": "Dangling test"
+    }
   ]
 }

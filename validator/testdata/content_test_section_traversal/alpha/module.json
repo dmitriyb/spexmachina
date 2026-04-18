@@ -1,9 +1,19 @@
 {
-  "name": "alpha",
   "components": [
-    {"id": 1, "name": "Widget"}
+    {
+      "id": "000000000001",
+      "name": "Widget"
+    }
   ],
+  "name": "alpha",
   "test_sections": [
-    {"id": 1, "name": "Escaped test", "content": "../escape.md", "describes": [1]}
+    {
+      "content": "../escape.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Escaped test"
+    }
   ]
 }

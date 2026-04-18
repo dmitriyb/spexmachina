@@ -1,10 +1,23 @@
 {
-  "name": "coverage-multi-module-uncovered-test",
   "modules": [
-    {"id": 1, "name": "alpha", "path": "alpha"},
-    {"id": 2, "name": "beta", "path": "beta"}
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    },
+    {
+      "id": "000000000002",
+      "name": "beta",
+      "path": "beta"
+    }
   ],
+  "name": "coverage-multi-module-uncovered-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req", "priority": 1}
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Req",
+      "type": "functional"
+    }
   ]
 }

@@ -398,8 +398,8 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"},
-			{"id": 2, "name": "beta", "path": "beta", "requires_module": [1]}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"},
+			{"id": "000000000002", "name": "beta", "path": "beta", "requires_module": ["000000000001"]}
 		]
 	}`
 	if err := os.MkdirAll(specDir, 0755); err != nil {
@@ -516,7 +516,7 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "mod", "path": "mod"}
+			{"id": "000000000001", "name": "mod", "path": "mod"}
 		]
 	}`
 	if err := os.MkdirAll(specDir, 0755); err != nil {

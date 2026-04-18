@@ -3,15 +3,15 @@ package mapping
 // SpecGraph provides read access to the spec dependency structure.
 type SpecGraph interface {
 	ModuleByName(name string) (ModuleInfo, error)
-	ModuleByID(id int) (ModuleInfo, error)
-	NodeHash(specNodeID string) (string, error)
+	ModuleByID(id string) (ModuleInfo, error)
 }
 
 // ModuleInfo describes a module's identity and dependencies.
+// IDs are 12-character hex identity hash strings.
 type ModuleInfo struct {
-	ID             int
+	ID             string
 	Name           string
-	RequiresModule []int
+	RequiresModule []string
 	Components     []ComponentInfo
 }
 

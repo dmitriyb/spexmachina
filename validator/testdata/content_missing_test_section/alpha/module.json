@@ -1,9 +1,20 @@
 {
-  "name": "alpha",
   "components": [
-    {"id": 1, "name": "Widget", "content": "arch_widget.md"}
+    {
+      "content": "arch_widget.md",
+      "id": "000000000001",
+      "name": "Widget"
+    }
   ],
+  "name": "alpha",
   "test_sections": [
-    {"id": 1, "name": "Widget behavior", "content": "test_widget_behavior.md", "describes": [1]}
+    {
+      "content": "test_widget_behavior.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Widget behavior"
+    }
   ]
 }

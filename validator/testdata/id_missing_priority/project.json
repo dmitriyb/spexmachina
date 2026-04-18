@@ -1,10 +1,23 @@
 {
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
   "name": "id-missing-priority-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req A"},
-    {"id": 2, "type": "functional", "title": "Req B", "priority": 1}
-  ],
-  "modules": [
-    {"id": 1, "name": "core", "path": "core"}
+    {
+      "id": "000000000001",
+      "title": "Req A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "priority": 1,
+      "title": "Req B",
+      "type": "functional"
+    }
   ]
 }

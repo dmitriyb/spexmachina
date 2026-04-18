@@ -1,7 +1,11 @@
 {
-  "name": "reqcov-no-requirements",
   "modules": [
-    {"id": 1, "name": "alpha", "path": "alpha"}
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
   ],
+  "name": "reqcov-no-requirements",
   "requirements": []
 }

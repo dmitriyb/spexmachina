@@ -1,9 +1,18 @@
 {
-  "name": "reqcov-uncovered-module",
   "modules": [
-    {"id": 1, "name": "alpha", "path": "alpha"}
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
   ],
+  "name": "reqcov-uncovered-module",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Feature A", "priority": 1}
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Feature A",
+      "type": "functional"
+    }
   ]
 }

@@ -1,11 +1,29 @@
 {
-  "name": "reqcov-multi-module",
   "modules": [
-    {"id": 1, "name": "alpha", "path": "alpha"},
-    {"id": 2, "name": "beta", "path": "beta"}
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    },
+    {
+      "id": "000000000002",
+      "name": "beta",
+      "path": "beta"
+    }
   ],
+  "name": "reqcov-multi-module",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Feature A", "priority": 1},
-    {"id": 2, "type": "functional", "title": "Feature B", "priority": 2}
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Feature A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "priority": 2,
+      "title": "Feature B",
+      "type": "functional"
+    }
   ]
 }

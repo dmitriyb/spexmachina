@@ -1,28 +1,28 @@
 {
-  "name": "cycle-test",
   "modules": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "alpha",
       "path": "alpha",
       "requires_module": [
-        2
+        "000000000002"
       ]
     },
     {
-      "id": 2,
+      "id": "000000000002",
       "name": "beta",
       "path": "beta",
       "requires_module": [
-        1
+        "000000000001"
       ]
     }
   ],
+  "name": "cycle-test",
   "requirements": [
     {
-      "id": 1,
-      "type": "functional",
-      "title": "Project requirement"
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
     }
   ]
 }

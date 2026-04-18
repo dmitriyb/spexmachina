@@ -1,6 +1,10 @@
 {
-  "name": "core",
   "components": [
-    {"id": 1, "name": "Sneaky", "content": "../secret.md"}
-  ]
+    {
+      "content": "../secret.md",
+      "id": "000000000001",
+      "name": "Sneaky"
+    }
+  ],
+  "name": "core"
 }

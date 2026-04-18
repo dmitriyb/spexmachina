@@ -34,7 +34,7 @@ func CheckCoupledSections(specDir string) []ValidationError {
 	}
 
 	var result []ValidationError
-	seenIDs := make(map[int]int, len(project.Sections))
+	seenIDs := make(map[string]int, len(project.Sections))
 	seenNames := make(map[string]int, len(project.Sections))
 
 	for i, section := range project.Sections {
@@ -50,7 +50,7 @@ func CheckCoupledSections(specDir string) []ValidationError {
 				Check:    "coupled_section",
 				Severity: "error",
 				Path:     path,
-				Message:  fmt.Sprintf("duplicate section id %d (also at sections/%d)", section.ID, prevIdx),
+				Message:  fmt.Sprintf("duplicate section id %s (also at sections/%d)", section.ID, prevIdx),
 			})
 		} else {
 			seenIDs[section.ID] = i

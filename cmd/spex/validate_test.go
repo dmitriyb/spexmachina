@@ -104,7 +104,6 @@ func TestFR7_ValidateCommand_DefaultDir(t *testing.T) {
 }
 
 func TestFR7_ValidateCommand_WarningsDoNotFail(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-qg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecWithOrphans(t)
 
 	out, err := runSpex(t, "validate", "--spec-dir", specDir)
@@ -132,7 +131,7 @@ func setupInvalidTestSpec(t *testing.T) string {
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
 		]
 	}`)
 
@@ -162,10 +161,10 @@ func setupSpecWithOrphans(t *testing.T) string {
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Project req", "priority": 1}
+			{"id": "000000000001", "type": "functional", "title": "Project req", "priority": 1}
 		],
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
 		]
 	}`)
 
@@ -173,12 +172,11 @@ func setupSpecWithOrphans(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req1", "preq_id": "aabbccddeeff"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req2", "preq_id": "aabbccddeeff"}
+			{"id": "aabbccddeeff", "type": "functional", "title": "Req1", "preq_id": "000000000001"},
+			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req2", "preq_id": "000000000001"}
 		],
 		"components": [
 			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md", "implements": ["aabbccddeeff", "ffeeddccbbaa"]},

@@ -19,7 +19,7 @@ func setupSpecDir(t *testing.T) string {
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": 1, "name": "Alpha", "path": "alpha"}
+			{"id": "000000000001", "name": "Alpha", "path": "alpha"}
 		]
 	}`
 	writeTestFile(t, dir, "project.json", proj)

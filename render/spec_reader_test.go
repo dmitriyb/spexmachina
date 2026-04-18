@@ -24,16 +24,16 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"name": "test-project",
 		"description": "A test spec",
 		"requirements": [
-			{"id": 1, "type": "functional", "title": "Parse input", "description": "Accept structured input and parse it."},
-			{"id": 2, "type": "functional", "title": "Build output", "description": "Build output from parsed input."},
-			{"id": 3, "type": "non_functional", "title": "Performance", "description": "Complete within 2 seconds."}
+			{"id": "112233445566", "type": "functional", "title": "Parse input", "description": "Accept structured input and parse it."},
+			{"id": "665544332211", "type": "functional", "title": "Build output", "description": "Build output from parsed input."},
+			{"id": "778899aabbcc", "type": "non_functional", "title": "Performance", "description": "Complete within 2 seconds."}
 		],
 		"modules": [
-			{"id": 1, "name": "alpha", "path": "alpha", "description": "Alpha module"},
-			{"id": 2, "name": "beta", "path": "beta", "description": "Beta module", "requires_module": [1]}
+			{"id": "111111111111", "name": "alpha", "path": "alpha", "description": "Alpha module"},
+			{"id": "222222222222", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["111111111111"]}
 		],
 		"milestones": [
-			{"id": 1, "title": "MVP", "description": "First release", "groups": [1, 2]}
+			{"id": "ccbbaa998877", "title": "MVP", "description": "First release", "groups": ["111111111111", "222222222222"]}
 		]
 	}`
 	writeFile(t, dir, "project.json", proj)
@@ -93,7 +93,7 @@ func TestFR1_S1_ParseMinimalSpec(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "minimal",
-		"modules": [{"id": 1, "name": "mod1", "path": "mod1"}]
+		"modules": [{"id": "mod1mod1mod1", "name": "mod1", "path": "mod1"}]
 	}`)
 	modDir := filepath.Join(dir, "mod1")
 	os.MkdirAll(modDir, 0755)
@@ -167,8 +167,8 @@ func TestFR1_S3_MultiModule(t *testing.T) {
 	}
 
 	// Beta requires_module preserved
-	if len(graph.Modules[1].Module.RequiresModule) != 1 || graph.Modules[1].Module.RequiresModule[0] != 1 {
-		t.Fatalf("beta should require module 1, got %v", graph.Modules[1].Module.RequiresModule)
+	if len(graph.Modules[1].Module.RequiresModule) != 1 || graph.Modules[1].Module.RequiresModule[0] != "111111111111" {
+		t.Fatalf("beta should require alpha, got %v", graph.Modules[1].Module.RequiresModule)
 	}
 }
 
@@ -230,7 +230,7 @@ func TestFR1_S6_UnicodeContent(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "unicode-test",
-		"modules": [{"id": 1, "name": "u", "path": "u"}]
+		"modules": [{"id": "u00000000001", "name": "u", "path": "u"}]
 	}`)
 	modDir := filepath.Join(dir, "u")
 	os.MkdirAll(modDir, 0755)
@@ -268,7 +268,7 @@ func TestFR1_E2_MissingModuleJSON(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "gamma", "path": "gamma"}]
+		"modules": [{"id": "gamma0000001", "name": "gamma", "path": "gamma"}]
 	}`)
 	os.MkdirAll(filepath.Join(dir, "gamma"), 0755)
 
@@ -286,7 +286,7 @@ func TestFR1_E3_MissingContentFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)
@@ -323,7 +323,7 @@ func TestFR1_E5_MalformedModuleJSON(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)
@@ -343,7 +343,7 @@ func TestFR1_E6_EmptyContentFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)
@@ -375,10 +375,10 @@ func TestFR1_S7_SectionsParsed(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "sections-test",
-		"modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+		"modules": [{"id": "delivery0001", "name": "delivery", "path": "delivery"}],
 		"sections": [
 			{
-				"id": 1,
+				"id": "section00001",
 				"name": "delivery",
 				"type": "coupled",
 				"versioning": {"scheme": "semver", "source": "git-tag"},
@@ -399,8 +399,8 @@ func TestFR1_S7_SectionsParsed(t *testing.T) {
 	}
 
 	sec := graph.Project.Sections[0]
-	if sec.ID != 1 {
-		t.Fatalf("want section ID 1, got %d", sec.ID)
+	if sec.ID != "section00001" {
+		t.Fatalf("want section ID section00001, got %s", sec.ID)
 	}
 	if sec.Name != "delivery" {
 		t.Fatalf("want section name 'delivery', got %q", sec.Name)
@@ -430,7 +430,7 @@ func TestFR1_S8_SectionsAbsent(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "no-sections",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)
@@ -450,7 +450,7 @@ func TestFR1_E8_ModuleWithNoContent(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": 1, "name": "m", "path": "m"}]
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
 	}`)
 	modDir := filepath.Join(dir, "m")
 	os.MkdirAll(modDir, 0755)

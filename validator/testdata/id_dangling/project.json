@@ -1,12 +1,33 @@
 {
-  "name": "id-dangling-test",
-  "requirements": [
-    {"id": 1, "type": "functional", "title": "Req A", "depends_on": [99], "priority": 1}
+  "milestones": [
+    {
+      "groups": [
+        "000000000099"
+      ],
+      "id": "000000000001",
+      "title": "M1"
+    }
   ],
   "modules": [
-    {"id": 1, "name": "core", "path": "core", "requires_module": [99]}
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core",
+      "requires_module": [
+        "000000000099"
+      ]
+    }
   ],
-  "milestones": [
-    {"id": 1, "title": "M1", "groups": [99]}
+  "name": "id-dangling-test",
+  "requirements": [
+    {
+      "depends_on": [
+        "000000000099"
+      ],
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Req A",
+      "type": "functional"
+    }
   ]
 }

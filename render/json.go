@@ -43,7 +43,7 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 	// Project-level requirements
 	for _, r := range spec.Project.Requirements {
 		out.Nodes = append(out.Nodes, GraphNode{
-			ID:          fmt.Sprintf("project:req:%d", r.ID),
+			ID:          fmt.Sprintf("project:req:%s", r.ID),
 			Type:        "requirement",
 			Name:        r.Title,
 			Description: r.Description,

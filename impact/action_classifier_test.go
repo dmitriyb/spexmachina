@@ -491,7 +491,7 @@ func TestFR7_D1_ResolveDeps_UsesOpenBead(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"impact": {
-				ID:   4,
+				ID:   "impact000004",
 				Name: "impact",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "NodeMatcher", Uses: nil},
@@ -522,7 +522,7 @@ func TestFR7_D2_ResolveDeps_UsesClosedBead(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"impact": {
-				ID:   4,
+				ID:   "impact000004",
 				Name: "impact",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "NodeMatcher", Uses: nil},
@@ -550,15 +550,15 @@ func TestFR7_D3_ResolveDeps_RequiresModuleOpenBeads(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"impact": {
-				ID:             4,
+				ID:             "impact000004",
 				Name:           "impact",
-				RequiresModule: []int{3},
+				RequiresModule: []string{"merkle000003"},
 				Components: []mapping.ComponentInfo{
 					{ID: "ffeeddccbbaa", Name: "ActionClassifier", Uses: nil},
 				},
 			},
 			"merkle": {
-				ID:   3,
+				ID:   "merkle000003",
 				Name: "merkle",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "Hasher"},
@@ -567,7 +567,7 @@ func TestFR7_D3_ResolveDeps_RequiresModuleOpenBeads(t *testing.T) {
 				},
 			},
 		},
-		modulesByID: map[int]string{3: "merkle", 4: "impact"},
+		modulesByID: map[string]string{"merkle000003": "merkle", "impact000004": "impact"},
 	}
 	records := []mapping.Record{
 		{ID: 60, SpecNodeID: "merkle/component/1", BeadID: "spex-060", Module: "merkle", BeadStatus: "open"},
@@ -589,11 +589,11 @@ func TestFR7_D4_ResolveDeps_TransitiveRequiresModule(t *testing.T) {
 	t.Skip("TODO(bead:spexmachina-r4o): fix after spexmachina-e8t changed module IDs to identity hashes")
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
-			"modB": {ID: 2, Name: "modB", RequiresModule: []int{3}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
-			"modC": {ID: 3, Name: "modC", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompC"}}},
+			"modA": {ID: "modA00000001", Name: "modA", RequiresModule: []string{"modB00000002"}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
+			"modB": {ID: "modB00000002", Name: "modB", RequiresModule: []string{"modC00000003"}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
+			"modC": {ID: "modC00000003", Name: "modC", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompC"}}},
 		},
-		modulesByID: map[int]string{1: "modA", 2: "modB", 3: "modC"},
+		modulesByID: map[string]string{"modA00000001": "modA", "modB00000002": "modB", "modC00000003": "modC"},
 	}
 	records := []mapping.Record{
 		{ID: 70, SpecNodeID: "modB/component/1", BeadID: "spex-070", Module: "modB", BeadStatus: "open"},
@@ -614,7 +614,7 @@ func TestFR7_D5_ResolveDeps_UsesNotTransitive(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"mod": {
-				ID:   1,
+				ID:   "mod000000001",
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
@@ -643,23 +643,23 @@ func TestFR7_D6_ResolveDeps_MixedUsesAndRequiresModule(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"modA": {
-				ID:             1,
+				ID:             "modA00000001",
 				Name:           "modA",
-				RequiresModule: []int{2},
+				RequiresModule: []string{"modB00000002"},
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
 					{ID: "ffeeddccbbaa", Name: "Y"},
 				},
 			},
 			"modB": {
-				ID:   2,
+				ID:   "modB00000002",
 				Name: "modB",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "CompB"},
 				},
 			},
 		},
-		modulesByID: map[int]string{1: "modA", 2: "modB"},
+		modulesByID: map[string]string{"modA00000001": "modA", "modB00000002": "modB"},
 	}
 	records := []mapping.Record{
 		{ID: 90, SpecNodeID: "modA/component/2", BeadID: "spex-090", Module: "modA", BeadStatus: "open"},
@@ -679,17 +679,17 @@ func TestFR7_D7_ResolveDeps_AllClosed(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"mod": {
-				ID:             1,
+				ID:             "mod000000001",
 				Name:           "mod",
-				RequiresModule: []int{2},
+				RequiresModule: []string{"modB00000002"},
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
 					{ID: "ffeeddccbbaa", Name: "Y"},
 				},
 			},
-			"modB": {ID: 2, Name: "modB", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
+			"modB": {ID: "modB00000002", Name: "modB", Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
 		},
-		modulesByID: map[int]string{1: "mod", 2: "modB"},
+		modulesByID: map[string]string{"mod000000001": "mod", "modB00000002": "modB"},
 	}
 	records := []mapping.Record{
 		{ID: 1, SpecNodeID: "mod/component/2", BeadID: "b1", Module: "mod", BeadStatus: "closed"},
@@ -710,7 +710,7 @@ func TestFR7_D8_ResolveDeps_NoDeps(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"mod": {
-				ID:   1,
+				ID:   "mod000000001",
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "Standalone"},
@@ -733,10 +733,10 @@ func TestFR7_D9_ResolveDeps_CycleDetection(t *testing.T) {
 	t.Skip("TODO(bead:spexmachina-r4o): fix after spexmachina-e8t changed module IDs to identity hashes")
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"modA": {ID: 1, Name: "modA", RequiresModule: []int{2}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
-			"modB": {ID: 2, Name: "modB", RequiresModule: []int{1}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
+			"modA": {ID: "modA00000001", Name: "modA", RequiresModule: []string{"modB00000002"}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompA"}}},
+			"modB": {ID: "modB00000002", Name: "modB", RequiresModule: []string{"modA00000001"}, Components: []mapping.ComponentInfo{{ID: "aabbccddeeff", Name: "CompB"}}},
 		},
-		modulesByID: map[int]string{1: "modA", 2: "modB"},
+		modulesByID: map[string]string{"modA00000001": "modA", "modB00000002": "modB"},
 	}
 	records := []mapping.Record{
 		{ID: 1, SpecNodeID: "modA/component/1", BeadID: "b-a", Module: "modA", BeadStatus: "open"},
@@ -757,7 +757,7 @@ func TestFR7_D12_ResolveDeps_NoBeadForNewComponent(t *testing.T) {
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"mod": {
-				ID:   1,
+				ID:   "mod000000001",
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
 					{ID: "aabbccddeeff", Name: "X", Uses: []string{"ffeeddccbbaa"}},
@@ -817,7 +817,7 @@ func assertNotContains(t *testing.T, slice []string, unwanted string) {
 // stubSpecGraph implements a minimal SpecGraph for testing dependency resolution.
 type stubSpecGraph struct {
 	modules     map[string]mapping.ModuleInfo
-	modulesByID map[int]string
+	modulesByID map[string]string
 }
 
 func (s *stubSpecGraph) ModuleByName(name string) (mapping.ModuleInfo, error) {
@@ -828,14 +828,11 @@ func (s *stubSpecGraph) ModuleByName(name string) (mapping.ModuleInfo, error) {
 	return m, nil
 }
 
-func (s *stubSpecGraph) ModuleByID(id int) (mapping.ModuleInfo, error) {
+func (s *stubSpecGraph) ModuleByID(id string) (mapping.ModuleInfo, error) {
 	name, ok := s.modulesByID[id]
 	if !ok {
-		return mapping.ModuleInfo{}, fmt.Errorf("module id %d not found", id)
+		return mapping.ModuleInfo{}, fmt.Errorf("module id %s not found", id)
 	}
 	return s.ModuleByName(name)
 }
 
-func (s *stubSpecGraph) NodeHash(specNodeID string) (string, error) {
-	return "", fmt.Errorf("not implemented in stub")
-}

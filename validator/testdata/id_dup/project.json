@@ -1,11 +1,23 @@
 {
+  "milestones": [],
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
   "name": "id-dup-test",
   "requirements": [
-    {"id": 1, "type": "functional", "title": "Req A"},
-    {"id": 1, "type": "functional", "title": "Req A duplicate"}
-  ],
-  "modules": [
-    {"id": 1, "name": "core", "path": "core"}
-  ],
-  "milestones": []
+    {
+      "id": "000000000001",
+      "title": "Req A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000001",
+      "title": "Req A duplicate",
+      "type": "functional"
+    }
+  ]
 }
