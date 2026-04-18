@@ -22,16 +22,18 @@ func writeModuleJSON(t *testing.T, dir string, ms schema.ModuleSpec) {
 	}
 }
 
+// TestFR6_ResolveContext_FullResolution covers scenarios S1 and S3 in
+// spec/map/test_context_resolver.md: the record's identity hash appears in
+// some sections (S1) and not in data_flows for another component (S3). Here
+// the record targets a hash that no section references, so all file lists
+// are empty but the call still succeeds with ArchFile/ModuleFile populated.
 func TestFR6_ResolveContext_FullResolution(t *testing.T) {
-	// Setup: create a spec directory with a module.json containing impl_sections,
-	// test_sections, and data_flows that describe/use component 4.
 	specDir := t.TempDir()
 	modDir := filepath.Join(specDir, "map")
 	if err := os.MkdirAll(modDir, 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 
-	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	ms := schema.ModuleSpec{
 		Name: "map",
 		Components: []schema.Component{
@@ -39,23 +41,24 @@ func TestFR6_ResolveContext_FullResolution(t *testing.T) {
 			{ID: "ffeeddccbbaa", Name: "ContextResolver", Content: "arch_context_resolver.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: "aabbccddeeff", Name: "Mapping format", Content: "impl_mapping_format.md", Describes: []string{"aabbccddeeff"}},
-			{ID: "ffeeddccbbaa", Name: "CRUD ops", Content: "impl_crud_operations.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "111111111111", Name: "Mapping format", Content: "impl_mapping_format.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "222222222222", Name: "CRUD ops", Content: "impl_crud_operations.md", Describes: []string{"aabbccddeeff"}},
 		},
 		TestSections: []schema.TestSection{
-			{ID: "aabbccddeeff", Name: "Store tests", Content: "test_mapping_store.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "333333333333", Name: "Store tests", Content: "test_mapping_store.md", Describes: []string{"aabbccddeeff"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: "aabbccddeeff", Name: "Bead mapping flow", Content: "flow_bead_mapping.md", Uses: []string{"aabbccddeeff", "ccddee112233"}},
-			{ID: "ffeeddccbbaa", Name: "Preflight flow", Content: "flow_preflight.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+			{ID: "444444444444", Name: "Bead mapping flow", Content: "flow_bead_mapping.md", Uses: []string{"aabbccddeeff"}},
+			{ID: "555555555555", Name: "Preflight flow", Content: "flow_preflight.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
 
+	// ccddee112233 is a valid identity hash that no section references.
 	rec := Record{
 		ID:          50,
-		SpecNodeID:  "map/component/4",
-		BeadID:      "spexmachina-2pu",
+		SpecNodeID:  "ccddee112233",
+		BeadID:      "spexmachina-nv9",
 		Module:      "map",
 		Component:   "ContextResolver",
 		ContentFile: "spec/map/arch_context_resolver.md",
@@ -66,40 +69,34 @@ func TestFR6_ResolveContext_FullResolution(t *testing.T) {
 		t.Fatalf("ResolveContext: %v", err)
 	}
 
-	// ArchFile comes from the record's ContentFile.
 	if result.ArchFile != "spec/map/arch_context_resolver.md" {
 		t.Errorf("ArchFile = %q, want %q", result.ArchFile, "spec/map/arch_context_resolver.md")
 	}
 
-	// ModuleFile = specDir/module/module.json
 	wantModFile := filepath.Join(specDir, "map", "module.json")
 	if result.ModuleFile != wantModFile {
 		t.Errorf("ModuleFile = %q, want %q", result.ModuleFile, wantModFile)
 	}
 
-	// Component 4 is not described by any impl_sections → empty.
 	if len(result.ImplFiles) != 0 {
-		t.Errorf("ImplFiles = %v, want empty (component 4 not described)", result.ImplFiles)
+		t.Errorf("ImplFiles = %v, want empty (hash not in any impl_section)", result.ImplFiles)
 	}
-
-	// Component 4 is not described by any test_sections → empty.
 	if len(result.TestFiles) != 0 {
-		t.Errorf("TestFiles = %v, want empty (component 4 not described)", result.TestFiles)
+		t.Errorf("TestFiles = %v, want empty (hash not in any test_section)", result.TestFiles)
 	}
-
-	// Component 4 is not used by any data_flows → empty.
 	if len(result.FlowFiles) != 0 {
-		t.Errorf("FlowFiles = %v, want empty (component 4 not used)", result.FlowFiles)
+		t.Errorf("FlowFiles = %v, want empty (hash not in any data_flow)", result.FlowFiles)
 	}
 
-	// Record should be passed through.
 	if result.Record.ID != 50 {
 		t.Errorf("Record.ID = %d, want 50", result.Record.ID)
 	}
 }
 
+// TestFR6_ResolveContext_MatchingSections covers S1 and S2: a component
+// referenced by multiple impl_sections, a single test_section, and one of
+// two data_flows. Lookup is by direct identity-hash match on Describes/Uses.
 func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
-	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := t.TempDir()
 	modDir := filepath.Join(specDir, "impact")
 	if err := os.MkdirAll(modDir, 0755); err != nil {
@@ -113,24 +110,24 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 			{ID: "ffeeddccbbaa", Name: "ReportGenerator", Content: "arch_report_generator.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: "aabbccddeeff", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
-			{ID: "ffeeddccbbaa", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
-			{ID: "112233445566", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+			{ID: "111111111111", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "222222222222", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "333333333333", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 		TestSections: []schema.TestSection{
-			{ID: "aabbccddeeff", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
-			{ID: "ffeeddccbbaa", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "444444444444", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "555555555555", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: "aabbccddeeff", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
-			{ID: "ffeeddccbbaa", Name: "Other flow", Content: "flow_other.md", Uses: []string{"ffeeddccbbaa"}},
+			{ID: "666666666666", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+			{ID: "777777777777", Name: "Other flow", Content: "flow_other.md", Uses: []string{"ffeeddccbbaa"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
 
 	rec := Record{
 		ID:          10,
-		SpecNodeID:  "impact/component/aabbccddeeff",
+		SpecNodeID:  "aabbccddeeff",
 		Module:      "impact",
 		Component:   "ActionClassifier",
 		ContentFile: "spec/impact/arch_action_classifier.md",
@@ -141,7 +138,6 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 		t.Fatalf("ResolveContext: %v", err)
 	}
 
-	// impl_sections 1 and 3 describe component 1.
 	wantImpl := []string{
 		filepath.Join(specDir, "impact", "impl_classification.md"),
 		filepath.Join(specDir, "impact", "impl_shared.md"),
@@ -155,7 +151,6 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 		}
 	}
 
-	// test_section 1 describes component 1.
 	wantTest := []string{
 		filepath.Join(specDir, "impact", "test_classifier.md"),
 	}
@@ -166,7 +161,6 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 		t.Errorf("TestFiles[0] = %q, want %q", result.TestFiles[0], wantTest[0])
 	}
 
-	// data_flow 1 uses component 1.
 	wantFlow := []string{
 		filepath.Join(specDir, "impact", "flow_impact.md"),
 	}
@@ -178,37 +172,139 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 	}
 }
 
-func TestFR6_ResolveContext_InvalidSpecNodeID(t *testing.T) {
-	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+// TestFR6_ResolveContext_S4_SecondComponent covers scenario S4: a record
+// targeting a second component in the same fixture resolves to that
+// component's sections, confirming lookup is parameterised on the record,
+// not baked into the resolver.
+func TestFR6_ResolveContext_S4_SecondComponent(t *testing.T) {
 	specDir := t.TempDir()
-
-	tests := []struct {
-		name       string
-		specNodeID string
-		wantErr    string
-	}{
-		{"too few parts", "map/component", "invalid spec_node_id"},
-		{"not a component", "map/requirement/1", "not a component node"},
+	modDir := filepath.Join(specDir, "impact")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			rec := Record{SpecNodeID: tt.specNodeID, Module: "map"}
-			_, err := ResolveContext(specDir, rec)
-			if err == nil {
-				t.Fatalf("expected error, got nil")
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Errorf("error = %q, want containing %q", err.Error(), tt.wantErr)
-			}
-		})
+
+	ms := schema.ModuleSpec{
+		Name: "impact",
+		Components: []schema.Component{
+			{ID: "aabbccddeeff", Name: "ActionClassifier", Content: "arch_action_classifier.md"},
+			{ID: "ffeeddccbbaa", Name: "ReportGenerator", Content: "arch_report_generator.md"},
+		},
+		ImplSections: []schema.ImplSection{
+			{ID: "111111111111", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "222222222222", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "333333333333", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+		},
+		TestSections: []schema.TestSection{
+			{ID: "444444444444", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "555555555555", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
+		},
+		DataFlows: []schema.DataFlow{
+			{ID: "666666666666", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
+			{ID: "777777777777", Name: "Other flow", Content: "flow_other.md", Uses: []string{"ffeeddccbbaa"}},
+		},
+	}
+	writeModuleJSON(t, modDir, ms)
+
+	rec := Record{
+		ID:          11,
+		SpecNodeID:  "ffeeddccbbaa",
+		Module:      "impact",
+		Component:   "ReportGenerator",
+		ContentFile: "spec/impact/arch_report_generator.md",
+	}
+
+	result, err := ResolveContext(specDir, rec)
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+
+	if result.ArchFile != "spec/impact/arch_report_generator.md" {
+		t.Errorf("ArchFile = %q, want ReportGenerator arch", result.ArchFile)
+	}
+
+	wantImpl := []string{
+		filepath.Join(specDir, "impact", "impl_report_format.md"),
+		filepath.Join(specDir, "impact", "impl_shared.md"),
+	}
+	if len(result.ImplFiles) != len(wantImpl) {
+		t.Fatalf("ImplFiles count = %d, want %d", len(result.ImplFiles), len(wantImpl))
+	}
+	for i, got := range result.ImplFiles {
+		if got != wantImpl[i] {
+			t.Errorf("ImplFiles[%d] = %q, want %q", i, got, wantImpl[i])
+		}
+	}
+
+	if len(result.TestFiles) != 1 || result.TestFiles[0] != filepath.Join(specDir, "impact", "test_report.md") {
+		t.Errorf("TestFiles = %v, want [test_report.md]", result.TestFiles)
+	}
+
+	wantFlow := []string{
+		filepath.Join(specDir, "impact", "flow_impact.md"),
+		filepath.Join(specDir, "impact", "flow_other.md"),
+	}
+	if len(result.FlowFiles) != len(wantFlow) {
+		t.Fatalf("FlowFiles count = %d, want %d", len(result.FlowFiles), len(wantFlow))
+	}
+	for i, got := range result.FlowFiles {
+		if got != wantFlow[i] {
+			t.Errorf("FlowFiles[%d] = %q, want %q", i, got, wantFlow[i])
+		}
 	}
 }
 
+// TestFR6_ResolveContext_UnknownHash covers edge case E3: a record whose
+// identity hash is valid but appears in no impl_section, test_section, or
+// data_flow returns an empty result — this is not an error. The validator
+// (not ResolveContext) is responsible for catching dangling references.
+func TestFR6_ResolveContext_UnknownHash(t *testing.T) {
+	specDir := t.TempDir()
+	modDir := filepath.Join(specDir, "map")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	ms := schema.ModuleSpec{
+		Name: "map",
+		Components: []schema.Component{
+			{ID: "aabbccddeeff", Name: "OnlyComponent", Content: "arch_only.md"},
+		},
+		ImplSections: []schema.ImplSection{
+			{ID: "111111111111", Name: "Only impl", Content: "impl_only.md", Describes: []string{"aabbccddeeff"}},
+		},
+	}
+	writeModuleJSON(t, modDir, ms)
+
+	rec := Record{
+		ID:          99,
+		SpecNodeID:  "deadbeefcafe",
+		Module:      "map",
+		Component:   "Ghost",
+		ContentFile: "spec/map/arch_ghost.md",
+	}
+
+	result, err := ResolveContext(specDir, rec)
+	if err != nil {
+		t.Fatalf("ResolveContext should not error on unknown hash: %v", err)
+	}
+	if result.ArchFile != "spec/map/arch_ghost.md" {
+		t.Errorf("ArchFile = %q, want passthrough from record", result.ArchFile)
+	}
+	if result.ModuleFile != filepath.Join(specDir, "map", "module.json") {
+		t.Errorf("ModuleFile = %q, want module.json path", result.ModuleFile)
+	}
+	if len(result.ImplFiles) != 0 || len(result.TestFiles) != 0 || len(result.FlowFiles) != 0 {
+		t.Errorf("all file lists should be empty for unknown hash; got impl=%v test=%v flow=%v",
+			result.ImplFiles, result.TestFiles, result.FlowFiles)
+	}
+}
+
+// TestFR6_ResolveContext_ModuleJsonNotFound covers edge case E1: missing
+// module.json surfaces as a read error.
 func TestFR6_ResolveContext_ModuleJsonNotFound(t *testing.T) {
 	specDir := t.TempDir()
-	// No module.json created — should fail.
 	rec := Record{
-		SpecNodeID: "missing/component/1",
+		SpecNodeID: "aabbccddeeff",
 		Module:     "missing",
 	}
 
@@ -221,9 +317,9 @@ func TestFR6_ResolveContext_ModuleJsonNotFound(t *testing.T) {
 	}
 }
 
+// TestFR6_ResolveContext_Deterministic asserts the pure-function contract:
+// same inputs produce byte-identical outputs.
 func TestFR6_ResolveContext_Deterministic(t *testing.T) {
-	// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
-	// Same inputs produce same outputs — pure function.
 	specDir := t.TempDir()
 	modDir := filepath.Join(specDir, "schema")
 	if err := os.MkdirAll(modDir, 0755); err != nil {
@@ -236,17 +332,17 @@ func TestFR6_ResolveContext_Deterministic(t *testing.T) {
 			{ID: "aabbccddeeff", Name: "ProjectSchema", Content: "arch_project_schema.md"},
 		},
 		ImplSections: []schema.ImplSection{
-			{ID: "aabbccddeeff", Name: "Schema format", Content: "impl_format.md", Describes: []string{"aabbccddeeff"}},
+			{ID: "111111111111", Name: "Schema format", Content: "impl_format.md", Describes: []string{"aabbccddeeff"}},
 		},
 		DataFlows: []schema.DataFlow{
-			{ID: "aabbccddeeff", Name: "Load flow", Content: "flow_load.md", Uses: []string{"aabbccddeeff"}},
+			{ID: "222222222222", Name: "Load flow", Content: "flow_load.md", Uses: []string{"aabbccddeeff"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
 
 	rec := Record{
 		ID:          1,
-		SpecNodeID:  "schema/component/aabbccddeeff",
+		SpecNodeID:  "aabbccddeeff",
 		Module:      "schema",
 		Component:   "ProjectSchema",
 		ContentFile: "spec/schema/arch_project_schema.md",
@@ -261,7 +357,6 @@ func TestFR6_ResolveContext_Deterministic(t *testing.T) {
 		t.Fatalf("second call: %v", err)
 	}
 
-	// Compare JSON serialization for deep equality.
 	j1, _ := json.Marshal(r1)
 	j2, _ := json.Marshal(r2)
 	if string(j1) != string(j2) {
