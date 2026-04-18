@@ -27,7 +27,7 @@ type ContextResult struct {
 // record.SpecNodeID is treated as the component's identity hash directly —
 // MappingStore's JSON-schema validation guarantees it matches ^[a-f0-9]{12}$,
 // so no parsing happens here. record.Module is authoritative for locating
-// module.json (see test_context_resolver.md, edge case E4).
+// module.json.
 func ResolveContext(specDir string, record Record) (ContextResult, error) {
 	compHash := record.SpecNodeID
 
