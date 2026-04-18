@@ -206,14 +206,14 @@ func TestREQ2_LabelObsoletes_DeletesMappingForRemovedNodes(t *testing.T) {
 	store := newMockStore()
 	store.addRecord(mapping.Record{
 		ID:         10,
-		SpecNodeID: "validator/component/1",
+		SpecNodeID: "aabbccddeeff",
 		BeadID:     "bead-1",
 		Module:     "validator",
 		Component:  "LegacyChecker",
 	})
 
 	actions := []Action{
-		{Module: "validator", Node: "LegacyChecker", BeadID: "bead-1", ChangeType: "removed"},
+		{Module: "validator", Node: "LegacyChecker", BeadID: "bead-1", SpecNodeID: "aabbccddeeff", ChangeType: "removed"},
 	}
 
 	err := LabelObsoletes(context.Background(), cli, store, actions, testLogger())
@@ -233,14 +233,14 @@ func TestREQ2_LabelObsoletes_LeavesMappingForModifiedNodes(t *testing.T) {
 	store := newMockStore()
 	store.addRecord(mapping.Record{
 		ID:         10,
-		SpecNodeID: "validator/component/1",
+		SpecNodeID: "aabbccddeeff",
 		BeadID:     "bead-1",
 		Module:     "validator",
 		Component:  "ContentResolver",
 	})
 
 	actions := []Action{
-		{Module: "validator", Node: "ContentResolver", BeadID: "bead-1", ChangeType: "modified"},
+		{Module: "validator", Node: "ContentResolver", BeadID: "bead-1", SpecNodeID: "aabbccddeeff", ChangeType: "modified"},
 	}
 
 	err := LabelObsoletes(context.Background(), cli, store, actions, testLogger())
@@ -252,6 +252,34 @@ func TestREQ2_LabelObsoletes_LeavesMappingForModifiedNodes(t *testing.T) {
 	recs, _ := store.List()
 	if len(recs) != 1 {
 		t.Errorf("want 1 record (unchanged) for modified node, got %d", len(recs))
+	}
+}
+
+// Exercises the identity-hash lookup path: LabelObsoletes must locate the
+// mapping record via the action's SpecNodeID, not by BeadID. The record's
+// BeadID here intentionally does not match the action's BeadID.
+func TestREQ2_LabelObsoletes_DeletesByIdentityHash(t *testing.T) {
+	cli := newMockCLI()
+	store := newMockStore()
+	store.addRecord(mapping.Record{
+		ID:         10,
+		SpecNodeID: "aabbccddeeff",
+		BeadID:     "stale-bead-ref",
+		Module:     "validator",
+		Component:  "LegacyChecker",
+	})
+
+	actions := []Action{
+		{Module: "validator", Node: "LegacyChecker", BeadID: "bead-1", SpecNodeID: "aabbccddeeff", ChangeType: "removed"},
+	}
+
+	if err := LabelObsoletes(context.Background(), cli, store, actions, testLogger()); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	recs, _ := store.List()
+	if len(recs) != 0 {
+		t.Errorf("want 0 records (record deleted by SpecNodeID), got %d", len(recs))
 	}
 }
 

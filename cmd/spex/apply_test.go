@@ -13,19 +13,19 @@ import (
 // noopStore is a minimal mapping.Store for testing conversions.
 type noopStore struct{}
 
-func (s *noopStore) Create(r mapping.Record) (int, error)                    { return 0, nil }
-func (s *noopStore) Get(id int) (mapping.Record, error)                      { return mapping.Record{}, fmt.Errorf("not found") }
-func (s *noopStore) GetByBead(beadID string) (mapping.Record, error)         { return mapping.Record{}, fmt.Errorf("not found") }
+func (s *noopStore) Create(r mapping.Record) (int, error)                      { return 0, nil }
+func (s *noopStore) Get(id int) (mapping.Record, error)                        { return mapping.Record{}, fmt.Errorf("not found") }
+func (s *noopStore) GetByBead(beadID string) (mapping.Record, error)           { return mapping.Record{}, fmt.Errorf("not found") }
 func (s *noopStore) GetBySpecNode(specNodeID string) ([]mapping.Record, error) { return nil, fmt.Errorf("not found") }
-func (s *noopStore) Update(id int, updates map[string]string) error          { return nil }
-func (s *noopStore) Delete(id int) error                                     { return nil }
-func (s *noopStore) List() ([]mapping.Record, error)                         { return nil, nil }
+func (s *noopStore) Update(id int, updates map[string]string) error            { return nil }
+func (s *noopStore) Delete(id int) error                                       { return nil }
+func (s *noopStore) List() ([]mapping.Record, error)                           { return nil, nil }
 
 func TestREQ4_ResolveNodeName(t *testing.T) {
 	modules := map[string]impact.NodeMap{
-		"1": {
-			"component/1":    "BeadCreator",
-			"impl_section/2": "Bead creation commands",
+		"validator": {
+			"aabbccddeeff": "SchemaChecker",
+			"112233445566": "Content section",
 		},
 	}
 
@@ -35,10 +35,10 @@ func TestREQ4_ResolveNodeName(t *testing.T) {
 		node   string
 		want   string
 	}{
-		{"known component via spec-ID", "1", "module/1/component/1", "BeadCreator"},
-		{"known impl via spec-ID", "1", "module/1/impl_section/2", "Bead creation commands"},
-		{"unknown node", "1", "module/1/component/99", "module/1/component/99"},
-		{"unknown module", "2", "module/2/component/1", "module/2/component/1"},
+		{"known identity hash", "validator", "aabbccddeeff", "SchemaChecker"},
+		{"another known hash", "validator", "112233445566", "Content section"},
+		{"unknown hash", "validator", "deadbeefcafe", "deadbeefcafe"},
+		{"unknown module", "merkle", "aabbccddeeff", "aabbccddeeff"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -50,15 +50,15 @@ func TestREQ4_ResolveNodeName(t *testing.T) {
 	}
 }
 
-func TestREQ4_ConvertCreateActions(t *testing.T) {
+func TestREQ4_ConvertCreateActions_PassesSpecNodeIDThrough(t *testing.T) {
 	modules := map[string]impact.NodeMap{
-		"1": {
-			"component/1": "BeadCreator",
+		"validator": {
+			"aabbccddeeff": "ContentResolver",
 		},
 	}
 
 	creates := []impact.Action{
-		{Type: "create", Module: "1", Node: "module/1/component/1", NodeType: "component", SpecHash: "abc123"},
+		{Type: "create", Module: "validator", Node: "aabbccddeeff", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "abc123"},
 	}
 
 	actions := convertCreateActions(creates, modules, nil, &noopStore{})
@@ -67,11 +67,11 @@ func TestREQ4_ConvertCreateActions(t *testing.T) {
 		t.Fatalf("want 1 action, got %d", len(actions))
 	}
 	a := actions[0]
-	if a.Module != "1" {
-		t.Errorf("want module 1, got %q", a.Module)
+	if a.Module != "validator" {
+		t.Errorf("want module validator, got %q", a.Module)
 	}
-	if a.Node != "BeadCreator" {
-		t.Errorf("want node BeadCreator, got %q", a.Node)
+	if a.Node != "ContentResolver" {
+		t.Errorf("want node ContentResolver, got %q", a.Node)
 	}
 	if a.NodeType != "component" {
 		t.Errorf("want nodeType component, got %q", a.NodeType)
@@ -79,8 +79,8 @@ func TestREQ4_ConvertCreateActions(t *testing.T) {
 	if a.SpecHash != "abc123" {
 		t.Errorf("want specHash abc123, got %q", a.SpecHash)
 	}
-	if a.SpecNodeID != "1/component/1" {
-		t.Errorf("want specNodeID 1/component/1, got %q", a.SpecNodeID)
+	if a.SpecNodeID != "aabbccddeeff" {
+		t.Errorf("want specNodeID aabbccddeeff, got %q", a.SpecNodeID)
 	}
 }
 
@@ -88,7 +88,7 @@ func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
 	modules := map[string]impact.NodeMap{}
 
 	creates := []impact.Action{
-		{Type: "create", Module: "1", Node: "module/1/component/5", NodeType: "component", SpecHash: "xyz"},
+		{Type: "create", Module: "validator", Node: "aabbccddeeff", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "xyz"},
 	}
 
 	actions := convertCreateActions(creates, modules, nil, &noopStore{})
@@ -96,43 +96,68 @@ func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
 	}
-	if actions[0].Node != "module/1/component/5" {
-		t.Errorf("want fallback node key, got %q", actions[0].Node)
+	if actions[0].Node != "aabbccddeeff" {
+		t.Errorf("want fallback node key (identity hash), got %q", actions[0].Node)
 	}
 	if actions[0].SpecHash != "xyz" {
 		t.Errorf("want specHash xyz, got %q", actions[0].SpecHash)
 	}
 }
 
-func TestREQ4_ConvertCreateActions_OldBeadIDLookup(t *testing.T) {
-	store := &lookupStore{
-		records: map[string]mapping.Record{
-			"old-bead-1": {SpecNodeID: "validator/component/1"},
-		},
-	}
-	modules := map[string]impact.NodeMap{}
+func TestREQ4_ConvertCreateActions_ContentFileFromExistingRecord(t *testing.T) {
+	store := newSpecNodeStore()
+	store.addRecord(mapping.Record{
+		ID:          1,
+		SpecNodeID:  "aabbccddeeff",
+		BeadID:      "old-bead-1",
+		ContentFile: "spec/validator/arch_content_resolver.md",
+	})
 
 	creates := []impact.Action{
-		{Type: "create", Module: "validator", Node: "ContentResolver", NodeType: "component", OldBeadID: "old-bead-1", SpecHash: "h1"},
+		{Type: "create", Module: "validator", Node: "ContentResolver", NodeType: "component", SpecNodeID: "aabbccddeeff", OldBeadID: "old-bead-1", SpecHash: "h1"},
 	}
 
-	actions := convertCreateActions(creates, modules, nil, store)
+	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, nil, store)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
 	}
-	if actions[0].SpecNodeID != "validator/component/1" {
-		t.Errorf("want specNodeID from mapping record, got %q", actions[0].SpecNodeID)
+	if actions[0].SpecNodeID != "aabbccddeeff" {
+		t.Errorf("want specNodeID from impact action, got %q", actions[0].SpecNodeID)
+	}
+	if actions[0].ContentFile != "spec/validator/arch_content_resolver.md" {
+		t.Errorf("want ContentFile from existing record, got %q", actions[0].ContentFile)
 	}
 	if actions[0].OldBeadID != "old-bead-1" {
 		t.Errorf("want OldBeadID old-bead-1, got %q", actions[0].OldBeadID)
 	}
 }
 
+func TestREQ4_ConvertCreateActions_ContentFileFromSpecGraph(t *testing.T) {
+	contents := map[string]ContentMap{
+		"validator": {
+			"aabbccddeeff": "spec/validator/arch_new_component.md",
+		},
+	}
+
+	creates := []impact.Action{
+		{Type: "create", Module: "validator", Node: "NewComponent", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "h1"},
+	}
+
+	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, contents, &noopStore{})
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	if actions[0].ContentFile != "spec/validator/arch_new_component.md" {
+		t.Errorf("want ContentFile from spec graph, got %q", actions[0].ContentFile)
+	}
+}
+
 func TestREQ4_ConvertObsoleteActions(t *testing.T) {
 	obsoletes := []impact.Action{
-		{Type: "obsolete", BeadID: "bead-2", Module: "3", Node: "LegacyChecker", ChangeType: "removed", Reason: "Spec node removed: 3/LegacyChecker"},
-		{Type: "obsolete", BeadID: "bead-3", Module: "3", Node: "Hasher", ChangeType: "modified", Reason: "Spec node modified: 3/Hasher"},
+		{Type: "obsolete", BeadID: "bead-2", Module: "validator", Node: "LegacyChecker", SpecNodeID: "deadbeefcafe", ChangeType: "removed", Reason: "Spec node removed"},
+		{Type: "obsolete", BeadID: "bead-3", Module: "merkle", Node: "Hasher", SpecNodeID: "112233445566", ChangeType: "modified", Reason: "Spec node modified"},
 	}
 
 	actions := convertObsoleteActions(obsoletes)
@@ -143,31 +168,14 @@ func TestREQ4_ConvertObsoleteActions(t *testing.T) {
 	if actions[0].ChangeType != "removed" {
 		t.Errorf("want ChangeType removed for removed node, got %q", actions[0].ChangeType)
 	}
+	if actions[0].SpecNodeID != "deadbeefcafe" {
+		t.Errorf("want SpecNodeID deadbeefcafe to flow through, got %q", actions[0].SpecNodeID)
+	}
 	if actions[1].ChangeType != "modified" {
 		t.Errorf("want ChangeType modified for modified node, got %q", actions[1].ChangeType)
 	}
-}
-
-func TestREQ4_DeriveSpecNodeID(t *testing.T) {
-	tests := []struct {
-		name     string
-		module   string
-		node     string
-		nodeType string
-		want     string
-	}{
-		{"merkle key component", "validator", "module/1/component/2", "component", "validator/component/2"},
-		{"merkle key module", "validator", "module/1", "module", "validator/module"},
-		{"human name fallback", "validator", "ContentResolver", "component", "validator/component"},
-		{"no node type", "validator", "ContentResolver", "", "validator"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := deriveSpecNodeID(tt.module, tt.node, tt.nodeType)
-			if got != tt.want {
-				t.Errorf("deriveSpecNodeID(%q, %q, %q) = %q, want %q", tt.module, tt.node, tt.nodeType, got, tt.want)
-			}
-		})
+	if actions[1].SpecNodeID != "112233445566" {
+		t.Errorf("want SpecNodeID 112233445566 to flow through, got %q", actions[1].SpecNodeID)
 	}
 }
 
@@ -218,15 +226,29 @@ func TestREQ8_S12_ProposalFlagRequired(t *testing.T) {
 	}
 }
 
-// lookupStore is a minimal store that returns records by bead ID.
-type lookupStore struct {
+// specNodeStore is an in-memory store that supports GetBySpecNode.
+type specNodeStore struct {
 	noopStore
-	records map[string]mapping.Record
+	records []mapping.Record
 }
 
-func (s *lookupStore) GetByBead(beadID string) (mapping.Record, error) {
-	if r, ok := s.records[beadID]; ok {
-		return r, nil
+func newSpecNodeStore() *specNodeStore {
+	return &specNodeStore{}
+}
+
+func (s *specNodeStore) addRecord(r mapping.Record) {
+	s.records = append(s.records, r)
+}
+
+func (s *specNodeStore) GetBySpecNode(specNodeID string) ([]mapping.Record, error) {
+	var matches []mapping.Record
+	for _, r := range s.records {
+		if r.SpecNodeID == specNodeID {
+			matches = append(matches, r)
+		}
 	}
-	return mapping.Record{}, fmt.Errorf("not found: %s", beadID)
+	if len(matches) == 0 {
+		return nil, fmt.Errorf("not found: %s", specNodeID)
+	}
+	return matches, nil
 }
