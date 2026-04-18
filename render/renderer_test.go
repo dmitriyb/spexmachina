@@ -265,7 +265,6 @@ func TestFR2_D3_NodeShapes(t *testing.T) {
 
 // D4: Edge types rendered with correct styles
 func TestFR2_D4_EdgeStyles(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderDOT(spec, &buf); err != nil {
@@ -273,14 +272,17 @@ func TestFR2_D4_EdgeStyles(t *testing.T) {
 	}
 	out := buf.String()
 
-	// Builder implements req 2
-	if !strings.Contains(out, "alpha_comp_2") || !strings.Contains(out, "alpha_req_2") {
-		t.Fatal("should have edge from Builder to req 2")
+	// Builder (ffeeddccbbaa) implements req ffeeddccbbaa
+	if !strings.Contains(out, "alpha_comp_ffeeddccbbaa -> alpha_req_ffeeddccbbaa") {
+		t.Fatalf("should have edge Builder -> Build requirement, got:\n%s", out)
 	}
-	if !strings.Contains(out, "implements") {
+	if !strings.Contains(out, `label="implements"`) {
 		t.Fatal("should have implements label")
 	}
-	// Builder uses Parser
+	// Builder uses Parser (aabbccddeeff) with dotted style
+	if !strings.Contains(out, "alpha_comp_ffeeddccbbaa -> alpha_comp_aabbccddeeff") {
+		t.Fatalf("should have Builder -> Parser uses edge, got:\n%s", out)
+	}
 	if !strings.Contains(out, `"uses"`) || !strings.Contains(out, "dotted") {
 		t.Fatal("uses edge should exist with dotted style")
 	}
@@ -302,7 +304,6 @@ func TestFR2_D5_CrossModuleEdges(t *testing.T) {
 
 // D6: Node IDs are valid DOT identifiers
 func TestFR2_D6_ValidNodeIDs(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderDOT(spec, &buf); err != nil {
@@ -310,9 +311,35 @@ func TestFR2_D6_ValidNodeIDs(t *testing.T) {
 	}
 	out := buf.String()
 
-	for _, id := range []string{"alpha_comp_1", "alpha_comp_2", "alpha_req_1", "beta_comp_1", "beta_req_1"} {
+	for _, id := range []string{
+		"alpha_comp_aabbccddeeff",
+		"alpha_comp_ffeeddccbbaa",
+		"alpha_req_aabbccddeeff",
+		"alpha_req_ffeeddccbbaa",
+		"beta_comp_aabbccddeeff",
+		"beta_req_aabbccddeeff",
+	} {
 		if !strings.Contains(out, id) {
 			t.Errorf("missing node ID %q", id)
+		}
+	}
+
+	// Node IDs must not contain characters that require quoting in DOT.
+	// Check lines that start with whitespace + identifier + space (node decls).
+	for _, line := range strings.Split(out, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.Contains(trimmed, "_comp_") && !strings.Contains(trimmed, "_req_") &&
+			!strings.Contains(trimmed, "_impl_") && !strings.Contains(trimmed, "_flow_") {
+			continue
+		}
+		// extract identifier: everything before first space or '['
+		idEnd := strings.IndexAny(trimmed, " [-")
+		if idEnd <= 0 {
+			continue
+		}
+		id := trimmed[:idEnd]
+		if strings.ContainsAny(id, " -\"") {
+			t.Errorf("node ID %q contains invalid characters", id)
 		}
 	}
 }
@@ -528,6 +555,115 @@ func TestFR3_J6_DataFlowUsesEdges(t *testing.T) {
 		if !found {
 			t.Errorf("missing data flow edge: %+v", want)
 		}
+	}
+}
+
+// SM2: DOT renders section nodes and coupling edges
+func TestFR2_SM2_SectionsDOT(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name:    "delivery-test",
+			Modules: []schema.Module{{ID: "delivery0001", Name: "delivery", Path: "delivery"}},
+			Sections: []schema.Section{{
+				ID:   "section00001",
+				Name: "delivery",
+				Type: "coupled",
+				Raw:  json.RawMessage(`{"id":"section00001","name":"delivery","type":"coupled"}`),
+			}},
+		},
+		Modules: []ModuleGraph{{
+			Module:  schema.Module{ID: "delivery0001", Name: "delivery", Path: "delivery"},
+			Spec:    schema.ModuleSpec{Name: "delivery"},
+			Content: map[string]string{},
+		}},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderDOT(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	// Section node present with shape=tab and label "delivery"
+	if !strings.Contains(out, "section_delivery ") {
+		t.Fatalf("section_delivery node not declared, got:\n%s", out)
+	}
+	if !strings.Contains(out, "shape=tab") {
+		t.Fatalf("section node should have shape=tab, got:\n%s", out)
+	}
+	// Coupling edge section_delivery -> delivery module
+	if !strings.Contains(out, "section_delivery -> delivery") {
+		t.Fatalf("missing coupling edge section_delivery -> delivery, got:\n%s", out)
+	}
+	if !strings.Contains(out, `label="coupled"`) {
+		t.Fatalf("coupling edge should have label coupled, got:\n%s", out)
+	}
+
+	// Section node must appear BEFORE any subgraph (project-level, not inside cluster)
+	sectionIdx := strings.Index(out, "section_delivery [")
+	subgraphIdx := strings.Index(out, "subgraph cluster_delivery")
+	if sectionIdx < 0 || subgraphIdx < 0 {
+		t.Fatalf("expected both section decl and subgraph, got:\n%s", out)
+	}
+	if sectionIdx >= subgraphIdx {
+		t.Fatal("section node should be emitted before module subgraph (project-level)")
+	}
+}
+
+// SM4: Multiple sections rendered in declaration order (DOT)
+func TestFR2_SM4_SectionOrderDOT(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "order-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "delivery", Type: "coupled", Raw: json.RawMessage(`{"name":"delivery"}`)},
+				{ID: "section00002", Name: "performance", Type: "informational", Raw: json.RawMessage(`{"name":"performance"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderDOT(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	delIdx := strings.Index(out, "section_delivery [")
+	perfIdx := strings.Index(out, "section_performance [")
+	if delIdx < 0 || perfIdx < 0 {
+		t.Fatalf("expected both section nodes, got:\n%s", out)
+	}
+	if delIdx >= perfIdx {
+		t.Fatal("delivery should appear before performance (declaration order)")
+	}
+}
+
+// SM5: Non-coupled section rendered without module link (DOT)
+func TestFR2_SM5_SectionNoCouplingDOT(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "notes-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "notes", Type: "informational", Raw: json.RawMessage(`{"name":"notes"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderDOT(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	// Section node exists
+	if !strings.Contains(out, "section_notes [") {
+		t.Fatalf("section_notes node not declared, got:\n%s", out)
+	}
+	// No coupled edge
+	if strings.Contains(out, "coupled") {
+		t.Fatalf("informational section should not emit coupled edge, got:\n%s", out)
 	}
 }
 
@@ -795,7 +931,6 @@ func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 
 // E6: Module name with special characters in DOT
 func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"}}},
 		Modules: []ModuleGraph{{
@@ -818,7 +953,7 @@ func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
 	if !strings.Contains(out, "cluster_data_pipeline") {
 		t.Fatalf("hyphen should be replaced in cluster name, got:\n%s", out)
 	}
-	if !strings.Contains(out, "data_pipeline_comp_1") {
+	if !strings.Contains(out, "data_pipeline_comp_aabbccddeeff") {
 		t.Fatalf("hyphen should be replaced in node ID, got:\n%s", out)
 	}
 }
