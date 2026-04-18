@@ -2,7 +2,6 @@ package merkle
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -359,7 +358,6 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		t.Fatal("expected changes, got none")
 	}
 
-	projReqPrefix := "project/requirement/"
 	projReq1 := schema.IdentityHash("project", "requirement", "1")
 	projReq2 := schema.IdentityHash("project", "requirement", "2")
 	projectLevelKeys := map[string]bool{
@@ -378,8 +376,7 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 			t.Errorf("missing NodeType for %s", c.Path)
 		}
 		// Project-level leaves have empty Module; all module-scoped leaves must have it.
-		isProjectLevel := projectLevelKeys[c.Path] || strings.HasPrefix(c.Path, projReqPrefix)
-		if !isProjectLevel && c.Module == "" {
+		if !projectLevelKeys[c.Path] && c.Module == "" {
 			t.Errorf("missing Module for %s", c.Path)
 		}
 	}
