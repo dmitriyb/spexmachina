@@ -9,7 +9,45 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// setupDiffTestSpec creates a spec directory where every entity has a distinct
+// identity hash so that per-leaf merkle keys do not collide. Returns the
+// directory and the identity-hash keys for Comp1 and Impl1.
+func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, impl1Hash string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	comp1Hash = schema.IdentityHash("alpha", "component", "Comp1")
+	impl1Hash = schema.IdentityHash("alpha", "impl_section", "Impl1")
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": 1, "name": "alpha", "path": "alpha"}
+		]
+	}`)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	modJSON := `{
+		"name": "alpha",
+		"components": [
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"}
+		],
+		"impl_sections": [
+			{"id": "` + impl1Hash + `", "name": "Impl1", "content": "impl_comp1.md"}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", modJSON)
+	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
+	writeTestFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
+
+	return dir, comp1Hash, impl1Hash
+}
 
 func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
 	specDir := setupTestSpec(t)
@@ -63,8 +101,7 @@ func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 }
 
 func TestFR4_DiffCommand_Modified(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-ec7): fix after spexmachina-e8t changed module IDs to identity hashes")
-	specDir := setupTestSpec(t)
+	specDir, _, impl1Hash := setupDiffTestSpec(t)
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
@@ -96,18 +133,20 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 
 	foundModified := false
 	for _, c := range result.Changes {
-		if c.Type == "modified" && c.Path == "module/1/impl_section/1" {
+		if c.Type == "modified" && c.Path == impl1Hash {
 			foundModified = true
+			if c.NodeType != "impl_section" {
+				t.Fatalf("want impl_section node_type for %s, got %q", impl1Hash, c.NodeType)
+			}
 		}
 	}
 	if !foundModified {
-		t.Fatal("expected modified change for module/1/impl_section/1")
+		t.Fatalf("expected modified change for impl_section hash %s, got: %+v", impl1Hash, result.Changes)
 	}
 }
 
 func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-ec7): fix after spexmachina-e8t changed module IDs to identity hashes")
-	specDir := setupTestSpec(t)
+	specDir, comp1Hash, _ := setupDiffTestSpec(t)
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
@@ -135,15 +174,18 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 
 	foundArchImpl := false
 	for _, c := range result.Changes {
-		if c.Impact == "arch_impl" && c.Path == "module/1/component/1" {
+		if c.Impact == "arch_impl" && c.Path == comp1Hash {
 			foundArchImpl = true
 			if c.Module == "" {
-				t.Fatal("expected module name for arch change")
+				t.Fatal("expected module hash for arch change")
+			}
+			if c.NodeType != "component" {
+				t.Fatalf("want component node_type for %s, got %q", comp1Hash, c.NodeType)
 			}
 		}
 	}
 	if !foundArchImpl {
-		t.Fatalf("expected arch_impl impact for component change, got: %+v", result.Changes)
+		t.Fatalf("expected arch_impl impact for component hash %s, got: %+v", comp1Hash, result.Changes)
 	}
 }
 
@@ -220,9 +262,19 @@ func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
 
 // setupTestSpecWithRequirements creates a spec fixture with requirements and
 // implements edges so completeness checking can detect incomplete changes.
+// Each entity uses a distinct identity hash so that merkle leaf keys do not
+// collide. Module requirements derive from the project requirement via
+// preq_id so project-level completeness checks can walk the full chain.
 func setupTestSpecWithRequirements(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+
+	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
+	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
+	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
+	compAHash := schema.IdentityHash("alpha", "component", "CompA")
+	compBHash := schema.IdentityHash("alpha", "component", "CompB")
+	implAHash := schema.IdentityHash("alpha", "impl_section", "Impl1")
 
 	proj := `{
 		"name": "test-project",
@@ -239,19 +291,18 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1", "preq_id": "aabbccddeeff"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
+			{"id": "` + req1Hash + `", "type": "functional", "title": "Req 1", "preq_id": "` + projReq1Hash + `"},
+			{"id": "` + req2Hash + `", "type": "functional", "title": "Req 2", "preq_id": "` + projReq1Hash + `"}
 		],
 		"components": [
-			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
-			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
+			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
+			{"id": "` + compBHash + `", "name": "CompB", "content": "arch_comp_b.md", "implements": ["` + req2Hash + `"]}
 		],
 		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
+			{"id": "` + implAHash + `", "name": "Impl1", "content": "impl_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
@@ -262,8 +313,36 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	return dir
 }
 
+// mutatedAlphaModule returns the alpha/module.json body for a mutation pass
+// where requirement titles are overridden. Identity hashes for every entity
+// stay identical to those written by setupTestSpecWithRequirements so that
+// the diff reports requirement modifications, not add+remove pairs.
+func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
+	t.Helper()
+	projReq1Hash := schema.IdentityHash("project", "requirement", "1")
+	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
+	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
+	compAHash := schema.IdentityHash("alpha", "component", "CompA")
+	compBHash := schema.IdentityHash("alpha", "component", "CompB")
+	implAHash := schema.IdentityHash("alpha", "impl_section", "Impl1")
+
+	return `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + req1Hash + `", "type": "functional", "title": "` + req1Title + `", "preq_id": "` + projReq1Hash + `"},
+			{"id": "` + req2Hash + `", "type": "functional", "title": "` + req2Title + `", "preq_id": "` + projReq1Hash + `"}
+		],
+		"components": [
+			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
+			{"id": "` + compBHash + `", "name": "CompB", "content": "arch_comp_b.md", "implements": ["` + req2Hash + `"]}
+		],
+		"impl_sections": [
+			{"id": "` + implAHash + `", "name": "Impl1", "content": "impl_comp_a.md"}
+		]
+	}`
+}
+
 func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := setupTestSpecWithRequirements(t)
 
 	// Create initial snapshot.
@@ -275,21 +354,7 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 	// Modify a requirement leaf by changing the module.json requirement description.
 	// This changes the requirement node hash but NOT the implementing component.
 	alphaDir := filepath.Join(specDir, "alpha")
-	alphaMod := `{
-		"name": "alpha",
-		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
-		],
-		"components": [
-			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
-			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
-		]
-	}`
-	writeTestFile(t, alphaDir, "module.json", alphaMod)
+	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
 
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
@@ -317,7 +382,6 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 }
 
 func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	specDir := setupTestSpecWithRequirements(t)
 
 	_, err := runSpex(t, "hash", "--spec-dir", specDir)
@@ -327,21 +391,7 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 
 	// Modify requirement without component change.
 	alphaDir := filepath.Join(specDir, "alpha")
-	alphaMod := `{
-		"name": "alpha",
-		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
-		],
-		"components": [
-			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
-			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
-		]
-	}`
-	writeTestFile(t, alphaDir, "module.json", alphaMod)
+	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
 
 	out, err := runSpex(t, "diff", "--spec-dir", specDir)
 	if err != nil {
@@ -404,7 +454,6 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 }
 
 func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-ec7): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupTestSpecWithRequirements(t)
 
 	// With no snapshot, all nodes are "added" — requirements and their
