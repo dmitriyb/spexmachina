@@ -1,6 +1,7 @@
 package render
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,7 +16,6 @@ func writeFile(t *testing.T, dir, name, content string) {
 }
 
 // setupMultiModuleSpec creates a two-module fixture matching the test spec.
-// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 func setupMultiModuleSpec(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -195,7 +195,6 @@ func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
 
 // S5: All module-level edge types preserved
 func TestFR1_S5_EdgeTypesPreserved(t *testing.T) {
-	// TODO(bead:spexmachina-rjg): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	dir := setupMultiModuleSpec(t)
 
 	graph, err := ReadSpec(dir)
@@ -368,6 +367,81 @@ func TestFR1_E7_NonExistentDir(t *testing.T) {
 	_, err := ReadSpec("/tmp/nonexistent-spec-dir-xyz")
 	if err == nil {
 		t.Fatal("want error for non-existent directory")
+	}
+}
+
+// S7: Sections array parsed into SpecGraph
+func TestFR1_S7_SectionsParsed(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "project.json", `{
+		"name": "sections-test",
+		"modules": [{"id": 1, "name": "delivery", "path": "delivery"}],
+		"sections": [
+			{
+				"id": 1,
+				"name": "delivery",
+				"type": "coupled",
+				"versioning": {"scheme": "semver", "source": "git-tag"},
+				"artifacts": [{"id": 1, "name": "app", "type": "binary"}]
+			}
+		]
+	}`)
+	modDir := filepath.Join(dir, "delivery")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{"name": "delivery"}`)
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(graph.Project.Sections) != 1 {
+		t.Fatalf("want 1 section, got %d", len(graph.Project.Sections))
+	}
+
+	sec := graph.Project.Sections[0]
+	if sec.ID != 1 {
+		t.Fatalf("want section ID 1, got %d", sec.ID)
+	}
+	if sec.Name != "delivery" {
+		t.Fatalf("want section name 'delivery', got %q", sec.Name)
+	}
+	if sec.Type != "coupled" {
+		t.Fatalf("want section type 'coupled', got %q", sec.Type)
+	}
+
+	// Raw content preserved for renderer access without knowing schema
+	if len(sec.Raw) == 0 {
+		t.Fatal("section Raw should be populated")
+	}
+	var freeform map[string]any
+	if err := json.Unmarshal(sec.Raw, &freeform); err != nil {
+		t.Fatalf("section Raw not valid JSON: %v", err)
+	}
+	if _, ok := freeform["versioning"]; !ok {
+		t.Fatal("section Raw should contain 'versioning' freeform field")
+	}
+	if _, ok := freeform["artifacts"]; !ok {
+		t.Fatal("section Raw should contain 'artifacts' freeform field")
+	}
+}
+
+// S8: Sections absent from project.json
+func TestFR1_S8_SectionsAbsent(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "project.json", `{
+		"name": "no-sections",
+		"modules": [{"id": 1, "name": "m", "path": "m"}]
+	}`)
+	modDir := filepath.Join(dir, "m")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(graph.Project.Sections) != 0 {
+		t.Fatalf("want no sections, got %d", len(graph.Project.Sections))
 	}
 }
 
