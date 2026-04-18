@@ -54,19 +54,23 @@ func LabelObsoletes(ctx context.Context, cli BeadCLI, store mapping.Store, actio
 		}
 
 		// Delete mapping record for removed nodes only.
+		// Looked up by the action's SpecNodeID identity hash — the same key
+		// the merkle diff, the impact report, and the mapping store all share.
 		if a.ChangeType == "removed" {
-			rec, err := store.GetByBead(a.BeadID)
-			if err != nil {
-				logger.WarnContext(ctx, "mapping record not found for removed bead",
+			recs, err := store.GetBySpecNode(a.SpecNodeID)
+			if err != nil || len(recs) == 0 {
+				logger.WarnContext(ctx, "mapping record not found for removed node",
 					"bead_id", a.BeadID,
+					"spec_node_id", a.SpecNodeID,
 					"error", err,
 				)
 				continue
 			}
-			if err := store.Delete(rec.ID); err != nil {
+			if err := store.Delete(recs[0].ID); err != nil {
 				logger.WarnContext(ctx, "delete mapping record failed",
 					"bead_id", a.BeadID,
-					"record_id", rec.ID,
+					"spec_node_id", a.SpecNodeID,
+					"record_id", recs[0].ID,
 					"error", err,
 				)
 				errs = append(errs, fmt.Errorf("delete mapping for %s: %w", a.BeadID, err))

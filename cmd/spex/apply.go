@@ -53,7 +53,7 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 	mapPath := filepath.Join(filepath.Dir(specDir), ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)
 
-	// Build NodeMaps for name and content file resolution.
+	// Build NodeMaps for name and content file resolution by identity hash.
 	modules, contents, err := buildNodeMaps(specDir)
 	if err != nil {
 		return fmt.Errorf("apply: %w", err)
@@ -104,63 +104,34 @@ func readReport(path string) ([]byte, error) {
 	return data, nil
 }
 
-// resolveNodeName resolves an impact action's node reference to a spec node name
-// using module NodeMaps. Falls back to the raw node value if no mapping exists.
+// resolveNodeName resolves an impact action's node reference to a spec node
+// name via module NodeMaps (keyed by identity hash). Returns the raw input
+// when no mapping exists.
 func resolveNodeName(modules map[string]impact.NodeMap, module, node string) string {
 	if nm, ok := modules[module]; ok {
 		if name, ok := nm[node]; ok {
 			return name
 		}
-		parts := splitKey(node)
-		if len(parts) >= 4 && parts[0] == "module" {
-			nmKey := parts[2] + "/" + parts[3]
-			if name, ok := nm[nmKey]; ok {
-				return name
-			}
-		}
 	}
 	return node
 }
 
-// splitKey splits a spec-ID key into its path segments.
-func splitKey(key string) []string {
-	var parts []string
-	start := 0
-	for i := 0; i < len(key); i++ {
-		if key[i] == '/' {
-			parts = append(parts, key[start:i])
-			start = i + 1
-		}
-	}
-	parts = append(parts, key[start:])
-	return parts
-}
-
 // convertCreateActions converts impact create actions to apply actions.
+// SpecNodeID flows through unchanged from the impact report — both the merkle
+// diff and the mapping store are keyed by the same identity hash.
 func convertCreateActions(creates []impact.Action, modules map[string]impact.NodeMap, contents map[string]ContentMap, store mapping.Store) []apply.Action {
 	actions := make([]apply.Action, 0, len(creates))
 	for _, c := range creates {
 		name := resolveNodeName(modules, c.Module, c.Node)
 
-		specNID := ""
-		if c.OldBeadID != "" {
-			if rec, err := store.GetByBead(c.OldBeadID); err == nil {
-				specNID = rec.SpecNodeID
-			}
-		}
-		if specNID == "" {
-			specNID = deriveSpecNodeID(c.Module, c.Node, c.NodeType)
-		}
-
-		// Resolve content file from the spec graph.
+		// Resolve content file: prefer the existing mapping record (for modified
+		// nodes), falling back to the spec graph (for new nodes).
 		contentFile := ""
-		if c.OldBeadID != "" {
-			if rec, err := store.GetByBead(c.OldBeadID); err == nil {
-				contentFile = rec.ContentFile
-			}
+		if recs, err := store.GetBySpecNode(c.SpecNodeID); err == nil && len(recs) > 0 {
+			contentFile = recs[0].ContentFile
 		}
 		if contentFile == "" {
-			contentFile = resolveContentFile(contents, c.Module, c.Node)
+			contentFile = resolveContentFile(contents, c.Module, c.SpecNodeID)
 		}
 
 		actions = append(actions, apply.Action{
@@ -168,7 +139,7 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 			Node:        name,
 			NodeType:    c.NodeType,
 			SpecHash:    c.SpecHash,
-			SpecNodeID:  specNID,
+			SpecNodeID:  c.SpecNodeID,
 			ContentFile: contentFile,
 			OldBeadID:   c.OldBeadID,
 			DepBeadIDs:  c.DepBeadIDs,
@@ -179,37 +150,20 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 	return actions
 }
 
-// resolveContentFile looks up the content file path for a node from the ContentMap.
-func resolveContentFile(contents map[string]ContentMap, module, node string) string {
-	parts := splitKey(node)
-	if len(parts) >= 4 && parts[0] == "module" {
-		key := parts[2] + "/" + parts[3]
-		if cm, ok := contents[module]; ok {
-			if cf, ok := cm[key]; ok {
-				return cf
-			}
+// resolveContentFile looks up the content file path for a node via the
+// ContentMap keyed by identity hash.
+func resolveContentFile(contents map[string]ContentMap, module, specNodeID string) string {
+	if cm, ok := contents[module]; ok {
+		if cf, ok := cm[specNodeID]; ok {
+			return cf
 		}
 	}
 	return ""
 }
 
-// deriveSpecNodeID constructs a SpecNodeID from a merkle key path or falls back
-// to module/nodeType.
-func deriveSpecNodeID(moduleName, node, nodeType string) string {
-	parts := splitKey(node)
-	if len(parts) >= 4 && parts[0] == "module" {
-		return moduleName + "/" + parts[2] + "/" + parts[3]
-	}
-	if len(parts) >= 2 && parts[0] == "module" {
-		return moduleName + "/module"
-	}
-	if nodeType != "" {
-		return moduleName + "/" + nodeType
-	}
-	return moduleName
-}
-
 // convertObsoleteActions converts impact obsolete actions to apply actions.
+// SpecNodeID is carried through so BeadCloser can locate the mapping record
+// by identity hash when deleting records for removed nodes.
 func convertObsoleteActions(obsoletes []impact.Action) []apply.Action {
 	actions := make([]apply.Action, 0, len(obsoletes))
 	for _, o := range obsoletes {
@@ -221,6 +175,7 @@ func convertObsoleteActions(obsoletes []impact.Action) []apply.Action {
 			BeadID:     o.BeadID,
 			Module:     o.Module,
 			Node:       o.Node,
+			SpecNodeID: o.SpecNodeID,
 			ChangeType: ct,
 		})
 	}
