@@ -389,7 +389,6 @@ func TestFR3_J2_ProjectNode(t *testing.T) {
 
 // J3: Synthetic node IDs follow path convention
 func TestFR3_J3_SyntheticNodeIDs(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderJSON(spec, &buf); err != nil {
@@ -402,18 +401,18 @@ func TestFR3_J3_SyntheticNodeIDs(t *testing.T) {
 	json.Unmarshal(buf.Bytes(), &result)
 
 	expectedIDs := map[string]bool{
-		"project":            true,
-		"module:alpha":       true,
-		"module:beta":        true,
-		"module:alpha:req:1": true,
-		"module:alpha:req:2": true,
-		"module:alpha:comp:1": true,
-		"module:alpha:comp:2": true,
-		"module:alpha:impl:1": true,
-		"module:alpha:flow:1": true,
-		"module:beta:req:1":   true,
-		"module:beta:comp:1":  true,
-		"module:beta:impl:1":  true,
+		"project":                          true,
+		"module:alpha":                     true,
+		"module:beta":                      true,
+		"module:alpha:req:aabbccddeeff":    true,
+		"module:alpha:req:ffeeddccbbaa":    true,
+		"module:alpha:comp:aabbccddeeff":   true,
+		"module:alpha:comp:ffeeddccbbaa":   true,
+		"module:alpha:impl:aabbccddeeff":   true,
+		"module:alpha:flow:aabbccddeeff":   true,
+		"module:beta:req:aabbccddeeff":     true,
+		"module:beta:comp:aabbccddeeff":    true,
+		"module:beta:impl:aabbccddeeff":    true,
 	}
 
 	nodeIDs := make(map[string]bool)
@@ -433,7 +432,6 @@ func TestFR3_J3_SyntheticNodeIDs(t *testing.T) {
 
 // J4: Content inlined in component nodes
 func TestFR3_J4_ContentInlined(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderJSON(spec, &buf); err != nil {
@@ -446,7 +444,7 @@ func TestFR3_J4_ContentInlined(t *testing.T) {
 	json.Unmarshal(buf.Bytes(), &result)
 
 	for _, n := range result.Nodes {
-		if n.ID == "module:alpha:comp:1" {
+		if n.ID == "module:alpha:comp:aabbccddeeff" {
 			if !strings.Contains(n.Content, "Parses input into AST.") {
 				t.Fatalf("Parser node should have inlined content, got: %q", n.Content)
 			}
@@ -458,7 +456,6 @@ func TestFR3_J4_ContentInlined(t *testing.T) {
 
 // J5: All edge types represented
 func TestFR3_J5_AllEdgeTypes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderJSON(spec, &buf); err != nil {
@@ -471,9 +468,9 @@ func TestFR3_J5_AllEdgeTypes(t *testing.T) {
 	json.Unmarshal(buf.Bytes(), &result)
 
 	expectedEdges := []GraphEdge{
-		{From: "module:alpha:comp:1", To: "module:alpha:req:1", Type: "implements"},
-		{From: "module:alpha:comp:2", To: "module:alpha:comp:1", Type: "uses"},
-		{From: "module:alpha:impl:1", To: "module:alpha:comp:1", Type: "describes"},
+		{From: "module:alpha:comp:aabbccddeeff", To: "module:alpha:req:aabbccddeeff", Type: "implements"},
+		{From: "module:alpha:comp:ffeeddccbbaa", To: "module:alpha:comp:aabbccddeeff", Type: "uses"},
+		{From: "module:alpha:impl:aabbccddeeff", To: "module:alpha:comp:aabbccddeeff", Type: "describes"},
 		{From: "module:beta", To: "module:alpha", Type: "requires_module"},
 	}
 
@@ -505,7 +502,6 @@ func TestFR3_J5_AllEdgeTypes(t *testing.T) {
 
 // J6: Data flow uses edges
 func TestFR3_J6_DataFlowUsesEdges(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed module IDs to identity hashes")
 	spec := fixtureGraph()
 	var buf bytes.Buffer
 	if err := RenderJSON(spec, &buf); err != nil {
@@ -518,8 +514,8 @@ func TestFR3_J6_DataFlowUsesEdges(t *testing.T) {
 	json.Unmarshal(buf.Bytes(), &result)
 
 	expected := []GraphEdge{
-		{From: "module:alpha:flow:1", To: "module:alpha:comp:1", Type: "uses"},
-		{From: "module:alpha:flow:1", To: "module:alpha:comp:2", Type: "uses"},
+		{From: "module:alpha:flow:aabbccddeeff", To: "module:alpha:comp:aabbccddeeff", Type: "uses"},
+		{From: "module:alpha:flow:aabbccddeeff", To: "module:alpha:comp:ffeeddccbbaa", Type: "uses"},
 	}
 	for _, want := range expected {
 		found := false
@@ -531,6 +527,145 @@ func TestFR3_J6_DataFlowUsesEdges(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("missing data flow edge: %+v", want)
+		}
+	}
+}
+
+// SM3: JSON includes section nodes and coupling edges
+func TestFR3_SM3_SectionsJSON(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name:    "delivery-test",
+			Modules: []schema.Module{{ID: "delivery0001", Name: "delivery", Path: "delivery"}},
+			Sections: []schema.Section{{
+				ID:   "section00001",
+				Name: "delivery",
+				Type: "coupled",
+				Raw: json.RawMessage(`{
+					"id": "section00001",
+					"name": "delivery",
+					"type": "coupled",
+					"versioning": {"scheme": "semver", "source": "git-tag"},
+					"artifacts": [{"id": 1, "name": "app", "type": "binary"}],
+					"channels": ["stable", "edge"]
+				}`),
+			}},
+		},
+		Modules: []ModuleGraph{{
+			Module:  schema.Module{ID: "delivery0001", Name: "delivery", Path: "delivery"},
+			Spec:    schema.ModuleSpec{Name: "delivery"},
+			Content: map[string]string{},
+		}},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderJSON(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result struct {
+		Nodes []map[string]any `json:"nodes"`
+		Edges []GraphEdge      `json:"edges"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, buf.String())
+	}
+
+	var sectionNode map[string]any
+	for _, n := range result.Nodes {
+		if n["id"] == "section:delivery" {
+			sectionNode = n
+			break
+		}
+	}
+	if sectionNode == nil {
+		t.Fatalf("section:delivery node not found in:\n%s", buf.String())
+	}
+	if sectionNode["type"] != "section" {
+		t.Errorf("want type=section, got %v", sectionNode["type"])
+	}
+	if sectionNode["name"] != "delivery" {
+		t.Errorf("want name=delivery, got %v", sectionNode["name"])
+	}
+	if sectionNode["section_type"] != "coupled" {
+		t.Errorf("want section_type=coupled, got %v", sectionNode["section_type"])
+	}
+	if _, ok := sectionNode["versioning"]; !ok {
+		t.Error("section node should include freeform 'versioning' field")
+	}
+	if _, ok := sectionNode["artifacts"]; !ok {
+		t.Error("section node should include freeform 'artifacts' field")
+	}
+	if _, ok := sectionNode["channels"]; !ok {
+		t.Error("section node should include freeform 'channels' field")
+	}
+
+	coupledFound := false
+	for _, e := range result.Edges {
+		if e.From == "section:delivery" && e.To == "module:delivery" && e.Type == "coupled" {
+			coupledFound = true
+			break
+		}
+	}
+	if !coupledFound {
+		t.Fatalf("missing coupled edge section:delivery -> module:delivery in:\n%s", buf.String())
+	}
+}
+
+// SM4: Multiple sections rendered in declaration order (JSON)
+func TestFR3_SM4_SectionOrderJSON(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "order-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "delivery", Type: "coupled", Raw: json.RawMessage(`{"name":"delivery"}`)},
+				{ID: "section00002", Name: "performance", Type: "informational", Raw: json.RawMessage(`{"name":"performance"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderJSON(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := buf.String()
+	delIdx := strings.Index(out, `"section:delivery"`)
+	perfIdx := strings.Index(out, `"section:performance"`)
+	if delIdx < 0 || perfIdx < 0 {
+		t.Fatalf("expected both section nodes, got:\n%s", out)
+	}
+	if delIdx >= perfIdx {
+		t.Fatal("delivery should appear before performance (declaration order)")
+	}
+}
+
+// SM5: Non-coupled section rendered without module link (JSON)
+func TestFR3_SM5_SectionNoCouplingJSON(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "notes-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "notes", Type: "informational", Raw: json.RawMessage(`{"name":"notes"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderJSON(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var result struct {
+		Edges []GraphEdge `json:"edges"`
+	}
+	json.Unmarshal(buf.Bytes(), &result)
+
+	for _, e := range result.Edges {
+		if e.Type == "coupled" {
+			t.Fatalf("informational section should not emit coupled edge, got %+v", e)
 		}
 	}
 }

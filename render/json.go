@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // GraphNode represents a node in the JSON graph output.
@@ -24,7 +26,7 @@ type GraphEdge struct {
 }
 
 type graphOutput struct {
-	Nodes []GraphNode `json:"nodes"`
+	Nodes []any       `json:"nodes"`
 	Edges []GraphEdge `json:"edges"`
 }
 
@@ -48,6 +50,22 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			Name:        r.Title,
 			Description: r.Description,
 		})
+	}
+
+	// Project-level sections (generic, iterate by name)
+	for _, s := range spec.Project.Sections {
+		node, err := sectionNode(s)
+		if err != nil {
+			return err
+		}
+		out.Nodes = append(out.Nodes, node)
+		if s.Type == "coupled" {
+			out.Edges = append(out.Edges, GraphEdge{
+				From: fmt.Sprintf("section:%s", s.Name),
+				To:   fmt.Sprintf("module:%s", s.Name),
+				Type: "coupled",
+			})
+		}
 	}
 
 	for _, mg := range spec.Modules {
@@ -75,7 +93,6 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 		}
 
 		// Requirements
-		// TODO(bead:spexmachina-69y): fix after spexmachina-e8t changed ModuleRequirement to string IDs
 		for _, r := range mg.Spec.Requirements {
 			nodeID := fmt.Sprintf("module:%s:req:%s", modName, r.ID)
 			out.Nodes = append(out.Nodes, GraphNode{
@@ -187,4 +204,22 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 		return fmt.Errorf("render: encode json: %w", err)
 	}
 	return nil
+}
+
+// sectionNode builds a JSON node for a project-level section, merging the
+// typed envelope (id, name, section_type) with the freeform content fields
+// preserved in s.Raw. Envelope keys override raw duplicates so the synthetic
+// id and node type are authoritative.
+func sectionNode(s schema.Section) (map[string]any, error) {
+	node := map[string]any{}
+	if len(s.Raw) > 0 {
+		if err := json.Unmarshal(s.Raw, &node); err != nil {
+			return nil, fmt.Errorf("render: section %q raw: %w", s.Name, err)
+		}
+	}
+	node["id"] = fmt.Sprintf("section:%s", s.Name)
+	node["type"] = "section"
+	node["name"] = s.Name
+	node["section_type"] = s.Type
+	return node, nil
 }
