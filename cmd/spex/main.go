@@ -11,6 +11,7 @@ func main() {
 	rootCmd := cli.NewRootCmd()
 	rootCmd.AddCommand(
 		newHashCmd(),
+		newHashIDCmd(),
 		newDiffCmd(),
 		newValidateCmd(),
 		newImpactCmd(),
