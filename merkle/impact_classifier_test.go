@@ -3,6 +3,8 @@ package merkle
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func TestREQ5_Classify_ImplOnly(t *testing.T) {
@@ -153,7 +155,6 @@ func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 }
 
 func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
 	if err != nil {
@@ -176,24 +177,27 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 		t.Fatal("expected classified changes, got none")
 	}
 
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+	impl1Key := schema.IdentityHash("alpha", "impl_section", "Impl1")
+
 	// Should have at least one arch_impl and one impl_only
 	var hasArch, hasImpl bool
 	for _, c := range classified {
-		if c.Impact == ArchImpl && c.Path == "module/1/component/1" {
+		if c.Impact == ArchImpl && c.Path == comp1Key {
 			hasArch = true
 			if c.Module != "Alpha" {
 				t.Errorf("expected module Alpha for component change, got %q", c.Module)
 			}
 		}
-		if c.Impact == ImplOnly && c.Path == "module/1/impl_section/1" {
+		if c.Impact == ImplOnly && c.Path == impl1Key {
 			hasImpl = true
 		}
 	}
 	if !hasArch {
-		t.Error("expected arch_impl change for module/1/component/1")
+		t.Errorf("expected arch_impl change for %s", comp1Key)
 	}
 	if !hasImpl {
-		t.Error("expected impl_only change for module/1/impl_section/1")
+		t.Errorf("expected impl_only change for %s", impl1Key)
 	}
 }
 
