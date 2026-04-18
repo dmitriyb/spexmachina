@@ -191,6 +191,163 @@ func TestFR1_M5_PureMarkdown(t *testing.T) {
 	}
 }
 
+// M6: Module requirements use numbered prefixes (FR1, FR2, NFR1)
+func TestFR1_M6_ModuleRequirementsNumbered(t *testing.T) {
+	spec := fixtureGraph()
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	// Alpha has two functional module requirements: Parse, Build.
+	// They should be enumerated as FR1, FR2 within the module — not "FRaabbccddeeff".
+	if !strings.Contains(out, "FR1: Parse") {
+		t.Errorf("expected 'FR1: Parse' for alpha module requirement, got:\n%s", out)
+	}
+	if !strings.Contains(out, "FR2: Build") {
+		t.Errorf("expected 'FR2: Build' for alpha module requirement, got:\n%s", out)
+	}
+	if strings.Contains(out, "FRaabbccddeeff") || strings.Contains(out, "FRffeeddccbbaa") {
+		t.Errorf("module requirement prefix should not include raw identity hash, got:\n%s", out)
+	}
+}
+
+// SM1: Markdown renders sections after requirements
+func TestFR1_SM1_MarkdownSections(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name:        "delivery-test",
+			Description: "Test project with sections",
+			Requirements: []schema.Requirement{
+				{ID: "112233445566", Type: "functional", Title: "Deploy", Description: "Ship the thing."},
+			},
+			Modules: []schema.Module{{ID: "delivery0001", Name: "delivery", Path: "delivery"}},
+			Sections: []schema.Section{{
+				ID:   "section00001",
+				Name: "delivery",
+				Type: "coupled",
+				Raw: json.RawMessage(`{
+					"id": "section00001",
+					"name": "delivery",
+					"type": "coupled",
+					"versioning": {"scheme": "semver", "source": "git-tag"},
+					"artifacts": ["app-binary", "cli"],
+					"channels": ["stable", "edge"]
+				}`),
+			}},
+		},
+		Modules: []ModuleGraph{{
+			Module:  schema.Module{ID: "delivery0001", Name: "delivery", Path: "delivery"},
+			Spec:    schema.ModuleSpec{Name: "delivery", Description: "Delivery module"},
+			Content: map[string]string{},
+		}},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	// Sections heading appears after requirements and before modules.
+	reqIdx := strings.Index(out, "## Requirements")
+	secIdx := strings.Index(out, "## Sections")
+	modIdx := strings.Index(out, "## Module: delivery")
+	if reqIdx < 0 || secIdx < 0 || modIdx < 0 {
+		t.Fatalf("missing expected headings, got:\n%s", out)
+	}
+	if !(reqIdx < secIdx && secIdx < modIdx) {
+		t.Fatalf("order should be Requirements → Sections → Module, got indices %d, %d, %d\n%s",
+			reqIdx, secIdx, modIdx, out)
+	}
+
+	// Section heading with type annotation.
+	if !strings.Contains(out, "### delivery (coupled)") {
+		t.Errorf("expected '### delivery (coupled)' heading, got:\n%s", out)
+	}
+
+	// Freeform content fields surfaced.
+	for _, frag := range []string{"versioning", "semver", "artifacts", "app-binary", "channels", "stable"} {
+		if !strings.Contains(out, frag) {
+			t.Errorf("section content should surface %q, got:\n%s", frag, out)
+		}
+	}
+}
+
+// SM4: Multiple sections rendered in declaration order (markdown)
+func TestFR1_SM4_MarkdownSectionOrder(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "order-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "delivery", Type: "coupled", Raw: json.RawMessage(`{"name":"delivery"}`)},
+				{ID: "section00002", Name: "performance", Type: "informational", Raw: json.RawMessage(`{"name":"performance"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	delIdx := strings.Index(out, "### delivery")
+	perfIdx := strings.Index(out, "### performance")
+	if delIdx < 0 || perfIdx < 0 {
+		t.Fatalf("expected both section headings, got:\n%s", out)
+	}
+	if delIdx >= perfIdx {
+		t.Fatal("delivery should appear before performance (declaration order)")
+	}
+}
+
+// SM5: Non-coupled section rendered without module cross-reference (markdown)
+func TestFR1_SM5_MarkdownSectionNoCoupling(t *testing.T) {
+	spec := &SpecGraph{
+		Project: schema.Project{
+			Name: "notes-test",
+			Sections: []schema.Section{
+				{ID: "section00001", Name: "notes", Type: "informational", Raw: json.RawMessage(`{"name":"notes","body":"free-form notes"}`)},
+			},
+		},
+		Modules: []ModuleGraph{},
+	}
+
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "### notes (informational)") {
+		t.Errorf("expected '### notes (informational)' heading, got:\n%s", out)
+	}
+	if !strings.Contains(out, "free-form notes") {
+		t.Errorf("freeform content should appear, got:\n%s", out)
+	}
+	// No module section should be emitted and no coupled link line.
+	if strings.Contains(out, "## Module:") {
+		t.Errorf("should not render a module section for informational section, got:\n%s", out)
+	}
+}
+
+// SM6: Spec with no sections array omits sections heading
+func TestFR1_SM6_MarkdownNoSectionsHeading(t *testing.T) {
+	spec := fixtureGraph() // fixture has no Sections
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	if strings.Contains(out, "## Sections") {
+		t.Fatalf("no sections in spec — should omit '## Sections' heading, got:\n%s", out)
+	}
+}
+
 // ---- DOTRenderer tests ----
 
 // D1: Valid DOT syntax with digraph wrapper
