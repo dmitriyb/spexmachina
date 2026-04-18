@@ -4,7 +4,6 @@ package mapping
 type SpecGraph interface {
 	ModuleByName(name string) (ModuleInfo, error)
 	ModuleByID(id string) (ModuleInfo, error)
-	NodeHash(specNodeID string) (string, error)
 }
 
 // ModuleInfo describes a module's identity and dependencies.

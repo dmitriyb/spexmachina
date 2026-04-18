@@ -836,6 +836,3 @@ func (s *stubSpecGraph) ModuleByID(id string) (mapping.ModuleInfo, error) {
 	return s.ModuleByName(name)
 }
 
-func (s *stubSpecGraph) NodeHash(specNodeID string) (string, error) {
-	return "", fmt.Errorf("not implemented in stub")
-}
