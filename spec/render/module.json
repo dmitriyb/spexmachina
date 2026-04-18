@@ -3,187 +3,195 @@
   "description": "Generates human-readable output from spec: collated markdown, graphviz DOT, machine-readable JSON.",
   "requirements": [
     {
-      "id": 1,
+      "id": "8828685278e9",
+      "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render markdown",
-      "preq_id": 7,
-      "description": "Generate a collated spec document in markdown. Structure: requirements \u2192 architecture \u2192 implementation, with content inlined from markdown files."
+      "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files."
     },
     {
-      "id": 2,
+      "id": "a596d8caefb1",
+      "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render DOT",
-      "preq_id": 7,
       "description": "Generate a graphviz DOT graph of spec nodes and edges. Nodes are requirements, components, impl_sections. Edges are implements, uses, describes, depends_on."
     },
     {
-      "id": 3,
+      "id": "1078c088e0c6",
+      "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render JSON",
-      "preq_id": 7,
       "description": "Generate a machine-readable JSON graph of the full spec. All nodes and edges in a single JSON document for piping to other tools."
     },
     {
-      "id": 4,
+      "id": "8d441659a190",
+      "preq_id": "91f6f338de19",
       "type": "non_functional",
       "title": "Composable output",
-      "preq_id": 10,
       "description": "All render output goes to stdout. Format is selected via subcommand or flag. Output is pipeable to other tools."
     },
     {
-      "id": 5,
+      "id": "d1a61942bc21",
+      "preq_id": "a65bbd37c7ec",
       "type": "functional",
       "title": "Render sections",
-      "preq_id": 15,
       "description": "The spec reader and all three renderers (markdown, DOT, JSON) handle the project-level sections array generically. Iterate sections by name, render each section's envelope and content, pull related content from the coupled module. No hardcoded section-type logic."
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "7d1150c19724",
       "name": "SpecReader",
       "description": "Reads and parses the spec directory into an in-memory graph structure for rendering.",
       "content": "arch_spec_reader.md",
       "implements": [
-        1,
-        2,
-        3,
-        4,
-        5
+        "8828685278e9",
+        "a596d8caefb1",
+        "1078c088e0c6",
+        "8d441659a190",
+        "d1a61942bc21"
       ]
     },
     {
-      "id": 2,
+      "id": "b4b4eba6b551",
       "name": "MarkdownRenderer",
       "description": "Generates a collated markdown document from the parsed spec, inlining content from markdown files.",
       "content": "arch_markdown_renderer.md",
       "implements": [
-        1,
-        5
+        "8828685278e9",
+        "d1a61942bc21"
       ],
       "uses": [
-        1
+        "7d1150c19724"
       ]
     },
     {
-      "id": 3,
+      "id": "45331bdc0bd0",
       "name": "DOTRenderer",
       "description": "Generates a graphviz DOT graph from the parsed spec.",
       "content": "arch_dot_renderer.md",
       "implements": [
-        2,
-        5
+        "a596d8caefb1",
+        "d1a61942bc21"
       ],
       "uses": [
-        1
+        "7d1150c19724"
       ]
     },
     {
-      "id": 4,
+      "id": "172d16ca0eac",
       "name": "JSONRenderer",
       "description": "Generates a full JSON graph from the parsed spec.",
       "content": "arch_json_renderer.md",
       "implements": [
-        3,
-        5
+        "1078c088e0c6",
+        "d1a61942bc21"
       ],
       "uses": [
-        1
+        "7d1150c19724"
       ]
     },
     {
-      "id": 5,
+      "id": "c56eefd05f42",
       "name": "RenderCommand",
       "description": "CLI entry point for spex render. Parses format flag (markdown/dot/json), wires SpecReader with selected renderer, outputs to stdout.",
       "content": "arch_render_command.md",
       "implements": [
-        1,
-        2,
-        3,
-        4
+        "8828685278e9",
+        "a596d8caefb1",
+        "1078c088e0c6",
+        "8d441659a190"
       ],
       "uses": [
-        1,
-        2,
-        3,
-        4
+        "7d1150c19724",
+        "b4b4eba6b551",
+        "45331bdc0bd0",
+        "172d16ca0eac"
       ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "d9131db2cb43",
       "name": "Spec reading implementation",
       "content": "impl_spec_reading.md",
       "describes": [
-        1
+        "7d1150c19724"
       ]
     },
     {
-      "id": 2,
+      "id": "13d101c54d00",
       "name": "Markdown rendering implementation",
       "content": "impl_markdown_rendering.md",
       "describes": [
-        2
+        "b4b4eba6b551"
       ]
     },
     {
-      "id": 3,
+      "id": "663e81f67b2f",
       "name": "DOT generation implementation",
       "content": "impl_dot_generation.md",
       "describes": [
-        3
+        "45331bdc0bd0"
       ]
     },
     {
-      "id": 4,
+      "id": "95c3bcf1e3ec",
       "name": "JSON serialization implementation",
       "content": "impl_json_serialization.md",
       "describes": [
-        4
+        "172d16ca0eac"
       ]
     },
     {
-      "id": 5,
+      "id": "134855db67a3",
       "name": "Render command implementation",
       "content": "impl_render_command.md",
       "describes": [
-        5
+        "c56eefd05f42"
       ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "8fa7d21ec7f0",
       "name": "Render pipeline",
-      "description": "Spec JSON + markdown leaves \u2192 parsed graph \u2192 format-specific output (markdown, DOT, or JSON) \u2192 stdout.",
+      "description": "Spec JSON + markdown leaves → parsed graph → format-specific output (markdown, DOT, or JSON) → stdout.",
       "content": "flow_render_pipeline.md",
       "uses": [
-        1,
-        2,
-        3,
-        4
+        "7d1150c19724",
+        "b4b4eba6b551",
+        "45331bdc0bd0",
+        "172d16ca0eac"
       ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "5ba9651a675e",
       "name": "Spec reading tests",
       "content": "test_spec_reading.md",
-      "describes": [1]
+      "describes": [
+        "7d1150c19724"
+      ]
     },
     {
-      "id": 2,
+      "id": "23b86e6f80c7",
       "name": "Renderer tests",
       "content": "test_renderers.md",
-      "describes": [2, 3, 4]
+      "describes": [
+        "b4b4eba6b551",
+        "45331bdc0bd0",
+        "172d16ca0eac"
+      ]
     },
     {
-      "id": 3,
+      "id": "6aad73fe1bc2",
       "name": "Render command tests",
       "content": "test_render_command.md",
-      "describes": [5]
+      "describes": [
+        "c56eefd05f42"
+      ]
     }
   ]
 }

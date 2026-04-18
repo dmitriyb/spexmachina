@@ -3,99 +3,125 @@
   "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra.",
   "requirements": [
     {
-      "id": 1,
+      "id": "0d7b10a39eb0",
+      "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Root command and subcommand registration",
-      "description": "A top-level cobra root command that registers all module subcommands, sets global flags, and prints help when invoked with no args or an unknown command.",
-      "preq_id": 14
+      "description": "A top-level cobra root command that registers all module subcommands, sets global flags, and prints help when invoked with no args or an unknown command."
     },
     {
-      "id": 2,
+      "id": "e15f238e9534",
+      "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Version command",
-      "description": "A `spex version` subcommand that prints version string and build info injected at build time via ldflags.",
-      "preq_id": 14
+      "description": "A `spex version` subcommand that prints version string and build info injected at build time via ldflags."
     },
     {
-      "id": 3,
+      "id": "0c395440d59f",
+      "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Identity hash computation command",
-      "description": "`spex hash-id --module <module> --type <type> --name <name>` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing.",
-      "preq_id": 14
+      "description": "`spex hash-id --module \u003cmodule\u003e --type \u003ctype\u003e --name \u003cname\u003e` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing."
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "b6758cdfabc4",
       "name": "RootCommand",
       "description": "Top-level `spex` command. Registers all subcommands, sets global flags, prints help when invoked with no args.",
       "content": "arch_root_command.md",
-      "implements": [1]
+      "implements": [
+        "0d7b10a39eb0"
+      ]
     },
     {
-      "id": 2,
+      "id": "bbdb70e6f9f7",
       "name": "VersionCommand",
       "description": "`spex version` — prints version and build info injected via ldflags at build time.",
       "content": "arch_version_command.md",
-      "implements": [2],
-      "uses": [1]
+      "implements": [
+        "e15f238e9534"
+      ],
+      "uses": [
+        "b6758cdfabc4"
+      ]
     },
     {
-      "id": 3,
+      "id": "a338e50fec70",
       "name": "HashIDCommand",
-      "description": "`spex hash-id --module <module> --type <type> --name <name>` — computes and prints the identity hash for a spec node. Calls schema.IdentityHash with parts derived from the flags.",
+      "description": "`spex hash-id --module \u003cmodule\u003e --type \u003ctype\u003e --name \u003cname\u003e` — computes and prints the identity hash for a spec node. Calls schema.IdentityHash with parts derived from the flags.",
       "content": "arch_hash_id_command.md",
-      "implements": [3],
-      "uses": [1]
+      "implements": [
+        "0c395440d59f"
+      ],
+      "uses": [
+        "b6758cdfabc4"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "d0dbdac909dc",
       "name": "Cobra Setup and Registration",
       "content": "impl_cobra_setup.md",
-      "describes": [1]
+      "describes": [
+        "b6758cdfabc4"
+      ]
     },
     {
-      "id": 2,
+      "id": "39aebe007a94",
       "name": "Version Injection",
       "content": "impl_version_injection.md",
-      "describes": [2]
+      "describes": [
+        "bbdb70e6f9f7"
+      ]
     },
     {
-      "id": 3,
+      "id": "7b12fb6f10f3",
       "name": "Hash ID implementation",
       "content": "impl_hash_id.md",
-      "describes": [3]
+      "describes": [
+        "a338e50fec70"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "8aae44eabf47",
       "name": "Command Dispatch",
       "description": "How user input flows from argv through cobra to the correct subcommand handler.",
       "content": "flow_command_dispatch.md",
-      "uses": [1, 2, 3]
+      "uses": [
+        "b6758cdfabc4",
+        "bbdb70e6f9f7",
+        "a338e50fec70"
+      ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "476f594a2f5f",
       "name": "Root Command Tests",
       "content": "test_root_command.md",
-      "describes": [1]
+      "describes": [
+        "b6758cdfabc4"
+      ]
     },
     {
-      "id": 2,
+      "id": "1d4fca99754e",
       "name": "Version Command Tests",
       "content": "test_version_command.md",
-      "describes": [2]
+      "describes": [
+        "bbdb70e6f9f7"
+      ]
     },
     {
-      "id": 3,
+      "id": "379d1bf22453",
       "name": "Hash ID Command Tests",
       "content": "test_hash_id_command.md",
-      "describes": [3]
+      "describes": [
+        "a338e50fec70"
+      ]
     }
   ]
 }

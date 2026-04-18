@@ -3,112 +3,141 @@
   "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs. Provides CRUD operations, context resolution, and CLI query interface.",
   "requirements": [
     {
-      "id": 1,
+      "id": "934d627f0e90",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Store mapping records",
-      "preq_id": 3,
       "description": "Read/write .bead-map.json. Each record links a spec node ID to a bead ID with structured metadata: module name, component/section name, content file path, spec hash at time of mapping, and bead type."
     },
     {
-      "id": 3,
+      "id": "27c046dde129",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Query mappings via CLI",
-      "preq_id": 3,
-      "description": "spex map get <record-id> returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context <record-id> resolves full spec context."
+      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context."
     },
     {
-      "id": 5,
+      "id": "4aee62bd3c15",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Validate mapping file against schema",
-      "preq_id": 3,
       "description": "MappingStore validates .bead-map.json against the bead-map JSON Schema on load. Invalid files produce a clear error before any CRUD operation."
     },
     {
-      "id": 6,
+      "id": "40a3d3155131",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Resolve full spec context from record",
-      "preq_id": 3,
       "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), impl_sections whose describes array contains the component ID, test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "205e67ca4aad",
       "name": "MappingStore",
       "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node identity hash to a bead ID with structured metadata including bead_type field. The `spec_node_id` field is the same 12-char hex identity hash that the merkle tree uses as a key, so impact and apply look up records by that hash with no translation. Supports record updates for obsolete+create flows.",
       "content": "arch_mapping_store.md",
-      "implements": [1, 5]
+      "implements": [
+        "934d627f0e90",
+        "4aee62bd3c15"
+      ]
     },
     {
-      "id": 3,
+      "id": "08909d62930b",
       "name": "MapCommand",
       "description": "CLI entry point for spex map. Wires MappingStore and ContextResolver to serve queries and context resolution.",
       "content": "arch_map_command.md",
-      "implements": [3],
-      "uses": [1, 4]
+      "implements": [
+        "27c046dde129"
+      ],
+      "uses": [
+        "205e67ca4aad",
+        "6b79188dff4c"
+      ]
     },
     {
-      "id": 4,
+      "id": "6b79188dff4c",
       "name": "ContextResolver",
       "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Looks up the component by matching `record.SpecNodeID` (an identity hash) against component IDs in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
-      "implements": [6],
-      "uses": [1]
+      "implements": [
+        "40a3d3155131"
+      ],
+      "uses": [
+        "205e67ca4aad"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "12e88095cc9d",
       "name": "Mapping file format",
       "content": "impl_mapping_format.md",
-      "describes": [1]
+      "describes": [
+        "205e67ca4aad"
+      ]
     },
     {
-      "id": 2,
+      "id": "a19bedd79ef6",
       "name": "CRUD operations",
       "content": "impl_crud_operations.md",
-      "describes": [1]
+      "describes": [
+        "205e67ca4aad"
+      ]
     },
     {
-      "id": 4,
+      "id": "5c84dc2bdfc3",
       "name": "Map command implementation",
       "content": "impl_map_command.md",
-      "describes": [3]
+      "describes": [
+        "08909d62930b"
+      ]
     },
     {
-      "id": 5,
+      "id": "bb6031b762aa",
       "name": "Context resolution implementation",
       "content": "impl_context_resolution.md",
-      "describes": [4]
+      "describes": [
+        "6b79188dff4c"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
       "description": "When Apply creates a bead, it calls MappingStore to create a mapping record. The record ID is stored as the bead label. Skills query mappings via MapCommand.",
       "content": "flow_bead_mapping.md",
-      "uses": [1, 3]
+      "uses": [
+        "205e67ca4aad",
+        "08909d62930b"
+      ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "21eae6071d42",
       "name": "Mapping store tests",
       "content": "test_mapping_store.md",
-      "describes": [1]
+      "describes": [
+        "205e67ca4aad"
+      ]
     },
     {
-      "id": 3,
+      "id": "571971ee44d6",
       "name": "Map command tests",
       "content": "test_map_command.md",
-      "describes": [3]
+      "describes": [
+        "08909d62930b"
+      ]
     },
     {
-      "id": 4,
+      "id": "ea5d8a24b604",
       "name": "Context resolver tests",
       "content": "test_context_resolver.md",
-      "describes": [4]
+      "describes": [
+        "6b79188dff4c"
+      ]
     }
   ]
 }

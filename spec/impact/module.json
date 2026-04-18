@@ -3,174 +3,238 @@
   "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/obsolete).",
   "requirements": [
     {
-      "id": 1,
+      "id": "5179e5a95653",
+      "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Read bead metadata",
-      "preq_id": 3,
       "description": "Read spec-related fields from bead metadata: metadata.component, metadata.impl_section, metadata.module, metadata.spec_hash."
     },
     {
-      "id": 2,
+      "id": "d165e2fe215e",
+      "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Match changed nodes to beads",
-      "preq_id": 4,
       "description": "Correlate changed spec nodes (from merkle diff) with existing beads using spec metadata fields.",
-      "depends_on": [1]
+      "depends_on": [
+        "5179e5a95653"
+      ]
     },
     {
-      "id": 3,
+      "id": "06a081811e38",
+      "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Classify actions",
-      "preq_id": 4,
       "description": "Determine action for each affected bead: create (added or modified spec nodes) or obsolete (modified or removed spec nodes with existing beads). Modified nodes trigger both obsolete and create.",
-      "depends_on": [2]
+      "depends_on": [
+        "d165e2fe215e"
+      ]
     },
     {
-      "id": 4,
+      "id": "cc987600950e",
+      "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Output impact report",
-      "preq_id": 4,
       "description": "Produce a structured JSON impact report listing all affected beads and their classified actions (create or obsolete).",
-      "depends_on": [3]
+      "depends_on": [
+        "06a081811e38"
+      ]
     },
     {
-      "id": 5,
+      "id": "755ded242c8a",
+      "preq_id": "6faeb216618a",
       "type": "non_functional",
       "title": "Deterministic matching",
-      "preq_id": 9,
       "description": "Same merkle diff + same bead state always produces the same impact report."
     },
     {
-      "id": 6,
+      "id": "3dcf3c279ac5",
+      "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Classify cleanup actions for removed nodes",
-      "preq_id": 5,
       "description": "When a removed spec node has a closed bead (code shipped to main), classify as obsolete + cleanup create. When the bead is open or in_progress (no code shipped), classify as obsolete only.",
-      "depends_on": [3]
+      "depends_on": [
+        "06a081811e38"
+      ]
     },
     {
-      "id": 7,
+      "id": "d1823d802984",
+      "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Resolve spec-graph dependencies for create actions",
-      "preq_id": 4,
       "description": "For each create action, resolve uses (intra-module component edges) and requires_module (inter-module edges, transitive) to current bead IDs via the mapping file. Attach resolved open-bead dependency IDs to the action for downstream propagation to bead CLI --deps depends: flags.",
-      "depends_on": [3]
+      "depends_on": [
+        "06a081811e38"
+      ]
     },
     {
-      "id": 8,
+      "id": "9199f27cb1e2",
+      "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Validate diff input",
-      "preq_id": 4,
       "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed — print errors to stderr and exit non-zero.",
-      "depends_on": [2]
+      "depends_on": [
+        "d165e2fe215e"
+      ]
     }
   ],
   "components": [
     {
-      "id": 1,
+      "id": "bec96486c6b2",
       "name": "BeadReader",
-      "description": "Reads bead metadata from the bead CLI (br or bd). Extracts the mapping record ID from the simplified bead label (spex:<record-id>) and bead status for correlation with spec nodes and cleanup classification.",
+      "description": "Reads bead metadata from the bead CLI (br or bd). Extracts the mapping record ID from the simplified bead label (spex:\u003crecord-id\u003e) and bead status for correlation with spec nodes and cleanup classification.",
       "content": "arch_bead_reader.md",
-      "implements": [1, 6]
+      "implements": [
+        "5179e5a95653",
+        "3dcf3c279ac5"
+      ]
     },
     {
-      "id": 2,
+      "id": "06035e7f0c39",
       "name": "NodeMatcher",
       "description": "Matches changed spec nodes to beads using spec node IDs from the ID-based merkle diff. Correlates by matching spec node IDs against mapping record IDs, not by parsing paths or label conventions.",
       "content": "arch_node_matcher.md",
-      "implements": [2, 5],
-      "uses": [1]
+      "implements": [
+        "d165e2fe215e",
+        "755ded242c8a"
+      ],
+      "uses": [
+        "bec96486c6b2"
+      ]
     },
     {
-      "id": 3,
+      "id": "76d72cbe00f3",
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added→create, modified→obsolete+create, removed→obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file.",
       "content": "arch_action_classifier.md",
-      "implements": [3, 6, 7],
-      "uses": [1, 2]
+      "implements": [
+        "06a081811e38",
+        "3dcf3c279ac5",
+        "d1823d802984"
+      ],
+      "uses": [
+        "bec96486c6b2",
+        "06035e7f0c39"
+      ]
     },
     {
-      "id": 4,
+      "id": "60d4747021ec",
       "name": "ReportGenerator",
       "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepBeadIDs field carrying resolved spec-graph dependency bead IDs.",
       "content": "arch_report_generator.md",
-      "implements": [4],
-      "uses": [3]
+      "implements": [
+        "cc987600950e"
+      ],
+      "uses": [
+        "76d72cbe00f3"
+      ]
     },
     {
-      "id": 5,
+      "id": "5d6813710879",
       "name": "ImpactCommand",
       "description": "CLI entry point for spex impact. Reads merkle diff, validates diff input for errors, wires BeadReader, NodeMatcher, ActionClassifier, ReportGenerator, outputs impact report as JSON.",
       "content": "arch_impact_command.md",
-      "implements": [4, 8],
-      "uses": [1, 2, 3, 4]
+      "implements": [
+        "cc987600950e",
+        "9199f27cb1e2"
+      ],
+      "uses": [
+        "bec96486c6b2",
+        "06035e7f0c39",
+        "76d72cbe00f3",
+        "60d4747021ec"
+      ]
     }
   ],
   "impl_sections": [
     {
-      "id": 1,
+      "id": "df9419abd371",
       "name": "Bead metadata reading",
       "content": "impl_bead_reading.md",
-      "describes": [1]
+      "describes": [
+        "bec96486c6b2"
+      ]
     },
     {
-      "id": 2,
+      "id": "74694a681259",
       "name": "Node matching algorithm",
       "content": "impl_node_matching.md",
-      "describes": [2]
+      "describes": [
+        "06035e7f0c39"
+      ]
     },
     {
-      "id": 3,
+      "id": "c4d8861def3d",
       "name": "Action classification rules",
       "content": "impl_action_classification.md",
-      "describes": [3]
+      "describes": [
+        "76d72cbe00f3"
+      ]
     },
     {
-      "id": 4,
+      "id": "7169092e513c",
       "name": "Report format",
       "content": "impl_report_format.md",
-      "describes": [4]
+      "describes": [
+        "60d4747021ec"
+      ]
     },
     {
-      "id": 5,
+      "id": "4c1f6ea7df9d",
       "name": "Impact command implementation",
       "content": "impl_impact_command.md",
-      "describes": [5]
+      "describes": [
+        "5d6813710879"
+      ]
     },
     {
-      "id": 6,
+      "id": "8a6cca3fca36",
       "name": "Dependency resolution algorithm",
       "content": "impl_dependency_resolution.md",
-      "describes": [3]
+      "describes": [
+        "76d72cbe00f3"
+      ]
     }
   ],
   "data_flows": [
     {
-      "id": 1,
+      "id": "855e53793fdf",
       "name": "Impact analysis flow",
-      "description": "Merkle diff + bead metadata \u2192 matched pairs \u2192 classified actions (create/obsolete) \u2192 impact report.",
+      "description": "Merkle diff + bead metadata → matched pairs → classified actions (create/obsolete) → impact report.",
       "content": "flow_impact_analysis.md",
-      "uses": [1, 2, 3, 4]
+      "uses": [
+        "bec96486c6b2",
+        "06035e7f0c39",
+        "76d72cbe00f3",
+        "60d4747021ec"
+      ]
     }
   ],
   "test_sections": [
     {
-      "id": 1,
+      "id": "3f52a24cb35d",
       "name": "Bead matching tests",
       "content": "test_bead_matching.md",
-      "describes": [1, 2]
+      "describes": [
+        "bec96486c6b2",
+        "06035e7f0c39"
+      ]
     },
     {
-      "id": 2,
+      "id": "59e85bdbec24",
       "name": "Classification and reporting tests",
       "content": "test_classification_reporting.md",
-      "describes": [3, 4]
+      "describes": [
+        "76d72cbe00f3",
+        "60d4747021ec"
+      ]
     },
     {
-      "id": 3,
+      "id": "35a2f66ec797",
       "name": "Impact command tests",
       "content": "test_impact_command.md",
-      "describes": [5]
+      "describes": [
+        "5d6813710879"
+      ]
     }
   ]
 }
