@@ -88,8 +88,10 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	}
 	for i := range actions {
 		if actions[i].Type == "create" {
-			specNID := resolveActionSpecNodeID(actions[i], records)
-			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i], specNID)
+			// TODO(bead:spexmachina-ir6): action.SpecNodeID now carries the identity hash
+			// directly; remove resolveActionSpecNodeID and the path-reconstruction helpers
+			// below once ImpactCommand is rewritten for identity-hash IDs.
+			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i])
 		}
 	}
 

@@ -19,8 +19,11 @@ type Unmatched struct {
 }
 
 // Orphaned represents a mapping record whose referenced spec node was removed.
+// NodeType is preserved from the originating removed change because identity
+// hashes do not embed the node type and ActionClassifier needs it downstream.
 type Orphaned struct {
-	Record mapping.Record
+	Record   mapping.Record
+	NodeType string
 }
 
 // MatchNodes correlates classified changes with mapping records using direct
@@ -33,7 +36,7 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 	}
 
 	matched := map[int]bool{}
-	orphanCandidates := map[int]mapping.Record{}
+	orphanCandidates := map[int]Orphaned{}
 
 	var matches []Match
 	var unmatched []Unmatched
@@ -55,7 +58,7 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 			if c.Type == merkle.Removed {
 				for _, r := range found {
 					if !matched[r.ID] {
-						orphanCandidates[r.ID] = r
+						orphanCandidates[r.ID] = Orphaned{Record: r, NodeType: c.NodeType}
 					}
 				}
 			} else {
@@ -72,8 +75,8 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 
 	// Collect orphaned records sorted by bead ID.
 	var orphaned []Orphaned
-	for _, r := range orphanCandidates {
-		orphaned = append(orphaned, Orphaned{Record: r})
+	for _, o := range orphanCandidates {
+		orphaned = append(orphaned, o)
 	}
 	sort.Slice(orphaned, func(i, j int) bool {
 		return orphaned[i].Record.BeadID < orphaned[j].Record.BeadID
