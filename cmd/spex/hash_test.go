@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func setupTestSpec(t *testing.T) string {
@@ -28,17 +29,19 @@ func setupTestSpec(t *testing.T) string {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	impl1Hash := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	test1Hash := schema.IdentityHash("alpha", "test_section", "Comp1 tests")
 	alphaMod := `{
 		"name": "alpha",
 		"components": [
-			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"}
 		],
 		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md"}
+			{"id": "` + impl1Hash + `", "name": "Impl1", "content": "impl_comp1.md"}
 		],
 		"test_sections": [
-			{"id": "aabbccddeeff", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["aabbccddeeff"]}
+			{"id": "` + test1Hash + `", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["` + comp1Hash + `"]}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)

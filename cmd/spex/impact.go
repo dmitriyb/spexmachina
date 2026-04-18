@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -72,13 +71,9 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: read mapping records: %w", err)
 	}
 
-	// Build a reverse index: bead-map spec_node_id → records, keyed by
-	// the merkle path format so NodeMatcher can match directly.
-	// This avoids mutating Change.Path (which apply's deriveSpecNodeID needs
-	// in original merkle format).
-	merkleIndex := buildMerkleIndex(records, changes)
-
-	matches, unmatched, orphaned := impact.MatchNodes(changes, merkleIndex)
+	// Changes and records both key on identity hashes; NodeMatcher joins them
+	// directly without any path-format translation.
+	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
 	actions := impact.ClassifyActions(matches, unmatched, orphaned)
 
 	// Post-processing: resolve spec-graph dependencies for create actions.
@@ -88,9 +83,6 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	}
 	for i := range actions {
 		if actions[i].Type == "create" {
-			// TODO(bead:spexmachina-ir6): action.SpecNodeID now carries the identity hash
-			// directly; remove resolveActionSpecNodeID and the path-reconstruction helpers
-			// below once ImpactCommand is rewritten for identity-hash IDs.
 			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i])
 		}
 	}
@@ -99,34 +91,6 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: %w", err)
 	}
 	return nil
-}
-
-// buildMerkleIndex re-keys bead-map records from their spec_node_id format
-// (moduleName/nodeType/nodeID) to the merkle path format (module/moduleID/nodeType/nodeID)
-// so that NodeMatcher's direct string comparison works against Change.Path.
-func buildMerkleIndex(records []mapping.Record, changes []merkle.ClassifiedChange) []mapping.Record {
-	// Build module name → merkle ID prefix mapping from the changes.
-	moduleIDs := map[string]string{}
-	for _, c := range changes {
-		parts := splitKey(c.Change.Path)
-		if len(parts) >= 2 && parts[0] == "module" && c.Module != "" {
-			moduleIDs[c.Module] = parts[1] // e.g., "render" → "7"
-		}
-	}
-
-	// Re-key each record's SpecNodeID to merkle format.
-	rekeyed := make([]mapping.Record, len(records))
-	copy(rekeyed, records)
-	for i, r := range rekeyed {
-		parts := splitKey(r.SpecNodeID)
-		if len(parts) == 3 {
-			// "schema/component/1" → "module/<moduleID>/component/1"
-			if modID, ok := moduleIDs[parts[0]]; ok {
-				rekeyed[i].SpecNodeID = "module/" + modID + "/" + parts[1] + "/" + parts[2]
-			}
-		}
-	}
-	return rekeyed
 }
 
 // parseDiffJSON converts the JSON output of `spex diff --json` into
@@ -202,12 +166,12 @@ func parseImpactLevel(s string) (merkle.ImpactLevel, error) {
 // moduleJSON is the subset of module.json we need for building NodeMaps.
 type moduleJSON struct {
 	Components []struct {
-		ID      int    `json:"id"`
+		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	} `json:"components"`
 	ImplSections []struct {
-		ID      int    `json:"id"`
+		ID      string `json:"id"`
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	} `json:"impl_sections"`
@@ -254,17 +218,15 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]Conten
 		nm := impact.NodeMap{}
 		cm := ContentMap{}
 		for _, c := range mod.Components {
-			key := "component/" + strconv.Itoa(c.ID)
-			if c.Content != "" {
-				nm[key] = c.Name
-				cm[key] = filepath.Join("spec", m.Path, c.Content)
+			if c.Content != "" && c.ID != "" {
+				nm[c.ID] = c.Name
+				cm[c.ID] = filepath.Join("spec", m.Path, c.Content)
 			}
 		}
 		for _, s := range mod.ImplSections {
-			key := "impl_section/" + strconv.Itoa(s.ID)
-			if s.Content != "" {
-				nm[key] = s.Name
-				cm[key] = filepath.Join("spec", m.Path, s.Content)
+			if s.Content != "" && s.ID != "" {
+				nm[s.ID] = s.Name
+				cm[s.ID] = filepath.Join("spec", m.Path, s.Content)
 			}
 		}
 
@@ -272,18 +234,4 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]Conten
 		contents[m.Name] = cm
 	}
 	return modules, contents, nil
-}
-
-// resolveActionSpecNodeID determines the spec node ID for a create action.
-// For replacements (OldBeadID set), it looks up the existing mapping record.
-// For new nodes, it derives the ID from the merkle path in the action's Node field.
-func resolveActionSpecNodeID(action impact.Action, records []mapping.Record) string {
-	if action.OldBeadID != "" {
-		for _, r := range records {
-			if r.BeadID == action.OldBeadID {
-				return r.SpecNodeID
-			}
-		}
-	}
-	return deriveSpecNodeID(action.Module, action.Node, action.NodeType)
 }
