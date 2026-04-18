@@ -25,7 +25,6 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [

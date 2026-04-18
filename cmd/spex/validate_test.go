@@ -139,7 +139,6 @@ func setupInvalidTestSpec(t *testing.T) string {
 	if err := makeDir(alphaDir); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [

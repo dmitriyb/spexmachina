@@ -34,7 +34,6 @@ func setupRenderSpec(t *testing.T) string {
 
 	alphaDir := filepath.Join(dir, "alpha")
 	os.MkdirAll(alphaDir, 0755)
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	alphaMod := `{
 		"name": "alpha",
 		"description": "Alpha module description",
@@ -321,7 +320,6 @@ func TestFR1_E3_MissingProjectJSON(t *testing.T) {
 
 // E4: Spec with broken content reference
 func TestFR1_E4_BrokenContentRef(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	dir := t.TempDir()
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test",

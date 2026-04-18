@@ -407,8 +407,6 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 }
 
 func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-kdb changed to identity-hash keying
-	t.Skip("TODO(bead:spexmachina-ir6): fix after spexmachina-kdb changed to identity-hash keying")
 	specDir := setupTestSpecWithRequirements(t)
 
 	_, err := runSpex(t, "hash", "--spec-dir", specDir)
@@ -420,21 +418,7 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 	// Changing module.json (requirement title) also triggers meta-only checks
 	// for all components, so both must change.
 	alphaDir := filepath.Join(specDir, "alpha")
-	alphaMod := `{
-		"name": "alpha",
-		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req 1 CHANGED", "preq_id": "aabbccddeeff"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req 2"}
-		],
-		"components": [
-			{"id": "aabbccddeeff", "name": "CompA", "content": "arch_comp_a.md", "implements": ["aabbccddeeff"]},
-			{"id": "ffeeddccbbaa", "name": "CompB", "content": "arch_comp_b.md", "implements": ["ffeeddccbbaa"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp_a.md"}
-		]
-	}`
-	writeTestFile(t, alphaDir, "module.json", alphaMod)
+	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
 	writeTestFile(t, alphaDir, "arch_comp_a.md", "# CompA architecture CHANGED\n")
 	writeTestFile(t, alphaDir, "arch_comp_b.md", "# CompB architecture CHANGED\n")
 

@@ -13,6 +13,7 @@ import (
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // setupImpactDiffFile creates a spec dir, builds a tree, snapshots it,
@@ -63,12 +64,11 @@ func setupMappingFile(t *testing.T, dir string, records []mapping.Record) string
 }
 
 func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-ir6: fixtures need identity hash IDs")
 	specDir, diffFile := setupImpactDiffFile(t)
 
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
+		{SpecNodeID: comp1Hash, BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
 	})
 
 	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
@@ -81,9 +81,9 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// Merkle paths (module/1/component/1) are translated to bead-map format
-	// (alpha/component/1) before matching. Verify the match produced an
-	// obsolete+create pair for the existing bead.
+	// The change.Path (identity hash) matches directly against the mapping
+	// record's SpecNodeID (also an identity hash) — no rekeying. Verify
+	// the match produced an obsolete+create pair for the existing bead.
 	if report.Summary.ObsoleteCount != 1 {
 		t.Errorf("want 1 obsolete, got %d", report.Summary.ObsoleteCount)
 	}
@@ -100,8 +100,6 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 }
 
 func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-kdb changed to identity-hash keying
-	t.Skip("TODO(bead:spexmachina-ir6): fix after spexmachina-kdb changed to identity-hash keying")
 	specDir, diffFile := setupImpactDiffFile(t)
 
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
@@ -163,8 +161,9 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
 	specDir, diffFile := setupImpactDiffFile(t)
 
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: "alpha/component/1", BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
+		{SpecNodeID: comp1Hash, BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
 	})
 
 	out1, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
@@ -389,17 +388,23 @@ func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
 // When beta's component is modified, the create action should carry alpha's
 // open bead ID in DepBeadIDs (requires_module transitive resolution).
 func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-ir6: fixtures need identity hash IDs")
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
 
-	// Project: alpha (id 1), beta (id 2, requires alpha).
+	alphaID := schema.IdentityHash("module", "alpha")
+	betaID := schema.IdentityHash("module", "beta")
+	alphaCompID := schema.IdentityHash("alpha", "component", "AlphaComp")
+	alphaImplID := schema.IdentityHash("alpha", "impl_section", "AlphaImpl")
+	alphaTestID := schema.IdentityHash("alpha", "test_section", "AlphaTest")
+	betaCompID := schema.IdentityHash("beta", "component", "BetaComp")
+	betaImplID := schema.IdentityHash("beta", "impl_section", "BetaImpl")
+	betaTestID := schema.IdentityHash("beta", "test_section", "BetaTest")
+
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": "000000000001", "name": "alpha", "path": "alpha"},
-			{"id": "000000000002", "name": "beta", "path": "beta", "requires_module": ["000000000001"]}
+			{"id": "` + alphaID + `", "name": "alpha", "path": "alpha"},
+			{"id": "` + betaID + `", "name": "beta", "path": "beta", "requires_module": ["` + alphaID + `"]}
 		]
 	}`
 	if err := os.MkdirAll(specDir, 0755); err != nil {
@@ -411,17 +416,16 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	if err := os.MkdirAll(alphaDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
-			{"id": "aabbccddeeff", "name": "AlphaComp", "content": "arch_alpha.md"}
+			{"id": "`+alphaCompID+`", "name": "AlphaComp", "content": "arch_alpha.md"}
 		],
 		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "AlphaImpl", "content": "impl_alpha.md"}
+			{"id": "`+alphaImplID+`", "name": "AlphaImpl", "content": "impl_alpha.md"}
 		],
 		"test_sections": [
-			{"id": "aabbccddeeff", "name": "AlphaTest", "content": "test_alpha.md", "describes": ["aabbccddeeff"]}
+			{"id": "`+alphaTestID+`", "name": "AlphaTest", "content": "test_alpha.md", "describes": ["`+alphaCompID+`"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_alpha.md", "# Alpha comp\n")
@@ -435,20 +439,19 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	writeTestFile(t, betaDir, "module.json", `{
 		"name": "beta",
 		"components": [
-			{"id": "aabbccddeeff", "name": "BetaComp", "content": "arch_beta.md"}
+			{"id": "`+betaCompID+`", "name": "BetaComp", "content": "arch_beta.md"}
 		],
 		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "BetaImpl", "content": "impl_beta.md"}
+			{"id": "`+betaImplID+`", "name": "BetaImpl", "content": "impl_beta.md"}
 		],
 		"test_sections": [
-			{"id": "aabbccddeeff", "name": "BetaTest", "content": "test_beta.md", "describes": ["aabbccddeeff"]}
+			{"id": "`+betaTestID+`", "name": "BetaTest", "content": "test_beta.md", "describes": ["`+betaCompID+`"]}
 		]
 	}`)
 	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp\n")
 	writeTestFile(t, betaDir, "impl_beta.md", "# Beta impl\n")
 	writeTestFile(t, betaDir, "test_beta.md", "# Beta test\n")
 
-	// Build initial snapshot.
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -460,7 +463,6 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	// Modify beta's arch file to trigger a change.
 	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp CHANGED\n")
 
-	// Run diff.
 	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("diff: %v", err)
@@ -469,11 +471,9 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	diffFile := filepath.Join(diffDir, "diff.json")
 	writeTestFile(t, diffDir, "diff.json", diffJSON)
 
-	// Create mapping: alpha/component/1 → bead-alpha (open),
-	// beta/component/1 → bead-beta (open, will be modified).
 	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: "alpha/component/1", BeadID: "bead-alpha", BeadType: "feature", Module: "alpha", Component: "AlphaComp", ContentFile: "spec/alpha/arch_alpha.md", SpecHash: "aaa", BeadStatus: "open"},
-		{SpecNodeID: "beta/component/1", BeadID: "bead-beta", BeadType: "feature", Module: "beta", Component: "BetaComp", ContentFile: "spec/beta/arch_beta.md", SpecHash: "bbb", BeadStatus: "open"},
+		{SpecNodeID: alphaCompID, BeadID: "bead-alpha", BeadType: "feature", Module: "alpha", Component: "AlphaComp", ContentFile: "spec/alpha/arch_alpha.md", SpecHash: "aaa", BeadStatus: "open"},
+		{SpecNodeID: betaCompID, BeadID: "bead-beta", BeadType: "feature", Module: "beta", Component: "BetaComp", ContentFile: "spec/beta/arch_beta.md", SpecHash: "bbb", BeadStatus: "open"},
 	})
 
 	// Run impact.
@@ -502,21 +502,27 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 			t.Fatalf("want bead-alpha in DepBeadIDs, got %v", c.DepBeadIDs)
 		}
 	}
-	t.Fatal("create action for beta/component/1 with OldBeadID=bead-beta not found")
+	t.Fatal("create action for beta component with OldBeadID=bead-beta not found")
 }
 
 // TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs verifies that intra-module
 // component `uses` edges are resolved into DepBeadIDs.
 func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-hd6 changed spec_node_id pattern to identity hash (^[a-f0-9]{12}$).
-	t.Skip("blocked on spexmachina-ir6: fixtures need identity hash IDs")
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
+
+	modID := schema.IdentityHash("module", "mod")
+	baseID := schema.IdentityHash("mod", "component", "Base")
+	userID := schema.IdentityHash("mod", "component", "User")
+	baseImplID := schema.IdentityHash("mod", "impl_section", "BaseImpl")
+	userImplID := schema.IdentityHash("mod", "impl_section", "UserImpl")
+	baseTestID := schema.IdentityHash("mod", "test_section", "BaseTest")
+	userTestID := schema.IdentityHash("mod", "test_section", "UserTest")
 
 	proj := `{
 		"name": "test-project",
 		"modules": [
-			{"id": "000000000001", "name": "mod", "path": "mod"}
+			{"id": "` + modID + `", "name": "mod", "path": "mod"}
 		]
 	}`
 	if err := os.MkdirAll(specDir, 0755); err != nil {
@@ -528,21 +534,20 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 	if err := os.MkdirAll(modDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	// TODO(bead:spexmachina-ir6): fix after spexmachina-e8t changed module IDs from int to identity hash strings
-	// Component 2 uses component 1.
+	// Component User uses component Base.
 	writeTestFile(t, modDir, "module.json", `{
 		"name": "mod",
 		"components": [
-			{"id": "aabbccddeeff", "name": "Base", "content": "arch_base.md"},
-			{"id": "ffeeddccbbaa", "name": "User", "content": "arch_user.md", "uses": ["aabbccddeeff"]}
+			{"id": "`+baseID+`", "name": "Base", "content": "arch_base.md"},
+			{"id": "`+userID+`", "name": "User", "content": "arch_user.md", "uses": ["`+baseID+`"]}
 		],
 		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "BaseImpl", "content": "impl_base.md"},
-			{"id": "ffeeddccbbaa", "name": "UserImpl", "content": "impl_user.md"}
+			{"id": "`+baseImplID+`", "name": "BaseImpl", "content": "impl_base.md"},
+			{"id": "`+userImplID+`", "name": "UserImpl", "content": "impl_user.md"}
 		],
 		"test_sections": [
-			{"id": "aabbccddeeff", "name": "BaseTest", "content": "test_base.md", "describes": ["aabbccddeeff"]},
-			{"id": "ffeeddccbbaa", "name": "UserTest", "content": "test_user.md", "describes": ["ffeeddccbbaa"]}
+			{"id": "`+baseTestID+`", "name": "BaseTest", "content": "test_base.md", "describes": ["`+baseID+`"]},
+			{"id": "`+userTestID+`", "name": "UserTest", "content": "test_user.md", "describes": ["`+userID+`"]}
 		]
 	}`)
 	writeTestFile(t, modDir, "arch_base.md", "# Base\n")
@@ -560,7 +565,7 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Modify component 2's arch file.
+	// Modify User's arch file.
 	writeTestFile(t, modDir, "arch_user.md", "# User CHANGED\n")
 
 	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
@@ -572,8 +577,8 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 	writeTestFile(t, diffDir, "diff.json", diffJSON)
 
 	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: "mod/component/1", BeadID: "bead-base", BeadType: "feature", Module: "mod", Component: "Base", ContentFile: "spec/mod/arch_base.md", SpecHash: "aaa", BeadStatus: "open"},
-		{SpecNodeID: "mod/component/2", BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
+		{SpecNodeID: baseID, BeadID: "bead-base", BeadType: "feature", Module: "mod", Component: "Base", ContentFile: "spec/mod/arch_base.md", SpecHash: "aaa", BeadStatus: "open"},
+		{SpecNodeID: userID, BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
 	})
 
 	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
@@ -596,7 +601,7 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 			t.Fatalf("want bead-base in DepBeadIDs (uses edge), got %v", c.DepBeadIDs)
 		}
 	}
-	t.Fatal("create action for mod/component/2 with OldBeadID=bead-user not found")
+	t.Fatal("create action for User component with OldBeadID=bead-user not found")
 }
 
 func TestFR8_ImpactCommand_MultipleErrorsAllPrinted(t *testing.T) {
