@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -24,11 +23,13 @@ type ContextResult struct {
 // ResolveContext resolves all spec files needed to implement or review a
 // component, given a mapping record and the spec directory. It is a pure
 // function: deterministic, no side effects beyond reading files.
+//
+// record.SpecNodeID is treated as the component's identity hash directly —
+// MappingStore's JSON-schema validation guarantees it matches ^[a-f0-9]{12}$,
+// so no parsing happens here. record.Module is authoritative for locating
+// module.json.
 func ResolveContext(specDir string, record Record) (ContextResult, error) {
-	compID, err := parseContextComponentID(record.SpecNodeID)
-	if err != nil {
-		return ContextResult{}, err
-	}
+	compHash := record.SpecNodeID
 
 	modPath := filepath.Join(specDir, record.Module, "module.json")
 	data, err := os.ReadFile(modPath)
@@ -45,21 +46,21 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 
 	var implFiles []string
 	for _, sec := range ms.ImplSections {
-		if slices.Contains(sec.Describes, compID) {
+		if slices.Contains(sec.Describes, compHash) {
 			implFiles = append(implFiles, filepath.Join(modDir, sec.Content))
 		}
 	}
 
 	var testFiles []string
 	for _, sec := range ms.TestSections {
-		if slices.Contains(sec.Describes, compID) {
+		if slices.Contains(sec.Describes, compHash) {
 			testFiles = append(testFiles, filepath.Join(modDir, sec.Content))
 		}
 	}
 
 	var flowFiles []string
 	for _, df := range ms.DataFlows {
-		if slices.Contains(df.Uses, compID) {
+		if slices.Contains(df.Uses, compHash) {
 			flowFiles = append(flowFiles, filepath.Join(modDir, df.Content))
 		}
 	}
@@ -72,19 +73,4 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 		FlowFiles:  flowFiles,
 		ModuleFile: modPath,
 	}, nil
-}
-
-// parseContextComponentID extracts the integer component ID from a
-// spec_node_id like "module_name/component/3". Returns an error if the
-// format is invalid or the node type is not "component".
-// TODO(bead:spexmachina-nv9): fix after spexmachina-e8t changed module IDs from int to identity hash strings
-func parseContextComponentID(specNodeID string) (string, error) {
-	parts := strings.Split(specNodeID, "/")
-	if len(parts) != 3 {
-		return "", fmt.Errorf("context: invalid spec_node_id: %q (expected module/component/id)", specNodeID)
-	}
-	if parts[1] != "component" {
-		return "", fmt.Errorf("context: not a component node: %q", specNodeID)
-	}
-	return parts[2], nil
 }
