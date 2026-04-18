@@ -5,10 +5,11 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func TestREQ4_Diff_NoSnapshot_AllAdded(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	current, err := BuildTree(specDir)
 	if err != nil {
@@ -37,7 +38,6 @@ func TestREQ4_Diff_NoSnapshot_AllAdded(t *testing.T) {
 }
 
 func TestREQ4_Diff_IdenticalTrees_NoChanges(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	current, err := BuildTree(specDir)
 	if err != nil {
@@ -56,7 +56,6 @@ func TestREQ4_Diff_IdenticalTrees_NoChanges(t *testing.T) {
 }
 
 func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
 	if err != nil {
@@ -82,14 +81,16 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 	if len(modified) != 1 {
 		t.Fatalf("expected 1 modified change, got %d: %v", len(modified), changes)
 	}
-	if modified[0].Path != "module/1/component/1" {
-		t.Errorf("expected modified path module/1/component/1, got %s", modified[0].Path)
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	if modified[0].Path != comp1Key {
+		t.Errorf("expected modified key %s, got %s", comp1Key, modified[0].Path)
 	}
 	if modified[0].NodeType != "component" {
 		t.Errorf("expected NodeType 'component', got %q", modified[0].NodeType)
 	}
-	if modified[0].Module == "" {
-		t.Errorf("expected non-empty Module, got %q", modified[0].Module)
+	if modified[0].Module != alphaHash {
+		t.Errorf("expected Module %s, got %q", alphaHash, modified[0].Module)
 	}
 	if modified[0].OldHash == "" || modified[0].NewHash == "" {
 		t.Error("expected both OldHash and NewHash to be non-empty for modified change")
@@ -100,23 +101,34 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 }
 
 func TestREQ4_Diff_AddedLeaf(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
 	if err != nil {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// Add a new impl section to alpha's module.json and create the file
+	// Extend alpha's module.json with a second impl_section and create the file.
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	alphaComp1 := schema.IdentityHash("alpha", "component", "Comp1")
+	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	alphaImpl2 := schema.IdentityHash("alpha", "impl_section", "Impl2")
+	projReq1 := schema.IdentityHash("project", "requirement", "1")
+
 	alphaMod := `{
 		"name": "alpha",
+		"requirements": [
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + projReq1 + `"},
+			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
+		],
 		"components": [
-			{"id": 1, "name": "Comp1", "content": "arch_comp1.md"},
-			{"id": 2, "name": "Comp2", "content": "arch_comp2.md"}
+			{"id": "` + alphaComp1 + `", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "` + alphaComp2 + `", "name": "Comp2", "content": "arch_comp2.md"}
 		],
 		"impl_sections": [
-			{"id": 1, "name": "Impl1", "content": "impl_comp1.md"},
-			{"id": 2, "name": "Impl2", "content": "impl_comp2.md"}
+			{"id": "` + alphaImpl1 + `", "name": "Impl1", "content": "impl_comp1.md"},
+			{"id": "` + alphaImpl2 + `", "name": "Impl2", "content": "impl_comp2.md"}
 		]
 	}`
 	alphaDir := filepath.Join(specDir, "alpha")
@@ -137,26 +149,25 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 		}
 	}
 
-	// The new impl_section/2 is added; module meta is modified (its hash changed)
+	alphaHash := schema.IdentityHash("module", "Alpha")
 	foundNewImpl := false
 	for _, c := range added {
-		if c.Path == "module/1/impl_section/2" {
+		if c.Path == alphaImpl2 {
 			foundNewImpl = true
 			if c.NodeType != "impl_section" {
 				t.Errorf("expected NodeType 'impl_section', got %q", c.NodeType)
 			}
-			if c.Module == "" {
-				t.Errorf("expected non-empty Module, got %q", c.Module)
+			if c.Module != alphaHash {
+				t.Errorf("expected Module %s, got %q", alphaHash, c.Module)
 			}
 		}
 	}
 	if !foundNewImpl {
-		t.Errorf("expected added change for module/1/impl_section/2, changes: %v", changes)
+		t.Errorf("expected added change for %s, changes: %v", alphaImpl2, changes)
 	}
 }
 
 func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	// Build snapshot with both modules
@@ -168,6 +179,10 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 	// Remove beta module from project.json
 	proj := `{
 		"name": "test-project",
+		"requirements": [
+			{"id": 1, "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": 2, "type": "non_functional", "title": "Be fast", "priority": 2}
+		],
 		"modules": [
 			{"id": 1, "name": "Alpha", "path": "alpha"}
 		]
@@ -192,25 +207,41 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 		t.Fatalf("expected removed changes, got none. all changes: %v", changes)
 	}
 
-	foundBeta := false
+	betaHash := schema.IdentityHash("module", "Beta")
+	betaComp := schema.IdentityHash("beta", "component", "BetaComp")
+	betaMetaKey := "meta/" + betaHash
+
+	foundBetaMeta := false
+	foundBetaComp := false
 	for _, c := range removed {
-		if strings.HasPrefix(c.Path, "module/2") {
-			foundBeta = true
-			if c.Module == "" {
-				t.Errorf("expected non-empty Module for removed beta node, got %q", c.Module)
+		if c.Path == betaMetaKey {
+			foundBetaMeta = true
+			if c.NodeType != "meta" {
+				t.Errorf("expected NodeType 'meta' for %s, got %q", c.Path, c.NodeType)
 			}
-			if c.NodeType == "" {
-				t.Errorf("expected non-empty NodeType for removed %s", c.Path)
+			if c.Module != betaHash {
+				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Path, c.Module)
+			}
+		}
+		if c.Path == betaComp {
+			foundBetaComp = true
+			if c.NodeType != "component" {
+				t.Errorf("expected NodeType 'component' for %s, got %q", c.Path, c.NodeType)
+			}
+			if c.Module != betaHash {
+				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Path, c.Module)
 			}
 		}
 	}
-	if !foundBeta {
-		t.Errorf("expected removed change for module/2, changes: %v", changes)
+	if !foundBetaMeta {
+		t.Errorf("expected removed change for %s, changes: %v", betaMetaKey, changes)
+	}
+	if !foundBetaComp {
+		t.Errorf("expected removed change for %s, changes: %v", betaComp, changes)
 	}
 }
 
 func TestREQ4_Diff_LeafOnlyReporting(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
 	if err != nil {
@@ -244,7 +275,6 @@ func TestREQ4_Diff_LeafOnlyReporting(t *testing.T) {
 }
 
 func TestREQ4_Diff_Deterministic(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	// Modify a file to create some changes
@@ -284,7 +314,6 @@ func TestREQ4_Diff_Deterministic(t *testing.T) {
 }
 
 func TestREQ4_Diff_SaveLoadRoundtrip(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
 	if err != nil {
@@ -323,12 +352,20 @@ func TestREQ4_Diff_SaveLoadRoundtrip(t *testing.T) {
 }
 
 func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-lg2): fix after spexmachina-e8t changed module IDs to identity hashes")
 	specDir := setupSpecDir(t)
 
 	changes := Diff(mustBuildTree(t, specDir), nil)
 	if len(changes) == 0 {
 		t.Fatal("expected changes, got none")
+	}
+
+	projReqPrefix := "project/requirement/"
+	projReq1 := schema.IdentityHash("project", "requirement", "1")
+	projReq2 := schema.IdentityHash("project", "requirement", "2")
+	projectLevelKeys := map[string]bool{
+		"meta/project": true,
+		projReq1:       true,
+		projReq2:       true,
 	}
 
 	// Collect the node types present across all added leaves.
@@ -340,8 +377,8 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		if c.NodeType == "" {
 			t.Errorf("missing NodeType for %s", c.Path)
 		}
-		// project-level nodes have Module 0; all others must be > 0.
-		isProjectLevel := c.Path == "project/meta" || strings.HasPrefix(c.Path, "project/requirement/")
+		// Project-level leaves have empty Module; all module-scoped leaves must have it.
+		isProjectLevel := projectLevelKeys[c.Path] || strings.HasPrefix(c.Path, projReqPrefix)
 		if !isProjectLevel && c.Module == "" {
 			t.Errorf("missing Module for %s", c.Path)
 		}
