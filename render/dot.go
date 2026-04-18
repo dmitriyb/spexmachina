@@ -21,6 +21,17 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 	}
 	fmt.Fprintf(w, "\n")
 
+	// Project-level section nodes (emitted before module subgraphs so they
+	// remain at the project scope, not inside any cluster).
+	for _, s := range spec.Project.Sections {
+		nid := fmt.Sprintf("section_%s", sanitizeDOTID(s.Name))
+		fmt.Fprintf(w, "  %s [label=%q, shape=tab, fillcolor=mistyrose, style=filled];\n",
+			nid, s.Name)
+	}
+	if len(spec.Project.Sections) > 0 {
+		fmt.Fprintf(w, "\n")
+	}
+
 	// Module subgraphs
 	for _, mg := range spec.Modules {
 		modID := sanitizeDOTID(mg.Module.Name)
@@ -108,7 +119,6 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 			}
 		}
 
-		// TODO(bead:spexmachina-spl): fix after spexmachina-e8t changed ModuleRequirement to string IDs
 		// Requirement edges
 		for _, r := range mg.Spec.Requirements {
 			reqID := fmt.Sprintf("%s_req_%s", modID, r.ID)
@@ -123,8 +133,31 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 		}
 	}
 
+	// Section coupling edges. A coupled section links to the module sharing
+	// its name; sections without a matching module or of another type emit
+	// no edge.
+	for _, s := range spec.Project.Sections {
+		if s.Type != "coupled" {
+			continue
+		}
+		if findModuleByName(spec, s.Name) == "" {
+			continue
+		}
+		fmt.Fprintf(w, "  section_%s -> %s [label=\"coupled\", style=bold];\n",
+			sanitizeDOTID(s.Name), sanitizeDOTID(s.Name))
+	}
+
 	fmt.Fprintf(w, "}\n")
 	return nil
+}
+
+func findModuleByName(spec *SpecGraph, name string) string {
+	for _, mg := range spec.Modules {
+		if mg.Module.Name == name {
+			return mg.Module.Name
+		}
+	}
+	return ""
 }
 
 func sanitizeDOTID(name string) string {
