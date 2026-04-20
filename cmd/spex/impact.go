@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,6 +22,7 @@ func newImpactCmd() *cobra.Command {
 	}
 	cmd.Flags().String("diff", "", "path to diff JSON file (default: stdin)")
 	cmd.Flags().String("map", ".bead-map.json", "path to bead mapping file")
+	cmd.Flags().String("bead-cli", "br", "bead CLI binary name (used to read live bead status for cleanup classification)")
 	return cmd
 }
 
@@ -69,6 +71,15 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	records, err := store.List()
 	if err != nil {
 		return fmt.Errorf("impact: read mapping records: %w", err)
+	}
+
+	// Populate live BeadStatus on each mapping record by querying the bead CLI.
+	// Without this, ActionClassifier cannot classify cleanup creates for
+	// removed spec nodes whose beads have already closed (req 3dcf3c279ac5).
+	beadCLIFlag, _ := cmd.Flags().GetString("bead-cli")
+	records, err = enrichRecordsWithBeadStatus(cmd.Context(), beadCLIFlag, records)
+	if err != nil {
+		return fmt.Errorf("impact: enrich bead statuses: %w", err)
 	}
 
 	// Changes and records both key on identity hashes; NodeMatcher joins them
@@ -135,6 +146,36 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 		}
 	}
 	return changes, raw.Errors, nil
+}
+
+// enrichRecordsWithBeadStatus queries the bead CLI for live statuses and
+// populates each mapping record's BeadStatus field by matching on the
+// spex:<record-id> label. Records without a matching bead are returned with
+// an empty BeadStatus; ActionClassifier treats that as non-closed, which
+// produces an obsolete-only action (no cleanup create), matching the intent
+// for beads that have been deleted out-of-band.
+//
+// Returns the original slice with BeadStatus set; does not reorder.
+func enrichRecordsWithBeadStatus(ctx context.Context, beadBin string, records []mapping.Record) ([]mapping.Record, error) {
+	if len(records) == 0 {
+		return records, nil
+	}
+	beads, err := impact.ReadBeads(ctx, beadBin)
+	if err != nil {
+		return nil, err
+	}
+	statusByRecordID := make(map[int]string, len(beads))
+	for _, b := range beads {
+		statusByRecordID[b.RecordID] = b.Status
+	}
+	out := make([]mapping.Record, len(records))
+	for i, r := range records {
+		if status, ok := statusByRecordID[r.ID]; ok {
+			r.BeadStatus = status
+		}
+		out[i] = r
+	}
+	return out, nil
 }
 
 func parseChangeType(s string) (merkle.ChangeType, error) {

@@ -604,6 +604,65 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 	t.Fatal("create action for User component with OldBeadID=bead-user not found")
 }
 
+// TestEnrichRecordsWithBeadStatus verifies the helper copies live bead
+// statuses onto mapping records by matching on the spex:<record-id> label.
+// Regression guard for spexmachina-idd: previously BeadStatus was never
+// populated on production code paths, so cleanup creates never fired.
+func TestEnrichRecordsWithBeadStatus(t *testing.T) {
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "br-stub")
+	jsonFile := filepath.Join(dir, "beads.json")
+
+	// Envelope shape with three beads: one closed, one open, one unrelated.
+	// Record 99 has no corresponding bead — its BeadStatus must stay empty.
+	payload := `{"issues":[
+		{"id":"bead-1","status":"closed","labels":["spex:10"]},
+		{"id":"bead-2","status":"open","labels":["spex:11"]},
+		{"id":"unrelated","status":"open","labels":["team:backend"]}
+	]}`
+	if err := os.WriteFile(jsonFile, []byte(payload), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\ncat "+jsonFile+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	records := []mapping.Record{
+		{ID: 10, BeadID: "bead-1", SpecNodeID: "aaa", Module: "alpha", Component: "A", ContentFile: "a.md"},
+		{ID: 11, BeadID: "bead-2", SpecNodeID: "bbb", Module: "alpha", Component: "B", ContentFile: "b.md"},
+		{ID: 99, BeadID: "bead-missing", SpecNodeID: "ccc", Module: "alpha", Component: "Gone", ContentFile: "c.md"},
+	}
+
+	enriched, err := enrichRecordsWithBeadStatus(t.Context(), stub, records)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(enriched) != 3 {
+		t.Fatalf("want 3 records, got %d", len(enriched))
+	}
+	if enriched[0].BeadStatus != "closed" {
+		t.Errorf("record 10: want closed, got %q", enriched[0].BeadStatus)
+	}
+	if enriched[1].BeadStatus != "open" {
+		t.Errorf("record 11: want open, got %q", enriched[1].BeadStatus)
+	}
+	if enriched[2].BeadStatus != "" {
+		t.Errorf("record 99 (no matching bead): want empty, got %q", enriched[2].BeadStatus)
+	}
+}
+
+// TestEnrichRecordsWithBeadStatus_EmptyInput verifies zero-record input
+// short-circuits without invoking the bead CLI.
+func TestEnrichRecordsWithBeadStatus_EmptyInput(t *testing.T) {
+	out, err := enrichRecordsWithBeadStatus(t.Context(), "/does/not/exist", nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if out != nil {
+		t.Errorf("want nil slice, got %v", out)
+	}
+}
+
 func TestFR8_ImpactCommand_MultipleErrorsAllPrinted(t *testing.T) {
 	specDir := setupTestSpec(t)
 	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
