@@ -154,12 +154,12 @@
     {
       "id": 16,
       "spec_node_id": "f1a672216ce9",
-      "bead_id": "spexmachina-s85",
+      "bead_id": "spexmachina-7hb",
       "bead_type": "task",
       "module": "merkle",
       "component": "ImpactClassifier",
       "content_file": "spec/merkle/arch_impact_classifier.md",
-      "spec_hash": "7dacfff788b93f08d8440d5a229e974fb18f652c9338eeff0d4ef30246d5f060"
+      "spec_hash": "5d8a60e4b3eead72bf433fa7c97961593077e6454edfb13beb624f8483a75708"
     },
     {
       "id": 17,
@@ -174,12 +174,12 @@
     {
       "id": 18,
       "spec_node_id": "c8b958ec310d",
-      "bead_id": "spexmachina-ec7",
+      "bead_id": "spexmachina-z9y",
       "bead_type": "task",
       "module": "merkle",
       "component": "DiffCommand",
       "content_file": "spec/merkle/arch_diff_command.md",
-      "spec_hash": "93d8a3dfd78127ed75c8c11470486b590f373644f48d8cc43c6b5d880022e07d"
+      "spec_hash": "80a2700ab42e8226bfdb4b44b4b2580ed6fdceaf857a5a06c61f3ae26d8b6281"
     },
     {
       "id": 19,
@@ -204,12 +204,12 @@
     {
       "id": 21,
       "spec_node_id": "76d72cbe00f3",
-      "bead_id": "spexmachina-r4o",
+      "bead_id": "spexmachina-xl3",
       "bead_type": "feature",
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "d5a5cd578f523e90f6da55e51023343d91c68ea3e95e4b4723a7243fa2145c68"
+      "spec_hash": "ebcd15cdd37829817b9ffcc0335e743ca111c5f186f02752b83cc2f657e341e5"
     },
     {
       "id": 22,
@@ -234,12 +234,12 @@
     {
       "id": 24,
       "spec_node_id": "59fab0fedef7",
-      "bead_id": "spexmachina-igq",
+      "bead_id": "spexmachina-p6z",
       "bead_type": "feature",
       "module": "apply",
       "component": "BeadCreator",
       "content_file": "spec/apply/arch_bead_creator.md",
-      "spec_hash": "98707113c897ece4992f6dcec65571ca91d7666df623b2fee107eb8411d26d99"
+      "spec_hash": "fd1b72c547fa0aa07d57e223ad4c3f7f32b4b766ffc08dbb3024d8a21c14440d"
     },
     {
       "id": 25,
@@ -252,34 +252,24 @@
       "spec_hash": "0cdfb338e44c5386857d64495be13fecd9e6e1ee3ab892a2cfcc2cdcc4ddc057"
     },
     {
-      "id": 27,
-      "spec_node_id": "867bb1dd804f",
-      "bead_id": "spexmachina-i6x",
-      "bead_type": "task",
-      "module": "apply",
-      "component": "ProposalTagger",
-      "content_file": "spec/apply/arch_proposal_tagger.md",
-      "spec_hash": "33d47a041aa5477be7e5c0c5aad89efc99112a2967cbc1bddc03913a6417118b"
-    },
-    {
       "id": 28,
       "spec_node_id": "1acc0e1fff76",
-      "bead_id": "spexmachina-29q",
+      "bead_id": "spexmachina-lln",
       "bead_type": "task",
       "module": "apply",
       "component": "SnapshotSaver",
       "content_file": "spec/apply/arch_snapshot_saver.md",
-      "spec_hash": "42593c5003b6806750393efad0e003f60aca3d3ca2e261c909a16d7b10ba2ac3"
+      "spec_hash": "80e32f576d408b886a3850bd6446b362403b5bc3868a1fdec19fc4f4a536da16"
     },
     {
       "id": 29,
       "spec_node_id": "78a551ef7b74",
-      "bead_id": "spexmachina-tjs",
+      "bead_id": "spexmachina-7nz",
       "bead_type": "feature",
       "module": "apply",
       "component": "ApplyCommand",
       "content_file": "spec/apply/arch_apply_command.md",
-      "spec_hash": "c2a10d7f556ea2546788d5b70f49f2fe72cc3056ce47e89f9a4b4a31856a89fe"
+      "spec_hash": "bc4a0af15d5f97d289994171d717b207846b3926115ad7022204cfbfdd6fe4c9"
     },
     {
       "id": 30,
