@@ -18,7 +18,9 @@ The `createdAt` parameter controls the snapshot timestamp passed to `merkle.Save
 
 ## Timing
 
-The snapshot is saved last, after all bead actions succeed. If any bead action fails, the snapshot is not updated — this ensures the next diff will re-detect the same changes and retry the failed actions.
+The snapshot is saved last, after all bead actions succeed (label → create → close). If any bead action fails, the snapshot is not updated — this ensures the next diff will re-detect the same changes and retry the failed actions.
+
+The step-4 proposal-tagging phase no longer exists; SnapshotSaver is the immediate successor of the close-obsoletes phase in the apply flow. The "Save snapshot" requirement's `depends_on` now lists Create-beads and Obsolete-beads directly instead of transiting through the removed "Tag with proposal" requirement.
 
 ## Dependency on Merkle Module
 

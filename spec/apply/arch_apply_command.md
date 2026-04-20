@@ -6,9 +6,8 @@ CLI entry point for `spex apply`. Reads an impact report and executes bead actio
 
 - Parse CLI flags: impact report (stdin or file), bead CLI binary, proposal reference
 - Wire BeadCloser to label obsolete beads (mark intent, keep open)
-- Wire BeadCreator for create actions (in hierarchy order, while old beads still open)
+- Wire BeadCreator to create the proposal epic first, then feature/task beads in topological order, all parented under the proposal epic
 - Wire BeadCloser to close obsolete beads (after replacements exist)
-- Wire ProposalTagger to tag all affected beads
 - Wire SnapshotSaver to save new merkle snapshot
 
 ## Interface
@@ -20,12 +19,14 @@ spex apply [--report file] [--bead-cli br] [--proposal ref] [--dry-run]
 ## Execution Order
 
 1. **Label obsoletes** — mark beads being replaced or removed with `spex:obsolete` + `commit:<HEAD>` labels, but keep them open. For removed nodes, delete the mapping record (looked up by the action's `SpecNodeID` identity hash). For modified nodes, leave the record for BeadCreator to update in place.
-2. **Creates in hierarchy order with topological sort** — epics (modules) first, then features (components), then tasks (test_sections). Within each type level, beads are topologically sorted by their `DepBeadIDs` so that dependency beads are created before their dependents. Parent bead IDs are resolved from the mapping file after each level. Old beads are still open at this point, so `--deps blocks:<old-bead-id>` references valid open beads.
-3. **Close obsoletes** — close all beads that were labeled in step 1. This is safe because replacements already exist.
-4. **Tag all** — tag every affected bead (created + closed) with the proposal reference
+2. **Create proposal epic** — first create action when the run has any `create` entries. The epic is named after the `--proposal` flag value, typed `epic`, no parent. Its bead ID is captured and reused as `--parent` for every subsequent create. A bead-map record is written with `node_type=proposal`, `bead_type=epic`, `spec_node_id=<proposal-ref>`.
+3. **Creates in topological order** — features (components) and task-type creates (data_flow, multi-component test_section) are placed in a single pool and topologically sorted by their `DepBeadIDs` so that dependency beads are created before their dependents. Every bead in this pool is parented under the proposal-epic bead ID from step 2. Old beads are still open at this point, so `--deps blocks:<old-bead-id>` references valid open beads.
+4. **Close obsoletes** — close all beads that were labeled in step 1. This is safe because replacements already exist.
 5. **Save snapshot** — record the new baseline state
 
-This label→create→close ordering ensures: (1) old beads are still open when new beads reference them via `--deps blocks`, (2) parent beads exist before children are created with `--parent`, (3) dependency beads within the same type level are created before dependents, and (4) `br` auto-flush correctly persists all bead states to the JSONL file that `bv` reads.
+This label→epic→create→close ordering ensures: (1) old beads are still open when new beads reference them via `--deps blocks`, (2) the proposal epic exists before any feature/task is created with `--parent`, (3) dependency beads within the create pool are created before dependents, and (4) `br` auto-flush correctly persists all bead states to the JSONL file that `bv` reads.
+
+Historical note: proposal-label tagging is gone. The ProposalTagger component and its requirement have been removed. Bead grouping by proposal wave is now structural (every created bead is a child of that run's proposal epic) instead of metadata-based.
 
 ## No spec_node_id derivation
 
