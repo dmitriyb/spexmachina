@@ -9,13 +9,17 @@ First run `git checkout main && git pull --rebase` to ensure you are on the late
 
 Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific guidance.
 
+## Dispatch Check
+
+Before anything else, run `br show $ARGUMENTS --json` and look at the labels. If the bead carries a `spex:cleanup` label, this is a cleanup bead — use `/cleanup` instead. Stop here and tell the user. The workflows differ (removal vs implementation) and using `/implement` for a cleanup bead will fail the context-loading step because cleanup beads have no `spex:<record-id>` label or bead-map record.
+
 ## Context Loading
 
 1. Run `br show $ARGUMENTS` to get the full bead details (title, description, labels, dependencies)
 2. Extract the `spex:<record_id>` label from the bead's labels array (e.g. `spex:22` → record ID 22)
 3. Run `bin/spex map context <record_id>` to get all spec file paths deterministically
 4. Read all files returned in the context result: `arch_file`, all `impl_files`, all `test_files`, all `flow_files`, and `module_file`
-5. If no `spex:` label exists, fall back to reading any spec references in the description
+5. If no `spex:` label exists and the bead is NOT a cleanup bead (checked above), fall back to reading any spec references in the description
 
 ## Pre-flight Checks
 
