@@ -5,25 +5,50 @@ Creates new beads via the bead CLI (`br` or `bd`) with deterministic type assign
 ## Responsibilities
 
 - Read "create" actions from the impact report
-- Determine bead type from spec node type (module→epic, component→feature, test_section→task)
-- Set `--parent` to establish hierarchy (component under module epic, test under component feature)
+- Create the proposal epic first on each apply run, reuse its bead ID as `--parent` for every subsequent create
+- Determine bead type from spec node type (proposal→epic, component→feature, data_flow→task, test_section→task)
+- Set `--parent <proposal-epic-bead-id>` for hierarchy
 - Set `--deps blocks:<old-bead-id>` for lineage when replacing an obsoleted bead
 - Set `--deps depends:<dep-bead-id>` for each spec-graph dependency from `DepBeadIDs`
 - Set `--priority` derived from project requirement chain
 - Execute bead creation and capture the new bead ID
 - Create or update the mapping record in `.bead-map.json`
 - Set the bead label to `spex:<record-id>`
-- Return created bead IDs for subsequent tagging
+- Return created bead IDs for the epic close-eligibility query
 
 ## Type Assignment Table
 
 | Spec Node Type | Bead Type | Rationale |
 |---------------|-----------|-----------|
-| module | `epic` | Grouping container for a module's work |
+| proposal | `epic` | One epic per apply run; groups every bead created in that run |
 | component | `feature` | Each component is a distinct capability to build |
-| test_section | `task` | Distinct verification effort |
+| data_flow | `task` | Cross-component contract; must land before participating component beads start |
+| test_section (len(describes) >= 2) | `task` | Cross-component integration test that cannot be bundled into any single component bead |
 
-The type is a pure function of the spec node type — no history queries needed.
+The type is a pure function of the spec node type — no history queries needed. Note that test_sections with `len(describes) == 1` do not produce beads at all; they are bundled into the feature bead of the single component they describe, and the implement skill reads the test_section content as part of that component's TDD workflow.
+
+## Proposal Epic Creation
+
+At the start of each apply run with at least one create action:
+
+1. BeadCreator issues a single `<bin> create --type epic --title "<proposal>" --priority <inherited>` call.
+2. The returned bead ID is stored on the BeadCreator instance and reused as the `--parent` value for every subsequent create in the same run.
+3. A bead-map record is written with `node_type = "proposal"`, `bead_type = "epic"`, `spec_node_id = <proposal-reference>`, `spec_hash = ""`, `module = ""`.
+4. The epic bead is never obsoleted. When all of its children close, `br epic close-eligible <epic-id>` closes it.
+
+Module identity plays no role in epic assignment. Modules are already addressable via labels and spec-graph queries; conflating them with epics (the previous design) added noise without adding value.
+
+## Coupling Rule: Single-Component Test Sections
+
+When an action references a `test_section` node, BeadCreator asserts before creation:
+
+```
+test_section = module_spec.find_test_section(action.SpecNodeID)
+if len(test_section.describes) < 2:
+    return error "single-component test_section reached BeadCreator — ActionClassifier should have filtered it"
+```
+
+This is a defense-in-depth check. The ActionClassifier upstream is the authoritative gate; BeadCreator asserts the invariant so any future bug is caught at the creation boundary rather than producing a stray bead.
 
 ## Interface
 

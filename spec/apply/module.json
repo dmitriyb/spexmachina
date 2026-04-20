@@ -7,7 +7,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Create beads",
-      "description": "Create beads via bead CLI (br or bd) with deterministic type assignment from spec node type (module→epic, component→feature, test_section→task), parent hierarchy via --parent, lineage via --deps blocks:\u003cold-bead-id\u003e, and priority via --priority derived from project requirements."
+      "description": "Create beads via bead CLI (br or bd) with deterministic type assignment from spec node type (proposal→epic, component→feature, data_flow→task, test_section→task), parent hierarchy via --parent, lineage via --deps blocks:\u003cold-bead-id\u003e, and priority via --priority derived from project requirements."
     },
     {
       "id": "a9f305ba4a77",
@@ -17,14 +17,13 @@
       "description": "Obsolete existing beads via bead CLI (br or bd) with spex:obsolete label and commit:\u003cHEAD\u003e label. The commit label stamps the last commit where the bead's spec was valid. Used for both modified and removed spec nodes."
     },
     {
-      "id": "7117e4c0a085",
+      "id": "64f0d881a5a0",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Tag with proposal",
-      "description": "All affected beads (created, obsoleted) are tagged with the proposal reference that triggered the change.",
+      "title": "Per-proposal epic grouping",
+      "description": "Each spex apply run creates a single epic bead named after the proposal and parents every bead created in that run under it (features, data_flow tasks, multi-component test tasks). The epic groups exactly the work produced by one proposal wave, enabling 'what's left from this proposal?' queries via br epic close-eligible. Epics are never obsoleted — a proposal has a natural end (all children close), and historical epics stay closed with their children. Module identity plays no role in epic assignment; modules are already grouped via labels and spec-graph queries.",
       "depends_on": [
-        "8a30e4fefa9e",
-        "a9f305ba4a77"
+        "8a30e4fefa9e"
       ]
     },
     {
@@ -34,7 +33,8 @@
       "title": "Save snapshot",
       "description": "After applying all bead actions, save the new merkle snapshot to mark the current state as baseline.",
       "depends_on": [
-        "7117e4c0a085"
+        "8a30e4fefa9e",
+        "a9f305ba4a77"
       ]
     },
     {
@@ -56,7 +56,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Deterministic type, hierarchy, and lineage",
-      "description": "Bead type is a pure function of spec node type (module→epic, component→feature, test_section→task). Component beads get --parent \u003cmodule-epic-bead-id\u003e. Test beads get --parent \u003ccomponent-feature-bead-id\u003e. Creation order: epics first, then features, then tasks. Modified nodes: obsolete old bead, create new bead with --deps blocks:\u003cold-bead-id\u003e."
+      "description": "Bead type is a pure function of spec node type (proposal→epic, component→feature, data_flow→task, test_section→task). All beads created in an apply run get --parent \u003cproposal-epic-bead-id\u003e. Creation order: proposal epic first, then features and data_flow tasks (topologically ordered so bead IDs resolve for --deps depends: flags), then multi-component test tasks. Modified nodes: obsolete old bead, create new bead with --deps blocks:\u003cold-bead-id\u003e."
     },
     {
       "id": "2febb1706374",
@@ -90,7 +90,7 @@
     {
       "id": "59fab0fedef7",
       "name": "BeadCreator",
-      "description": "Creates new beads via bead CLI (br or bd) with deterministic type assignment from spec node type table, --parent for hierarchy, --deps blocks:\u003cold-bead-id\u003e for lineage, and --priority from project requirement chain. After creation, creates or updates the mapping record in .bead-map.json and sets the bead label to spex:\u003crecord-id\u003e.",
+      "description": "Creates new beads via bead CLI (br or bd) with deterministic type assignment from spec node type table (proposal→epic, component→feature, data_flow→task, test_section→task), --parent \u003cproposal-epic-bead-id\u003e for hierarchy, --deps blocks:\u003cold-bead-id\u003e for lineage, --deps depends:\u003cdep-bead-id\u003e for spec-graph edges, and --priority from project requirement chain. At the start of each apply run, creates the proposal epic bead first and reuses its ID for every subsequent --parent flag. After each creation, creates or updates the mapping record in .bead-map.json and sets the bead label to spex:\u003crecord-id\u003e.",
       "content": "arch_bead_creator.md",
       "implements": [
         "8a30e4fefa9e",
@@ -98,7 +98,8 @@
         "8ce9e91dfd31",
         "0d24751af69f",
         "2febb1706374",
-        "35ea0058fd4e"
+        "35ea0058fd4e",
+        "64f0d881a5a0"
       ]
     },
     {
@@ -109,19 +110,6 @@
       "implements": [
         "a9f305ba4a77",
         "8ce9e91dfd31"
-      ]
-    },
-    {
-      "id": "867bb1dd804f",
-      "name": "ProposalTagger",
-      "description": "Tags all affected beads with the proposal reference that triggered the changes.",
-      "content": "arch_proposal_tagger.md",
-      "implements": [
-        "7117e4c0a085"
-      ],
-      "uses": [
-        "59fab0fedef7",
-        "995b5e116b5b"
       ]
     },
     {
@@ -136,10 +124,9 @@
     {
       "id": "78a551ef7b74",
       "name": "ApplyCommand",
-      "description": "CLI entry point for spex apply. Reads impact report, enforces creation ordering (epics → features → tasks), wires BeadCreator, BeadCloser, ProposalTagger, SnapshotSaver, executes all bead actions.",
+      "description": "CLI entry point for spex apply. Reads impact report, enforces creation ordering (proposal epic → features and data_flow tasks → test tasks), wires BeadCreator, BeadCloser, SnapshotSaver, executes all bead actions.",
       "content": "arch_apply_command.md",
       "implements": [
-        "7117e4c0a085",
         "23ee86dfc512",
         "0d24751af69f",
         "7551c76a6c74"
@@ -147,7 +134,6 @@
       "uses": [
         "59fab0fedef7",
         "995b5e116b5b",
-        "867bb1dd804f",
         "1acc0e1fff76"
       ]
     }
@@ -167,14 +153,6 @@
       "content": "impl_bead_closure.md",
       "describes": [
         "995b5e116b5b"
-      ]
-    },
-    {
-      "id": "6e1c1db0f26e",
-      "name": "Proposal tagging",
-      "content": "impl_proposal_tagging.md",
-      "describes": [
-        "867bb1dd804f"
       ]
     },
     {
@@ -198,12 +176,11 @@
     {
       "id": "e5b9907792b2",
       "name": "Apply flow",
-      "description": "Impact report is read. Bead actions execute in label→create→close order: label obsoletes (keep open), creates in hierarchy order (epics → features → tasks), close obsoletes, tag all with proposal. New snapshot saved.",
+      "description": "Impact report is read. BeadCreator creates the proposal epic first, then creates features and data_flow tasks in topological order, then multi-component test tasks — all parented under the proposal epic. BeadCloser obsoletes removed and modified beads. SnapshotSaver writes the new merkle snapshot.",
       "content": "flow_apply.md",
       "uses": [
         "59fab0fedef7",
         "995b5e116b5b",
-        "867bb1dd804f",
         "1acc0e1fff76"
       ]
     }
@@ -219,11 +196,10 @@
       ]
     },
     {
-      "id": "6d05f87cde11",
-      "name": "Tagging and snapshot tests",
-      "content": "test_tagging_snapshot.md",
+      "id": "226f2ff4fd6d",
+      "name": "Snapshot tests",
+      "content": "test_snapshot.md",
       "describes": [
-        "867bb1dd804f",
         "1acc0e1fff76"
       ]
     },

@@ -70,7 +70,22 @@ The hash is `SHA256(identity_string)` truncated to the first 6 bytes (12 hex cha
 | Milestone | `milestone/<title>` |
 | Test scenario | `test_plan/scenario/<name>` |
 
-Use the shared helper `schema.IdentityHash(parts...)` when authoring from Go; when writing JSON by hand, compute `printf '%s' "<identity_string>" | sha256sum | head -c 12`.
+Prefer the `spex hash-id` subcommand — it calls the same `schema.IdentityHash` helper that the rest of the pipeline uses, so any future change to the hashing scheme stays consistent across authoring and validation:
+
+```bash
+spex hash-id --type requirement --name "Spec test strategy"
+spex hash-id --type requirement --module merkle --name "Classify impact"
+spex hash-id --type component    --module merkle --name "ImpactClassifier"
+spex hash-id --type data_flow    --module merkle --name "Hash computation flow"
+spex hash-id --type test_section --module apply  --name "Snapshot tests"
+spex hash-id --type module       --name merkle
+spex hash-id --type milestone    --name "Bootstrap"
+spex hash-id --type scenario     --name "Coupled sections integration"
+```
+
+Valid `--type` values: `requirement`, `component`, `impl_section`, `data_flow`, `test_section`, `module`, `milestone`, `scenario`. `--module` is required for every type that lives inside a module (requirement, component, impl_section, data_flow, test_section); it is omitted for `module`, `milestone`, `scenario`, and project-level requirements.
+
+When `spex` is not yet built, use `printf '%s' "<identity_string>" | sha256sum | head -c 12` as a manual fallback — but build the binary and re-verify at the first opportunity, because a silent divergence between manual hashing and the Go helper would poison the spec.
 
 Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care.
 

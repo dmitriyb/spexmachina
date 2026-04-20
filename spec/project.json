@@ -120,6 +120,18 @@
       "title": "Coupled sections",
       "description": "Project.json supports a sections array with typed entries. Sections with type 'coupled' require a corresponding module and a section.schema.json in the module's spec directory. Spex validates the envelope generically and delegates content validation to the module's schema.",
       "priority": 1
+    },
+    {
+      "id": "13c15bc3c865",
+      "type": "functional",
+      "title": "Data flow contract layer",
+      "description": "Data flows are cross-component contracts that describe the shapes moving between components in a module's uses graph. When a data flow's content (its Data Shapes section) changes, spex creates a dedicated task bead parented under the proposal epic, and participating component beads (via the flow's uses array) gain depends edges on it. The data_flow bead is implemented first: shared types and interfaces are updated across all participants, the codebase compiles, and tests or logic that need per-component follow-up are marked with deferred-work markers naming the specific component bead that will resolve them. Each participating component bead then updates only the files it owns and removes the deferred markers pointing to itself. This prevents cross-bead cascading edits that otherwise produce unowned TODO markers across the codebase.",
+      "depends_on": [
+        "9120788210c9",
+        "e291989b1599",
+        "0a0f49f9be9b"
+      ],
+      "priority": 1
     }
   ],
   "modules": [

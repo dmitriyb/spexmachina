@@ -1,5 +1,28 @@
 # Action Classification Rules
 
+## Node-Type Gate (runs before the state transition table)
+
+Each change first passes through a type gate. Gates produce no actions for nodes that do not correspond to beads.
+
+```
+def produces_bead(change, module_spec):
+    if change.NodeType == "component":
+        return True
+    if change.NodeType == "data_flow":
+        return True
+    if change.NodeType == "test_section":
+        ts = module_spec.find_test_section(change.SpecNodeID)
+        return len(ts.describes) >= 2
+    if change.NodeType == "impl_section":
+        return False
+    # structural types (meta, requirement) are filtered earlier by NodeMatcher
+    return False
+```
+
+The `len(describes) >= 2` rule for test_sections: when a test_section describes only one component, it is a unit/component test naturally coupled with that component's TDD workflow — the implement skill reads the test_section's content as part of the component feature bead's work, so producing a separate task bead would create a redundant hand-off. When it describes two or more components, it is a cross-component integration test that cannot be bundled into any single component bead.
+
+The rule reads `describes` from the current module.json (post-change). For `removed` test_sections, the describes array is read from the previous snapshot's spec graph; if it has already been lost, the classifier falls back to assuming a bead may exist and defers the decision to mapping lookup.
+
 ## State Transition Table
 
 | Change Type | Has Matching Bead? | Action |

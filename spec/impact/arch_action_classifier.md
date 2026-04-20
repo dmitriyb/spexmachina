@@ -6,7 +6,23 @@ Determines the action for each affected bead or unmatched spec node using a simp
 
 - Assign actions based on match results and change types
 - Handle modified nodes by generating both obsolete (old bead) and create (new bead) actions
+- Gate action production by node type and, for test_sections, by `len(describes)`
 - Handle edge cases (multiple beads per node, unexpected state combinations)
+
+## Node-Type Gate
+
+Before applying the state transition table, each change is gated by its node type:
+
+| NodeType | Produces beads? | Notes |
+|----------|-----------------|-------|
+| `component` | yes (feature) | primary work unit |
+| `data_flow` | yes (task) | cross-component contract, always produces a bead |
+| `test_section`, `len(describes) >= 2` | yes (task) | cross-component integration test, needs its own bead |
+| `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead; implement skill reads the test_section content as part of the component's TDD workflow |
+| `impl_section` | no | implementation detail; owned by the component bead |
+| `meta`, `requirement` | no | filtered upstream by NodeMatcher (`structural` skip) |
+
+`describes` array length is read from the current module.json for the test_section's node. If the array is empty (orphan test_section), validator would already have rejected it — ActionClassifier may assert and skip defensively.
 
 ## State Transition Table
 
@@ -40,7 +56,7 @@ type Action struct {
     BeadID     string   // existing bead ID (for "obsolete"); empty for "create"
     Module     string   // affected module name (carried alongside the identity hash for human-readable output)
     Node       string   // affected spec node name (carried alongside the identity hash)
-    NodeType   string   // spec node type (module/component/impl_section/test_section/data_flow)
+    NodeType   string   // spec node type (component/data_flow/test_section)
     SpecNodeID string   // identity hash of the affected node — the lookup key into the mapping store
     SpecHash   string   // current merkle content hash (for "create")
     OldBeadID  string   // predecessor bead ID (for "create" replacing an obsoleted bead)
