@@ -476,8 +476,12 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 		{SpecNodeID: betaCompID, BeadID: "bead-beta", BeadType: "feature", Module: "beta", Component: "BetaComp", ContentFile: "spec/beta/arch_beta.md", SpecHash: "bbb", BeadStatus: "open"},
 	})
 
+	// Use an empty-bead stub so enrichment leaves the hand-set BeadStatus
+	// values alone; otherwise the real br DB would overwrite them.
+	stub := writeEmptyBeadStub(t)
+
 	// Run impact.
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--bead-cli", stub)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -581,7 +585,8 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 		{SpecNodeID: userID, BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
 	})
 
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	stub := writeEmptyBeadStub(t)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--bead-cli", stub)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -602,6 +607,23 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 		}
 	}
 	t.Fatal("create action for User component with OldBeadID=bead-user not found")
+}
+
+// writeEmptyBeadStub creates a shell script that answers any `list` invocation
+// with {"issues":[]}. Tests that don't care about live bead status but would
+// otherwise collide with the real br DB (whose RecordIDs overlap with
+// test-constructed mapping record IDs) can point spex impact at this stub via
+// --bead-cli to keep BeadStatus enrichment a no-op. Scripts ignore args, so
+// the stub works with any flag combination ReadBeads might pass.
+func writeEmptyBeadStub(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "br-stub")
+	script := "#!/bin/sh\necho '{\"issues\":[]}'\n"
+	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return stub
 }
 
 // TestEnrichRecordsWithBeadStatus verifies the helper copies live bead
