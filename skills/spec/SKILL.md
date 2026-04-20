@@ -37,16 +37,16 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 
 - **Required**: `name`, `modules` (at least one)
 - **Optional**: `description`, `version`, `requirements`, `milestones`, `test_plan`
-- Requirements: `id` (int ≥1), `type` ("functional" | "non_functional"), `title` (required); `description`, `depends_on` (optional)
-- Modules: `id` (int ≥1), `name`, `path` (required); `description`, `requires_module` (optional). **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g., `"impact"`, not `"Impact"`)
-- Milestones: `id` (int ≥1), `title` (required); `description`, `groups` (optional)
-- Test plan: `scenarios` array; each scenario has `id` (int ≥1), `name` (required); `description`, `content` (path to `test_*.md`), `modules` (optional)
+- Requirements: `id` (identity hash), `type` ("functional" | "non_functional"), `title` (required); `description`, `depends_on` (optional)
+- Modules: `id` (identity hash), `name`, `path` (required); `description`, `requires_module` (optional). **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g., `"impact"`, not `"Impact"`)
+- Milestones: `id` (identity hash), `title` (required); `description`, `groups` (optional)
+- Test plan: `scenarios` array; each scenario has `id` (identity hash), `name` (required); `description`, `content` (path to `test_*.md`), `modules` (optional)
 
 ### module.json
 
 - **Required**: `name`
 - **Optional**: `description`, `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`
-- Requirements: same as project, plus optional `preq_id` (traces to project requirement)
+- Requirements: same as project, plus **required `preq_id`** (identity hash of the project requirement this module requirement derives from)
 - Components: `id`, `name` (required); `description`, `content`, `implements`, `uses` (optional). If users or other systems invoke the module externally, that entry point is itself a component.
 - Impl sections: `id`, `name` (required); `content`, `describes` (optional)
 - Data flows: `id`, `name` (required); `description`, `content`, `uses` (optional)
@@ -54,9 +54,27 @@ All JSON output must conform to the schemas in `schema/project.schema.json` and 
 
 ### IDs
 
-- All IDs are integers ≥1, unique within their array (requirements, components, etc.)
-- Assign IDs sequentially starting from 1 within each array
-- In alter mode, never reuse an ID that was previously assigned — append with the next available ID
+All IDs in `project.json` and `module.json` are 12-character lowercase hex identity hashes (pattern `^[a-f0-9]{12}$`). IDs are computed deterministically from the node's position in the spec graph — never assigned manually, never sequential. Same identity string always produces the same hash.
+
+The hash is `SHA256(identity_string)` truncated to the first 6 bytes (12 hex chars), where `identity_string` is built per node type:
+
+| Node type | Identity string |
+|-----------|-----------------|
+| Project requirement | `project/requirement/<title>` |
+| Module | `module/<name>` |
+| Module requirement | `<module>/requirement/<title>` |
+| Component | `<module>/component/<name>` |
+| Impl section | `<module>/impl_section/<name>` |
+| Data flow | `<module>/data_flow/<name>` |
+| Test section | `<module>/test_section/<name>` |
+| Milestone | `milestone/<title>` |
+| Test scenario | `test_plan/scenario/<name>` |
+
+Use the shared helper `schema.IdentityHash(parts...)` when authoring from Go; when writing JSON by hand, compute `printf '%s' "<identity_string>" | sha256sum | head -c 12`.
+
+Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care.
+
+The only integer ID in the system is the `.bead-map.json` record's internal `id` field — used only for the `spex:<id>` bead label, never referenced from the spec graph.
 
 ### Edges
 
@@ -169,12 +187,7 @@ Write tests BEFORE implementation content to avoid confirmation bias — test sc
 
 ### 6. Validate
 
-- Run `spex validate` if available (the binary may not exist yet during bootstrap)
-- If `spex validate` is not available, manually verify:
-  - All `content` paths in module.json resolve to files that were created
-  - All cross-reference IDs (implements, uses, describes, depends_on, requires_module, groups) point to existing nodes
-  - No duplicate IDs within any array
-  - Every component is described by at least one test_section (test coverage check)
+Run `spex validate` and fix every reported error before proceeding. Exit code 0 with `"valid": true` in the JSON report is the gate — do not skip this step. Common failures: missing `preq_id`, incorrect identity hash for a cross-reference, orphan components, content paths that don't resolve.
 
 ### 7. Report
 
@@ -182,15 +195,14 @@ Tell the user:
 - What files were created or modified (list them)
 - Any `<!-- TODO -->` markers that need follow-up
 - Remind them to review the spec and commit it to git
-- Note: once `spex validate` exists, run it to confirm structural validity
 
 ## Alter Mode Details
 
 When modifying an existing spec:
 
 1. Read all existing JSON files first
-2. Preserve existing IDs — never renumber
-3. Add new nodes with the next sequential ID after the current maximum
+2. Preserve existing IDs — never renumber, never recompute for unchanged nodes
+3. Add new nodes by computing their identity hash from the identity string (see IDs section). IDs are content-derived, not assigned
 4. When removing nodes, delete the JSON entry and its content file — do not leave orphans
-5. When modifying a node, update the JSON fields and the content markdown as needed
+5. When modifying a node, update the JSON fields and the content markdown as needed. **Changing a node's `name` or `title` changes its identity hash** — the old ID is gone, a new one appears. The pipeline treats this as delete + create
 6. Update all edges affected by the change (e.g., if a component is removed, remove its ID from any `uses` or `describes` arrays)
