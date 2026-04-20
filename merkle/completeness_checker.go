@@ -253,7 +253,11 @@ type derivedRequirement struct {
 }
 
 // findDerivedModuleRequirements returns all module requirements whose preq_id
-// matches projReqHash.
+// matches projReqHash. Callers may pass projReqHash as either the raw project
+// requirement ID (as stored in project.json) or the TreeBuilder-computed tree
+// key IdentityHash("project", "requirement", req.ID). Module requirements in
+// real specs store preq_id with the raw ID, while some fixtures use the tree
+// key directly — both forms are accepted so the checker works in both cases.
 func findDerivedModuleRequirements(projReqHash string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []derivedRequirement {
 	var result []derivedRequirement
 	for _, m := range proj.Modules {
@@ -263,7 +267,8 @@ func findDerivedModuleRequirements(projReqHash string, proj *schema.Project, loa
 			continue
 		}
 		for _, req := range modSpec.Requirements {
-			if req.PreqID == projReqHash {
+			preqTreeKey := schema.IdentityHash("project", "requirement", req.PreqID)
+			if req.PreqID == projReqHash || preqTreeKey == projReqHash {
 				result = append(result, derivedRequirement{
 					moduleHash: mHash,
 					reqHash:    req.ID,

@@ -413,3 +413,55 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 		t.Errorf("expected related set to contain %s and %s, got %v", fx.req1Hash, fx.req2Hash, related)
 	}
 }
+
+// TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation verifies that derivation
+// resolution recognizes module requirements whose preq_id stores the raw project
+// requirement ID (as the real repo's module.json files do) rather than the
+// TreeBuilder's double-hashed tree key. Regression guard for spexmachina-elv.
+func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
+	dir := t.TempDir()
+
+	rawProjReqID := "0a0f49f9be9b"
+	projReqTreeKey := schema.IdentityHash("project", "requirement", rawProjReqID)
+	modReqID := schema.IdentityHash("alpha", "requirement", "Derived")
+	compID := schema.IdentityHash("alpha", "component", "CompA")
+
+	proj := fmt.Sprintf(`{
+		"name": "test-project",
+		"requirements": [
+			{"id": %q, "type": "functional", "title": "Source"}
+		],
+		"modules": [
+			{"id": %q, "name": "Alpha", "path": "alpha"}
+		]
+	}`, rawProjReqID, schema.IdentityHash("module", "Alpha"))
+	writeFile(t, dir, "project.json", proj)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	must(t, os.MkdirAll(alphaDir, 0755))
+	alphaMod := fmt.Sprintf(`{
+		"name": "alpha",
+		"requirements": [
+			{"id": %q, "type": "functional", "title": "Derived", "preq_id": %q}
+		],
+		"components": [
+			{"id": %q, "name": "CompA", "content": "arch_comp_a.md", "implements": [%q]}
+		]
+	}`, modReqID, rawProjReqID, compID, modReqID)
+	writeFile(t, alphaDir, "module.json", alphaMod)
+	writeFile(t, alphaDir, "arch_comp_a.md", "# CompA\n")
+
+	// Diff carries the TREE KEY (projReqTreeKey) as c.Path for the added project
+	// requirement. The module requirement's preq_id stores the RAW ID. The
+	// checker must resolve that the module req derives from the project req.
+	// With CompA also modified, we expect zero errors.
+	changes := []ClassifiedChange{
+		reqChange(projReqTreeKey, "", Added),
+		compChange(compID, schema.IdentityHash("module", "Alpha"), Modified),
+	}
+
+	errs := CheckCompleteness(changes, dir)
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors (module req derives from project req via raw preq_id), got %d: %v", len(errs), errs)
+	}
+}
