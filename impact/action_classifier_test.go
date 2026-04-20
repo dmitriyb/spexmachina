@@ -298,6 +298,24 @@ func TestFR6_S5b_ClassifyActions_RemovedClosedBead(t *testing.T) {
 
 	assertHasAction(t, actions, "obsolete", "spex-010", "merkle", "LegacyHasher", "Spec node removed: merkle/LegacyHasher")
 	assertHasAction(t, actions, "create", "", "merkle", "LegacyHasher", "Code cleanup: merkle/LegacyHasher")
+
+	// The cleanup create must carry OldBeadID so BeadCreator can emit
+	// --deps blocks:<old-bead-id>, giving the cleanup bead a lineage link
+	// back to the obsoleted bead it replaces. Regression guard for the
+	// second phase of spexmachina-idd.
+	var cleanup *Action
+	for i := range actions {
+		if actions[i].Type == "create" {
+			cleanup = &actions[i]
+			break
+		}
+	}
+	if cleanup == nil {
+		t.Fatal("no create action found")
+	}
+	if cleanup.OldBeadID != "spex-010" {
+		t.Errorf("want OldBeadID=spex-010 on cleanup action, got %q", cleanup.OldBeadID)
+	}
 }
 
 // --- S5c: Removed node with open bead (no cleanup) ---
