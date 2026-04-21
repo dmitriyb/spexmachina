@@ -113,7 +113,7 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(matches, unmatched, orphaned)
+	actions := ClassifyActions(nil, matches, unmatched, orphaned)
 
 	// Expect 6 actions: 2 obsolete+create pairs for modified, 1 create for added, 1 obsolete for orphaned.
 	if len(actions) != 6 {
@@ -161,7 +161,7 @@ func TestFR3_S2_ClassifyActions_ModifiedUnmatched(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(nil, unmatched, nil)
+	actions := ClassifyActions(nil, nil, unmatched, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -198,7 +198,7 @@ func TestFR3_S3_ClassifyActions_AddedWithExistingBead(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(matches, nil, nil)
+	actions := ClassifyActions(nil, matches, nil, nil)
 
 	if len(actions) != 2 {
 		t.Fatalf("want 2 actions (obsolete + create), got %d", len(actions))
@@ -230,7 +230,7 @@ func TestFR3_S4_ClassifyActions_RemovedNoRecord(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(nil, unmatched, nil)
+	actions := ClassifyActions(nil, nil, unmatched, nil)
 
 	if len(actions) != 0 {
 		t.Fatalf("want 0 actions for removed+unmatched, got %d", len(actions))
@@ -255,7 +255,7 @@ func TestFR3_S5_ClassifyActions_MultipleBeadsPerNode(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(matches, nil, nil)
+	actions := ClassifyActions(nil, matches, nil, nil)
 
 	// Two obsoletes (one per old bead) + two creates (new replacements).
 	if len(actions) != 4 {
@@ -290,7 +290,7 @@ func TestFR6_S5b_ClassifyActions_RemovedClosedBead(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(nil, nil, orphaned)
+	actions := ClassifyActions(nil, nil, nil, orphaned)
 
 	if len(actions) != 2 {
 		t.Fatalf("want 2 actions (obsolete + cleanup create), got %d: %+v", len(actions), actions)
@@ -329,7 +329,7 @@ func TestFR6_S5c_ClassifyActions_RemovedOpenBead(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(nil, nil, orphaned)
+	actions := ClassifyActions(nil, nil, nil, orphaned)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action (obsolete only), got %d: %+v", len(actions), actions)
@@ -362,7 +362,7 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 				},
 			}
 
-			actions := ClassifyActions(matches, nil, nil)
+			actions := ClassifyActions(nil, matches, nil, nil)
 
 			if len(actions) != 2 {
 				t.Fatalf("want 2 actions (obsolete + create), got %d", len(actions))
@@ -383,31 +383,26 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 	}
 }
 
-// --- Non-bead node types are filtered ---
+// --- impl_section is always filtered; data_flow is not ---
 
-func TestFR3_ClassifyActions_NonBeadTypesFiltered(t *testing.T) {
+func TestFR3_ClassifyActions_ImplSectionFiltered(t *testing.T) {
 	impl := schema.IdentityHash("render", "impl_section", "Section1")
-	flow := schema.IdentityHash("render", "data_flow", "Flow1")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
 			Change: merkle.Change{Path: impl, Type: merkle.Added, NewHash: "aaa", NodeType: "impl_section"},
 			Impact: merkle.ImplOnly, Module: "render",
 		}},
-		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flow, Type: merkle.Added, NewHash: "bbb", NodeType: "data_flow"},
-			Impact: merkle.ImplOnly, Module: "render",
-		}},
 	}
-	actions := ClassifyActions(nil, unmatched, nil)
+	actions := ClassifyActions(nil, nil, unmatched, nil)
 	if len(actions) != 0 {
-		t.Errorf("want 0 actions for non-bead types, got %d: %+v", len(actions), actions)
+		t.Errorf("want 0 actions for impl_section, got %d: %+v", len(actions), actions)
 	}
 }
 
 // --- E1: Empty inputs produce empty result ---
 
 func TestFR3_E1_ClassifyActions_EmptyInputs(t *testing.T) {
-	actions := ClassifyActions(nil, nil, nil)
+	actions := ClassifyActions(nil, nil, nil, nil)
 	if len(actions) != 0 {
 		t.Errorf("want 0 actions for nil inputs, got %d", len(actions))
 	}
@@ -431,7 +426,7 @@ func TestFR3_E5_ClassifyActions_DuplicatesPreserved(t *testing.T) {
 	}
 	unmatched := []Unmatched{{Change: change}}
 
-	actions := ClassifyActions(matches, unmatched, nil)
+	actions := ClassifyActions(nil, matches, unmatched, nil)
 
 	// Obsolete + create from the match, plus a create from the unmatched entry = 3.
 	if len(actions) != 3 {
@@ -469,7 +464,7 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 	}
 
 	for i := 0; i < 5; i++ {
-		actions := ClassifyActions(matches, unmatched, orphaned)
+		actions := ClassifyActions(nil, matches, unmatched, orphaned)
 		prevType := ""
 		for _, a := range actions {
 			if a.Type < prevType {
@@ -497,7 +492,7 @@ func TestFR3_ClassifyActions_OldBeadIDOnCreate(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(matches, nil, nil)
+	actions := ClassifyActions(nil, matches, nil, nil)
 
 	for _, a := range actions {
 		if a.Type == "create" {
@@ -531,7 +526,7 @@ func TestFR3_ClassifyActions_NodeTypePropagated(t *testing.T) {
 		},
 	}
 
-	actions := ClassifyActions(matches, nil, nil)
+	actions := ClassifyActions(nil, matches, nil, nil)
 
 	for _, a := range actions {
 		if a.NodeType != "component" {
@@ -548,7 +543,7 @@ func TestFR3_ClassifyActions_SpecNodeIDFromOrphan(t *testing.T) {
 		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Gone"}, NodeType: "component"},
 	}
 
-	actions := ClassifyActions(nil, nil, orphaned)
+	actions := ClassifyActions(nil, nil, nil, orphaned)
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
 	}
@@ -568,7 +563,7 @@ func TestFR6_ClassifyActions_OrphanedNoStatusDefaultObsolete(t *testing.T) {
 		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp"}, NodeType: "component"},
 	}
 
-	actions := ClassifyActions(nil, nil, orphaned)
+	actions := ClassifyActions(nil, nil, nil, orphaned)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -586,7 +581,7 @@ func TestFR6_ClassifyActions_OrphanedInProgressBead(t *testing.T) {
 		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp", BeadStatus: "in_progress"}, NodeType: "component"},
 	}
 
-	actions := ClassifyActions(nil, nil, orphaned)
+	actions := ClassifyActions(nil, nil, nil, orphaned)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -952,6 +947,336 @@ func assertNotContains(t *testing.T, slice []string, unwanted string) {
 			return
 		}
 	}
+}
+
+// ========================
+// Data-flow and test_section gating (proposal 2026-04-12-data-flow-contract-layer)
+// ========================
+
+// --- Data flow added without a matching bead produces a create action ---
+
+func TestFR8_ClassifyActions_DataFlowAddedProducesBead(t *testing.T) {
+	flow := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: flow, Type: merkle.Added, NewHash: "ff1", NodeType: "data_flow"},
+			Impact: merkle.Contract, Module: "merkle",
+		}},
+	}
+
+	actions := ClassifyActions(nil, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action for added data_flow, got %d: %+v", len(actions), actions)
+	}
+	a := actions[0]
+	if a.Type != "create" {
+		t.Errorf("want type create, got %q", a.Type)
+	}
+	if a.NodeType != "data_flow" {
+		t.Errorf("want NodeType data_flow, got %q", a.NodeType)
+	}
+	if a.SpecNodeID != flow {
+		t.Errorf("want SpecNodeID %q, got %q", flow, a.SpecNodeID)
+	}
+}
+
+// --- Data flow modified with a matching bead produces obsolete+create ---
+
+func TestFR8_ClassifyActions_DataFlowModifiedMatched(t *testing.T) {
+	flow := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Path: flow, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "data_flow"},
+				Impact: merkle.Contract, Module: "merkle",
+			},
+			Records: []mapping.Record{
+				{ID: 99, SpecNodeID: flow, BeadID: "spex-flow", BeadType: "task", Module: "merkle", Component: "HashFlow"},
+			},
+		},
+	}
+
+	actions := ClassifyActions(nil, matches, nil, nil)
+
+	if len(actions) != 2 {
+		t.Fatalf("want 2 actions (obsolete+create), got %d: %+v", len(actions), actions)
+	}
+	var hasObsolete, hasCreate bool
+	for _, a := range actions {
+		if a.NodeType != "data_flow" {
+			t.Errorf("want NodeType=data_flow on every action, got %q", a.NodeType)
+		}
+		if a.Type == "obsolete" && a.BeadID == "spex-flow" {
+			hasObsolete = true
+		}
+		if a.Type == "create" && a.OldBeadID == "spex-flow" {
+			hasCreate = true
+		}
+	}
+	if !hasObsolete || !hasCreate {
+		t.Errorf("want obsolete(spex-flow)+create(OldBeadID=spex-flow), got %+v", actions)
+	}
+}
+
+// --- test_section with len(describes) == 1 is bundled into its component ---
+
+func TestFR8_ClassifyActions_TestSectionSingleDescribesSkipped(t *testing.T) {
+	h := newDepFixture()
+	testID := schema.IdentityHash("impact", "test_section", "MatcherTests")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"impact": {
+				ID:   h.ModImpact,
+				Name: "impact",
+				Components: []mapping.ComponentInfo{
+					{ID: h.NM, Name: "NodeMatcher"},
+				},
+				TestSections: []mapping.TestSectionInfo{
+					{ID: testID, Name: "MatcherTests", Describes: []string{h.NM}},
+				},
+			},
+		},
+	}
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t1", NodeType: "test_section"},
+			Impact: merkle.ImplOnly, Module: "impact",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	if len(actions) != 0 {
+		t.Fatalf("want 0 actions for single-describes test_section, got %d: %+v", len(actions), actions)
+	}
+}
+
+// --- test_section with len(describes) >= 2 produces a task bead ---
+
+func TestFR8_ClassifyActions_TestSectionMultiDescribesProducesBead(t *testing.T) {
+	h := newDepFixture()
+	testID := schema.IdentityHash("impact", "test_section", "ClassifyReport")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"impact": {
+				ID:   h.ModImpact,
+				Name: "impact",
+				Components: []mapping.ComponentInfo{
+					{ID: h.AC, Name: "ActionClassifier"},
+					{ID: h.NM, Name: "NodeMatcher"},
+				},
+				TestSections: []mapping.TestSectionInfo{
+					{ID: testID, Name: "ClassifyReport", Describes: []string{h.AC, h.NM}},
+				},
+			},
+		},
+	}
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t2", NodeType: "test_section"},
+			Impact: merkle.ImplOnly, Module: "impact",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action for multi-describes test_section, got %d: %+v", len(actions), actions)
+	}
+	if actions[0].Type != "create" || actions[0].NodeType != "test_section" {
+		t.Errorf("want create/test_section action, got %+v", actions[0])
+	}
+}
+
+// --- test_section gate falls back to produce-bead when graph is nil ---
+
+func TestFR8_ClassifyActions_TestSectionNilGraphDefaultsToProduce(t *testing.T) {
+	testID := schema.IdentityHash("mod", "test_section", "T")
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t3", NodeType: "test_section"},
+			Impact: merkle.ImplOnly, Module: "mod",
+		}},
+	}
+
+	// nil graph: classifier cannot prove the coupling rule; keep the action.
+	actions := ClassifyActions(nil, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action when graph is nil (safe fallback), got %d: %+v", len(actions), actions)
+	}
+}
+
+// --- Matched test_section with len(describes) == 1 obsoletes only, no create ---
+
+func TestFR8_ClassifyActions_TestSectionCoupledMatchedObsoleteOnly(t *testing.T) {
+	h := newDepFixture()
+	testID := schema.IdentityHash("impact", "test_section", "MatcherTests")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"impact": {
+				ID:   h.ModImpact,
+				Name: "impact",
+				Components: []mapping.ComponentInfo{
+					{ID: h.NM, Name: "NodeMatcher"},
+				},
+				TestSections: []mapping.TestSectionInfo{
+					{ID: testID, Name: "MatcherTests", Describes: []string{h.NM}},
+				},
+			},
+		},
+	}
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Path: testID, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "test_section"},
+				Impact: merkle.ImplOnly, Module: "impact",
+			},
+			Records: []mapping.Record{
+				{ID: 77, SpecNodeID: testID, BeadID: "spex-test", BeadType: "task", Module: "impact", Component: "MatcherTests"},
+			},
+		},
+	}
+
+	actions := ClassifyActions(graph, matches, nil, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action (obsolete only for coupled test_section), got %d: %+v", len(actions), actions)
+	}
+	if actions[0].Type != "obsolete" || actions[0].BeadID != "spex-test" {
+		t.Errorf("want obsolete(spex-test), got %+v", actions[0])
+	}
+}
+
+// ========================
+// Data-flow dependency resolution (requirement 81aac298ce04)
+// ========================
+
+// --- Component in a data_flow's uses gets the data_flow's open bead as a dep ---
+
+func TestFR8_ResolveDeps_DataFlowDepOpenBead(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	records := []mapping.Record{
+		{ID: 200, SpecNodeID: flowID, BeadID: "spex-flow", Module: "merkle", BeadStatus: "open"},
+	}
+
+	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
+	deps := ResolveDeps(graph, records, action)
+
+	assertContains(t, deps, "spex-flow")
+}
+
+// --- Closed data_flow bead is skipped ---
+
+func TestFR8_ResolveDeps_DataFlowDepClosedBead(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	records := []mapping.Record{
+		{ID: 201, SpecNodeID: flowID, BeadID: "spex-flow-closed", Module: "merkle", BeadStatus: "closed"},
+	}
+
+	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
+	deps := ResolveDeps(graph, records, action)
+
+	assertNotContains(t, deps, "spex-flow-closed")
+}
+
+// --- Component NOT listed in a data_flow's uses does not depend on that flow ---
+
+func TestFR8_ResolveDeps_DataFlowUnrelatedComponent(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+					{ID: h.LEGACY, Name: "LegacyHasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					// Flow only involves Hasher; LegacyHasher is not in uses.
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	records := []mapping.Record{
+		{ID: 210, SpecNodeID: flowID, BeadID: "spex-flow", Module: "merkle", BeadStatus: "open"},
+	}
+
+	action := Action{Type: "create", Module: "merkle", Node: "LegacyHasher", NodeType: "component", SpecNodeID: h.LEGACY}
+	deps := ResolveDeps(graph, records, action)
+
+	assertNotContains(t, deps, "spex-flow")
+}
+
+// --- Multiple data_flows: component gets deps from each flow it participates in ---
+
+func TestFR8_ResolveDeps_MultipleDataFlows(t *testing.T) {
+	h := newDepFixture()
+	flow1 := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	flow2 := schema.IdentityHash("merkle", "data_flow", "DiffFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flow1, Name: "HashFlow", Uses: []string{h.HASH}},
+					{ID: flow2, Name: "DiffFlow", Uses: []string{h.HASH, h.TREE}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	records := []mapping.Record{
+		{ID: 220, SpecNodeID: flow1, BeadID: "spex-flow1", Module: "merkle", BeadStatus: "open"},
+		{ID: 221, SpecNodeID: flow2, BeadID: "spex-flow2", Module: "merkle", BeadStatus: "open"},
+	}
+
+	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
+	deps := ResolveDeps(graph, records, action)
+
+	assertContains(t, deps, "spex-flow1")
+	assertContains(t, deps, "spex-flow2")
 }
 
 // stubSpecGraph implements a minimal SpecGraph for testing dependency resolution.

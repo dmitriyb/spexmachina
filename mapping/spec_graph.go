@@ -89,10 +89,30 @@ func (sg *specGraph) buildModuleInfo(mod schema.Module) (ModuleInfo, error) {
 		}
 	}
 
+	flows := make([]DataFlowInfo, len(ms.DataFlows))
+	for i, f := range ms.DataFlows {
+		flows[i] = DataFlowInfo{
+			ID:   f.ID,
+			Name: f.Name,
+			Uses: f.Uses,
+		}
+	}
+
+	tests := make([]TestSectionInfo, len(ms.TestSections))
+	for i, t := range ms.TestSections {
+		tests[i] = TestSectionInfo{
+			ID:        t.ID,
+			Name:      t.Name,
+			Describes: t.Describes,
+		}
+	}
+
 	return ModuleInfo{
 		ID:             mod.ID,
 		Name:           mod.Name,
 		RequiresModule: mod.RequiresModule,
 		Components:     comps,
+		DataFlows:      flows,
+		TestSections:   tests,
 	}, nil
 }
