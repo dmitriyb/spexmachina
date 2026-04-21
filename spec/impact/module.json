@@ -75,6 +75,17 @@
       "depends_on": [
         "d165e2fe215e"
       ]
+    },
+    {
+      "id": "81aac298ce04",
+      "preq_id": "13c15bc3c865",
+      "type": "functional",
+      "title": "Data flow contract bead gating",
+      "description": "Produce a create action with node_type=data_flow for every added or modified data_flow change (contract-level impact). Filter test_section changes by the describes array length in the current module spec: len(describes) >= 2 produces a task action, len(describes) == 1 is skipped (bundled into the single described component's feature bead). For every component create action whose spec node appears in a changed data_flow's uses array, resolve the data_flow bead into its DepBeadIDs via the mapping store so apply's topological ordering creates the data_flow bead first and participating component beads gain --deps depends: on it.",
+      "depends_on": [
+        "06a081811e38",
+        "d1823d802984"
+      ]
     }
   ],
   "components": [
@@ -91,7 +102,7 @@
     {
       "id": "06035e7f0c39",
       "name": "NodeMatcher",
-      "description": "Matches changed spec nodes to beads using spec node IDs from the ID-based merkle diff. Correlates by matching spec node IDs against mapping record IDs, not by parsing paths or label conventions.",
+      "description": "Matches changed spec nodes to beads using spec node IDs from the ID-based merkle diff. Correlates by matching spec node IDs against mapping record IDs, not by parsing paths or label conventions. Skips structural-level changes (module.json, project.json, requirement leaves) but forwards contract-level changes (data_flow leaves) to the action classifier so a dedicated data_flow task bead is produced.",
       "content": "arch_node_matcher.md",
       "implements": [
         "d165e2fe215e",
@@ -104,12 +115,13 @@
     {
       "id": "76d72cbe00f3",
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added→create, modified→obsolete+create, removed→obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added→create, modified→obsolete+create, removed→obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file. Gates bead creation by node type: module, component, data_flow, and test_section produce beads; impl_section is always skipped; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature bead (no separate task), if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead because they describe cross-component contracts.",
       "content": "arch_action_classifier.md",
       "implements": [
         "06a081811e38",
         "3dcf3c279ac5",
-        "d1823d802984"
+        "d1823d802984",
+        "81aac298ce04"
       ],
       "uses": [
         "bec96486c6b2",

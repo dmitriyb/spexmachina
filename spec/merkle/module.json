@@ -44,7 +44,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Classify impact",
-      "description": "Classify each change as impl-only (only impl_section leaves changed), arch+impl (component leaves changed), or structural (module.json or project.json changed).",
+      "description": "Classify each change by its impact level: impl_only (only impl_section or test_section leaves changed), contract (data_flow leaves changed — a cross-component contract within the module), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between arch_impl and structural: data_flow changes are not purely local like impl_section, nor do they rewire graph topology like component or meta changes — they alter the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created.",
       "depends_on": [
         "f223179a540a"
       ]
@@ -123,7 +123,7 @@
     {
       "id": "f1a672216ce9",
       "name": "ImpactClassifier",
-      "description": "Analyzes diff results to classify changes by their impact level: impl-only, arch+impl, or structural. Requirement leaf nodes are classified as structural. Uses node metadata (type, module association) instead of parsing path prefixes.",
+      "description": "Analyzes diff results to classify changes by their impact level: impl_only (impl_section, test_section), contract (data_flow), arch_impl (component), or structural (module.json, project.json, requirement). The contract level is distinct from impl_only because data_flow changes describe cross-component shapes — downstream matchers must not skip them. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
         "425146f32e96"

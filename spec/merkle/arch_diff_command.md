@@ -7,9 +7,11 @@ CLI entry point for `spex diff`. Compares the current merkle tree against a stor
 - Parse CLI flags: spec directory, snapshot path (optional, defaults to stored)
 - Wire SnapshotStore to load the previous snapshot
 - Wire DiffEngine to compare current vs stored trees
-- Wire ImpactClassifier to classify changes
+- Wire ImpactClassifier to classify changes across four levels (`impl_only`, `contract`, `arch_impl`, `structural`)
 - Wire CompletenessChecker to validate that requirement changes are accompanied by component content changes
 - Output the diff report with changes and errors
+
+The fourth impact level `contract` (new) appears on `data_flow` leaf changes. DiffCommand passes classified changes through unchanged; downstream consumers (impact module) are responsible for acting on the new level. Tests that assert impact strings must accept the expanded enum.
 
 ## Interface
 

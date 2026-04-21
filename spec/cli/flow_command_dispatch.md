@@ -63,3 +63,32 @@ spex completion fish > ~/.config/fish/completions/spex.fish
 ```
 
 No custom code is needed — cobra generates completions from the registered command tree.
+
+## Data Shapes
+
+### argv → RootCommand
+
+- os.Args: list of string (as provided by the Go runtime)
+- Cobra parses this into:
+  - PersistentFlags: map[string]string (e.g., `spec-dir`)
+  - Subcommand path: list of string (always length 1 in spex today)
+  - LocalFlags: map[string]string (per-subcommand)
+  - PositionalArgs: list of string
+
+### RootCommand → Subcommand handler (RunE signature)
+
+- cobra.Command receiver with:
+  - Flags() / PersistentFlags() accessors
+  - Root() for persistent flag lookup
+- Positional args: `args []string`
+- Return: `error` — nil for success; non-nil propagates to main()
+
+### Subcommand → stderr / stdout (exit contract)
+
+- stdout: subcommand-specific payload (JSON, text, DOT, etc.)
+- stderr: error messages + optional progress logs
+- exit code: 0 on RunE returning nil, 1 otherwise
+
+Any new persistent flag on RootCommand must be documented here. Any new
+subcommand must be registered via the CommandRegistrar pattern — drive-by
+additions outside that pattern break shell completion and help output.

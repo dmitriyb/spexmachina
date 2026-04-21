@@ -116,6 +116,9 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		})
 
 		// If the bead is closed, code has shipped — create a cleanup bead.
+		// OldBeadID carries the obsoleted bead so BeadCreator emits
+		// --deps blocks:<old-bead-id>, giving the cleanup bead a structural
+		// pointer back to what needs removing.
 		if o.Record.BeadStatus == "closed" {
 			actions = append(actions, Action{
 				Type:       "create",
@@ -123,6 +126,7 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 				Node:       node,
 				NodeType:   o.NodeType,
 				SpecNodeID: o.Record.SpecNodeID,
+				OldBeadID:  o.Record.BeadID,
 				Reason:     fmt.Sprintf("Code cleanup: %s/%s", o.Record.Module, node),
 			})
 		}

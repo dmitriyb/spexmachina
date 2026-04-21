@@ -200,6 +200,42 @@ func TestFR1_ExtractRecordID(t *testing.T) {
 	}
 }
 
+// TestReadBeadsParsesIssuesEnvelope verifies that ReadBeads accepts the
+// {"issues": [...]} envelope shape produced by br list --json. Regression
+// guard for spexmachina-idd: previously ReadBeads only accepted a bare
+// array, so every call against a real br binary failed with
+// "cannot unmarshal object into Go value of type []impact.rawBead".
+func TestReadBeadsParsesIssuesEnvelope(t *testing.T) {
+	dir := t.TempDir()
+	stub := filepath.Join(dir, "br-stub")
+	jsonFile := filepath.Join(dir, "data.json")
+
+	envelope := `{"issues":[
+		{"id":"abc-1","status":"closed","labels":["spex:10"]},
+		{"id":"def-2","status":"open","labels":["spex:11"]}
+	]}`
+	if err := os.WriteFile(jsonFile, []byte(envelope), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(stub, []byte("#!/bin/sh\ncat "+jsonFile+"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	beads, err := ReadBeads(context.Background(), stub)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(beads) != 2 {
+		t.Fatalf("want 2 beads, got %d", len(beads))
+	}
+	if beads[0].Status != "closed" || beads[0].RecordID != 10 {
+		t.Errorf("bead[0]: want status=closed RecordID=10, got status=%s RecordID=%d", beads[0].Status, beads[0].RecordID)
+	}
+	if beads[1].Status != "open" || beads[1].RecordID != 11 {
+		t.Errorf("bead[1]: want status=open RecordID=11, got status=%s RecordID=%d", beads[1].Status, beads[1].RecordID)
+	}
+}
+
 // writeStubCLI creates a shell script that outputs the given beads as JSON
 // when called with "list --json". Returns the path to the script.
 func writeStubCLI(t *testing.T, beads []rawBead) string {

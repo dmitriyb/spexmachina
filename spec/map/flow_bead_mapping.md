@@ -58,3 +58,41 @@ spex apply (reads impact report)
 - Every mapping record's bead_id points to a bead that has a `spex:<record-id>` label
 - The label value matches the mapping record's ID
 - No orphaned records (record without a bead) or orphaned labels (label without a record)
+
+## Data Shapes
+
+### BeadCreator → MappingStore.Create (request)
+
+- CreateRequest:
+  - bead_id: string — newly created bead ID from bead CLI (e.g., `spexmachina-abc`)
+  - bead_type: string enum — `epic` | `feature` | `task`
+  - node_type: string enum — `proposal` | `component` | `data_flow` | `test_section`
+  - spec_node_id: string — 12-char hex identity hash, OR a proposal reference
+    (e.g., `2026-04-12-data-flow-contract-layer`) when node_type = `proposal`
+  - spec_hash: string — 64-char hex content hash (empty for epic records)
+  - module: string — 12-char hex identity hash of parent module
+    (empty for proposal epic records)
+
+### MappingStore → on-disk format (.bead-map.json)
+
+- MapFile:
+  - version: integer — schema version (currently 1)
+  - next_id: integer — monotonic counter for new record IDs
+  - records: list of MapRecord
+
+- MapRecord (same shape as CreateRequest plus):
+  - id: integer — assigned by MappingStore from next_id
+
+### MappingStore → BeadCreator (response)
+
+- record_id: integer — freshly assigned id; used by BeadCreator as the
+  `spex:<record-id>` label value
+
+### MappingStore query interface (CLI `spex map get`)
+
+- QueryResponse:
+  - records: list of MapRecord matched by the query predicate
+  - not_found: list of input identifiers that had no matching record
+
+No field renames, additions, or removals of these shapes without updating
+every consumer in BeadCreator, BeadCloser, and the `spex map` CLI command.
