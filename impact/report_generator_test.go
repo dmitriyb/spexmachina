@@ -314,6 +314,7 @@ func TestFR4_D11_GenerateReportOmitsEmptyDepBeadIDs(t *testing.T) {
 
 func TestFR4_S10_FullPipeline(t *testing.T) {
 	actions := ClassifyActions(
+		nil,
 		[]Match{
 			{
 				Change: mkChange("module/1/component/1", "modified", "a", "b", "component", "alpha"),

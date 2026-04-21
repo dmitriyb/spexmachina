@@ -82,16 +82,18 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: enrich bead statuses: %w", err)
 	}
 
-	// Changes and records both key on identity hashes; NodeMatcher joins them
-	// directly without any path-format translation.
-	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
-	actions := impact.ClassifyActions(matches, unmatched, orphaned)
-
-	// Post-processing: resolve spec-graph dependencies for create actions.
+	// Spec graph is used for test_section describes-length gating inside
+	// ClassifyActions and for dependency resolution on create actions.
 	specGraph, err := mapping.NewSpecGraph(specDir)
 	if err != nil {
 		return fmt.Errorf("impact: load spec graph: %w", err)
 	}
+
+	// Changes and records both key on identity hashes; NodeMatcher joins them
+	// directly without any path-format translation.
+	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
+	actions := impact.ClassifyActions(specGraph, matches, unmatched, orphaned)
+
 	for i := range actions {
 		if actions[i].Type == "create" {
 			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i])
@@ -195,6 +197,8 @@ func parseImpactLevel(s string) (merkle.ImpactLevel, error) {
 	switch s {
 	case "impl_only":
 		return merkle.ImplOnly, nil
+	case "contract":
+		return merkle.Contract, nil
 	case "arch_impl":
 		return merkle.ArchImpl, nil
 	case "structural":
