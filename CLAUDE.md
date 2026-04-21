@@ -34,8 +34,10 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 ## Git Conventions
 
 - Default branch is `main` (never `master`)
+- `main` is protected: never commit directly to it. All changes land via a dedicated branch + PR merge, even one-line data fixes.
 - Always `git fetch origin` before creating a new branch
 - Always branch from `origin/main`, not from the current branch
+- Commits must be SSH-signed. Never bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`). To verify a commit is actually signed, inspect the raw object for a `gpgsig` block: `git cat-file -p <sha>`. Do NOT trust `git log --show-signature` or `%G?` — both report `N`/"No signature" on correctly-signed commits when `gpg.ssh.allowedSignersFile` is not configured locally. That is a verification-side gap, not a signing failure.
 
 ## Issue Tracking
 
