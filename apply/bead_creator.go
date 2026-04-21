@@ -15,20 +15,19 @@ import (
 
 // Action describes a bead action derived from impact analysis.
 type Action struct {
-	Module           string   // spec module name, e.g. "validator"
-	Node             string   // node name, e.g. "SchemaChecker"
-	NodeType         string   // "component", "data_flow", "test_section"
-	SpecHash         string   // merkle hash of the spec node
-	BeadID           string   // existing bead ID (for close/obsolete actions)
-	OldBeadID        string   // predecessor bead ID (for creates replacing obsoleted beads)
-	DepBeadIDs       []string // spec-graph dependency bead IDs
-	Priority         int      // derived priority; -1 means unset
-	SpecNodeID       string   // identity hash of the spec node
-	ContentFile      string   // spec content file path
-	DescribesCount   int      // test_section describes array length (defense-in-depth gate)
-	ParentSpecNodeID string   // unused; kept for backwards compatibility with callers
-	Reason           string   // human-readable reason
-	ChangeType       string   // "removed" or "modified" (for obsolete actions)
+	Module         string   // spec module name, e.g. "validator"
+	Node           string   // node name, e.g. "SchemaChecker"
+	NodeType       string   // "component", "data_flow", "test_section"
+	SpecHash       string   // merkle hash of the spec node
+	BeadID         string   // existing bead ID (for close/obsolete actions)
+	OldBeadID      string   // predecessor bead ID (for creates replacing obsoleted beads)
+	DepBeadIDs     []string // spec-graph dependency bead IDs
+	Priority       int      // derived priority; -1 means unset
+	SpecNodeID     string   // identity hash of the spec node
+	ContentFile    string   // spec content file path
+	DescribesCount int      // test_section describes array length (defense-in-depth gate)
+	Reason         string   // human-readable reason
+	ChangeType     string   // "removed" or "modified" (for obsolete actions)
 }
 
 // CreateOpts holds parameters for creating a single bead.

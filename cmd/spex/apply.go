@@ -60,9 +60,14 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 	}
 
 	// SpecGraph gives test_section describes arrays for the BeadCreator
-	// defense-in-depth gate. Errors here are non-fatal — missing describes
-	// counts just disable the gate for this run.
-	specGraph, _ := mapping.NewSpecGraph(specDir)
+	// defense-in-depth gate. A nil graph would cause DescribesCount to fall
+	// through to 0, tripping the gate on valid multi-component test_sections
+	// with a misleading "ActionClassifier should have filtered it" error — so
+	// propagate the error instead of swallowing it.
+	specGraph, err := mapping.NewSpecGraph(specDir)
+	if err != nil {
+		return fmt.Errorf("apply: load spec graph: %w", err)
+	}
 
 	// Convert impact actions to apply actions.
 	creates := convertCreateActions(report.Creates, modules, contents, store, specGraph)
