@@ -189,6 +189,115 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 	}
 }
 
+// setupDiffTestSpecWithDataFlow extends setupDiffTestSpec with a data_flow
+// leaf so tests can exercise the contract impact level. Returns the spec
+// directory plus the identity hashes for the component and the data_flow.
+func setupDiffTestSpecWithDataFlow(t *testing.T) (specDir, compHash, flowHash string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	compHash = schema.IdentityHash("alpha", "component", "Comp1")
+	flowHash = schema.IdentityHash("alpha", "data_flow", "Flow1")
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
+		]
+	}`)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	modJSON := `{
+		"name": "alpha",
+		"components": [
+			{"id": "` + compHash + `", "name": "Comp1", "content": "arch_comp1.md"}
+		],
+		"data_flows": [
+			{"id": "` + flowHash + `", "name": "Flow1", "content": "flow_flow1.md", "uses": ["` + compHash + `"]}
+		]
+	}`
+	writeTestFile(t, alphaDir, "module.json", modJSON)
+	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
+	writeTestFile(t, alphaDir, "flow_flow1.md", "# Flow1 data flow\n")
+
+	return dir, compHash, flowHash
+}
+
+func TestFR5_DiffCommand_DataFlowIsContract(t *testing.T) {
+	specDir, _, flowHash := setupDiffTestSpecWithDataFlow(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	flowPath := filepath.Join(specDir, "alpha", "flow_flow1.md")
+	if err := os.WriteFile(flowPath, []byte("# Flow1 data flow CHANGED\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	foundContract := false
+	for _, c := range result.Changes {
+		if c.Path == flowHash {
+			foundContract = true
+			if c.Impact != "contract" {
+				t.Fatalf("want impact %q for data_flow %s, got %q", "contract", flowHash, c.Impact)
+			}
+			if c.NodeType != "data_flow" {
+				t.Fatalf("want node_type %q, got %q", "data_flow", c.NodeType)
+			}
+		}
+	}
+	if !foundContract {
+		t.Fatalf("expected change for data_flow hash %s, got: %+v", flowHash, result.Changes)
+	}
+	if result.Summary.ByImpact["contract"] == 0 {
+		t.Fatalf("expected summary.by_impact to count contract changes, got: %+v", result.Summary.ByImpact)
+	}
+}
+
+func TestFR5_DiffCommand_ContractInHumanSummary(t *testing.T) {
+	specDir, _, _ := setupDiffTestSpecWithDataFlow(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	flowPath := filepath.Join(specDir, "alpha", "flow_flow1.md")
+	if err := os.WriteFile(flowPath, []byte("# Flow1 data flow CHANGED\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "diff", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	if !strings.Contains(out, "1 contract") {
+		t.Fatalf("human summary should report contract count for data_flow change, got: %s", out)
+	}
+}
+
 func TestFR4_DiffCommand_CustomSnapshotPath(t *testing.T) {
 	specDir := setupTestSpec(t)
 
