@@ -141,7 +141,7 @@ func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.Diff
 		}
 	}
 	fmt.Println()
-	for _, imp := range []string{"impl_only", "arch_impl", "structural"} {
+	for _, imp := range []string{"impl_only", "contract", "arch_impl", "structural"} {
 		if c, ok := byImpact[imp]; ok {
 			fmt.Printf("  %d %s\n", c, imp)
 		}
