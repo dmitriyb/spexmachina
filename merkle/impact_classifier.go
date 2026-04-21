@@ -2,11 +2,14 @@ package merkle
 
 // TODO(bead:spexmachina-s85): review after spexmachina-kdb changed Module from int to string
 
-// ImpactLevel represents the severity of a spec change.
+// ImpactLevel represents the severity of a spec change. Ordering (lowest to
+// highest) is impl_only < contract < arch_impl < structural — the int value
+// reflects this so a numeric max yields the aggregate module impact.
 type ImpactLevel int
 
 const (
-	ImplOnly   ImpactLevel = iota + 1
+	ImplOnly ImpactLevel = iota + 1
+	Contract
 	ArchImpl
 	Structural
 )
@@ -15,6 +18,8 @@ func (il ImpactLevel) String() string {
 	switch il {
 	case ImplOnly:
 		return "impl_only"
+	case Contract:
+		return "contract"
 	case ArchImpl:
 		return "arch_impl"
 	case Structural:
@@ -50,8 +55,10 @@ func Classify(changes []Change, moduleNames map[string]string) []ClassifiedChang
 // classifyNodeType determines the impact level from node metadata.
 func classifyNodeType(nodeType string) ImpactLevel {
 	switch nodeType {
-	case "impl_section", "data_flow", "test_section":
+	case "impl_section", "test_section":
 		return ImplOnly
+	case "data_flow":
+		return Contract
 	case "component":
 		return ArchImpl
 	case "meta", "requirement":
