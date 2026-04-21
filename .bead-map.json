@@ -174,7 +174,7 @@
     {
       "id": 18,
       "spec_node_id": "c8b958ec310d",
-      "bead_id": "spexmachina-z9y",
+      "bead_id": "spexmachina-ec7",
       "bead_type": "task",
       "module": "merkle",
       "component": "DiffCommand",
@@ -204,7 +204,7 @@
     {
       "id": 21,
       "spec_node_id": "76d72cbe00f3",
-      "bead_id": "spexmachina-xl3",
+      "bead_id": "spexmachina-r4o",
       "bead_type": "feature",
       "module": "impact",
       "component": "ActionClassifier",
@@ -264,7 +264,7 @@
     {
       "id": 29,
       "spec_node_id": "78a551ef7b74",
-      "bead_id": "spexmachina-7nz",
+      "bead_id": "spexmachina-yyi",
       "bead_type": "feature",
       "module": "apply",
       "component": "ApplyCommand",
