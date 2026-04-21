@@ -26,15 +26,19 @@ func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	}
 }
 
-func TestREQ5_Classify_DataFlowIsImplOnly(t *testing.T) {
+func TestREQ5_Classify_DataFlowIsContract(t *testing.T) {
 	changes := []Change{
 		{Path: "module/1/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod1"},
 	}
+	names := map[string]string{"mod1": "Alpha"}
 
-	classified := Classify(changes, nil)
+	classified := Classify(changes, names)
 
-	if classified[0].Impact != ImplOnly {
-		t.Errorf("expected impl_only for data_flow, got %s", classified[0].Impact)
+	if classified[0].Impact != Contract {
+		t.Errorf("expected contract for data_flow, got %s", classified[0].Impact)
+	}
+	if classified[0].Module != "Alpha" {
+		t.Errorf("expected module Alpha, got %q", classified[0].Module)
 	}
 }
 
@@ -141,7 +145,7 @@ func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 		{Structural, ""},
 		{ArchImpl, "Alpha"},
 		{ImplOnly, "Alpha"},
-		{ImplOnly, "Beta"},
+		{Contract, "Beta"},
 	}
 
 	for i, want := range expected {
@@ -219,6 +223,7 @@ func TestREQ5_ImpactLevel_String(t *testing.T) {
 		want  string
 	}{
 		{ImplOnly, "impl_only"},
+		{Contract, "contract"},
 		{ArchImpl, "arch_impl"},
 		{Structural, "structural"},
 		{ImpactLevel(0), "unknown"},
