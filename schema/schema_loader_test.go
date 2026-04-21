@@ -541,22 +541,28 @@ func TestFR7_BM1_BeadMapSchemaLoads(t *testing.T) {
 	}
 }
 
-func TestFR7_BM2_BeadMapEnforcesIdentityHashPattern(t *testing.T) {
+func TestFR7_BM2_BeadMapAcceptsIdentityHashAndProposalRef(t *testing.T) {
 	schData, err := BeadMapSchema()
 	if err != nil {
 		t.Fatalf("BeadMapSchema(): %v", err)
 	}
 	sch := compileSchema(t, schData)
 
-	// Valid identity hash spec_node_id
-	valid := fmt.Sprintf(`{"next_id":2,"records":[{"id":1,"spec_node_id":"a1b2c3d4e5f6","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"%s"}]}`, strings.Repeat("a", 64))
-	if err := validateJSON(t, sch, []byte(valid)); err != nil {
-		t.Fatalf("valid identity hash should pass: %v", err)
+	// Identity-hash spec_node_id (component/data_flow/test_section records).
+	identity := fmt.Sprintf(`{"next_id":2,"records":[{"id":1,"spec_node_id":"a1b2c3d4e5f6","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"%s"}]}`, strings.Repeat("a", 64))
+	if err := validateJSON(t, sch, []byte(identity)); err != nil {
+		t.Fatalf("identity hash spec_node_id should pass: %v", err)
 	}
 
-	// Legacy format spec_node_id
-	legacy := fmt.Sprintf(`{"next_id":2,"records":[{"id":1,"spec_node_id":"impact/component/3","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"%s"}]}`, strings.Repeat("a", 64))
-	if err := validateJSON(t, sch, []byte(legacy)); err == nil {
-		t.Fatal("legacy spec_node_id should fail validation")
+	// Proposal reference spec_node_id (proposal epic records).
+	proposal := `{"next_id":2,"records":[{"id":1,"spec_node_id":"2026-04-12-data-flow-contract-layer","bead_id":"test-epic","bead_type":"epic","node_type":"proposal","module":"","component":"2026-04-12-data-flow-contract-layer","content_file":"","spec_hash":""}]}`
+	if err := validateJSON(t, sch, []byte(proposal)); err != nil {
+		t.Fatalf("proposal epic record should pass: %v", err)
+	}
+
+	// Empty spec_node_id is always rejected.
+	empty := `{"next_id":2,"records":[{"id":1,"spec_node_id":"","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"abc"}]}`
+	if err := validateJSON(t, sch, []byte(empty)); err == nil {
+		t.Fatal("empty spec_node_id should fail validation")
 	}
 }

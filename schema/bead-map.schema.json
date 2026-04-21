@@ -31,8 +31,8 @@
         },
         "spec_node_id": {
           "type": "string",
-          "pattern": "^[a-f0-9]{12}$",
-          "description": "Identity hash of the spec node (12-char lowercase hex). Same format as node IDs in project.json and module.json."
+          "minLength": 1,
+          "description": "Identity of the spec node. For component/data_flow/test_section records this is the 12-char hex identity hash. For proposal epic records it is the proposal reference."
         },
         "bead_id": {
           "type": "string",
@@ -42,27 +42,29 @@
         "bead_type": {
           "type": "string",
           "minLength": 1,
-          "description": "Bead issue type (e.g. task, bug)."
+          "description": "Bead issue type (e.g. epic, feature, task)."
+        },
+        "node_type": {
+          "type": "string",
+          "enum": ["proposal", "component", "data_flow", "test_section"],
+          "description": "Spec node type. Optional; present on records created by BeadCreator to distinguish proposal epics from component/data_flow/test_section records."
         },
         "module": {
           "type": "string",
-          "minLength": 1,
-          "description": "Module name containing the spec node."
+          "description": "Module name containing the spec node. Empty for proposal epic records."
         },
         "component": {
           "type": "string",
           "minLength": 1,
-          "description": "Component or section name within the module."
+          "description": "Component or section name within the module; for proposal epics this is the proposal reference."
         },
         "content_file": {
           "type": "string",
-          "minLength": 1,
-          "description": "Relative path to the spec content markdown file."
+          "description": "Relative path to the spec content markdown file. Empty for proposal epic records."
         },
         "spec_hash": {
           "type": "string",
-          "minLength": 1,
-          "description": "SHA-256 hash of the spec content at time of mapping."
+          "description": "SHA-256 hash of the spec content at time of mapping. Empty for proposal epic records."
         },
         "bead_status": {
           "type": "string",

@@ -49,7 +49,7 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 	}
 
 	// 3. Create beads — abort on failure, no snapshot saved.
-	createdIDs, err := CreateBeads(ctx, cli, store, sorted)
+	createdIDs, err := CreateBeads(ctx, cli, store, opts.ProposalRef, sorted)
 	if err != nil {
 		return err
 	}
@@ -101,17 +101,17 @@ func collectAffectedBeadIDs(createdIDs []string, obsoletes []Action) []string {
 }
 
 // typePriority returns the sort priority for a spec node type.
-// Lower values are created first: modules (epics) -> components (features) -> test_sections (tasks).
+// Lower values are created first: features (components) and data_flow tasks
+// share a level so topological sort can interleave them, then test_section
+// tasks. The proposal epic is created separately outside this ordering.
 func typePriority(nodeType string) int {
 	switch nodeType {
-	case "module":
+	case "component", "data_flow":
 		return 0
-	case "component":
-		return 1
 	case "test_section":
-		return 2
+		return 1
 	default:
-		return 3
+		return 2
 	}
 }
 
@@ -129,7 +129,7 @@ func SortCreateActions(actions []Action) ([]Action, error) {
 	}
 
 	var result []Action
-	for _, level := range []int{0, 1, 2, 3} {
+	for _, level := range []int{0, 1, 2} {
 		group, ok := groups[level]
 		if !ok {
 			continue
@@ -223,7 +223,14 @@ func printApplyDryRun(opts ApplyOpts) error {
 	if err != nil {
 		return err
 	}
+	if len(sorted) > 0 && opts.ProposalRef != "" {
+		fmt.Fprintf(w, "create proposal-epic %q --type epic\n", opts.ProposalRef)
+	}
 	for _, a := range sorted {
+		if isCleanup(a) {
+			fmt.Fprintf(w, "create cleanup/%s --type task\n", a.Node)
+			continue
+		}
 		bt := beadType(a.NodeType)
 		if bt == "" {
 			bt = a.NodeType
@@ -236,6 +243,9 @@ func printApplyDryRun(opts ApplyOpts) error {
 	}
 
 	total := len(opts.Creates) + len(opts.Obsoletes)
+	if len(opts.Creates) > 0 {
+		total++ // proposal epic bead
+	}
 	if opts.ProposalRef != "" && total > 0 {
 		fmt.Fprintf(w, "tag %d beads with proposal %s\n", total, opts.ProposalRef)
 	}

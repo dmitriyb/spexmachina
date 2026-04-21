@@ -175,18 +175,19 @@ func TestREQ8_S1_FullActionOrder(t *testing.T) {
 		t.Error("tag phase started before close phase ended")
 	}
 
-	// Verify counts.
+	// Verify counts. The proposal epic is created first on every run with
+	// at least one create, producing one extra create and one extra tag.
 	if labelCount != 3 {
 		t.Errorf("want 3 label updates, got %d", labelCount)
 	}
-	if createCount != 2 {
-		t.Errorf("want 2 creates, got %d", createCount)
+	if createCount != 3 {
+		t.Errorf("want 3 creates (epic + 2 components), got %d", createCount)
 	}
 	if closeCount != 3 {
 		t.Errorf("want 3 closes, got %d", closeCount)
 	}
-	if tagCount != 5 {
-		t.Errorf("want 5 tag updates, got %d", tagCount)
+	if tagCount != 6 {
+		t.Errorf("want 6 tag updates (epic + 2 new + 3 obsolete), got %d", tagCount)
 	}
 
 	// Verify snapshot was written.
@@ -204,9 +205,9 @@ func TestREQ8_S2_HierarchyOrdering(t *testing.T) {
 	specDir := setupSpecDir(t)
 
 	creates := []Action{
-		{Module: "validator", Node: "SchemaTests", NodeType: "test_section", SpecNodeID: "validator/test_section/1", Priority: -1},
+		{Module: "apply", Node: "BeadActionTests", NodeType: "test_section", SpecNodeID: "apply/test_section/1", DescribesCount: 2, Priority: -1},
 		{Module: "validator", Node: "ContentResolver", NodeType: "component", SpecNodeID: "validator/component/1", Priority: -1},
-		{Module: "validator", Node: "validator", NodeType: "module", SpecNodeID: "validator/module", Priority: -1},
+		{Module: "merkle", Node: "HashFlow", NodeType: "data_flow", SpecNodeID: "merkle/data_flow/1", Priority: -1},
 		{Module: "validator", Node: "DagChecker", NodeType: "component", SpecNodeID: "validator/component/2", Priority: -1},
 	}
 
@@ -216,22 +217,25 @@ func TestREQ8_S2_HierarchyOrdering(t *testing.T) {
 		t.Fatalf("RunApply: %v", err)
 	}
 
-	if len(cli.created) != 4 {
-		t.Fatalf("want 4 creates, got %d", len(cli.created))
+	// Epic (1) + 2 components + 1 data_flow + 1 test_section = 5 creates.
+	if len(cli.created) != 5 {
+		t.Fatalf("want 5 creates, got %d", len(cli.created))
 	}
 
-	// Verify order: epic first, then features, then task.
+	// Order: proposal epic, then features/data_flow tasks, then test_section task.
 	if cli.created[0].Type != "epic" {
 		t.Errorf("first create type: want epic, got %s", cli.created[0].Type)
 	}
-	if cli.created[1].Type != "feature" {
-		t.Errorf("second create type: want feature, got %s", cli.created[1].Type)
+	// Levels 0 (component, data_flow) come before level 1 (test_section).
+	// Last create must be the test_section task.
+	if cli.created[4].Type != "task" {
+		t.Errorf("last create type: want task, got %s", cli.created[4].Type)
 	}
-	if cli.created[2].Type != "feature" {
-		t.Errorf("third create type: want feature, got %s", cli.created[2].Type)
-	}
-	if cli.created[3].Type != "task" {
-		t.Errorf("fourth create type: want task, got %s", cli.created[3].Type)
+	// Everything between epic and last is feature/task at level 0.
+	for i := 1; i <= 3; i++ {
+		if cli.created[i].Type != "feature" && cli.created[i].Type != "task" {
+			t.Errorf("create[%d] type: want feature or task, got %s", i, cli.created[i].Type)
+		}
 	}
 }
 
@@ -276,27 +280,28 @@ func TestREQ6_S6_IdempotencyNoExtraCreates(t *testing.T) {
 
 	opts := defaultApplyOpts(creates, nil, specDir)
 
-	// First run: creates beads.
+	// First run: creates epic + 2 components.
 	err := RunApply(context.Background(), cli, store, opts)
 	if err != nil {
 		t.Fatalf("first run: %v", err)
 	}
-	if len(cli.created) != 2 {
-		t.Fatalf("first run: want 2 creates, got %d", len(cli.created))
+	if len(cli.created) != 3 {
+		t.Fatalf("first run: want 3 creates (epic + 2 components), got %d", len(cli.created))
 	}
 
-	// Set up FindExisting to return existing beads for second run.
-	cli.findResult["spex:1"] = "mock-1"
+	// Set up FindExisting to return existing component beads for second run.
+	// Records 1 = epic, 2 and 3 = components.
 	cli.findResult["spex:2"] = "mock-2"
+	cli.findResult["spex:3"] = "mock-3"
 	cli.created = nil
 
-	// Second run: should skip creates.
+	// Second run: should still create a fresh epic but skip the component creates.
 	err = RunApply(context.Background(), cli, store, opts)
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	if len(cli.created) != 0 {
-		t.Errorf("second run: want 0 creates (idempotent), got %d", len(cli.created))
+	if len(cli.created) != 1 {
+		t.Errorf("second run: want 1 create (epic only), got %d", len(cli.created))
 	}
 }
 
@@ -369,7 +374,7 @@ func TestREQ8_S8_DryRunPrintsActions(t *testing.T) {
 		"close spexmachina-77",
 		"close spexmachina-78",
 		"close spexmachina-42",
-		"tag 5 beads with proposal 2026-02-23-spex-machina",
+		"tag 6 beads with proposal 2026-02-23-spex-machina",
 		"save snapshot",
 	}
 	for _, line := range expected {
@@ -504,8 +509,9 @@ func TestREQ8_E4_LargeReport(t *testing.T) {
 		t.Fatalf("RunApply with 100 actions: %v", err)
 	}
 
-	if len(cli.created) != 50 {
-		t.Errorf("want 50 creates, got %d", len(cli.created))
+	// Epic + 50 components.
+	if len(cli.created) != 51 {
+		t.Errorf("want 51 creates (epic + 50 components), got %d", len(cli.created))
 	}
 }
 
@@ -542,8 +548,9 @@ func TestREQ11_T1_TopoSortWithinFeatureLevel(t *testing.T) {
 // T2: Topological ordering does not affect cross-type ordering
 
 func TestREQ11_T2_TopoSortDoesNotAffectCrossType(t *testing.T) {
+	// Features (components) and data_flow tasks share level 0 and are
+	// topologically sorted; test_section tasks are level 1 and come last.
 	actions := []Action{
-		{Module: "m", Node: "Epic", NodeType: "module"},
 		{Module: "m", Node: "X", NodeType: "component", OldBeadID: "old-X", DepBeadIDs: []string{"old-Y"}},
 		{Module: "m", Node: "Y", NodeType: "component", OldBeadID: "old-Y"},
 		{Module: "m", Node: "Task", NodeType: "test_section"},
@@ -554,22 +561,19 @@ func TestREQ11_T2_TopoSortDoesNotAffectCrossType(t *testing.T) {
 		t.Fatalf("SortCreateActions: %v", err)
 	}
 
-	if len(sorted) != 4 {
-		t.Fatalf("want 4 actions, got %d", len(sorted))
+	if len(sorted) != 3 {
+		t.Fatalf("want 3 actions, got %d", len(sorted))
 	}
 
-	// Type-level order preserved: epic, features (Y before X), task.
-	if sorted[0].Node != "Epic" {
-		t.Errorf("first: want Epic, got %s", sorted[0].Node)
+	// Level 0 first (Y before X via topo sort), then level 1 (Task).
+	if sorted[0].Node != "Y" {
+		t.Errorf("first: want Y (dependency of X), got %s", sorted[0].Node)
 	}
-	if sorted[1].Node != "Y" {
-		t.Errorf("second: want Y (dependency of X), got %s", sorted[1].Node)
+	if sorted[1].Node != "X" {
+		t.Errorf("second: want X, got %s", sorted[1].Node)
 	}
-	if sorted[2].Node != "X" {
-		t.Errorf("third: want X, got %s", sorted[2].Node)
-	}
-	if sorted[3].Node != "Task" {
-		t.Errorf("fourth: want Task, got %s", sorted[3].Node)
+	if sorted[2].Node != "Task" {
+		t.Errorf("third: want Task, got %s", sorted[2].Node)
 	}
 }
 
@@ -713,11 +717,12 @@ func TestREQ8_TypePriority(t *testing.T) {
 		nodeType string
 		want     int
 	}{
-		{"module", 0},
-		{"component", 1},
-		{"test_section", 2},
-		{"unknown", 3},
-		{"", 3},
+		{"component", 0},
+		{"data_flow", 0},
+		{"test_section", 1},
+		{"module", 2},
+		{"unknown", 2},
+		{"", 2},
 	}
 	for _, tt := range tests {
 		t.Run(tt.nodeType, func(t *testing.T) {

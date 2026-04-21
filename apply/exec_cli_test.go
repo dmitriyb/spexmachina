@@ -263,24 +263,26 @@ func TestIntegration_CreateBeads_Idempotency(t *testing.T) {
 		{Module: "idem", Node: "Widget", NodeType: "component", SpecHash: "h1", SpecNodeID: "idem/component/1", Priority: -1},
 	}
 
-	ids1, err := CreateBeads(ctx, cli, store, actions)
+	ids1, err := CreateBeads(ctx, cli, store, testProposal, actions)
 	if err != nil {
 		t.Fatalf("CreateBeads first call: %v", err)
 	}
-	if len(ids1) != 1 {
-		t.Fatalf("want 1 ID, got %d", len(ids1))
+	// Expect epic + component.
+	if len(ids1) != 2 {
+		t.Fatalf("want 2 IDs (epic + component), got %d", len(ids1))
 	}
 
-	ids2, err := CreateBeads(ctx, cli, store, actions)
+	ids2, err := CreateBeads(ctx, cli, store, testProposal, actions)
 	if err != nil {
 		t.Fatalf("CreateBeads second call: %v", err)
 	}
-	if len(ids2) != 1 {
-		t.Fatalf("want 1 ID, got %d", len(ids2))
+	// Each run creates a fresh epic; the component is idempotent.
+	if len(ids2) != 2 {
+		t.Fatalf("want 2 IDs (epic + component), got %d", len(ids2))
 	}
 
-	if ids1[0] != ids2[0] {
-		t.Errorf("idempotency: want same ID, got %q and %q", ids1[0], ids2[0])
+	if ids1[1] != ids2[1] {
+		t.Errorf("component idempotency: want same ID, got %q and %q", ids1[1], ids2[1])
 	}
 }
 
