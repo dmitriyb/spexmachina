@@ -62,6 +62,14 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 		moduleByHash[schema.IdentityHash("module", m.Name)] = m
 	}
 
+	// Map the TreeBuilder's project-requirement tree key back to the
+	// underlying Requirement so project-level errors carry the identity hash
+	// (req.ID) instead of the double-hashed tree key.
+	projReqByTreeKey := make(map[string]schema.Requirement, len(proj.Requirements))
+	for _, req := range proj.Requirements {
+		projReqByTreeKey[schema.IdentityHash("project", "requirement", req.ID)] = req
+	}
+
 	moduleSpecCache := make(map[string]*schema.ModuleSpec)
 	loadModule := func(moduleHash string) *schema.ModuleSpec {
 		if spec, ok := moduleSpecCache[moduleHash]; ok {
@@ -90,22 +98,31 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 
 		switch c.Type {
 		case Modified:
-			errs = append(errs, checkModifiedRequirement(c, reqHash, modSpec, changedPaths)...)
+			errs = append(errs, checkModifiedRequirement(reqHash, modSpec, changedPaths)...)
 		case Added:
-			errs = append(errs, checkAddedRequirement(c, reqHash, modSpec, changedPaths)...)
+			errs = append(errs, checkAddedRequirement(reqHash, modSpec, changedPaths)...)
 		case Removed:
-			errs = append(errs, checkRemovedRequirement(c, reqHash, modSpec)...)
+			errs = append(errs, checkRemovedRequirement(reqHash, modSpec)...)
 		}
 	}
 
 	for _, c := range projectReqChanges {
+		// c.Path is the TreeBuilder tree key (double hash). Resolve it to the
+		// underlying req.ID so path/related carry identity hashes that appear
+		// in project.json. If the project requirement was truly removed from
+		// the current spec, the lookup fails and we fall back to the tree key.
 		reqHash := c.Path
+		var reqTitle string
+		if req, ok := projReqByTreeKey[c.Path]; ok {
+			reqHash = req.ID
+			reqTitle = req.Title
+		}
 
 		switch c.Type {
 		case Modified, Added:
-			errs = append(errs, checkProjectRequirementModifiedOrAdded(c, reqHash, proj, loadModule, changedPaths)...)
+			errs = append(errs, checkProjectRequirementModifiedOrAdded(reqHash, reqTitle, proj, loadModule, changedPaths)...)
 		case Removed:
-			errs = append(errs, checkProjectRequirementRemoved(c, reqHash, proj, loadModule)...)
+			errs = append(errs, checkProjectRequirementRemoved(reqHash, reqTitle, proj, loadModule)...)
 		}
 	}
 
@@ -138,9 +155,9 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 
 // checkModifiedRequirement emits errors for components that implement the
 // modified requirement but whose content leaf did not change.
-func checkModifiedRequirement(c ClassifiedChange, reqHash string, modSpec *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+func checkModifiedRequirement(reqHash string, modSpec *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
 	var errs []DiffError
-	reqTitle := findRequirementTitle(modSpec, reqHash)
+	label := requirementLabel(findRequirementTitle(modSpec, reqHash), reqHash)
 	for _, comp := range modSpec.Components {
 		if !implementsReq(comp, reqHash) {
 			continue
@@ -150,8 +167,8 @@ func checkModifiedRequirement(c ClassifiedChange, reqHash string, modSpec *schem
 		}
 		errs = append(errs, DiffError{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("requirement %s (%s) description changed but component %s content leaf unchanged", reqHash, reqTitle, comp.Name),
-			Path:    c.Path,
+			Message: fmt.Sprintf("requirement %s (%s) description changed but component %s content leaf unchanged", label, modSpec.Name, comp.Name),
+			Path:    reqHash,
 			Related: []string{comp.ID},
 		})
 	}
@@ -160,13 +177,14 @@ func checkModifiedRequirement(c ClassifiedChange, reqHash string, modSpec *schem
 
 // checkAddedRequirement emits errors when an added requirement has no
 // implementor, or when implementing components' content leaves did not change.
-func checkAddedRequirement(c ClassifiedChange, reqHash string, modSpec *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+func checkAddedRequirement(reqHash string, modSpec *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+	label := requirementLabel(findRequirementTitle(modSpec, reqHash), reqHash)
 	implementors := findImplementors(modSpec, reqHash)
 	if len(implementors) == 0 {
 		return []DiffError{{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("requirement %s added but not implemented by any component", reqHash),
-			Path:    c.Path,
+			Message: fmt.Sprintf("requirement %s (%s) added but not implemented by any component", label, modSpec.Name),
+			Path:    reqHash,
 		}}
 	}
 	var errs []DiffError
@@ -176,8 +194,8 @@ func checkAddedRequirement(c ClassifiedChange, reqHash string, modSpec *schema.M
 		}
 		errs = append(errs, DiffError{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("requirement %s added but component %s content leaf unchanged", reqHash, comp.Name),
-			Path:    c.Path,
+			Message: fmt.Sprintf("requirement %s (%s) added but component %s content leaf unchanged", label, modSpec.Name, comp.Name),
+			Path:    reqHash,
 			Related: []string{comp.ID},
 		})
 	}
@@ -185,8 +203,10 @@ func checkAddedRequirement(c ClassifiedChange, reqHash string, modSpec *schema.M
 }
 
 // checkRemovedRequirement emits errors when a component still references the
-// removed requirement via its implements array.
-func checkRemovedRequirement(c ClassifiedChange, reqHash string, modSpec *schema.ModuleSpec) []DiffError {
+// removed requirement via its implements array. The removed requirement is
+// gone from modSpec.Requirements, so the title is unavailable — the hash
+// carries the identity.
+func checkRemovedRequirement(reqHash string, modSpec *schema.ModuleSpec) []DiffError {
 	var errs []DiffError
 	for _, comp := range modSpec.Components {
 		if !implementsReq(comp, reqHash) {
@@ -194,8 +214,8 @@ func checkRemovedRequirement(c ClassifiedChange, reqHash string, modSpec *schema
 		}
 		errs = append(errs, DiffError{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("component %s still implements removed requirement %s", comp.Name, reqHash),
-			Path:    c.Path,
+			Message: fmt.Sprintf("component %s still implements removed requirement %s (%s)", comp.Name, reqHash, modSpec.Name),
+			Path:    reqHash,
 			Related: []string{comp.ID},
 		})
 	}
@@ -204,14 +224,17 @@ func checkRemovedRequirement(c ClassifiedChange, reqHash string, modSpec *schema
 
 // checkProjectRequirementModifiedOrAdded walks the project → module → component
 // chain and emits errors when derivation is missing or component content leaves
-// did not change.
-func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, projReqHash string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+// did not change. projReqHash is the identity hash (req.ID) when the project
+// requirement could be resolved from proj.Requirements; otherwise it falls
+// back to the tree key.
+func checkProjectRequirementModifiedOrAdded(projReqHash, projReqTitle string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec, changedPaths map[string]bool) []DiffError {
+	label := requirementLabel(projReqTitle, projReqHash)
 	derived := findDerivedModuleRequirements(projReqHash, proj, loadModule)
 	if len(derived) == 0 {
 		return []DiffError{{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("no module requirement derives from project requirement %s", projReqHash),
-			Path:    c.Path,
+			Message: fmt.Sprintf("no module requirement derives from project requirement %s", label),
+			Path:    projReqHash,
 		}}
 	}
 	var errs []DiffError
@@ -222,8 +245,8 @@ func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, projReqHash stri
 			}
 			errs = append(errs, DiffError{
 				Type:    "incomplete_change",
-				Message: fmt.Sprintf("project requirement %s changed but component %s content leaf unchanged", projReqHash, comp.Name),
-				Path:    c.Path,
+				Message: fmt.Sprintf("project requirement %s changed but component %s (%s) content leaf unchanged", label, comp.Name, dr.modSpec.Name),
+				Path:    projReqHash,
 				Related: []string{comp.ID},
 			})
 		}
@@ -233,17 +256,28 @@ func checkProjectRequirementModifiedOrAdded(c ClassifiedChange, projReqHash stri
 
 // checkProjectRequirementRemoved emits errors for module requirements that
 // still declare the removed project requirement as their preq_id.
-func checkProjectRequirementRemoved(c ClassifiedChange, projReqHash string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []DiffError {
+func checkProjectRequirementRemoved(projReqHash, projReqTitle string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []DiffError {
+	label := requirementLabel(projReqTitle, projReqHash)
 	var errs []DiffError
 	for _, dr := range findDerivedModuleRequirements(projReqHash, proj, loadModule) {
 		errs = append(errs, DiffError{
 			Type:    "incomplete_change",
-			Message: fmt.Sprintf("module requirement %s still derives from removed project requirement %s", dr.reqHash, projReqHash),
-			Path:    c.Path,
+			Message: fmt.Sprintf("module requirement %s (%s) still derives from removed project requirement %s", dr.reqHash, dr.modSpec.Name, label),
+			Path:    projReqHash,
 			Related: []string{dr.reqHash},
 		})
 	}
 	return errs
+}
+
+// requirementLabel renders a requirement identifier for an error message. If a
+// title is available the label is "'<title>'"; otherwise the hash is shown raw
+// so it still matches an identity hash in project.json / module.json.
+func requirementLabel(title, hash string) string {
+	if title != "" {
+		return fmt.Sprintf("'%s'", title)
+	}
+	return hash
 }
 
 type derivedRequirement struct {
