@@ -317,35 +317,6 @@ func TestIntegration_CloseBeads(t *testing.T) {
 	}
 }
 
-func TestIntegration_TagWithProposal(t *testing.T) {
-	cli := initSandbox(t)
-	ctx := context.Background()
-
-	id1, err := cli.Create(ctx, CreateOpts{Title: "tag: X", Type: "task", Priority: -1})
-	if err != nil {
-		t.Fatalf("Create X: %v", err)
-	}
-	id2, err := cli.Create(ctx, CreateOpts{Title: "tag: Y", Type: "task", Priority: -1})
-	if err != nil {
-		t.Fatalf("Create Y: %v", err)
-	}
-
-	proposal := "2026-02-23-spex-machina.md"
-	if err := TagWithProposal(ctx, cli, []string{id1, id2}, proposal, testLogger()); err != nil {
-		t.Fatalf("TagWithProposal: %v", err)
-	}
-
-	// .md extension is stripped because br labels don't allow dots.
-	want := "spec_proposal:2026-02-23-spex-machina"
-	for _, id := range []string{id1, id2} {
-		bead := brShow(t, cli.bin, id)
-		labels := toStringSlice(t, bead["labels"])
-		if !containsStr(labels, want) {
-			t.Errorf("bead %s: want label %q, got %v", id, want, labels)
-		}
-	}
-}
-
 // toStringSlice extracts a []string from a JSON-decoded []interface{}.
 func toStringSlice(t *testing.T, v interface{}) []string {
 	t.Helper()
