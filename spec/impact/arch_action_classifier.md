@@ -1,13 +1,14 @@
 # ActionClassifier
 
-Determines the action for each affected bead or unmatched spec node using a simplified state transition table. Only two action types exist: `create` and `obsolete`.
+Determines the action for each affected bead or unmatched spec node using a simplified state transition table. Only two action types exist: `create` and `obsolete`. Collects `DepSpecNodeIDs` for each create action — identity hashes of spec nodes the created bead will depend on. Bead-ID resolution is NOT done here; it moves to the emit module.
 
 ## Responsibilities
 
-- Assign actions based on match results and change types
-- Handle modified nodes by generating both obsolete (old bead) and create (new bead) actions
-- Gate action production by node type and, for test_sections, by `len(describes)`
-- Handle edge cases (multiple beads per node, unexpected state combinations)
+- Assign actions based on match results and change types.
+- Handle modified nodes by generating both obsolete (old bead) and create (new bead) actions.
+- Gate action production by node type and, for test_sections, by `len(describes)`.
+- Use the bead's live status (from BeadReader) to choose between "obsolete only" and "obsolete + cleanup create" for removed nodes.
+- For each create action, collect `DepSpecNodeIDs` by walking component `uses` (direct) and module `requires_module` (transitive).
 
 ## Node-Type Gate
 
@@ -18,11 +19,9 @@ Before applying the state transition table, each change is gated by its node typ
 | `component` | yes (feature) | primary work unit |
 | `data_flow` | yes (task) | cross-component contract, always produces a bead |
 | `test_section`, `len(describes) >= 2` | yes (task) | cross-component integration test, needs its own bead |
-| `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead; implement skill reads the test_section content as part of the component's TDD workflow |
+| `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead |
 | `impl_section` | no | implementation detail; owned by the component bead |
 | `meta`, `requirement` | no | filtered upstream by NodeMatcher (`structural` skip) |
-
-`describes` array length is read from the current module.json for the test_section's node. If the array is empty (orphan test_section), validator would already have rejected it — ActionClassifier may assert and skip defensively.
 
 ## State Transition Table
 
@@ -38,36 +37,42 @@ Before applying the state transition table, each change is gated by its node typ
 
 The "review" action is eliminated. Any spec change to a node with an existing bead always obsoletes the old bead. If the node still exists (added or modified), a fresh bead is created.
 
-## Spec-Graph Dependency Resolution
+## DepSpecNodeIDs Collection
 
-After classification, the ActionClassifier resolves spec-graph dependencies for each create action:
+After classification, for each create action:
 
-1. **Component `uses` edges** (direct only): For each component the created node uses, the `uses` array contains identity hashes. Look each hash up directly in the mapping file. If the matched bead is open, add to `DepBeadIDs`.
-2. **Module `requires_module` edges** (transitive): Walk the module dependency graph by identity hash, collecting open component beads from each required module. Uses cycle detection to handle invalid graphs.
-3. **Closed beads are skipped**: If a dependency's bead is closed, the work is done — no edge needed.
+1. **Component `uses` edges** (direct only): read the component's `uses` array; each entry is a sibling component's identity hash. Add each to `DepSpecNodeIDs`.
+2. **Module `requires_module` edges** (transitive, with cycle detection): walk the module dependency graph by identity hash. For each reachable required module, add every component's identity hash from that module to `DepSpecNodeIDs`.
+3. **Data_flow add-ons** (contract layer): for each create with node_type=component whose spec_node appears in a changed data_flow's `uses` array, add the data_flow's identity hash to the component's `DepSpecNodeIDs`. This ensures emit's topological sort places the data_flow create op first and the component ops gain `ref:op` deps on it.
 
-This resolves structural dependencies into concrete bead IDs that flow through the impact report to BeadCreator, which passes them as `--deps depends:<bead-id>`. There is no `fmt.Sprintf("%s/component/%d", ...)` reconstruction — the spec-graph edges are already in the form the mapping store accepts.
+The output is a set (deduplicated) of identity hashes. No bead lookup, no status filtering — those belong to emit's Resolver.
+
+## Why DepSpecNodeIDs, Not DepBeadIDs
+
+Prior to this proposal, ActionClassifier resolved deps to bead IDs at impact time by querying the mapping store. When a dep was being obsoleted+recreated in the same batch, the resolver picked up the OLD (soon-closed) bead ID, leading to the broken-dep-graph bug (commit `21defea`). The fix is to defer resolution to emit time where the three-shape ref scheme (ref:op / ref:bead / ref:spec_node) can distinguish same-run work from upstream deps.
+
+ActionClassifier now emits spec_node_ids — identity hashes that stay stable across batches. Emit's Resolver classifies each at emit time with full knowledge of the current batch's op_ids.
 
 ## Interface
 
 ```go
 type Action struct {
-    Type       string   // "create" or "obsolete"
-    BeadID     string   // existing bead ID (for "obsolete"); empty for "create"
-    Module     string   // affected module name (carried alongside the identity hash for human-readable output)
-    Node       string   // affected spec node name (carried alongside the identity hash)
-    NodeType   string   // spec node type (component/data_flow/test_section)
-    SpecNodeID string   // identity hash of the affected node — the lookup key into the mapping store
-    SpecHash   string   // current merkle content hash (for "create")
-    OldBeadID  string   // predecessor bead ID (for "create" replacing an obsoleted bead)
-    DepBeadIDs []string // bead IDs this action's bead should depend on (from spec graph)
-    Reason     string   // human-readable explanation
+    Type            string   // "create" or "obsolete"
+    BeadID          string   // existing bead ID (for "obsolete"); empty for "create"
+    Module          string   // affected module name (carried alongside the identity hash for human-readable output)
+    Node            string   // affected spec node name
+    NodeType        string   // spec node type (component/data_flow/test_section)
+    SpecNodeID      string   // identity hash of the affected node — the lookup key into the mapping store
+    SpecHash        string   // current merkle content hash (for "create")
+    OldBeadID       string   // predecessor bead ID (for "create" replacing an obsoleted bead)
+    DepSpecNodeIDs  []string // identity hashes of spec nodes this action's bead should depend on — resolved to refs by emit
+    Reason          string   // human-readable explanation
 }
 
 func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned) []Action
 ```
 
-`NodeType` is carried as a separate field on `ClassifiedChange` and `Action` because identity hashes do not embed the node type — there is no way to tell from `abc123def456` alone whether the node is a component, impl_section, or test_section. The merkle tree records `NodeType` on every leaf when it builds the tree, and that field flows through the diff into impact and apply.
+`NodeType` is carried as a separate field on `ClassifiedChange` and `Action` because identity hashes do not embed the node type.
 
 ## Reason Generation
 

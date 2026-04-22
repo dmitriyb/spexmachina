@@ -1,0 +1,214 @@
+{
+  "name": "emit",
+  "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding — that an external adapter consumes.",
+  "requirements": [
+    {
+      "id": "aa2375420738",
+      "preq_id": "58ea35f52b86",
+      "type": "functional",
+      "title": "Pure function over inputs",
+      "description": "spex emit reads the impact report (stdin or --impact), .bead-map.json, the spec directory, and the --git-head SHA; writes changeset.json to stdout. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output."
+    },
+    {
+      "id": "f379c06c6a53",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Topological ordering within type levels",
+      "description": "Ops are emitted in an order that respects type tiers (proposal epic first, then features and data_flow tasks, then multi-component test tasks) and respects spec-graph dependencies within each tier. When new bead B depends on new bead A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. Same-tier ties break deterministically by spec_node_id."
+    },
+    {
+      "id": "af8c8ecf3519",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Priority propagation through project requirements",
+      "description": "Each create op carries a priority derived from the chain component.implements → module_requirement.preq_id → project_requirement.priority. Lowest numeric priority wins across the implements set. Passed through in the op's priority field for the adapter to forward to the tracker."
+    },
+    {
+      "id": "79c821e01654",
+      "preq_id": "9120788210c9",
+      "type": "functional",
+      "title": "Parent resolution from mapping store",
+      "description": "Each create op's parent field encodes the proposal epic for the run. The epic is either the op_id of a same-run epic create (first op) or a bead_id ref to a pre-existing epic. All non-epic creates in the run parent under this single epic reference."
+    },
+    {
+      "id": "d096fd5d6cd8",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Forward-reference encoding for in-batch creates",
+      "description": "Parent and dependency fields use three ref shapes: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} for existing beads; {\"ref\":\"op\",\"op_id\":\"<id>\"} for the result of another create op in the same changeset; {\"ref\":\"spec_node\",\"spec_node_id\":\"<id>\"} for adapter-time lookup against the mapping store. Resolving DepSpecNodeIDs from impact into these three shapes is how emit fixes the broken-dep-graph bug: same-run deps become op refs resolved by the adapter at exec time rather than pre-resolved stale bead IDs."
+    },
+    {
+      "id": "0d468e176aaf",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Idempotency label construction",
+      "description": "Each create op carries an idempotency.label field of the form spex:<record-id> where record-id is the next integer ID the ingest reconciler will assign. The adapter matches this label against the tracker before creating; a pre-existing match produces a was_existing=true skipped receipt rather than a duplicate bead. Record IDs come from the mapping store's monotonic counter."
+    },
+    {
+      "id": "22e63e959749",
+      "preq_id": "58ea35f52b86",
+      "type": "functional",
+      "title": "Git HEAD threaded from caller",
+      "description": "emit accepts --git-head <sha> and embeds the SHA into changeset.json under the top-level git_head field. The adapter uses this value to build commit:<HEAD> labels on obsoleted beads. spex never calls git rev-parse; the caller supplies $(git rev-parse HEAD) from their shell."
+    },
+    {
+      "id": "240f59bf64f6",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Deterministic changeset schema",
+      "description": "changeset.json carries a top-level \"version\": 1 field. The schema is stable across runs: op ordering is deterministic, all ref shapes use named fields, field order is canonical so two runs with identical inputs produce byte-identical output suitable for git diff review."
+    },
+    {
+      "id": "de8ba472d9f6",
+      "preq_id": "91f6f338de19",
+      "type": "functional",
+      "title": "Tool-agnostic operation vocabulary",
+      "description": "Operations are label, create, close, and tag — abstract over any bead tracker. No tracker-specific flags or subcommand names appear in changeset.json. Adapters for br, bd, GitHub Issues, or Jira consume the same vocabulary."
+    }
+  ],
+  "components": [
+    {
+      "id": "7f06f7d80e94",
+      "name": "ChangesetBuilder",
+      "description": "Composes changeset.json from the impact report, mapping store records, spec graph, and caller-supplied git HEAD. Delegates dep resolution to Resolver, op ordering to TopologicalSorter, and idempotency labels to IdempotencyLabeler. Writes the final v1 changeset with canonical field order.",
+      "content": "arch_changeset_builder.md",
+      "implements": [
+        "aa2375420738",
+        "22e63e959749",
+        "240f59bf64f6",
+        "de8ba472d9f6"
+      ],
+      "uses": [
+        "f7775ac5f1f3",
+        "7249fd093b8a",
+        "6f4b6dd8928f"
+      ]
+    },
+    {
+      "id": "f7775ac5f1f3",
+      "name": "Resolver",
+      "description": "Resolves each create action's DepSpecNodeIDs and parent_spec_node_id into the three ref shapes. Classifies each dep: if another op in the same batch targets the spec_node_id → ref:op; else if the mapping store has an open bead → ref:bead; else → ref:spec_node (adapter-time fallback). Also computes priority by walking component.implements → module_requirement.preq_id → project_requirement.priority and taking the minimum.",
+      "content": "arch_resolver.md",
+      "implements": [
+        "d096fd5d6cd8",
+        "79c821e01654",
+        "af8c8ecf3519"
+      ]
+    },
+    {
+      "id": "7249fd093b8a",
+      "name": "TopologicalSorter",
+      "description": "Orders the create ops so every in-batch dep comes before its dependent. Uses Kahn's algorithm over the (create op, DepSpecNodeIDs → op_id) DAG restricted to the current batch. Detects cycles and returns an error (a cycle in spec-graph deps within one batch is a spec error, not an emit error). Secondary sort key: spec_node_id lex order, for determinism on unconstrained pairs.",
+      "content": "arch_topological_sorter.md",
+      "implements": [
+        "f379c06c6a53"
+      ]
+    },
+    {
+      "id": "6f4b6dd8928f",
+      "name": "IdempotencyLabeler",
+      "description": "Assigns each create op its idempotency.label in the form spex:<record-id>. The record-id is the next integer from the mapping store's monotonic counter, reserved at emit time so ingest's later reconciliation uses the same value. Never reuses a record-id across runs.",
+      "content": "arch_idempotency_labeler.md",
+      "implements": [
+        "0d468e176aaf"
+      ]
+    },
+    {
+      "id": "cbe835d38c3e",
+      "name": "EmitCommand",
+      "description": "CLI entry point: spex emit --proposal <ref> --git-head <sha> [--impact <file>] [--out <file>]. Reads the impact report (stdin or --impact), loads .bead-map.json via the map module, loads the spec graph, wires ChangesetBuilder, writes changeset.json to stdout or --out.",
+      "content": "arch_emit_command.md",
+      "implements": [
+        "aa2375420738"
+      ],
+      "uses": [
+        "7f06f7d80e94"
+      ]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": "bb860a396d40",
+      "name": "Changeset building",
+      "content": "impl_changeset_building.md",
+      "describes": [
+        "7f06f7d80e94"
+      ]
+    },
+    {
+      "id": "f78cf15a5fdb",
+      "name": "Reference resolution",
+      "content": "impl_reference_resolution.md",
+      "describes": [
+        "f7775ac5f1f3"
+      ]
+    },
+    {
+      "id": "5f984d123929",
+      "name": "Topological sorting",
+      "content": "impl_topological_sorting.md",
+      "describes": [
+        "7249fd093b8a"
+      ]
+    },
+    {
+      "id": "cb9cd590dd6c",
+      "name": "Idempotency labeling",
+      "content": "impl_idempotency_labeling.md",
+      "describes": [
+        "6f4b6dd8928f"
+      ]
+    },
+    {
+      "id": "0e215d0ee35d",
+      "name": "Emit command implementation",
+      "content": "impl_emit_command.md",
+      "describes": [
+        "cbe835d38c3e"
+      ]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "dbe8d1e707d5",
+      "name": "Emit flow",
+      "description": "Impact report + .bead-map.json + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v1.",
+      "content": "flow_emit.md",
+      "uses": [
+        "7f06f7d80e94",
+        "f7775ac5f1f3",
+        "7249fd093b8a",
+        "6f4b6dd8928f",
+        "cbe835d38c3e"
+      ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "6951b8d84604",
+      "name": "Changeset builder tests",
+      "content": "test_changeset_builder.md",
+      "describes": [
+        "7f06f7d80e94"
+      ]
+    },
+    {
+      "id": "280a5495eef8",
+      "name": "Resolver and sorter tests",
+      "content": "test_resolver_and_sorter.md",
+      "describes": [
+        "f7775ac5f1f3",
+        "7249fd093b8a",
+        "6f4b6dd8928f"
+      ]
+    },
+    {
+      "id": "b0b2ff773cd2",
+      "name": "Emit command tests",
+      "content": "test_emit_command.md",
+      "describes": [
+        "cbe835d38c3e"
+      ]
+    }
+  ]
+}

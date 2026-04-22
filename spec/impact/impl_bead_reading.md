@@ -1,34 +1,84 @@
-# Bead Metadata Reading Implementation
+# Bead metadata reading
 
-## Bead CLI Interface
+Implementation of BeadReader as a pure parser over tracker `list --json` output.
 
-The `bin` parameter is the bead CLI binary name (`"br"` or `"bd"`), allowing the same logic to work with either tool.
+## Full Implementation
 
 ```go
-func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
-    out, err := exec.CommandContext(ctx, bin, "list", "--json").Output()
+package impact
+
+import (
+    "encoding/json"
+    "fmt"
+    "io"
+    "strconv"
+    "strings"
+)
+
+type BeadSpec struct {
+    ID       string
+    RecordID int
+    Status   string
+    Labels   []string
+}
+
+// trackerBead mirrors the input JSON shape.
+type trackerBead struct {
+    ID     string   `json:"id"`
+    Status string   `json:"status"`
+    Labels []string `json:"labels"`
+}
+
+type wrappedInput struct {
+    Issues []trackerBead `json:"issues"`
+}
+
+func ReadBeads(r io.Reader) ([]BeadSpec, error) {
+    data, err := io.ReadAll(r)
     if err != nil {
         return nil, fmt.Errorf("impact: read beads: %w", err)
     }
-    // Parse JSON output, extract spex label
+    return ReadBeadsBytes(data)
 }
-```
 
-## JSON Parsing
+func ReadBeadsBytes(data []byte) ([]BeadSpec, error) {
+    var beads []trackerBead
 
-The `<bin> list --json` output is a JSON array of bead objects. Each bead has a `labels` array containing `key:value` strings. Parse using `encoding/json` into a typed structure, then find the `spex:` label.
+    // Try wrapped shape first: {"issues": [...]}.
+    var wrap wrappedInput
+    if err := json.Unmarshal(data, &wrap); err == nil && wrap.Issues != nil {
+        beads = wrap.Issues
+    } else {
+        // Fall back to bare array.
+        if err := json.Unmarshal(data, &beads); err != nil {
+            return nil, fmt.Errorf("impact: read beads: parse: %w", err)
+        }
+    }
 
-## Label Extraction
+    out := make([]BeadSpec, 0, len(beads))
+    for i, b := range beads {
+        if b.ID == "" {
+            return nil, fmt.Errorf("impact: read beads: missing bead id at index %d", i)
+        }
+        recID, ok := extractRecordID(b.Labels)
+        if !ok {
+            continue // not spec-managed
+        }
+        out = append(out, BeadSpec{
+            ID:       b.ID,
+            RecordID: recID,
+            Status:   b.Status,
+            Labels:   b.Labels,
+        })
+    }
+    return out, nil
+}
 
-Each spec-managed bead has a single label with the `spex:` prefix:
-
-```go
 func extractRecordID(labels []string) (int, bool) {
-    for _, label := range labels {
-        if strings.HasPrefix(label, "spex:") {
-            id, err := strconv.Atoi(strings.TrimPrefix(label, "spex:"))
-            if err == nil {
-                return id, true
+    for _, lbl := range labels {
+        if strings.HasPrefix(lbl, "spex:") {
+            if n, err := strconv.Atoi(strings.TrimPrefix(lbl, "spex:")); err == nil {
+                return n, true
             }
         }
     }
@@ -36,6 +86,27 @@ func extractRecordID(labels []string) (int, bool) {
 }
 ```
 
-Beads without a `spex:` label are ignored — they are not spec-managed beads.
+## Test Rewrite Note
 
-This replaces the previous multi-label approach that required parsing `spec_module`, `spec_component`, `spec_impl_section`, and `spec_hash` labels separately.
+The legacy tests under `impact/bead_reader_test.go` that depended on a stub `br` binary (`testdata/mock-br`) are retired. New tests feed canned JSON fixtures directly:
+
+```go
+func TestReadBeads_WrappedShape(t *testing.T) {
+    data := []byte(`{"issues":[{"id":"sm-1","status":"open","labels":["spex:42"]}]}`)
+    got, err := ReadBeadsBytes(data)
+    if err != nil { t.Fatal(err) }
+    // assert got[0] == BeadSpec{ID:"sm-1", RecordID:42, Status:"open", Labels:["spex:42"]}
+}
+```
+
+## Determinism
+
+The output `[]BeadSpec` preserves the order of the input JSON array. Clients that need sorted output sort post-call.
+
+## Performance
+
+- One JSON parse per call. O(n) in the input byte length.
+- Label-prefix scan is O(labels-per-bead) per bead; practically bounded.
+- No allocations beyond the decoded slice and the output `BeadSpec` list.
+
+For large trackers (10k+ beads), streaming parse would matter. The reference impl does an all-at-once ReadAll; real-world call sites are bounded by the count of spec-managed beads per proposal wave (dozens to low hundreds).

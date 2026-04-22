@@ -7,7 +7,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Read bead metadata",
-      "description": "Read spec-related fields from bead metadata: metadata.component, metadata.impl_section, metadata.module, metadata.spec_hash."
+      "description": "Parse bead metadata from input JSON (sourced via --beads flag or stdin). Extract the mapping record ID from the simplified bead label (spex:<record-id>) and the bead's live status. Pure function over []byte or io.Reader \u2014 no subprocess invocation, no live tracker calls."
     },
     {
       "id": "d165e2fe215e",
@@ -57,21 +57,11 @@
       ]
     },
     {
-      "id": "d1823d802984",
-      "preq_id": "0a0f49f9be9b",
-      "type": "functional",
-      "title": "Resolve spec-graph dependencies for create actions",
-      "description": "For each create action, resolve uses (intra-module component edges) and requires_module (inter-module edges, transitive) to current bead IDs via the mapping file. Attach resolved open-bead dependency IDs to the action for downstream propagation to bead CLI --deps depends: flags.",
-      "depends_on": [
-        "06a081811e38"
-      ]
-    },
-    {
       "id": "9199f27cb1e2",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Validate diff input",
-      "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed — print errors to stderr and exit non-zero.",
+      "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed \u2014 print errors to stderr and exit non-zero.",
       "depends_on": [
         "d165e2fe215e"
       ]
@@ -81,22 +71,40 @@
       "preq_id": "13c15bc3c865",
       "type": "functional",
       "title": "Data flow contract bead gating",
-      "description": "Produce a create action with node_type=data_flow for every added or modified data_flow change (contract-level impact). Filter test_section changes by the describes array length in the current module spec: len(describes) >= 2 produces a task action, len(describes) == 1 is skipped (bundled into the single described component's feature bead). For every component create action whose spec node appears in a changed data_flow's uses array, resolve the data_flow bead into its DepBeadIDs via the mapping store so apply's topological ordering creates the data_flow bead first and participating component beads gain --deps depends: on it.",
+      "description": "Produce a create action with node_type=data_flow for every added or modified data_flow change (contract-level impact). Filter test_section changes by the describes array length in the current module spec: len(describes) >= 2 produces a task action, len(describes) == 1 is skipped (bundled into the single described component's feature bead). For every component create action whose spec node appears in a changed data_flow's uses array, add the data_flow's spec_node_id to the component's DepSpecNodeIDs. Emit's TopologicalSorter and Resolver then ensure the data_flow's create op is emitted first and participating components carry ref:op deps on it.",
       "depends_on": [
         "06a081811e38",
-        "d1823d802984"
+        "a3ecff50de68"
       ]
+    },
+    {
+      "id": "a3ecff50de68",
+      "preq_id": "0a0f49f9be9b",
+      "type": "functional",
+      "title": "Emit DepSpecNodeIDs per create action",
+      "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here \u2014 it moves to the emit module, whose Resolver classifies each spec_node_id into ref:op / ref:bead / ref:spec_node at emit time. Retires the prior impact-time resolution which pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
+      "depends_on": [
+        "06a081811e38"
+      ]
+    },
+    {
+      "id": "116eb5f9906a",
+      "preq_id": "0a0f49f9be9b",
+      "type": "functional",
+      "title": "Accept bead state via --beads file input",
+      "description": "ImpactCommand accepts an optional --beads <file> flag. The file contains the JSON array produced by 'br list --json' (or any tracker whose output conforms to the same shape). BeadReader parses the file contents into []BeadSpec. Impact enriches each mapping record with its live bead_status before ActionClassifier runs, so the cleanup-bead gate fires correctly for removed nodes with closed beads. No subprocess invocation \u2014 the caller pipes tracker output as a data artifact."
     }
   ],
   "components": [
     {
       "id": "bec96486c6b2",
       "name": "BeadReader",
-      "description": "Reads bead metadata from the bead CLI (br or bd). Extracts the mapping record ID from the simplified bead label (spex:\u003crecord-id\u003e) and bead status for correlation with spec nodes and cleanup classification.",
+      "description": "Parses bead metadata from input JSON (produced by 'br list --json' or any compatible tracker output). Pure function: takes []byte / io.Reader, returns []BeadSpec. Extracts the mapping record ID from the spex:<record-id> label and the bead's live status. No subprocess invocation.",
       "content": "arch_bead_reader.md",
       "implements": [
         "5179e5a95653",
-        "3dcf3c279ac5"
+        "3dcf3c279ac5",
+        "116eb5f9906a"
       ]
     },
     {
@@ -115,12 +123,12 @@
     {
       "id": "76d72cbe00f3",
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using a simplified state transition table: added→create, modified→obsolete+create, removed→obsolete. For removed nodes with closed beads, also creates a cleanup bead. For create actions, resolves spec-graph dependencies (uses and requires_module edges) to current bead IDs via the mapping file. Gates bead creation by node type: module, component, data_flow, and test_section produce beads; impl_section is always skipped; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature bead (no separate task), if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead because they describe cross-component contracts.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using the simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads (live status from BeadReader), also creates a cleanup bead. For create actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges \u2014 the list of spec_node_ids the created bead will depend on. Bead-ID resolution is NOT performed here; it moves to emit. Gates bead creation by node type: module, component, data_flow, and test_section produce beads; impl_section is always skipped; test_section is additionally gated by its describes array length \u2014 if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
       "content": "arch_action_classifier.md",
       "implements": [
         "06a081811e38",
         "3dcf3c279ac5",
-        "d1823d802984",
+        "a3ecff50de68",
         "81aac298ce04"
       ],
       "uses": [
@@ -131,7 +139,7 @@
     {
       "id": "60d4747021ec",
       "name": "ReportGenerator",
-      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepBeadIDs field carrying resolved spec-graph dependency bead IDs.",
+      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepSpecNodeIDs field \u2014 identity hashes of spec nodes the created bead depends on, to be resolved to bead refs by emit.",
       "content": "arch_report_generator.md",
       "implements": [
         "cc987600950e"
@@ -143,11 +151,12 @@
     {
       "id": "5d6813710879",
       "name": "ImpactCommand",
-      "description": "CLI entry point for spex impact. Reads merkle diff, validates diff input for errors, wires BeadReader, NodeMatcher, ActionClassifier, ReportGenerator, outputs impact report as JSON.",
+      "description": "CLI entry point for spex impact. Reads merkle diff from stdin, validates diff input for errors, accepts optional --beads <file> flag carrying tracker list output (parsed via BeadReader), enriches mapping records with live bead_status, wires NodeMatcher + ActionClassifier + ReportGenerator, outputs the impact report as JSON.",
       "content": "arch_impact_command.md",
       "implements": [
         "cc987600950e",
-        "9199f27cb1e2"
+        "9199f27cb1e2",
+        "116eb5f9906a"
       ],
       "uses": [
         "bec96486c6b2",
@@ -197,21 +206,13 @@
       "describes": [
         "5d6813710879"
       ]
-    },
-    {
-      "id": "8a6cca3fca36",
-      "name": "Dependency resolution algorithm",
-      "content": "impl_dependency_resolution.md",
-      "describes": [
-        "76d72cbe00f3"
-      ]
     }
   ],
   "data_flows": [
     {
       "id": "855e53793fdf",
       "name": "Impact analysis flow",
-      "description": "Merkle diff + bead metadata → matched pairs → classified actions (create/obsolete) → impact report.",
+      "description": "Merkle diff + bead metadata \u2192 matched pairs \u2192 classified actions (create/obsolete) \u2192 impact report.",
       "content": "flow_impact_analysis.md",
       "uses": [
         "bec96486c6b2",

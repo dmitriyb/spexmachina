@@ -1,35 +1,79 @@
 # BeadReader
 
-Reads bead metadata from the bead CLI (`br` or `bd`). Extracts the mapping record ID from the simplified bead label (`spex:<record-id>`) for correlation with spec nodes.
+Parses bead metadata from input JSON. Pure function: takes `[]byte` or `io.Reader`, returns `[]BeadSpec`. The input JSON matches the shape of `br list --json` (and compatible tracker outputs): an array of bead objects with `id`, `labels`, and `status` fields.
 
 ## Responsibilities
 
-- Call `<bin> list --json` to get all beads with labels
-- Extract the `spex:<record-id>` label from each bead
-- Build a lookup structure mapping bead IDs to record IDs for the NodeMatcher
+- Decode the input JSON array into a typed intermediate.
+- For each bead, extract the `spex:<record-id>` label and parse the record-id integer.
+- For each bead, carry forward the live `status` field so ActionClassifier can gate cleanup beads correctly.
+- Skip beads without a `spex:` label — they are not spec-managed.
+- Return an empty slice (not an error) if the input is a valid JSON array with no spec-managed beads.
 
 ## Interface
 
 ```go
 type BeadSpec struct {
-    ID       string // bead ID
-    RecordID int    // mapping record ID from "spex:<id>" label
-    Status   string // bead status ("open", "in_progress", "closed")
+    ID       string // tracker bead ID, e.g., "spexmachina-abc"
+    RecordID int    // integer parsed from the "spex:<n>" label
+    Status   string // live status: "open" | "in_progress" | "closed"
+    Labels   []string // all labels (retained for future use, e.g., spec_proposal filter)
 }
 
-func ReadBeads(ctx context.Context) ([]BeadSpec, error)
+// ReadBeads parses the JSON payload into typed BeadSpec entries.
+// No subprocess invocation. Errors wrap with "impact: read beads: ...".
+func ReadBeads(r io.Reader) ([]BeadSpec, error)
+
+// ReadBeadsBytes is a convenience for []byte inputs.
+func ReadBeadsBytes(data []byte) ([]BeadSpec, error)
 ```
 
-## Bead CLI Interaction
+## Input Shape
 
-Uses `exec.CommandContext(ctx, bin, "list", "--json")` to get bead data, where `bin` is `"br"` or `"bd"`. The `--json` flag outputs machine-readable JSON with a `labels` array of `key:value` strings and a `status` field. Parse the output and extract the `spex` label (e.g., `spex:42`) and the `status` field.
+The function expects JSON that conforms to the widely-accepted tracker list shape. For br the exact shape is:
 
-## Label Format
+```json
+{
+  "issues": [
+    {
+      "id": "spexmachina-abc",
+      "status": "open",
+      "labels": ["spex:42", "commit:deadbeef"],
+      ...
+    }
+  ]
+}
+```
 
-Each spec-managed bead has a single label: `spex:<record-id>`. The record ID is an integer that indexes into `.bead-map.json`. This replaces the previous multi-label format (`spec_module:...`, `spec_component:...`, `spec_hash:...`).
+BeadReader handles both the wrapped form (`{"issues": [...]}`) and a bare array (`[...]`) for adapter-produced JSON that may have unwrapped it.
+
+## Label Parsing
+
+```go
+for _, lbl := range bead.Labels {
+    if strings.HasPrefix(lbl, "spex:") {
+        n, err := strconv.Atoi(strings.TrimPrefix(lbl, "spex:"))
+        if err == nil {
+            spec.RecordID = n
+            break
+        }
+    }
+}
+```
+
+If multiple `spex:<n>` labels exist on a single bead, the first one wins. Validator-level rules should prevent this; BeadReader is defensive.
 
 ## Error Handling
 
-- If the bead CLI (`br` or `bd`) is not installed or not in PATH, return a clear error
-- If no beads have a `spex:` label, return an empty slice (not an error)
-- Wrap all errors with `"impact: read beads: ..."` context
+- Malformed JSON → `"impact: read beads: parse: <json err>"`.
+- A bead object missing `id` → `"impact: read beads: missing bead id at index N"`.
+- A bead object with a `spex:` label where the integer fails to parse → logged as a warning, bead skipped (still returned in the non-spec category? No — dropped since it can't be matched by RecordID).
+
+## No Subprocess
+
+This is the structural fix for this component. The old implementation ran `exec.CommandContext(ctx, bin, "list", "--json")` — that's retired. Callers now pass `br list --json` output as a file (via spex impact's `--beads` flag) or any equivalent shape from their tracker.
+
+## Testing
+
+- Unit-level: canned JSON fixtures exercise each extraction path.
+- See `test_bead_matching.md` for integration tests that feed BeadReader output into NodeMatcher.

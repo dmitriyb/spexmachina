@@ -1,0 +1,151 @@
+{
+  "name": "adapters",
+  "description": "Reference adapter scripts outside the spex binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br (beads_rust); authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex. Requirements in this module double as the contract any adapter must satisfy.",
+  "requirements": [
+    {
+      "id": "4277dbd90063",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Read changeset v1",
+      "description": "The adapter parses changeset.json v1 and refuses earlier or later versions with a clear error. It reads ops in the order given and processes them sequentially — order matters because later ops may forward-reference earlier op results."
+    },
+    {
+      "id": "2f0a1f1152a0",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Op ID substitution table",
+      "description": "As the adapter processes create ops, it maintains an op_id → bead_id substitution table. When a later op's deps or parent contains {\"ref\":\"op\",\"op_id\":\"<id>\"}, the adapter resolves the ref from this table. Missing table entries (e.g., the referenced op was skipped or errored) cause the dependent op to be downgraded to error with a clear reason."
+    },
+    {
+      "id": "a2645b77b8bc",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Resolve three ref shapes",
+      "description": "For each ref field in parent and deps: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} resolves as-is; {\"ref\":\"op\",\"op_id\":\"<id>\"} resolves via the substitution table; {\"ref\":\"spec_node\",\"spec_node_id\":\"<id>\"} resolves via a live lookup to the spex mapping store (.bead-map.json) for the most recent bead_id associated with that spec_node_id."
+    },
+    {
+      "id": "b8d894dff9b5",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Idempotent create via label",
+      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing bead carrying the op's idempotency.label (format: spex:<record-id>). On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
+    },
+    {
+      "id": "7bad082a34b6",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Idempotent close via label",
+      "description": "Before closing a bead for a close op, the adapter checks whether the target bead already carries the spex:obsolete label. If yes: skip the close, record status=skipped with reason=\"already obsoleted\". If no: close the bead with the spex:obsolete and commit:<HEAD> labels. This guards against the crash-between-close-and-receipt scenario — a second run sees the bead is already labeled and records the skip correctly."
+    },
+    {
+      "id": "3486b44f4f64",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Write receipts v1",
+      "description": "After processing each op (or after failing to process it), the adapter writes a per-op entry to receipts.json with op_id, status (ok|skipped|error), bead_id (if applicable), was_existing (for create ops), and an optional error or reason string. The top-level status field is complete if every op produced ok or intentional-skipped; partial if any op resulted in error or if the adapter exited before processing all ops."
+    },
+    {
+      "id": "970260050e3e",
+      "preq_id": "92dfddf840b0",
+      "type": "functional",
+      "title": "Integration test against real br",
+      "description": "A shell-based integration test (scripts/apply-br_test.sh) exercises the full adapter against a real br sandbox. It validates: changeset parsing, all three ref shapes resolving correctly, idempotency on re-run, receipt output matches the v1 schema, and partial-receipt handling when a synthetic failure is injected mid-run. The test is gated on br being present on PATH and is excluded from the Go test suite."
+    },
+    {
+      "id": "7c2fea6b1963",
+      "preq_id": "81f8102ae1b5",
+      "type": "non_functional",
+      "title": "Reference implementation scope",
+      "description": "scripts/apply-br.sh is explicitly marked as a reference implementation — vet before production use. It demonstrates the required adapter contract but does not aspire to handle every tracker misconfiguration. Users wanting production-grade adapters for their environment should fork and adapt. The contract (this module's functional requirements) is the authoritative specification that any adapter must meet."
+    }
+  ],
+  "components": [
+    {
+      "id": "7f2e76cecab3",
+      "name": "BrReferenceAdapter",
+      "description": "Bash + jq implementation of the adapter contract targeting br (beads_rust). Ships at scripts/apply-br.sh. Reads changeset.json, resolves refs via the substitution table, runs br create/list/show/update/close for each op, and writes receipts.json. Integration-tested against a real br sandbox via scripts/apply-br_test.sh.",
+      "content": "arch_br_reference_adapter.md",
+      "implements": [
+        "4277dbd90063",
+        "2f0a1f1152a0",
+        "a2645b77b8bc",
+        "b8d894dff9b5",
+        "7bad082a34b6",
+        "3486b44f4f64",
+        "970260050e3e",
+        "7c2fea6b1963"
+      ]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": "2a9c563a1519",
+      "name": "Changeset consumption",
+      "content": "impl_changeset_consumption.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    },
+    {
+      "id": "5a483b619d7d",
+      "name": "Substitution table",
+      "content": "impl_substitution_table.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    },
+    {
+      "id": "5dd7dcf6b861",
+      "name": "Br subprocess invocation",
+      "content": "impl_br_subprocess.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    },
+    {
+      "id": "ac72eda46bf5",
+      "name": "Receipt writing",
+      "content": "impl_receipt_writing.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "703128d3ebd6",
+      "name": "Adapter flow",
+      "description": "changeset.json → parse → iterate ops in order → for each op: resolve refs, query tracker for idempotency, run subcommand, record receipt → receipts.json written atomically after each op so a crash preserves partial state.",
+      "content": "flow_adapter.md",
+      "uses": [
+        "7f2e76cecab3"
+      ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "99a021074f54",
+      "name": "Idempotency tests",
+      "content": "test_idempotency.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    },
+    {
+      "id": "6ba400aaeb0f",
+      "name": "Substitution table tests",
+      "content": "test_substitution_table.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    },
+    {
+      "id": "e62fbe481413",
+      "name": "Br integration test",
+      "content": "test_br_integration.md",
+      "describes": [
+        "7f2e76cecab3"
+      ]
+    }
+  ]
+}
