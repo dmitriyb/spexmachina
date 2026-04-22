@@ -1300,3 +1300,93 @@ func (s *stubSpecGraph) ModuleByID(id string) (mapping.ModuleInfo, error) {
 	}
 	return s.ModuleByName(name)
 }
+
+// TestClassifyActions_ResolvesAddedNodeNames verifies that added spec nodes
+// (data_flow, test_section, component) get their human-readable name on
+// Action.Node, not the raw identity hash. Spec contract: arch_action_classifier.md
+// states Action.Node is "affected spec node name", and reason templates use
+// {node_name}. Prior to the fix, only matched (modified) nodes resolved names;
+// unmatched (added) nodes carried the identity hash. Regression guard for
+// bug spexmachina-sjm.
+func TestClassifyActions_ResolvesAddedNodeNames(t *testing.T) {
+	compID := schema.IdentityHash("emit", "component", "ChangesetBuilder")
+	flowID := schema.IdentityHash("emit", "data_flow", "Emit flow")
+	testID := schema.IdentityHash("emit", "test_section", "Resolver and sorter tests")
+
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"emit": {
+				Name: "emit",
+				Components: []mapping.ComponentInfo{
+					{ID: compID, Name: "ChangesetBuilder"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "Emit flow"},
+				},
+				TestSections: []mapping.TestSectionInfo{
+					{ID: testID, Name: "Resolver and sorter tests", Describes: []string{"a", "b"}},
+				},
+			},
+		},
+	}
+
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: compID, Type: merkle.Added, NewHash: "h1", NodeType: "component"},
+			Module: "emit",
+		}},
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "h2", NodeType: "data_flow"},
+			Module: "emit",
+		}},
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "h3", NodeType: "test_section"},
+			Module: "emit",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	want := map[string]string{
+		compID: "ChangesetBuilder",
+		flowID: "Emit flow",
+		testID: "Resolver and sorter tests",
+	}
+	if len(actions) != len(want) {
+		t.Fatalf("want %d actions, got %d", len(want), len(actions))
+	}
+	for _, a := range actions {
+		expectedName, ok := want[a.SpecNodeID]
+		if !ok {
+			t.Errorf("unexpected action for spec_node_id %s", a.SpecNodeID)
+			continue
+		}
+		if a.Node != expectedName {
+			t.Errorf("spec_node_id %s: want Node=%q, got %q", a.SpecNodeID, expectedName, a.Node)
+		}
+		expectedReason := fmt.Sprintf("New spec node: emit/%s", expectedName)
+		if a.Reason != expectedReason {
+			t.Errorf("spec_node_id %s: want Reason=%q, got %q", a.SpecNodeID, expectedReason, a.Reason)
+		}
+	}
+}
+
+// TestClassifyActions_ResolvesNodeName_NilGraphFallback guards the backward-
+// compatible fallback: with no graph supplied, Action.Node falls back to the
+// identity hash. Several existing tests rely on this by passing nil.
+func TestClassifyActions_ResolvesNodeName_NilGraphFallback(t *testing.T) {
+	specNodeID := schema.IdentityHash("emit", "data_flow", "Emit flow")
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: specNodeID, Type: merkle.Added, NewHash: "h1", NodeType: "data_flow"},
+			Module: "emit",
+		}},
+	}
+	actions := ClassifyActions(nil, nil, unmatched, nil)
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	if actions[0].Node != specNodeID {
+		t.Errorf("nil graph: want fallback Node=%s, got %q", specNodeID, actions[0].Node)
+	}
+}
