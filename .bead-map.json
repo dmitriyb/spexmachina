@@ -1,5 +1,5 @@
 {
-  "next_id": 60,
+  "next_id": 77,
   "records": [
     {
       "id": 1,
@@ -184,12 +184,12 @@
     {
       "id": 19,
       "spec_node_id": "bec96486c6b2",
-      "bead_id": "spexmachina-31x",
+      "bead_id": "spexmachina-0lk.14",
       "bead_type": "task",
       "module": "impact",
       "component": "BeadReader",
       "content_file": "spec/impact/arch_bead_reader.md",
-      "spec_hash": "ef904d037780f278150405d1fc827abf7e6d02e9fa962375d1024992a1788974"
+      "spec_hash": "978ce27893fdcd04acae96759a8927ab6cd49064add22da777c4daae87550b93"
     },
     {
       "id": 20,
@@ -204,12 +204,12 @@
     {
       "id": 21,
       "spec_node_id": "76d72cbe00f3",
-      "bead_id": "spexmachina-r4o",
+      "bead_id": "spexmachina-0lk.13",
       "bead_type": "feature",
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "ebcd15cdd37829817b9ffcc0335e743ca111c5f186f02752b83cc2f657e341e5"
+      "spec_hash": "50ad50eb1b69b09982a13e4f0c1c92112795e6e06652de8f40bfa65802855020"
     },
     {
       "id": 22,
@@ -224,62 +224,22 @@
     {
       "id": 23,
       "spec_node_id": "5d6813710879",
-      "bead_id": "spexmachina-ir6",
+      "bead_id": "spexmachina-0lk.15",
       "bead_type": "task",
       "module": "impact",
       "component": "ImpactCommand",
       "content_file": "spec/impact/arch_impact_command.md",
-      "spec_hash": "42d204492044c1647ace850a540bb20ca21c1d37beba00acf1c0eaa9a906fc24"
-    },
-    {
-      "id": 24,
-      "spec_node_id": "59fab0fedef7",
-      "bead_id": "spexmachina-p6z",
-      "bead_type": "feature",
-      "module": "apply",
-      "component": "BeadCreator",
-      "content_file": "spec/apply/arch_bead_creator.md",
-      "spec_hash": "fd1b72c547fa0aa07d57e223ad4c3f7f32b4b766ffc08dbb3024d8a21c14440d"
-    },
-    {
-      "id": 25,
-      "spec_node_id": "995b5e116b5b",
-      "bead_id": "spexmachina-wya",
-      "bead_type": "task",
-      "module": "apply",
-      "component": "BeadCloser",
-      "content_file": "spec/apply/arch_bead_closer.md",
-      "spec_hash": "0cdfb338e44c5386857d64495be13fecd9e6e1ee3ab892a2cfcc2cdcc4ddc057"
-    },
-    {
-      "id": 28,
-      "spec_node_id": "1acc0e1fff76",
-      "bead_id": "spexmachina-lln",
-      "bead_type": "task",
-      "module": "apply",
-      "component": "SnapshotSaver",
-      "content_file": "spec/apply/arch_snapshot_saver.md",
-      "spec_hash": "80e32f576d408b886a3850bd6446b362403b5bc3868a1fdec19fc4f4a536da16"
-    },
-    {
-      "id": 29,
-      "spec_node_id": "78a551ef7b74",
-      "bead_id": "spexmachina-7nz",
-      "bead_type": "feature",
-      "module": "apply",
-      "component": "ApplyCommand",
-      "content_file": "spec/apply/arch_apply_command.md",
-      "spec_hash": "bc4a0af15d5f97d289994171d717b207846b3926115ad7022204cfbfdd6fe4c9"
+      "spec_hash": "4ab9ea0baeb0ac48c48b9ca50f95f43350545646bf991b93989adc8c5206bd75"
     },
     {
       "id": 30,
       "spec_node_id": "21bc124a46c0",
-      "bead_id": "spexmachina-das",
+      "bead_id": "spexmachina-0lk.21",
       "bead_type": "task",
       "module": "proposal",
       "component": "ProposalCommands",
       "content_file": "spec/proposal/arch_proposal_commands.md",
-      "spec_hash": "b773815ad7d5f05cc72f3ce7e467f6151e818f1d070b5c940fe3cb2220972612"
+      "spec_hash": "191e5a66efc57d1e62e6c0cd67ca5a8222381baed7b32875fdb76fc062bac139"
     },
     {
       "id": 31,
@@ -450,6 +410,193 @@
       "component": "SchemaLoader",
       "content_file": "spec/schema/arch_schema_loader.md",
       "spec_hash": "dc0300f1939cf1881311534f068098a00d02065aa0247844a1405ff08e7facef"
+    },
+    {
+      "id": 60,
+      "spec_node_id": "2026-04-18-decouple-spex-from-br",
+      "bead_id": "spexmachina-0lk",
+      "bead_type": "epic",
+      "node_type": "proposal",
+      "module": "",
+      "component": "2026-04-18-decouple-spex-from-br",
+      "content_file": "",
+      "spec_hash": ""
+    },
+    {
+      "id": 61,
+      "spec_node_id": "703128d3ebd6",
+      "bead_id": "spexmachina-0lk.1",
+      "bead_type": "task",
+      "node_type": "data_flow",
+      "module": "adapters",
+      "component": "Adapter flow",
+      "content_file": "",
+      "spec_hash": "8c3422f0946f6625e58a344414eb45d9f1805a3931156b67c1060fa304b3a464"
+    },
+    {
+      "id": 62,
+      "spec_node_id": "7f2e76cecab3",
+      "bead_id": "spexmachina-0lk.2",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "adapters",
+      "component": "BrReferenceAdapter",
+      "content_file": "spec/adapters/arch_br_reference_adapter.md",
+      "spec_hash": "17b87007f56a1c4420043515ceb2a41e290e529b1ce48b80655fdf5636b326f6"
+    },
+    {
+      "id": 63,
+      "spec_node_id": "7f06f7d80e94",
+      "bead_id": "spexmachina-0lk.7",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "emit",
+      "component": "ChangesetBuilder",
+      "content_file": "spec/emit/arch_changeset_builder.md",
+      "spec_hash": "121a41f593027ef12e626acdd158c6737fa49be960c3575f84a4863fedaeb9c9"
+    },
+    {
+      "id": 64,
+      "spec_node_id": "dbe8d1e707d5",
+      "bead_id": "spexmachina-0lk.8",
+      "bead_type": "task",
+      "node_type": "data_flow",
+      "module": "emit",
+      "component": "Emit flow",
+      "content_file": "",
+      "spec_hash": "dbf868d7a79b2459c1f0dabb9d55f62a2f3599a033e6342ccba33d8609baaf7d"
+    },
+    {
+      "id": 65,
+      "spec_node_id": "cbe835d38c3e",
+      "bead_id": "spexmachina-0lk.9",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "emit",
+      "component": "EmitCommand",
+      "content_file": "spec/emit/arch_emit_command.md",
+      "spec_hash": "21c9166e8b4a2fe2ce4a4d8d4f51ab006e7834e932c84827999e54c5e35c6d86"
+    },
+    {
+      "id": 66,
+      "spec_node_id": "6f4b6dd8928f",
+      "bead_id": "spexmachina-0lk.10",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "emit",
+      "component": "IdempotencyLabeler",
+      "content_file": "spec/emit/arch_idempotency_labeler.md",
+      "spec_hash": "ca8f1ea7223f2f0eda9b893a060128f664940f27335d49d9d878399fd0502478"
+    },
+    {
+      "id": 67,
+      "spec_node_id": "f7775ac5f1f3",
+      "bead_id": "spexmachina-0lk.11",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "emit",
+      "component": "Resolver",
+      "content_file": "spec/emit/arch_resolver.md",
+      "spec_hash": "1fa3b869e156f8232ee172e3753c44db3cee08f040b17d5fe13b291fcf340e41"
+    },
+    {
+      "id": 68,
+      "spec_node_id": "7249fd093b8a",
+      "bead_id": "spexmachina-0lk.12",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "emit",
+      "component": "TopologicalSorter",
+      "content_file": "spec/emit/arch_topological_sorter.md",
+      "spec_hash": "1a70fe9118417ac9aca8c88ea937dd2e926d0c93b2c7afc3aa39628f0b361bb8"
+    },
+    {
+      "id": 69,
+      "spec_node_id": "6fd1f0cbb76c",
+      "bead_id": "spexmachina-0lk.16",
+      "bead_type": "task",
+      "node_type": "data_flow",
+      "module": "ingest",
+      "component": "Ingest flow",
+      "content_file": "",
+      "spec_hash": "4d4fa06e839041a2834fd96a375e01e07b7d1423a174d011be4abc540b58e6c1"
+    },
+    {
+      "id": 70,
+      "spec_node_id": "db90eb607bcb",
+      "bead_id": "spexmachina-0lk.17",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "ingest",
+      "component": "IngestCommand",
+      "content_file": "spec/ingest/arch_ingest_command.md",
+      "spec_hash": "ea89d3d0beb88cc9140148a1aa6e116c8248364f040dfd8f4ca501a5487eecb6"
+    },
+    {
+      "id": 71,
+      "spec_node_id": "2b5158af774b",
+      "bead_id": "spexmachina-0lk.18",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "ingest",
+      "component": "Reconciler",
+      "content_file": "spec/ingest/arch_reconciler.md",
+      "spec_hash": "9ff20f3913b8cd7e02430bdf21c24c1aa7514c35425b3b67e53b31c8fdea7645"
+    },
+    {
+      "id": 72,
+      "spec_node_id": "f85bd2f94aeb",
+      "bead_id": "spexmachina-0lk.19",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "ingest",
+      "component": "SnapshotSaver",
+      "content_file": "spec/ingest/arch_snapshot_saver.md",
+      "spec_hash": "e2287b7efbba867f4f9f1b407fb4c441e6a9d0381023afe18a28e8a47a498418"
+    },
+    {
+      "id": 73,
+      "spec_node_id": "97f73ced5a02",
+      "bead_id": "spexmachina-0lk.20",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "proposal",
+      "component": "HistoryViewer",
+      "content_file": "spec/proposal/arch_history_viewer.md",
+      "spec_hash": "9270d2ba0935e030c0517455e8a22308767d5e17a543e9d24ec6dda386f64e87"
+    },
+    {
+      "id": 74,
+      "spec_node_id": "280a5495eef8",
+      "bead_id": "spexmachina-0lk.22",
+      "bead_type": "task",
+      "node_type": "test_section",
+      "module": "emit",
+      "component": "Resolver and sorter tests",
+      "content_file": "",
+      "spec_hash": "5e89ea9e24014bab35129ce1b7426d3eca8ffd303e9d4174b1290376da8daee0"
+    },
+    {
+      "id": 75,
+      "spec_node_id": "2cd902e10873",
+      "bead_id": "spexmachina-0lk.23",
+      "bead_type": "task",
+      "node_type": "test_section",
+      "module": "ingest",
+      "component": "Consistency invariants",
+      "content_file": "",
+      "spec_hash": "cd99a806ad8f468e0f109105c2687254db3d3b2a62ad56c5c90808b6dccb6b53"
+    },
+    {
+      "id": 76,
+      "spec_node_id": "2515c91337a5",
+      "bead_id": "spexmachina-0lk.24",
+      "bead_type": "task",
+      "node_type": "test_section",
+      "module": "ingest",
+      "component": "Partial run recovery tests",
+      "content_file": "",
+      "spec_hash": "bfb4ae1114d105d387c9d4020582fc9e781478cdbb87bf0c1d69fdfcccb76caa"
     }
   ]
 }

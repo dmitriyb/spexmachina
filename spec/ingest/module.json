@@ -1,0 +1,167 @@
+{
+  "name": "ingest",
+  "description": "Records the outcome of an adapter run. Pure function over changeset.json and receipts.json. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
+  "requirements": [
+    {
+      "id": "539030e8c5a4",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Reconcile per-op receipts",
+      "description": "For every ok create receipt: insert or update the mapping record with the bead_id from the receipt and the spec_node_id from the matching create op. For every ok close receipt on a removed node: delete the mapping record. For every ok close+create pair on a modified node: update the record to point to the new bead_id. Receipts with status=error leave records unchanged."
+    },
+    {
+      "id": "16dbbee94e88",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Partial receipts tolerance",
+      "description": "When top-level receipts status is partial (adapter stopped mid-run), ingest reconciles all ok-status ops and leaves skipped/error ops untouched. The partial state is internally consistent: successful creates have records, failed ones do not. The next spex emit recomputes against the unchanged snapshot baseline and resurfaces the unfinished work."
+    },
+    {
+      "id": "cf47671793fa",
+      "preq_id": "e291989b1599",
+      "type": "functional",
+      "title": "Snapshot save gated on complete status",
+      "description": "spec/.snapshot.json is overwritten only when receipts.json top-level status is complete. Partial status leaves the snapshot untouched. This makes the next emit comparison pick up unfinished ops through the idempotency path."
+    },
+    {
+      "id": "ee28b5d190ae",
+      "preq_id": "9120788210c9",
+      "type": "functional",
+      "title": "Mapping consistency invariants",
+      "description": "After ingest runs, the mapping store satisfies: (1) every ok create op has a record with its bead_id; (2) every ok close on a removed node has no record; (3) every modified node's close+create pair has a record pointing to the new bead_id; (4) no orphan records (spec_node_id with no live spec node in the post-apply tree); (5) no duplicate records (same spec_node_id twice); (6) snapshot saved iff complete; (7) .bead-map.json passes the bead-map schema. Ingest asserts these invariants and returns a structured error if any fails."
+    },
+    {
+      "id": "ffab5d1337ac",
+      "preq_id": "8efae3d1ad18",
+      "type": "functional",
+      "title": "Atomic file replacement",
+      "description": "Writes to .bead-map.json and spec/.snapshot.json go through a temp-file + rename pattern so a crash mid-write leaves the pre-write file intact. Never truncate in place."
+    },
+    {
+      "id": "20589ccf7072",
+      "preq_id": "58ea35f52b86",
+      "type": "non_functional",
+      "title": "No runtime subprocess",
+      "description": "spex ingest invokes no external subprocesses. Inputs are local files (changeset.json, receipts.json); outputs are local files (.bead-map.json, spec/.snapshot.json). No tracker calls, no git calls."
+    },
+    {
+      "id": "fd6f08ef34fa",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Re-run idempotency",
+      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. A second run against already-reconciled receipts is a no-op: record targets already match, deletes already happened, snapshot already written. No duplication, no unexpected obsoletion."
+    }
+  ],
+  "components": [
+    {
+      "id": "2b5158af774b",
+      "name": "Reconciler",
+      "description": "Consumes the changeset+receipts pair and applies per-op state transitions to the mapping store. Handles create (insert/update), close-on-removed (delete), close+create pairs (update to new bead_id). Asserts the seven consistency invariants before returning.",
+      "content": "arch_reconciler.md",
+      "implements": [
+        "539030e8c5a4",
+        "16dbbee94e88",
+        "ee28b5d190ae",
+        "fd6f08ef34fa"
+      ]
+    },
+    {
+      "id": "f85bd2f94aeb",
+      "name": "SnapshotSaver",
+      "description": "Writes spec/.snapshot.json iff receipts top-level status is complete. Uses atomic temp-file + rename. Reads the current merkle tree via the merkle module.",
+      "content": "arch_snapshot_saver.md",
+      "implements": [
+        "cf47671793fa",
+        "ffab5d1337ac"
+      ]
+    },
+    {
+      "id": "db90eb607bcb",
+      "name": "IngestCommand",
+      "description": "CLI entry point: spex ingest --changeset <file> --receipts <file>. Loads both artifacts, wires Reconciler and SnapshotSaver, returns exit 0 on success or non-zero with a structured error on any invariant violation or IO failure.",
+      "content": "arch_ingest_command.md",
+      "implements": [
+        "20589ccf7072"
+      ],
+      "uses": [
+        "2b5158af774b",
+        "f85bd2f94aeb"
+      ]
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": "3ae29d706b7d",
+      "name": "Reconciliation rules",
+      "content": "impl_reconciliation.md",
+      "describes": [
+        "2b5158af774b"
+      ]
+    },
+    {
+      "id": "65bab56e5646",
+      "name": "Snapshot saving",
+      "content": "impl_snapshot_saving.md",
+      "describes": [
+        "f85bd2f94aeb"
+      ]
+    },
+    {
+      "id": "4fc05ab335c9",
+      "name": "Ingest command implementation",
+      "content": "impl_ingest_command.md",
+      "describes": [
+        "db90eb607bcb"
+      ]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "6fd1f0cbb76c",
+      "name": "Ingest flow",
+      "description": "changeset.json + receipts.json → Reconciler applies per-op state transitions to mapping store → consistency invariants asserted → SnapshotSaver writes spec/.snapshot.json iff status=complete. Both writes are atomic.",
+      "content": "flow_ingest.md",
+      "uses": [
+        "2b5158af774b",
+        "f85bd2f94aeb",
+        "db90eb607bcb"
+      ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "425f743382a7",
+      "name": "Reconciliation tests",
+      "content": "test_reconciliation.md",
+      "describes": [
+        "2b5158af774b"
+      ]
+    },
+    {
+      "id": "2cd902e10873",
+      "name": "Consistency invariants",
+      "content": "test_consistency_invariants.md",
+      "describes": [
+        "2b5158af774b",
+        "f85bd2f94aeb"
+      ]
+    },
+    {
+      "id": "2515c91337a5",
+      "name": "Partial run recovery tests",
+      "content": "test_partial_run_recovery.md",
+      "describes": [
+        "2b5158af774b",
+        "f85bd2f94aeb"
+      ]
+    },
+    {
+      "id": "3e9de336f65f",
+      "name": "Ingest command tests",
+      "content": "test_ingest_command.md",
+      "describes": [
+        "db90eb607bcb"
+      ]
+    }
+  ]
+}

@@ -96,7 +96,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 
 	for _, u := range unmatched {
 		nodeType := u.Change.NodeType
-		node := u.Change.Path
+		node := resolveNodeName(graph, u.Change.Module, nodeType, u.Change.Path)
 
 		// Only bead-trackable node types produce actions.
 		if !beadProducingTypes[nodeType] {
@@ -201,6 +201,43 @@ func testSectionProducesBead(graph mapping.SpecGraph, module, specNodeID string)
 		}
 	}
 	return true
+}
+
+// resolveNodeName returns the human-readable name for a spec node referenced
+// by identity hash, looked up in the current spec graph. Falls back to the
+// identity hash when the graph is unavailable, the module cannot be resolved,
+// or the node does not appear in the module — matches pre-lookup behavior and
+// keeps Action.Node populated even when the graph is nil (existing callers
+// may pass nil during early-boot tests).
+func resolveNodeName(graph mapping.SpecGraph, module, nodeType, specNodeID string) string {
+	if graph == nil || module == "" {
+		return specNodeID
+	}
+	mod, err := graph.ModuleByName(module)
+	if err != nil {
+		return specNodeID
+	}
+	switch nodeType {
+	case "component":
+		for _, c := range mod.Components {
+			if c.ID == specNodeID {
+				return c.Name
+			}
+		}
+	case "data_flow":
+		for _, d := range mod.DataFlows {
+			if d.ID == specNodeID {
+				return d.Name
+			}
+		}
+	case "test_section":
+		for _, t := range mod.TestSections {
+			if t.ID == specNodeID {
+				return t.Name
+			}
+		}
+	}
+	return specNodeID
 }
 
 // ResolveDeps resolves spec-graph dependencies for a create action. Three

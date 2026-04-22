@@ -29,6 +29,13 @@
       "type": "non_functional",
       "title": "Git-native proposals",
       "description": "Proposals are plain markdown files in spec/proposals/. No database, no external state. Everything is committed to git."
+    },
+    {
+      "id": "fd540b407fb4",
+      "preq_id": "58ea35f52b86",
+      "type": "functional",
+      "title": "Bead data via stdin",
+      "description": "spex log reads tracker bead data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed []BeadRecord slice from its caller \u2014 no subprocess invocation inside the proposal module."
     }
   ],
   "components": [
@@ -45,10 +52,11 @@
     {
       "id": "97f73ced5a02",
       "name": "HistoryViewer",
-      "description": "Queries proposals and their linked spec changes and bead actions to show the proposal history.",
+      "description": "Groups and renders proposal history from a bead data array supplied by the caller. Accepts parsed []BeadRecord directly \u2014 no subprocess invocation. Filters by spec_proposal:<ref> label, resolves proposal files from spec/proposals/, and writes the grouped history to an io.Writer. Usage: the ProposalCommands wrapper reads 'br list --json' (or equivalent) from stdin, parses into BeadRecord, and passes the slice to HistoryViewer.",
       "content": "arch_history_viewer.md",
       "implements": [
-        "2e38135487be"
+        "2e38135487be",
+        "fd540b407fb4"
       ]
     },
     {
@@ -68,7 +76,8 @@
       "implements": [
         "2b62ad5e8ef2",
         "2e38135487be",
-        "e8c48d1b4cde"
+        "e8c48d1b4cde",
+        "fd540b407fb4"
       ],
       "uses": [
         "24180f55c0b4",
@@ -115,7 +124,7 @@
     {
       "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file → register (validate + copy) → spec change → impact → bead actions → history query.",
+      "description": "Proposal file \u2192 register (validate + copy) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
         "24180f55c0b4",
