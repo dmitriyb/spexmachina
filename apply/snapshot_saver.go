@@ -10,9 +10,12 @@ import (
 )
 
 // SaveSnapshot computes a fresh merkle tree from the spec directory and writes
-// it to spec/.snapshot.json. The createdAt parameter controls the snapshot
-// timestamp for deterministic output. This should only be called after all
-// bead actions have completed successfully.
+// it to <specDir>/.snapshot.json. The createdAt parameter controls the
+// snapshot timestamp for deterministic output. SaveSnapshot is the immediate
+// successor of the close-obsoletes phase in the apply flow: it runs last,
+// after label, create, and close phases all succeed. If any earlier phase
+// fails the snapshot is not updated, so the next diff re-detects the same
+// changes and retries the failed actions.
 // ctx is currently unused but reserved for future cancellation support.
 func SaveSnapshot(ctx context.Context, specDir string, createdAt time.Time) error {
 	tree, err := merkle.BuildTree(specDir)
