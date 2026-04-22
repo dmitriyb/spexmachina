@@ -68,10 +68,9 @@ Then the fake BeadCLI records calls in this exact order:
 1. Three `Update` calls adding `spex:obsolete` + `commit:<HEAD>` labels (label phase — beads stay open)
 2. Two `Create` calls with correct types, `--parent`, and `--deps blocks` where applicable
 3. Three `Close` calls on the obsoleted beads (close phase — replacements exist)
-4. Five `Update` calls for proposal tagging (one per affected bead: 2 created + 3 closed)
-5. `.snapshot.json` is written after all bead actions
+4. `.snapshot.json` is written after all bead actions
 
-This order matches the flow spec: label obsoletes, then creates in hierarchy order, then close obsoletes, then tag all, then snapshot.
+This order matches the flow spec: label obsoletes, then creates in hierarchy order, then close obsoletes, then snapshot.
 
 ### S2: Apply command enforces creation ordering (epics before features before tasks)
 
@@ -141,7 +140,6 @@ Then stdout contains a human-readable listing of planned actions:
 - `close spexmachina-77`
 - `close spexmachina-78`
 - `close spexmachina-42`
-- `tag 5 beads with proposal 2026-02-23-spex-machina`
 - `save snapshot`
 
 No `Create` or `Close` calls are made on the fake. Exit code is 0.
