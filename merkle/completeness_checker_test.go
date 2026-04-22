@@ -1,6 +1,7 @@
 package merkle
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,15 +15,23 @@ import (
 // setupCompletenessSpecDir so tests can build ClassifiedChange values with
 // the same hashes that the fixture's module.json declares.
 type completenessFixture struct {
-	specDir    string
-	alphaHash  string
-	req1Hash   string
-	req2Hash   string
-	comp1Hash  string
-	comp2Hash  string
-	comp3Hash  string
-	projReq1   string
-	projReq5   string
+	specDir   string
+	alphaHash string
+	req1Hash  string
+	req2Hash  string
+	req99Hash string
+	comp1Hash string
+	comp2Hash string
+	comp3Hash string
+	// projReq1ID/projReq5ID are the raw project requirement IDs stored in
+	// project.json (and used as module preq_id values, matching real specs).
+	projReq1ID string
+	projReq5ID string
+	// projReq1Key/projReq5Key are the TreeBuilder tree keys
+	// (IdentityHash("project","requirement",<id>)) — what the diff engine
+	// emits as Change.Path for project-level requirement leaves.
+	projReq1Key string
+	projReq5Key string
 }
 
 // setupCompletenessSpecDir creates a spec directory with requirements and
@@ -34,15 +43,17 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 	dir := t.TempDir()
 
 	fx := completenessFixture{
-		specDir:   dir,
-		alphaHash: schema.IdentityHash("module", "Alpha"),
-		req1Hash:  schema.IdentityHash("alpha", "requirement", "Req 1"),
-		req2Hash:  schema.IdentityHash("alpha", "requirement", "Req 2"),
-		comp1Hash: schema.IdentityHash("alpha", "component", "CompA"),
-		comp2Hash: schema.IdentityHash("alpha", "component", "CompB"),
-		comp3Hash: schema.IdentityHash("alpha", "component", "CompC"),
-		projReq1:  schema.IdentityHash("project", "requirement", "000000000001"),
-		projReq5:  schema.IdentityHash("project", "requirement", "5"),
+		specDir:     dir,
+		alphaHash:   schema.IdentityHash("module", "Alpha"),
+		req1Hash:    schema.IdentityHash("alpha", "requirement", "Req 1"),
+		req2Hash:    schema.IdentityHash("alpha", "requirement", "Req 2"),
+		comp1Hash:   schema.IdentityHash("alpha", "component", "CompA"),
+		comp2Hash:   schema.IdentityHash("alpha", "component", "CompB"),
+		comp3Hash:   schema.IdentityHash("alpha", "component", "CompC"),
+		projReq1ID:  "000000000001",
+		projReq5ID:  "000000000005",
+		projReq1Key: schema.IdentityHash("project", "requirement", "000000000001"),
+		projReq5Key: schema.IdentityHash("project", "requirement", "000000000005"),
 	}
 
 	proj := `{
@@ -59,11 +70,14 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 
 	alphaDir := filepath.Join(dir, "alpha")
 	must(t, os.MkdirAll(alphaDir, 0755))
+	req99Hash := schema.IdentityHash("alpha", "requirement", "Req 99")
+	fx.req99Hash = req99Hash
 	alphaMod := fmt.Sprintf(`{
 		"name": "alpha",
 		"requirements": [
 			{"id": %q, "type": "functional", "title": "Req 1", "preq_id": %q},
-			{"id": %q, "type": "functional", "title": "Req 2", "preq_id": %q}
+			{"id": %q, "type": "functional", "title": "Req 2", "preq_id": %q},
+			{"id": %q, "type": "functional", "title": "Req 99", "preq_id": %q}
 		],
 		"components": [
 			{"id": %q, "name": "CompA", "content": "arch_comp_a.md", "implements": [%q]},
@@ -71,8 +85,9 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 			{"id": %q, "name": "CompC", "content": "arch_comp_c.md", "implements": [%q]}
 		]
 	}`,
-		fx.req1Hash, fx.projReq1,
-		fx.req2Hash, fx.projReq1,
+		fx.req1Hash, fx.projReq1ID,
+		fx.req2Hash, fx.projReq1ID,
+		req99Hash, fx.projReq1ID,
 		fx.comp1Hash, fx.req1Hash,
 		fx.comp2Hash, fx.req2Hash,
 		fx.comp3Hash, fx.req2Hash,
@@ -217,16 +232,19 @@ func TestREQ8_C6_ProjectRequirementNoModuleDerivation(t *testing.T) {
 	fx := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq5, "", Modified),
+		reqChange(fx.projReq5Key, "", Modified),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
-	want := fmt.Sprintf("no module requirement derives from project requirement %s", fx.projReq5)
+	want := "no module requirement derives from project requirement 'Proj Req 5'"
 	if !strings.Contains(errs[0].Message, want) {
 		t.Errorf("expected message containing %q, got %q", want, errs[0].Message)
+	}
+	if errs[0].Path != fx.projReq5ID {
+		t.Errorf("expected path %s (identity hash), got %q", fx.projReq5ID, errs[0].Path)
 	}
 }
 
@@ -239,7 +257,7 @@ func TestREQ8_C7_ProjectRequirementChainIncomplete(t *testing.T) {
 	// projReq1 modified. Module reqs 1 and 2 both derive from it.
 	// Req 1 → CompA. Req 2 → CompB, CompC. None of the components are in the diff.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1, "", Modified),
+		reqChange(fx.projReq1Key, "", Modified),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
@@ -250,6 +268,9 @@ func TestREQ8_C7_ProjectRequirementChainIncomplete(t *testing.T) {
 	for _, e := range errs {
 		if len(e.Related) == 1 {
 			related[e.Related[0]] = true
+		}
+		if e.Path != fx.projReq1ID {
+			t.Errorf("expected path %s (identity hash), got %q", fx.projReq1ID, e.Path)
 		}
 	}
 	for _, want := range []string{fx.comp1Hash, fx.comp2Hash, fx.comp3Hash} {
@@ -267,7 +288,7 @@ func TestREQ8_C8_ProjectRequirementChainComplete(t *testing.T) {
 	// projReq1 changed. CompA, CompB, CompC all in the diff — all derived
 	// module requirements (req1, req2) are fully covered.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1, "", Modified),
+		reqChange(fx.projReq1Key, "", Modified),
 		compChange(fx.comp1Hash, fx.alphaHash, Modified),
 		compChange(fx.comp2Hash, fx.alphaHash, Modified),
 		compChange(fx.comp3Hash, fx.alphaHash, Modified),
@@ -375,12 +396,15 @@ func TestREQ8_ProjectRequirement_Added_NoDerivation(t *testing.T) {
 	fx := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq5, "", Added),
+		reqChange(fx.projReq5Key, "", Added),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Path != fx.projReq5ID {
+		t.Errorf("expected path %s (identity hash), got %q", fx.projReq5ID, errs[0].Path)
 	}
 }
 
@@ -389,18 +413,21 @@ func TestREQ8_ProjectRequirement_Added_NoDerivation(t *testing.T) {
 func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 	fx := setupCompletenessSpecDir(t)
 
-	// projReq1 removed. Module reqs 1 and 2 still have preq_id = projReq1.
+	// projReq1 removed. Module reqs 1, 2, and 99 still have preq_id = projReq1ID.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1, "", Removed),
+		reqChange(fx.projReq1Key, "", Removed),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
-	if len(errs) != 2 {
-		t.Fatalf("expected 2 errors (one per derived module requirement), got %d: %v", len(errs), errs)
+	if len(errs) != 3 {
+		t.Fatalf("expected 3 errors (one per derived module requirement), got %d: %v", len(errs), errs)
 	}
 	for _, e := range errs {
 		if !strings.Contains(e.Message, "still derives from removed project requirement") {
 			t.Errorf("unexpected message: %q", e.Message)
+		}
+		if e.Path != fx.projReq1ID {
+			t.Errorf("expected path %s (identity hash), got %q", fx.projReq1ID, e.Path)
 		}
 	}
 	related := map[string]bool{}
@@ -409,8 +436,10 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 			related[e.Related[0]] = true
 		}
 	}
-	if !related[fx.req1Hash] || !related[fx.req2Hash] {
-		t.Errorf("expected related set to contain %s and %s, got %v", fx.req1Hash, fx.req2Hash, related)
+	for _, want := range []string{fx.req1Hash, fx.req2Hash, fx.req99Hash} {
+		if !related[want] {
+			t.Errorf("expected related set to contain %s, got %v", want, related)
+		}
 	}
 }
 
@@ -464,4 +493,98 @@ func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (module req derives from project req via raw preq_id), got %d: %v", len(errs), errs)
 	}
+}
+
+// TestREQ8_ErrorFields_AreIdentityHashesInSpec asserts that every Path and
+// Related value produced by CheckCompleteness is an identity hash that
+// actually appears as an id in project.json or the relevant module.json.
+// Regression guard for spexmachina-d7w: path must never be the TreeBuilder
+// double-hashed key, which does not appear in any spec file.
+func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
+	fx := setupCompletenessSpecDir(t)
+
+	// Mix module-req, added-orphan, removed, and project-req changes so every
+	// error branch contributes at least one DiffError.
+	changes := []ClassifiedChange{
+		reqChange(fx.req1Hash, fx.alphaHash, Modified), // C2 branch
+		reqChange(fx.req99Hash, fx.alphaHash, Added),   // C3 branch (req in module.json, no implementor)
+		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // C5 branch
+		reqChange(fx.projReq1Key, "", Modified),        // project modified branch
+		reqChange(fx.projReq5Key, "", Added),           // project no-derivation branch
+		{ // meta-only branch
+			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Impact: Structural,
+		},
+	}
+
+	errs := CheckCompleteness(changes, fx.specDir)
+	if len(errs) == 0 {
+		t.Fatalf("expected errors across every branch, got 0")
+	}
+
+	valid := collectIdentityHashes(t, fx.specDir)
+
+	for _, e := range errs {
+		// Meta-envelope leaves use a synthetic "meta/<hash>" path; accept
+		// that form but verify the hash portion is a known module.
+		if hash, ok := stripMetaPrefix(e.Path); ok {
+			if !valid[hash] {
+				t.Errorf("meta path %q references unknown module hash", e.Path)
+			}
+		} else if !valid[e.Path] {
+			t.Errorf("Path %q is not an identity hash present in project.json or module.json (message: %q)", e.Path, e.Message)
+		}
+		for _, r := range e.Related {
+			if !valid[r] {
+				t.Errorf("Related %q is not an identity hash present in project.json or module.json (message: %q)", r, e.Message)
+			}
+		}
+	}
+}
+
+// collectIdentityHashes returns the set of every raw identity hash stored in
+// project.json and every module.json — the values any Path/Related field is
+// allowed to take.
+func collectIdentityHashes(t *testing.T, specDir string) map[string]bool {
+	t.Helper()
+	set := map[string]bool{}
+
+	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
+	must(t, err)
+	var proj schema.Project
+	must(t, json.Unmarshal(projData, &proj))
+	for _, req := range proj.Requirements {
+		set[req.ID] = true
+	}
+	for _, mod := range proj.Modules {
+		set[schema.IdentityHash("module", mod.Name)] = true
+		data, err := os.ReadFile(filepath.Join(specDir, mod.Path, "module.json"))
+		must(t, err)
+		var ms schema.ModuleSpec
+		must(t, json.Unmarshal(data, &ms))
+		for _, r := range ms.Requirements {
+			set[r.ID] = true
+		}
+		for _, c := range ms.Components {
+			set[c.ID] = true
+		}
+		for _, s := range ms.ImplSections {
+			set[s.ID] = true
+		}
+		for _, f := range ms.DataFlows {
+			set[f.ID] = true
+		}
+		for _, ts := range ms.TestSections {
+			set[ts.ID] = true
+		}
+	}
+	return set
+}
+
+func stripMetaPrefix(path string) (string, bool) {
+	const prefix = "meta/"
+	if len(path) > len(prefix) && path[:len(prefix)] == prefix {
+		return path[len(prefix):], true
+	}
+	return "", false
 }

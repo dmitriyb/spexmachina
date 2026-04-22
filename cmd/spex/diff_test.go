@@ -378,7 +378,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 
-	projReq1Hash := schema.IdentityHash("project", "requirement", "000000000001")
+	const projReq1ID = "000000000001"
 	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")
@@ -388,7 +388,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	proj := `{
 		"name": "test-project",
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "Proj Req 1"}
+			{"id": "` + projReq1ID + `", "type": "functional", "title": "Proj Req 1"}
 		],
 		"modules": [
 			{"id": "000000000001", "name": "alpha", "path": "alpha"}
@@ -403,8 +403,8 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	alphaMod := `{
 		"name": "alpha",
 		"requirements": [
-			{"id": "` + req1Hash + `", "type": "functional", "title": "Req 1", "preq_id": "` + projReq1Hash + `"},
-			{"id": "` + req2Hash + `", "type": "functional", "title": "Req 2", "preq_id": "` + projReq1Hash + `"}
+			{"id": "` + req1Hash + `", "type": "functional", "title": "Req 1", "preq_id": "` + projReq1ID + `"},
+			{"id": "` + req2Hash + `", "type": "functional", "title": "Req 2", "preq_id": "` + projReq1ID + `"}
 		],
 		"components": [
 			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
@@ -428,7 +428,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 // the diff reports requirement modifications, not add+remove pairs.
 func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
 	t.Helper()
-	projReq1Hash := schema.IdentityHash("project", "requirement", "000000000001")
+	const projReq1ID = "000000000001"
 	req1Hash := schema.IdentityHash("alpha", "requirement", "Req 1")
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")
@@ -438,8 +438,8 @@ func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
 	return `{
 		"name": "alpha",
 		"requirements": [
-			{"id": "` + req1Hash + `", "type": "functional", "title": "` + req1Title + `", "preq_id": "` + projReq1Hash + `"},
-			{"id": "` + req2Hash + `", "type": "functional", "title": "` + req2Title + `", "preq_id": "` + projReq1Hash + `"}
+			{"id": "` + req1Hash + `", "type": "functional", "title": "` + req1Title + `", "preq_id": "` + projReq1ID + `"},
+			{"id": "` + req2Hash + `", "type": "functional", "title": "` + req2Title + `", "preq_id": "` + projReq1ID + `"}
 		],
 		"components": [
 			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
