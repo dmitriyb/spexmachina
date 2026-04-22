@@ -10,9 +10,8 @@
 2. For each obsolete action: `BeadCloser.Label(action)` — add `spex:obsolete` + `commit:<HEAD>` labels, delete the mapping record for removed nodes (looked up by `action.SpecNodeID`). Beads stay open.
 3. For each create action (in hierarchy order: epics → features → tasks): `BeadCreator.Create(action)` with type, parent, deps, priority. The new mapping record's `spec_node_id` is `action.SpecNodeID` — passed through directly from the impact report without any reconstruction. Old beads are still open, so `--deps blocks:<old-bead-id>` references valid beads.
 4. For each obsolete action: `BeadCloser.Close(action)` — close the labeled beads. Replacements already exist.
-5. Call `ProposalTagger.Tag(allAffected, proposalRef)`
-6. Call `SnapshotSaver.Save(currentTree)`
-7. In dry-run mode, print actions without executing
+5. Call `SnapshotSaver.Save(currentTree)`
+6. In dry-run mode, print actions without executing
 
 ## No deriveSpecNodeID helper
 

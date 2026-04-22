@@ -26,10 +26,12 @@ type ApplyOpts struct {
 
 // RunApply orchestrates the full apply pipeline:
 //  1. Label obsoletes (mark intent, keep open)
-//  2. Creates in hierarchy order with topological sort
+//  2. Create proposal epic, then creates in hierarchy order with topological sort
 //  3. Close obsoletes (replacements exist)
-//  4. Tag all affected beads with proposal
-//  5. Save snapshot
+//  4. Save snapshot
+//
+// Bead grouping by proposal wave is structural: every created bead is a child
+// of that run's proposal epic. No per-bead proposal tagging is applied.
 func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyOpts) error {
 	if opts.DryRun {
 		return printApplyDryRun(opts)
@@ -48,7 +50,8 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 		return err
 	}
 
-	// 3. Create beads — abort on failure, no snapshot saved.
+	// 3. Create proposal epic (if any creates), then create all beads under
+	// that epic as --parent. Abort on failure, no snapshot saved.
 	createdIDs, err := CreateBeads(ctx, cli, store, opts.ProposalRef, sorted)
 	if err != nil {
 		return err
@@ -59,15 +62,7 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 		opts.Logger.ErrorContext(ctx, "some beads failed to close", "error", err)
 	}
 
-	// 5. Tag all affected beads with proposal reference.
-	allIDs := collectAffectedBeadIDs(createdIDs, opts.Obsoletes)
-	if opts.ProposalRef != "" {
-		if err := TagWithProposal(ctx, cli, allIDs, opts.ProposalRef, opts.Logger); err != nil {
-			opts.Logger.ErrorContext(ctx, "some beads failed to tag", "error", err)
-		}
-	}
-
-	// 6. Save snapshot.
+	// 5. Save snapshot.
 	now := time.Now()
 	if opts.Now != nil {
 		now = opts.Now()
@@ -79,25 +74,6 @@ func RunApply(ctx context.Context, cli BeadCLI, store mapping.Store, opts ApplyO
 	fmt.Fprintf(opts.Stderr, "spex apply: done (created=%d obsoleted=%d)\n",
 		len(createdIDs), len(opts.Obsoletes))
 	return nil
-}
-
-// collectAffectedBeadIDs gathers unique bead IDs from creates and obsoletes.
-func collectAffectedBeadIDs(createdIDs []string, obsoletes []Action) []string {
-	seen := make(map[string]bool)
-	var ids []string
-	for _, id := range createdIDs {
-		if !seen[id] {
-			seen[id] = true
-			ids = append(ids, id)
-		}
-	}
-	for _, a := range obsoletes {
-		if !seen[a.BeadID] {
-			seen[a.BeadID] = true
-			ids = append(ids, a.BeadID)
-		}
-	}
-	return ids
 }
 
 // typePriority returns the sort priority for a spec node type.
@@ -240,14 +216,6 @@ func printApplyDryRun(opts ApplyOpts) error {
 
 	for _, a := range opts.Obsoletes {
 		fmt.Fprintf(w, "close %s\n", a.BeadID)
-	}
-
-	total := len(opts.Creates) + len(opts.Obsoletes)
-	if len(opts.Creates) > 0 {
-		total++ // proposal epic bead
-	}
-	if opts.ProposalRef != "" && total > 0 {
-		fmt.Fprintf(w, "tag %d beads with proposal %s\n", total, opts.ProposalRef)
 	}
 
 	fmt.Fprintln(w, "save snapshot")
