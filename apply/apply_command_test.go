@@ -78,9 +78,6 @@ func classifyPhase(op opRecord) string {
 		if _, ok := op.Metadata["commit"]; ok {
 			return "label"
 		}
-		if _, ok := op.Metadata["spec_proposal"]; ok {
-			return "tag"
-		}
 	}
 	return "unknown"
 }
@@ -100,7 +97,7 @@ func defaultApplyOpts(creates []Action, obsoletes []Action, specDir string) Appl
 	}
 }
 
-// --- S1: Full action order (label -> create -> close -> tag -> snapshot) ---
+// --- S1: Full action order (label -> create -> close -> snapshot) ---
 
 func TestREQ8_S1_FullActionOrder(t *testing.T) {
 	cli := newRecordingCLI()
@@ -131,10 +128,8 @@ func TestREQ8_S1_FullActionOrder(t *testing.T) {
 	firstCreate := -1
 	lastCreatePhase := -1
 	firstClose := -1
-	lastClose := -1
-	firstTag := -1
 
-	var labelCount, createCount, closeCount, tagCount int
+	var labelCount, createCount, closeCount int
 
 	for i, op := range cli.ops {
 		phase := classifyPhase(op)
@@ -154,13 +149,7 @@ func TestREQ8_S1_FullActionOrder(t *testing.T) {
 			if firstClose == -1 {
 				firstClose = i
 			}
-			lastClose = i
 			closeCount++
-		case "tag":
-			if firstTag == -1 {
-				firstTag = i
-			}
-			tagCount++
 		}
 	}
 
@@ -171,12 +160,9 @@ func TestREQ8_S1_FullActionOrder(t *testing.T) {
 	if firstClose != -1 && lastCreatePhase != -1 && firstClose <= lastCreatePhase {
 		t.Error("close phase started before create phase ended")
 	}
-	if firstTag != -1 && lastClose != -1 && firstTag <= lastClose {
-		t.Error("tag phase started before close phase ended")
-	}
 
 	// Verify counts. The proposal epic is created first on every run with
-	// at least one create, producing one extra create and one extra tag.
+	// at least one create, producing one extra create.
 	if labelCount != 3 {
 		t.Errorf("want 3 label updates, got %d", labelCount)
 	}
@@ -186,8 +172,16 @@ func TestREQ8_S1_FullActionOrder(t *testing.T) {
 	if closeCount != 3 {
 		t.Errorf("want 3 closes, got %d", closeCount)
 	}
-	if tagCount != 6 {
-		t.Errorf("want 6 tag updates (epic + 2 new + 3 obsolete), got %d", tagCount)
+
+	// Verify no proposal-tagging Update calls were issued (grouping is
+	// structural via the proposal epic, not via metadata labels).
+	for _, op := range cli.ops {
+		if op.Op != "update" {
+			continue
+		}
+		if _, ok := op.Metadata["spec_proposal"]; ok {
+			t.Errorf("unexpected spec_proposal tag on %s — tagging was removed", op.ID)
+		}
 	}
 
 	// Verify snapshot was written.
@@ -374,7 +368,6 @@ func TestREQ8_S8_DryRunPrintsActions(t *testing.T) {
 		"close spexmachina-77",
 		"close spexmachina-78",
 		"close spexmachina-42",
-		"tag 6 beads with proposal 2026-02-23-spex-machina",
 		"save snapshot",
 	}
 	for _, line := range expected {
@@ -383,11 +376,18 @@ func TestREQ8_S8_DryRunPrintsActions(t *testing.T) {
 		}
 	}
 
-	// Verify order: labels before creates, creates before closes.
+	// Verify the dry-run does not emit a proposal-tag line — tagging was
+	// removed when the proposal epic became the structural grouping mechanism.
+	if strings.Contains(output, "tag ") {
+		t.Errorf("dry-run output contains removed tag line:\n%s", output)
+	}
+
+	// Verify order: labels before creates, creates before closes, closes
+	// before save snapshot.
 	labelEnd := strings.LastIndex(output, "label ")
 	createStart := strings.Index(output, "create ")
 	closeStart := strings.Index(output, "close ")
-	tagStart := strings.Index(output, "tag ")
+	saveStart := strings.Index(output, "save snapshot")
 
 	if createStart < labelEnd {
 		t.Error("creates appear before labels in dry-run output")
@@ -395,8 +395,8 @@ func TestREQ8_S8_DryRunPrintsActions(t *testing.T) {
 	if closeStart < createStart {
 		t.Error("closes appear before creates in dry-run output")
 	}
-	if tagStart < closeStart {
-		t.Error("tag appears before closes in dry-run output")
+	if saveStart < closeStart {
+		t.Error("save snapshot appears before closes in dry-run output")
 	}
 }
 
@@ -681,32 +681,6 @@ func TestREQ11_TopoSort_Chain(t *testing.T) {
 	}
 	if sorted[2].Node != "C" {
 		t.Errorf("third: want C, got %s", sorted[2].Node)
-	}
-}
-
-// --- Unit tests for collectAffectedBeadIDs ---
-
-func TestREQ4_CollectAffectedBeadIDs(t *testing.T) {
-	created := []string{"new-1", "new-2"}
-	obsoletes := []Action{
-		{BeadID: "old-1"},
-		{BeadID: "new-1"}, // duplicate with created
-		{BeadID: "old-2"},
-	}
-
-	ids := collectAffectedBeadIDs(created, obsoletes)
-
-	// Should deduplicate.
-	if len(ids) != 4 {
-		t.Fatalf("want 4 unique IDs, got %d: %v", len(ids), ids)
-	}
-
-	seen := make(map[string]bool)
-	for _, id := range ids {
-		if seen[id] {
-			t.Errorf("duplicate ID: %s", id)
-		}
-		seen[id] = true
 	}
 }
 
