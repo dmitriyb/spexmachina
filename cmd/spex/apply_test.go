@@ -61,7 +61,7 @@ func TestREQ4_ConvertCreateActions_PassesSpecNodeIDThrough(t *testing.T) {
 		{Type: "create", Module: "validator", Node: "aabbccddeeff", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "abc123"},
 	}
 
-	actions := convertCreateActions(creates, modules, nil, &noopStore{})
+	actions := convertCreateActions(creates, modules, nil, &noopStore{}, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -91,7 +91,7 @@ func TestREQ4_ConvertCreateActions_FallbackNodeName(t *testing.T) {
 		{Type: "create", Module: "validator", Node: "aabbccddeeff", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "xyz"},
 	}
 
-	actions := convertCreateActions(creates, modules, nil, &noopStore{})
+	actions := convertCreateActions(creates, modules, nil, &noopStore{}, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -117,7 +117,7 @@ func TestREQ4_ConvertCreateActions_ContentFileFromExistingRecord(t *testing.T) {
 		{Type: "create", Module: "validator", Node: "ContentResolver", NodeType: "component", SpecNodeID: "aabbccddeeff", OldBeadID: "old-bead-1", SpecHash: "h1"},
 	}
 
-	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, nil, store)
+	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, nil, store, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))
@@ -144,7 +144,7 @@ func TestREQ4_ConvertCreateActions_ContentFileFromSpecGraph(t *testing.T) {
 		{Type: "create", Module: "validator", Node: "NewComponent", NodeType: "component", SpecNodeID: "aabbccddeeff", SpecHash: "h1"},
 	}
 
-	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, contents, &noopStore{})
+	actions := convertCreateActions(creates, map[string]impact.NodeMap{}, contents, &noopStore{}, nil)
 
 	if len(actions) != 1 {
 		t.Fatalf("want 1 action, got %d", len(actions))

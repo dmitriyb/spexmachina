@@ -15,19 +15,19 @@ import (
 
 // Action describes a bead action derived from impact analysis.
 type Action struct {
-	Module           string   // spec module name, e.g. "validator"
-	Node             string   // node name, e.g. "SchemaChecker"
-	NodeType         string   // "module", "component", "test_section"
-	SpecHash         string   // merkle hash of the spec node
-	BeadID           string   // existing bead ID (for close/obsolete actions)
-	OldBeadID        string   // predecessor bead ID (for creates replacing obsoleted beads)
-	DepBeadIDs       []string // spec-graph dependency bead IDs
-	Priority         int      // derived priority; -1 means unset
-	SpecNodeID       string   // e.g. "validator/component/1"
-	ContentFile      string   // spec content file path
-	ParentSpecNodeID string   // parent spec node ID (for test_sections)
-	Reason           string   // human-readable reason
-	ChangeType       string   // "removed" or "modified" (for obsolete actions)
+	Module         string   // spec module name, e.g. "validator"
+	Node           string   // node name, e.g. "SchemaChecker"
+	NodeType       string   // "component", "data_flow", "test_section"
+	SpecHash       string   // merkle hash of the spec node
+	BeadID         string   // existing bead ID (for close/obsolete actions)
+	OldBeadID      string   // predecessor bead ID (for creates replacing obsoleted beads)
+	DepBeadIDs     []string // spec-graph dependency bead IDs
+	Priority       int      // derived priority; -1 means unset
+	SpecNodeID     string   // identity hash of the spec node
+	ContentFile    string   // spec content file path
+	DescribesCount int      // test_section describes array length (defense-in-depth gate)
+	Reason         string   // human-readable reason
+	ChangeType     string   // "removed" or "modified" (for obsolete actions)
 }
 
 // CreateOpts holds parameters for creating a single bead.
@@ -63,7 +63,6 @@ func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 		return nil, fmt.Errorf("apply: bead CLI not found: %s: %w", bin, err)
 	}
 
-	// Probe: verify the flags we depend on are accepted.
 	probe := exec.CommandContext(ctx, bin,
 		"create", "--dry-run",
 		"--title", "probe",
@@ -75,14 +74,12 @@ func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 		return nil, fmt.Errorf("apply: %s create probe failed (version %s): %w\n%s", bin, version, err, out)
 	}
 
-	// Probe: verify the close subcommand exists.
 	closeProbe := exec.CommandContext(ctx, bin, "close", "--help")
 	if out, err := closeProbe.CombinedOutput(); err != nil {
 		version := cliVersion(ctx, bin)
 		return nil, fmt.Errorf("apply: %s close probe failed (version %s): %w\n%s", bin, version, err, out)
 	}
 
-	// Probe: verify the update subcommand exists.
 	updateProbe := exec.CommandContext(ctx, bin, "update", "--help")
 	if out, err := updateProbe.CombinedOutput(); err != nil {
 		version := cliVersion(ctx, bin)
@@ -92,7 +89,6 @@ func NewBeadCLI(ctx context.Context, bin string) (BeadCLI, error) {
 	return &execCLI{bin: bin}, nil
 }
 
-// Create creates a new bead and returns its ID.
 func (c *execCLI) Create(ctx context.Context, opts CreateOpts) (string, error) {
 	args := []string{
 		"create",
@@ -159,10 +155,7 @@ func (c *execCLI) FindExisting(ctx context.Context, labels []string) (string, er
 }
 
 // Close closes a bead, first adding the given labels via update, then closing.
-// Labels are applied before close so the bead is marked while still open,
-// giving br auto-flush a clean state transition.
 func (c *execCLI) Close(ctx context.Context, id string, labels []string) error {
-	// Add labels via update (br close does not support --add-label).
 	for _, label := range labels {
 		args := []string{"update", id, "--add-label", label}
 		out, err := exec.CommandContext(ctx, c.bin, args...).CombinedOutput()
@@ -215,14 +208,17 @@ func (c *execCLI) Status(ctx context.Context, id string) (string, error) {
 	return items[0].Status, nil
 }
 
-// beadType maps spec node types to bead types.
-// Returns empty string for node types that do not get beads.
+// beadType maps spec node types to bead types for non-epic creates.
+// The proposal epic is created separately at the start of each apply run.
+// Returns empty string for node types that do not produce beads.
 func beadType(nodeType string) string {
 	switch nodeType {
-	case "module":
+	case "proposal":
 		return "epic"
 	case "component":
 		return "feature"
+	case "data_flow":
+		return "task"
 	case "test_section":
 		return "task"
 	default:
@@ -230,43 +226,40 @@ func beadType(nodeType string) string {
 	}
 }
 
-// resolveParent resolves the parent bead ID from the mapping store.
-// Components are parented under the module's epic bead.
-// Test sections are parented under the component's feature bead.
-func resolveParent(store mapping.Store, action Action) string {
-	switch action.NodeType {
-	case "component":
-		recs, err := store.GetBySpecNode(action.Module + "/module")
-		if err == nil && len(recs) > 0 {
-			return recs[0].BeadID
-		}
-	case "test_section":
-		if action.ParentSpecNodeID != "" {
-			recs, err := store.GetBySpecNode(action.ParentSpecNodeID)
-			if err == nil && len(recs) > 0 {
-				return recs[0].BeadID
-			}
-		}
-	}
-	return ""
-}
-
 // isCleanup returns true if the action represents a cleanup bead.
 func isCleanup(a Action) bool {
 	return strings.HasPrefix(a.Reason, "Code cleanup:")
 }
 
-// CreateBeads processes a batch of create actions sequentially.
-// For each action, it checks for an existing open bead (idempotency)
-// before creating a new one. After creation, it creates or updates
-// the mapping record in the store and labels the bead with the record ID.
-// Returns the list of bead IDs (existing or new).
-func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates []Action) ([]string, error) {
-	ids := make([]string, 0, len(creates))
+// CreateBeads processes a batch of create actions. Before any action is
+// processed, it creates a single proposal epic bead whose ID is reused as
+// --parent for every subsequent create in the run. When creates is empty,
+// no epic is created.
+//
+// For each action, it checks for an existing open bead (idempotency) before
+// creating a new one. After creation it creates or updates the mapping
+// record in the store and labels the bead with the record ID.
+//
+// The returned slice contains the epic bead ID (when creates is non-empty)
+// followed by a bead ID for each input action, in input order.
+func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, proposalRef string, creates []Action) ([]string, error) {
+	if len(creates) == 0 {
+		return nil, nil
+	}
+
+	// Create the proposal epic first. Its bead ID is reused as --parent
+	// for every subsequent create in this run.
+	epicID, err := createProposalEpic(ctx, cli, store, proposalRef, creates)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]string, 0, len(creates)+1)
+	ids = append(ids, epicID)
 
 	for _, a := range creates {
 		if isCleanup(a) {
-			id, err := createCleanupBead(ctx, cli, a)
+			id, err := createCleanupBead(ctx, cli, epicID, a)
 			if err != nil {
 				return ids, err
 			}
@@ -277,6 +270,12 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 		bt := beadType(a.NodeType)
 		if bt == "" {
 			return ids, fmt.Errorf("apply: node type %q does not get a bead", a.NodeType)
+		}
+
+		// Defense-in-depth: a single-component test_section must never reach
+		// BeadCreator — ActionClassifier is the authoritative gate.
+		if a.NodeType == "test_section" && a.DescribesCount < 2 {
+			return ids, fmt.Errorf("apply: single-component test_section reached BeadCreator for %s/%s (describes=%d) — ActionClassifier should have filtered it", a.Module, a.Node, a.DescribesCount)
 		}
 
 		// Idempotency: check for existing record and open bead with matching label.
@@ -293,15 +292,11 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 			}
 		}
 
-		// Build create opts.
 		opts := CreateOpts{
 			Title:    fmt.Sprintf("%s: %s", a.Module, a.Node),
 			Type:     bt,
+			Parent:   epicID,
 			Priority: a.Priority,
-		}
-
-		if parentID := resolveParent(store, a); parentID != "" {
-			opts.Parent = parentID
 		}
 
 		if a.OldBeadID != "" {
@@ -309,7 +304,7 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 		}
 
 		for _, depID := range a.DepBeadIDs {
-			opts.Deps = append(opts.Deps, fmt.Sprintf("blocked-by:%s", depID))
+			opts.Deps = append(opts.Deps, fmt.Sprintf("depends:%s", depID))
 		}
 
 		beadID, err := cli.Create(ctx, opts)
@@ -317,7 +312,6 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 			return ids, fmt.Errorf("apply: create bead for %s/%s: %w", a.Module, a.Node, err)
 		}
 
-		// Create or update mapping record.
 		var recordID int
 		if len(recs) > 0 {
 			recordID = recs[0].ID
@@ -330,6 +324,7 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 				SpecNodeID:  a.SpecNodeID,
 				BeadID:      beadID,
 				BeadType:    bt,
+				NodeType:    a.NodeType,
 				Module:      a.Module,
 				Component:   a.Node,
 				ContentFile: a.ContentFile,
@@ -341,7 +336,6 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 			return ids, fmt.Errorf("apply: mapping record for %s: %w", beadID, err)
 		}
 
-		// Label the bead with the mapping record ID.
 		if err := cli.Update(ctx, beadID, map[string]string{
 			"spex": strconv.Itoa(recordID),
 		}); err != nil {
@@ -354,12 +348,61 @@ func CreateBeads(ctx context.Context, cli BeadCLI, store mapping.Store, creates 
 	return ids, nil
 }
 
+// createProposalEpic issues the single per-run epic create and writes the
+// corresponding bead-map record. The priority is inherited from the lowest
+// (most urgent) explicit priority among the creates; when none is set the
+// epic is created without --priority.
+func createProposalEpic(ctx context.Context, cli BeadCLI, store mapping.Store, proposalRef string, creates []Action) (string, error) {
+	opts := CreateOpts{
+		Title:    proposalRef,
+		Type:     "epic",
+		Priority: inheritedPriority(creates),
+	}
+
+	beadID, err := cli.Create(ctx, opts)
+	if err != nil {
+		return "", fmt.Errorf("apply: create proposal epic %q: %w", proposalRef, err)
+	}
+
+	record := mapping.Record{
+		SpecNodeID: proposalRef,
+		BeadID:     beadID,
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "",
+		Component:  proposalRef,
+		SpecHash:   "",
+	}
+	if _, err := store.Create(record); err != nil {
+		return "", fmt.Errorf("apply: mapping record for epic %s: %w", beadID, err)
+	}
+
+	return beadID, nil
+}
+
+// inheritedPriority returns the lowest non-negative priority across creates,
+// or -1 when no action sets one.
+func inheritedPriority(creates []Action) int {
+	best := -1
+	for _, a := range creates {
+		if a.Priority < 0 {
+			continue
+		}
+		if best < 0 || a.Priority < best {
+			best = a.Priority
+		}
+	}
+	return best
+}
+
 // createCleanupBead creates a cleanup bead for a removed component.
 // Cleanup beads have no mapping record and are labeled spex:cleanup.
-func createCleanupBead(ctx context.Context, cli BeadCLI, a Action) (string, error) {
+// They are parented under the proposal epic that scheduled the cleanup.
+func createCleanupBead(ctx context.Context, cli BeadCLI, epicID string, a Action) (string, error) {
 	opts := CreateOpts{
 		Title:    fmt.Sprintf("Code cleanup: %s", a.Node),
 		Type:     "task",
+		Parent:   epicID,
 		Priority: -1,
 	}
 	if a.OldBeadID != "" {

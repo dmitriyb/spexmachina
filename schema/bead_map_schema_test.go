@@ -155,7 +155,11 @@ func TestFR7_BeadMapSchemaRecordDefinesAllFields(t *testing.T) {
 	}
 }
 
-func TestFR7_BeadMapSchemaSpecNodeIDPattern(t *testing.T) {
+func TestFR7_BeadMapSchemaSpecNodeIDIsNonEmpty(t *testing.T) {
+	// Historically spec_node_id was restricted to a 12-char hex pattern.
+	// With proposal epic records it now also carries human-readable proposal
+	// references (see spec/apply/arch_bead_creator.md, BeadCreator S0a),
+	// so the schema only enforces a non-empty string here.
 	data, err := BeadMapSchema()
 	if err != nil {
 		t.Fatalf("BeadMapSchema(): %v", err)
@@ -170,10 +174,15 @@ func TestFR7_BeadMapSchemaSpecNodeIDPattern(t *testing.T) {
 	recordProps := recordDef["properties"].(map[string]any)
 	specNodeDef := recordProps["spec_node_id"].(map[string]any)
 
-	pattern := specNodeDef["pattern"].(string)
-	expected := "^[a-f0-9]{12}$"
-	if pattern != expected {
-		t.Fatalf("spec_node_id pattern: want %q, got %q", expected, pattern)
+	if _, hasPattern := specNodeDef["pattern"]; hasPattern {
+		t.Fatalf("spec_node_id pattern was relaxed for proposal epic records; did not expect a pattern constraint")
+	}
+	minLen, ok := specNodeDef["minLength"].(float64)
+	if !ok {
+		t.Fatalf("spec_node_id should have minLength; got %v", specNodeDef["minLength"])
+	}
+	if int(minLen) != 1 {
+		t.Fatalf("spec_node_id minLength: want 1, got %d", int(minLen))
 	}
 }
 
@@ -298,19 +307,18 @@ func TestFR7_MissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestFR7_SpecNodeIDPatternValidation(t *testing.T) {
+func TestFR7_SpecNodeIDNonEmptyValidation(t *testing.T) {
 	sch := compileBeadMapSchema(t)
 
 	validRecord := func(specNodeID string) string {
 		return `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "` + specNodeID + `", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`
 	}
 
-	t.Run("valid patterns", func(t *testing.T) {
+	t.Run("valid values", func(t *testing.T) {
 		valid := []string{
-			"a1b2c3d4e5f6", // typical identity hash
-			"000000000000", // all zeros
-			"abcdefabcdef", // all alpha hex
-			"123456789012", // all numeric hex
+			"a1b2c3d4e5f6",                       // typical identity hash
+			"2026-04-12-data-flow-contract-layer", // proposal reference used on epic records
+			"123456789012",                       // numeric hex
 		}
 		for _, id := range valid {
 			t.Run(id, func(t *testing.T) {
@@ -322,23 +330,10 @@ func TestFR7_SpecNodeIDPatternValidation(t *testing.T) {
 		}
 	})
 
-	t.Run("invalid patterns", func(t *testing.T) {
-		invalid := []string{
-			"schema/component/1",           // old module/type/id format
-			"A1B2C3D4E5F6",                // uppercase hex
-			"a1b2c3d4e5",                   // too short (10 chars)
-			"a1b2c3d4e5f6a",               // too long (13 chars)
-			"a1b2c3d4e5fg",                // non-hex char 'g'
-			"",                             // empty string
-			"a1b2c3d4e5f ",                // trailing space
-		}
-		for _, id := range invalid {
-			t.Run(id, func(t *testing.T) {
-				err := validateBeadMap(t, sch, validRecord(id))
-				if err == nil {
-					t.Fatalf("spec_node_id %q should fail pattern validation", id)
-				}
-			})
+	t.Run("empty rejected", func(t *testing.T) {
+		err := validateBeadMap(t, sch, validRecord(""))
+		if err == nil {
+			t.Fatal("empty spec_node_id should fail minLength validation")
 		}
 	})
 }
@@ -380,6 +375,8 @@ func TestFR7_RecordIDMinimum(t *testing.T) {
 }
 
 func TestFR7_EmptyStringFieldsFail(t *testing.T) {
+	// module, content_file, and spec_hash are allowed to be empty on proposal
+	// epic records (BeadCreator S0a), so they are not asserted here.
 	sch := compileBeadMapSchema(t)
 
 	fields := []struct {
@@ -395,20 +392,8 @@ func TestFR7_EmptyStringFieldsFail(t *testing.T) {
 			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
 		},
 		{
-			"empty module",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-		},
-		{
 			"empty component",
 			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "", "content_file": "f.md", "spec_hash": "h"}]}`,
-		},
-		{
-			"empty content_file",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "", "spec_hash": "h"}]}`,
-		},
-		{
-			"empty spec_hash",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": ""}]}`,
 		},
 	}
 	for _, tt := range fields {

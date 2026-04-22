@@ -91,10 +91,11 @@ func TestFR7_BeadMapSchemaDefinesFields(t *testing.T) {
 		t.Fatal("bead-map record definition missing optional property \"bead_status\"")
 	}
 
-	// Verify spec_node_id has a pattern constraint
+	// Verify spec_node_id enforces a non-empty string (pattern was relaxed
+	// to allow both identity-hash and proposal-reference values).
 	specNodeDef := recordProps["spec_node_id"].(map[string]any)
-	if specNodeDef["pattern"] == nil {
-		t.Fatal("spec_node_id missing pattern constraint")
+	if _, ok := specNodeDef["minLength"]; !ok {
+		t.Fatal("spec_node_id missing minLength constraint")
 	}
 }
 

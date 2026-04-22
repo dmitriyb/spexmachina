@@ -59,8 +59,18 @@ func runApplyE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("apply: %w", err)
 	}
 
+	// SpecGraph gives test_section describes arrays for the BeadCreator
+	// defense-in-depth gate. A nil graph would cause DescribesCount to fall
+	// through to 0, tripping the gate on valid multi-component test_sections
+	// with a misleading "ActionClassifier should have filtered it" error — so
+	// propagate the error instead of swallowing it.
+	specGraph, err := mapping.NewSpecGraph(specDir)
+	if err != nil {
+		return fmt.Errorf("apply: load spec graph: %w", err)
+	}
+
 	// Convert impact actions to apply actions.
-	creates := convertCreateActions(report.Creates, modules, contents, store)
+	creates := convertCreateActions(report.Creates, modules, contents, store, specGraph)
 	obsoletes := convertObsoleteActions(report.Obsoletes)
 
 	opts := apply.ApplyOpts{
@@ -119,7 +129,7 @@ func resolveNodeName(modules map[string]impact.NodeMap, module, node string) str
 // convertCreateActions converts impact create actions to apply actions.
 // SpecNodeID flows through unchanged from the impact report — both the merkle
 // diff and the mapping store are keyed by the same identity hash.
-func convertCreateActions(creates []impact.Action, modules map[string]impact.NodeMap, contents map[string]ContentMap, store mapping.Store) []apply.Action {
+func convertCreateActions(creates []impact.Action, modules map[string]impact.NodeMap, contents map[string]ContentMap, store mapping.Store, specGraph mapping.SpecGraph) []apply.Action {
 	actions := make([]apply.Action, 0, len(creates))
 	for _, c := range creates {
 		name := resolveNodeName(modules, c.Module, c.Node)
@@ -135,19 +145,39 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 		}
 
 		actions = append(actions, apply.Action{
-			Module:      c.Module,
-			Node:        name,
-			NodeType:    c.NodeType,
-			SpecHash:    c.SpecHash,
-			SpecNodeID:  c.SpecNodeID,
-			ContentFile: contentFile,
-			OldBeadID:   c.OldBeadID,
-			DepBeadIDs:  c.DepBeadIDs,
-			Priority:    -1,
-			Reason:      c.Reason,
+			Module:         c.Module,
+			Node:           name,
+			NodeType:       c.NodeType,
+			SpecHash:       c.SpecHash,
+			SpecNodeID:     c.SpecNodeID,
+			ContentFile:    contentFile,
+			OldBeadID:      c.OldBeadID,
+			DepBeadIDs:     c.DepBeadIDs,
+			DescribesCount: describesCount(specGraph, c.Module, c.NodeType, c.SpecNodeID),
+			Priority:       -1,
+			Reason:         c.Reason,
 		})
 	}
 	return actions
+}
+
+// describesCount returns the length of a test_section's describes array.
+// Returns 0 for non-test_section nodes or when the spec graph cannot resolve
+// the module/section (e.g. graph nil or lookup failure).
+func describesCount(specGraph mapping.SpecGraph, module, nodeType, specNodeID string) int {
+	if nodeType != "test_section" || specGraph == nil {
+		return 0
+	}
+	modInfo, err := specGraph.ModuleByName(module)
+	if err != nil {
+		return 0
+	}
+	for _, ts := range modInfo.TestSections {
+		if ts.ID == specNodeID {
+			return len(ts.Describes)
+		}
+	}
+	return 0
 }
 
 // resolveContentFile looks up the content file path for a node via the

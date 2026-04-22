@@ -23,6 +23,7 @@ type Record struct {
 	SpecNodeID  string `json:"spec_node_id"`
 	BeadID      string `json:"bead_id"`
 	BeadType    string `json:"bead_type"`
+	NodeType    string `json:"node_type,omitempty"`
 	Module      string `json:"module"`
 	Component   string `json:"component"`
 	ContentFile string `json:"content_file"`
@@ -100,7 +101,10 @@ func (s *fileStore) Create(r Record) (int, error) {
 		if existing.BeadID == r.BeadID {
 			return 0, fmt.Errorf("map: duplicate bead_id %q", r.BeadID)
 		}
-		if existing.SpecNodeID == r.SpecNodeID {
+		// Proposal epic records share spec_node_id across apply runs by design
+		// (one new epic per run, all referencing the same proposal). Skip the
+		// uniqueness check for those; other node types still enforce it.
+		if r.NodeType != "proposal" && existing.SpecNodeID == r.SpecNodeID {
 			return 0, fmt.Errorf("map: duplicate spec_node_id %q (record %d)", r.SpecNodeID, existing.ID)
 		}
 	}
