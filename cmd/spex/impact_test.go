@@ -382,12 +382,13 @@ func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
 	}
 }
 
-// TestFR7_ImpactCommand_ResolvesDepBeadIDs verifies that the impact command
-// populates DepBeadIDs on create actions via ResolveDeps post-processing.
-// Setup: module "beta" requires module "alpha". Alpha has an open bead.
-// When beta's component is modified, the create action should carry alpha's
-// open bead ID in DepBeadIDs (requires_module transitive resolution).
-func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
+// TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs verifies that the impact
+// command populates DepSpecNodeIDs on create actions with identity hashes
+// (not bead IDs — emit's Resolver does that).
+// Setup: module "beta" requires module "alpha". When beta's component is
+// modified, the create action should carry alpha component's identity hash
+// in DepSpecNodeIDs (requires_module transitive resolution).
+func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
 
@@ -492,26 +493,27 @@ func TestFR7_ImpactCommand_ResolvesDepBeadIDs(t *testing.T) {
 	}
 
 	// Find the create action for beta's component — it should have
-	// bead-alpha in DepBeadIDs (via requires_module resolution).
+	// alphaCompID in DepSpecNodeIDs (via requires_module resolution).
 	for _, c := range report.Creates {
 		if c.Module == "beta" && c.OldBeadID == "bead-beta" {
-			if len(c.DepBeadIDs) == 0 {
-				t.Fatal("want DepBeadIDs populated for beta create, got empty")
+			if len(c.DepSpecNodeIDs) == 0 {
+				t.Fatal("want DepSpecNodeIDs populated for beta create, got empty")
 			}
-			for _, dep := range c.DepBeadIDs {
-				if dep == "bead-alpha" {
+			for _, dep := range c.DepSpecNodeIDs {
+				if dep == alphaCompID {
 					return // success
 				}
 			}
-			t.Fatalf("want bead-alpha in DepBeadIDs, got %v", c.DepBeadIDs)
+			t.Fatalf("want %s in DepSpecNodeIDs, got %v", alphaCompID, c.DepSpecNodeIDs)
 		}
 	}
 	t.Fatal("create action for beta component with OldBeadID=bead-beta not found")
 }
 
-// TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs verifies that intra-module
-// component `uses` edges are resolved into DepBeadIDs.
-func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
+// TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs verifies that
+// intra-module component `uses` edges contribute identity hashes to
+// DepSpecNodeIDs on the consumer's create action.
+func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
 
@@ -598,12 +600,12 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepBeadIDs(t *testing.T) {
 
 	for _, c := range report.Creates {
 		if c.Module == "mod" && c.OldBeadID == "bead-user" {
-			for _, dep := range c.DepBeadIDs {
-				if dep == "bead-base" {
-					return // success: uses edge resolved
+			for _, dep := range c.DepSpecNodeIDs {
+				if dep == baseID {
+					return // success: uses edge contributed baseID
 				}
 			}
-			t.Fatalf("want bead-base in DepBeadIDs (uses edge), got %v", c.DepBeadIDs)
+			t.Fatalf("want %s in DepSpecNodeIDs (uses edge), got %v", baseID, c.DepSpecNodeIDs)
 		}
 	}
 	t.Fatal("create action for User component with OldBeadID=bead-user not found")

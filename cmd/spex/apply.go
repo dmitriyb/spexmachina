@@ -152,7 +152,11 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 			SpecNodeID:     c.SpecNodeID,
 			ContentFile:    contentFile,
 			OldBeadID:      c.OldBeadID,
-			DepBeadIDs:     c.DepBeadIDs,
+			// TODO(bead:spexmachina-0lk.3): apply is being retired. DepSpecNodeIDs
+			// now carries identity hashes, not bead IDs — emit's Resolver owns the
+			// bead-ID resolution. apply.Action.DepBeadIDs is left empty here until
+			// the apply → emit cutover completes.
+			DepBeadIDs:     nil,
 			DescribesCount: describesCount(specGraph, c.Module, c.NodeType, c.SpecNodeID),
 			Priority:       -1,
 			Reason:         c.Reason,

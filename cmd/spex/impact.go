@@ -90,15 +90,10 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	}
 
 	// Changes and records both key on identity hashes; NodeMatcher joins them
-	// directly without any path-format translation.
+	// directly without any path-format translation. DepSpecNodeIDs is filled
+	// inline by ClassifyActions — bead-ID resolution is deferred to emit.
 	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
 	actions := impact.ClassifyActions(specGraph, matches, unmatched, orphaned)
-
-	for i := range actions {
-		if actions[i].Type == "create" {
-			actions[i].DepBeadIDs = impact.ResolveDeps(specGraph, records, actions[i])
-		}
-	}
 
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
 		return fmt.Errorf("impact: %w", err)
