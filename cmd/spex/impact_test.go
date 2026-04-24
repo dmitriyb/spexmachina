@@ -631,34 +631,17 @@ func writeEmptyBeadStub(t *testing.T) string {
 // Regression guard for spexmachina-idd: previously BeadStatus was never
 // populated on production code paths, so cleanup creates never fired.
 func TestEnrichRecordsWithBeadStatus(t *testing.T) {
-	dir := t.TempDir()
-	stub := filepath.Join(dir, "br-stub")
-	jsonFile := filepath.Join(dir, "beads.json")
-
-	// Envelope shape with three beads: one closed, one open, one unrelated.
-	// Record 99 has no corresponding bead — its BeadStatus must stay empty.
-	payload := `{"issues":[
-		{"id":"bead-1","status":"closed","labels":["spex:10"]},
-		{"id":"bead-2","status":"open","labels":["spex:11"]},
-		{"id":"unrelated","status":"open","labels":["team:backend"]}
-	]}`
-	if err := os.WriteFile(jsonFile, []byte(payload), 0o644); err != nil {
-		t.Fatal(err)
+	beads := []impact.BeadSpec{
+		{ID: "bead-1", Status: "closed", RecordID: 10, Labels: []string{"spex:10"}},
+		{ID: "bead-2", Status: "open", RecordID: 11, Labels: []string{"spex:11"}},
 	}
-	if err := os.WriteFile(stub, []byte("#!/bin/sh\ncat "+jsonFile+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
 	records := []mapping.Record{
 		{ID: 10, BeadID: "bead-1", SpecNodeID: "aaa", Module: "alpha", Component: "A", ContentFile: "a.md"},
 		{ID: 11, BeadID: "bead-2", SpecNodeID: "bbb", Module: "alpha", Component: "B", ContentFile: "b.md"},
 		{ID: 99, BeadID: "bead-missing", SpecNodeID: "ccc", Module: "alpha", Component: "Gone", ContentFile: "c.md"},
 	}
 
-	enriched, err := enrichRecordsWithBeadStatus(t.Context(), stub, records)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	enriched := enrichRecordsWithBeadStatus(beads, records)
 	if len(enriched) != 3 {
 		t.Fatalf("want 3 records, got %d", len(enriched))
 	}
@@ -673,13 +656,10 @@ func TestEnrichRecordsWithBeadStatus(t *testing.T) {
 	}
 }
 
-// TestEnrichRecordsWithBeadStatus_EmptyInput verifies zero-record input
-// short-circuits without invoking the bead CLI.
+// TestEnrichRecordsWithBeadStatus_EmptyInput verifies zero-record input is
+// returned untouched.
 func TestEnrichRecordsWithBeadStatus_EmptyInput(t *testing.T) {
-	out, err := enrichRecordsWithBeadStatus(t.Context(), "/does/not/exist", nil)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	out := enrichRecordsWithBeadStatus(nil, nil)
 	if out != nil {
 		t.Errorf("want nil slice, got %v", out)
 	}

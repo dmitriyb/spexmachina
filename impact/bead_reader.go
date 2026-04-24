@@ -2,95 +2,108 @@
 package impact
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os/exec"
+	"io"
 	"strconv"
 	"strings"
 )
 
-// BeadSpec holds the spec-related metadata extracted from a bead's labels.
+// BeadSpec holds the spec-related metadata extracted from a tracker bead.
 type BeadSpec struct {
-	ID       string // bead ID
-	Status   string // bead status
-	RecordID int    // mapping record ID from "spex:<id>" label
+	ID       string   // tracker bead ID, e.g. "spexmachina-abc"
+	RecordID int      // integer parsed from the "spex:<n>" label
+	Status   string   // live status: open | in_progress | closed | blocked | deferred
+	Labels   []string // all labels, retained for downstream filters
 }
 
 // NodeMap maps node identifiers to their canonical spec node names.
 // Used by the apply command for resolving spec-ID keys to human-readable names.
 type NodeMap map[string]string
 
-// rawBead is the JSON shape returned by `<bin> list --json`.
-type rawBead struct {
+// trackerBead mirrors the input JSON shape.
+type trackerBead struct {
 	ID     string   `json:"id"`
 	Status string   `json:"status"`
 	Labels []string `json:"labels"`
 }
 
-// ReadBeads calls the bead CLI to list every bead (regardless of status) and
-// extracts those that carry a `spex:<record-id>` label. Beads without that
-// label are ignored.
+// wrappedInput is the {"issues": [...]} envelope produced by br list --json.
+type wrappedInput struct {
+	Issues []trackerBead `json:"issues"`
+}
+
+// ReadBeads decodes tracker list output from r into []BeadSpec. It is a pure
+// parser: it performs no subprocess invocation and makes no live tracker
+// calls. Callers feed it the bytes of `br list --json` (or any tracker whose
+// output conforms to the same shape) via --beads file input or stdin.
 //
-// Passes explicit status filters because br list defaults to excluding closed
-// beads, which would hide exactly the records the cleanup classifier needs.
-// Also passes --limit 0 to bypass the default 50-bead cap. bd ignores these
-// flags when they are unrecognised, so the same command works for both CLIs.
-func ReadBeads(ctx context.Context, bin string) ([]BeadSpec, error) {
-	out, err := exec.CommandContext(ctx, bin, "list",
-		"-s", "open",
-		"-s", "in_progress",
-		"-s", "blocked",
-		"-s", "closed",
-		"-s", "deferred",
-		"--limit", "0",
-		"--json",
-	).Output()
+// Accepted input shapes:
+//   - wrapped: {"issues": [...]}
+//   - bare array: [...]
+//
+// Only beads carrying a spex:<n> label are returned; others are silently
+// dropped. An empty valid array returns an empty slice, not an error.
+func ReadBeads(r io.Reader) ([]BeadSpec, error) {
+	data, err := io.ReadAll(r)
 	if err != nil {
-		msg := ""
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			msg = string(exitErr.Stderr)
+		return nil, fmt.Errorf("impact: read beads: %w", err)
+	}
+	return ReadBeadsBytes(data)
+}
+
+// ReadBeadsBytes is ReadBeads for callers that already have the payload in
+// memory.
+func ReadBeadsBytes(data []byte) ([]BeadSpec, error) {
+	beads, err := decodeBeads(data)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]BeadSpec, 0, len(beads))
+	for i, b := range beads {
+		if b.ID == "" {
+			return nil, fmt.Errorf("impact: read beads: missing bead id at index %d", i)
 		}
-		return nil, fmt.Errorf("impact: read beads: %s list --json: %w\n%s", bin, err, msg)
-	}
-
-	// br list --json returns {"issues": [...]}; bd list --json returns a bare
-	// array. Accept both shapes so the reader works across bead CLIs.
-	var envelope struct {
-		Issues []rawBead `json:"issues"`
-	}
-	var raw []rawBead
-	if err := json.Unmarshal(out, &envelope); err == nil && envelope.Issues != nil {
-		raw = envelope.Issues
-	} else if err := json.Unmarshal(out, &raw); err != nil {
-		return nil, fmt.Errorf("impact: read beads: parse JSON: %w", err)
-	}
-
-	var beads []BeadSpec
-	for _, r := range raw {
-		recID, ok := extractRecordID(r.Labels)
+		recID, ok := extractRecordID(b.Labels)
 		if !ok {
 			continue
 		}
-		beads = append(beads, BeadSpec{
-			ID:       r.ID,
-			Status:   r.Status,
+		out = append(out, BeadSpec{
+			ID:       b.ID,
 			RecordID: recID,
+			Status:   b.Status,
+			Labels:   b.Labels,
 		})
+	}
+	return out, nil
+}
+
+// decodeBeads tries the wrapped envelope first and falls back to a bare
+// array. A single parse error from the bare-array path is what gets surfaced
+// to the caller — the wrapped attempt is best-effort.
+func decodeBeads(data []byte) ([]trackerBead, error) {
+	var wrap wrappedInput
+	if err := json.Unmarshal(data, &wrap); err == nil && wrap.Issues != nil {
+		return wrap.Issues, nil
+	}
+	var beads []trackerBead
+	if err := json.Unmarshal(data, &beads); err != nil {
+		return nil, fmt.Errorf("impact: read beads: parse: %w", err)
 	}
 	return beads, nil
 }
 
-// extractRecordID finds the spex:<record-id> label and returns the integer ID.
+// extractRecordID returns the integer from the first well-formed spex:<n>
+// label. Non-numeric spex: values are skipped, matching defensive intent —
+// validator-level rules should prevent them, but the reader does not error.
 func extractRecordID(labels []string) (int, bool) {
-	for _, label := range labels {
-		if strings.HasPrefix(label, "spex:") {
-			id, err := strconv.Atoi(strings.TrimPrefix(label, "spex:"))
-			if err == nil && id >= 0 {
-				return id, true
-			}
+	for _, lbl := range labels {
+		if !strings.HasPrefix(lbl, "spex:") {
+			continue
+		}
+		if n, err := strconv.Atoi(strings.TrimPrefix(lbl, "spex:")); err == nil && n >= 0 {
+			return n, true
 		}
 	}
 	return 0, false
