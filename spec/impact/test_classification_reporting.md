@@ -267,108 +267,126 @@ If the same spec node change appears in both `matches` and `unmatched` due to up
 
 Write the report output to a buffer, then unmarshal it back into an `ImpactReport` struct. Assert the round-trip produces identical data. This validates that the JSON is well-formed and the struct tags are correct.
 
-## Dependency Resolution Scenarios
+## Dependency Collection Scenarios
 
-These scenarios test the spec-graph dependency resolution that runs after action classification (requirement 7). For each create action, the ActionClassifier resolves `uses` (intra-module) and `requires_module` (inter-module, transitive) edges to current bead IDs via the mapping file. Only open (non-closed) bead dependencies are included.
+These scenarios test the spec-graph dependency collection that runs alongside action classification. For each create action with `node_type=component`, ActionClassifier walks the spec graph and records identity hashes of spec nodes the new bead will depend on in `DepSpecNodeIDs`. No mapping-store lookup and no bead-status filtering happens here — emit's Resolver classifies each identity hash into a `ref:op` / `ref:bead` / `ref:spec_node` at emit time. This defers bead-ID resolution to the point where the current batch's op IDs are known, fixing the broken-dep-graph bug where an obsoleted-in-the-same-batch bead was picked up as a dependency.
 
-### D1: Component uses edge resolves to open dependency bead
+### D1: Component `uses` edge collects the sibling's identity hash
 
-Given a create action for component X in module A, where X `uses: [Y]` and Y has an open bead `spex-050` in the mapping file.
-
-When `ClassifyActions` runs with dependency resolution enabled:
-
-Then the create action for X has `DepBeadIDs: ["spex-050"]`.
-
-### D2: Component uses edge skips closed dependency bead
-
-Given a create action for component X where X `uses: [Y]` and Y's bead `spex-051` is closed.
+Given a create action for component X in module A, where X `uses: [Y]` and Y is another component in module A with identity hash `id_Y`.
 
 When `ClassifyActions` runs:
 
-Then the create action for X has `DepBeadIDs: []` (empty) — the dependency is already satisfied.
+Then X's `DepSpecNodeIDs` contains `id_Y`. A self-reference (X's own identity hash) is filtered out.
 
-### D3: requires_module resolves to all open component beads in the required module
+### D2: Bead status is irrelevant to collection
 
-Given a create action for a component in module A, where A `requires_module: [B]`. Module B has three component beads: `spex-060` (open), `spex-061` (closed), `spex-062` (open).
+Given a create action for component X whose `uses: [Y]`, and the mapping records for Y show a closed bead.
 
 When `ClassifyActions` runs:
 
-Then the create action has `DepBeadIDs` containing `spex-060` and `spex-062` (the two open beads). The closed bead `spex-061` is excluded.
+Then X's `DepSpecNodeIDs` still contains `id_Y`. The classifier does not peek at `Records.BeadStatus` — filtering "already-satisfied" deps is emit's responsibility.
 
-### D4: Transitive requires_module resolution
+### D3: Transitive `requires_module` collects every reachable module's components
 
-Given module A `requires_module: [B]` and module B `requires_module: [C]`. Module B has open bead `spex-070`. Module C has open bead `spex-071`.
+Given a create action for a component in module A, where A `requires_module: [B]` and B `requires_module: [C]`. Module B has component CompB; module C has component CompC.
 
-When a create action for a component in module A is classified:
+When `ClassifyActions` runs:
 
-Then `DepBeadIDs` contains both `spex-070` and `spex-071`. Transitive module dependencies are fully resolved.
+Then the create action's `DepSpecNodeIDs` contains both `id_CompB` and `id_CompC`. Transitive module reachability pulls in every component identity hash along the closure.
 
-### D5: Component uses edges are NOT transitive
+### D4: Component `uses` edges are NOT transitive
 
-Given component X `uses: [Y]` and Y `uses: [Z]`. Y has open bead `spex-080`, Z has open bead `spex-081`.
+Given component X `uses: [Y]` and Y `uses: [Z]`.
 
 When a create action for X is classified:
 
-Then `DepBeadIDs` contains only `spex-080` (direct dependency Y). Z's bead is not included — component `uses` are direct only, matching PreflightChecker semantics.
+Then `DepSpecNodeIDs` contains only `id_Y`. Z is not included — component `uses` walks one hop only, matching PreflightChecker semantics.
 
-### D6: Mixed uses and requires_module dependencies are combined
+### D5: Mixed `uses` and `requires_module` are merged and deduplicated
 
-Given a create action for component X in module A, where X `uses: [Y]` (Y has open bead `spex-090`), and A `requires_module: [B]` (B has open bead `spex-091`).
-
-When `ClassifyActions` runs:
-
-Then `DepBeadIDs` contains both `spex-090` and `spex-091`. Intra-module and inter-module dependencies are merged.
-
-### D7: No dependencies when all dependency beads are closed
-
-Given a create action for a component with `uses: [Y, Z]` where both Y and Z have closed beads, and the module's `requires_module` targets also have all-closed beads.
+Given component X in module A where X `uses: [Y]` (Y sits in module A), and A `requires_module: [B]` with B containing CompB.
 
 When `ClassifyActions` runs:
 
-Then `DepBeadIDs` is empty. All dependencies are satisfied.
+Then `DepSpecNodeIDs` contains both `id_Y` and `id_CompB`. Duplicates are removed — if the walks hit the same identity hash twice, it appears once.
 
-### D8: No dependencies for nodes without uses or requires_module edges
+### D6: No edges yields empty `DepSpecNodeIDs`
 
 Given a create action for a component with no `uses` edges in a module with no `requires_module` edges.
 
 When `ClassifyActions` runs:
 
-Then `DepBeadIDs` is empty. No dependency resolution is needed.
+Then `DepSpecNodeIDs` is empty (length zero).
 
-### D9: Cycle detection in requires_module traversal
+### D7: `requires_module` cycle terminates and collects each reachable module once
 
 Given module A `requires_module: [B]` and module B `requires_module: [A]` (a cycle — invalid but must not hang).
 
-When dependency resolution runs for a component in A:
+When `ClassifyActions` runs for a component in A:
 
-Then the resolver detects the cycle and terminates without infinite recursion. The cycle is reported as an error or the already-visited module is skipped.
+Then the walk terminates via visited-set tracking and `DepSpecNodeIDs` includes `id_CompB` (B is reachable from A). The cycle does not cause infinite recursion.
 
-### D10: ReportGenerator includes DepBeadIDs in create action JSON
+### D8: Data_flow add-on — component gains the flow's identity hash when both are in the same batch
 
-Given a create action with `DepBeadIDs: ["spex-100", "spex-101"]`.
+Given a data_flow F in module M with `uses: [X]` (listing component X), and both F and X are in the current batch of changes (both produce create actions).
+
+When `ClassifyActions` runs:
+
+Then the create action for X has `DepSpecNodeIDs` containing `id_F`. This ensures emit's topological sort places the data_flow op first and the component ops gain a `ref:op` dependency on it (the contract-layer guarantee).
+
+### D9: Data_flow add-on does not apply to components the flow does not list
+
+Given data_flow F with `uses: [X]` and component Y (not listed in F's `uses`), both F and Y are in the same batch.
+
+When `ClassifyActions` runs:
+
+Then Y's `DepSpecNodeIDs` does NOT contain `id_F`. Only components explicitly listed in the flow's `uses` pick up the add-on.
+
+### D10: Data_flow add-on fires only for flows in the current batch
+
+Given data_flow F exists in the spec graph with `uses: [X]`, but F is not in the current batch of changes (it was created in a previous run). Only X is in the batch.
+
+When `ClassifyActions` runs:
+
+Then X's `DepSpecNodeIDs` does NOT contain `id_F`. Pre-existing data_flow dependencies are emit's concern — it resolves them to `ref:bead` or `ref:spec_node` from the mapping store. Only same-batch flows need the add-on.
+
+### D11: Non-component creates do not walk `uses` / `requires_module`
+
+Given a create action for a data_flow (or test_section) in module M, where M `requires_module: [A]`.
+
+When `ClassifyActions` runs:
+
+Then the create action's `DepSpecNodeIDs` is empty. The `uses` / `requires_module` walk is component-only. Data_flow and test_section creates carry no spec-graph deps from classification — their ordering inside the batch is driven by the data_flow add-on (D8) applied to the components on the other side.
+
+### D12: Nil spec graph leaves `DepSpecNodeIDs` empty
+
+Given `ClassifyActions(nil, ...)` — the caller does not supply a spec graph (e.g., a legacy call site).
+
+When classification runs:
+
+Then every create action has an empty `DepSpecNodeIDs`. No dependency walk happens. Classification itself (action types, reasons, bead IDs) still works.
+
+### D13: Obsolete actions never carry `DepSpecNodeIDs`
+
+Given any obsolete action (modified-with-bead, removed-with-bead, cleanup pair).
+
+When `ClassifyActions` runs:
+
+Then the obsolete action's `DepSpecNodeIDs` is empty. Dependency information belongs on creates only — obsolete actions describe work on an existing bead and inherit its existing graph position.
+
+### D14: ReportGenerator serializes `dep_spec_node_ids` for creates
+
+Given a create action with `DepSpecNodeIDs: ["abc123...", "def456..."]` (two identity hashes).
 
 When `GenerateReport` serializes the action:
 
-Then the JSON output for that create action includes:
+Then the JSON output includes:
 ```json
 {
-  "dep_bead_ids": ["spex-100", "spex-101"],
+  "dep_spec_node_ids": ["abc123...", "def456..."],
   ...
 }
 ```
 
-### D11: ReportGenerator omits dep_bead_ids when empty
-
-Given a create action with `DepBeadIDs: []` or nil.
-
-When `GenerateReport` serializes:
-
-Then the JSON output either omits `dep_bead_ids` or includes an empty array. Both are valid — the downstream consumer (apply) treats both as "no spec-graph dependencies."
-
-### D12: Dependency resolution with beads created in the same apply run
-
-Given create actions for both component X and component Y, where X `uses: [Y]`. Neither has an existing bead in the mapping file yet.
-
-When `ClassifyActions` runs:
-
-Then X's `DepBeadIDs` does not include Y (Y has no bead ID yet — it hasn't been created). The actual dependency ordering is handled by ApplyCommand's topological sort, not by the impact module. The impact module can only resolve dependencies against existing mapping file entries.
+When `DepSpecNodeIDs` is empty or nil, the field is omitted via `omitempty`.

@@ -11,17 +11,17 @@ import (
 // Action represents a classified impact action for a spec node.
 // Only two action types exist: "create" and "obsolete".
 type Action struct {
-	Type           string   `json:"type"`                      // "create" or "obsolete"
-	BeadID         string   `json:"bead_id,omitempty"`         // existing bead ID (for "obsolete"); empty for "create"
-	Module         string   `json:"module"`                    // affected module
-	Node           string   `json:"node"`                      // affected spec node name
-	NodeType       string   `json:"node_type,omitempty"`       // spec node type (component, data_flow, test_section, impl_section, etc.)
-	SpecNodeID     string   `json:"spec_node_id,omitempty"`    // identity hash of the affected node — lookup key into the mapping store
-	SpecHash       string   `json:"spec_hash,omitempty"`       // current merkle hash (for "create")
-	OldBeadID      string   `json:"old_bead_id,omitempty"`     // predecessor bead ID (for "create" replacing an obsoleted bead)
+	Type           string   `json:"type"`                        // "create" or "obsolete"
+	BeadID         string   `json:"bead_id,omitempty"`           // existing bead ID (for "obsolete"); empty for "create"
+	Module         string   `json:"module"`                      // affected module
+	Node           string   `json:"node"`                        // affected spec node name
+	NodeType       string   `json:"node_type,omitempty"`         // spec node type (component, data_flow, test_section, impl_section, etc.)
+	SpecNodeID     string   `json:"spec_node_id,omitempty"`      // identity hash of the affected node — lookup key into the mapping store
+	SpecHash       string   `json:"spec_hash,omitempty"`         // current merkle hash (for "create")
+	OldBeadID      string   `json:"old_bead_id,omitempty"`       // predecessor bead ID (for "create" replacing an obsoleted bead)
 	DepSpecNodeIDs []string `json:"dep_spec_node_ids,omitempty"` // identity hashes of spec nodes this action's bead should depend on — resolved to refs by emit
-	ChangeType     string   `json:"change_type,omitempty"`     // "modified" or "removed" (set by classifier for obsolete actions)
-	Reason         string   `json:"reason"`                    // human-readable explanation
+	ChangeType     string   `json:"change_type,omitempty"`       // "modified" or "removed" (set by classifier for obsolete actions)
+	Reason         string   `json:"reason"`                      // human-readable explanation
 }
 
 // beadProducingTypes are the node types that may produce a bead when changed.

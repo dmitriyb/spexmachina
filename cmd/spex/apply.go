@@ -145,13 +145,13 @@ func convertCreateActions(creates []impact.Action, modules map[string]impact.Nod
 		}
 
 		actions = append(actions, apply.Action{
-			Module:         c.Module,
-			Node:           name,
-			NodeType:       c.NodeType,
-			SpecHash:       c.SpecHash,
-			SpecNodeID:     c.SpecNodeID,
-			ContentFile:    contentFile,
-			OldBeadID:      c.OldBeadID,
+			Module:      c.Module,
+			Node:        name,
+			NodeType:    c.NodeType,
+			SpecHash:    c.SpecHash,
+			SpecNodeID:  c.SpecNodeID,
+			ContentFile: contentFile,
+			OldBeadID:   c.OldBeadID,
 			// TODO(bead:spexmachina-0lk.3): apply is being retired. DepSpecNodeIDs
 			// now carries identity hashes, not bead IDs — emit's Resolver owns the
 			// bead-ID resolution. apply.Action.DepBeadIDs is left empty here until
