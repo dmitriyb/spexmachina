@@ -1,193 +1,252 @@
 package impact
 
 import (
-	"context"
-	"encoding/json"
-	"os"
-	"path/filepath"
+	"bytes"
+	"reflect"
 	"strings"
 	"testing"
 )
 
-func TestFR1_ReadBeadsExtractsRecordID(t *testing.T) {
-	stub := writeStubCLI(t, []rawBead{
-		{
-			ID:     "abc-123",
-			Status: "open",
-			Labels: []string{"spex:42"},
-		},
-		{
-			ID:     "def-456",
-			Status: "in_progress",
-			Labels: []string{"spex:7"},
-		},
-	})
+// TestReadBeadsBytes_WrappedShape verifies that ReadBeadsBytes accepts the
+// {"issues": [...]} envelope form produced by br list --json.
+func TestReadBeadsBytes_WrappedShape(t *testing.T) {
+	data := []byte(`{"issues":[{"id":"sm-1","status":"open","labels":["spex:42"]}]}`)
 
-	beads, err := ReadBeads(context.Background(), stub)
+	got, err := ReadBeadsBytes(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(beads) != 2 {
-		t.Fatalf("want 2 beads, got %d", len(beads))
-	}
-
-	b := beads[0]
-	if b.ID != "abc-123" {
-		t.Errorf("want ID abc-123, got %s", b.ID)
-	}
-	if b.Status != "open" {
-		t.Errorf("want status open, got %s", b.Status)
-	}
-	if b.RecordID != 42 {
-		t.Errorf("want RecordID 42, got %d", b.RecordID)
-	}
-
-	b2 := beads[1]
-	if b2.ID != "def-456" {
-		t.Errorf("want ID def-456, got %s", b2.ID)
-	}
-	if b2.RecordID != 7 {
-		t.Errorf("want RecordID 7, got %d", b2.RecordID)
+	want := []BeadSpec{{
+		ID:       "sm-1",
+		RecordID: 42,
+		Status:   "open",
+		Labels:   []string{"spex:42"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
 
-func TestFR1_ReadBeadsIgnoresNonSpecBeads(t *testing.T) {
-	stub := writeStubCLI(t, []rawBead{
-		{
-			ID:     "spec-bead",
-			Status: "open",
-			Labels: []string{"spex:1"},
-		},
-		{
-			ID:     "plain-bead",
-			Status: "open",
-			Labels: []string{"priority:high"},
-		},
-		{
-			ID:     "no-labels",
-			Status: "open",
-			Labels: []string{},
-		},
-	})
+// TestReadBeadsBytes_BareArrayShape verifies that ReadBeadsBytes accepts the
+// bare [...] form for adapter-produced JSON.
+func TestReadBeadsBytes_BareArrayShape(t *testing.T) {
+	data := []byte(`[{"id":"sm-2","status":"closed","labels":["spex:7","team:x"]}]`)
 
-	beads, err := ReadBeads(context.Background(), stub)
+	got, err := ReadBeadsBytes(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(beads) != 1 {
-		t.Fatalf("want 1 bead, got %d", len(beads))
-	}
-	if beads[0].ID != "spec-bead" {
-		t.Errorf("want spec-bead, got %s", beads[0].ID)
+	want := []BeadSpec{{
+		ID:       "sm-2",
+		RecordID: 7,
+		Status:   "closed",
+		Labels:   []string{"spex:7", "team:x"},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %#v, want %#v", got, want)
 	}
 }
 
-func TestFR1_ReadBeadsEmptyList(t *testing.T) {
-	stub := writeStubCLI(t, []rawBead{})
+// TestReadBeadsBytes_OrderPreserved verifies BeadSpec output preserves the
+// input JSON order (determinism requirement).
+func TestReadBeadsBytes_OrderPreserved(t *testing.T) {
+	data := []byte(`{"issues":[
+		{"id":"a","status":"open","labels":["spex:3"]},
+		{"id":"b","status":"open","labels":["spex:1"]},
+		{"id":"c","status":"open","labels":["spex:2"]}
+	]}`)
 
-	beads, err := ReadBeads(context.Background(), stub)
+	got, err := ReadBeadsBytes(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(beads) != 0 {
-		t.Errorf("want 0 beads, got %d", len(beads))
+	if len(got) != 3 {
+		t.Fatalf("want 3 beads, got %d", len(got))
+	}
+	wantIDs := []string{"a", "b", "c"}
+	for i, id := range wantIDs {
+		if got[i].ID != id {
+			t.Errorf("index %d: got ID %q, want %q", i, got[i].ID, id)
+		}
 	}
 }
 
-func TestFR1_ReadBeadsCLINotFound(t *testing.T) {
-	_, err := ReadBeads(context.Background(), "nonexistent-bead-cli-xyz")
+// TestReadBeadsBytes_SkipsNonSpecManaged verifies beads without a spex: label
+// are dropped from the output (not errors).
+func TestReadBeadsBytes_SkipsNonSpecManaged(t *testing.T) {
+	data := []byte(`[
+		{"id":"spec-bead","status":"open","labels":["spex:1"]},
+		{"id":"plain-bead","status":"open","labels":["priority:high"]},
+		{"id":"no-labels","status":"open","labels":[]}
+	]`)
+
+	got, err := ReadBeadsBytes(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 bead, got %d", len(got))
+	}
+	if got[0].ID != "spec-bead" {
+		t.Errorf("want spec-bead, got %s", got[0].ID)
+	}
+}
+
+// TestReadBeadsBytes_EmptyArrayReturnsEmptySlice verifies an empty valid
+// array returns an empty slice, not an error.
+func TestReadBeadsBytes_EmptyArrayReturnsEmptySlice(t *testing.T) {
+	cases := map[string][]byte{
+		"bare":    []byte(`[]`),
+		"wrapped": []byte(`{"issues":[]}`),
+	}
+	for name, data := range cases {
+		t.Run(name, func(t *testing.T) {
+			got, err := ReadBeadsBytes(data)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if len(got) != 0 {
+				t.Errorf("want 0 beads, got %d: %#v", len(got), got)
+			}
+		})
+	}
+}
+
+// TestReadBeadsBytes_ValidButNoSpecManaged verifies a valid array with no
+// spex-labeled beads returns an empty slice, not an error.
+func TestReadBeadsBytes_ValidButNoSpecManaged(t *testing.T) {
+	data := []byte(`[{"id":"plain","status":"open","labels":["priority:high"]}]`)
+
+	got, err := ReadBeadsBytes(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("want 0 beads, got %d", len(got))
+	}
+}
+
+// TestReadBeadsBytes_MalformedJSONError verifies malformed JSON returns an
+// error wrapped with "impact: read beads: parse:".
+func TestReadBeadsBytes_MalformedJSONError(t *testing.T) {
+	_, err := ReadBeadsBytes([]byte(`not json`))
 	if err == nil {
-		t.Fatal("want error for missing CLI, got nil")
+		t.Fatal("want error, got nil")
 	}
-	if !strings.Contains(err.Error(), "impact: read beads:") {
-		t.Errorf("want wrapped error, got: %v", err)
+	if !strings.Contains(err.Error(), "impact: read beads: parse:") {
+		t.Errorf("want parse error prefix, got: %v", err)
 	}
 }
 
-func TestFR1_ReadBeadsCLIBadJSON(t *testing.T) {
-	dir := t.TempDir()
-	stub := filepath.Join(dir, "br-stub")
-	script := "#!/bin/sh\necho 'not json'\n"
-	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
+// TestReadBeadsBytes_MissingBeadID verifies a bead object without an id
+// returns a positional error.
+func TestReadBeadsBytes_MissingBeadID(t *testing.T) {
+	data := []byte(`[
+		{"id":"a","status":"open","labels":["spex:1"]},
+		{"status":"open","labels":["spex:2"]}
+	]`)
 
-	_, err := ReadBeads(context.Background(), stub)
+	_, err := ReadBeadsBytes(data)
 	if err == nil {
-		t.Fatal("want error for bad JSON, got nil")
+		t.Fatal("want error, got nil")
 	}
-	if !strings.Contains(err.Error(), "parse JSON") {
-		t.Errorf("want parse JSON error, got: %v", err)
+	if !strings.Contains(err.Error(), "impact: read beads: missing bead id at index 1") {
+		t.Errorf("want missing-id error at index 1, got: %v", err)
 	}
 }
 
-func TestFR1_ReadBeadsNoSpecLabelsReturnsEmpty(t *testing.T) {
-	stub := writeStubCLI(t, []rawBead{
-		{
-			ID:     "task-1",
-			Status: "open",
-			Labels: []string{"team:backend", "priority:high"},
-		},
-	})
+// TestReadBeadsBytes_FirstSpexLabelWins verifies the first spex: label wins
+// when multiple are present.
+func TestReadBeadsBytes_FirstSpexLabelWins(t *testing.T) {
+	data := []byte(`[{"id":"a","status":"open","labels":["spex:42","spex:99"]}]`)
 
-	beads, err := ReadBeads(context.Background(), stub)
+	got, err := ReadBeadsBytes(data)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if len(beads) != 0 {
-		t.Errorf("want 0 beads (no spex labels), got %d", len(beads))
+	if len(got) != 1 {
+		t.Fatalf("want 1 bead, got %d", len(got))
+	}
+	if got[0].RecordID != 42 {
+		t.Errorf("want RecordID 42 (first wins), got %d", got[0].RecordID)
 	}
 }
 
-func TestFR1_ExtractRecordID(t *testing.T) {
+// TestReadBeadsBytes_NonNumericSpexLabelSkipped verifies beads whose spex:
+// label has a non-numeric value are dropped (cannot be matched by RecordID).
+func TestReadBeadsBytes_NonNumericSpexLabelSkipped(t *testing.T) {
+	data := []byte(`[
+		{"id":"bad","status":"open","labels":["spex:abc"]},
+		{"id":"good","status":"open","labels":["spex:5"]}
+	]`)
+
+	got, err := ReadBeadsBytes(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("want 1 bead (bad dropped), got %d", len(got))
+	}
+	if got[0].ID != "good" || got[0].RecordID != 5 {
+		t.Errorf("want good/5, got %s/%d", got[0].ID, got[0].RecordID)
+	}
+}
+
+// TestReadBeadsBytes_CarriesLiveStatus verifies that bead status is carried
+// through for downstream cleanup-bead gating.
+func TestReadBeadsBytes_CarriesLiveStatus(t *testing.T) {
+	data := []byte(`[
+		{"id":"a","status":"open","labels":["spex:1"]},
+		{"id":"b","status":"in_progress","labels":["spex:2"]},
+		{"id":"c","status":"closed","labels":["spex:3"]}
+	]`)
+
+	got, err := ReadBeadsBytes(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wantStatus := []string{"open", "in_progress", "closed"}
+	for i, s := range wantStatus {
+		if got[i].Status != s {
+			t.Errorf("index %d: want status %q, got %q", i, s, got[i].Status)
+		}
+	}
+}
+
+// TestReadBeads_ReaderEquivalentToBytes verifies ReadBeads and ReadBeadsBytes
+// produce the same output.
+func TestReadBeads_ReaderEquivalentToBytes(t *testing.T) {
+	data := []byte(`{"issues":[{"id":"a","status":"open","labels":["spex:1"]}]}`)
+
+	fromBytes, err := ReadBeadsBytes(data)
+	if err != nil {
+		t.Fatalf("ReadBeadsBytes: %v", err)
+	}
+	fromReader, err := ReadBeads(bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("ReadBeads: %v", err)
+	}
+	if !reflect.DeepEqual(fromBytes, fromReader) {
+		t.Errorf("reader/bytes mismatch: bytes=%#v reader=%#v", fromBytes, fromReader)
+	}
+}
+
+// TestExtractRecordID covers the internal label-parsing helper.
+func TestExtractRecordID(t *testing.T) {
 	tests := []struct {
 		name   string
 		labels []string
 		wantID int
 		wantOK bool
 	}{
-		{
-			name:   "valid spex label",
-			labels: []string{"spex:42"},
-			wantID: 42,
-			wantOK: true,
-		},
-		{
-			name:   "spex label among others",
-			labels: []string{"team:backend", "spex:7", "priority:high"},
-			wantID: 7,
-			wantOK: true,
-		},
-		{
-			name:   "no spex label",
-			labels: []string{"priority:high"},
-			wantID: 0,
-			wantOK: false,
-		},
-		{
-			name:   "empty labels",
-			labels: []string{},
-			wantID: 0,
-			wantOK: false,
-		},
-		{
-			name:   "nil labels",
-			labels: nil,
-			wantID: 0,
-			wantOK: false,
-		},
-		{
-			name:   "spex label with non-numeric value",
-			labels: []string{"spex:abc"},
-			wantID: 0,
-			wantOK: false,
-		},
-		{
-			name:   "spex label with zero",
-			labels: []string{"spex:0"},
-			wantID: 0,
-			wantOK: true,
-		},
+		{"valid spex label", []string{"spex:42"}, 42, true},
+		{"spex label among others", []string{"team:backend", "spex:7", "priority:high"}, 7, true},
+		{"no spex label", []string{"priority:high"}, 0, false},
+		{"empty labels", []string{}, 0, false},
+		{"nil labels", nil, 0, false},
+		{"non-numeric spex value", []string{"spex:abc"}, 0, false},
+		{"spex zero", []string{"spex:0"}, 0, true},
+		{"first wins", []string{"spex:1", "spex:2"}, 1, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -198,65 +257,4 @@ func TestFR1_ExtractRecordID(t *testing.T) {
 			}
 		})
 	}
-}
-
-// TestReadBeadsParsesIssuesEnvelope verifies that ReadBeads accepts the
-// {"issues": [...]} envelope shape produced by br list --json. Regression
-// guard for spexmachina-idd: previously ReadBeads only accepted a bare
-// array, so every call against a real br binary failed with
-// "cannot unmarshal object into Go value of type []impact.rawBead".
-func TestReadBeadsParsesIssuesEnvelope(t *testing.T) {
-	dir := t.TempDir()
-	stub := filepath.Join(dir, "br-stub")
-	jsonFile := filepath.Join(dir, "data.json")
-
-	envelope := `{"issues":[
-		{"id":"abc-1","status":"closed","labels":["spex:10"]},
-		{"id":"def-2","status":"open","labels":["spex:11"]}
-	]}`
-	if err := os.WriteFile(jsonFile, []byte(envelope), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(stub, []byte("#!/bin/sh\ncat "+jsonFile+"\n"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	beads, err := ReadBeads(context.Background(), stub)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(beads) != 2 {
-		t.Fatalf("want 2 beads, got %d", len(beads))
-	}
-	if beads[0].Status != "closed" || beads[0].RecordID != 10 {
-		t.Errorf("bead[0]: want status=closed RecordID=10, got status=%s RecordID=%d", beads[0].Status, beads[0].RecordID)
-	}
-	if beads[1].Status != "open" || beads[1].RecordID != 11 {
-		t.Errorf("bead[1]: want status=open RecordID=11, got status=%s RecordID=%d", beads[1].Status, beads[1].RecordID)
-	}
-}
-
-// writeStubCLI creates a shell script that outputs the given beads as JSON
-// when called with "list --json". Returns the path to the script.
-func writeStubCLI(t *testing.T, beads []rawBead) string {
-	t.Helper()
-	data, err := json.Marshal(beads)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	dir := t.TempDir()
-	stub := filepath.Join(dir, "br-stub")
-
-	// Write JSON to a separate file and cat it to avoid quoting issues
-	jsonFile := filepath.Join(dir, "data.json")
-	if err := os.WriteFile(jsonFile, data, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	script := "#!/bin/sh\ncat " + jsonFile + "\n"
-	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	return stub
 }
