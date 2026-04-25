@@ -165,6 +165,10 @@ func (s *mockStore) List() ([]mapping.Record, error) {
 	return result, nil
 }
 
+func (s *mockStore) NextRecordID() (int, error) {
+	return s.nextID, nil
+}
+
 func (s *mockStore) addRecord(r mapping.Record) {
 	if r.ID == 0 {
 		r.ID = s.nextID
