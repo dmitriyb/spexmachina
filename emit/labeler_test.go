@@ -34,6 +34,9 @@ func (s *stubStore) GetByBead(string) (mapping.Record, error) {
 func (s *stubStore) GetBySpecNode(string) ([]mapping.Record, error) {
 	return nil, fmt.Errorf("stubStore.GetBySpecNode: not implemented")
 }
+func (s *stubStore) GetByProposalEpic(string) (mapping.Record, error) {
+	return mapping.Record{}, fmt.Errorf("stubStore.GetByProposalEpic: not implemented")
+}
 func (s *stubStore) Update(int, map[string]string) error {
 	return fmt.Errorf("stubStore.Update: not implemented")
 }
