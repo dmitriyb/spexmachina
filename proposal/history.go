@@ -1,7 +1,7 @@
 package proposal
 
 import (
-	"context"
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,190 +11,226 @@ import (
 	"strings"
 )
 
-// BeadRecord represents a bead from the bead CLI JSON output.
+// specProposalLabelPrefix is the bead-label prefix that links a bead to a
+// proposal stem (filename without .md). The first such label on a bead
+// determines the bead's proposal grouping; additional matching labels are
+// ignored.
+const specProposalLabelPrefix = "spec_proposal:"
+
+// missingProposalLabel is the human-readable suffix shown when a bead's
+// spec_proposal label points at a file that does not exist under
+// spec/proposals/. The bead is still surfaced so its provenance remains
+// visible.
+const missingProposalLabel = "proposal file missing"
+
+// BeadRecord is the shape HistoryViewer consumes. The caller (ProposalCommands)
+// parses tracker output (typically `br list --json`) into a slice of these
+// records and hands it to the viewer; HistoryViewer never performs subprocess
+// invocation of its own.
 type BeadRecord struct {
-	ID       string            `json:"id"`
-	Title    string            `json:"title"`
-	Metadata map[string]string `json:"metadata"`
+	ID        string   `json:"id"`
+	Status    string   `json:"status"`
+	Labels    []string `json:"labels"`
+	Title     string   `json:"title"`
+	CreatedAt string   `json:"created_at,omitempty"`
+	ClosedAt  string   `json:"closed_at,omitempty"`
 }
 
-// BeadListOutput is the top-level JSON output from `br list --json`.
-type BeadListOutput struct {
-	Issues []BeadRecord `json:"issues"`
+// HistoryViewer renders proposal-grouped bead history.
+//
+// SpecDir is the spec root (proposals are read from SpecDir/proposals).
+// Out is the destination writer. JSON toggles between human-readable text
+// (the default) and the JSON envelope documented in
+// spec/proposal/arch_history_viewer.md.
+type HistoryViewer struct {
+	SpecDir string
+	Out     io.Writer
+	JSON    bool
 }
 
-// ProposalEntry represents a single proposal in the history output.
-type ProposalEntry struct {
-	Proposal string      `json:"proposal"`
-	Type     string      `json:"type"`
-	Date     string      `json:"date"`
-	Beads    []BeadEntry `json:"beads"`
+// proposalEntry is the JSON shape per proposal group.
+type proposalEntry struct {
+	Filename string      `json:"filename"`
+	Title    string      `json:"title"`
+	Beads    []beadEntry `json:"beads"`
 }
 
-// BeadEntry represents a bead linked to a proposal.
-type BeadEntry struct {
-	ID        string `json:"id"`
-	Action    string `json:"action"`
-	Module    string `json:"module"`
-	Component string `json:"component"`
+// beadEntry is the JSON shape for a single bead within a proposal group.
+type beadEntry struct {
+	ID      string `json:"id"`
+	Status  string `json:"status"`
+	Action  string `json:"action"`
+	Summary string `json:"summary"`
 }
 
-// BeadLister is the interface for listing beads. It allows testing without
-// requiring the real br CLI.
-type BeadLister interface {
-	ListBeads(ctx context.Context) ([]BeadRecord, error)
-}
+// ShowHistory groups beads by their first spec_proposal:<stem> label, resolves
+// each group's proposal file under SpecDir/proposals, and writes the rendered
+// history to Out. Beads without a spec_proposal label are silently skipped.
+// Groups whose proposal files are missing are still rendered, with a "proposal
+// file missing" annotation, so the bead's provenance stays visible.
+func (h *HistoryViewer) ShowHistory(beads []BeadRecord) error {
+	groups := groupBeadsByProposal(beads)
 
-// CLIBeadLister lists beads by executing a bead CLI binary.
-type CLIBeadLister struct {
-	Bin string // e.g. "br"
-}
-
-// ListBeads runs `<bin> list --json` and parses the output.
-func (c *CLIBeadLister) ListBeads(ctx context.Context) ([]BeadRecord, error) {
-	out, err := execCommand(ctx, c.Bin, "list", "--json")
-	if err != nil {
-		return nil, fmt.Errorf("proposal: bead CLI unavailable: %w", err)
+	stems := make([]string, 0, len(groups))
+	for stem := range groups {
+		stems = append(stems, stem)
 	}
+	sort.Strings(stems)
 
-	var result BeadListOutput
-	if err := json.Unmarshal(out, &result); err != nil {
-		return nil, fmt.Errorf("proposal: parse bead list: %w", err)
-	}
-	return result.Issues, nil
-}
+	entries := make([]proposalEntry, 0, len(stems))
+	humanMeta := make([]proposalDisplay, 0, len(stems))
 
-// ShowHistory lists proposals and their linked beads, writing to w.
-// If jsonMode is true, output is JSON. Otherwise human-readable.
-func ShowHistory(ctx context.Context, specDir string, lister BeadLister, w io.Writer, jsonMode bool) error {
-	proposalsDir := filepath.Join(specDir, "proposals")
-	entries, err := os.ReadDir(proposalsDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			if jsonMode {
-				_, err := io.WriteString(w, "[]\n")
-				return err
-			}
-			return nil
+	proposalsDir := filepath.Join(h.SpecDir, "proposals")
+	for _, stem := range stems {
+		filename := stem + ".md"
+		path := filepath.Join(proposalsDir, filename)
+		title, ptype, exists := resolveProposalFile(path)
+
+		entry := proposalEntry{
+			Filename: filename,
+			Title:    title,
+			Beads:    make([]beadEntry, 0, len(groups[stem])),
 		}
-		return fmt.Errorf("proposal: read proposals dir: %w", err)
-	}
-
-	// Collect proposal filenames.
-	var proposals []string
-	for _, e := range entries {
-		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") {
-			proposals = append(proposals, e.Name())
+		for _, b := range groups[stem] {
+			entry.Beads = append(entry.Beads, beadEntry{
+				ID:      b.ID,
+				Status:  b.Status,
+				Action:  deriveAction(b),
+				Summary: b.Title,
+			})
 		}
-	}
-	sort.Strings(proposals)
-
-	if len(proposals) == 0 {
-		if jsonMode {
-			_, err := io.WriteString(w, "[]\n")
-			return err
-		}
-		return nil
-	}
-
-	// Query beads.
-	beads, err := lister.ListBeads(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Build proposal → beads index.
-	beadsByProposal := make(map[string][]BeadRecord)
-	for _, b := range beads {
-		if ref, ok := b.Metadata["spec_proposal"]; ok {
-			// spec_proposal stores the stem (no .md), so match both forms.
-			key := ref
-			if !strings.HasSuffix(key, ".md") {
-				key = key + ".md"
-			}
-			beadsByProposal[key] = append(beadsByProposal[key], b)
-		}
-	}
-
-	// Build entries.
-	result := make([]ProposalEntry, 0, len(proposals))
-	for _, p := range proposals {
-		ptype := detectProposalType(filepath.Join(proposalsDir, p))
-		date := extractDate(p)
-
-		var beadEntries []BeadEntry
-		if matched, ok := beadsByProposal[p]; ok {
-			for _, b := range matched {
-				module, component := parseBeadTitle(b.Title)
-				action := b.Metadata["action"]
-				if action == "" {
-					action = "created"
-				}
-				beadEntries = append(beadEntries, BeadEntry{
-					ID:        b.ID,
-					Action:    action,
-					Module:    module,
-					Component: component,
-				})
-			}
-		}
-		if beadEntries == nil {
-			beadEntries = []BeadEntry{}
-		}
-
-		result = append(result, ProposalEntry{
-			Proposal: p,
-			Type:     ptype,
-			Date:     date,
-			Beads:    beadEntries,
+		entries = append(entries, entry)
+		humanMeta = append(humanMeta, proposalDisplay{
+			filename: filename,
+			label:    proposalLabel(ptype, exists),
 		})
 	}
 
-	if jsonMode {
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "  ")
-		return enc.Encode(result)
+	if h.JSON {
+		return h.writeJSON(entries)
 	}
-
-	// Human-readable output.
-	for _, entry := range result {
-		fmt.Fprintf(w, "%s (%s proposal)\n", entry.Proposal, entry.Type)
-		for _, b := range entry.Beads {
-			label := strings.ToUpper(b.Action[:1]) + b.Action[1:]
-			fmt.Fprintf(w, "  %s: %s (%s: %s)\n", label, b.ID, b.Module, b.Component)
-		}
-	}
-	return nil
+	return h.writeText(entries, humanMeta)
 }
 
-// detectProposalType reads a proposal file and detects its type.
-// Returns "project", "change", or "unknown".
-func detectProposalType(path string) string {
+// proposalDisplay carries the per-group metadata only the human-readable
+// renderer needs (the JSON envelope omits the type label entirely).
+type proposalDisplay struct {
+	filename string
+	label    string
+}
+
+// groupBeadsByProposal walks beads and returns a map keyed by proposal stem
+// (no .md). A bead with multiple spec_proposal labels is placed under the
+// first one — defensive handling per arch_history_viewer.md.
+func groupBeadsByProposal(beads []BeadRecord) map[string][]BeadRecord {
+	groups := make(map[string][]BeadRecord)
+	for _, b := range beads {
+		stem, ok := firstProposalStem(b.Labels)
+		if !ok {
+			continue
+		}
+		groups[stem] = append(groups[stem], b)
+	}
+	return groups
+}
+
+// firstProposalStem returns the stem from the first spec_proposal:<stem>
+// label, accepting either a bare stem or a value with a trailing .md.
+func firstProposalStem(labels []string) (string, bool) {
+	for _, lbl := range labels {
+		if !strings.HasPrefix(lbl, specProposalLabelPrefix) {
+			continue
+		}
+		ref := strings.TrimPrefix(lbl, specProposalLabelPrefix)
+		ref = strings.TrimSuffix(ref, ".md")
+		if ref == "" {
+			continue
+		}
+		return ref, true
+	}
+	return "", false
+}
+
+// resolveProposalFile reads the proposal at path. It returns the H1 title, the
+// detected proposal type (project|change|""), and whether the file exists.
+// A missing file returns ("", "", false). A present-but-typeless file (no H1
+// or unrecognized headings) returns ("", "", true) so the caller can render
+// the filename without a title.
+func resolveProposalFile(path string) (title, ptype string, exists bool) {
 	content, err := os.ReadFile(path)
 	if err != nil {
-		return "unknown"
+		return "", "", false
 	}
-	ptype, err := detectType(string(content))
-	if err != nil {
-		return "unknown"
+	title = firstH1(string(content))
+	if t, err := detectType(string(content)); err == nil {
+		ptype = t
 	}
-	return ptype
+	return title, ptype, true
 }
 
-// extractDate extracts the YYYY-MM-DD date prefix from a proposal filename.
-func extractDate(filename string) string {
-	// Expected format: YYYY-MM-DD-slug.md
-	if len(filename) >= 10 {
-		return filename[:10]
+// firstH1 returns the first markdown H1 heading text, with the leading "# "
+// stripped. Empty string if none is found.
+func firstH1(content string) string {
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "# ") && !strings.HasPrefix(line, "## ") {
+			return strings.TrimSpace(line[2:])
+		}
 	}
 	return ""
 }
 
-// parseBeadTitle parses "Module: Component" from a bead title.
-// Falls back to empty strings if the format doesn't match.
-func parseBeadTitle(title string) (module, component string) {
-	if idx := strings.Index(title, ": "); idx >= 0 {
-		return title[:idx], title[idx+2:]
+// proposalLabel formats the parenthetical label for human-readable output.
+func proposalLabel(ptype string, exists bool) string {
+	if !exists {
+		return missingProposalLabel
 	}
-	return "", title
+	switch ptype {
+	case "project":
+		return "project proposal"
+	case "change":
+		return "change proposal"
+	}
+	return "proposal"
+}
+
+// deriveAction maps a bead's lifecycle to the human-facing action label.
+// Closed beads are rendered as "closed" (the proposal closed them); all
+// others are rendered as "created" (the proposal created and still owns them).
+func deriveAction(b BeadRecord) string {
+	if strings.EqualFold(b.Status, "closed") {
+		return "closed"
+	}
+	return "created"
+}
+
+// writeJSON emits the {"proposals": [...]} envelope.
+func (h *HistoryViewer) writeJSON(entries []proposalEntry) error {
+	payload := struct {
+		Proposals []proposalEntry `json:"proposals"`
+	}{Proposals: entries}
+	enc := json.NewEncoder(h.Out)
+	enc.SetIndent("", "  ")
+	return enc.Encode(payload)
+}
+
+// writeText emits the human-readable rendering. Format:
+//
+//	2026-02-23-spex-machina.md (project proposal)
+//	  Created: spexmachina-abc (open)     schema: ProjectSchema
+//	  Closed:  spexmachina-old (closed)   apply: BeadCreator
+func (h *HistoryViewer) writeText(entries []proposalEntry, meta []proposalDisplay) error {
+	for i, entry := range entries {
+		if _, err := fmt.Fprintf(h.Out, "%s (%s)\n", entry.Filename, meta[i].label); err != nil {
+			return err
+		}
+		for _, b := range entry.Beads {
+			action := strings.ToUpper(b.Action[:1]) + b.Action[1:]
+			if _, err := fmt.Fprintf(h.Out, "  %s: %s (%s)\t%s\n", action, b.ID, b.Status, b.Summary); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }

@@ -1,25 +1,19 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
 )
 
-// stubBeadLister is a test double for proposal.BeadLister.
-type stubBeadLister struct {
-	beads []proposal.BeadRecord
-}
-
-func (s *stubBeadLister) ListBeads(_ context.Context) ([]proposal.BeadRecord, error) {
-	return s.beads, nil
-}
+// TODO(bead:spexmachina-0lk.21): the stubBeadLister + ShowHistory tests below
+// were removed because spexmachina-0lk.20 retired BeadLister/CLIBeadLister and
+// reshaped HistoryViewer to consume a pre-parsed []BeadRecord. The
+// ProposalCommands bead owns rewiring `spex log` to read bead JSON from stdin
+// and the corresponding integration tests.
 
 // --- spex register ---
 
@@ -203,158 +197,14 @@ func TestREQ30_S14_TemplateMissingArgument(t *testing.T) {
 
 // --- spex log ---
 
-func TestREQ30_S6_LogHumanReadable(t *testing.T) {
-	tmp := t.TempDir()
-	specDir := filepath.Join(tmp, "spec")
-	proposalsDir := filepath.Join(specDir, "proposals")
-	os.MkdirAll(proposalsDir, 0755)
-
-	projContent := "# Project Proposal: Test\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
-	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-test.md"), []byte(projContent), 0644)
-
-	lister := &stubBeadLister{
-		beads: []proposal.BeadRecord{
-			{
-				ID:       "spexmachina-abc",
-				Title:    "schema: ProjectSchema",
-				Metadata: map[string]string{"spec_proposal": "2026-02-23-test"},
-			},
-		},
-	}
-
-	var out strings.Builder
-	err := proposal.ShowHistory(t.Context(), specDir, lister, &out, false)
-	if err != nil {
-		t.Fatalf("ShowHistory: %v", err)
-	}
-
-	result := out.String()
-	if !strings.Contains(result, "2026-02-23-test.md (project proposal)") {
-		t.Errorf("want proposal header in output, got:\n%s", result)
-	}
-	if !strings.Contains(result, "spexmachina-abc") {
-		t.Errorf("want bead ID in output, got:\n%s", result)
-	}
-	if !strings.Contains(result, "schema: ProjectSchema") {
-		t.Errorf("want bead details in output, got:\n%s", result)
-	}
-}
-
-func TestREQ30_S7_LogJSON(t *testing.T) {
-	tmp := t.TempDir()
-	specDir := filepath.Join(tmp, "spec")
-	proposalsDir := filepath.Join(specDir, "proposals")
-	os.MkdirAll(proposalsDir, 0755)
-
-	projContent := "# Project Proposal: Test\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
-	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-test.md"), []byte(projContent), 0644)
-
-	lister := &stubBeadLister{
-		beads: []proposal.BeadRecord{
-			{
-				ID:       "spexmachina-abc",
-				Title:    "schema: ProjectSchema",
-				Metadata: map[string]string{"spec_proposal": "2026-02-23-test"},
-			},
-		},
-	}
-
-	var out strings.Builder
-	err := proposal.ShowHistory(t.Context(), specDir, lister, &out, true)
-	if err != nil {
-		t.Fatalf("ShowHistory JSON: %v", err)
-	}
-
-	var result []proposal.ProposalEntry
-	if err := json.Unmarshal([]byte(out.String()), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\nraw: %s", err, out.String())
-	}
-	if len(result) != 1 {
-		t.Fatalf("want 1 entry, got %d", len(result))
-	}
-	if result[0].Proposal != "2026-02-23-test.md" {
-		t.Errorf("want proposal name, got %q", result[0].Proposal)
-	}
-	if result[0].Type != "project" {
-		t.Errorf("want type project, got %q", result[0].Type)
-	}
-	if result[0].Date != "2026-02-23" {
-		t.Errorf("want date, got %q", result[0].Date)
-	}
-	if len(result[0].Beads) != 1 {
-		t.Fatalf("want 1 bead, got %d", len(result[0].Beads))
-	}
-}
-
-func TestREQ30_S8_LogEmptyProposals(t *testing.T) {
-	tmp := t.TempDir()
-	specDir := filepath.Join(tmp, "spec")
-	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
-
-	lister := &stubBeadLister{beads: []proposal.BeadRecord{}}
-
-	// Human-readable.
-	var out strings.Builder
-	err := proposal.ShowHistory(t.Context(), specDir, lister, &out, false)
-	if err != nil {
-		t.Fatalf("ShowHistory: %v", err)
-	}
-	if out.String() != "" {
-		t.Errorf("want empty output, got %q", out.String())
-	}
-
-	// JSON.
-	out.Reset()
-	err = proposal.ShowHistory(t.Context(), specDir, lister, &out, true)
-	if err != nil {
-		t.Fatalf("ShowHistory JSON: %v", err)
-	}
-	if strings.TrimSpace(out.String()) != "[]" {
-		t.Errorf("want '[]', got %q", out.String())
-	}
-}
-
-func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
-	tmp := t.TempDir()
-	specDir := filepath.Join(tmp, "spec")
-	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
-
-	// Register a change proposal.
-	content := "# Change Proposal: Round Trip\n\n## Context\n\nTesting round trip.\n\n## Proposed change\n\nSome change.\n\n## Impact expectation\n\nSome impact.\n"
-	inputFile := filepath.Join(tmp, "round-trip.md")
-	os.WriteFile(inputFile, []byte(content), 0644)
-
-	filename, err := proposal.Register(inputFile, specDir)
-	if err != nil {
-		t.Fatalf("Register: %v", err)
-	}
-
-	// Log (JSON mode, no beads tagged yet).
-	lister := &stubBeadLister{beads: []proposal.BeadRecord{}}
-	var out strings.Builder
-	err = proposal.ShowHistory(t.Context(), specDir, lister, &out, true)
-	if err != nil {
-		t.Fatalf("ShowHistory: %v", err)
-	}
-
-	var result []proposal.ProposalEntry
-	if err := json.Unmarshal([]byte(out.String()), &result); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
-	}
-
-	found := false
-	for _, entry := range result {
-		if entry.Proposal == filename {
-			found = true
-			if len(entry.Beads) != 0 {
-				t.Errorf("want empty beads array, got %d", len(entry.Beads))
-			}
-		}
-	}
-	if !found {
-		t.Errorf("registered proposal %q not found in log output", filename)
-	}
-}
+// TODO(bead:spexmachina-0lk.21): TestREQ30_S6_LogHumanReadable,
+// TestREQ30_S7_LogJSON, TestREQ30_S8_LogEmptyProposals, and
+// TestREQ30_S16_RegisterThenLogRoundTrip were removed here.
+// They asserted on proposal.ShowHistory(ctx, specDir, lister, ...) and
+// proposal.BeadRecord.Metadata, both of which spexmachina-0lk.20 retired.
+// Re-introduce equivalent tests when ProposalCommands wires `spex log` to read
+// bead JSON from stdin and parse it into the new BeadRecord shape (Labels-based
+// grouping, HistoryViewer struct).
 
 // --- helpers ---
 
