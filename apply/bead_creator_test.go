@@ -169,6 +169,27 @@ func (s *mockStore) NextRecordID() (int, error) {
 	return s.nextID, nil
 }
 
+func (s *mockStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
+	var match mapping.Record
+	var found bool
+	for _, r := range s.records {
+		if r.NodeType != "proposal" || r.SpecNodeID != proposal {
+			continue
+		}
+		if r.BeadStatus == "closed" {
+			continue
+		}
+		if !found || r.ID > match.ID {
+			match = r
+			found = true
+		}
+	}
+	if !found {
+		return mapping.Record{}, fmt.Errorf("not found: proposal epic %s", proposal)
+	}
+	return match, nil
+}
+
 func (s *mockStore) addRecord(r mapping.Record) {
 	if r.ID == 0 {
 		r.ID = s.nextID

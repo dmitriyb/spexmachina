@@ -45,6 +45,11 @@ type Store interface {
 	// spex:<id> labels without advancing the counter — emit is pure;
 	// ingest commits the advance.
 	NextRecordID() (int, error)
+	// GetByProposalEpic returns the open proposal-epic record for the
+	// given proposal ref, used by emit's Resolver to detect re-run cases
+	// where the epic bead already exists. Closed epic records are
+	// ignored. Returns ErrNotFound if no open epic record matches.
+	GetByProposalEpic(proposal string) (Record, error)
 }
 
 // mapFile is the on-disk JSON structure for .bead-map.json.
@@ -230,6 +235,38 @@ func (s *fileStore) NextRecordID() (int, error) {
 		return 0, err
 	}
 	return data.NextID, nil
+}
+
+func (s *fileStore) GetByProposalEpic(proposal string) (Record, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.load()
+	if err != nil {
+		return Record{}, err
+	}
+
+	// Multiple proposal epics can share a SpecNodeID (one per apply run).
+	// Skip closed runs and return the highest-ID open record so re-runs see
+	// the latest epic.
+	var match Record
+	var found bool
+	for _, r := range data.Records {
+		if r.NodeType != "proposal" || r.SpecNodeID != proposal {
+			continue
+		}
+		if r.BeadStatus == "closed" {
+			continue
+		}
+		if !found || r.ID > match.ID {
+			match = r
+			found = true
+		}
+	}
+	if !found {
+		return Record{}, fmt.Errorf("map: %w: proposal epic %q", ErrNotFound, proposal)
+	}
+	return match, nil
 }
 
 func (s *fileStore) List() ([]Record, error) {

@@ -48,6 +48,23 @@ This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) f
 - Link PR: `br update <id> --external-ref "PR#<number>"`
 - Close work: performed by `/review` after LGTM, never by `/implement`. The command is `br close <id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."` — do not run it from any other skill or context.
 
+## Bead Context Resolution
+
+Beads in this repo intentionally carry empty `description`, `design`, `acceptance_criteria`, and `notes` fields. The bead's title plus its `spex:<record_id>` label is the entry point — the spec files are the source of truth.
+
+To resolve the spec context for any bead (review, fix, implement, ad-hoc):
+
+1. `br show <bead-id> --json` — read the bead, find the `spex:<record_id>` label in `labels`.
+2. `bin/spex map context <record_id>` — returns the JSON record plus the `arch_file`, `impl_files`, `test_files`, `flow_files`, and `module_file` paths.
+3. Read those spec files. Do not hunt elsewhere for the bead's "real" description — there isn't one.
+
+Hard rules:
+- Never read `.beads/beads.db` directly (sqlite3, python sqlite3, raw file reads, etc.). Use `br` commands or `.beads/issues.jsonl`.
+- Never bypass the documented `br` / `spex` interfaces to dig into their storage. If `br` says a field is empty, treat it as empty.
+- If you need bead/spec data and the documented tools don't expose it, ask the user — do not improvise with general-purpose tools.
+
+Cleanup beads (carrying the `spex:cleanup` label) have no map record by design — see `/cleanup` for that workflow.
+
 ## Organizational Constraints
 
 - **Module dependency order**: Schema first, then Validator/Merkle, then Impact, then Apply

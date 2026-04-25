@@ -203,6 +203,95 @@ func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
 	}
 }
 
+func TestGetByProposalEpic_ReturnsLatestOpen(t *testing.T) {
+	s := testStore(t)
+
+	// Two epic records for the same proposal; the older is closed (a prior
+	// run), the newer is open (current run). Resolver should see the latest.
+	if _, err := s.Create(Record{
+		SpecNodeID: "2026-04-foo",
+		BeadID:     "epic-1",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "2026-04-foo",
+		BeadStatus: "closed",
+	}); err != nil {
+		t.Fatalf("Create closed epic: %v", err)
+	}
+	if _, err := s.Create(Record{
+		SpecNodeID: "2026-04-foo",
+		BeadID:     "epic-2",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "2026-04-foo",
+		BeadStatus: "open",
+	}); err != nil {
+		t.Fatalf("Create open epic: %v", err)
+	}
+
+	got, err := s.GetByProposalEpic("2026-04-foo")
+	if err != nil {
+		t.Fatalf("GetByProposalEpic: %v", err)
+	}
+	if got.BeadID != "epic-2" {
+		t.Errorf("want epic-2 (latest open), got %s", got.BeadID)
+	}
+}
+
+func TestGetByProposalEpic_NotFound(t *testing.T) {
+	s := testStore(t)
+	_, err := s.GetByProposalEpic("nonexistent")
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound, got: %v", err)
+	}
+}
+
+func TestGetByProposalEpic_AllClosedReturnsNotFound(t *testing.T) {
+	s := testStore(t)
+	if _, err := s.Create(Record{
+		SpecNodeID: "P1",
+		BeadID:     "epic-old",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "P1",
+		BeadStatus: "closed",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err := s.GetByProposalEpic("P1")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("all-closed proposal must yield ErrNotFound, got: %v", err)
+	}
+}
+
+func TestGetByProposalEpic_IgnoresNonProposalRecords(t *testing.T) {
+	s := testStore(t)
+	// A non-proposal record sharing the SpecNodeID should not match.
+	if _, err := s.Create(Record{
+		SpecNodeID: "shared-id",
+		BeadID:     "feature-bead",
+		BeadType:   "feature",
+		NodeType:   "component",
+		Module:     "m",
+		Component:  "C",
+		BeadStatus: "open",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err := s.GetByProposalEpic("shared-id")
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("non-proposal record must not match, got: %v", err)
+	}
+}
+
 func TestFR1_BeadTypePreserved(t *testing.T) {
 	s := testStore(t)
 

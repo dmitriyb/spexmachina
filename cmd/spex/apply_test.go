@@ -21,6 +21,9 @@ func (s *noopStore) Update(id int, updates map[string]string) error            {
 func (s *noopStore) Delete(id int) error                                       { return nil }
 func (s *noopStore) List() ([]mapping.Record, error)                           { return nil, nil }
 func (s *noopStore) NextRecordID() (int, error)                                { return 1, nil }
+func (s *noopStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
+	return mapping.Record{}, fmt.Errorf("not found")
+}
 
 func TestREQ4_ResolveNodeName(t *testing.T) {
 	modules := map[string]impact.NodeMap{
