@@ -40,6 +40,11 @@ type Store interface {
 	Update(id int, updates map[string]string) error
 	Delete(id int) error
 	List() ([]Record, error)
+	// NextRecordID reads the persisted monotonic counter that the next
+	// Create would assign. Used by emit's IdempotencyLabeler to reserve
+	// spex:<id> labels without advancing the counter — emit is pure;
+	// ingest commits the advance.
+	NextRecordID() (int, error)
 }
 
 // mapFile is the on-disk JSON structure for .bead-map.json.
@@ -214,6 +219,17 @@ func (s *fileStore) Delete(id int) error {
 		}
 	}
 	return fmt.Errorf("map: %w: %d", ErrNotFound, id)
+}
+
+func (s *fileStore) NextRecordID() (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	data, err := s.load()
+	if err != nil {
+		return 0, err
+	}
+	return data.NextID, nil
 }
 
 func (s *fileStore) List() ([]Record, error) {
