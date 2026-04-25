@@ -91,7 +91,6 @@ func runSpex(t *testing.T, args ...string) (string, error) {
 		newDiffCmd(),
 		newValidateCmd(),
 		newImpactCmd(),
-		newApplyCmd(),
 		newMapCmd(),
 		newRenderCmd(),
 	)
