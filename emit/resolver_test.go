@@ -97,6 +97,9 @@ func (s *fakeStore) List() ([]mapping.Record, error) {
 func (s *fakeStore) NextRecordID() (int, error) {
 	return s.nextID, nil
 }
+func (s *fakeStore) Replace([]mapping.Record, int) error {
+	return fmt.Errorf("fakeStore.Replace: not implemented")
+}
 
 // TestResolveDeps_ClassifiesEachShape covers the spec scenario:
 // deps [A, B, C] — A has an open mapping record, B is in-batch, C has

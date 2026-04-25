@@ -50,6 +50,13 @@ type Store interface {
 	// where the epic bead already exists. Closed epic records are
 	// ignored. Returns ErrNotFound if no open epic record matches.
 	GetByProposalEpic(proposal string) (Record, error)
+	// Replace atomically rewrites the full mapping state — both the
+	// records list and the next-id counter — to disk. Used by ingest's
+	// Reconciler to commit an in-memory working copy after invariants
+	// have been asserted. Records are validated against the bead-map
+	// schema before the rename; a schema violation aborts the write
+	// and leaves the on-disk file unchanged.
+	Replace(records []Record, nextID int) error
 }
 
 // mapFile is the on-disk JSON structure for .bead-map.json.
@@ -267,6 +274,36 @@ func (s *fileStore) GetByProposalEpic(proposal string) (Record, error) {
 		return Record{}, fmt.Errorf("map: %w: proposal epic %q", ErrNotFound, proposal)
 	}
 	return match, nil
+}
+
+func (s *fileStore) Replace(records []Record, nextID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	out := make([]Record, len(records))
+	copy(out, records)
+	data := &mapFile{
+		NextID:  nextID,
+		Records: out,
+	}
+
+	sch, err := getBeadMapSchema()
+	if err != nil {
+		return err
+	}
+	raw, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("map: marshal: %w", err)
+	}
+	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
+	if err != nil {
+		return fmt.Errorf("map: parse: %w", err)
+	}
+	if err := sch.Validate(doc); err != nil {
+		return fmt.Errorf("map: schema validation: %w", err)
+	}
+
+	return s.save(data)
 }
 
 func (s *fileStore) List() ([]Record, error) {

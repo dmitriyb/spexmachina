@@ -169,6 +169,14 @@ func (s *mockStore) NextRecordID() (int, error) {
 	return s.nextID, nil
 }
 
+func (s *mockStore) Replace(records []mapping.Record, nextID int) error {
+	out := make([]mapping.Record, len(records))
+	copy(out, records)
+	s.records = out
+	s.nextID = nextID
+	return nil
+}
+
 func (s *mockStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
 	var match mapping.Record
 	var found bool
