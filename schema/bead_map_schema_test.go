@@ -158,8 +158,7 @@ func TestFR7_BeadMapSchemaRecordDefinesAllFields(t *testing.T) {
 func TestFR7_BeadMapSchemaSpecNodeIDIsNonEmpty(t *testing.T) {
 	// Historically spec_node_id was restricted to a 12-char hex pattern.
 	// With proposal epic records it now also carries human-readable proposal
-	// references (see spec/apply/arch_bead_creator.md, BeadCreator S0a),
-	// so the schema only enforces a non-empty string here.
+	// references, so the schema only enforces a non-empty string here.
 	data, err := BeadMapSchema()
 	if err != nil {
 		t.Fatalf("BeadMapSchema(): %v", err)
@@ -376,7 +375,7 @@ func TestFR7_RecordIDMinimum(t *testing.T) {
 
 func TestFR7_EmptyStringFieldsFail(t *testing.T) {
 	// module, content_file, and spec_hash are allowed to be empty on proposal
-	// epic records (BeadCreator S0a), so they are not asserted here.
+	// epic records, so they are not asserted here.
 	sch := compileBeadMapSchema(t)
 
 	fields := []struct {

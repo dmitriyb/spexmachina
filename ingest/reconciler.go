@@ -492,9 +492,7 @@ func parseRecordID(label string) (int, error) {
 }
 
 // beadTypeFor maps emit's SpecNodeKind vocabulary onto the bead-type
-// vocabulary the tracker expects. The mapping mirrors apply's
-// BeadCreator so a re-run that switches between apply and ingest sees
-// identical bead types on the records.
+// vocabulary the tracker expects.
 func beadTypeFor(specNodeKind string) string {
 	switch specNodeKind {
 	case "proposal_epic":
