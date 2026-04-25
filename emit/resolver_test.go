@@ -48,12 +48,14 @@ type fakeStore struct {
 	bySpecNode map[string][]mapping.Record
 	epic       map[string]mapping.Record
 	err        error
+	nextID     int
 }
 
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		bySpecNode: make(map[string][]mapping.Record),
 		epic:       make(map[string]mapping.Record),
+		nextID:     1,
 	}
 }
 
@@ -93,7 +95,7 @@ func (s *fakeStore) List() ([]mapping.Record, error) {
 	return nil, fmt.Errorf("fakeStore.List: not implemented")
 }
 func (s *fakeStore) NextRecordID() (int, error) {
-	return 0, fmt.Errorf("fakeStore.NextRecordID: not implemented")
+	return s.nextID, nil
 }
 
 // TestResolveDeps_ClassifiesEachShape covers the spec scenario:
