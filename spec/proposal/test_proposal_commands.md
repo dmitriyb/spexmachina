@@ -17,7 +17,7 @@ tmpdir/
     invalid-proposal.md             # missing required sections
 ```
 
-Mock or set up a `br` binary that responds to `br list --json` with deterministic bead data (same as HistoryViewer setup). Set `$PATH` so that the mock `br` is found before any real installation.
+For `spex log` scenarios, feed deterministic bead JSON on stdin (matching the `[]BeadRecord` shape, or the `{"issues":[...]}` envelope produced by `br list --json`). The test driver writes the fixture string directly into the command's stdin — `spex log` never invokes a tracker subprocess, so no `br` binary or `$PATH` setup is required.
 
 For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error / `ExitError.ExitCode()`.
 
@@ -96,7 +96,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **When** `spex log` is executed.
 **Then:**
 - Exit code is 0.
-- Stdout is empty (human-readable) or `[]` (JSON mode).
+- Stdout is empty (human-readable) or `{"proposals":[]}` (JSON mode), matching the HistoryViewer envelope.
 - No error output.
 
 #### S9: Log with explicit spec directory
@@ -107,13 +107,13 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 - History is read from `/tmp/otherspec/proposals/`.
 - Exit code is 0.
 
-#### S10: Log when bead CLI is unavailable
+#### S10: Log with empty stdin
 
-**Given** `br` is not on `$PATH`.
-**When** `spex log` is executed.
+**Given** the architecture forbids `spex log` from invoking any tracker subprocess (see `arch_proposal_commands.md`); the caller is expected to pipe bead JSON in.
+**When** `spex log` is executed with no data on stdin (e.g., `spex log < /dev/null`).
 **Then:**
 - Exit code is 1.
-- Stderr contains an error about the bead CLI being unavailable.
+- Stderr contains the documented message: `spex log: no bead data on stdin; pipe 'br list --json' or equivalent`.
 
 ### spex template
 
