@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "git_head": "11112222",
+  "proposal": "test/substitution",
+  "ops": [
+    {"op_id":"op-0001","type":"create","spec_node_kind":"component","spec_node_id":"sn-A","idempotency":{"label":"spex:1"},"priority":1,"title":"A"},
+    {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-B","idempotency":{"label":"spex:2"},"deps":[{"ref":"op","op_id":"op-0001"}],"priority":1,"title":"B"},
+    {"op_id":"op-0003","type":"create","spec_node_kind":"component","spec_node_id":"sn-C","idempotency":{"label":"spex:3"},"deps":[{"ref":"op","op_id":"op-0002"}],"priority":1,"title":"C"}
+  ]
+}

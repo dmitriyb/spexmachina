@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "git_head": "11112222",
+  "proposal": "test/substitution",
+  "ops": [
+    {"op_id":"op-0003","type":"create","spec_node_kind":"component","spec_node_id":"sn-skipped","idempotency":{"label":"spex:10"},"priority":1,"title":"Pre-existing"},
+    {"op_id":"op-0005","type":"create","spec_node_kind":"component","spec_node_id":"sn-dep","idempotency":{"label":"spex:11"},"deps":[{"ref":"op","op_id":"op-0003"}],"priority":1,"title":"Depends on skipped"}
+  ]
+}

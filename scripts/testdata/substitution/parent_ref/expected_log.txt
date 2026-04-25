@@ -1,0 +1,5 @@
+br --version
+br list --json --label spex:1
+br create --title Proposal:\ parent_ref --labels spex:1 --type epic --json --priority 2
+br list --json --label spex:2
+br create --title Child --labels spex:2 --type feature --json --priority 1 --parent br-50

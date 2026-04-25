@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "git_head": "abcdef0123456789",
+  "proposal": "test/idempotency",
+  "ops": [
+    {
+      "op_id": "op-0001",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-200",
+      "idempotency": {"label": "spex:200"},
+      "priority": 1,
+      "title": "Different record id"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "version": 1,
+  "git_head": "11112222",
+  "proposal": "test/substitution",
+  "ops": [
+    {"op_id":"op-0001","type":"create","spec_node_kind":"proposal_epic","spec_node_id":"sn-epic","idempotency":{"label":"spex:1"},"priority":2,"title":"Proposal: parent_ref"},
+    {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-comp","idempotency":{"label":"spex:2"},"parent":{"ref":"op","op_id":"op-0001"},"priority":1,"title":"Child"}
+  ]
+}

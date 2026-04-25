@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "status": "complete",
+  "ops": [
+    {"op_id":"op-0001","status":"ok","bead_id":"mock-001","was_existing":false}
+  ]
+}

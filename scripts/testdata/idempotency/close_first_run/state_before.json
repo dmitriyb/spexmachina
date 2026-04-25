@@ -1,0 +1,6 @@
+{
+  "issues": [
+    {"id":"br-abc","title":"to be obsoleted","status":"open","issue_type":"feature","labels":["spex:55"]}
+  ],
+  "create_ids": []
+}

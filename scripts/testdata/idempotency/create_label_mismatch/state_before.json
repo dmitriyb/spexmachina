@@ -1,0 +1,6 @@
+{
+  "issues": [
+    {"id":"existing-7","title":"different record id bead","status":"open","issue_type":"feature","labels":["spex:100"]}
+  ],
+  "create_ids": ["mock-200"]
+}
