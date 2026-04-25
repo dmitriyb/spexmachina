@@ -44,6 +44,9 @@ func (s *stubStore) Delete(int) error    { return fmt.Errorf("stubStore.Delete: 
 func (s *stubStore) List() ([]mapping.Record, error) {
 	return nil, fmt.Errorf("stubStore.List: not implemented")
 }
+func (s *stubStore) Replace([]mapping.Record, int) error {
+	return fmt.Errorf("stubStore.Replace: not implemented")
+}
 
 // TestReserveMonotonicLabels covers the spec's "Monotonic label assignment"
 // scenario: starting counter 42, three creates → spex:42..spex:44 with the

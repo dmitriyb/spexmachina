@@ -24,6 +24,7 @@ func (s *noopStore) NextRecordID() (int, error)                                {
 func (s *noopStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
 	return mapping.Record{}, fmt.Errorf("not found")
 }
+func (s *noopStore) Replace(records []mapping.Record, nextID int) error { return nil }
 
 func TestREQ4_ResolveNodeName(t *testing.T) {
 	modules := map[string]impact.NodeMap{
