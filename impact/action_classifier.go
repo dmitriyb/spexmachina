@@ -154,9 +154,9 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 		})
 
 		// If the bead is closed, code has shipped — create a cleanup bead.
-		// OldBeadID carries the obsoleted bead so BeadCreator emits
-		// --deps blocks:<old-bead-id>, giving the cleanup bead a structural
-		// pointer back to what needs removing.
+		// OldBeadID carries the obsoleted bead so the downstream emitter
+		// records --deps blocks:<old-bead-id>, giving the cleanup bead a
+		// structural pointer back to what needs removing.
 		if o.Record.BeadStatus == "closed" {
 			actions = append(actions, Action{
 				Type:       "create",

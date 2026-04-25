@@ -75,7 +75,7 @@ func TestHistoryViewer_RendersProposalTypeAndStatus(t *testing.T) {
 	beads := []BeadRecord{
 		{ID: "spexmachina-abc", Status: "open", Title: "schema: ProjectSchema",
 			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
-		{ID: "spexmachina-old", Status: "closed", Title: "apply: BeadCreator",
+		{ID: "spexmachina-old", Status: "closed", Title: "emit: ChangesetBuilder",
 			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
 	}
 
@@ -139,7 +139,7 @@ func TestHistoryViewer_JSONMode(t *testing.T) {
 	beads := []BeadRecord{
 		{ID: "spexmachina-abc", Status: "open", Title: "emit: ChangesetBuilder",
 			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
-		{ID: "spexmachina-old", Status: "closed", Title: "apply: BeadCreator",
+		{ID: "spexmachina-old", Status: "closed", Title: "emit: Resolver",
 			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
 	}
 

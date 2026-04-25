@@ -47,7 +47,7 @@
         "node_type": {
           "type": "string",
           "enum": ["proposal", "component", "data_flow", "test_section"],
-          "description": "Spec node type. Optional; present on records created by BeadCreator to distinguish proposal epics from component/data_flow/test_section records."
+          "description": "Spec node type. Optional; present on records that distinguish proposal epics from component/data_flow/test_section records."
         },
         "module": {
           "type": "string",

@@ -201,7 +201,6 @@ ref_error_for() {
 }
 
 # spec_kind_to_bead_type maps changeset spec_node_kind onto br --type values.
-# Mirrors the legacy BeadCreator mapping.
 spec_kind_to_bead_type() {
     case "$1" in
         proposal_epic) echo epic ;;
