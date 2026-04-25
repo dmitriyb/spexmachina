@@ -18,7 +18,6 @@ type BeadSpec struct {
 }
 
 // NodeMap maps node identifiers to their canonical spec node names.
-// Used by the apply command for resolving spec-ID keys to human-readable names.
 type NodeMap map[string]string
 
 // trackerBead mirrors the input JSON shape.

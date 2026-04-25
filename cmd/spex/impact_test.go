@@ -253,7 +253,6 @@ func runSpexWithStderr(t *testing.T, args ...string) (string, string, error) {
 		newDiffCmd(),
 		newValidateCmd(),
 		newImpactCmd(),
-		newApplyCmd(),
 		newMapCmd(),
 		newRenderCmd(),
 	)

@@ -16,7 +16,6 @@ func main() {
 		newDiffCmd(),
 		newValidateCmd(),
 		newImpactCmd(),
-		newApplyCmd(),
 		newMapCmd(),
 		newRegisterCmd(),
 		newLogCmd(),
