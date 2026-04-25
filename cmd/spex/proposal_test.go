@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -8,12 +10,6 @@ import (
 
 	"github.com/spf13/cobra"
 )
-
-// TODO(bead:spexmachina-0lk.21): the stubBeadLister + ShowHistory tests below
-// were removed because spexmachina-0lk.20 retired BeadLister/CLIBeadLister and
-// reshaped HistoryViewer to consume a pre-parsed []BeadRecord. The
-// ProposalCommands bead owns rewiring `spex log` to read bead JSON from stdin
-// and the corresponding integration tests.
 
 // --- spex register ---
 
@@ -197,14 +193,259 @@ func TestREQ30_S14_TemplateMissingArgument(t *testing.T) {
 
 // --- spex log ---
 
-// TODO(bead:spexmachina-0lk.21): TestREQ30_S6_LogHumanReadable,
-// TestREQ30_S7_LogJSON, TestREQ30_S8_LogEmptyProposals, and
-// TestREQ30_S16_RegisterThenLogRoundTrip were removed here.
-// They asserted on proposal.ShowHistory(ctx, specDir, lister, ...) and
-// proposal.BeadRecord.Metadata, both of which spexmachina-0lk.20 retired.
-// Re-introduce equivalent tests when ProposalCommands wires `spex log` to read
-// bead JSON from stdin and parse it into the new BeadRecord shape (Labels-based
-// grouping, HistoryViewer struct).
+const projProposalContent = "# Project Proposal: Spex Machina\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
+
+const changeProposalContent = "# Change Proposal: Decouple\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
+
+// runLogWith feeds stdin to the log subcommand and returns stdout.
+func runLogWith(t *testing.T, specDir, stdin string, args ...string) (string, error) {
+	t.Helper()
+	root := buildTestCmd(specDir)
+	logCmd := findSubcommand(root, "log")
+	var out bytes.Buffer
+	logCmd.SetOut(&out)
+	logCmd.SetErr(&bytes.Buffer{})
+	logCmd.SetIn(strings.NewReader(stdin))
+
+	root.SetArgs(append([]string{"log"}, args...))
+	err := root.Execute()
+	return out.String(), err
+}
+
+func TestREQ30_S6_LogHumanReadable(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "proposals", "2026-02-23-spex-machina.md"),
+		[]byte(projProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin := `[{"id":"spexmachina-abc","status":"open","title":"schema: ProjectSchema","labels":["spec_proposal:2026-02-23-spex-machina"]}]`
+
+	out, err := runLogWith(t, specDir, stdin)
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if !strings.Contains(out, "2026-02-23-spex-machina.md") {
+		t.Errorf("want proposal filename in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "(project proposal)") {
+		t.Errorf("want project-proposal type label, got:\n%s", out)
+	}
+	if !strings.Contains(out, "spexmachina-abc") {
+		t.Errorf("want bead id in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Created:") {
+		t.Errorf("want Created action label, got:\n%s", out)
+	}
+}
+
+func TestREQ30_S7_LogJSON(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "proposals", "2026-04-18-decouple.md"),
+		[]byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin := `{"issues":[{"id":"spexmachina-xyz","status":"closed","title":"emit: ChangesetBuilder","labels":["spec_proposal:2026-04-18-decouple"]}]}`
+
+	out, err := runLogWith(t, specDir, stdin, "--json")
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+
+	var payload struct {
+		Proposals []struct {
+			Filename string `json:"filename"`
+			Beads    []struct {
+				ID     string `json:"id"`
+				Action string `json:"action"`
+				Status string `json:"status"`
+			} `json:"beads"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal([]byte(out), &payload); err != nil {
+		t.Fatalf("not valid JSON: %v\nraw: %s", err, out)
+	}
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("want 1 proposal entry, got %d", len(payload.Proposals))
+	}
+	p := payload.Proposals[0]
+	if p.Filename != "2026-04-18-decouple.md" {
+		t.Errorf("want filename, got %q", p.Filename)
+	}
+	if len(p.Beads) != 1 || p.Beads[0].ID != "spexmachina-xyz" || p.Beads[0].Action != "closed" {
+		t.Errorf("unexpected bead entry: %+v", p.Beads)
+	}
+}
+
+func TestREQ30_S8_LogEmptyProposals(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Human-readable: empty bead array → empty stdout.
+	out, err := runLogWith(t, specDir, `[]`)
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if out != "" {
+		t.Errorf("want empty stdout, got %q", out)
+	}
+
+	// JSON: empty bead array → {"proposals":[]} envelope.
+	out, err = runLogWith(t, specDir, `[]`, "--json")
+	if err != nil {
+		t.Fatalf("log --json: %v", err)
+	}
+	var envelope struct {
+		Proposals []any `json:"proposals"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	if len(envelope.Proposals) != 0 {
+		t.Errorf("want empty proposals array, got %d entries", len(envelope.Proposals))
+	}
+}
+
+func TestREQ30_S9_LogExplicitSpecDir(t *testing.T) {
+	tmp := t.TempDir()
+	otherSpec := filepath.Join(tmp, "otherspec")
+	if err := os.MkdirAll(filepath.Join(otherSpec, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(otherSpec, "proposals", "2026-04-18-decouple.md"),
+		[]byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin := `[{"id":"spexmachina-abc","status":"open","title":"x","labels":["spec_proposal:2026-04-18-decouple"]}]`
+
+	// buildTestCmd already wires --spec-dir; we just point it at otherSpec.
+	out, err := runLogWith(t, otherSpec, stdin)
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if !strings.Contains(out, "2026-04-18-decouple.md") {
+		t.Errorf("want history from explicit spec dir, got:\n%s", out)
+	}
+}
+
+// TestREQ30_S10_LogEmptyStdin replaces the original S10 "br not on PATH"
+// scenario: the new architecture (arch_proposal_commands.md) requires that
+// spex log never invoke a tracker subprocess. Empty stdin must therefore exit
+// non-zero with the documented message.
+func TestREQ30_S10_LogEmptyStdin(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runLogWith(t, specDir, "")
+	if err == nil {
+		t.Fatal("want error on empty stdin, got nil")
+	}
+	if !strings.Contains(err.Error(), "no bead data on stdin") {
+		t.Errorf("want documented empty-stdin error, got: %v", err)
+	}
+}
+
+func TestREQ30_S10b_LogMalformedStdin(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runLogWith(t, specDir, "{ not json")
+	if err == nil {
+		t.Fatal("want error on malformed JSON, got nil")
+	}
+}
+
+func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	inputFile := filepath.Join(tmp, "new.md")
+	if err := os.WriteFile(inputFile, []byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Step 1: register.
+	root1 := buildTestCmd(specDir)
+	root1.SetArgs([]string{"register", inputFile})
+	if err := root1.Execute(); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	// Step 2: log --json with empty bead list — registered proposal should
+	// not appear (HistoryViewer keys off bead labels, not directory listing).
+	out, err := runLogWith(t, specDir, `[]`, "--json")
+	if err != nil {
+		t.Fatalf("log --json: %v", err)
+	}
+	var envelope struct {
+		Proposals []struct {
+			Filename string `json:"filename"`
+			Beads    []any  `json:"beads"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
+		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
+	}
+	if len(envelope.Proposals) != 0 {
+		t.Errorf("empty bead input must produce empty proposals array, got %d", len(envelope.Proposals))
+	}
+}
+
+// TestREQ30_LogProposalFilter verifies the --proposal flag scopes the output
+// to a single proposal stem, dropping beads tagged for any other proposal.
+func TestREQ30_LogProposalFilter(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "proposals", "2026-02-23-spex-machina.md"),
+		[]byte(projProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "proposals", "2026-04-18-decouple.md"),
+		[]byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin := `[
+{"id":"spexmachina-abc","status":"open","title":"a","labels":["spec_proposal:2026-02-23-spex-machina"]},
+{"id":"spexmachina-xyz","status":"open","title":"b","labels":["spec_proposal:2026-04-18-decouple"]}
+]`
+
+	out, err := runLogWith(t, specDir, stdin, "--proposal", "2026-04-18-decouple")
+	if err != nil {
+		t.Fatalf("log --proposal: %v", err)
+	}
+	if !strings.Contains(out, "spexmachina-xyz") {
+		t.Errorf("want filtered bead, got:\n%s", out)
+	}
+	if strings.Contains(out, "spexmachina-abc") {
+		t.Errorf("filtered bead leaked into output:\n%s", out)
+	}
+}
 
 // --- helpers ---
 
