@@ -60,14 +60,20 @@ Produce a `result` of either `CLEAN` (nothing to flag) or `ISSUES` (one or more 
 **If `mode = REVIEW`:** examine the diff against the bead and spec. Every check below must pass for `result = CLEAN`.
 
 1. **Spec traceability**: code maps to bead requirements, no unrelated changes.
-2. **Bead completion** (critical — this is the most important check):
+2. **Spec hygiene** (blocker): the bead's spec leaves (`arch_*.md`, `impl_*.md`, `test_*.md` resolved via `spex map context`) must match the implementation that ships in this PR. Stale prose is a blocker, not a follow-up — list every offender as an inline comment and reject. Common drift to look for:
+   - `impl_*.md` referencing methods or types that no longer exist (e.g. an old `Foo.Bar()` after a struct refactor).
+   - `test_*.md` scenarios describing retired preconditions (e.g. "Given X is on PATH" after the subprocess path was deleted).
+   - Output-shape mismatches (e.g. spec shows `[]`, code emits `{"items":[]}`).
+   - `arch_*.md` describing a contract the code does not honor.
+   `spex validate` passing is **not** sufficient — it checks structural validity, not whether the prose matches the code. Read each spec leaf line by line against the diff. If the spec leaf was already drifted before this PR (e.g. a piecemeal earlier touch only updated `arch_*.md`), the PR that lands the matching code is the PR that fixes the leftovers.
+3. **Bead completion** (critical — this is the most important check):
    - Re-read the bead title and description line by line. For each stated requirement, find the code in the diff that implements it. If a requirement has no corresponding code, the PR is incomplete.
    - Take the bead's verbs literally: "replaces" means the old thing is gone, "adds" means the new thing exists and works, "removes" means the thing is absent. If a verb is not satisfied, flag it.
    - Search the diff for `TODO`, `FIXME`, `HACK`, `WORKAROUND`, shim functions, and compatibility wrappers that defer work the bead is supposed to deliver. These are automatic rejections — the bead's work is not done if it leaves TODOs for itself.
-3. **Correctness**: error paths handled, edge cases, no resource leaks.
-4. **Patterns**: follows existing conventions, idiomatic Go (see `@~/.claude/skills/go-expert/SKILL.md`).
-5. **Tests**: verify requirements not implementation details, failure cases tested.
-6. **Integration testing**: if the spec includes integration test scenarios (in `test_*.md` files), the PR must include tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.
+4. **Correctness**: error paths handled, edge cases, no resource leaks.
+5. **Patterns**: follows existing conventions, idiomatic Go (see `@~/.claude/skills/go-expert/SKILL.md`).
+6. **Tests**: verify requirements not implementation details, failure cases tested.
+7. **Integration testing**: if the spec includes integration test scenarios (in `test_*.md` files), the PR must include tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.
 
 **If `mode = FOLLOWUP`:** verify each prior feedback item against current files.
 
