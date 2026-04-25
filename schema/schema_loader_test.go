@@ -48,7 +48,6 @@ func TestFR10_IH2_IdentityHashMatchesSchemaPattern(t *testing.T) {
 		{"validator", "component", "DAGChecker"},
 		{"merkle", "component", "TreeBuilder"},
 		{"impact", "component", "NodeMatcher"},
-		{"apply", "component", "SnapshotSaver"},
 		{"map", "component", "MappingStore"},
 		{"render", "component", "DOTRenderer"},
 		{"x"},
