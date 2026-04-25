@@ -10,7 +10,7 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// depFixture holds identity hashes used by the dependency-resolution scenarios
+// depFixture holds identity hashes used by the dependency-collection scenarios
 // below. Computing them via schema.IdentityHash keeps the test data honest —
 // the same derivation used by production — while letting fixtures refer to
 // symbolic names (NM, AC, MOD_IMPACT, ...) rather than raw hex.
@@ -592,12 +592,12 @@ func TestFR6_ClassifyActions_OrphanedInProgressBead(t *testing.T) {
 }
 
 // ========================
-// Dependency Resolution Tests
+// DepSpecNodeIDs collection tests (requirement a3ecff50de68)
 // ========================
 
-// --- D1: Component uses edge resolves to open dependency bead ---
+// Components `uses` contribute dependency spec_node_ids directly (no bead lookup).
 
-func TestFR7_D1_ResolveDeps_UsesOpenBead(t *testing.T) {
+func TestDepSpecNodeIDs_ComponentUsesEdgeCollected(t *testing.T) {
 	h := newDepFixture()
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
@@ -612,21 +612,25 @@ func TestFR7_D1_ResolveDeps_UsesOpenBead(t *testing.T) {
 		},
 		modulesByID: map[string]string{h.ModImpact: "impact"},
 	}
-	records := []mapping.Record{
-		{ID: 50, SpecNodeID: h.NM, BeadID: "spex-050", Module: "impact", Component: "NodeMatcher", BeadStatus: "open"},
-		{ID: 51, SpecNodeID: h.AC, BeadID: "spex-051", Module: "impact", Component: "ActionClassifier", BeadStatus: "open"},
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.AC, Type: merkle.Added, NewHash: "aaa", NodeType: "component"},
+			Module: "impact",
+		}},
 	}
 
-	action := Action{Type: "create", Module: "impact", Node: "ActionClassifier", NodeType: "component", SpecNodeID: h.AC}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	assertContains(t, deps, "spex-050")
-	assertNotContains(t, deps, "spex-051") // the action itself, not a dep
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d: %+v", len(actions), actions)
+	}
+	assertContains(t, actions[0].DepSpecNodeIDs, h.NM)
+	assertNotContains(t, actions[0].DepSpecNodeIDs, h.AC) // self-reference is filtered
 }
 
-// --- D2: Component uses edge skips closed dependency bead ---
+// Bead status is irrelevant — the classifier no longer peeks at records.
 
-func TestFR7_D2_ResolveDeps_UsesClosedBead(t *testing.T) {
+func TestDepSpecNodeIDs_IgnoresBeadStatus(t *testing.T) {
 	h := newDepFixture()
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
@@ -641,61 +645,38 @@ func TestFR7_D2_ResolveDeps_UsesClosedBead(t *testing.T) {
 		},
 		modulesByID: map[string]string{h.ModImpact: "impact"},
 	}
-	records := []mapping.Record{
-		{ID: 51, SpecNodeID: h.NM, BeadID: "spex-051", Module: "impact", Component: "NodeMatcher", BeadStatus: "closed"},
-	}
-
-	action := Action{Type: "create", Module: "impact", Node: "ActionClassifier", NodeType: "component", SpecNodeID: h.AC}
-	deps := ResolveDeps(graph, records, action)
-
-	if len(deps) != 0 {
-		t.Errorf("want 0 deps (closed bead skipped), got %v", deps)
-	}
-}
-
-// --- D3: requires_module resolves to all open component beads ---
-
-func TestFR7_D3_ResolveDeps_RequiresModuleOpenBeads(t *testing.T) {
-	h := newDepFixture()
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"impact": {
-				ID:             h.ModImpact,
-				Name:           "impact",
-				RequiresModule: []string{h.ModMerkle},
-				Components: []mapping.ComponentInfo{
-					{ID: h.AC, Name: "ActionClassifier"},
-				},
+	// Records include a closed bead for NM — the classifier must not read
+	// them; that filtering moves to emit's Resolver.
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Path: h.AC, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Module: "impact",
 			},
-			"merkle": {
-				ID:   h.ModMerkle,
-				Name: "merkle",
-				Components: []mapping.ComponentInfo{
-					{ID: h.HASH, Name: "Hasher"},
-					{ID: h.TREE, Name: "TreeBuilder"},
-					{ID: h.SNAP, Name: "SnapshotStore"},
-				},
+			Records: []mapping.Record{
+				{ID: 2, SpecNodeID: h.AC, BeadID: "spex-ac", Module: "impact", Component: "ActionClassifier", BeadStatus: "open"},
 			},
 		},
-		modulesByID: map[string]string{h.ModMerkle: "merkle", h.ModImpact: "impact"},
-	}
-	records := []mapping.Record{
-		{ID: 60, SpecNodeID: h.HASH, BeadID: "spex-060", Module: "merkle", BeadStatus: "open"},
-		{ID: 61, SpecNodeID: h.TREE, BeadID: "spex-061", Module: "merkle", BeadStatus: "closed"},
-		{ID: 62, SpecNodeID: h.SNAP, BeadID: "spex-062", Module: "merkle", BeadStatus: "open"},
 	}
 
-	action := Action{Type: "create", Module: "impact", Node: "ActionClassifier", NodeType: "component", SpecNodeID: h.AC}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, matches, nil, nil)
 
-	assertContains(t, deps, "spex-060")
-	assertContains(t, deps, "spex-062")
-	assertNotContains(t, deps, "spex-061")
+	var create *Action
+	for i := range actions {
+		if actions[i].Type == "create" {
+			create = &actions[i]
+			break
+		}
+	}
+	if create == nil {
+		t.Fatal("no create action")
+	}
+	assertContains(t, create.DepSpecNodeIDs, h.NM)
 }
 
-// --- D4: Transitive requires_module resolution ---
+// Transitive requires_module walk collects every reachable module's components.
 
-func TestFR7_D4_ResolveDeps_TransitiveRequiresModule(t *testing.T) {
+func TestDepSpecNodeIDs_TransitiveRequiresModule(t *testing.T) {
 	h := newDepFixture()
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
@@ -705,26 +686,31 @@ func TestFR7_D4_ResolveDeps_TransitiveRequiresModule(t *testing.T) {
 		},
 		modulesByID: map[string]string{h.ModA: "modA", h.ModB: "modB", h.ModC: "modC"},
 	}
-	records := []mapping.Record{
-		{ID: 70, SpecNodeID: h.CompB, BeadID: "spex-070", Module: "modB", BeadStatus: "open"},
-		{ID: 71, SpecNodeID: h.CompC, BeadID: "spex-071", Module: "modC", BeadStatus: "open"},
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Module: "modA",
+		}},
 	}
 
-	action := Action{Type: "create", Module: "modA", Node: "CompA", NodeType: "component", SpecNodeID: h.CompA}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	assertContains(t, deps, "spex-070")
-	assertContains(t, deps, "spex-071")
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	assertContains(t, actions[0].DepSpecNodeIDs, h.CompB)
+	assertContains(t, actions[0].DepSpecNodeIDs, h.CompC)
 }
 
-// --- D5: Component uses edges are NOT transitive ---
+// Direct component `uses` are NOT transitive — only the first hop is collected.
 
-func TestFR7_D5_ResolveDeps_UsesNotTransitive(t *testing.T) {
+func TestDepSpecNodeIDs_ComponentUsesNotTransitive(t *testing.T) {
 	h := newDepFixture()
+	modID := schema.IdentityHash("module", "mod")
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
 			"mod": {
-				ID:   schema.IdentityHash("module", "mod"),
+				ID:   modID,
 				Name: "mod",
 				Components: []mapping.ComponentInfo{
 					{ID: h.X, Name: "X", Uses: []string{h.Y}},
@@ -733,22 +719,24 @@ func TestFR7_D5_ResolveDeps_UsesNotTransitive(t *testing.T) {
 				},
 			},
 		},
+		modulesByID: map[string]string{modID: "mod"},
 	}
-	records := []mapping.Record{
-		{ID: 80, SpecNodeID: h.Y, BeadID: "spex-080", Module: "mod", BeadStatus: "open"},
-		{ID: 81, SpecNodeID: h.Z, BeadID: "spex-081", Module: "mod", BeadStatus: "open"},
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Module: "mod",
+		}},
 	}
 
-	action := Action{Type: "create", Module: "mod", Node: "X", NodeType: "component", SpecNodeID: h.X}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	assertContains(t, deps, "spex-080")
-	assertNotContains(t, deps, "spex-081")
+	assertContains(t, actions[0].DepSpecNodeIDs, h.Y)
+	assertNotContains(t, actions[0].DepSpecNodeIDs, h.Z)
 }
 
-// --- D6: Mixed uses and requires_module dependencies ---
+// Uses + requires_module edges both contribute.
 
-func TestFR7_D6_ResolveDeps_MixedUsesAndRequiresModule(t *testing.T) {
+func TestDepSpecNodeIDs_MixedUsesAndRequiresModule(t *testing.T) {
 	h := newDepFixture()
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
@@ -771,54 +759,47 @@ func TestFR7_D6_ResolveDeps_MixedUsesAndRequiresModule(t *testing.T) {
 		},
 		modulesByID: map[string]string{h.ModA: "modA", h.ModB: "modB"},
 	}
-	records := []mapping.Record{
-		{ID: 90, SpecNodeID: h.Y, BeadID: "spex-090", Module: "modA", BeadStatus: "open"},
-		{ID: 91, SpecNodeID: h.CompB, BeadID: "spex-091", Module: "modB", BeadStatus: "open"},
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Module: "modA",
+		}},
 	}
 
-	action := Action{Type: "create", Module: "modA", Node: "X", NodeType: "component", SpecNodeID: h.X}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	assertContains(t, deps, "spex-090")
-	assertContains(t, deps, "spex-091")
+	assertContains(t, actions[0].DepSpecNodeIDs, h.Y)     // direct uses
+	assertContains(t, actions[0].DepSpecNodeIDs, h.CompB) // transitive requires_module
 }
 
-// --- D7: No dependencies when all beads are closed ---
+// Cycle detection must terminate without infinite recursion.
 
-func TestFR7_D7_ResolveDeps_AllClosed(t *testing.T) {
+func TestDepSpecNodeIDs_RequiresModuleCycle(t *testing.T) {
 	h := newDepFixture()
-	modID := schema.IdentityHash("module", "mod")
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"mod": {
-				ID:             modID,
-				Name:           "mod",
-				RequiresModule: []string{h.ModB},
-				Components: []mapping.ComponentInfo{
-					{ID: h.X, Name: "X", Uses: []string{h.Y}},
-					{ID: h.Y, Name: "Y"},
-				},
-			},
-			"modB": {ID: h.ModB, Name: "modB", Components: []mapping.ComponentInfo{{ID: h.CompB, Name: "CompB"}}},
+			"modA": {ID: h.ModA, Name: "modA", RequiresModule: []string{h.ModB}, Components: []mapping.ComponentInfo{{ID: h.CompA, Name: "CompA"}}},
+			"modB": {ID: h.ModB, Name: "modB", RequiresModule: []string{h.ModA}, Components: []mapping.ComponentInfo{{ID: h.CompB, Name: "CompB"}}},
 		},
-		modulesByID: map[string]string{modID: "mod", h.ModB: "modB"},
+		modulesByID: map[string]string{h.ModA: "modA", h.ModB: "modB"},
 	}
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: h.Y, BeadID: "b1", Module: "mod", BeadStatus: "closed"},
-		{ID: 2, SpecNodeID: h.CompB, BeadID: "b2", Module: "modB", BeadStatus: "closed"},
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Module: "modA",
+		}},
 	}
 
-	action := Action{Type: "create", Module: "mod", Node: "X", NodeType: "component", SpecNodeID: h.X}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	if len(deps) != 0 {
-		t.Errorf("want 0 deps (all closed), got %v", deps)
-	}
+	// modB is reachable from modA; its component's identity hash must appear.
+	// Must terminate.
+	assertContains(t, actions[0].DepSpecNodeIDs, h.CompB)
 }
 
-// --- D8: No dependencies for nodes without uses or requires_module ---
+// Component with no uses / no requires_module yields empty DepSpecNodeIDs.
 
-func TestFR7_D8_ResolveDeps_NoDeps(t *testing.T) {
+func TestDepSpecNodeIDs_EmptyWhenNoEdges(t *testing.T) {
 	standalone := schema.IdentityHash("mod", "component", "Standalone")
 	modID := schema.IdentityHash("module", "mod")
 	graph := &stubSpecGraph{
@@ -833,118 +814,252 @@ func TestFR7_D8_ResolveDeps_NoDeps(t *testing.T) {
 		},
 		modulesByID: map[string]string{modID: "mod"},
 	}
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: standalone, Type: merkle.Added, NewHash: "s", NodeType: "component"},
+			Module: "mod",
+		}},
+	}
 
-	action := Action{Type: "create", Module: "mod", Node: "Standalone", NodeType: "component", SpecNodeID: standalone}
-	deps := ResolveDeps(graph, nil, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	if len(deps) != 0 {
-		t.Errorf("want 0 deps, got %v", deps)
+	if len(actions[0].DepSpecNodeIDs) != 0 {
+		t.Errorf("want empty DepSpecNodeIDs, got %v", actions[0].DepSpecNodeIDs)
 	}
 }
 
-// --- D9: Cycle detection in requires_module ---
+// Data_flow add-on: a component create gains the data_flow's SpecNodeID when
+// that data_flow is also created in the same batch and lists the component in
+// its uses array.
 
-func TestFR7_D9_ResolveDeps_CycleDetection(t *testing.T) {
+func TestDepSpecNodeIDs_DataFlowAddOn(t *testing.T) {
 	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"modA": {ID: h.ModA, Name: "modA", RequiresModule: []string{h.ModB}, Components: []mapping.ComponentInfo{{ID: h.CompA, Name: "CompA"}}},
-			"modB": {ID: h.ModB, Name: "modB", RequiresModule: []string{h.ModA}, Components: []mapping.ComponentInfo{{ID: h.CompB, Name: "CompB"}}},
-		},
-		modulesByID: map[string]string{h.ModA: "modA", h.ModB: "modB"},
-	}
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: h.CompA, BeadID: "b-a", Module: "modA", BeadStatus: "open"},
-		{ID: 2, SpecNodeID: h.CompB, BeadID: "b-b", Module: "modB", BeadStatus: "open"},
-	}
-
-	action := Action{Type: "create", Module: "modA", Node: "CompA", NodeType: "component", SpecNodeID: h.CompA}
-
-	// Must terminate — no infinite recursion on the modA↔modB cycle.
-	deps := ResolveDeps(graph, records, action)
-	// modB is reachable from modA; its open bead should appear.
-	assertContains(t, deps, "b-b")
-}
-
-// --- D12: Deps with beads created in same apply run ---
-
-func TestFR7_D12_ResolveDeps_NoBeadForNewComponent(t *testing.T) {
-	h := newDepFixture()
-	modID := schema.IdentityHash("module", "mod")
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"mod": {
-				ID:   modID,
-				Name: "mod",
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
 				Components: []mapping.ComponentInfo{
-					{ID: h.X, Name: "X", Uses: []string{h.Y}},
-					{ID: h.Y, Name: "Y"},
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
 				},
 			},
 		},
-		modulesByID: map[string]string{modID: "mod"},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
 	}
-	// No records for Y — it is being created in the same run.
-	records := []mapping.Record{}
+	// Both data_flow and component are created in the same batch.
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Module: "merkle",
+		}},
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
+			Module: "merkle",
+		}},
+	}
 
-	action := Action{Type: "create", Module: "mod", Node: "X", NodeType: "component", SpecNodeID: h.X}
-	deps := ResolveDeps(graph, records, action)
+	actions := ClassifyActions(graph, nil, unmatched, nil)
 
-	if len(deps) != 0 {
-		t.Errorf("want 0 deps (Y has no bead yet), got %v", deps)
+	var hasherAction *Action
+	for i := range actions {
+		if actions[i].SpecNodeID == h.HASH {
+			hasherAction = &actions[i]
+		}
+	}
+	if hasherAction == nil {
+		t.Fatal("no create action for Hasher")
+	}
+	assertContains(t, hasherAction.DepSpecNodeIDs, flowID)
+}
+
+// Component NOT listed in a data_flow's uses does not pick up the flow's ID.
+
+func TestDepSpecNodeIDs_DataFlowUnrelatedComponent(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+					{ID: h.LEGACY, Name: "LegacyHasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					// Flow only involves Hasher, not LegacyHasher.
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Module: "merkle",
+		}},
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.LEGACY, Type: merkle.Added, NewHash: "l", NodeType: "component"},
+			Module: "merkle",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	var legacyAction *Action
+	for i := range actions {
+		if actions[i].SpecNodeID == h.LEGACY {
+			legacyAction = &actions[i]
+		}
+	}
+	if legacyAction == nil {
+		t.Fatal("no create action for LegacyHasher")
+	}
+	assertNotContains(t, legacyAction.DepSpecNodeIDs, flowID)
+}
+
+// Data_flow add-on only fires when the flow is in the same batch. A flow that
+// already exists in the graph but is not part of the current changes does not
+// contribute — emit handles existing dependencies via ref:bead / ref:spec_node.
+
+func TestDepSpecNodeIDs_DataFlowNotInBatchIgnored(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:   h.ModMerkle,
+				Name: "merkle",
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+	}
+	// Only the component is in the batch; the flow is pre-existing.
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
+			Module: "merkle",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	assertNotContains(t, actions[0].DepSpecNodeIDs, flowID)
+}
+
+// Non-component creates (data_flow, test_section) do not get uses/requires_module
+// deps — that walk only applies to component creates.
+
+func TestDepSpecNodeIDs_NonComponentCreateNoUsesWalk(t *testing.T) {
+	h := newDepFixture()
+	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
+	graph := &stubSpecGraph{
+		modules: map[string]mapping.ModuleInfo{
+			"merkle": {
+				ID:             h.ModMerkle,
+				Name:           "merkle",
+				RequiresModule: []string{h.ModA},
+				Components: []mapping.ComponentInfo{
+					{ID: h.HASH, Name: "Hasher"},
+				},
+				DataFlows: []mapping.DataFlowInfo{
+					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
+				},
+			},
+			"modA": {
+				ID:   h.ModA,
+				Name: "modA",
+				Components: []mapping.ComponentInfo{
+					{ID: h.CompA, Name: "CompA"},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModMerkle: "merkle", h.ModA: "modA"},
+	}
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Module: "merkle",
+		}},
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	// A data_flow create does NOT transitively collect its module's requires_module
+	// closure — only component creates do that walk.
+	if len(actions[0].DepSpecNodeIDs) != 0 {
+		t.Errorf("want empty DepSpecNodeIDs for data_flow create, got %v", actions[0].DepSpecNodeIDs)
 	}
 }
 
-// --- ResolveDeps ignores non-component actions ---
+// Nil graph => no dep collection; other classification paths still work.
 
-func TestFR7_ResolveDeps_NonComponentActionReturnsNil(t *testing.T) {
+func TestDepSpecNodeIDs_NilGraphLeavesDepsEmpty(t *testing.T) {
+	h := newDepFixture()
+	unmatched := []Unmatched{
+		{Change: merkle.ClassifiedChange{
+			Change: merkle.Change{Path: h.AC, Type: merkle.Added, NewHash: "a", NodeType: "component"},
+			Module: "impact",
+		}},
+	}
+
+	actions := ClassifyActions(nil, nil, unmatched, nil)
+
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %d", len(actions))
+	}
+	if len(actions[0].DepSpecNodeIDs) != 0 {
+		t.Errorf("want empty DepSpecNodeIDs with nil graph, got %v", actions[0].DepSpecNodeIDs)
+	}
+}
+
+// Obsolete actions never carry DepSpecNodeIDs — dependency info belongs on
+// creates only.
+
+func TestDepSpecNodeIDs_ObsoleteCarriesNoDeps(t *testing.T) {
 	h := newDepFixture()
 	graph := &stubSpecGraph{
 		modules: map[string]mapping.ModuleInfo{
-			"impact": {ID: h.ModImpact, Name: "impact", Components: []mapping.ComponentInfo{{ID: h.AC, Name: "ActionClassifier", Uses: []string{h.NM}}}},
+			"impact": {
+				ID:   h.ModImpact,
+				Name: "impact",
+				Components: []mapping.ComponentInfo{
+					{ID: h.NM, Name: "NodeMatcher"},
+					{ID: h.AC, Name: "ActionClassifier", Uses: []string{h.NM}},
+				},
+			},
+		},
+		modulesByID: map[string]string{h.ModImpact: "impact"},
+	}
+	orphaned := []Orphaned{
+		{
+			Record:   mapping.Record{ID: 1, SpecNodeID: h.AC, BeadID: "spex-ac", Module: "impact", Component: "ActionClassifier"},
+			NodeType: "component",
 		},
 	}
-	records := []mapping.Record{{ID: 1, SpecNodeID: h.NM, BeadID: "spex-999", Module: "impact", BeadStatus: "open"}}
 
-	action := Action{Type: "create", Module: "impact", NodeType: "test_section", SpecNodeID: h.AC}
-	if deps := ResolveDeps(graph, records, action); deps != nil {
-		t.Errorf("want nil deps for non-component action, got %v", deps)
-	}
-}
+	actions := ClassifyActions(graph, nil, nil, orphaned)
 
-// ========================
-// Test Helpers
-// ========================
-
-func assertHasAction(t *testing.T, actions []Action, typ, beadID, module, node, reason string) {
-	t.Helper()
 	for _, a := range actions {
-		if a.Type == typ && a.BeadID == beadID && a.Module == module && a.Node == node {
-			if !strings.Contains(a.Reason, reason) {
-				t.Errorf("action (%s, %s, %s, %s) reason = %q, want containing %q", typ, beadID, module, node, a.Reason, reason)
-			}
-			return
-		}
-	}
-	t.Errorf("want action (type=%s, beadID=%s, module=%s, node=%s), not found in %+v", typ, beadID, module, node, actions)
-}
-
-func assertContains(t *testing.T, slice []string, want string) {
-	t.Helper()
-	for _, s := range slice {
-		if s == want {
-			return
-		}
-	}
-	t.Errorf("want %q in %v", want, slice)
-}
-
-func assertNotContains(t *testing.T, slice []string, unwanted string) {
-	t.Helper()
-	for _, s := range slice {
-		if s == unwanted {
-			t.Errorf("do not want %q in %v", unwanted, slice)
-			return
+		if a.Type == "obsolete" && len(a.DepSpecNodeIDs) != 0 {
+			t.Errorf("obsolete action must not carry DepSpecNodeIDs, got %v", a.DepSpecNodeIDs)
 		}
 	}
 }
@@ -1150,136 +1265,43 @@ func TestFR8_ClassifyActions_TestSectionCoupledMatchedObsoleteOnly(t *testing.T)
 }
 
 // ========================
-// Data-flow dependency resolution (requirement 81aac298ce04)
+// Test Helpers
 // ========================
 
-// --- Component in a data_flow's uses gets the data_flow's open bead as a dep ---
-
-func TestFR8_ResolveDeps_DataFlowDepOpenBead(t *testing.T) {
-	h := newDepFixture()
-	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"merkle": {
-				ID:   h.ModMerkle,
-				Name: "merkle",
-				Components: []mapping.ComponentInfo{
-					{ID: h.HASH, Name: "Hasher"},
-				},
-				DataFlows: []mapping.DataFlowInfo{
-					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
-				},
-			},
-		},
-		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+func assertHasAction(t *testing.T, actions []Action, typ, beadID, module, node, reason string) {
+	t.Helper()
+	for _, a := range actions {
+		if a.Type == typ && a.BeadID == beadID && a.Module == module && a.Node == node {
+			if !strings.Contains(a.Reason, reason) {
+				t.Errorf("action (%s, %s, %s, %s) reason = %q, want containing %q", typ, beadID, module, node, a.Reason, reason)
+			}
+			return
+		}
 	}
-	records := []mapping.Record{
-		{ID: 200, SpecNodeID: flowID, BeadID: "spex-flow", Module: "merkle", BeadStatus: "open"},
-	}
-
-	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
-	deps := ResolveDeps(graph, records, action)
-
-	assertContains(t, deps, "spex-flow")
+	t.Errorf("want action (type=%s, beadID=%s, module=%s, node=%s), not found in %+v", typ, beadID, module, node, actions)
 }
 
-// --- Closed data_flow bead is skipped ---
-
-func TestFR8_ResolveDeps_DataFlowDepClosedBead(t *testing.T) {
-	h := newDepFixture()
-	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"merkle": {
-				ID:   h.ModMerkle,
-				Name: "merkle",
-				Components: []mapping.ComponentInfo{
-					{ID: h.HASH, Name: "Hasher"},
-				},
-				DataFlows: []mapping.DataFlowInfo{
-					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
-				},
-			},
-		},
-		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+func assertContains(t *testing.T, slice []string, want string) {
+	t.Helper()
+	for _, s := range slice {
+		if s == want {
+			return
+		}
 	}
-	records := []mapping.Record{
-		{ID: 201, SpecNodeID: flowID, BeadID: "spex-flow-closed", Module: "merkle", BeadStatus: "closed"},
-	}
-
-	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
-	deps := ResolveDeps(graph, records, action)
-
-	assertNotContains(t, deps, "spex-flow-closed")
+	t.Errorf("want %q in %v", want, slice)
 }
 
-// --- Component NOT listed in a data_flow's uses does not depend on that flow ---
-
-func TestFR8_ResolveDeps_DataFlowUnrelatedComponent(t *testing.T) {
-	h := newDepFixture()
-	flowID := schema.IdentityHash("merkle", "data_flow", "HashFlow")
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"merkle": {
-				ID:   h.ModMerkle,
-				Name: "merkle",
-				Components: []mapping.ComponentInfo{
-					{ID: h.HASH, Name: "Hasher"},
-					{ID: h.LEGACY, Name: "LegacyHasher"},
-				},
-				DataFlows: []mapping.DataFlowInfo{
-					// Flow only involves Hasher; LegacyHasher is not in uses.
-					{ID: flowID, Name: "HashFlow", Uses: []string{h.HASH}},
-				},
-			},
-		},
-		modulesByID: map[string]string{h.ModMerkle: "merkle"},
+func assertNotContains(t *testing.T, slice []string, unwanted string) {
+	t.Helper()
+	for _, s := range slice {
+		if s == unwanted {
+			t.Errorf("do not want %q in %v", unwanted, slice)
+			return
+		}
 	}
-	records := []mapping.Record{
-		{ID: 210, SpecNodeID: flowID, BeadID: "spex-flow", Module: "merkle", BeadStatus: "open"},
-	}
-
-	action := Action{Type: "create", Module: "merkle", Node: "LegacyHasher", NodeType: "component", SpecNodeID: h.LEGACY}
-	deps := ResolveDeps(graph, records, action)
-
-	assertNotContains(t, deps, "spex-flow")
 }
 
-// --- Multiple data_flows: component gets deps from each flow it participates in ---
-
-func TestFR8_ResolveDeps_MultipleDataFlows(t *testing.T) {
-	h := newDepFixture()
-	flow1 := schema.IdentityHash("merkle", "data_flow", "HashFlow")
-	flow2 := schema.IdentityHash("merkle", "data_flow", "DiffFlow")
-	graph := &stubSpecGraph{
-		modules: map[string]mapping.ModuleInfo{
-			"merkle": {
-				ID:   h.ModMerkle,
-				Name: "merkle",
-				Components: []mapping.ComponentInfo{
-					{ID: h.HASH, Name: "Hasher"},
-				},
-				DataFlows: []mapping.DataFlowInfo{
-					{ID: flow1, Name: "HashFlow", Uses: []string{h.HASH}},
-					{ID: flow2, Name: "DiffFlow", Uses: []string{h.HASH, h.TREE}},
-				},
-			},
-		},
-		modulesByID: map[string]string{h.ModMerkle: "merkle"},
-	}
-	records := []mapping.Record{
-		{ID: 220, SpecNodeID: flow1, BeadID: "spex-flow1", Module: "merkle", BeadStatus: "open"},
-		{ID: 221, SpecNodeID: flow2, BeadID: "spex-flow2", Module: "merkle", BeadStatus: "open"},
-	}
-
-	action := Action{Type: "create", Module: "merkle", Node: "Hasher", NodeType: "component", SpecNodeID: h.HASH}
-	deps := ResolveDeps(graph, records, action)
-
-	assertContains(t, deps, "spex-flow1")
-	assertContains(t, deps, "spex-flow2")
-}
-
-// stubSpecGraph implements a minimal SpecGraph for testing dependency resolution.
+// stubSpecGraph implements a minimal SpecGraph for testing dependency collection.
 type stubSpecGraph struct {
 	modules     map[string]mapping.ModuleInfo
 	modulesByID map[string]string

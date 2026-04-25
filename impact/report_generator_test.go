@@ -271,11 +271,11 @@ func TestNFR5_GenerateReportDeterministic(t *testing.T) {
 	}
 }
 
-// --- D10: ReportGenerator includes DepBeadIDs in create action JSON ---
+// --- D10: ReportGenerator includes DepSpecNodeIDs in create action JSON ---
 
-func TestFR4_D10_GenerateReportIncludesDepBeadIDs(t *testing.T) {
+func TestFR4_D10_GenerateReportIncludesDepSpecNodeIDs(t *testing.T) {
 	actions := []Action{
-		{Type: "create", Module: "impact", Node: "ActionClassifier", DepBeadIDs: []string{"spex-100", "spex-101"}, Reason: "New spec node"},
+		{Type: "create", Module: "impact", Node: "ActionClassifier", DepSpecNodeIDs: []string{"abc123", "def456"}, Reason: "New spec node"},
 	}
 
 	var buf bytes.Buffer
@@ -284,17 +284,17 @@ func TestFR4_D10_GenerateReportIncludesDepBeadIDs(t *testing.T) {
 	}
 
 	output := buf.String()
-	if !strings.Contains(output, `"dep_bead_ids"`) {
-		t.Error("want dep_bead_ids in JSON output")
+	if !strings.Contains(output, `"dep_spec_node_ids"`) {
+		t.Error("want dep_spec_node_ids in JSON output")
 	}
-	if !strings.Contains(output, `"spex-100"`) || !strings.Contains(output, `"spex-101"`) {
-		t.Error("want both dep bead IDs in output")
+	if !strings.Contains(output, `"abc123"`) || !strings.Contains(output, `"def456"`) {
+		t.Error("want both dep spec_node ids in output")
 	}
 }
 
-// --- D11: ReportGenerator omits dep_bead_ids when empty ---
+// --- D11: ReportGenerator omits dep_spec_node_ids when empty ---
 
-func TestFR4_D11_GenerateReportOmitsEmptyDepBeadIDs(t *testing.T) {
+func TestFR4_D11_GenerateReportOmitsEmptyDepSpecNodeIDs(t *testing.T) {
 	actions := []Action{
 		{Type: "create", Module: "impact", Node: "ActionClassifier", Reason: "New spec node"},
 	}
@@ -305,8 +305,8 @@ func TestFR4_D11_GenerateReportOmitsEmptyDepBeadIDs(t *testing.T) {
 	}
 
 	output := buf.String()
-	if strings.Contains(output, `"dep_bead_ids"`) {
-		t.Error("want dep_bead_ids omitted for empty/nil DepBeadIDs")
+	if strings.Contains(output, `"dep_spec_node_ids"`) {
+		t.Error("want dep_spec_node_ids omitted for empty/nil DepSpecNodeIDs")
 	}
 }
 
