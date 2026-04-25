@@ -1,0 +1,5 @@
+{
+  "issues": [
+    {"id":"mock-001","title":"Fresh component","status":"open","issue_type":"feature","parent":"","labels":["spex:100"]}
+  ]
+}

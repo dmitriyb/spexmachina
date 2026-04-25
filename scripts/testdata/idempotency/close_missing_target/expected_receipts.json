@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "status": "partial",
+  "ops": [
+    {"op_id":"op-0001","status":"error","bead_id":"br-xyz","was_existing":false,"error":"br show failed: mock_br: not found: br-xyz"}
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "git_head": "abcdef0123456789",
+  "proposal": "test/idempotency",
+  "ops": [
+    {
+      "op_id": "op-0001",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-100",
+      "idempotency": {"label": "spex:100"},
+      "priority": 2,
+      "title": "Fresh component",
+      "body": "first run, no existing match"
+    }
+  ]
+}

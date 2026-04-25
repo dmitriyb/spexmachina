@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "status": "complete",
+  "ops": [
+    {"op_id":"op-0001","status":"ok","bead_id":"br-200","was_existing":false},
+    {"op_id":"op-0002","status":"ok","bead_id":"br-201","was_existing":false}
+  ]
+}
