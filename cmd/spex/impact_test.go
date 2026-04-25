@@ -479,10 +479,10 @@ func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 
 	// Use an empty-bead stub so enrichment leaves the hand-set BeadStatus
 	// values alone; otherwise the real br DB would overwrite them.
-	stub := writeEmptyBeadStub(t)
+	beadsFile := writeEmptyBeadsFile(t)
 
 	// Run impact.
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--bead-cli", stub)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -587,8 +587,8 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 		{SpecNodeID: userID, BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
 	})
 
-	stub := writeEmptyBeadStub(t)
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--bead-cli", stub)
+	beadsFile := writeEmptyBeadsFile(t)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -611,21 +611,17 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	t.Fatal("create action for User component with OldBeadID=bead-user not found")
 }
 
-// writeEmptyBeadStub creates a shell script that answers any `list` invocation
-// with {"issues":[]}. Tests that don't care about live bead status but would
-// otherwise collide with the real br DB (whose RecordIDs overlap with
-// test-constructed mapping record IDs) can point spex impact at this stub via
-// --bead-cli to keep BeadStatus enrichment a no-op. Scripts ignore args, so
-// the stub works with any flag combination ReadBeads might pass.
-func writeEmptyBeadStub(t *testing.T) string {
+// writeEmptyBeadsFile writes an empty tracker-list JSON to a temp file so
+// tests that hand-set BeadStatus on mapping records can opt out of
+// enrichment without leaking the real tracker DB into the run.
+func writeEmptyBeadsFile(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	stub := filepath.Join(dir, "br-stub")
-	script := "#!/bin/sh\necho '{\"issues\":[]}'\n"
-	if err := os.WriteFile(stub, []byte(script), 0o755); err != nil {
+	path := filepath.Join(dir, "beads.json")
+	if err := os.WriteFile(path, []byte(`{"issues":[]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return stub
+	return path
 }
 
 // TestEnrichRecordsWithBeadStatus verifies the helper copies live bead
@@ -664,6 +660,235 @@ func TestEnrichRecordsWithBeadStatus_EmptyInput(t *testing.T) {
 	out := enrichRecordsWithBeadStatus(nil, nil)
 	if out != nil {
 		t.Errorf("want nil slice, got %v", out)
+	}
+}
+
+// TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate verifies that --beads
+// is wired through ImpactCommand: a removed spec node whose mapping record
+// names a closed bead must produce a cleanup-create action. Without --beads,
+// BeadStatus stays empty and only the obsolete action is emitted (the cleanup
+// gate at action_classifier.go defaults closed for safety).
+func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	modID := schema.IdentityHash("module", "alpha")
+	keepID := schema.IdentityHash("alpha", "component", "Keep")
+	dropID := schema.IdentityHash("alpha", "component", "Drop")
+	keepImplID := schema.IdentityHash("alpha", "impl_section", "KeepImpl")
+	dropImplID := schema.IdentityHash("alpha", "impl_section", "DropImpl")
+	keepTestID := schema.IdentityHash("alpha", "test_section", "KeepTest")
+	dropTestID := schema.IdentityHash("alpha", "test_section", "DropTest")
+
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-project",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+
+	alphaDir := filepath.Join(specDir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"},
+			{"id": "`+dropID+`", "name": "Drop", "content": "arch_drop.md"}
+		],
+		"impl_sections": [
+			{"id": "`+keepImplID+`", "name": "KeepImpl", "content": "impl_keep.md"},
+			{"id": "`+dropImplID+`", "name": "DropImpl", "content": "impl_drop.md"}
+		],
+		"test_sections": [
+			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]},
+			{"id": "`+dropTestID+`", "name": "DropTest", "content": "test_drop.md", "describes": ["`+dropID+`"]}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep\n")
+	writeTestFile(t, alphaDir, "arch_drop.md", "# Drop\n")
+	writeTestFile(t, alphaDir, "impl_keep.md", "# Keep impl\n")
+	writeTestFile(t, alphaDir, "impl_drop.md", "# Drop impl\n")
+	writeTestFile(t, alphaDir, "test_keep.md", "# Keep test\n")
+	writeTestFile(t, alphaDir, "test_drop.md", "# Drop test\n")
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Remove Drop from the spec by rewriting module.json. The completeness
+	// checker requires every still-present component's content leaf to change
+	// when the module meta hash changes — touch arch_keep.md to satisfy it.
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"}
+		],
+		"impl_sections": [
+			{"id": "`+keepImplID+`", "name": "KeepImpl", "content": "impl_keep.md"}
+		],
+		"test_sections": [
+			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep CHANGED\n")
+	if err := os.Remove(filepath.Join(alphaDir, "arch_drop.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(alphaDir, "impl_drop.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(alphaDir, "test_drop.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mapPath := setupMappingFile(t, dir, []mapping.Record{
+		{SpecNodeID: keepID, BeadID: "bead-keep", BeadType: "feature", Module: "alpha", Component: "Keep", ContentFile: "spec/alpha/arch_keep.md", SpecHash: "k"},
+		{SpecNodeID: dropID, BeadID: "bead-drop", BeadType: "feature", Module: "alpha", Component: "Drop", ContentFile: "spec/alpha/arch_drop.md", SpecHash: "d"},
+	})
+
+	// Tracker output: bead-drop is closed, so the obsolete must be paired
+	// with a cleanup create. Record IDs (1, 2) come from FileStore.Create
+	// allocating sequentially in setupMappingFile.
+	beadsFile := filepath.Join(t.TempDir(), "beads.json")
+	if err := os.WriteFile(beadsFile, []byte(`{"issues":[
+		{"id":"bead-keep","status":"open","labels":["spex:1"]},
+		{"id":"bead-drop","status":"closed","labels":["spex:2"]}
+	]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	var foundCleanup bool
+	for _, c := range report.Creates {
+		if c.OldBeadID == "bead-drop" && strings.Contains(c.Reason, "Code cleanup") {
+			foundCleanup = true
+			break
+		}
+	}
+	if !foundCleanup {
+		t.Fatalf("want cleanup create action for bead-drop; creates=%+v", report.Creates)
+	}
+}
+
+// TestFR4_ImpactCommand_NoBeadsFlagSkipsCleanup verifies the safety default:
+// without --beads the cleanup gate stays closed even when removed nodes have
+// matching mapping records, because BeadStatus is never populated.
+func TestFR4_ImpactCommand_NoBeadsFlagSkipsCleanup(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	modID := schema.IdentityHash("module", "alpha")
+	keepID := schema.IdentityHash("alpha", "component", "Keep")
+	dropID := schema.IdentityHash("alpha", "component", "Drop")
+
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-project",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+
+	alphaDir := filepath.Join(specDir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"},
+			{"id": "`+dropID+`", "name": "Drop", "content": "arch_drop.md"}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep\n")
+	writeTestFile(t, alphaDir, "arch_drop.md", "# Drop\n")
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep CHANGED\n")
+	if err := os.Remove(filepath.Join(alphaDir, "arch_drop.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mapPath := setupMappingFile(t, dir, []mapping.Record{
+		{SpecNodeID: dropID, BeadID: "bead-drop", BeadType: "feature", Module: "alpha", Component: "Drop", ContentFile: "spec/alpha/arch_drop.md", SpecHash: "d"},
+	})
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	for _, c := range report.Creates {
+		if strings.Contains(c.Reason, "Code cleanup") {
+			t.Fatalf("cleanup create emitted without --beads; creates=%+v", report.Creates)
+		}
+	}
+}
+
+// TestFR4_ImpactCommand_BeadsFileMissingErrors verifies a non-existent
+// --beads path is surfaced as an error rather than silently skipped.
+func TestFR4_ImpactCommand_BeadsFileMissingErrors(t *testing.T) {
+	specDir, diffFile := setupImpactDiffFile(t)
+	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
+
+	_, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", "/nonexistent/beads.json")
+	if err == nil {
+		t.Fatal("want error for missing --beads file, got nil")
+	}
+	if !strings.Contains(err.Error(), "read beads") {
+		t.Fatalf("want error mentioning 'read beads', got %v", err)
 	}
 }
 
