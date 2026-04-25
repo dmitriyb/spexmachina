@@ -2,178 +2,330 @@ package proposal
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// stubLister is a test double for BeadLister.
-type stubLister struct {
-	beads []BeadRecord
-	err   error
+// writeProposal writes a proposal markdown file under specDir/proposals.
+func writeProposal(t *testing.T, specDir, name, content string) {
+	t.Helper()
+	dir := filepath.Join(specDir, "proposals")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir proposals: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0644); err != nil {
+		t.Fatalf("write %s: %v", name, err)
+	}
 }
 
-func (s *stubLister) ListBeads(_ context.Context) ([]BeadRecord, error) {
-	return s.beads, s.err
-}
+const projContent = "# Project Proposal: Spex Machina\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
 
-func TestFR2_ShowHistory_HumanReadable(t *testing.T) {
+const changeContent = "# Change Proposal: Decouple spex from br\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
+
+func TestHistoryViewer_GroupsBeadsBySpecProposalLabel(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
-	proposalsDir := filepath.Join(specDir, "proposals")
-	os.MkdirAll(proposalsDir, 0755)
+	writeProposal(t, specDir, "2026-02-23-spex-machina.md", projContent)
+	writeProposal(t, specDir, "2026-04-18-decouple.md", changeContent)
 
-	// Create a project proposal file.
-	projContent := "# Project Proposal: Spex Machina\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
-	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-spex-machina.md"), []byte(projContent), 0644)
-
-	lister := &stubLister{
-		beads: []BeadRecord{
-			{
-				ID:       "spexmachina-abc",
-				Title:    "schema: ProjectSchema",
-				Metadata: map[string]string{"spec_proposal": "2026-02-23-spex-machina"},
-			},
-		},
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "schema: ProjectSchema",
+			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
+		{ID: "spexmachina-def", Status: "in_progress", Title: "validator: SchemaChecker",
+			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
+		{ID: "spexmachina-ghi", Status: "closed", Title: "merkle: DiffCommand",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
+		// Bead without spec_proposal label is skipped.
+		{ID: "spexmachina-pqr", Status: "open", Title: "unrelated"},
 	}
 
 	var buf bytes.Buffer
-	err := ShowHistory(context.Background(), specDir, lister, &buf, false)
-	if err != nil {
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(beads); err != nil {
 		t.Fatalf("ShowHistory: %v", err)
 	}
 
 	out := buf.String()
-	if !strings.Contains(out, "2026-02-23-spex-machina.md (project proposal)") {
-		t.Errorf("want proposal header, got:\n%s", out)
+	if !strings.Contains(out, "2026-02-23-spex-machina.md") {
+		t.Errorf("missing first proposal header:\n%s", out)
 	}
-	if !strings.Contains(out, "spexmachina-abc") {
-		t.Errorf("want bead ID in output, got:\n%s", out)
+	if !strings.Contains(out, "2026-04-18-decouple.md") {
+		t.Errorf("missing second proposal header:\n%s", out)
+	}
+	if !strings.Contains(out, "spexmachina-abc") || !strings.Contains(out, "spexmachina-def") {
+		t.Errorf("missing beads under first proposal:\n%s", out)
+	}
+	if !strings.Contains(out, "spexmachina-ghi") {
+		t.Errorf("missing bead under second proposal:\n%s", out)
+	}
+	if strings.Contains(out, "spexmachina-pqr") {
+		t.Errorf("unrelated bead leaked into output:\n%s", out)
 	}
 }
 
-func TestFR2_ShowHistory_JSON(t *testing.T) {
+func TestHistoryViewer_RendersProposalTypeAndStatus(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
-	proposalsDir := filepath.Join(specDir, "proposals")
-	os.MkdirAll(proposalsDir, 0755)
+	writeProposal(t, specDir, "2026-02-23-spex-machina.md", projContent)
+	writeProposal(t, specDir, "2026-04-18-decouple.md", changeContent)
 
-	projContent := "# Project Proposal: Test\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
-	os.WriteFile(filepath.Join(proposalsDir, "2026-02-23-test.md"), []byte(projContent), 0644)
-
-	lister := &stubLister{beads: []BeadRecord{}}
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "schema: ProjectSchema",
+			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
+		{ID: "spexmachina-old", Status: "closed", Title: "apply: BeadCreator",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
+	}
 
 	var buf bytes.Buffer
-	err := ShowHistory(context.Background(), specDir, lister, &buf, true)
-	if err != nil {
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(beads); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "(project proposal)") {
+		t.Errorf("want project-proposal type label, got:\n%s", out)
+	}
+	if !strings.Contains(out, "(change proposal)") {
+		t.Errorf("want change-proposal type label, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Created: spexmachina-abc") {
+		t.Errorf("want Created action for open bead, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Closed:") || !strings.Contains(out, "spexmachina-old") {
+		t.Errorf("want Closed action for closed bead, got:\n%s", out)
+	}
+	if !strings.Contains(out, "(open)") || !strings.Contains(out, "(closed)") {
+		t.Errorf("want bead status in parentheses, got:\n%s", out)
+	}
+}
+
+func TestHistoryViewer_MissingProposalFile(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	// Create the proposals directory but no files.
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "schema: ProjectSchema",
+			Labels: []string{"spec_proposal:2026-99-99-ghost"}},
+	}
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(beads); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
+	}
+
+	out := buf.String()
+	if !strings.Contains(out, "proposal file missing") {
+		t.Errorf("want 'proposal file missing' label, got:\n%s", out)
+	}
+	if !strings.Contains(out, "spexmachina-abc") {
+		t.Errorf("want bead listed under missing-proposal entry, got:\n%s", out)
+	}
+}
+
+func TestHistoryViewer_JSONMode(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	writeProposal(t, specDir, "2026-04-18-decouple.md", changeContent)
+
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "emit: ChangesetBuilder",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
+		{ID: "spexmachina-old", Status: "closed", Title: "apply: BeadCreator",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
+	}
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf, JSON: true}
+	if err := hv.ShowHistory(beads); err != nil {
 		t.Fatalf("ShowHistory JSON: %v", err)
 	}
 
-	var result []ProposalEntry
-	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
-		t.Fatalf("invalid JSON output: %v\nraw: %s", err, buf.String())
+	var payload struct {
+		Proposals []struct {
+			Filename string `json:"filename"`
+			Title    string `json:"title"`
+			Beads    []struct {
+				ID      string `json:"id"`
+				Status  string `json:"status"`
+				Action  string `json:"action"`
+				Summary string `json:"summary"`
+			} `json:"beads"`
+		} `json:"proposals"`
 	}
-	if len(result) != 1 {
-		t.Fatalf("want 1 proposal, got %d", len(result))
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("json unmarshal: %v\nraw: %s", err, buf.String())
 	}
-	if result[0].Proposal != "2026-02-23-test.md" {
-		t.Errorf("want proposal 2026-02-23-test.md, got %q", result[0].Proposal)
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("want 1 proposal entry, got %d", len(payload.Proposals))
 	}
-	if result[0].Type != "project" {
-		t.Errorf("want type project, got %q", result[0].Type)
+	p := payload.Proposals[0]
+	if p.Filename != "2026-04-18-decouple.md" {
+		t.Errorf("want filename, got %q", p.Filename)
 	}
-	if result[0].Date != "2026-02-23" {
-		t.Errorf("want date 2026-02-23, got %q", result[0].Date)
+	if p.Title != "Change Proposal: Decouple spex from br" {
+		t.Errorf("want H1 title, got %q", p.Title)
+	}
+	if len(p.Beads) != 2 {
+		t.Fatalf("want 2 beads, got %d", len(p.Beads))
+	}
+	if p.Beads[0].ID != "spexmachina-abc" || p.Beads[0].Action != "created" || p.Beads[0].Status != "open" {
+		t.Errorf("first bead: %+v", p.Beads[0])
+	}
+	if p.Beads[0].Summary != "emit: ChangesetBuilder" {
+		t.Errorf("want summary, got %q", p.Beads[0].Summary)
+	}
+	if p.Beads[1].Action != "closed" {
+		t.Errorf("want closed action for closed bead, got %q", p.Beads[1].Action)
 	}
 }
 
-func TestFR2_ShowHistory_EmptyDir(t *testing.T) {
+func TestHistoryViewer_NoProposalsNoBeads(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
-	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
 
-	lister := &stubLister{beads: []BeadRecord{}}
-
-	// Human-readable: empty output.
+	// Default (text) mode produces empty output.
 	var buf bytes.Buffer
-	err := ShowHistory(context.Background(), specDir, lister, &buf, false)
-	if err != nil {
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(nil); err != nil {
 		t.Fatalf("ShowHistory: %v", err)
 	}
-	if buf.String() != "" {
+	if buf.Len() != 0 {
 		t.Errorf("want empty output, got %q", buf.String())
 	}
 
-	// JSON: empty array.
+	// JSON mode produces an empty proposals array.
 	buf.Reset()
-	err = ShowHistory(context.Background(), specDir, lister, &buf, true)
-	if err != nil {
+	hv.JSON = true
+	if err := hv.ShowHistory(nil); err != nil {
 		t.Fatalf("ShowHistory JSON: %v", err)
 	}
-	if strings.TrimSpace(buf.String()) != "[]" {
-		t.Errorf("want '[]', got %q", buf.String())
+	var envelope struct {
+		Proposals []any `json:"proposals"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &envelope); err != nil {
+		t.Fatalf("json unmarshal: %v\nraw: %s", err, buf.String())
+	}
+	if len(envelope.Proposals) != 0 {
+		t.Errorf("want empty proposals array, got %d entries", len(envelope.Proposals))
 	}
 }
 
-func TestFR2_ShowHistory_BeadListerError(t *testing.T) {
+func TestHistoryViewer_MultipleSpecProposalLabelsUsesFirst(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
-	proposalsDir := filepath.Join(specDir, "proposals")
-	os.MkdirAll(proposalsDir, 0755)
+	writeProposal(t, specDir, "2026-02-23-first.md", projContent)
+	writeProposal(t, specDir, "2026-03-01-second.md", changeContent)
 
-	content := "# Change Proposal: X\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
-	os.WriteFile(filepath.Join(proposalsDir, "2026-03-01-x.md"), []byte(content), 0644)
-
-	lister := &stubLister{err: fmt.Errorf("proposal: bead CLI unavailable: br not found")}
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "schema: ProjectSchema",
+			Labels: []string{
+				"spec_proposal:2026-02-23-first",
+				"spec_proposal:2026-03-01-second",
+			}},
+	}
 
 	var buf bytes.Buffer
-	err := ShowHistory(context.Background(), specDir, lister, &buf, false)
-	if err == nil {
-		t.Fatal("want error when bead lister fails, got nil")
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf, JSON: true}
+	if err := hv.ShowHistory(beads); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
 	}
-	if !strings.Contains(err.Error(), "bead CLI unavailable") {
-		t.Errorf("want bead CLI error, got: %v", err)
+
+	var payload struct {
+		Proposals []struct {
+			Filename string `json:"filename"`
+			Beads    []struct {
+				ID string `json:"id"`
+			} `json:"beads"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("json unmarshal: %v", err)
+	}
+
+	var firstHasBead, secondHasBead bool
+	for _, p := range payload.Proposals {
+		for _, b := range p.Beads {
+			if b.ID != "spexmachina-abc" {
+				continue
+			}
+			if p.Filename == "2026-02-23-first.md" {
+				firstHasBead = true
+			}
+			if p.Filename == "2026-03-01-second.md" {
+				secondHasBead = true
+			}
+		}
+	}
+	if !firstHasBead {
+		t.Errorf("bead should be grouped under first label")
+	}
+	if secondHasBead {
+		t.Errorf("bead should NOT appear under second label")
 	}
 }
 
-func TestFR2_ExtractDate(t *testing.T) {
-	tests := []struct {
-		filename string
-		want     string
-	}{
-		{"2026-02-23-spex-machina.md", "2026-02-23"},
-		{"2026-03-09-skills.md", "2026-03-09"},
-		{"short.md", ""},
+func TestHistoryViewer_NoSubprocessUsage(t *testing.T) {
+	// HistoryViewer accepts parsed []BeadRecord and must not invoke any
+	// external subprocess. This test does not assert on output; it merely
+	// constructs a viewer with an empty PATH — if any exec.Command call
+	// existed, it would fail. With a pure pipeline, this succeeds.
+	t.Setenv("PATH", "")
+
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	writeProposal(t, specDir, "2026-04-18-decouple.md", changeContent)
+
+	beads := []BeadRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "x",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.filename, func(t *testing.T) {
-			got := extractDate(tt.filename)
-			if got != tt.want {
-				t.Errorf("extractDate(%q) = %q, want %q", tt.filename, got, tt.want)
-			}
-		})
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(beads); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
 	}
 }
 
-func TestFR2_ParseBeadTitle(t *testing.T) {
-	tests := []struct {
-		title      string
-		wantModule string
-		wantNode   string
-	}{
-		{"schema: ProjectSchema", "schema", "ProjectSchema"},
-		{"NoColonHere", "", "NoColonHere"},
+func TestHistoryViewer_ProposalsSortedByFilename(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	writeProposal(t, specDir, "2026-03-01-b.md", changeContent)
+	writeProposal(t, specDir, "2026-02-23-a.md", projContent)
+	writeProposal(t, specDir, "2026-04-12-c.md", changeContent)
+
+	beads := []BeadRecord{
+		{ID: "id1", Status: "open", Title: "x",
+			Labels: []string{"spec_proposal:2026-02-23-a"}},
+		{ID: "id2", Status: "open", Title: "x",
+			Labels: []string{"spec_proposal:2026-03-01-b"}},
+		{ID: "id3", Status: "open", Title: "x",
+			Labels: []string{"spec_proposal:2026-04-12-c"}},
 	}
-	for _, tt := range tests {
-		t.Run(tt.title, func(t *testing.T) {
-			m, n := parseBeadTitle(tt.title)
-			if m != tt.wantModule || n != tt.wantNode {
-				t.Errorf("parseBeadTitle(%q) = (%q, %q), want (%q, %q)", tt.title, m, n, tt.wantModule, tt.wantNode)
-			}
-		})
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(beads); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
+	}
+
+	out := buf.String()
+	idxA := strings.Index(out, "2026-02-23-a.md")
+	idxB := strings.Index(out, "2026-03-01-b.md")
+	idxC := strings.Index(out, "2026-04-12-c.md")
+	if idxA < 0 || idxB < 0 || idxC < 0 {
+		t.Fatalf("missing proposal entries:\n%s", out)
+	}
+	if !(idxA < idxB && idxB < idxC) {
+		t.Errorf("proposals not sorted by filename:\n%s", out)
 	}
 }

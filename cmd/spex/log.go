@@ -1,10 +1,8 @@
 package main
 
 import (
-	"context"
-	"os"
+	"fmt"
 
-	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
 )
 
@@ -18,14 +16,10 @@ func newLogCmd() *cobra.Command {
 	return cmd
 }
 
+// TODO(bead:spexmachina-0lk.21): rewire after spexmachina-0lk.20 retired
+// CLIBeadLister and changed proposal.HistoryViewer to a struct that consumes a
+// pre-parsed []BeadRecord. The new wiring (read stdin → parse → hand to
+// HistoryViewer) is owned by the ProposalCommands bead.
 func runLogE(cmd *cobra.Command, args []string) error {
-	specDir, err := resolveSpecDir(cmd)
-	if err != nil {
-		return err
-	}
-
-	jsonMode, _ := cmd.Flags().GetBool("json")
-	lister := &proposal.CLIBeadLister{Bin: "br"}
-
-	return proposal.ShowHistory(context.Background(), specDir, lister, os.Stdout, jsonMode)
+	return fmt.Errorf("spex log: pending ProposalCommands rewire (spexmachina-0lk.21)")
 }
