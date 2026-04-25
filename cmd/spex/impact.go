@@ -21,8 +21,12 @@ func newImpactCmd() *cobra.Command {
 	}
 	cmd.Flags().String("diff", "", "path to diff JSON file (default: stdin)")
 	cmd.Flags().String("map", ".bead-map.json", "path to bead mapping file")
-	// TODO(bead:spexmachina-0lk.15): replace --bead-cli with --beads <file> after BeadReader lost its subprocess API.
-	cmd.Flags().String("bead-cli", "br", "bead CLI binary name (used to read live bead status for cleanup classification)")
+	cmd.Flags().String("beads", "", "path to tracker list JSON (e.g. `br list --json` output) — supplies live bead status for cleanup-bead classification")
+	// --bead-cli is retained for backward compatibility during the
+	// decouple-spex-from-br transition (proposal 2026-04-18). It is currently
+	// a no-op; callers should migrate to --beads.
+	cmd.Flags().String("bead-cli", "br", "deprecated; use --beads instead")
+	cmd.Flags().Bool("json", true, "emit JSON output (default and currently the only supported format)")
 	return cmd
 }
 
@@ -73,14 +77,18 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: read mapping records: %w", err)
 	}
 
-	// TODO(bead:spexmachina-0lk.15): re-enable bead-status enrichment after
-	// ImpactCommand is rewired to read `br list --json` from a --beads file
-	// and feed it to impact.ReadBeads / ReadBeadsBytes (pure parser, no
-	// subprocess). Without this, cleanup-bead classification for removed
-	// spec nodes whose beads have already closed (req 3dcf3c279ac5) is a
-	// no-op; obsolete-only actions are still produced correctly.
-	_, _ = cmd.Flags().GetString("bead-cli")
-	_ = enrichRecordsWithBeadStatus
+	beadsFlag, _ := cmd.Flags().GetString("beads")
+	if beadsFlag != "" {
+		beadsData, err := os.ReadFile(beadsFlag)
+		if err != nil {
+			return fmt.Errorf("impact: read beads: %w", err)
+		}
+		beads, err := impact.ReadBeadsBytes(beadsData)
+		if err != nil {
+			return fmt.Errorf("impact: %w", err)
+		}
+		records = enrichRecordsWithBeadStatus(beads, records)
+	}
 
 	// Spec graph is used for test_section describes-length gating inside
 	// ClassifyActions and for dependency resolution on create actions.
@@ -146,13 +154,9 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 }
 
 // enrichRecordsWithBeadStatus populates each mapping record's BeadStatus
-// field by matching on the spex:<record-id> label.
-//
-// TODO(bead:spexmachina-0lk.15): this helper is currently unreferenced — the
-// subprocess-based path was retired with impact.BeadReader. ImpactCommand
-// will resurrect it by reading `br list --json` from the --beads flag and
-// feeding it to impact.ReadBeads / ReadBeadsBytes (pure parser, no
-// subprocess). Signature will change to accept []impact.BeadSpec.
+// field by matching on record ID. Records without a matching bead are
+// returned unchanged so the cleanup-bead gate at action_classifier.go
+// defaults closed (no cleanup actions emitted) for safety.
 func enrichRecordsWithBeadStatus(beads []impact.BeadSpec, records []mapping.Record) []mapping.Record {
 	if len(records) == 0 {
 		return records
