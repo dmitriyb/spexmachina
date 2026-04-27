@@ -15,24 +15,33 @@ This skill complements `/spec-review` (which audits internal spec consistency, n
 - If `$ARGUMENTS` is a module name, scope the audit to that module only.
 - If `$ARGUMENTS` is empty, audit every module that has both a spec directory AND shipped code.
 
-## Step 2: Detect modules with shipped code
+## Step 2: Resolve code locations per module
 
-For each module in `spec/project.json`:
+Do NOT assume `<module>/` at the repo root. Code dirs vary: a module's components may live in a directory whose name differs from the module name (e.g. `map` → `mapping/`), and individual components may live outside their module's primary dir (e.g. an `ImpactCommand` component may live in `cmd/spex/impact.go` rather than `impact/`).
 
-- Spec directory: `spec/<module>/` exists with content leaves.
-- Code directory: `<module>/` exists at the repo root (project convention; verify by reading `CLAUDE.md` for any project-specific layout notes).
+For each module in scope:
 
-If a module has spec but no code directory, skip it — there's nothing to audit yet (the components are pre-implementation). Report skipped modules in the final summary.
+1. Read `spec/<module>/module.json` to get the component list.
+2. For each component, locate its code by searching the repo for a top-level Go declaration matching the component name. Use ripgrep with a Go-shaped pattern, e.g.:
+
+   ```bash
+   rg -n --type go "^(type|func) +<ComponentName>\b" .
+   ```
+
+   Record the file path of every hit.
+3. Collect the set of unique directories from the hits. These are the module's resolved code dirs.
+4. Tie-break ambiguity:
+   - **Zero hits** for a component → treat the component as pre-implementation; skip it for this audit and note in the summary.
+   - **Multiple hits in different dirs** for the same component name (homonym across packages) → ask the user which one is the spec'd component before continuing. Do not guess.
+5. If every component in a module is pre-implementation (zero hits), skip the module entirely and report it as skipped.
 
 ## Step 3: Read spec + code per module
 
 For each module in scope, read in this order:
 
-1. `spec/<module>/module.json` to get the component list and content paths
-2. Spec content leaves: `arch_*.md`, `impl_*.md`, `test_*.md`, `flow_*.md`
-3. Code in `<module>/`:
-   - All `*.go` source files (skip `*_test.go` for the first pass — those are TDD artifacts and may legitimately exceed what arch describes)
-   - For each component named in `module.json`, find the Go type/function with the same name
+1. `spec/<module>/module.json` (already loaded in Step 2) and the spec content leaves it points to: `arch_*.md`, `impl_*.md`, `test_*.md`, `flow_*.md`.
+2. The code files resolved in Step 2, plus their sibling files in the same Go package (same directory, same `package` declaration). Sibling files often hold the helpers, types, and tests that complete the component's surface.
+   - Skip `*_test.go` for the first pass — those are TDD artifacts and may legitimately exceed what arch describes. They re-enter scope in Step 4 for the test-claim check.
 
 Do NOT modify any files. Read-only audit.
 
