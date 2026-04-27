@@ -74,6 +74,7 @@ Produce a `result` of either `CLEAN` (nothing to flag) or `ISSUES` (one or more 
 5. **Patterns**: follows existing conventions, idiomatic Go (see `@~/.claude/skills/go-expert/SKILL.md`).
 6. **Tests**: verify requirements not implementation details, failure cases tested.
 7. **Integration testing**: if the spec includes integration test scenarios (in `test_*.md` files), the PR must include tests matching those scenarios. Missing integration tests for defined scenarios is a review blocker.
+8. **Cross-bead test scope** (blocker): tests in this PR's diff must trace ONLY to scenarios in this bead's test_sections. Run `bin/spex map context <bead-id>` to get the bead's `test_files`. For each test case added or modified in the diff (regardless of source-code file or language — `*_test.go`, `*_spec.rb`, `*.test.ts`, `test_*.py`, etc.), identify which `test_*.md` scenario it implements. If a test covers a scenario from a test_section NOT in this bead's `test_files`, the implementer reached outside scope — flag as a blocker. The default action is to require removal of the cross-bead tests so the corresponding sibling bead can deliver them in its own PR; ask the user to confirm before allowing such tests to ship under this bead. Note: this check is independent of file ownership — a single test file may legitimately host tests for multiple beads' test_sections; the boundary is per-test-case, mapped via scenario-to-test_section ownership.
 
 **If `mode = FOLLOWUP`:** verify each prior feedback item against current files.
 
