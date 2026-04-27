@@ -155,6 +155,19 @@ Each markdown file is a content leaf. Write substantive content — these are th
 
 ## Workflow
 
+### 0. Maintain an authoring log
+
+Throughout this run, keep an in-memory append-only log of every spec node you create or modify. Each entry records:
+
+- Module name
+- Node type (`module`, `requirement`, `component`, `impl_section`, `data_flow`, `test_section`, `milestone`, `scenario`)
+- Identity hash (computed via `spex hash-id`)
+- Node name
+- File path of any content leaf written
+- Source: which proposal section / requirement drove this node
+
+The log is the input to the per-node check (steps 3–5) and the end-of-session sanity gate (step 6). It does NOT need to be persisted to disk — it lives in your reasoning context for this run only.
+
 ### 1. Read proposal and schemas
 
 - Read the resolved proposal file
@@ -180,6 +193,7 @@ Ask the user:
 - Create module directories under `spec/<module-path>/`
 - Write `spec/<module-path>/module.json` for each module
 - Use 2-space indentation for JSON
+- **Per-node check**: after each `module.json` write, append every node it declares (requirements, components, impl_sections, data_flows, test_sections) to the log AND run the per-node check defined in step 6's "Per-node check" subsection on each one. Fix anything before moving to the next file.
 
 ### 4. Write test sections
 
@@ -193,16 +207,52 @@ Write tests BEFORE implementation content to avoid confirmation bias — test sc
   - **Edge cases**: boundary conditions, error paths, invalid inputs
 - Group related components into shared test_sections where they have natural testing affinity (e.g., components that form a pipeline)
 - If applicable, add cross-module `test_plan` scenarios to `project.json`
+- **Per-node check**: after writing each `test_*.md`, append the test_section to the log AND run the per-node check on it. The `describes >= 2` ⇔ scenarios-actually-span-multiple-components rule is the highest-value check here.
 
 ### 5. Write implementation content leaves
 
 - Create each markdown file referenced by `content` fields in components, impl_sections, and data_flows
 - Write substantive content synthesized from the proposal — not stubs
 - If the proposal lacks detail for a particular node, write what you can and mark gaps with `<!-- TODO: detail needed -->` comments
+- **Per-node check**: after writing each content leaf (`arch_*.md`, `impl_*.md`, `flow_*.md`), append it to the log AND run the per-node check on it.
 
-### 6. Validate
+### 6. Sanity gates
 
-Run `spex validate` and fix every reported error before proceeding. Exit code 0 with `"valid": true` in the JSON report is the gate — do not skip this step. Common failures: missing `preq_id`, incorrect identity hash for a cross-reference, orphan components, content paths that don't resolve.
+Two-phase gate: per-node check (already run inline during steps 3–5) and end-of-session full review.
+
+#### Per-node check
+
+Run immediately after a single node is written (during steps 3–5). Cheap, scoped to one node and its content leaf:
+
+- **Schema/structural**: defer to `bin/spex validate` for whole-graph checks; for one node, just confirm the JSON entry has its required fields (id, name) and any referenced IDs (in `implements`, `uses`, `describes`) point at nodes that exist or are about to be written in this run.
+- **Prose-vs-JSON**: read what you just wrote in the content leaf. Does the prose describe what the JSON declaration claims?
+  - `component / arch_*.md`: prose describes behavior fulfilling the requirements in `implements`
+  - `impl_section / impl_*.md`: prose describes implementation of the components in `describes`, not other ones
+  - `test_section / test_*.md`: scenarios match the structural shape declared by `describes`. For `describes >= 2`, scenarios actually span multiple of the described components (a scenario that names one component, one method is a unit test and does NOT belong here). For `describes == 1`, scenarios are bundled with that component's TDD work.
+  - `data_flow / flow_*.md`: prose describes shapes/contracts moving between the components in `uses`
+- If a check fails: fix the JSON entry or rewrite the content leaf before moving to the next node. Do not log unresolved findings forward — handle them inline.
+
+#### End-of-session full review
+
+Run once after step 5 completes, before step 7.
+
+1. **Deterministic pass**: `bin/spex validate`. Exit code 0 with `"valid": true` is required. If errors, fix them and re-run.
+2. **Cross-node prose-vs-JSON pass**: walk the authoring log. For each touched node, re-run the per-node check now that ALL nodes exist (catches issues where a node referenced something only written later in this session). Also check cross-cutting consistency:
+   - No orphan content files (every `*.md` in a touched module dir is referenced by `module.json`)
+   - Every component is covered by at least one `test_section.describes` entry (this is what `bin/spex validate`'s `test_coverage` checker enforces — confirm it passed)
+   - Cross-references in `implements`, `uses`, `describes`, `requires_module`, `preq_id` resolve to existing nodes
+
+#### Loop and escape
+
+If the end-of-session review surfaces findings:
+
+- Attempt 1: revise the spec to address findings; re-run the review.
+- Attempt 2: revise again; re-run.
+- After attempt 2 fails: HALT auto-correction. Present the user with two choices:
+  - `skip` — leave the findings unresolved; user will adjust manually before running the pipeline.
+  - `one more round` — try one more auto-correction attempt; on failure, present the same two choices again.
+
+If all gates pass: print `spec: sanity gates passed (N nodes touched across M modules)` and proceed to step 7.
 
 ### 7. Report
 
