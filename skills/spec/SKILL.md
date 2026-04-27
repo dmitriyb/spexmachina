@@ -194,6 +194,18 @@ Write tests BEFORE implementation content to avoid confirmation bias — test sc
 - Group related components into shared test_sections where they have natural testing affinity (e.g., components that form a pipeline)
 - If applicable, add cross-module `test_plan` scenarios to `project.json`
 
+#### Behavioral, not unit-level
+
+`test_section` is for behavioral/integration scenarios that exercise components through their public surface — the kind of test a reader needs the spec to anchor because the behavior spans component boundaries or threads through a data flow. Per-function unit tests (one component, one method, one assertion) belong in Go `_test.go` files alongside the implementation; they do not need a spec section.
+
+A scenario heading like "Resolver classifies each dep into the correct ref shape" is a unit test — it names one method on one component. A scenario like "emit pipeline produces byte-identical changeset across two runs" is behavioral — it threads through Resolver, TopologicalSorter, IdempotencyLabeler, and ChangesetBuilder via the public `Build` API.
+
+Practical consequences:
+
+- A component that has no behavior worth describing beyond its unit tests does not get its own test_section. List it in another test_section's `describes` (typically the integration/orchestrator test_section that exercises it transitively). The validator's `CheckTestCoverage` is satisfied by any `describes` mention.
+- Prefer fewer, broader test_sections per module. One per natural behavioral surface (a pipeline, a CLI command, an end-to-end flow) is usually right. One-test_section-per-component is almost always wrong.
+- Do not list "Fixtures" subsections that name JSON files unless those fixture files are the actual contract being tested. Inline test construction is the default; fixtures are only worth calling out when the fixture itself is the spec (e.g., a canonical expected-output document).
+
 ### 5. Write implementation content leaves
 
 - Create each markdown file referenced by `content` fields in components, impl_sections, and data_flows
