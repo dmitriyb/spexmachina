@@ -1,7 +1,7 @@
 ---
 name: converge
 description: "Drive a /spec'd proposal through the deterministic spex pipeline (validate → diff → impact → emit → adapter → ingest). Halt and diagnose any stage failure; never auto-fix the spec or the binary."
-argument-hint: "[proposal-stem]"
+argument-hint: "<proposal-path-or-name>"
 ---
 
 # /converge — Drive the Spex Pipeline
@@ -24,14 +24,20 @@ run (clear it after confirming no live writer holds it).
 
 ## Step 1: Resolve proposal
 
-- If `$ARGUMENTS` is a path or filename stem of a file in `spec/proposals/`,
-  use it.
-- If `$ARGUMENTS` is empty, list `spec/proposals/*.md` and ask the user to
-  pick.
+Same resolution rules as `/spec`:
 
-The "stem" is the filename without `.md` (e.g.
-`2026-04-27-pipeline-cleanup-and-refresh-mode`). Confirm with the user before
-invoking the pipeline.
+1. If `$ARGUMENTS` is a path to an existing file, use it directly.
+2. If `$ARGUMENTS` is a name (no path separator), look for
+   `spec/proposals/*-$ARGUMENTS.md` (glob-suffix match — date prefix
+   optional).
+3. If `$ARGUMENTS` is empty, list `spec/proposals/` and ask the user which
+   proposal to use.
+
+After resolution, normalize to the **stem** (filename minus directory minus
+`.md`, e.g. `2026-04-27-pipeline-cleanup-and-refresh-mode`) because that's
+what `scripts/run-pipeline.sh --proposal <stem>` expects — the script
+constructs the proposal file path itself. Confirm the resolved stem with the
+user before invoking the pipeline.
 
 ## Step 2: Confirm preconditions
 
