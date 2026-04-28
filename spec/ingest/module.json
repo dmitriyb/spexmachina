@@ -50,6 +50,13 @@
       "type": "functional",
       "title": "Re-run idempotency",
       "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. A second run against already-reconciled receipts is a no-op: record targets already match, deletes already happened, snapshot already written. No duplication, no unexpected obsoletion."
+    },
+    {
+      "id": "e68653819f38",
+      "preq_id": "6faeb216618a",
+      "type": "functional",
+      "title": "Refresh mode for impl_only drift",
+      "description": "Refresh mode is a parallel ingest pathway for absorbing content drift on non-bead-producing leaves (impl_section, test_section, data_flow content) without triggering bead lifecycle. Activated via proposal frontmatter mode: refresh; pipeline routing reads the frontmatter and routes the run through the RefreshHandler instead of the normal Reconciler+SnapshotSaver path. The RefreshHandler accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf via merkle.HashFile, and updates each bead-map record's spec_hash to match current content (other fields untouched). Runs are refused if the underlying diff (computed against the snapshot before refresh) contains any added or removed entries, or if any bead-map record points to a spec node that no longer exists — those signal structural drift that requires the normal pipeline. After a successful refresh, the snapshot is saved atomically using the same complete-status path the Reconciler uses, preserving the snapshot+bead-map atomicity invariant. Same spec state plus same snapshot input always produces the same refresh output (no-op on second run)."
     }
   ],
   "components": [
@@ -78,14 +85,24 @@
     {
       "id": "db90eb607bcb",
       "name": "IngestCommand",
-      "description": "CLI entry point: spex ingest --changeset <file> --receipts <file>. Loads both artifacts, wires Reconciler and SnapshotSaver, returns exit 0 on success or non-zero with a structured error on any invariant violation or IO failure.",
+      "description": "CLI entry point: spex ingest --changeset <file> --receipts <file> [--mode refresh]. Loads both artifacts, inspects the run mode, and dispatches: mode: normal wires Reconciler and SnapshotSaver; mode: refresh wires RefreshHandler. Returns exit 0 on success or non-zero with a structured error on any invariant violation or IO failure.",
       "content": "arch_ingest_command.md",
       "implements": [
         "20589ccf7072"
       ],
       "uses": [
         "2b5158af774b",
-        "f85bd2f94aeb"
+        "f85bd2f94aeb",
+        "f9033352c13f"
+      ]
+    },
+    {
+      "id": "f9033352c13f",
+      "name": "RefreshHandler",
+      "description": "Refresh-mode ingest pathway. Consumes an empty changeset plus an empty receipts file, walks the current spec graph, re-hashes every content leaf via merkle.HashFile, and updates each bead-map record's spec_hash to the current content hash (other record fields untouched). Refuses if the diff against the pre-refresh snapshot contains any added or removed entries — refresh is for modified content only. Refuses if any bead-map record points to a spec node that no longer exists. After a successful refresh, saves the new snapshot atomically using the same write path the SnapshotSaver uses for complete-status runs, preserving the snapshot+bead-map atomicity invariant. Separated from Reconciler so the bead-lifecycle rules and the drift-absorption rules live in distinct components with distinct test surfaces.",
+      "content": "arch_refresh.md",
+      "implements": [
+        "e68653819f38"
       ]
     }
   ],
@@ -113,18 +130,27 @@
       "describes": [
         "db90eb607bcb"
       ]
+    },
+    {
+      "id": "4f1323053279",
+      "name": "Refresh handler implementation",
+      "content": "impl_refresh.md",
+      "describes": [
+        "f9033352c13f"
+      ]
     }
   ],
   "data_flows": [
     {
       "id": "6fd1f0cbb76c",
       "name": "Ingest flow",
-      "description": "changeset.json + receipts.json → Reconciler applies per-op state transitions to mapping store → consistency invariants asserted → SnapshotSaver writes spec/.snapshot.json iff status=complete. Both writes are atomic.",
+      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes spec/.snapshot.json iff status=complete); mode: refresh routes through RefreshHandler (re-hash every content leaf, update bead-map spec_hash for changed records, save snapshot atomically, refuse on adds/removes). Both pathways write atomically.",
       "content": "flow_ingest.md",
       "uses": [
         "2b5158af774b",
         "f85bd2f94aeb",
-        "db90eb607bcb"
+        "db90eb607bcb",
+        "f9033352c13f"
       ]
     }
   ],
@@ -161,6 +187,14 @@
       "content": "test_ingest_command.md",
       "describes": [
         "db90eb607bcb"
+      ]
+    },
+    {
+      "id": "a483524c406c",
+      "name": "Refresh mode tests",
+      "content": "test_refresh.md",
+      "describes": [
+        "f9033352c13f"
       ]
     }
   ]

@@ -1,6 +1,18 @@
 # CompletenessChecker
 
-Validates that requirement leaf changes in the diff are accompanied by corresponding component content leaf changes. Ensures that spec edits are complete before the impact pipeline processes them.
+Validates that requirement leaf changes in the diff are accompanied by
+corresponding component content leaf changes. Ensures that spec edits are
+complete before the impact pipeline processes them.
+
+Findings from CompletenessChecker are **errors**, not warnings. They land in
+the top-level `errors` array of the diff JSON output and DiffCommand
+propagates them as a non-zero exit code. The terminology is consistent: the
+struct type is `DiffError`, the JSON field is `errors`, and any text-output
+rendering must label each line with `error:` (never `warning:`). The
+distinction matters because downstream pipeline steps (`spex impact`, `spex
+emit`) refuse to consume a diff with a non-empty `errors` array — a "warning"
+label suggests advisory output that can be ignored, which is the opposite of
+the contract.
 
 ## Responsibilities
 

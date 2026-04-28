@@ -37,3 +37,15 @@ func (s *Sorter) Sort(ops []CreateOp) ([]OrderedOp, error)
 - Topological sort with smallest-lex-spec_node_id tiebreak → one valid order for any input.
 - `op_id` format is stable: `op-0001` through `op-NNNN` padded to the batch's max digit count.
 - Same `(batch, DepSpecNodeIDs)` produces the same ordering on every run.
+
+## Test surface
+
+TopologicalSorter has no public API surface independent of
+`ChangesetBuilder` — only Builder consumes it. Cross-component integration
+coverage (Sorter paired with Resolver, Labeler, and Builder, including the
+"in-batch dep ordering preserves Resolver's ref:op classification"
+scenario and the "cycle detection surfaces through Builder.Build error"
+scenario) lives in `test_changeset_builder`'s `describes` array, exercised
+through `Builder.Build()`'s public API. Per-method unit tests for the
+ordering rules and Kahn's-algorithm tiebreaks live in
+`emit/sorter_test.go` and ship with this component's implementation bead.

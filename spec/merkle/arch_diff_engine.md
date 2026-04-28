@@ -39,3 +39,16 @@ func Diff(current, snapshot *Node) []Change
 ## Rename Stability
 
 Because nodes are keyed by spec ID rather than file path, renaming a module directory or content file does not produce a remove + add. As long as the spec IDs remain the same, the diff correctly identifies the change as a modification.
+
+## Bootstrap behavior
+
+`DiffEngine` is invoked by `spex diff` against two trees: the tree
+TreeBuilder just built from the current spec, and the tree
+`SnapshotStore.Load` returned. On a fresh project where
+`spec/.snapshot.json` does not exist, `Load` returns the empty tree (per
+its missing-file contract). DiffEngine compares the populated current tree
+against the empty baseline and reports every leaf as `added`. That is the
+diff input the rest of the pipeline (impact → emit → adapter → ingest)
+consumes to produce the first bead-map and the first snapshot. There is no
+"prime the snapshot" step beforehand — bootstrap and steady-state share
+the same DiffEngine call.

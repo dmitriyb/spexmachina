@@ -58,3 +58,13 @@ func (r *Resolver) Priority(componentID string) int
 - Iteration order over `DepSpecNodeIDs` in the impact report is preserved as given (impact emits them in a deterministic order).
 - Priority computation uses `min` on a finite set; result is independent of enumeration order.
 - Parent resolution has one deterministic output per `(proposal, mapping store state)` pair.
+
+## Test surface
+
+Resolver has no public API surface independent of `ChangesetBuilder` —
+nothing else in the emit module's `uses` graph consumes it. Cross-component
+integration coverage (Resolver paired with Sorter, Labeler, and Builder)
+lives in `test_changeset_builder`'s `describes` array, exercised through
+`Builder.Build()`'s public API. Per-method unit tests for the individual
+classification, priority, and parent-resolution paths live in
+`emit/resolver_test.go` and ship with this component's implementation bead.

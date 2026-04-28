@@ -39,3 +39,23 @@ JSON is human-readable and diff-friendly in git. When a spec changes, the snapsh
 ### ID-keyed, not path-keyed
 
 Keying by spec ID instead of file path makes the snapshot rename-stable. Renaming a module directory or content file does not invalidate the snapshot — the IDs remain the same.
+
+## Read vs. write call sites
+
+`Save` and `Load` have distinct, single call sites:
+
+- `Load` is called from `spex diff` to read the previous snapshot for
+  comparison. When `spec/.snapshot.json` does not exist, `Load` returns the
+  empty tree (root with no children, root hash = SHA-256 of the empty
+  string) rather than an error. This contract is what enables bootstrap
+  without a pre-seeded snapshot — the first diff treats the spec as
+  entirely added against the empty baseline.
+- `Save` is called only from `spex ingest`'s SnapshotSaver path. The
+  invariant that snapshot and `.bead-map.json` move together is enforced
+  by ingest, which atomically commits both files (mode: normal on complete
+  receipts; mode: refresh always). There is no other writer — no
+  standalone `spex hash` command, no other subcommand that persists the
+  tree.
+
+Keeping reads in `spex diff` and writes in `spex ingest` is what holds the
+snapshot+bead-map atomicity invariant in place.
