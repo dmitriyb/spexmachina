@@ -7,3 +7,6 @@ bin/
 # br (beads) local files
 .beads/.br_history
 .beads/.br_recovery
+
+# /converge pipeline run artifacts (diff.json, changeset.json, receipts.json, log)
+.spex/
