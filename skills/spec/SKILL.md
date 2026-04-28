@@ -236,8 +236,12 @@ Run immediately after a single node is written (during steps 3–5). Cheap, scop
 
 Run once after step 5 completes, before step 7.
 
-1. **Deterministic pass**: `bin/spex validate`. Exit code 0 with `"valid": true` is required. If errors, fix them and re-run.
-2. **Cross-node prose-vs-JSON pass**: walk the authoring log. For each touched node, re-run the per-node check now that ALL nodes exist (catches issues where a node referenced something only written later in this session). Also check cross-cutting consistency:
+1. **Deterministic schema pass**: `bin/spex validate`. Exit code 0 with `"valid": true` is required. If errors, fix them and re-run before moving to the diff pass — schema/DAG failures will produce uninterpretable diff output.
+2. **Deterministic completeness pass**: `bin/spex diff --json`. Read the top-level `errors` array. A non-empty array is a hard failure even though the CLI's bare text output labels these as "warnings" — the JSON is authoritative. Common findings:
+   - `incomplete_change` with message `module X meta changed but component Y content leaf unchanged` — meta hash of module X changed (e.g., a component was added/removed or a test_section's `describes` was reshaped) but component Y's content leaf was not touched in this session. Fix by editing `arch_<Y>.md` (or whichever leaf belongs to Y) to acknowledge the structural shift in the module — what changed about Y's call sites, test surface, or relationships. The edits should be real, not cosmetic. If multiple components are flagged, every one of them needs an edit; the rule is intentionally strict.
+   - Other `incomplete_change` shapes (requirement → component coverage, project requirement chain, etc.): fix per the message — usually the implementing component's content needs to change.
+   This pass MUST end with `errors: []` before moving on. The pipeline (`spex impact`, `spex emit`) refuses to consume a diff with errors, so leaving them unresolved blocks the user.
+3. **Cross-node prose-vs-JSON pass**: walk the authoring log. For each touched node, re-run the per-node check now that ALL nodes exist (catches issues where a node referenced something only written later in this session). Also check cross-cutting consistency:
    - No orphan content files (every `*.md` in a touched module dir is referenced by `module.json`)
    - Every component is covered by at least one `test_section.describes` entry (this is what `bin/spex validate`'s `test_coverage` checker enforces — confirm it passed)
    - Cross-references in `implements`, `uses`, `describes`, `requires_module`, `preq_id` resolve to existing nodes
