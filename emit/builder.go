@@ -54,10 +54,6 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	}
 
 	labeler := &Labeler{MappingStore: b.MappingStore}
-	labels, err := labeler.Reserve(len(ordered))
-	if err != nil {
-		return Changeset{}, fmt.Errorf("emit: build: %w", err)
-	}
 
 	resolver := &Resolver{
 		SpecGraph:    b.SpecGraph,
@@ -66,8 +62,16 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	}
 
 	ops := make([]Op, 0, totalOps)
-	for i, oc := range ordered {
-		op, err := b.makeCreateOp(oc, labels[i], resolver)
+	for _, oc := range ordered {
+		// Per-action labelling: modify-pair creates reuse existing
+		// record-id; cleanup creates use spex:cleanup-<spec_node_id>;
+		// fresh creates consume the cursor. See
+		// spec/emit/arch_idempotency_labeler.md.
+		label, err := labeler.LabelFor(oc.Action)
+		if err != nil {
+			return Changeset{}, fmt.Errorf("emit: build: %w", err)
+		}
+		op, err := b.makeCreateOp(oc, label, resolver)
 		if err != nil {
 			return Changeset{}, err
 		}
@@ -126,13 +130,16 @@ func (b *Builder) collectCreates(report impact.ImpactReport, hasExistingEpic boo
 			SpecHash:       a.SpecHash,
 			OldBeadID:      a.OldBeadID,
 			DepSpecNodeIDs: a.DepSpecNodeIDs,
+			Reason:         a.Reason,
 		})
 	}
 	return creates
 }
 
 // makeCreateOp builds a single create Op, applying epic-specific shortcuts
-// (no parent, no deps, fixed title) and otherwise delegating to Resolver.
+// (no parent, no deps, fixed title), cleanup-specific shape (distinct
+// spec_node_kind, title=Reason, labels=[spex:cleanup]), and otherwise
+// delegating to Resolver.
 func (b *Builder) makeCreateOp(oc OrderedOp, label string, resolver *Resolver) (Op, error) {
 	if oc.Action.NodeType == "proposal" {
 		return Op{
@@ -160,6 +167,28 @@ func (b *Builder) makeCreateOp(oc OrderedOp, label string, resolver *Resolver) (
 			BeadID:   oc.Action.OldBeadID,
 			EdgeType: "blocks",
 		})
+	}
+
+	if oc.Action.IsCleanup() {
+		// Cleanup op shape per spec/emit/arch_changeset_builder.md
+		// "Cleanup op shape" — distinct from the conventional
+		// component/data_flow form. Title comes from Reason verbatim;
+		// labels carry the spex:cleanup discriminator; priority is
+		// FallbackPriority (3) because the pre-decouple "-1 means
+		// don't pass --priority" sentinel doesn't translate to the
+		// changeset's plain-int schema.
+		return Op{
+			OpID:         oc.OpID,
+			Type:         OpCreate,
+			SpecNodeKind: "cleanup",
+			SpecNodeID:   oc.Action.SpecNodeID,
+			Idempotency:  &Idem{Label: label},
+			Parent:       &parent,
+			Deps:         deps,
+			Priority:     FallbackPriority,
+			Title:        oc.Action.Reason,
+			Labels:       []string{"spex:cleanup"},
+		}, nil
 	}
 
 	return Op{

@@ -323,8 +323,24 @@ func TestBuild_PriorityFallback(t *testing.T) {
 // labels [spex:obsolete, commit:<git-head>]. Create op for the replacement
 // includes deps [{ref:bead, bead_id:spexmachina-abc, type:blocks}] for
 // lineage."
+//
+// Also covers the modify-pair record-id-reuse rule from
+// arch_idempotency_labeler.md: the create op's idempotency.label MUST
+// equal the existing record's id (looked up via OldBeadID), NOT a
+// freshly-reserved sequential label. Without this, Reconciler treats the
+// create as a fresh insert at a new recID and invariant 3 fails.
 func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	env := newBuilderEnv()
+	// Seed an existing record whose bead_id matches OldBeadID. Labeler's
+	// modify-pair branch reuses this record's id (42) rather than the
+	// cursor (which would otherwise return 1 from the empty store's
+	// default).
+	const existingRecordID = 42
+	env.store.byBead["spexmachina-abc"] = mapping.Record{
+		ID:         existingRecordID,
+		BeadID:     "spexmachina-abc",
+		SpecNodeID: "Q",
+	}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			{
@@ -388,6 +404,108 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	}
 	if closeOp.Reason != "Spec node modified: m/Q" {
 		t.Errorf("close reason: got %q", closeOp.Reason)
+	}
+
+	// Modify-pair label reuse: the create's idempotency.label must equal
+	// the existing record's id, not a fresh sequential value.
+	wantLabel := "spex:42"
+	if q.Idempotency == nil || q.Idempotency.Label != wantLabel {
+		t.Errorf("Q.idempotency.label: want %q (existing record id), got %+v", wantLabel, q.Idempotency)
+	}
+}
+
+// TestBuild_CleanupOpShape covers the spec scenario from
+// arch_changeset_builder.md "Cleanup op shape": an action with Reason
+// starting "Code cleanup:" produces an op with spec_node_kind="cleanup",
+// title=Reason verbatim, labels=[spex:cleanup], idempotency=spex:cleanup-
+// <spec_node_id>, deps carrying the OldBeadID lineage, priority=
+// FallbackPriority.
+func TestBuild_CleanupOpShape(t *testing.T) {
+	env := newBuilderEnv()
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "X",
+				NodeType:   "component",
+				SpecNodeID: "abc123def456",
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: m/X",
+			},
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	op := findOp(t, cs.Ops, "abc123def456")
+
+	if op.SpecNodeKind != "cleanup" {
+		t.Errorf("spec_node_kind: want cleanup, got %q", op.SpecNodeKind)
+	}
+	if op.Title != "Code cleanup: m/X" {
+		t.Errorf("title: want Reason verbatim, got %q", op.Title)
+	}
+	if len(op.Labels) != 1 || op.Labels[0] != "spex:cleanup" {
+		t.Errorf("labels: want [spex:cleanup], got %+v", op.Labels)
+	}
+	if op.Idempotency == nil || op.Idempotency.Label != "spex:cleanup-abc123def456" {
+		t.Errorf("idempotency.label: want spex:cleanup-abc123def456, got %+v", op.Idempotency)
+	}
+	if op.Priority != FallbackPriority {
+		t.Errorf("priority: want FallbackPriority=%d, got %d", FallbackPriority, op.Priority)
+	}
+	var foundLineage bool
+	for _, d := range op.Deps {
+		if d.Kind == RefBead && d.BeadID == "spexmachina-old" && d.EdgeType == "blocks" {
+			foundLineage = true
+		}
+	}
+	if !foundLineage {
+		t.Errorf("deps: want ref:bead spexmachina-old type:blocks, got %+v", op.Deps)
+	}
+}
+
+// TestBuild_CleanupDoesNotAdvanceCursor covers the spec scenario:
+// "Cursor non-advancement: build a changeset containing one cleanup
+// create AND one fresh component create. Assert the fresh create's
+// spex:<n> label uses the cursor value the Labeler would have returned
+// WITHOUT the cleanup op present."
+func TestBuild_CleanupDoesNotAdvanceCursor(t *testing.T) {
+	env := newBuilderEnv()
+	env.store.nextID = 100
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "Cleanup",
+				NodeType:   "component",
+				SpecNodeID: "spec_cleanup",
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: m/Cleanup",
+			},
+			sampleComponentCreate("spec_fresh", "m", "Fresh", nil),
+		},
+	}
+	cs, err := env.build(report, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	// Three creates expected: the proposal epic (spex:100), then either
+	// cleanup or fresh in some order. The fresh-create label MUST be
+	// spex:101 (the cursor value right after the epic), not spex:102 —
+	// proving the cleanup op did not advance the cursor.
+	freshOp := findOp(t, cs.Ops, "spec_fresh")
+	if freshOp.Idempotency == nil || freshOp.Idempotency.Label != "spex:101" {
+		t.Errorf("fresh.idempotency.label: want spex:101 (cleanup did not advance cursor), got %+v", freshOp.Idempotency)
+	}
+	cleanupOp := findOp(t, cs.Ops, "spec_cleanup")
+	if cleanupOp.Idempotency == nil || cleanupOp.Idempotency.Label != "spex:cleanup-spec_cleanup" {
+		t.Errorf("cleanup.idempotency.label: want spex:cleanup-spec_cleanup, got %+v", cleanupOp.Idempotency)
 	}
 }
 

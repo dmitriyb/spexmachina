@@ -41,11 +41,13 @@ func (g *fakeSpecGraph) ProjectRequirement(id string) (ProjectRequirement, bool)
 
 func intPtr(i int) *int { return &i }
 
-// fakeStore is an in-memory mapping.Store double for Resolver tests. Only
-// GetBySpecNode and GetByProposalEpic are exercised; the other methods
-// return errors so any accidental dependency fails loudly.
+// fakeStore is an in-memory mapping.Store double for Resolver and
+// Labeler tests. GetBySpecNode, GetByProposalEpic, and GetByBead are
+// exercised; the other methods return errors so any accidental
+// dependency fails loudly.
 type fakeStore struct {
 	bySpecNode map[string][]mapping.Record
+	byBead     map[string]mapping.Record
 	epic       map[string]mapping.Record
 	err        error
 	nextID     int
@@ -54,6 +56,7 @@ type fakeStore struct {
 func newFakeStore() *fakeStore {
 	return &fakeStore{
 		bySpecNode: make(map[string][]mapping.Record),
+		byBead:     make(map[string]mapping.Record),
 		epic:       make(map[string]mapping.Record),
 		nextID:     1,
 	}
@@ -84,8 +87,12 @@ func (s *fakeStore) Create(mapping.Record) (int, error) {
 func (s *fakeStore) Get(int) (mapping.Record, error) {
 	return mapping.Record{}, fmt.Errorf("fakeStore.Get: not implemented")
 }
-func (s *fakeStore) GetByBead(string) (mapping.Record, error) {
-	return mapping.Record{}, fmt.Errorf("fakeStore.GetByBead: not implemented")
+func (s *fakeStore) GetByBead(beadID string) (mapping.Record, error) {
+	r, ok := s.byBead[beadID]
+	if !ok {
+		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrNotFound, beadID)
+	}
+	return r, nil
 }
 func (s *fakeStore) Update(int, map[string]string) error {
 	return fmt.Errorf("fakeStore.Update: not implemented")
