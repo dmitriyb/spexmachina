@@ -1,5 +1,5 @@
 {
-  "next_id": 79,
+  "next_id": 83,
   "records": [
     {
       "id": 1,
@@ -114,72 +114,68 @@
     {
       "id": 12,
       "spec_node_id": "325f48728e04",
-      "bead_id": "spexmachina-16l",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.2",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "Hasher",
       "content_file": "spec/merkle/arch_hasher.md",
-      "spec_hash": "81722cb81549beacc8f89e9964784fa6640ad0ba77899b291d111da63fc4164f"
+      "spec_hash": "1be4de06f76ef42c2e5ab9adb1dbb4da246a5cc1ca53a2f40502c08e7630bdc6"
     },
     {
       "id": 13,
       "spec_node_id": "dfe1467b7a4b",
-      "bead_id": "spexmachina-kdb",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.5",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "TreeBuilder",
       "content_file": "spec/merkle/arch_tree_builder.md",
-      "spec_hash": "4d6f2f880e1f2c0941f8ca647a282a0f9d3b6ec38e066d65e84447e043ae09bc"
+      "spec_hash": "c59e2fb0de2139aeeef69720b7d5ce5ebdb593aba378def653e0e9036fdbc35c"
     },
     {
       "id": 14,
       "spec_node_id": "b2fcd9457a28",
-      "bead_id": "spexmachina-zel",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.4",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "SnapshotStore",
       "content_file": "spec/merkle/arch_snapshot_store.md",
-      "spec_hash": "326aeb71ca94c9294fff8d71532db605adc5198f51607dc671054db0fe9ed0d2"
+      "spec_hash": "f6f9b34196d3f7961764b2d5a7cb6ba6d29e7e47d551f21ad0ab47bba63c903c"
     },
     {
       "id": 15,
       "spec_node_id": "cb262b280963",
-      "bead_id": "spexmachina-lg2",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.6",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "DiffEngine",
       "content_file": "spec/merkle/arch_diff_engine.md",
-      "spec_hash": "f06f98731191ac340bc5a016a3901057d3e77540485cff6c059dae1a5cb0e5b8"
+      "spec_hash": "164c1892d2aee09b1e5b4ba693013b92e1dbb6485ddff4c5980e7bf0387020c2"
     },
     {
       "id": 16,
       "spec_node_id": "f1a672216ce9",
-      "bead_id": "spexmachina-7hb",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.8",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "ImpactClassifier",
       "content_file": "spec/merkle/arch_impact_classifier.md",
-      "spec_hash": "5d8a60e4b3eead72bf433fa7c97961593077e6454edfb13beb624f8483a75708"
-    },
-    {
-      "id": 17,
-      "spec_node_id": "ef841f48d313",
-      "bead_id": "spexmachina-103",
-      "bead_type": "task",
-      "module": "merkle",
-      "component": "HashCommand",
-      "content_file": "spec/merkle/arch_hash_command.md",
-      "spec_hash": "5c9ab3fe51d5dbd2951adee8d033af9d42393e5c2b0e5da2583986ef6cffb683"
+      "spec_hash": "27a7aaf1612e0e2af44d74acc3d92e12be320ee14003159be2173435059c39bc"
     },
     {
       "id": 18,
       "spec_node_id": "c8b958ec310d",
-      "bead_id": "spexmachina-ec7",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.10",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "DiffCommand",
       "content_file": "spec/merkle/arch_diff_command.md",
-      "spec_hash": "80a2700ab42e8226bfdb4b44b4b2580ed6fdceaf857a5a06c61f3ae26d8b6281"
+      "spec_hash": "46a9234ca24dde1b4c529036bb4ac764e992cd19a1da57abcb9bef9a543a925d"
     },
     {
       "id": 19,
@@ -324,12 +320,13 @@
     {
       "id": 52,
       "spec_node_id": "de3309dfbd3c",
-      "bead_id": "spexmachina-stp",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.9",
+      "bead_type": "feature",
+      "node_type": "component",
       "module": "merkle",
       "component": "CompletenessChecker",
       "content_file": "spec/merkle/arch_completeness_checker.md",
-      "spec_hash": "35e700f9a052e9cd9febd3fe4241be4fa495838802f393489b383a5c0f012c09"
+      "spec_hash": "c4b99e33b4864509b451dde8728cd19cdf17185f19797376b1a4f860bab93013"
     },
     {
       "id": 53,
@@ -437,13 +434,13 @@
     {
       "id": 63,
       "spec_node_id": "7f06f7d80e94",
-      "bead_id": "spexmachina-7tk.2",
+      "bead_id": "spexmachina-phb.14",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "ChangesetBuilder",
       "content_file": "spec/emit/arch_changeset_builder.md",
-      "spec_hash": "65727e0cf8e4453c22fa18c3125445ff7f50937ac7491d306f3757bb4b1475d7"
+      "spec_hash": "dbe7615f14e684a7a5285fe33d694ac7db9d1962aeb7fb7bff2f2a97a04579cd"
     },
     {
       "id": 64,
@@ -459,68 +456,68 @@
     {
       "id": 65,
       "spec_node_id": "cbe835d38c3e",
-      "bead_id": "spexmachina-0lk.9",
+      "bead_id": "spexmachina-phb.15",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "EmitCommand",
       "content_file": "spec/emit/arch_emit_command.md",
-      "spec_hash": "21c9166e8b4a2fe2ce4a4d8d4f51ab006e7834e932c84827999e54c5e35c6d86"
+      "spec_hash": "d50ede41f79073374538bccedb303a2b41a6030136093e351cd4c672d53b01ca"
     },
     {
       "id": 66,
       "spec_node_id": "6f4b6dd8928f",
-      "bead_id": "spexmachina-7tk.1",
+      "bead_id": "spexmachina-phb.11",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "IdempotencyLabeler",
       "content_file": "spec/emit/arch_idempotency_labeler.md",
-      "spec_hash": "9fc9f91dd31ef950349347cb81a8719c935786f71096945569b4979fef5c6c29"
+      "spec_hash": "fcfada9edd8fba384f68f21f03b695d5a07a748bf2ada0fc6613348b2be75d2f"
     },
     {
       "id": 67,
       "spec_node_id": "f7775ac5f1f3",
-      "bead_id": "spexmachina-0lk.11",
+      "bead_id": "spexmachina-phb.13",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "Resolver",
       "content_file": "spec/emit/arch_resolver.md",
-      "spec_hash": "1fa3b869e156f8232ee172e3753c44db3cee08f040b17d5fe13b291fcf340e41"
+      "spec_hash": "4ecded1122620a62191eee481fbd913162c99a7a64515b3d73409871261c8c51"
     },
     {
       "id": 68,
       "spec_node_id": "7249fd093b8a",
-      "bead_id": "spexmachina-0lk.12",
+      "bead_id": "spexmachina-phb.12",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "TopologicalSorter",
       "content_file": "spec/emit/arch_topological_sorter.md",
-      "spec_hash": "1a70fe9118417ac9aca8c88ea937dd2e926d0c93b2c7afc3aa39628f0b361bb8"
+      "spec_hash": "0589930e89e13b3d6bea1f76772616d3ecd00d7c5cd2c4ce9771dbdec0c32950"
     },
     {
       "id": 69,
       "spec_node_id": "6fd1f0cbb76c",
-      "bead_id": "spexmachina-0lk.16",
-      "bead_type": "task",
+      "bead_id": "spexmachina-phb.3",
+      "bead_type": "feature",
       "node_type": "data_flow",
       "module": "ingest",
       "component": "Ingest flow",
       "content_file": "",
-      "spec_hash": "4d4fa06e839041a2834fd96a375e01e07b7d1423a174d011be4abc540b58e6c1"
+      "spec_hash": "3bb13d2d59183ccaaeeb817d441984a58202204fcdc1b16cca6c25f35693b11a"
     },
     {
       "id": 70,
       "spec_node_id": "db90eb607bcb",
-      "bead_id": "spexmachina-0lk.17",
+      "bead_id": "spexmachina-phb.17",
       "bead_type": "feature",
       "node_type": "component",
       "module": "ingest",
       "component": "IngestCommand",
       "content_file": "spec/ingest/arch_ingest_command.md",
-      "spec_hash": "ea89d3d0beb88cc9140148a1aa6e116c8248364f040dfd8f4ca501a5487eecb6"
+      "spec_hash": "bc70aada68ea70508580042af559d6530753809aa2d330683bc1adf92149f7ef"
     },
     {
       "id": 71,
@@ -554,17 +551,6 @@
       "component": "HistoryViewer",
       "content_file": "spec/proposal/arch_history_viewer.md",
       "spec_hash": "9270d2ba0935e030c0517455e8a22308767d5e17a543e9d24ec6dda386f64e87"
-    },
-    {
-      "id": 74,
-      "spec_node_id": "280a5495eef8",
-      "bead_id": "spexmachina-0lk.22",
-      "bead_type": "task",
-      "node_type": "test_section",
-      "module": "emit",
-      "component": "Resolver and sorter tests",
-      "content_file": "",
-      "spec_hash": "5e89ea9e24014bab35129ce1b7426d3eca8ffd303e9d4174b1290376da8daee0"
     },
     {
       "id": 75,
@@ -609,6 +595,50 @@
       "component": "Classification and reporting tests",
       "content_file": "spec/impact/test_classification_reporting.md",
       "spec_hash": "1acc7093794d368a0866a111e7c3528d4cc3a8587752827958f8d66865b75ae0"
+    },
+    {
+      "id": 79,
+      "spec_node_id": "2026-04-27-pipeline-cleanup-and-refresh-mode",
+      "bead_id": "spexmachina-phb",
+      "bead_type": "epic",
+      "node_type": "proposal",
+      "module": "",
+      "component": "2026-04-27-pipeline-cleanup-and-refresh-mode",
+      "content_file": "",
+      "spec_hash": ""
+    },
+    {
+      "id": 80,
+      "spec_node_id": "35f39388bc76",
+      "bead_id": "spexmachina-phb.1",
+      "bead_type": "feature",
+      "node_type": "data_flow",
+      "module": "merkle",
+      "component": "Hash computation flow",
+      "content_file": "spec/merkle/flow_hash_computation.md",
+      "spec_hash": "a367ec7511cd97cf0f3c0c88f86dc9877048ad8348bf31df26cf9e452b226fc4"
+    },
+    {
+      "id": 81,
+      "spec_node_id": "f9033352c13f",
+      "bead_id": "spexmachina-phb.16",
+      "bead_type": "feature",
+      "node_type": "component",
+      "module": "ingest",
+      "component": "RefreshHandler",
+      "content_file": "spec/ingest/arch_refresh.md",
+      "spec_hash": "5cf89ea3003b251167f066fdbfba84eb7487f842ae7a7acdfe45188562c860b1"
+    },
+    {
+      "id": 82,
+      "spec_node_id": "6951b8d84604",
+      "bead_id": "spexmachina-phb.18",
+      "bead_type": "task",
+      "node_type": "test_section",
+      "module": "emit",
+      "component": "Changeset builder tests",
+      "content_file": "spec/emit/test_changeset_builder.md",
+      "spec_hash": "fadddbdc9e493659429fa9cccaa4a0456d9cf28fa083e914621f1bb18f8e527c"
     }
   ]
 }
