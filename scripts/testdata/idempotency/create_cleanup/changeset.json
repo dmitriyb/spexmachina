@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "git_head": "deadbeefcafe1234",
+  "proposal": "test/idempotency",
+  "ops": [
+    {
+      "op_id": "op-0001",
+      "type": "create",
+      "spec_node_kind": "cleanup",
+      "spec_node_id": "abc123def456",
+      "idempotency": {"label": "spex:cleanup-abc123def456"},
+      "priority": 3,
+      "title": "Code cleanup: m/X",
+      "labels": ["spex:cleanup"],
+      "deps": [
+        {"ref": "bead", "bead_id": "spexmachina-old", "type": "blocks"}
+      ]
+    }
+  ]
+}

@@ -207,6 +207,7 @@ spec_kind_to_bead_type() {
         component)     echo feature ;;
         data_flow)     echo task ;;
         test_section)  echo task ;;
+        cleanup)       echo task ;;
         *)             echo feature ;;
     esac
 }
@@ -306,11 +307,29 @@ process_create() {
             return
         fi
         SUB_TABLE["$op_id"]="$new_bead"
-        append_receipt_ok "$op_id" "$new_bead" false
     else
         rc=$?
         append_receipt_error "$op_id" "" "br create exited $rc: $out"
+        return
     fi
+
+    # op.Labels → post-create `br update --add-label` calls. `br create`
+    # has no --add-label flag (only the comma-joined --labels for the
+    # idempotency label); the spex:cleanup discriminator and any other
+    # op.Labels entry attaches via update, mirroring pre-decouple
+    # createCleanupBead's pattern (create + cli.Update). See
+    # arch_br_reference_adapter.md "Op Translation".
+    local extra_label upd_out
+    while IFS= read -r extra_label; do
+        [[ -z "$extra_label" ]] && continue
+        if ! upd_out=$("$BR_BIN" update "$new_bead" --add-label "$extra_label" 2>&1); then
+            rc=$?
+            append_receipt_error "$op_id" "$new_bead" "br update --add-label $extra_label exited $rc: $upd_out"
+            return
+        fi
+    done < <(jq -r '(.labels // [])[]' <<< "$op")
+
+    append_receipt_ok "$op_id" "$new_bead" false
 }
 
 process_close() {
@@ -331,7 +350,12 @@ process_close() {
         return
     fi
 
-    # Idempotency: already obsoleted?
+    # Idempotency + already-closed branching per spec/adapters/arch_br_reference_adapter.md
+    # "Idempotency". Read both labels AND status from the same `br show`
+    # JSON; pick branch by combined state:
+    #   - labels contain spex:obsolete → skip, status=skipped
+    #   - status="closed" no spex:obsolete → label-only path, status=ok
+    #   - status="open" no spex:obsolete → label + close, status=ok
     local show_out
     if ! show_out=$("$BR_BIN" show "$bead_id" --format json 2>&1); then
         append_receipt_error "$op_id" "$bead_id" "br show failed: $show_out"
@@ -341,8 +365,10 @@ process_close() {
         append_receipt_skipped "$op_id" "$bead_id" false "already obsoleted"
         return
     fi
+    local current_status
+    current_status=$(jq -r '(.[0].status // .status // "")' <<< "$show_out")
 
-    # Add labels from op.labels (typically spex:obsolete + commit:<HEAD>).
+    # Apply labels regardless of branch (typically spex:obsolete + commit:<HEAD>).
     local lbl out rc
     while IFS= read -r lbl; do
         [[ -z "$lbl" ]] && continue
@@ -353,7 +379,17 @@ process_close() {
         fi
     done < <(jq -r '(.labels // [])[]' <<< "$op")
 
-    # Close.
+    if [[ "$current_status" == "closed" ]]; then
+        # Label-only branch: bead is already closed (e.g. from an
+        # earlier bead-lifecycle run). Skip the close call — `br close`
+        # exits 3 on already-closed targets even though the labels
+        # apply. Receipt is ok; downstream Reconciler treats this
+        # identically to the close+label branch in applyClose.
+        append_receipt_ok "$op_id" "$bead_id" false
+        return
+    fi
+
+    # Close+label branch: bead is open.
     local reason
     reason=$(jq -r '.reason // empty' <<< "$op")
     local -a close_flags
