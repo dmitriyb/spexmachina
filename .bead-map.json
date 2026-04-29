@@ -282,16 +282,6 @@
       "spec_hash": "f6ddecac54edd3c6713337c14539f9a70967ed9c8d8de02bbfa5b211394f5b1f"
     },
     {
-      "id": 35,
-      "spec_node_id": "b4e2ae65373e",
-      "bead_id": "spexmachina-3vt",
-      "bead_type": "task",
-      "module": "map",
-      "component": "PreflightChecker",
-      "content_file": "spec/map/arch_preflight_checker.md",
-      "spec_hash": "c6e5eac67278f33c1d663402d1d016927e687d0b49016b8a30bd958c33a515fe"
-    },
-    {
       "id": 36,
       "spec_node_id": "08909d62930b",
       "bead_id": "spexmachina-0re",
