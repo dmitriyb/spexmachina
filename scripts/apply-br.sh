@@ -239,11 +239,18 @@ process_create() {
         return
     fi
 
-    # Idempotency pre-check: any existing bead carrying this label?
+    # Idempotency pre-check: any OPEN bead carrying this label?
+    # Open-only filter mirrors pre-decouple apply/bead_creator.go::FindExisting.
+    # Closed beads carrying the same label are historical (landed in a prior
+    # lifecycle, closed by /review, label persisted across close) and MUST
+    # NOT count as a match — modify-pair creates deliberately reuse the
+    # closed OLD bead's label as their idempotency.label, so without the
+    # filter we'd treat the closed bead as a match and skip the create.
+    # See spec/adapters/arch_br_reference_adapter.md "Idempotency".
     local existing
     if ! existing=$("$BR_BIN" list --json --label "$label" 2>/dev/null \
             | jq -r --arg L "$label" \
-                '(.issues // []) | map(select((.labels // []) | any(. == $L))) | .[0].id // empty'); then
+                '(.issues // []) | map(select(((.labels // []) | any(. == $L)) and .status == "open")) | .[0].id // empty'); then
         append_receipt_error "$op_id" "" "br list failed during idempotency check"
         return
     fi
