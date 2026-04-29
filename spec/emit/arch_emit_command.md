@@ -60,3 +60,15 @@ Failure modes never write a partial changeset.
 - Does not run the adapter.
 - Does not update `.bead-map.json` or save a snapshot — those belong to ingest.
 - Does not invoke git — `--git-head` is caller-supplied.
+
+## Test surface
+
+EmitCommand's CLI-level tests (flag validation, stdin/stdout wiring, exit
+codes, impact-report-with-errors rejection) live in the `Emit command
+tests` test_section and ship with this component's implementation bead.
+The four-component composition that produces the changeset itself
+(ChangesetBuilder + Resolver + TopologicalSorter + IdempotencyLabeler) is
+covered by the consolidated `test_changeset_builder` test_section, which
+names all four in its `describes` array — EmitCommand wires that
+composition but the cross-component integration assertions live with the
+builder tests, not here.

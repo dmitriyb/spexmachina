@@ -133,22 +133,6 @@
       ]
     },
     {
-      "id": "ef841f48d313",
-      "name": "HashCommand",
-      "description": "CLI entry point for spex hash. Parses flags, wires Hasher and TreeBuilder to compute the merkle tree, SnapshotStore to save it.",
-      "content": "arch_hash_command.md",
-      "implements": [
-        "6c556c0db942",
-        "97cc591528f9",
-        "e99a846810df"
-      ],
-      "uses": [
-        "325f48728e04",
-        "dfe1467b7a4b",
-        "b2fcd9457a28"
-      ]
-    },
-    {
       "id": "c8b958ec310d",
       "name": "DiffCommand",
       "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker. Outputs changes and errors in JSON or human-readable format.",
@@ -218,14 +202,6 @@
       "content": "impl_impact_classification.md",
       "describes": [
         "f1a672216ce9"
-      ]
-    },
-    {
-      "id": "15226d6b45d0",
-      "name": "Hash command implementation",
-      "content": "impl_hash_command.md",
-      "describes": [
-        "ef841f48d313"
       ]
     },
     {
@@ -302,7 +278,6 @@
       "name": "Merkle command tests",
       "content": "test_merkle_commands.md",
       "describes": [
-        "ef841f48d313",
         "c8b958ec310d"
       ]
     }

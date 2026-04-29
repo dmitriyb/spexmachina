@@ -13,12 +13,22 @@ Spex Machina owns the structural half. The LLM focuses on what it's good at.
 ## How it works
 
 ```
-spec change → spex validate → spex hash → spex diff → spex impact → spex apply
-                  │                                         │              │
-                  │                                         │              └─ creates/closes/updates beads
-                  │                                         └─ finds affected tasks
+spec change → spex validate → spex diff → spex impact → spex emit → adapter → spex ingest
+                  │                            │            │           │           │
+                  │                            │            │           │           └─ reconciles bead-map,
+                  │                            │            │           │              writes snapshot
+                  │                            │            │           └─ executes bead actions
+                  │                            │            │              against the tracker
+                  │                            │            └─ composes the next changeset
+                  │                            └─ finds affected beads
                   └─ confirms spec is a valid DAG
 ```
+
+The merkle tree is built on demand inside `spex diff` (read) and persisted by
+`spex ingest`'s SnapshotSaver (write); there is no separate `spex hash` step.
+The first diff on a fresh project treats the missing snapshot as the empty
+tree, so the bootstrap cycle produces the initial bead-map and snapshot
+together.
 
 Every change starts with a **proposal** — a traceable document committed to git that captures *why* the change is being made.
 

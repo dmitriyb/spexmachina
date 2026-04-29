@@ -98,3 +98,14 @@ cleanup labels depend on the specific action, not on a sequence position.
   inputs across runs produce identical labels. The adapter's `br list
   --json --label spex:cleanup-<spec_node_id>` lookup gives idempotent
   re-runs.
+
+## Test surface
+
+IdempotencyLabeler has no public API surface independent of
+`ChangesetBuilder` — only Builder consumes it. Cross-component integration
+coverage (Labeler paired with Sorter and Builder, exercising modify-pair
+record-id reuse, cleanup label format, and fresh-cursor allocation through
+`Builder.Build()`'s public API) lives in `test_changeset_builder`'s
+`describes` array. Per-method unit tests for the per-action LabelFor
+branches live in `emit/labeler_test.go` and ship with this component's
+implementation bead.

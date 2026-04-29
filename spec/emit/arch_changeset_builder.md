@@ -125,3 +125,16 @@ Close ops omit `deps`/`parent` and add `target` + `labels`:
 - Any error from Resolver or TopologicalSorter aborts the build; no partial changeset is ever produced.
 - Missing `git_head` is checked by EmitCommand before Builder runs.
 - An impact report with top-level errors is rejected upstream (EmitCommand); Builder assumes a clean report.
+
+## Test surface
+
+ChangesetBuilder, Resolver, TopologicalSorter, and IdempotencyLabeler form
+a closed four-component composition: Builder is the only consumer of the
+other three (per the module's `uses` graph), and the three subordinates
+have no public API surface independent of `Builder.Build()`. Cross-component
+integration coverage therefore lives in a single `test_changeset_builder`
+test_section whose `describes` array names all four components — exercised
+through `Builder.Build()`'s public API rather than against each subordinate
+in isolation. Per-method unit tests for each component live alongside its
+implementation in `emit/{builder,resolver,sorter,labeler}_test.go` and are
+bundled with that component's own implementation bead.

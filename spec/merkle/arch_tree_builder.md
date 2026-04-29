@@ -78,3 +78,19 @@ For project-level requirements, the serialized fields are: `depends_on`, `descri
 The `id` field is now a 12-character hex string rather than an integer, but it is still serialized as part of the leaf so that a node which is moved between modules (and therefore gets a new identity hash) is detected as a content change too — not just a key change.
 
 This ensures that any change to a requirement's text, type, dependencies, or derivation produces a different content hash, making it visible as an individual change in the diff.
+
+## Call sites
+
+TreeBuilder is composed (not invoked directly by users) inside the two
+merkle call paths:
+
+- `spex diff` — builds the current tree once per invocation, hands it to
+  DiffEngine for comparison against the snapshot loaded by SnapshotStore.
+- `spex ingest` SnapshotSaver — builds the current tree to write out the
+  fresh snapshot.
+
+There is no standalone tree-building CLI. The first `spex diff` on a fresh
+project builds the current tree and compares against the empty-tree
+baseline returned by `SnapshotStore.Load` when `spec/.snapshot.json` is
+absent — this is what bootstraps the pipeline without a separate hash
+step. See `flow_hash_computation.md` for the full bootstrap flow.

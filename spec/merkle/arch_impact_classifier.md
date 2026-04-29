@@ -42,3 +42,13 @@ Classification uses the node metadata (NodeType, Module) attached to each change
 4. If change.NodeType is `"meta"` (module.json or project.json) → `structural`
 5. If change.NodeType is `"requirement"` → `structural`
 6. If a module has changes at multiple levels, the highest level wins (structural > arch_impl > contract > impl_only)
+
+## Call site
+
+ImpactClassifier is invoked from `spex diff` only. The diff command builds
+the classified-changes list once per invocation and writes it under the
+top-level `changes` array of the diff JSON output. Downstream consumers
+(`spex impact`, `spex emit`) read the classification through that JSON;
+ImpactClassifier itself has no separate CLI surface and is not called
+during snapshot persistence (`spex ingest`'s SnapshotSaver only rebuilds
+the tree, not the classification).

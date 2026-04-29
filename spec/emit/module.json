@@ -189,14 +189,7 @@
       "name": "Changeset builder tests",
       "content": "test_changeset_builder.md",
       "describes": [
-        "7f06f7d80e94"
-      ]
-    },
-    {
-      "id": "280a5495eef8",
-      "name": "Resolver and sorter tests",
-      "content": "test_resolver_and_sorter.md",
-      "describes": [
+        "7f06f7d80e94",
         "f7775ac5f1f3",
         "7249fd093b8a",
         "6f4b6dd8928f"

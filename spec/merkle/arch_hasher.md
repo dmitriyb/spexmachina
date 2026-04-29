@@ -32,3 +32,20 @@ Interior node hashes are computed from sorted child hashes. This ensures determi
 ### Hex encoding
 
 Hashes are stored as hex strings, not raw bytes. This makes snapshot files human-readable and diff-friendly in git.
+
+## Call sites
+
+Hasher has no direct CLI surface. It is composed by `TreeBuilder`, which is
+invoked from two call sites only:
+
+- `spex diff` — builds the current tree to compare against the loaded snapshot.
+- `spex ingest` SnapshotSaver — rebuilds the tree from the current spec to
+  persist a fresh snapshot atomically with the bead-map writes (mode: normal
+  on complete receipts; mode: refresh always).
+
+There is no standalone `spex hash` command. A separate CLI step that built
+and persisted the tree on demand would either write a snapshot matching
+current content (stalling the next `spex diff`) or desync the snapshot from
+`.bead-map.json` (breaking the snapshot+bead-map atomicity invariant). Both
+fail modes are avoided by routing every read through `spex diff` and every
+write through `spex ingest`.
