@@ -1,0 +1,6 @@
+{
+  "issues": [
+    {"id":"br-old-closed","title":"the OLD bead, closed by /review long ago, still labelled spex:62","status":"closed","issue_type":"feature","labels":["spex:62"]},
+    {"id":"mock-modify-001","title":"m: ModifyPairTarget","status":"open","issue_type":"feature","parent":"","labels":["spex:62"]}
+  ]
+}

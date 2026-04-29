@@ -52,11 +52,48 @@ emit_receipts_json
 
 A bash associative array keyed by op_id, populated after each successful create (and updated with `was_existing` lookups). See `impl_substitution_table.md`.
 
+## Op Translation
+
+The adapter maps changeset op fields to `br` subcommand flags. Two mappings deserve explicit contract documentation because they differ from the obvious component-only path:
+
+### `spec_node_kind` → `br --type`
+
+| `spec_node_kind` | `br --type` |
+|------------------|-------------|
+| `proposal_epic`  | `epic`      |
+| `component`      | `feature`   |
+| `data_flow`      | `task`      |
+| `test_section`   | `task`      |
+| `cleanup`        | `task`      |
+| (other / unset)  | `feature` (default) |
+
+The `cleanup → task` mapping carries forward pre-decouple `apply/bead_creator.go::createCleanupBead`'s explicit `Type: "task"` choice; cleanup beads are bookkeeping/maintenance work, not features.
+
+### `op.Labels` → `br create --add-label`
+
+The adapter MUST pass each entry of `op.Labels` as a `--add-label <label>` flag on `br create`, in the order they appear in the changeset. Currently the adapter applies `Labels` only on close ops (and on `update` for label/tag ops); cleanup creates are the first create-op consumer of this pre-existing field. Without this, the cleanup discriminator label `spex:cleanup` never reaches the tracker, breaking `/cleanup`'s lookup pattern.
+
+The `idempotency.label` is applied separately (the adapter checks for an existing bead with that label before creating, then sets it on the new bead via the standard `--add-label` path or via a follow-up `br update` per the script's existing flow). This is independent of `op.Labels`; cleanup creates carry both `idempotency.label = "spex:cleanup-<spec_node_id>"` AND `Labels = ["spex:cleanup"]`, and both end up on the bead.
+
 ## Idempotency
 
-Before `br create`, query `br list --json | jq ... 'label == $label'` for the op's `idempotency.label`. On match, skip create, record `was_existing=true` with the existing bead_id.
+Before `br create`, query `br list --json --label <op.idempotency.label>` for the op's idempotency label. **A match is a bead with the label AND `status == "open"`.** Closed beads carrying the same label are historical artifacts (a previous bead-lifecycle landed and `/review` closed it; the label persisted across close); they MUST NOT count as a match for create-idempotency. On a true match (open bead with the label), skip create, record `was_existing=true` with the existing bead_id.
 
-Before `br close`, query `br show $bead_id --json | jq '.labels | any(. == "spex:obsolete")'`. On match, skip close, record `status=skipped`.
+The open-only filter mirrors pre-decouple `apply/bead_creator.go::FindExisting`, which iterated tracker results and returned only beads with `Status == "open"`. The filter matters specifically for modify-pair creates: per the modify-pair record-id-reuse rule (see `spec/emit/arch_idempotency_labeler.md`), the new create's `idempotency.label` deliberately equals the existing record's id. The OLD bead in the tracker (now closed) carries that same label as a historical marker. Without the open filter, the adapter would treat the closed historical bead as a match and skip the create — leaving the bead-map record pointing at the closed bead and the new arch contract unrepresented in the tracker. Reconciler invariant 3 (modified-pair records point to new bead_id) would then fail.
+
+The label format depends on the action class — emit produces `spex:<n>` for fresh and modify-pair creates, `spex:cleanup-<spec_node_id>` for cleanup creates; the adapter just looks up whatever label the op carries. The open-only filter applies uniformly across formats: a closed bead carrying ANY `spex:*` label is historical; only an open bead represents current state. Cleanup beads are unaffected because cleanup-bead labels (`spex:cleanup-<spec_node_id>`) are unique per removed-spec-node identity hash, only one bead ever carries them, and during the only window when re-runs occur (a failing /converge retry on the same proposal) the cleanup bead is open — `/cleanup` is a separate user workflow that doesn't run between failing pipeline attempts.
+
+Before `br close`, query `br show <bead_id> --format json` ONCE and read both `labels` and `status` from the returned JSON. Branch on the combined state:
+
+| Pre-state                                  | Action                                                       | Receipt |
+|--------------------------------------------|--------------------------------------------------------------|---------|
+| `labels` contain `spex:obsolete`           | Skip — already obsoleted in a prior run.                     | `status=skipped`, reason `"already obsoleted"` |
+| `status == "closed"` (no `spex:obsolete`)  | Apply labels via `br update --add-label …` only; do NOT call `br close` (it exits 3 on already-closed targets). | `status=ok` |
+| `status == "open"` (no `spex:obsolete`)    | Apply labels via `br update --add-label …`, then `br close --force --reason …`. | `status=ok` |
+
+Pre-decouple's binary split this into two phases (`LabelObsoletes` then `CloseBeads` with `cli.Status` check between them). Post-decouple, the adapter does the same status check internally; the contract from emit is unchanged (one close op per obsoleted bead with labels and reason). The status branch is purely adapter-internal.
+
+The label-only branch matters because `br close` exits 3 on already-closed targets even though the labels DO get applied. Treating that exit as `status=error` would push top-level receipts to `partial` and block ingest from saving the snapshot — every modify-pair close on a previously-shipped bead would fail this way.
 
 ## Receipt Atomicity
 

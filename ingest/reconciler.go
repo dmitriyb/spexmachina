@@ -218,10 +218,21 @@ func (r *Reconciler) applyOp(wc *workingCopy, op emit.Op, rc adapters.OpReceipt,
 	}
 }
 
-// applyCreate handles the four create variants from arch_reconciler.md:
-// fresh insert, was_existing idempotent re-match, modified-pair update
-// (label re-used by emit), and the duplicate-record-id error case.
+// applyCreate handles the create variants from arch_reconciler.md:
+// cleanup creates (no mapping record materialised), proposal_epic
+// creates (no spec-graph lookup, special metadata), fresh insert,
+// was_existing idempotent re-match, modified-pair update (label
+// re-used by emit), and the duplicate-record-id error case.
 func (r *Reconciler) applyCreate(wc *workingCopy, op emit.Op, rc adapters.OpReceipt, sum *ReconcileSummary) error {
+	// Cleanup creates have no mapping record by design — see
+	// arch_reconciler.md "Cleanup-Create Ops". Skip recID parse,
+	// spec-graph lookup, and record materialisation entirely. The
+	// idempotency.label (spex:cleanup-<spec_node_id>) is not a
+	// record-id form; parseRecordID would fail.
+	if op.SpecNodeKind == "cleanup" {
+		return nil
+	}
+
 	if op.Idempotency == nil {
 		return fmt.Errorf("ingest: reconcile: op %s: create has no idempotency label", op.OpID)
 	}
@@ -255,7 +266,7 @@ func (r *Reconciler) applyCreate(wc *workingCopy, op emit.Op, rc adapters.OpRece
 		// Modified-node pair: same record-id, new bead_id. Keep the
 		// record's identity (id, spec_node_id, content_file) and refresh
 		// the volatile fields.
-		md, err := r.lookupMetadata(op.SpecNodeID)
+		md, err := r.lookupOpMetadata(op)
 		if err != nil {
 			return fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
 		}
@@ -273,7 +284,7 @@ func (r *Reconciler) applyCreate(wc *workingCopy, op emit.Op, rc adapters.OpRece
 		return nil
 	}
 
-	md, err := r.lookupMetadata(op.SpecNodeID)
+	md, err := r.lookupOpMetadata(op)
 	if err != nil {
 		return fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
 	}
@@ -332,6 +343,23 @@ func (r *Reconciler) lookupMetadata(specNodeID string) (NodeMetadata, error) {
 	return md, nil
 }
 
+// lookupOpMetadata returns spec-graph metadata for a create op, with a
+// special case for proposal_epic ops whose spec_node_id is the proposal
+// stem (not an identity hash) and has no spec-graph node. See
+// spec/ingest/arch_reconciler.md "Proposal-Epic Ops".
+//
+// Cleanup ops are intercepted earlier in applyCreate and never reach
+// this function; that's why there's no cleanup branch here.
+func (r *Reconciler) lookupOpMetadata(op emit.Op) (NodeMetadata, error) {
+	if op.SpecNodeKind == "proposal_epic" {
+		return NodeMetadata{
+			NodeType:  "proposal",
+			Component: op.SpecNodeID,
+		}, nil
+	}
+	return r.lookupMetadata(op.SpecNodeID)
+}
+
 // assertInvariants enforces the post-apply consistency rules from
 // arch_reconciler.md. Only invariants 1–5 and 7 belong here; invariant
 // 6 (snapshot saved iff complete) is enforced by SnapshotSaver. We run
@@ -362,6 +390,12 @@ func (r *Reconciler) assertInvariants(wc *workingCopy, cs emit.Changeset, receip
 func (r *Reconciler) checkInvariant1(wc *workingCopy, cs emit.Changeset, receiptsByOp map[string]adapters.OpReceipt) error {
 	for _, op := range cs.Ops {
 		if op.Type != emit.OpCreate {
+			continue
+		}
+		// Cleanup creates are exempt from invariant 1 by design — they
+		// produce no mapping record. See arch_reconciler.md
+		// "Cleanup-Create Ops".
+		if op.SpecNodeKind == "cleanup" {
 			continue
 		}
 		rc := receiptsByOp[op.OpID]
@@ -500,6 +534,8 @@ func beadTypeFor(specNodeKind string) string {
 	case "data_flow":
 		return "feature"
 	case "test_section":
+		return "task"
+	case "cleanup":
 		return "task"
 	case "component":
 		return "feature"

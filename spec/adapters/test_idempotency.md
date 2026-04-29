@@ -27,6 +27,19 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 - Changeset label `spex:200`. Sandbox has a bead with label `spex:100` (different record-id).
 - Expected: `br create` invoked (no match on 200); new bead; receipt `was_existing=false`.
 
+### Create: cleanup-bead production
+
+- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cleanup-abc123def456"`, `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
+- br sandbox empty.
+- Expected: idempotency check via `br list --json --label spex:cleanup-abc123def456` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --type task --priority 3 --add-label spex:cleanup --add-label spex:cleanup-abc123def456 --deps blocks:spexmachina-old --silent`. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains both `spex:cleanup` and `spex:cleanup-abc123def456`.
+- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` matches CLAUDE.md's `/cleanup` workflow lookup; the unique label `spex:cleanup-<spec_node_id>` provides re-run idempotency that pre-decouple lacked. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
+
+### Create: cleanup-bead re-run is idempotent
+
+- Same changeset as above. Sandbox already has a bead with label `spex:cleanup-abc123def456` (from a prior run).
+- Expected: `br create` NOT invoked; `br list --json --label spex:cleanup-abc123def456` finds the existing bead; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`.
+- This is what pre-decouple lacked — `createCleanupBead` had no idempotency check and would create duplicates on every re-run.
+
 ### Close: first run
 
 - Changeset close op targeting bead `br-abc`. `br-abc` exists and is open.
@@ -36,6 +49,12 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 - Changeset close op targeting bead `br-abc`. `br-abc` already has label `spex:obsolete`.
 - Expected: `br close` NOT invoked; receipt `status=skipped`, reason `"already obsoleted"`.
+
+### Close: bead is already closed without `spex:obsolete`
+
+- Changeset close op targeting bead `br-abc`. `br-abc` is `status=closed` (closed by an earlier bead-lifecycle run, e.g. `/review` after a previous PR shipped) but its `labels` array does NOT contain `spex:obsolete`.
+- Expected: `br update --add-label spex:obsolete --add-label commit:HEAD` invoked (the labels apply); `br close` NOT invoked (the close transition is a no-op against an already-closed target — `br close` exits 3 in that case); receipt `status=ok`.
+- Rationale: this is the third branch of the close-op idempotency table in `arch_br_reference_adapter.md`. Without it, every modify-pair close on a previously-shipped component records `status=error`, top-level receipts go `partial`, and ingest's atomicity gate refuses to save the snapshot — blocking the whole run.
 
 ### Close: bead doesn't exist
 

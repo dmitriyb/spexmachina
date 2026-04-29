@@ -91,6 +91,12 @@ type Changeset struct {
 // CreateAction is the per-create slice of an impact report relevant to
 // emit. Sorter and Resolver consume it; impact.Action's obsolete-only
 // fields are dropped at the emit boundary.
+//
+// Reason is preserved because emit uses it to detect cleanup actions
+// (Reason starts with "Code cleanup:") — the same isCleanup discriminator
+// pre-decouple apply/bead_creator.go used. Builder branches on this to
+// produce cleanup op shape; Labeler branches on it for the
+// spex:cleanup-<spec_node_id> label format.
 type CreateAction struct {
 	SpecNodeID     string
 	NodeType       string
@@ -99,6 +105,16 @@ type CreateAction struct {
 	SpecHash       string
 	OldBeadID      string
 	DepSpecNodeIDs []string
+	Reason         string
+}
+
+// IsCleanup reports whether the action is a code-cleanup create. Pre-
+// decouple's apply/bead_creator.go used the same Reason-prefix
+// discriminator; emit lifts it into the changeset contract via
+// spec_node_kind="cleanup" on the resulting op.
+func (a CreateAction) IsCleanup() bool {
+	const prefix = "Code cleanup:"
+	return len(a.Reason) >= len(prefix) && a.Reason[:len(prefix)] == prefix
 }
 
 // OrderedOp pairs a CreateAction with the op_id assigned by Sorter.

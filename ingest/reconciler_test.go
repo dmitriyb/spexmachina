@@ -124,6 +124,133 @@ func TestApply_OkCreate(t *testing.T) {
 	}
 }
 
+// TestApply_OkCreate_ProposalEpic covers the "Proposal-Epic Ops" rule
+// from arch_reconciler.md: proposal-epic creates skip the SpecGraph
+// lookup (their spec_node_id is the proposal stem, not an identity hash)
+// and materialise a record with node_type="proposal" and component=<stem>.
+// Regression for the bug surfaced on /converge against any fresh proposal:
+// the reconciler used to call SpecGraph.NodeMetadata(<stem>) and abort
+// with "spec graph: no node <stem>" before any per-op transition committed.
+func TestApply_OkCreate_ProposalEpic(t *testing.T) {
+	// Empty graph — the proposal stem MUST NOT be looked up. If the
+	// implementation forgets the special case, the empty fakeSpecGraph
+	// returns "no node" and the test fails.
+	graph := newFakeSpecGraph()
+	store, _ := newTestStore(t, nil, 77)
+	r := &Reconciler{MappingStore: store, SpecGraph: graph}
+
+	stem := "2026-04-29-decouple-contract-gaps"
+	cs := emit.Changeset{
+		Version: 1,
+		Ops: []emit.Op{{
+			OpID:         "op-1",
+			Type:         emit.OpCreate,
+			SpecNodeKind: "proposal_epic",
+			SpecNodeID:   stem,
+			Idempotency:  idem("spex:77"),
+			Title:        "Proposal: " + stem,
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: 1,
+		Status:  adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{
+			OpID:        "op-1",
+			Status:      adapters.OpStatusOk,
+			BeadID:      "br-epic",
+			WasExisting: false,
+		}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.RecordsAdded != 1 || sum.OkCreates != 1 {
+		t.Errorf("summary = %+v, want 1 added/1 ok create", sum)
+	}
+
+	rec, err := store.Get(77)
+	if err != nil {
+		t.Fatalf("Get(77): %v", err)
+	}
+	if rec.NodeType != "proposal" {
+		t.Errorf("node_type = %q, want proposal (NOT proposal_epic — see arch_reconciler.md)", rec.NodeType)
+	}
+	if rec.BeadType != "epic" {
+		t.Errorf("bead_type = %q, want epic", rec.BeadType)
+	}
+	if rec.Component != stem {
+		t.Errorf("component = %q, want %q (the stem)", rec.Component, stem)
+	}
+	if rec.Module != "" || rec.ContentFile != "" || rec.SpecHash != "" {
+		t.Errorf("proposal-epic record should have empty module/content_file/spec_hash, got %+v", rec)
+	}
+}
+
+// TestApply_OkCreate_Cleanup covers the "Cleanup-Create Ops" rule from
+// arch_reconciler.md: cleanup creates produce no mapping record. The
+// counter does not advance. Invariant 1 is exempt.
+func TestApply_OkCreate_Cleanup(t *testing.T) {
+	// Empty graph — cleanup ops carry the identity hash of a removed
+	// spec node, which is not in the graph by design. The reconciler
+	// MUST NOT call SpecGraph.NodeMetadata; the cleanup branch returns
+	// before any lookup.
+	graph := newFakeSpecGraph()
+	store, _ := newTestStore(t, nil, 50)
+	r := &Reconciler{MappingStore: store, SpecGraph: graph}
+
+	cs := emit.Changeset{
+		Version: 1,
+		Ops: []emit.Op{{
+			OpID:         "op-1",
+			Type:         emit.OpCreate,
+			SpecNodeKind: "cleanup",
+			SpecNodeID:   "abc123def456",
+			Idempotency:  &emit.Idem{Label: "spex:cleanup-abc123def456"},
+			Title:        "Code cleanup: m/X",
+			Labels:       []string{"spex:cleanup"},
+			Deps: []emit.Ref{
+				{Kind: emit.RefBead, BeadID: "spexmachina-old", EdgeType: "blocks"},
+			},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: 1,
+		Status:  adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{
+			OpID:        "op-1",
+			Status:      adapters.OpStatusOk,
+			BeadID:      "br-cleanup",
+			WasExisting: false,
+		}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	// No record materialised.
+	if sum.RecordsAdded != 0 {
+		t.Errorf("RecordsAdded = %d, want 0 (cleanup creates have no map record)", sum.RecordsAdded)
+	}
+	// Counter NOT advanced.
+	next, err := store.NextRecordID()
+	if err != nil {
+		t.Fatalf("NextRecordID: %v", err)
+	}
+	if next != 50 {
+		t.Errorf("counter = %d, want 50 (cleanup ops do not consume the cursor)", next)
+	}
+	// OkCreates IS counted (the op was processed successfully).
+	if sum.OkCreates != 1 {
+		t.Errorf("OkCreates = %d, want 1", sum.OkCreates)
+	}
+	// Invariant 1 must NOT have fired — Apply returned nil. (If it had
+	// fired, Apply would have returned the invariant error.)
+}
+
 // TestApply_OkClose_RemovedDeletes covers the "Ok close on removed →
 // record deleted" scenario.
 func TestApply_OkClose_RemovedDeletes(t *testing.T) {

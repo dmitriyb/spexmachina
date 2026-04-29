@@ -31,6 +31,11 @@ type Labeler struct {
 //
 // Reserve(0) returns an empty slice and initializes the cursor so callers
 // can probe NextLabel after a no-op reservation. Negative n is rejected.
+//
+// Reserve is the bulk-allocation API. For per-action labelling that
+// respects modify-pair record-id reuse and cleanup label format, use
+// LabelFor — Reserve only allocates fresh sequential labels and does not
+// know about action class.
 func (l *Labeler) Reserve(n int) ([]string, error) {
 	if n < 0 {
 		return nil, fmt.Errorf("emit: idempotency labeler: negative count %d", n)
@@ -45,6 +50,37 @@ func (l *Labeler) Reserve(n int) ([]string, error) {
 	}
 	l.cursor += n
 	return out, nil
+}
+
+// LabelFor returns the idempotency label for one create action,
+// branching on action class per spec/emit/arch_idempotency_labeler.md:
+//
+//   - Cleanup actions (Reason starts with "Code cleanup:"):
+//     return spex:cleanup-<action.SpecNodeID>. Cursor does NOT advance.
+//   - Modify-pair actions (OldBeadID != "" and not a cleanup):
+//     look up MappingStore.GetByBead(OldBeadID) and return
+//     spex:<existing-rec.ID>. Cursor does NOT advance.
+//   - Fresh creates: return spex:<cursor> and advance the cursor.
+//
+// Cleanup is checked before modify-pair because cleanup actions also
+// carry OldBeadID (lineage) but get a different label format.
+func (l *Labeler) LabelFor(action CreateAction) (string, error) {
+	if err := l.ensureInit(); err != nil {
+		return "", err
+	}
+	if action.IsCleanup() {
+		return fmt.Sprintf("spex:cleanup-%s", action.SpecNodeID), nil
+	}
+	if action.OldBeadID != "" {
+		rec, err := l.MappingStore.GetByBead(action.OldBeadID)
+		if err != nil {
+			return "", fmt.Errorf("emit: idempotency labeler: lookup record for %s: %w", action.OldBeadID, err)
+		}
+		return fmt.Sprintf("spex:%d", rec.ID), nil
+	}
+	label := fmt.Sprintf("spex:%d", l.cursor)
+	l.cursor++
+	return label, nil
 }
 
 // NextLabel returns the next record-id this Labeler would assign without

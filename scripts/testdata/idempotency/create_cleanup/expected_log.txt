@@ -1,0 +1,4 @@
+br --version
+br list --json --label spex:cleanup-abc123def456
+br create --title Code\ cleanup:\ m/X --labels spex:cleanup-abc123def456 --type task --json --priority 3 --deps blocks:spexmachina-old
+br update mock-cleanup-001 --add-label spex:cleanup

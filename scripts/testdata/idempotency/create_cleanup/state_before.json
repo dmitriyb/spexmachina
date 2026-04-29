@@ -1,0 +1,6 @@
+{
+  "issues": [
+    {"id":"spexmachina-old","title":"the closed bead being cleaned up","status":"closed","issue_type":"feature","labels":[]}
+  ],
+  "create_ids": ["mock-cleanup-001"]
+}

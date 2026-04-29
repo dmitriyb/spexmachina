@@ -47,6 +47,18 @@ Integration tests for `ChangesetBuilder` against synthetic impact reports and ma
 - Modified component Q: old bead `spexmachina-abc` closed, new create op. Assert:
   - Close op carries `target: {"ref":"bead","bead_id":"spexmachina-abc"}` and `labels: ["spex:obsolete","commit:<git-head>"]`.
   - Create op for the replacement includes `deps: [{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}]` for lineage.
+  - Create op's `idempotency.label` MUST equal the existing record's id, NOT a freshly-reserved sequential value. Seed a record with `bead_id="spexmachina-abc"` and `id=42` in the fixture; assert the create op carries `idempotency: {"label":"spex:42"}`. This is the modify-pair record-id-reuse rule from `arch_idempotency_labeler.md`: `LabelFor` looks up the existing record via `MappingStore.GetByBead(action.OldBeadID)` and returns `spex:<existing-rec.ID>` so Reconciler hits the modify-pair-update branch and rebinds the bead_id rather than inserting a parallel record.
+
+### Cleanup-bead create
+
+- Action with `Reason: "Code cleanup: m/X"`, `OldBeadID: "spexmachina-old"`, `SpecNodeID: "abc123def456"`. Assert the resulting create op carries:
+  - `spec_node_kind: "cleanup"` (the new vocabulary value distinct from `component`/`data_flow`/`test_section`).
+  - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"` form).
+  - `labels: ["spex:cleanup"]` on the create op (the discriminator label; emit populates `Op.Labels` on creates, not just on closes).
+  - `idempotency.label: "spex:cleanup-abc123def456"` — unique by removed-node identity hash; does NOT consume the Labeler's cursor.
+  - `deps: [{"ref":"bead","bead_id":"spexmachina-old","type":"blocks"}]` — lineage from the closed bead being cleaned up.
+  - `priority: 3` (`emit.FallbackPriority`).
+- Cursor non-advancement: build a changeset containing one cleanup create AND one fresh component create. Assert the fresh create's `spex:<n>` label uses the cursor value the Labeler would have returned WITHOUT the cleanup op present (the cleanup did not bump the cursor).
 
 ### Error: cycle in batch deps
 

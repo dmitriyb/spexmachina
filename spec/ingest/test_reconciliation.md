@@ -54,6 +54,27 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 - Receipts: all ok.
 - Expected final map: record for X has bead_id from the new-create receipt; no record for B's spec_node; new record for Y.
 
+### Proposal-epic create → record materialised without spec-graph lookup
+
+- Changeset: one create op with `spec_node_kind: "proposal_epic"`, `spec_node_id: "2026-04-29-decouple-contract-gaps"` (the proposal stem), `idempotency.label: "spex:77"`, `title: "Proposal: 2026-04-29-decouple-contract-gaps"`.
+- Receipts: `status: "ok"`, `bead_id: "br-epic"`, `was_existing: false`.
+- Spec graph: empty (the proposal stem is NOT a spec-graph node by design).
+- Expected: record `{id: 77, spec_node_id: "2026-04-29-decouple-contract-gaps", bead_id: "br-epic", bead_type: "epic", node_type: "proposal", component: "2026-04-29-decouple-contract-gaps", module: "", content_file: "", spec_hash: ""}`. The reconciler MUST NOT call `SpecGraph.NodeMetadata` for this op — that lookup would fail because the proposal stem is not in the identity-hash keyspace; the bug it prevents is the "spec graph: no node <stem>" error that aborts ingest with exit 2.
+
+### Cleanup create → no mapping record
+
+- Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"` (the identity hash of the now-removed spec node), `idempotency.label: "spex:cleanup-abc123def456"`, `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
+- Receipts: `status: "ok"`, `bead_id: "br-cleanup"`, `was_existing: false`.
+- Initial counter: 50.
+- Expected: `.bead-map.json` UNCHANGED — no record materialised for the cleanup bead. The counter stays at 50 (the cleanup label uses the spec-node-id form, not the cursor; no allocation happened). `RecordsAdded` in the summary is 0; `OkCreates` is 1 (the op was processed successfully — it just didn't produce a record by design). Invariant 1 ("every ok create has a record") MUST be amended to exempt cleanup creates and MUST NOT fire on this op.
+
+### Invariant exemptions: proposal and cleanup records vs. invariant 4 (orphans)
+
+- Initial map: `{id: 60, spec_node_id: "2026-04-18-decouple-spex-from-br", node_type: "proposal", ...}` (a pre-existing proposal-epic record; its spec_node_id is a proposal stem, NOT in `SpecGraph`).
+- Changeset: any benign change (e.g., a no-op).
+- Expected: `Reconciler.Apply` does NOT report invariant 4 (orphan) for this record. The check short-circuits on `record.NodeType == "proposal"` because proposal stems will never resolve through `SpecGraph.HasNode`. Without this exemption every run would falsely flag the proposal record as orphan and abort.
+- Cleanup records (per the Cleanup-create scenario above) do NOT exist by construction, so invariant 4 trivially passes for them — the exemption is built into the fact that no record was materialised.
+
 ## Counter Advance
 
 After each successful create op, the mapping store's `next_record_id` counter advances to max(existing + 1).
