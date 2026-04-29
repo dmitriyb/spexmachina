@@ -1,5 +1,5 @@
 {
-  "next_id": 77,
+  "next_id": 79,
   "records": [
     {
       "id": 1,
@@ -426,24 +426,24 @@
     {
       "id": 62,
       "spec_node_id": "7f2e76cecab3",
-      "bead_id": "spexmachina-0lk.2",
+      "bead_id": "spexmachina-7tk.4",
       "bead_type": "feature",
       "node_type": "component",
       "module": "adapters",
       "component": "BrReferenceAdapter",
       "content_file": "spec/adapters/arch_br_reference_adapter.md",
-      "spec_hash": "17b87007f56a1c4420043515ceb2a41e290e529b1ce48b80655fdf5636b326f6"
+      "spec_hash": "63e07c42f3e43962236ff7f23dec02a905749d27b951b6a517a7dbf4a3363e9c"
     },
     {
       "id": 63,
       "spec_node_id": "7f06f7d80e94",
-      "bead_id": "spexmachina-0lk.7",
+      "bead_id": "spexmachina-7tk.2",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "ChangesetBuilder",
       "content_file": "spec/emit/arch_changeset_builder.md",
-      "spec_hash": "121a41f593027ef12e626acdd158c6737fa49be960c3575f84a4863fedaeb9c9"
+      "spec_hash": "65727e0cf8e4453c22fa18c3125445ff7f50937ac7491d306f3757bb4b1475d7"
     },
     {
       "id": 64,
@@ -470,13 +470,13 @@
     {
       "id": 66,
       "spec_node_id": "6f4b6dd8928f",
-      "bead_id": "spexmachina-0lk.10",
+      "bead_id": "spexmachina-7tk.1",
       "bead_type": "feature",
       "node_type": "component",
       "module": "emit",
       "component": "IdempotencyLabeler",
       "content_file": "spec/emit/arch_idempotency_labeler.md",
-      "spec_hash": "ca8f1ea7223f2f0eda9b893a060128f664940f27335d49d9d878399fd0502478"
+      "spec_hash": "9fc9f91dd31ef950349347cb81a8719c935786f71096945569b4979fef5c6c29"
     },
     {
       "id": 67,
@@ -525,13 +525,13 @@
     {
       "id": 71,
       "spec_node_id": "2b5158af774b",
-      "bead_id": "spexmachina-0lk.18",
+      "bead_id": "spexmachina-7tk.3",
       "bead_type": "feature",
       "node_type": "component",
       "module": "ingest",
       "component": "Reconciler",
       "content_file": "spec/ingest/arch_reconciler.md",
-      "spec_hash": "9ff20f3913b8cd7e02430bdf21c24c1aa7514c35425b3b67e53b31c8fdea7645"
+      "spec_hash": "c8073a9d5d3169974bc159e3acd1a8a06346c409ec47b55c31578fa51e97659b"
     },
     {
       "id": 72,
@@ -587,6 +587,28 @@
       "component": "Partial run recovery tests",
       "content_file": "",
       "spec_hash": "bfb4ae1114d105d387c9d4020582fc9e781478cdbb87bf0c1d69fdfcccb76caa"
+    },
+    {
+      "id": 77,
+      "spec_node_id": "2026-04-29-decouple-contract-gaps",
+      "bead_id": "spexmachina-7tk",
+      "bead_type": "epic",
+      "node_type": "proposal",
+      "module": "",
+      "component": "2026-04-29-decouple-contract-gaps",
+      "content_file": "",
+      "spec_hash": ""
+    },
+    {
+      "id": 78,
+      "spec_node_id": "59e85bdbec24",
+      "bead_id": "spexmachina-7tk.5",
+      "bead_type": "task",
+      "node_type": "test_section",
+      "module": "impact",
+      "component": "Classification and reporting tests",
+      "content_file": "spec/impact/test_classification_reporting.md",
+      "spec_hash": "1acc7093794d368a0866a111e7c3528d4cc3a8587752827958f8d66865b75ae0"
     }
   ]
 }
