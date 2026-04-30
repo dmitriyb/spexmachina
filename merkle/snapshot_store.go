@@ -2,7 +2,9 @@ package merkle
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -53,9 +55,20 @@ func Save(tree *Node, path string, createdAt time.Time) error {
 }
 
 // Load reads a snapshot file and reconstructs the merkle tree.
+//
+// When the snapshot file does not exist, Load returns the empty-tree
+// baseline (see EmptyTree) with a nil error. This is the contract from
+// spec/merkle/arch_snapshot_store.md: spex diff treats a missing
+// snapshot as the empty baseline so the first run on a fresh project
+// reports every leaf as "added" without a separate bootstrap step.
+// All other read failures (permission denied, I/O errors, malformed
+// JSON, missing root entry) still surface as errors.
 func Load(path string) (*Node, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return EmptyTree(), nil
+		}
 		return nil, fmt.Errorf("merkle: load snapshot %s: %w", path, err)
 	}
 

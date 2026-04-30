@@ -300,13 +300,89 @@ func assertTreeEqual(t *testing.T, want, got *Node, path string) {
 	}
 }
 
-func TestREQ3_Load_MissingFile(t *testing.T) {
-	_, err := Load("/nonexistent/path/.snapshot.json")
-	if err == nil {
-		t.Fatal("want error for missing file, got nil")
+// TestREQ3_Load_MissingFileReturnsEmptyTree pins the contract from
+// spec/merkle/arch_snapshot_store.md ("Read vs. write call sites"):
+// when the snapshot file does not exist, Load returns the empty-tree
+// baseline (root with no children, hash = SHA-256("")) and a nil error.
+// This is what enables spex diff to bootstrap on a fresh project
+// without a pre-seeded snapshot — the missing-file path is no longer
+// an error, it is the documented baseline.
+func TestREQ3_Load_MissingFileReturnsEmptyTree(t *testing.T) {
+	tree, err := Load(filepath.Join(t.TempDir(), "does-not-exist", ".snapshot.json"))
+	if err != nil {
+		t.Fatalf("Load on missing file: want nil error, got %v", err)
 	}
-	if !strings.Contains(err.Error(), "snapshot") {
-		t.Fatalf("error should mention snapshot, got: %v", err)
+	if tree == nil {
+		t.Fatal("Load on missing file: want empty-tree node, got nil")
+	}
+
+	want := EmptyTree()
+	if tree.Hash != want.Hash {
+		t.Errorf("Hash = %q, want EmptyTree().Hash = %q", tree.Hash, want.Hash)
+	}
+	if tree.Type != want.Type {
+		t.Errorf("Type = %q, want %q", tree.Type, want.Type)
+	}
+	if tree.Key != want.Key {
+		t.Errorf("Key = %q, want %q", tree.Key, want.Key)
+	}
+	if len(tree.Children) != 0 {
+		t.Errorf("Children = %d, want 0 (empty baseline)", len(tree.Children))
+	}
+}
+
+// TestREQ3_Load_MissingFile_DiffsAsAllAdded is the integration contract
+// that justifies the missing-file → EmptyTree behavior: the result of
+// Load on an absent snapshot must be diff-equivalent to EmptyTree(),
+// so a current spec compared against it reports every node as "added".
+// If Load returned a different shape (e.g., nil), the bootstrap diff
+// would either panic or produce wrong results.
+func TestREQ3_Load_MissingFile_DiffsAsAllAdded(t *testing.T) {
+	specDir := setupSpecDir(t)
+	current, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	loaded, err := Load(filepath.Join(t.TempDir(), ".snapshot.json"))
+	if err != nil {
+		t.Fatalf("Load on missing file: %v", err)
+	}
+
+	changes := Diff(current, loaded)
+	if len(changes) == 0 {
+		t.Fatal("Diff against missing-file baseline produced no changes; bootstrap path is broken")
+	}
+	for _, c := range changes {
+		if c.Type != Added {
+			t.Errorf("unexpected non-added change against empty baseline: %+v", c)
+		}
+	}
+}
+
+// TestREQ3_Load_PermissionErrorStillFails ensures the missing-file
+// special case does not swallow other I/O errors. A read failure that
+// is NOT os.IsNotExist must still surface as an error so callers can
+// distinguish "no snapshot yet" from "the snapshot is unreadable".
+func TestREQ3_Load_PermissionErrorStillFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".snapshot.json")
+	if err := os.WriteFile(path, []byte("{}"), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(path, 0644) })
+
+	// Skip when running as root (chmod 0 does not block root reads).
+	if data, readErr := os.ReadFile(path); readErr == nil {
+		_ = data
+		t.Skip("running as root — chmod 0 does not block reads, skipping permission-error contract test")
+	}
+
+	if _, err := Load(path); err == nil {
+		t.Fatal("want error for unreadable snapshot, got nil")
 	}
 }
 
