@@ -146,7 +146,28 @@ scripts/run-pipeline.sh --phase apply --run-dir <run-dir>
 
 Capture stdout/stderr. Exit code mapping is in step 6.
 
-If the script exits 0, proceed to step 7.
+If the script exits 0, proceed to step 5b.
+
+## Step 5b: Mark new proposal epic in_progress
+
+If the run created a proposal epic (the create op with `spec_node_kind ==
+"proposal_epic"`), flip its status from `open` to `in_progress` so it reads
+as actively-driven rather than backlog. Purely semantic — `bvr --robot-next`
+already filters open epics with open children — but it makes the epic
+distinguishable in `bvr`'s TUI status filters.
+
+```bash
+epic_op=$(jq -r '.ops[] | select(.spec_node_kind == "proposal_epic") | .op_id' \
+  <run-dir>/changeset.json)
+if [ -n "$epic_op" ]; then
+  epic_id=$(jq -r --arg op "$epic_op" '.ops[] | select(.op_id == $op) | .bead_id' \
+    <run-dir>/receipts.json)
+  [ -n "$epic_id" ] && br update "$epic_id" --status in_progress
+fi
+```
+
+Skip silently if the proposal had no `proposal_epic` create (e.g. no-op
+proposal, or apply ran against an existing epic).
 
 ## Step 6: Diagnose stage failures
 
