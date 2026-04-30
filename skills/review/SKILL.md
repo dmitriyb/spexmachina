@@ -130,12 +130,12 @@ not damage.
 
 When submitting GitHub PR reviews on the user's own PRs, always use event `COMMENT` (not `APPROVE` or `REQUEST_CHANGES`), as GitHub disallows approving or requesting changes on your own PRs.
 
-Write a JSON file and pass it via `--input`. Do NOT use `-f` flags for reviews with inline comments — the nested `comments` array cannot be constructed with `-f`. Do NOT use the `pulls/{number}/comments` endpoint for individual comments — always use the reviews endpoint below.
+Pass the JSON via `--input` against a **content-hashed temp path** (`/tmp/<verb>_<sha256-prefix>.json`) so stale leftovers from a prior session cannot be sent in place of the current body. Do NOT use `-f` flags for reviews with inline comments — the nested `comments` array cannot be constructed with `-f`. Do NOT use the `pulls/{number}/comments` endpoint for individual comments — always use the reviews endpoint below.
 
 The `line` field must be a line number present in the PR diff, not an absolute file line number.
 
 ```bash
-cat > /tmp/review.json << 'EOF'
+BODY=$(cat <<'EOF'
 {
   "event": "COMMENT",
   "body": "Brief summary of review findings.",
@@ -148,8 +148,20 @@ cat > /tmp/review.json << 'EOF'
   ]
 }
 EOF
-gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input /tmp/review.json
+)
+PAYLOAD=/tmp/review_$(printf '%s' "$BODY" | sha256sum | cut -c1-12).json
+printf '%s' "$BODY" > "$PAYLOAD"
+gh api repos/{owner}/{repo}/pulls/{number}/reviews --method POST --input "$PAYLOAD"
 ```
+
+The content-hashed filename is required, not cosmetic. A fixed path like `/tmp/review.json` collides across sessions and within a single session if you patch the same review twice — a Write that fails the file-already-exists guard leaves stale content on disk that a subsequent `gh api --input` call will silently send. With a content-derived path: identical content yields the same filename (idempotent, safe), different content yields a different filename (no stale-payload risk). Apply the same pattern to **every** `gh api --input` call in this skill, varying only the prefix:
+
+- review POST → `/tmp/review_<hash>.json`
+- review-body PUT (`/reviews/{review_id}`) → `/tmp/review_body_<hash>.json`
+- inline-comment PATCH (`/pulls/comments/{comment_id}`) → `/tmp/inline_<hash>.json`
+- follow-up reply (`/pulls/{n}/comments/{id}/replies`) → `/tmp/reply_<hash>.json`
+
+Other guidance for the comment text itself:
 
 - Each comment should be short, explicit, and aligned with the code
 - Include a code example if the fix isn't obvious
