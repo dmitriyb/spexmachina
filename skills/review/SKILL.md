@@ -101,6 +101,8 @@ The `(mode, result)` pair determines the action — one of four, no other paths:
 - **ISSUES + REVIEW** → Post the review with inline comments describing each blocker (see Posting Comments). Do not close.
 - **ISSUES + FOLLOWUP** → For each unfixed item, post a new reply on that comment thread explaining what's still wrong. Do NOT re-review already-fixed items. Do not close.
 
+These four actions are exhaustive. Any action not listed above is forbidden without explicit user consent, regardless of working mode (auto-accept, auto, plan, regular).
+
 Note: Do NOT attempt to resolve PR review threads via the GitHub GraphQL API — the `resolveReviewThread` mutation is not supported by fine-grained PATs. The closed bead serves as the approval signal.
 
 #### Closing the bead
