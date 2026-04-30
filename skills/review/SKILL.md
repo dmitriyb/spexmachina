@@ -109,14 +109,22 @@ Note: Do NOT attempt to resolve PR review threads via the GitHub GraphQL API —
 
 ```bash
 br close <bead-id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."
+br epic close-eligible
 git add .beads/issues.jsonl
 git commit -m "Close <bead-id>: <short bead title>
 
 All PR #<number> review feedback addressed.
+<If close-eligible reported any closed epic(s), append: "Also closed parent epic(s): <id> <title>.">
 
 Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 git push
 ```
+
+`br epic close-eligible` is workspace-wide and closes any epic whose
+children are now all closed. If `/review` is the universal close path,
+that's at most the parent of the just-closed bead. If it surfaces a
+stale-eligible epic from some other path, closing it is correct state —
+not damage.
 
 ## Posting Comments
 
