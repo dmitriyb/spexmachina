@@ -4,6 +4,14 @@ description: "Research the spec and draft a structured proposal in plan mode"
 argument-hint: "[proposal-name]"
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"propose","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 # /propose — Create a Spec Proposal
 
 Draft a structured proposal by researching the spec, code, and existing proposals, then present the full draft in plan mode for user approval.

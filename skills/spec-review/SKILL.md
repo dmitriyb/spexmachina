@@ -4,6 +4,14 @@ description: "Audit the spec for internal inconsistencies (no code reading) and 
 argument-hint: "[module-name]"
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"spec-review","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 # /spec-review — Audit Spec for Internal Inconsistencies
 
 Read the current spec and identify inconsistencies WITHIN the spec itself: prose that contradicts JSON declarations, JSON that references nonexistent nodes, content that doesn't match the structural shape its parent claims. **No code reading.** Code-vs-spec alignment is a separate skill (`/spec-drift`).

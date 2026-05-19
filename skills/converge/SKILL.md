@@ -4,6 +4,14 @@ description: "Drive a /spec'd proposal through the deterministic spex pipeline (
 argument-hint: "<proposal-path-or-name>"
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"converge","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 # /converge — Drive the Spex Pipeline
 
 Take a proposal that has already been processed by `/spec`, and execute the

@@ -5,6 +5,14 @@ disable-model-invocation: true
 argument-hint: <bead-id>
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"implement","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 First run `git checkout main && git pull --rebase` to ensure you are on the latest main.
 
 Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific guidance.

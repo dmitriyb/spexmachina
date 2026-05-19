@@ -4,6 +4,14 @@ description: "Read a proposal and author spec files: project.json, module.json, 
 argument-hint: "<proposal-path-or-name>"
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"spec","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 # /spec — Author Spec from Proposal
 
 Read a proposal from `spec/proposals/` and create or modify the spec: `project.json`, `module.json` files, and markdown content leaves. This is the LLM interface for spec authoring — all structural output must conform to the JSON Schema.

@@ -4,6 +4,14 @@ description: "Audit shipped code against its spec, identify drift, and draft a c
 argument-hint: "[module-name]"
 ---
 
+## Step 0: Declare skill identity to enforcement hooks
+
+Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
+
+```bash
+mkdir -p .claude && printf '{"skill":"spec-drift","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
 # /spec-drift — Audit Code Against Spec
 
 Read the spec content for shipped components and compare it against the actual code. Identify cases where spec and code have diverged: spec describes behavior X, code does behavior Y. Draft a correction proposal in plan mode if drift is found.
