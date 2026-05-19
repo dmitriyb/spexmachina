@@ -21,8 +21,9 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 [[ "$tool" != "Bash" ]] && exit 0
 
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+stripped="$(strip_heredoc_bodies "$command")"
 # Match: git checkout -b <name>, git switch -c <name>, git branch <name> <start>
-if [[ ! "$command" =~ git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c|branch)([[:space:]]|$) ]]; then
+if [[ ! "$stripped" =~ git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c|branch)([[:space:]]|$) ]]; then
   exit 0
 fi
 

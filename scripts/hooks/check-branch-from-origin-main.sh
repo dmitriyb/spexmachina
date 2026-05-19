@@ -23,17 +23,18 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 [[ "$tool" != "Bash" ]] && exit 0
 
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+stripped="$(strip_heredoc_bodies "$command")"
 
 # Capture form + remaining args. Three branch-creation forms:
 form=""
 rest=""
-if [[ "$command" =~ git[[:space:]]+checkout[[:space:]]+-b[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
+if [[ "$stripped" =~ git[[:space:]]+checkout[[:space:]]+-b[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
   form="checkout-b"
   rest="${BASH_REMATCH[3]:-}"
-elif [[ "$command" =~ git[[:space:]]+switch[[:space:]]+-c[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
+elif [[ "$stripped" =~ git[[:space:]]+switch[[:space:]]+-c[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
   form="switch-c"
   rest="${BASH_REMATCH[3]:-}"
-elif [[ "$command" =~ git[[:space:]]+branch[[:space:]]+([^-][^[:space:]]*)([[:space:]]+(.*))? ]]; then
+elif [[ "$stripped" =~ git[[:space:]]+branch[[:space:]]+([^-][^[:space:]]*)([[:space:]]+(.*))? ]]; then
   # `git branch <name> [<start>]` — first arg must not begin with `-`
   form="branch"
   rest="${BASH_REMATCH[3]:-}"

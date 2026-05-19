@@ -62,6 +62,11 @@ assert_allow "$hooks_dir/block-signing-bypass.sh" \
 assert_allow "$hooks_dir/block-signing-bypass.sh" \
   '{"tool_name":"Read","tool_input":{"file_path":"/etc/hosts"}}' \
   "R5b-allows-non-bash"
+# Regression: --no-gpg-sign mentioned inside a heredoc body (e.g. PR
+# description text or commit message documenting R5b) must not trip.
+assert_allow "$hooks_dir/block-signing-bypass.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"gh pr edit 170 --body \"$(cat <<EOF\nDescribes the --no-gpg-sign rule and commit.gpgsign=false bypass.\nEOF\n)\""}}' \
+  "R5b-allows-flag-mentioned-in-heredoc"
 
 # --- R7+R8: beads.db direct read --------------------------------------------
 assert_deny "$hooks_dir/block-beads-db-read.sh" \

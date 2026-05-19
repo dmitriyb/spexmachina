@@ -23,15 +23,7 @@ command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
 # Strip heredoc bodies before matching.
-stripped="$(printf '%s\n' "$command" | awk '
-  BEGIN { in_heredoc = 0; delim = "" }
-  in_heredoc { if ($0 ~ "^" delim "$") { in_heredoc = 0; next } next }
-  match($0, /<<-?[[:space:]]*'\''?"?([A-Za-z_][A-Za-z0-9_]*)/, m) {
-    delim = m[1]; in_heredoc = 1
-    print substr($0, 1, RSTART - 1); next
-  }
-  { print }
-')"
+stripped="$(strip_heredoc_bodies "$command")"
 
 # Trigger only on `git commit` (also matches `git -c k=v commit`).
 if ! printf '%s' " $stripped " | grep -qE "[[:space:]]git[[:space:]]+(-c[[:space:]]+[^[:space:]]+[[:space:]]+)*commit([[:space:]]|$)"; then

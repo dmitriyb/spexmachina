@@ -19,24 +19,10 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-# Heredoc bodies are literal text passed to commands (typically
-# `git commit -m "$(cat <<'EOF' ... EOF)"`). Real interactive git
-# rebase/add commands never use heredocs. To prevent false positives
-# from rule discussion inside commit messages or doc strings, strip
-# heredoc bodies before matching.
-stripped="$(printf '%s\n' "$command" | awk '
-  BEGIN { in_heredoc = 0; delim = "" }
-  in_heredoc {
-    if ($0 ~ "^" delim "$") { in_heredoc = 0; next }
-    next
-  }
-  match($0, /<<-?[[:space:]]*'\''?"?([A-Za-z_][A-Za-z0-9_]*)/, m) {
-    delim = m[1]; in_heredoc = 1
-    print substr($0, 1, RSTART - 1)
-    next
-  }
-  { print }
-')"
+# Real interactive git rebase/add commands never use heredocs.
+# Strip heredoc bodies so doc strings / commit messages mentioning
+# `git rebase -i` don't trip the hook.
+stripped="$(strip_heredoc_bodies "$command")"
 
 # has_flag <command> <flag>  — true if command contains the flag as
 # a whitespace-separated token.

@@ -24,6 +24,36 @@ _repo_root_for_halt() {
   git rev-parse --show-toplevel 2>/dev/null || echo "$PWD"
 }
 
+# strip_heredoc_bodies <command> — print the command with bash heredoc
+# bodies removed. Used by every hook that pattern-matches on Bash
+# commands, to prevent false positives from rule-discussion text
+# inside `git commit -m "$(cat <<'EOF' ... EOF)"` style commit
+# messages and similar literals.
+#
+# Recognises both quoted and unquoted heredoc delimiters: <<EOF,
+# <<'EOF', <<"EOF", <<-EOF (tab-stripped form). Anything between the
+# `<<DELIM` opener and a line matching `^DELIM$` is dropped.
+#
+# Limitations: doesn't try to parse single-line double-quoted strings
+# (`-m "..."` without a heredoc); those are rare and the trade-off
+# is acceptable. Doesn't escape nested heredocs (rare; would need a
+# stack).
+strip_heredoc_bodies() {
+  printf '%s\n' "$1" | awk '
+    BEGIN { in_heredoc = 0; delim = "" }
+    in_heredoc {
+      if ($0 ~ "^" delim "$") { in_heredoc = 0; next }
+      next
+    }
+    match($0, /<<-?[[:space:]]*'\''?"?([A-Za-z_][A-Za-z0-9_]*)/, m) {
+      delim = m[1]; in_heredoc = 1
+      print substr($0, 1, RSTART - 1)
+      next
+    }
+    { print }
+  '
+}
+
 build_halt_inner() {
   if [[ $# -lt 4 ]]; then
     echo "build_halt_inner: need at least <rule> <command> <invariant> <source>" >&2

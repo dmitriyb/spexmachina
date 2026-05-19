@@ -21,7 +21,8 @@ case "$tool" in
     ;;
   Bash)
     command="$(jq -r '.tool_input.command // empty' <<<"$input")"
-    if [[ ! "$command" =~ ^[[:space:]]*git[[:space:]]+commit($|[[:space:]]) ]]; then
+    stripped="$(strip_heredoc_bodies "$command")"
+    if [[ ! "$stripped" =~ ^[[:space:]]*git[[:space:]]+commit($|[[:space:]]) ]]; then
       exit 0
     fi
     target="$command"

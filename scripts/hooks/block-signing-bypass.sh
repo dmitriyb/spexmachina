@@ -18,11 +18,15 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
+# Strip heredoc bodies — documentation mentioning these flags inside a
+# `git commit -m "$(cat <<EOF ... EOF)"` body must not trip the hook.
+stripped="$(strip_heredoc_bodies "$command")"
+
 # Match either: `--no-gpg-sign` flag, or `-c commit.gpgsign=` set to
 # anything other than `true` (matches false/0/no/off).
-if [[ "$command" =~ --no-gpg-sign ]] \
-   || [[ "$command" =~ -c[[:space:]]+commit\.gpgsign=(false|0|no|off|FALSE) ]] \
-   || [[ "$command" =~ -c[[:space:]]+commit\.gpgsign[[:space:]]*=[[:space:]]*(false|0|no|off|FALSE) ]]; then
+if [[ "$stripped" =~ --no-gpg-sign ]] \
+   || [[ "$stripped" =~ -c[[:space:]]+commit\.gpgsign=(false|0|no|off|FALSE) ]] \
+   || [[ "$stripped" =~ -c[[:space:]]+commit\.gpgsign[[:space:]]*=[[:space:]]*(false|0|no|off|FALSE) ]]; then
   emit_halt \
     "signing-flag-denied" \
     "$command" \

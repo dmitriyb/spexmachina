@@ -15,12 +15,15 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 
 case "$tool" in
   Bash)
-    target="$(jq -r '.tool_input.command // empty' <<<"$input")"
+    command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+    target="$(strip_heredoc_bodies "$command")"
     # Direct reads of .beads/beads.db
     if [[ "$target" =~ (sqlite3|cat|head|tail|less|more|xxd|hexdump|od|strings|file|python|python3|perl|ruby).*\.beads/beads\.db ]] \
        || [[ "$target" =~ \.beads/beads\.db.*\.(dump|backup) ]] \
        || [[ "$target" =~ sqlite[0-9]?[[:space:]]+.*\.beads/ ]]; then
       rule="beads-db-direct-read"
+      # Restore original for the deny message.
+      target="$command"
     else
       exit 0
     fi
