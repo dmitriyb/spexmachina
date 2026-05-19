@@ -54,233 +54,318 @@ escalate to the user. The human is the only override path.
 
 **Goals**
 
-- Move every load-bearing "Never / MUST NOT" rule from prose into a hook
-  (Claude Code hook, git hook, or skill pre-flight, in that preference
-  order).
-- When a rule fires, the agent halts immediately, emits a structured
-  recovery message, and waits for explicit user direction. No silent
-  retries, no workarounds, no model-side bypass.
-- Logged violations accumulate locally so frequent firings can later
-  inform rule tuning.
+- Move every load-bearing "Never / MUST NOT" rule from prose into a
+  machine-enforced hook — Claude Code hook (PreToolUse running a script)
+  or git hook (pre-commit, post-commit, pre-push). No "skill pre-flight"
+  layer; markdown at the top of a SKILL.md file is prose, not
+  enforcement (see §9.3).
+- When a rule fires, the hook returns a structured JSON payload per
+  §4.1 and the agent halts immediately. The agent does not retry, does
+  not work around the block, and surfaces the structured payload to the
+  user. Recovery requires explicit user direction.
+- Logged violations accumulate locally (`.claude/hook-violations.log`,
+  gitignored) using the same JSON schema so `jq` is the only tool
+  needed to mine them.
 - All enforcement lives in the repo (`.claude/settings.json`,
-  `scripts/git-hooks/`, skill files), so it travels across docker
-  containers and machines.
+  `scripts/hooks/`, `scripts/git-hooks/`, `Makefile`), so it travels
+  across docker containers and machines.
 
 **Non-goals**
 
-- No relaxation of existing rules. This RFC catalogs and enforces what is
-  already documented.
-- No new auto-recovery or silent retries.
-- No work on the auto-mode classifier itself.
-- Implementation lands in follow-up PRs; this RFC ships only the design.
+- No relaxation of existing rules. This RFC catalogs and enforces what
+  is already documented.
+- No new auto-recovery or silent retries. The recovery path is always
+  through the user.
+- No work on the auto-mode classifier itself (opaque to us).
+- The RFC itself ships only design. The implementation lands as a
+  single PR with structured commits per §8 — not fragmented across
+  many PRs, since the rules are interdependent and half-installed
+  enforcement is worse than uninstalled.
 
 ## 3. Rule catalog
 
-| # | Rule | Source | Today's enforcement | Target layer | Halt message stub |
-|---|------|--------|---------------------|--------------|-------------------|
-| R1 | Never commit directly to `main` | CLAUDE.md:37 | Prose; `run-pipeline.sh:87` checks branch (pipeline only) | **Git pre-commit + pre-push** | `BLOCKED: no-commits-to-main` |
-| R2 | All changes land via branch + PR merge | CLAUDE.md:37 | Prose | **Git pre-push** (refuse `main` ref) | `BLOCKED: no-direct-push-to-main` |
-| R3 | Always `git fetch origin` before creating a branch | CLAUDE.md:38 | Prose | **Skill pre-flight** in `/implement`, `/fix`, `/cleanup` | `BLOCKED: stale-origin` |
-| R4 | Always branch from `origin/main`, not current branch | CLAUDE.md:39 | Prose | **Skill pre-flight** + CC hook on `git checkout -b` (best-effort) | `BLOCKED: branch-not-from-origin-main` |
-| R5 | Commits must be SSH-signed; never bypass signing | CLAUDE.md:40 | `/implement` runs `ssh-add -l` | **Git pre-commit** verifying signing config + CC hook denying `--no-gpg-sign` / `-c commit.gpgsign=false` | `BLOCKED: unsigned-commit-attempt` |
-| R6 | `br close` only from `/review` after LGTM | CLAUDE.md:49 | Prose | **CC hook** (PreToolUse Bash matcher; requires `SPEX_SKILL=review` env) | `BLOCKED: br-close-outside-review` |
-| R7 | Never read `.beads/beads.db` directly | CLAUDE.md:62 | Prose | **CC hook** (PreToolUse Bash matcher) | `BLOCKED: beads-db-direct-read` |
-| R8 | Never bypass `br` / `spex` to dig into storage | CLAUDE.md:63 | Prose | **CC hook** (same matcher as R7, extended) | `BLOCKED: tracker-storage-bypass` |
-| R9 | `/spec` and `/converge` leave changes staged, do not commit | skill docs (`feedback_skills_no_autocommit`) | Prose + memory | **Skill pre-flight** + CC hook keyed on `SPEX_SKILL` env | `BLOCKED: skill-must-not-commit` |
-| R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **Inverse rule** — explicitly NOT blocked; R9 hook must check the skill name | n/a (a guard against false positives) |
-| R11 | Never use `git rebase -i` / `git add -i` (interactive) | (operational, not in CLAUDE.md) | Prose | **CC hook** (PreToolUse Bash matcher) | `BLOCKED: interactive-git-not-supported` |
-| R12 | Never run `spex hash` to "fix" a non-empty diff | `feedback_spex_pipeline_not_hash` memory | Memory only | **CC hook** (PreToolUse Bash matcher; allow only if `SPEX_REBASELINE=1` marker is set, which the user sets manually when the TreeBuilder keying scheme changed) | `BLOCKED: spex-hash-bypasses-pipeline` |
-| R13 | Pre-flight check at the top of every commit-producing skill: HEAD is not `main` | `feedback_check_branch_before_editing` memory + CLAUDE.md:37 | Memory only | **CC hook** (PreToolUse on Edit/Write/Bash-git-commit; reads `git rev-parse --abbrev-ref HEAD`) | `BLOCKED: editing-on-protected-branch` |
+| # | Rule | Source | Today's enforcement | Target layer | Hook script | Rule slug |
+|---|------|--------|---------------------|--------------|-------------|-----------|
+| R1 | Never commit directly to `main` | CLAUDE.md:37 | Prose; `run-pipeline.sh:87` checks branch (pipeline only) | **Git pre-commit** | `scripts/git-hooks/pre-commit` | `no-commits-to-main` |
+| R2 | All changes land via branch + PR merge | CLAUDE.md:37 | Prose | **Git pre-push** | `scripts/git-hooks/pre-push` | `no-direct-push-to-main` |
+| R3 | `origin/main` must be fetched within last 15 min before branch creation | CLAUDE.md:38 | Prose | **CC hook** (PreToolUse Bash on `git checkout -b *` / `git switch -c *`) | `scripts/hooks/check-fetched-recent.sh` | `stale-origin` |
+| R4 | New branches must be created from `origin/main` | CLAUDE.md:39 | Prose | **CC hook** (PreToolUse Bash on `git checkout -b *` / `git switch -c *`) | `scripts/hooks/check-branch-from-origin-main.sh` | `branch-not-from-origin-main` |
+| R5a | Commits must have `gpgsig` block (verify post-commit) | CLAUDE.md:40 | `/implement` runs `ssh-add -l` | **Git post-commit + pre-push** | `scripts/git-hooks/post-commit`, `pre-push` | `unsigned-commit-detected` |
+| R5b | Deny `--no-gpg-sign` and `-c commit.gpgsign=false` flags | CLAUDE.md:40 | Prose | **CC hook** (PreToolUse Bash matcher) | `scripts/hooks/block-signing-bypass.sh` | `signing-flag-denied` |
+| R6 | `br close` only from `/review` after LGTM | CLAUDE.md:49 | Prose | **CC hook** (PreToolUse Bash on `br close *`) | `scripts/hooks/check-br-close-skill.sh` | `br-close-outside-review` |
+| R7 | Never read `.beads/beads.db` directly | CLAUDE.md:62 | Prose | **CC hook** (PreToolUse Bash, Read tool) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
+| R8 | Never bypass `br` / `spex` to dig into storage | CLAUDE.md:63 | Prose | **CC hook** (same matcher as R7, extended) | `scripts/hooks/block-tracker-bypass.sh` | `tracker-storage-bypass` |
+| R9 | `/spec` and `/converge` must not commit | `feedback_skills_no_autocommit` | Prose + memory | **CC hook** (PreToolUse Bash on `git commit *`) | `scripts/hooks/check-skill-commit-allowed.sh` | `skill-must-not-commit` |
+| R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **Inverse guard** inside R9's script — never block these skills | (same as R9) | n/a |
+| R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
+| R12 | Never run `spex hash` outside an explicit re-baseline | `feedback_spex_pipeline_not_hash` | Memory only | **CC hook** (PreToolUse Bash on `spex hash *`; allow only if `SPEX_REBASELINE=1`) | `scripts/hooks/check-spex-hash-rebaseline.sh` | `spex-hash-bypasses-pipeline` |
+| R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
 
 Layer key:
-- **CC hook**: `PreToolUse` matcher in `.claude/settings.json` (`Bash` tool).
-- **Git hook**: script under repo-tracked `scripts/git-hooks/`, installed via `git config core.hooksPath scripts/git-hooks`.
-- **Skill pre-flight**: a check that runs at the *start* of a skill invocation. **Important:** plain text at the top of a SKILL.md file is *not* enforcement — it's the same strength as prose, since the model must read and act on it. A row labelled "Skill pre-flight" only counts as enforced once the check is wired as a real hook (UserPromptSubmit matching the slash-command, or PreToolUse wrapping the skill's first tool call). See §9.3.
+- **CC hook**: `PreToolUse` matcher in `.claude/settings.json`, executes a script under `scripts/hooks/`. The script returns structured JSON per §4.1 and exits non-zero to block.
+- **Git hook**: script under repo-tracked `scripts/git-hooks/`, installed via `git config core.hooksPath scripts/git-hooks` (one-time `make setup-hooks`).
+
+**No "skill pre-flight" layer.** An earlier draft included it for rules
+like R3, R4, R9. We removed the layer entirely: a check that's only text
+at the top of a SKILL.md file is prose, not enforcement. Every row in
+the catalog now maps to a CC hook or git hook that runs without
+model cooperation. See §9.3 for the reasoning trail.
 
 Layer choice rationale:
-- **Git hooks** are preferred for anything involving `git commit` or
-  `git push` because they run regardless of who drove the action (model,
-  user, another tool). Once `core.hooksPath` is set, the hooks are active
-  in every clone.
-- **CC hooks** are preferred for tool-shape rules where the violation is
-  visible in the Bash command string (`br close`, `sqlite3 .beads/`,
-  `--no-gpg-sign`). They block the model before the syscall.
-- **Skill pre-flight** is the weakest layer; reserved for rules that are
-  context-dependent (e.g., "fetched origin within this skill run") and
-  cannot be expressed as a syntactic Bash match.
+- **Git hooks** for anything involving `git commit` or `git push` — they
+  run regardless of who drove the action (model, user, CI, another
+  tool). Once `core.hooksPath` is set, hooks are active in every clone.
+- **CC hooks** for tool-shape rules where the violation is visible in
+  the Bash command string or tool input (`br close`, `sqlite3 .beads/`,
+  `--no-gpg-sign`, Edit on main). They block the model before the
+  syscall.
+
+Note: rules R3, R4, R6, R9, R12, R13 are all CC hooks that consult some
+form of *context* (recent fetch time, branch name, active skill,
+re-baseline marker, HEAD). The "active skill" piece is the only piece
+that depends on the model setting state correctly — see §9.1 for the
+implementation options. Everything else reads state directly from the
+filesystem or git, with no model-mediated input.
 
 ## 4. Halt-and-recover protocol
 
-### 4.1 Hook output format
+### 4.1 Hook output format (structured JSON)
 
-When any enforcement layer blocks an action, the hook MUST write the
-following to its stdout / stderr and exit non-zero:
+When any enforcement layer blocks an action, the hook script MUST write
+a single line of JSON conforming to the `spex-halt/v1` schema below to
+**stdout**, then exit non-zero. No free text, no section-titled prose:
+the protocol is machine-readable so the agent doesn't have to parse
+sentences to know what to do.
 
+Schema (`spex-halt/v1`):
+
+```json
+{
+  "protocol": "spex-halt/v1",
+  "rule": "br-close-outside-review",
+  "command": "br close spexmachina-1dj1",
+  "cwd": "/workspace/spexmachina",
+  "head": "feat/phb-4-snapshot-load-empty-tree",
+  "skill": null,
+  "invariant": "br close is only allowed from /review after LGTM",
+  "source": "CLAUDE.md:49",
+  "recovery": [
+    {"path": "Run /review on the PR; that skill is the only authorized closer", "destructive": false},
+    {"path": "User invokes br close directly outside the agent context", "destructive": false}
+  ],
+  "directive": "halt"
+}
 ```
-BLOCKED: <one-line rule slug, e.g. br-close-outside-review>
 
-STATE: <what was attempted, including the exact command and CWD>
-INVARIANT: <the rule, quoted from CLAUDE.md or skill docs, with source location like "CLAUDE.md:49">
-POSSIBLE RECOVERY: <one or more canonical paths back to a valid state>
+Field contract:
 
-The agent MUST NOT retry this command, MUST NOT attempt a workaround, and
-MUST surface this block to the user verbatim before proceeding. Recovery
-requires explicit user direction.
+- `protocol` — exact string `spex-halt/v1`. Agents detect the halt by
+  this marker. Any future schema bump uses a new version string and
+  both must be supported during a transition window.
+- `rule` — slug from the catalog "Rule slug" column. Stable identifier
+  for logging and tooling.
+- `command` — the attempted shell command (or for Edit/Write hooks, the
+  target path). Truncated to 500 chars.
+- `cwd` — `pwd` at the time of the block.
+- `head` — `git rev-parse --abbrev-ref HEAD` at the time of the block.
+- `skill` — the active skill name if known (see §9.1); else `null`.
+- `invariant` — single-sentence statement of the rule the agent
+  violated. Plain prose for human reading.
+- `source` — file path + line where the rule is defined. Load-bearing
+  for verification (the agent or user can read the cited line).
+- `recovery` — array of `{path: string, destructive: bool}` objects.
+  Each entry is one canonical way back to a valid state.
+  `destructive: true` flags steps that overwrite unstaged work, force
+  pushes, deletes, db wipes — those require per-step user
+  confirmation per §4.2.
+- `directive` — currently always `halt`. Future protocol versions may
+  introduce other directives (warn, ask, etc.) but v1 is halt-only.
+
+The `recovery` array is **informational only**. It names valid paths,
+not authorization. Authorization comes from the user.
+
+A reference helper `scripts/hooks/lib/emit-halt.sh` MUST be used by
+every hook script to produce a conforming payload, so the schema can
+evolve without rewriting every script:
+
+```bash
+# scripts/hooks/lib/emit-halt.sh
+emit_halt() {
+  local rule="$1" command="$2" invariant="$3" source="$4"; shift 4
+  # remaining args are recovery items, alternating: "<text>" "<destructive>"
+  jq -n \
+    --arg protocol "spex-halt/v1" \
+    --arg rule "$rule" \
+    --arg command "$command" \
+    --arg cwd "$PWD" \
+    --arg head "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')" \
+    --arg skill "${SPEX_SKILL:-}" \
+    --arg invariant "$invariant" \
+    --arg source "$source" \
+    --argjson recovery "$(build_recovery_array "$@")" \
+    --arg directive "halt" \
+    '{protocol:$protocol,rule:$rule,command:$command,cwd:$cwd,head:$head,
+      skill:(if $skill=="" then null else $skill end),
+      invariant:$invariant,source:$source,recovery:$recovery,directive:$directive}'
+}
 ```
-
-The `POSSIBLE RECOVERY` block is **informational only** — it names valid
-paths but does not authorize them. Authorization comes from the user.
 
 ### 4.2 Agent-side contract
 
-A new section will be added to `CLAUDE.md` codifying agent behavior on a
-`BLOCKED:` line:
+A new section is added to CLAUDE.md codifying agent behavior on a hook
+response containing `"protocol": "spex-halt/v1"`:
 
-1. The agent halts the current tool sequence. It does not call any tool
-   on the same goal-path until the user has responded.
-2. The agent surfaces the full structured message to the user verbatim
-   (no paraphrasing — the slug and source location are load-bearing).
-3. The agent proposes a recovery path drawn from `POSSIBLE RECOVERY`, but
-   does not execute it.
-4. Destructive recovery steps require explicit per-step confirmation:
-   - `rm`, `rm -rf`, `git reset --hard`, `git checkout -- <file>`,
-     `git clean -f`, `git branch -D`, force-push, `br delete`, any DB
-     wipe, any operation that overwrites unstaged work.
-   - The agent never bundles a destructive step with other steps.
+1. The agent halts the current tool sequence. No further tools on the
+   same goal-path until the user has responded.
+2. The agent renders the payload to the user. The rendering MUST
+   include verbatim: the `rule` slug, the `invariant`, the `source`,
+   and every entry in `recovery`. The agent MAY add a one-line plain
+   English summary on top.
+3. The agent proposes a recovery path drawn from `recovery`, but does
+   not execute it.
+4. Destructive recovery steps (entries where `destructive: true`)
+   require explicit per-step user confirmation. The agent never bundles
+   a destructive step with other steps. The destructive list at the
+   syntactic level is also enumerated in CLAUDE.md as a backstop:
+   `rm`, `rm -rf`, `git reset --hard`, `git checkout -- <file>`,
+   `git clean -f`, `git branch -D`, force-push, `br delete`, any DB
+   wipe, any operation that overwrites unstaged work.
 5. Non-destructive recovery (file edits, `git add`, `git stash`,
-   `git fetch`, `br update`, additional `Read`s) may proceed once the user
-   acknowledges the block and names the path.
+   `git fetch`, `br update`, additional `Read`s) may proceed once the
+   user acknowledges the block and names the path.
 
 ### 4.3 Why no override env var
 
-Earlier drafts considered an override path (env var or marker file the
-user could set when an exception is genuinely intended). The user has
-explicitly chosen against this: the human IS the override. Edge cases are
-unique enough that a generic override knob would either (a) bit-rot to
-"always on" or (b) tempt the model to set it. Forcing every exception
-through an interactive conversation is the desired property, not a cost.
+Earlier drafts considered an override env var or marker file. The user
+has explicitly chosen against it: the human IS the override. A generic
+override knob would either (a) bit-rot to "always on" or (b) tempt the
+model to set it. Forcing every exception through an interactive
+conversation is the desired property, not a cost.
+
+The one exception is R12's `SPEX_REBASELINE=1` marker for `spex hash`,
+which is narrow (single rule, single command) and exists because the
+re-baseline operation is *legitimate* in specific circumstances (the
+TreeBuilder keying scheme changed). It is not a general bypass.
 
 ## 5. Logging contract
 
-Each hook firing appends a single JSON line to `.claude/hook-violations.log`:
+Each hook firing appends a single JSON line to
+`.claude/hook-violations.log`. The log line is the §4.1 halt payload
+plus a `ts` field — same schema, no duplication, no separate format to
+maintain:
 
 ```json
-{"ts":"2026-05-19T07:14:00Z","rule":"no-commits-to-main","branch":"main","command":"git commit -m ...","cwd":"/workspace/spexmachina","skill":"fix"}
+{"ts":"2026-05-19T07:14:00Z","protocol":"spex-halt/v1","rule":"no-commits-to-main","command":"git commit -m ...","cwd":"/workspace/spexmachina","head":"main","skill":"fix","invariant":"...","source":"CLAUDE.md:37","recovery":[...],"directive":"halt"}
 ```
 
-Fields:
+`.claude/hook-violations.log` is added to `.gitignore`. The log is
+local-only by design: it captures the user's specific workflow, not a
+global pattern.
 
-- `ts` — ISO-8601 UTC.
-- `rule` — the slug from the `BLOCKED:` line. Must match across hooks.
-- `branch` — `git rev-parse --abbrev-ref HEAD` at the time of the block.
-- `command` — the attempted Bash command (truncated to 500 chars).
-- `cwd` — working directory.
-- `skill` — value of `$SPEX_SKILL` if set, else `null`.
-
-`.claude/hook-violations.log` is added to `.gitignore` (alongside the
-existing `.spex/` and `.bv/` entries). The log is local-only by design:
-it captures the user's specific workflow, not a global pattern.
-
-A small helper `scripts/hook-violations-summary` (added in a later PR)
-will print rule firing counts and recent commands. The goal is to make
-"rule X fires 40 times a week, is it scoped correctly?" answerable in
+`scripts/hook-violations-summary` (delivered in the implementation PR)
+prints rule firing counts and recent commands, with `jq` doing all the
+filtering since every line is a well-formed JSON object. Goal: "rule X
+fires 40 times a week, is it scoped correctly?" is answerable in
 seconds.
 
 ## 6. Reference hook implementations
 
-These are worked examples for the three highest-value rules. They are
-NOT implemented in this RFC — the code below is illustrative. Follow-up
-PRs land each one separately.
+Worked examples for the three highest-value rules. Code is illustrative
+and uses the §4.1 JSON halt format via the `emit_halt` helper from
+`scripts/hooks/lib/emit-halt.sh`. The implementation PR (§8) lands all
+the scripts together.
 
 ### 6.1 CC hook: block `br close` outside `/review`
 
-Addition to `.claude/settings.json`:
+`.claude/settings.json`:
 
 ```jsonc
 {
   "hooks": {
     "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "scripts/hooks/block-br-close-outside-review.sh"
-          }
-        ]
-      }
+      { "matcher": "Bash",
+        "hooks": [{ "type": "command",
+                    "command": "scripts/hooks/check-br-close-skill.sh" }] }
     ]
   }
 }
 ```
 
-`scripts/hooks/block-br-close-outside-review.sh`:
+`scripts/hooks/check-br-close-skill.sh`:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "$0")/lib/emit-halt.sh"
 
-# Claude Code passes tool input as JSON on stdin.
 input="$(cat)"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 
 if [[ "$command" =~ ^[[:space:]]*br[[:space:]]+close([[:space:]]|$) ]]; then
   if [[ "${SPEX_SKILL:-}" != "review" ]]; then
-    rule="br-close-outside-review"
-    cat >&2 <<EOF
-BLOCKED: $rule
-
-STATE: attempted '$command' with SPEX_SKILL='${SPEX_SKILL:-<unset>}'
-INVARIANT: br close is only allowed from /review after LGTM (CLAUDE.md:49)
-POSSIBLE RECOVERY:
-  - If the PR is LGTM and ready to close, run /review on it; that skill sets SPEX_SKILL=review and is the only authorized closer.
-  - If the bead should be closed manually for an exceptional reason, the user must invoke br close directly outside the agent context.
-
-The agent MUST NOT retry this command, MUST NOT attempt a workaround,
-and MUST surface this block to the user verbatim before proceeding.
-EOF
-    scripts/hooks/log-violation "$rule" "$command"
+    payload="$(emit_halt \
+      "br-close-outside-review" \
+      "$command" \
+      "br close is only allowed from /review after LGTM" \
+      "CLAUDE.md:49" \
+      "Run /review on the PR; that skill is the only authorized closer" false \
+      "User invokes br close directly outside the agent context" false)"
+    printf '%s\n' "$payload"
+    printf '%s\n' "$payload" | scripts/hooks/log-violation
     exit 2
   fi
 fi
 exit 0
 ```
 
-`/review`'s SKILL.md gains a one-line `export SPEX_SKILL=review` at the
-top of its instructions so the hook can see the skill context.
+`/review` declares `SPEX_SKILL=review` via the skill-context propagation
+mechanism chosen in §9.1.
 
 ### 6.2 CC hook: block direct reads of `.beads/beads.db`
 
-`scripts/hooks/block-beads-db-direct-read.sh`:
+`scripts/hooks/block-beads-db-read.sh`:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(dirname "$0")/lib/emit-halt.sh"
+
 input="$(cat)"
-command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+tool="$(jq -r '.tool_name // empty' <<<"$input")"
 
-# Match: sqlite3 .beads/beads.db, cat .beads/beads.db, head/tail/less/xxd
-# .beads/beads.db, python -c 'import sqlite3 ... .beads/beads.db'.
-if [[ "$command" =~ (sqlite3|cat|head|tail|less|xxd|python).*\.beads/beads\.db ]]; then
-  rule="beads-db-direct-read"
-  cat >&2 <<EOF
-BLOCKED: $rule
+case "$tool" in
+  Bash)
+    target="$(jq -r '.tool_input.command // empty' <<<"$input")"
+    if [[ ! "$target" =~ (sqlite3|cat|head|tail|less|xxd|python).*\.beads/beads\.db ]]; then
+      exit 0
+    fi
+    ;;
+  Read)
+    target="$(jq -r '.tool_input.file_path // empty' <<<"$input")"
+    if [[ "$target" != *".beads/beads.db" ]]; then
+      exit 0
+    fi
+    ;;
+  *) exit 0 ;;
+esac
 
-STATE: attempted '$command'
-INVARIANT: Never read .beads/beads.db directly (CLAUDE.md:62). Use br commands or .beads/issues.jsonl.
-POSSIBLE RECOVERY:
-  - For a single bead: br show <id> --json
-  - For listings: br list / br ready (note: br list filters silently; use jq over .beads/issues.jsonl for canonical state)
-  - For raw tracker dump: jq -s '{issues: .}' .beads/issues.jsonl
-
-The agent MUST NOT retry this command, MUST NOT attempt a workaround,
-and MUST surface this block to the user verbatim before proceeding.
-EOF
-  scripts/hooks/log-violation "$rule" "$command"
-  exit 2
-fi
-exit 0
+payload="$(emit_halt \
+  "beads-db-direct-read" \
+  "$target" \
+  "Never read .beads/beads.db directly. Use br commands or .beads/issues.jsonl." \
+  "CLAUDE.md:62" \
+  "For a single bead: br show <id> --json" false \
+  "For listings: br list --all --limit 0 (the bare br list filters silently — open-only, limit 50)" false \
+  "For raw tracker dump: jq -s '{issues: .}' .beads/issues.jsonl" false)"
+printf '%s\n' "$payload"
+printf '%s\n' "$payload" | scripts/hooks/log-violation
+exit 2
 ```
+
+Note: this hook matches both `Bash` (to catch `sqlite3 .beads/beads.db`)
+and `Read` (to catch the model trying to read the file directly via the
+Read tool). The CC matcher list in `.claude/settings.json` enumerates
+both.
 
 ### 6.3 Git pre-push: block push to `main`
 
@@ -289,45 +374,47 @@ exit 0
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+source "$(git rev-parse --show-toplevel)/scripts/hooks/lib/emit-halt.sh"
 
-# Git passes refs being pushed on stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
+# stdin: <local_ref> <local_sha> <remote_ref> <remote_sha>
 while read -r local_ref local_sha remote_ref remote_sha; do
   if [[ "$remote_ref" == "refs/heads/main" ]]; then
-    rule="no-direct-push-to-main"
-    cat >&2 <<EOF
-BLOCKED: $rule
-
-STATE: attempted to push $local_ref to $remote_ref
-INVARIANT: main is protected; all changes land via PR merge (CLAUDE.md:37)
-POSSIBLE RECOVERY:
-  - Push to a feature branch instead: git push -u origin <branch-name>
-  - Open a PR with gh pr create
-  - If this is a genuinely exceptional case (e.g., emergency hotfix), the user must temporarily disable core.hooksPath out-of-band — the agent must not.
-
-The agent MUST NOT retry this command, MUST NOT attempt a workaround,
-and MUST surface this block to the user verbatim before proceeding.
-EOF
-    scripts/hooks/log-violation "$rule" "git push to main"
+    payload="$(emit_halt \
+      "no-direct-push-to-main" \
+      "git push: $local_ref -> $remote_ref" \
+      "main is protected; all changes land via PR merge" \
+      "CLAUDE.md:37" \
+      "Push to a feature branch: git push -u origin <branch-name>" false \
+      "Open a PR: gh pr create" false \
+      "If genuinely exceptional (emergency hotfix), user disables core.hooksPath out-of-band" true)"
+    printf '%s\n' "$payload"
+    printf '%s\n' "$payload" | "$(git rev-parse --show-toplevel)/scripts/hooks/log-violation"
     exit 1
   fi
 done
 exit 0
 ```
 
-Installation, added to a new top-level `Makefile` (or `make setup`
-target):
+### 6.4 Installation and the agent contract
+
+`Makefile`:
 
 ```make
-.PHONY: setup-hooks
+.PHONY: setup-hooks verify-enforcement
 setup-hooks:
 	git config core.hooksPath scripts/git-hooks
-	chmod +x scripts/git-hooks/*
+	chmod +x scripts/git-hooks/* scripts/hooks/*.sh
+verify-enforcement:
+	scripts/hooks/test/run-all.sh
 ```
 
-CLAUDE.md gains a one-line note under "Git Conventions":
-
-> Run `make setup-hooks` once per clone to activate the repo-tracked
-> git hooks. CI verifies `core.hooksPath` is set correctly.
+`CLAUDE.md` gains a "Enforcement" section pointing at this RFC and
+codifying:
+- Run `make setup-hooks` once per clone.
+- On any hook response containing `"protocol": "spex-halt/v1"`,
+  follow the §4.2 agent-side contract.
+- Run `make verify-enforcement` before opening a PR that touches
+  `.claude/settings.json`, `scripts/hooks/`, or `scripts/git-hooks/`.
 
 ## 7. Memory migration
 
@@ -469,40 +556,135 @@ gap.
 
 ## 8. Implementation roadmap
 
-Out of scope for this RFC PR. Suggested order, riskiest gaps first:
+**Single PR, structured commits.** This is interdependent work — half-installed
+enforcement is worse than uninstalled (some rules fire, others silently pass,
+and neither model nor user can reason about which is which). The §7.6 fresh-container
+acceptance test also only works if the migration is atomic. One review cycle,
+one merge, one verification.
 
-1. **Git pre-push hook + `core.hooksPath` wiring** (R1/R2). One PR.
-   Closes the "push to `main`" gap globally. Lowest coordination cost,
-   no skill-context dependency.
-2. **Git pre-commit + post-commit hooks for signing** (R5). One PR.
-   Pre-commit verifies config; post-commit verifies the just-created
-   commit has a `gpgsig` block (§9.2).
-3. **CC hook: `.beads/beads.db` direct reads** (R7/R8). One PR. Pure
-   syntactic block, no skill-context dependency.
-4. **CC hook: deny `--no-gpg-sign` and `-c commit.gpgsign=false` flags**
-   (R5 complement). One PR. Defense-in-depth alongside #2.
-5. **CC hook: editing on protected branch** (R13). One PR. Reads
-   `git rev-parse --abbrev-ref HEAD`; no skill-context dependency. This
-   is the §7.2 "delete memory after enforcement" pickup.
-6. **Resolve skill-context propagation** (§9.1). One PR with a small
-   spike: investigate harness-native skill identity, fall back to the
-   marker-file pattern if needed. This unblocks #7/#8/#9.
-7. **CC hook: `br close` outside `/review`** (R6). Depends on #6.
-8. **CC hook: skill-aware commit rules** (R9/R10). Depends on #6.
-9. **CC hook: `spex hash` requires re-baseline marker** (R12). Depends
-   on #6 (or stands alone if the marker is purely env-var-based, with
-   no skill check needed — see implementation note in §9.1).
-10. **Memory migration** (one PR, documentation-only). Per §7 table.
-    Can land in parallel with hook work since it's text-only.
-11. **`scripts/hook-violations-summary` helper** (one PR). Quality of
-    life for tuning rules.
+The PR ships the work in this commit order. Each commit is independently
+buildable and tested. The commit boundaries are essential checkpoints,
+not arbitrary slices:
 
-Each PR ships its own row(s) from the catalog, updates the row's
-"Today's enforcement" column, and adds a `make verify-enforcement` case
-for its rule. The RFC itself does not change as rows land — it stays a
-design reference. The catalog can be promoted to its own
-`docs/enforcement-catalog.md` once it has more than a few rows in
-"enforced" state, with the RFC pointing to it.
+### Commit 1 — Foundation: halt protocol + violation log + Makefile
+
+- `scripts/hooks/lib/emit-halt.sh` — the `emit_halt` helper that every
+  hook calls. Implements the §4.1 JSON schema. Single source of truth.
+- `scripts/hooks/log-violation` — stdin → append-to-log helper.
+- `scripts/hooks/test/run-all.sh` — test harness skeleton (one
+  fixture per rule will be added in later commits).
+- `Makefile` with `setup-hooks` and `verify-enforcement` targets.
+- `.gitignore` adds `.claude/hook-violations.log`.
+
+Outcome: infrastructure exists, no rules enforced yet.
+
+### Commit 2 — Git hooks: protect main + verify signing
+
+- `scripts/git-hooks/pre-commit` — R1 (block commit on main) + R5a
+  pre-commit half (verify `commit.gpgsign=true`).
+- `scripts/git-hooks/post-commit` — R5a post-commit half (verify
+  `gpgsig` block present in HEAD).
+- `scripts/git-hooks/pre-push` — R2 (refuse push to `main`) +
+  re-verification of R5a on each ref being pushed.
+- `scripts/hooks/test/test-git-hooks.sh` — fixtures: commit on main,
+  push to main, `--no-gpg-sign` commit, all expected to block.
+
+Outcome: R1, R2, R5a enforced.
+
+### Commit 3 — CC hooks: syntactic blocks (no skill context needed)
+
+- `scripts/hooks/block-signing-bypass.sh` — R5b (deny `--no-gpg-sign`,
+  `-c commit.gpgsign=false`).
+- `scripts/hooks/block-beads-db-read.sh` — R7 + R8 (block `sqlite3`,
+  `cat`, `Read` of `.beads/beads.db`).
+- `scripts/hooks/block-interactive-git.sh` — R11 (block `git rebase -i`,
+  `git add -i`).
+- `scripts/hooks/check-not-on-main.sh` — R13 (block Edit/Write/git-commit
+  when HEAD = main).
+- `scripts/hooks/check-fetched-recent.sh` — R3 (`origin/main` fetched
+  within 15 min before branch creation).
+- `scripts/hooks/check-branch-from-origin-main.sh` — R4 (new branches
+  must come from `origin/main`).
+- `.claude/settings.json` wires all PreToolUse matchers.
+- Test fixtures for each.
+
+Outcome: R3, R4, R5b, R7, R8, R11, R13 enforced.
+
+### Commit 4 — Resolve skill-context propagation (§9.1 spike)
+
+- Investigate harness-native skill identity. Land whichever of the §9.1
+  options is feasible:
+  1. If Claude Code exposes the active skill to hooks (env var, JSON
+     field), use it.
+  2. Else, implement the marker-file pattern:
+     `.claude/skill-context.json` written by each skill on entry, read
+     by hooks with TTL check.
+- `scripts/hooks/lib/active-skill.sh` — single helper every
+  skill-aware hook calls. Returns the skill name or `""`.
+- Update each skill's SKILL.md to wire its identity to the helper (one
+  line per skill, depending on option chosen).
+
+Outcome: skill identity is observable to hooks. No rules enforced *yet*
+that depend on it.
+
+### Commit 5 — CC hooks: skill-aware blocks
+
+- `scripts/hooks/check-br-close-skill.sh` — R6 (depends on Commit 4).
+- `scripts/hooks/check-skill-commit-allowed.sh` — R9 + R10 (block
+  `/spec`, `/converge` from committing; allow `/fix`, `/review`,
+  `/cleanup`, `/implement`).
+- `scripts/hooks/check-spex-hash-rebaseline.sh` — R12 (block `spex hash`
+  unless `SPEX_REBASELINE=1`). No skill check needed; included here
+  because it's the last CC hook.
+- `.claude/settings.json` adds the new matchers.
+- Test fixtures: `br close` from each skill, `git commit` from each
+  skill, `spex hash` with/without marker.
+
+Outcome: R6, R9, R10, R12 enforced. **All 13 rows of the catalog are
+now machine-enforced.**
+
+### Commit 6 — Memory migration
+
+- Delete memory entries in §7.1 and §7.2.
+- Move §7.3 entries into their target SKILL.md files (one paragraph
+  each).
+- Move §7.4 entries into CLAUDE.md as one-liners under the right
+  section.
+- Verify §7.5 entries are either retained in memory or moved into
+  `spec/merkle/arch_tree_builder.md` per the disposition.
+
+Outcome: memory now holds only ephemeral observations. CLAUDE.md and
+SKILL.md files are self-sufficient.
+
+### Commit 7 — CLAUDE.md enforcement section + agent contract
+
+- New "## Enforcement" section in CLAUDE.md:
+  - Pointer to this RFC.
+  - `make setup-hooks` instruction (one-time per clone).
+  - The §4.2 agent-side contract for `spex-halt/v1` payloads (the
+    canonical place the rule lives — not in memory).
+- Pointer in CLAUDE.md "Git Conventions" to §7.4-migrated rules.
+
+Outcome: CLAUDE.md is the durable home for the agent contract.
+
+### Commit 8 — Helper: `hook-violations-summary`
+
+- `scripts/hook-violations-summary` — `jq`-based rollup of the log.
+  Usage: `scripts/hook-violations-summary [--rule <slug>] [--since <date>]`.
+
+Outcome: rule tuning is one command away.
+
+### Acceptance gate (before merge)
+
+- `make verify-enforcement` passes locally.
+- Fresh docker container test (§7.6): clone, `make setup-hooks`, run
+  `/implement <a-bead>` or similar; agent picks up rules without any
+  memory directory present.
+- Every catalog row in §3 has a corresponding fixture under
+  `scripts/hooks/test/` that asserts the hook fires.
+- A CI check confirms `core.hooksPath` is `scripts/git-hooks` in the
+  repo's checked-in config (via `.git/config` template or a setup
+  script run in CI).
 
 ## 9. Open questions and risks
 
@@ -560,33 +742,41 @@ complementary mitigations:
    amend before pushing. Pair this with a pre-push hook that re-checks
    signing on every ref being pushed (last-line defense).
 
-### 9.3 Skill pre-flight is not a real enforcement layer
+### 9.3 Why "skill pre-flight" was removed as a layer
 
-The catalog has §6/§4 calling "skill pre-flight" a layer. As written
-(text at the top of SKILL.md), it's the same enforcement strength as
-prose: the model has to read it and act. To count as enforcement,
-pre-flight checks must run as hooks (UserPromptSubmit on slash-command
-invocation, or PreToolUse wrapping the skill's first tool call) — not
-as markdown the model reads.
+An earlier draft listed "Skill pre-flight" as one of three target
+enforcement layers, applied to R3, R4, R9, and (implicitly) R13. The
+intent was: a Bash check at the top of each SKILL.md that runs before
+any work. The problem: a SKILL.md file is markdown read by the model.
+"At the top of the skill" is not a process boundary or a hook — it's
+prose the model must execute. Same enforcement strength as the rule it
+was supposed to enforce. The model that skips the rule will also skip
+the pre-flight check that's supposed to catch it.
 
-The implementation roadmap should treat "skill pre-flight" rows as
-"unenforced until wired as a real hook." R3 and R4 should probably be
-demoted to skill-pre-flight-as-hook in the catalog, with the explicit
-note that they require harness wiring (see §9.1).
+The catalog now maps every row to either a CC hook (PreToolUse running
+a script) or a git hook (pre-commit, post-commit, pre-push). Both run
+without model cooperation, both return structured JSON per §4.1.
 
-### 9.4 R3 (always git fetch) is overweight
+The cost: rules that genuinely depend on skill context (R6, R9, R12)
+need a way to know which skill is active. That's §9.1 — a real spike
+with a tractable resolution path, not a "model is supposed to remember"
+hope.
 
-Requiring a network fetch + SSH-SK tap before every branch creation is
-painful. Two softer formulations to consider:
+### 9.4 R3 TTL choice and offline contexts
 
-- **TTL fetch**: hook passes if `.git/FETCH_HEAD` mtime is within last N
-  minutes (default 15). Avoids the tap on a fast iteration loop.
-- **Skip on no-network**: hook passes if the network check itself fails
-  fast (offline contexts).
+The catalog formulates R3 as "fetched within last 15 min" rather than
+"always fetch on every branch creation," to avoid forcing an SSH-SK
+tap on a fast iteration loop. Open sub-questions:
 
-Either is honest about what the rule is protecting against (working
-against months-stale origin/main), without the punitive enforcement on
-every branch.
+- **TTL value.** 15 min is a guess. Could be longer (an hour) since
+  the real harm is working against months-stale `origin/main`, not
+  minutes-stale. Pick a value when the hook lands and tune from the
+  violation log.
+- **Offline contexts.** The hook check is `mtime(.git/FETCH_HEAD) < 15 min`.
+  In an offline session the file is just stale; the hook will block.
+  Probably acceptable (the user knows they're offline), but worth a
+  flag like `SPEX_OFFLINE=1` to bypass. That's a narrow override —
+  same shape as `SPEX_REBASELINE=1` for R12.
 
 ### 9.5 Hook violation log rotation
 
