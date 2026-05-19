@@ -190,25 +190,47 @@ evolve without rewriting every script:
 
 ```bash
 # scripts/hooks/lib/emit-halt.sh
+# Usage: emit_halt <rule> <command> <invariant> <source> [<path> <destructive> ...]
+#   trailing args are recovery items in pairs: "<path text>" "<true|false>"
 emit_halt() {
-  local rule="$1" command="$2" invariant="$3" source="$4"; shift 4
-  # remaining args are recovery items, alternating: "<text>" "<destructive>"
+  local rule="$1" command="$2" invariant="$3" source_loc="$4"
+  shift 4
+
+  local recovery_json="[]"
+  while [[ $# -ge 2 ]]; do
+    recovery_json="$(jq --arg p "$1" --argjson d "$2" \
+      '. + [{path:$p, destructive:$d}]' <<<"$recovery_json")"
+    shift 2
+  done
+
   jq -n \
-    --arg protocol "spex-halt/v1" \
     --arg rule "$rule" \
     --arg command "$command" \
+    --arg invariant "$invariant" \
+    --arg source_loc "$source_loc" \
     --arg cwd "$PWD" \
     --arg head "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo '')" \
     --arg skill "${SPEX_SKILL:-}" \
-    --arg invariant "$invariant" \
-    --arg source "$source" \
-    --argjson recovery "$(build_recovery_array "$@")" \
-    --arg directive "halt" \
-    '{protocol:$protocol,rule:$rule,command:$command,cwd:$cwd,head:$head,
-      skill:(if $skill=="" then null else $skill end),
-      invariant:$invariant,source:$source,recovery:$recovery,directive:$directive}'
+    --argjson recovery "$recovery_json" \
+    '{
+      protocol: "spex-halt/v1",
+      rule: $rule,
+      command: $command,
+      cwd: $cwd,
+      head: $head,
+      skill: (if $skill == "" then null else $skill end),
+      invariant: $invariant,
+      source: $source_loc,
+      recovery: $recovery,
+      directive: "halt"
+    }'
 }
 ```
+
+The hook caller passes recovery items as alternating `(text, bool)`
+pairs; `emit_halt` walks them into the `recovery` array. `false` and
+`true` must be passed as JSON literals (`emit_halt ... "do X" false`),
+not as shell strings, so `--argjson` can consume them.
 
 ### 4.2 Agent-side contract
 
@@ -234,18 +256,37 @@ response containing `"protocol": "spex-halt/v1"`:
    `git fetch`, `br update`, additional `Read`s) may proceed once the
    user acknowledges the block and names the path.
 
-### 4.3 Why no override env var
+### 4.3 Override env vars (when allowed)
 
-Earlier drafts considered an override env var or marker file. The user
-has explicitly chosen against it: the human IS the override. A generic
-override knob would either (a) bit-rot to "always on" or (b) tempt the
-model to set it. Forcing every exception through an interactive
-conversation is the desired property, not a cost.
+The default rule is **no generic override**: the human is the override.
+A general "shut up the hooks" env var would either bit-rot to "always
+on" or tempt the model to set it. Recovery is always through the user.
 
-The one exception is R12's `SPEX_REBASELINE=1` marker for `spex hash`,
-which is narrow (single rule, single command) and exists because the
-re-baseline operation is *legitimate* in specific circumstances (the
-TreeBuilder keying scheme changed). It is not a general bypass.
+A rule MAY introduce its own narrow env-var override only if all of:
+
+1. The override is **rule-specific** (not cross-cutting).
+2. There is a **legitimate, recurring scenario** that hits the rule and
+   the override is the right response to that scenario — not a way to
+   keep working past the rule.
+3. The override is **scoped**: an env var, not a marker file, not a
+   global config flip. It only affects one shell invocation.
+4. The rule documents **who is expected to set it** (always the user,
+   never the agent). The agent must not set the override; if it
+   believes the override is warranted, it asks the user.
+
+Currently two rules qualify under this carve-out:
+
+- **R12 `SPEX_REBASELINE=1`** — the re-baseline operation is legitimate
+  when the TreeBuilder keying scheme changes (see commit
+  `b847f45 spec: regenerate snapshot baseline against current
+  TreeBuilder keying`). Without the marker, `spex hash` is blocked.
+- **R3 `SPEX_OFFLINE=1`** — in offline contexts (no network), the
+  fetch-recency check is meaningless. The user sets this when working
+  intentionally offline. Without it, the hook treats stale
+  `FETCH_HEAD` as a stale-origin block (which is the desired default).
+
+Future rules adding their own override must update this section and
+justify the addition. Two overrides today, period.
 
 ## 5. Logging contract
 
@@ -446,9 +487,9 @@ SKILL.md or are duplicated by existing prose:
   to it. All changes land via a dedicated branch + PR merge, even
   one-line data fixes."* The memory adds the operational "check before
   the first edit" framing, which is what the incident actually needed.
-  → **Enforce as R4 hook (CC PreToolUse on Edit/Write/Bash-git-commit
-  that asserts HEAD ≠ main), then delete.** Once the hook exists the
-  prose is sufficient.
+  → **Enforce as R13 (CC PreToolUse on Edit/Write/Bash-git-commit that
+  asserts HEAD ≠ main), then delete.** Once the hook exists the prose
+  is sufficient.
 
 ### 7.3 Skill-scoped — move into individual SKILL.md files
 
@@ -566,111 +607,93 @@ The PR ships the work in this commit order. Each commit is independently
 buildable and tested. The commit boundaries are essential checkpoints,
 not arbitrary slices:
 
-### Commit 1 — Foundation: halt protocol + violation log + Makefile
+**Ordering rule:** the CLAUDE.md "Enforcement" section (which contains
+the agent-side contract for `spex-halt/v1` payloads, per §4.2) MUST
+land *before* any hook that can block. Otherwise the model sees JSON
+output from a hook and has no contract telling it what to do. Hence
+Commit 1 ships the agent contract in CLAUDE.md alongside the hook
+infrastructure — not in a late commit.
 
-- `scripts/hooks/lib/emit-halt.sh` — the `emit_halt` helper that every
-  hook calls. Implements the §4.1 JSON schema. Single source of truth.
-- `scripts/hooks/log-violation` — stdin → append-to-log helper.
-- `scripts/hooks/test/run-all.sh` — test harness skeleton (one
-  fixture per rule will be added in later commits).
+### Commit 1 — Foundation + agent contract
+
+- `scripts/hooks/lib/emit-halt.sh` — the `emit_halt` helper. Single
+  source of truth for the §4.1 JSON schema.
+- `scripts/hooks/log-violation` — one-line script: read JSON from
+  stdin, prepend `ts` via `jq`, append to `.claude/hook-violations.log`.
+- `scripts/hooks/test/run-all.sh` — test harness skeleton.
 - `Makefile` with `setup-hooks` and `verify-enforcement` targets.
 - `.gitignore` adds `.claude/hook-violations.log`.
+- **CLAUDE.md "## Enforcement" section** — agent-side contract for
+  `spex-halt/v1` payloads (per §4.2), `make setup-hooks` note, pointer
+  to this RFC.
+- **`.claude/settings.json`** — created (currently only
+  `.claude/settings.local.json` exists). Hook matcher entries added
+  empty here; later commits append.
 
-Outcome: infrastructure exists, no rules enforced yet.
+Outcome: agent contract is in CLAUDE.md, infrastructure exists, no
+rules enforced yet.
 
 ### Commit 2 — Git hooks: protect main + verify signing
 
-- `scripts/git-hooks/pre-commit` — R1 (block commit on main) + R5a
-  pre-commit half (verify `commit.gpgsign=true`).
-- `scripts/git-hooks/post-commit` — R5a post-commit half (verify
-  `gpgsig` block present in HEAD).
-- `scripts/git-hooks/pre-push` — R2 (refuse push to `main`) +
-  re-verification of R5a on each ref being pushed.
-- `scripts/hooks/test/test-git-hooks.sh` — fixtures: commit on main,
-  push to main, `--no-gpg-sign` commit, all expected to block.
+- `scripts/git-hooks/pre-commit` — R1 + R5a pre-commit half.
+- `scripts/git-hooks/post-commit` — R5a post-commit half.
+- `scripts/git-hooks/pre-push` — R2 + R5a per-ref re-verification.
+- Fixtures: commit on main, push to main, `--no-gpg-sign` commit.
 
 Outcome: R1, R2, R5a enforced.
 
 ### Commit 3 — CC hooks: syntactic blocks (no skill context needed)
 
-- `scripts/hooks/block-signing-bypass.sh` — R5b (deny `--no-gpg-sign`,
-  `-c commit.gpgsign=false`).
-- `scripts/hooks/block-beads-db-read.sh` — R7 + R8 (block `sqlite3`,
-  `cat`, `Read` of `.beads/beads.db`).
-- `scripts/hooks/block-interactive-git.sh` — R11 (block `git rebase -i`,
-  `git add -i`).
-- `scripts/hooks/check-not-on-main.sh` — R13 (block Edit/Write/git-commit
-  when HEAD = main).
-- `scripts/hooks/check-fetched-recent.sh` — R3 (`origin/main` fetched
-  within 15 min before branch creation).
-- `scripts/hooks/check-branch-from-origin-main.sh` — R4 (new branches
-  must come from `origin/main`).
-- `.claude/settings.json` wires all PreToolUse matchers.
-- Test fixtures for each.
+- `scripts/hooks/block-signing-bypass.sh` — R5b.
+- `scripts/hooks/block-beads-db-read.sh` — R7 + R8 (single script;
+  catalog lists them separately for source-of-rule reasons but they
+  share enforcement).
+- `scripts/hooks/block-interactive-git.sh` — R11.
+- `scripts/hooks/check-not-on-main.sh` — R13.
+- `scripts/hooks/check-fetched-recent.sh` — R3 (honors
+  `SPEX_OFFLINE=1`).
+- `scripts/hooks/check-branch-from-origin-main.sh` — R4.
+- `.claude/settings.json` matchers wired.
+- Fixtures for each.
 
 Outcome: R3, R4, R5b, R7, R8, R11, R13 enforced.
 
-### Commit 4 — Resolve skill-context propagation (§9.1 spike)
+### Commit 4 — Skill-context propagation
 
-- Investigate harness-native skill identity. Land whichever of the §9.1
-  options is feasible:
-  1. If Claude Code exposes the active skill to hooks (env var, JSON
-     field), use it.
-  2. Else, implement the marker-file pattern:
-     `.claude/skill-context.json` written by each skill on entry, read
-     by hooks with TTL check.
-- `scripts/hooks/lib/active-skill.sh` — single helper every
-  skill-aware hook calls. Returns the skill name or `""`.
-- Update each skill's SKILL.md to wire its identity to the helper (one
-  line per skill, depending on option chosen).
+Per §9.1, ship the chosen mechanism (harness-native if available,
+marker file otherwise). Adds `scripts/hooks/lib/active-skill.sh` —
+single helper every skill-aware hook calls. Updates each SKILL.md to
+declare its identity according to the chosen mechanism. Updates
+CLAUDE.md "## Enforcement" section to document the mechanism.
 
-Outcome: skill identity is observable to hooks. No rules enforced *yet*
-that depend on it.
+Outcome: skill identity observable to hooks. No new rules enforced yet.
 
 ### Commit 5 — CC hooks: skill-aware blocks
 
-- `scripts/hooks/check-br-close-skill.sh` — R6 (depends on Commit 4).
-- `scripts/hooks/check-skill-commit-allowed.sh` — R9 + R10 (block
-  `/spec`, `/converge` from committing; allow `/fix`, `/review`,
-  `/cleanup`, `/implement`).
-- `scripts/hooks/check-spex-hash-rebaseline.sh` — R12 (block `spex hash`
-  unless `SPEX_REBASELINE=1`). No skill check needed; included here
-  because it's the last CC hook.
-- `.claude/settings.json` adds the new matchers.
-- Test fixtures: `br close` from each skill, `git commit` from each
-  skill, `spex hash` with/without marker.
+- `scripts/hooks/check-br-close-skill.sh` — R6 (fail-closed per §9.1).
+- `scripts/hooks/check-skill-commit-allowed.sh` — R9 + R10. Fail-open
+  when skill unknown (per §9.1 asymmetry); fail-closed when skill
+  positively names `/spec` or `/converge`.
+- `scripts/hooks/check-spex-hash-rebaseline.sh` — R12. Honors
+  `SPEX_REBASELINE=1`; no skill check.
+- `.claude/settings.json` matchers extended.
+- Fixtures.
 
-Outcome: R6, R9, R10, R12 enforced. **All 13 rows of the catalog are
-now machine-enforced.**
+Outcome: R6, R9, R10, R12 enforced. **All 13 rows now machine-enforced.**
 
 ### Commit 6 — Memory migration
 
-- Delete memory entries in §7.1 and §7.2.
-- Move §7.3 entries into their target SKILL.md files (one paragraph
-  each).
-- Move §7.4 entries into CLAUDE.md as one-liners under the right
-  section.
-- Verify §7.5 entries are either retained in memory or moved into
-  `spec/merkle/arch_tree_builder.md` per the disposition.
+- Delete §7.1 + §7.2 memory entries.
+- Move §7.3 entries into target SKILL.md files.
+- Move §7.4 entries into CLAUDE.md as one-liners under existing
+  sections (Git Conventions, Issue Tracking, Bead Context Resolution).
+- Verify §7.5 entries handled per disposition.
 
-Outcome: memory now holds only ephemeral observations. CLAUDE.md and
-SKILL.md files are self-sufficient.
+Outcome: memory holds only ephemeral observations.
 
-### Commit 7 — CLAUDE.md enforcement section + agent contract
+### Commit 7 — Helper: `hook-violations-summary`
 
-- New "## Enforcement" section in CLAUDE.md:
-  - Pointer to this RFC.
-  - `make setup-hooks` instruction (one-time per clone).
-  - The §4.2 agent-side contract for `spex-halt/v1` payloads (the
-    canonical place the rule lives — not in memory).
-- Pointer in CLAUDE.md "Git Conventions" to §7.4-migrated rules.
-
-Outcome: CLAUDE.md is the durable home for the agent contract.
-
-### Commit 8 — Helper: `hook-violations-summary`
-
-- `scripts/hook-violations-summary` — `jq`-based rollup of the log.
-  Usage: `scripts/hook-violations-summary [--rule <slug>] [--since <date>]`.
+- `scripts/hook-violations-summary` — `jq`-based rollup.
 
 Outcome: rule tuning is one command away.
 
@@ -678,53 +701,62 @@ Outcome: rule tuning is one command away.
 
 - `make verify-enforcement` passes locally.
 - Fresh docker container test (§7.6): clone, `make setup-hooks`, run
-  `/implement <a-bead>` or similar; agent picks up rules without any
-  memory directory present.
-- Every catalog row in §3 has a corresponding fixture under
-  `scripts/hooks/test/` that asserts the hook fires.
-- A CI check confirms `core.hooksPath` is `scripts/git-hooks` in the
-  repo's checked-in config (via `.git/config` template or a setup
-  script run in CI).
+  a representative skill; agent picks up rules without any memory
+  directory present.
+- Every catalog row in §3 has a fixture under `scripts/hooks/test/`
+  that asserts the hook fires.
+- If the repo has CI (not currently configured per the audit): add a
+  check that `core.hooksPath` is `scripts/git-hooks`. Otherwise leave
+  this as a documented post-merge follow-up.
 
 ## 9. Open questions and risks
 
 ### 9.1 Skill-context propagation (primary risk)
 
-The catalog includes rules that depend on knowing which skill is active:
-R6 (`br close` only from `/review`), R9/R10 (`/spec` and `/converge` do
-not commit, others do), R12 (`spex hash` requires explicit re-baseline
-marker). All three §6 reference implementations use
-`SPEX_SKILL=<name>`, set by the skill itself, to disambiguate.
+R6, R9, and R12 depend on knowing which skill is active. §6 examples
+use `SPEX_SKILL=<name>` set by the skill itself.
 
-**The fragility:** a skill file is a markdown instruction to the model,
-not a process boundary. "/review exports `SPEX_SKILL=review` at the top"
-only works if the model runs that Bash command. If the model skips it,
-the hook sees `SPEX_SKILL` unset, the rule falls back to "block all" (R6
-case) or "allow all" (R9 case), and we have either a false-positive
-block or — worse — a silent failure that lets the wrong skill close a
-bead. This is the same model-dependency that motivates the RFC in the
-first place.
+**The fragility:** a skill file is markdown read by the model, not a
+process boundary. "/review exports SPEX_SKILL=review at the top" only
+works if the model runs that bash command. If the model skips it, the
+hook sees `SPEX_SKILL` unset and falls back to a per-rule default.
 
-**Options to investigate during implementation, in preference order:**
+**The per-rule fail-mode asymmetry (important):** even with a marker
+file, model forgetfulness doesn't fail uniformly across rules.
+
+| Rule | Hook default when skill unknown | Fail mode | Safety |
+|------|--------------------------------|-----------|--------|
+| R6   | Block `br close`               | Closed    | Safe — false-blocks a legitimate `/review`, surfaces to user. |
+| R9   | Allow commit                   | Open      | **Unsafe** — `/spec` or `/converge` could commit, which the rule exists to prevent. |
+| R12  | Block `spex hash`              | Closed    | Safe — same shape as R6. |
+
+For R9 specifically, fail-closed ("block all commits when skill
+unknown") is not viable: the user commits directly outside any skill
+context routinely, and blocking that breaks normal workflow. So R9 is
+either model-dependent (open by default) or requires a stricter
+mechanism than marker files.
+
+**Options to investigate during Commit 4, in preference order:**
 
 1. **Harness-native skill identity.** Investigate whether Claude Code
    exposes the active skill name to hooks (env var, JSON field on
-   `tool_input`, etc.). If yes, use it; the harness is the authority and
-   model compliance is not required.
-2. **Marker file with TTL.** `/review` writes `.claude/skill-context.json`
-   with `{skill: "review", started_at: <iso>, pid: <self>}` on entry.
-   Hooks read it and refuse the operation if the file is missing, older
-   than N minutes, or names a different skill. Forgetful failure becomes
-   a hard block rather than a silent pass.
-3. **Defense in depth.** Combine (2) with a fail-closed default: if the
-   hook can't determine the skill context, it blocks (not allows). R6
-   becomes "block `br close` unless we can positively verify
-   skill=review." This is the safest default; the cost is more spurious
-   blocks until the marker mechanism is reliable.
+   `tool_input`, etc.). If yes, use it; the harness is the authority,
+   model compliance is not required, and the R9 asymmetry above
+   disappears.
+2. **Marker file with TTL.** Skill writes
+   `.claude/skill-context.json` on entry; hooks read it. R6 and R12
+   fail-closed when missing or stale. R9 fails *open* when missing
+   (the markerless commit is taken to be a user-driven commit) but
+   fails closed when the marker positively names `/spec` or
+   `/converge`. The improvement over today: there is now any
+   enforcement of R9 at all, just not perfect enforcement.
+3. **Hybrid: harness for read, marker for fallback.** If the harness
+   exposes partial info (e.g. last invoked skill name but not
+   active-skill), combine both signals.
 
-The current RFC text under §6 picks the env-var approach for
-readability; the implementation PR for R6 must answer this question
-before landing.
+Commit 4 ships option 1 if available, option 2 otherwise. The
+implementation must document the chosen mechanism in CLAUDE.md so
+future skills know how to declare their identity.
 
 ### 9.2 `--no-gpg-sign` flag bypass (R5 gap)
 
@@ -762,21 +794,17 @@ need a way to know which skill is active. That's §9.1 — a real spike
 with a tractable resolution path, not a "model is supposed to remember"
 hope.
 
-### 9.4 R3 TTL choice and offline contexts
+### 9.4 R3 TTL choice
 
 The catalog formulates R3 as "fetched within last 15 min" rather than
 "always fetch on every branch creation," to avoid forcing an SSH-SK
-tap on a fast iteration loop. Open sub-questions:
+tap on a fast iteration loop. Open: the TTL value itself. 15 min is a
+guess. The real harm is working against months-stale `origin/main`,
+not minutes-stale. An hour might be fine. Pick when the hook lands and
+tune from the violation log.
 
-- **TTL value.** 15 min is a guess. Could be longer (an hour) since
-  the real harm is working against months-stale `origin/main`, not
-  minutes-stale. Pick a value when the hook lands and tune from the
-  violation log.
-- **Offline contexts.** The hook check is `mtime(.git/FETCH_HEAD) < 15 min`.
-  In an offline session the file is just stale; the hook will block.
-  Probably acceptable (the user knows they're offline), but worth a
-  flag like `SPEX_OFFLINE=1` to bypass. That's a narrow override —
-  same shape as `SPEX_REBASELINE=1` for R12.
+Offline contexts are handled by the `SPEX_OFFLINE=1` env-var override
+declared in §4.3, not as an open question.
 
 ### 9.5 Hook violation log rotation
 
