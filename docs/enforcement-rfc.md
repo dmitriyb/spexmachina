@@ -131,13 +131,30 @@ filesystem or git, with no model-mediated input.
 
 ### 4.1 Hook output format (structured JSON)
 
-When any enforcement layer blocks an action, the hook script MUST write
-a single line of JSON conforming to the `spex-halt/v1` schema below to
-**stdout**, then exit non-zero. No free text, no section-titled prose:
-the protocol is machine-readable so the agent doesn't have to parse
-sentences to know what to do.
+Claude Code's hook protocol for `PreToolUse` requires the hook to exit
+**0** and write a `hookSpecificOutput` envelope to **stdout**. Exit-2
+with stderr is supported but only gives Claude raw stderr text — no
+structured control. We use the structured-output mode (source:
+[Claude Code hooks guide](https://code.claude.com/docs/en/hooks-guide.md),
+"Structured JSON output" and "PreToolUse" sections).
 
-Schema (`spex-halt/v1`):
+The wire format every hook script emits:
+
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PreToolUse",
+    "permissionDecision": "deny",
+    "permissionDecisionReason": "<spex-halt/v1 payload, serialised as a JSON string>"
+  }
+}
+```
+
+The model sees the `permissionDecisionReason` string. We pack the
+`spex-halt/v1` schema into that string as JSON, so the model can parse
+it deterministically rather than reading prose.
+
+Inner `spex-halt/v1` schema:
 
 ```json
 {
@@ -157,7 +174,7 @@ Schema (`spex-halt/v1`):
 }
 ```
 
-Field contract:
+Field contract (inner `spex-halt/v1`):
 
 - `protocol` — exact string `spex-halt/v1`. Agents detect the halt by
   this marker. Any future schema bump uses a new version string and
@@ -184,14 +201,16 @@ Field contract:
 The `recovery` array is **informational only**. It names valid paths,
 not authorization. Authorization comes from the user.
 
-A reference helper `scripts/hooks/lib/emit-halt.sh` MUST be used by
-every hook script to produce a conforming payload, so the schema can
-evolve without rewriting every script:
+A reference helper `scripts/hooks/lib/emit-halt.sh` builds the inner
+`spex-halt/v1` payload and the outer `hookSpecificOutput` envelope in
+one call. Every hook script calls it so the wire format can evolve
+without rewriting every script:
 
 ```bash
 # scripts/hooks/lib/emit-halt.sh
 # Usage: emit_halt <rule> <command> <invariant> <source> [<path> <destructive> ...]
-#   trailing args are recovery items in pairs: "<path text>" "<true|false>"
+#   Trailing args are recovery items in alternating (text, bool) pairs.
+#   Pass `false`/`true` literally (no quotes) so jq --argjson can consume them.
 emit_halt() {
   local rule="$1" command="$2" invariant="$3" source_loc="$4"
   shift 4
@@ -203,7 +222,8 @@ emit_halt() {
     shift 2
   done
 
-  jq -n \
+  local inner
+  inner="$(jq -nc \
     --arg rule "$rule" \
     --arg command "$command" \
     --arg invariant "$invariant" \
@@ -223,36 +243,51 @@ emit_halt() {
       source: $source_loc,
       recovery: $recovery,
       directive: "halt"
-    }'
+    }')"
+
+  # Log the inner payload (canonical form) before wrapping for the wire.
+  printf '%s\n' "$inner" | "$(dirname "${BASH_SOURCE[0]}")/../log-violation"
+
+  # Wrap for the Claude Code PreToolUse wire protocol.
+  jq -nc --arg reason "$inner" \
+    '{hookSpecificOutput:
+        {hookEventName: "PreToolUse",
+         permissionDecision: "deny",
+         permissionDecisionReason: $reason}}'
 }
 ```
 
-The hook caller passes recovery items as alternating `(text, bool)`
-pairs; `emit_halt` walks them into the `recovery` array. `false` and
-`true` must be passed as JSON literals (`emit_halt ... "do X" false`),
-not as shell strings, so `--argjson` can consume them.
+The function prints the outer envelope to stdout (the caller pipes it
+directly to its own stdout) and side-effects the log line. Caller exits
+0 — Claude Code interprets the `permissionDecision: "deny"` as the block.
 
 ### 4.2 Agent-side contract
 
-A new section is added to CLAUDE.md codifying agent behavior on a hook
-response containing `"protocol": "spex-halt/v1"`:
+When a `PreToolUse` hook denies a tool call, Claude Code surfaces the
+`permissionDecisionReason` field to the agent as the block reason. In
+our protocol that field is a JSON string conforming to `spex-halt/v1`.
+CLAUDE.md (added in Commit 1) codifies the contract:
 
-1. The agent halts the current tool sequence. No further tools on the
-   same goal-path until the user has responded.
-2. The agent renders the payload to the user. The rendering MUST
-   include verbatim: the `rule` slug, the `invariant`, the `source`,
-   and every entry in `recovery`. The agent MAY add a one-line plain
-   English summary on top.
-3. The agent proposes a recovery path drawn from `recovery`, but does
-   not execute it.
-4. Destructive recovery steps (entries where `destructive: true`)
-   require explicit per-step user confirmation. The agent never bundles
-   a destructive step with other steps. The destructive list at the
-   syntactic level is also enumerated in CLAUDE.md as a backstop:
-   `rm`, `rm -rf`, `git reset --hard`, `git checkout -- <file>`,
-   `git clean -f`, `git branch -D`, force-push, `br delete`, any DB
-   wipe, any operation that overwrites unstaged work.
-5. Non-destructive recovery (file edits, `git add`, `git stash`,
+1. **Recognise the protocol.** If a tool block's reason parses as JSON
+   with `"protocol": "spex-halt/v1"`, follow this contract. Otherwise
+   the block is a non-spex hook or a different mechanism — handle
+   normally.
+2. **Halt the current tool sequence.** No further tools on the same
+   goal-path until the user has responded.
+3. **Render the payload to the user.** The rendering MUST include
+   verbatim: the `rule` slug, the `invariant`, the `source`, and every
+   entry in `recovery`. The agent MAY add a one-line plain English
+   summary on top.
+4. **Propose, do not execute.** The agent proposes a recovery path
+   drawn from `recovery` but does not execute it.
+5. **Destructive recovery needs per-step confirmation.** Entries with
+   `destructive: true` require explicit user authorisation each.
+   The agent never bundles destructive steps. CLAUDE.md enumerates the
+   syntactic backstop list: `rm`, `rm -rf`, `git reset --hard`,
+   `git checkout -- <file>`, `git clean -f`, `git branch -D`,
+   force-push, `br delete`, any DB wipe, any operation that overwrites
+   unstaged work.
+6. **Non-destructive recovery** (file edits, `git add`, `git stash`,
    `git fetch`, `br update`, additional `Read`s) may proceed once the
    user acknowledges the block and names the path.
 
@@ -736,27 +771,41 @@ context routinely, and blocking that breaks normal workflow. So R9 is
 either model-dependent (open by default) or requires a stricter
 mechanism than marker files.
 
-**Options to investigate during Commit 4, in preference order:**
+**Chosen mechanism (per Claude Code hooks-guide research):** Claude
+Code does not expose active-skill identity to hooks. Hook stdin carries
+`session_id`, `cwd`, `hook_event_name`, `tool_name`, `tool_input` —
+none of those name a skill or slash command. Therefore Commit 4 ships
+the **marker-file pattern**:
 
-1. **Harness-native skill identity.** Investigate whether Claude Code
-   exposes the active skill name to hooks (env var, JSON field on
-   `tool_input`, etc.). If yes, use it; the harness is the authority,
-   model compliance is not required, and the R9 asymmetry above
-   disappears.
-2. **Marker file with TTL.** Skill writes
-   `.claude/skill-context.json` on entry; hooks read it. R6 and R12
-   fail-closed when missing or stale. R9 fails *open* when missing
-   (the markerless commit is taken to be a user-driven commit) but
-   fails closed when the marker positively names `/spec` or
-   `/converge`. The improvement over today: there is now any
-   enforcement of R9 at all, just not perfect enforcement.
-3. **Hybrid: harness for read, marker for fallback.** If the harness
-   exposes partial info (e.g. last invoked skill name but not
-   active-skill), combine both signals.
+- Each skill writes `.claude/skill-context.json` as its first action,
+  with shape:
+  ```json
+  {"skill": "review", "started_at": "2026-05-19T07:00:00Z", "pid": 12345}
+  ```
+- `scripts/hooks/lib/active-skill.sh` reads the file. It returns the
+  skill name if the file exists *and* `started_at` is within the last
+  60 minutes (TTL). Otherwise empty string.
+- Skill-aware hooks consult the helper and apply their per-rule
+  fail-mode (R6/R12 closed when unknown, R9 open when unknown but
+  closed when positively `/spec` or `/converge`).
 
-Commit 4 ships option 1 if available, option 2 otherwise. The
-implementation must document the chosen mechanism in CLAUDE.md so
-future skills know how to declare their identity.
+The marker-file pattern is itself model-dependent (the skill has to
+run the write command) and the table above still applies. We accept
+that:
+
+- **R6** (`br close`): fail-closed default means a skipped marker
+  causes a false-block surfaced to the user. Worst case: the user has
+  to acknowledge the block and run `/review` again with a fresh
+  marker. Inconvenient, not unsafe.
+- **R9** (`/spec` and `/converge` must not commit): improvement over
+  today is partial. If the skill writes the marker, R9 enforces. If
+  the skill skips it, R9 fails open — same as the status quo.
+- **R12** (`spex hash` re-baseline): does not consult the marker;
+  uses `SPEX_REBASELINE=1` env var instead, so the marker pattern
+  doesn't affect it.
+
+The mechanism is documented in CLAUDE.md (Commit 1's "## Enforcement"
+section) so future skills know how to declare their identity.
 
 ### 9.2 `--no-gpg-sign` flag bypass (R5 gap)
 
