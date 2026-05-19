@@ -89,11 +89,13 @@ escalate to the user. The human is the only override path.
 | R9 | `/spec` and `/converge` leave changes staged, do not commit | skill docs (`feedback_skills_no_autocommit`) | Prose + memory | **Skill pre-flight** + CC hook keyed on `SPEX_SKILL` env | `BLOCKED: skill-must-not-commit` |
 | R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **Inverse rule** — explicitly NOT blocked; R9 hook must check the skill name | n/a (a guard against false positives) |
 | R11 | Never use `git rebase -i` / `git add -i` (interactive) | (operational, not in CLAUDE.md) | Prose | **CC hook** (PreToolUse Bash matcher) | `BLOCKED: interactive-git-not-supported` |
+| R12 | Never run `spex hash` to "fix" a non-empty diff | `feedback_spex_pipeline_not_hash` memory | Memory only | **CC hook** (PreToolUse Bash matcher; allow only if `SPEX_REBASELINE=1` marker is set, which the user sets manually when the TreeBuilder keying scheme changed) | `BLOCKED: spex-hash-bypasses-pipeline` |
+| R13 | Pre-flight check at the top of every commit-producing skill: HEAD is not `main` | `feedback_check_branch_before_editing` memory + CLAUDE.md:37 | Memory only | **CC hook** (PreToolUse on Edit/Write/Bash-git-commit; reads `git rev-parse --abbrev-ref HEAD`) | `BLOCKED: editing-on-protected-branch` |
 
 Layer key:
 - **CC hook**: `PreToolUse` matcher in `.claude/settings.json` (`Bash` tool).
 - **Git hook**: script under repo-tracked `scripts/git-hooks/`, installed via `git config core.hooksPath scripts/git-hooks`.
-- **Skill pre-flight**: Bash check at the top of the skill file, exits non-zero with the structured halt message before any work begins.
+- **Skill pre-flight**: a check that runs at the *start* of a skill invocation. **Important:** plain text at the top of a SKILL.md file is *not* enforcement — it's the same strength as prose, since the model must read and act on it. A row labelled "Skill pre-flight" only counts as enforced once the check is wired as a real hook (UserPromptSubmit matching the slash-command, or PreToolUse wrapping the skill's first tool call). See §9.3.
 
 Layer choice rationale:
 - **Git hooks** are preferred for anything involving `git commit` or
@@ -329,69 +331,284 @@ CLAUDE.md gains a one-line note under "Git Conventions":
 
 ## 7. Memory migration
 
-Memory inventory at `/home/dev/.claude/projects/-workspace-spexmachina/memory/`:
+Inventory of `/home/dev/.claude/projects/-workspace-spexmachina/memory/` as
+of 2026-05-19. Each entry includes a one-line content summary, what's
+already covered elsewhere, and a disposition. Not every memory belongs in
+CLAUDE.md — some are domain knowledge, some are operational recovery
+procedures, some are already redundant with current SKILL.md text.
 
-| File | Type | Disposition | Target |
-|------|------|-------------|--------|
-| `feedback_beads_undo_requires_db_reset.md` | feedback | **Move** | CLAUDE.md "Bead Context Resolution" |
-| `feedback_br_list_filters_silently.md` | feedback | **Move** | CLAUDE.md "Issue Tracking" |
-| `feedback_branch_creation_avoid_inherited_upstream.md` | feedback | **Move** | CLAUDE.md "Git Conventions" |
-| `feedback_check_branch_before_editing.md` | feedback | **Enforce + delete** | Skill pre-flight in `/implement`, `/fix`, `/cleanup`; delete memory once enforced |
-| `feedback_dont_paraphrase_existing_rules.md` | feedback | **Move** | New section in CLAUDE.md "When fixing skills" |
-| `feedback_merkle_test_section_keying.md` | feedback | **Keep** | Domain-specific, model-discipline rule with no enforcement path |
-| `feedback_read_branch_commits_not_diff_stat.md` | feedback | **Move** | New section in CLAUDE.md "Working with branches" |
-| `feedback_read_main_not_current_branch.md` | feedback | **Move** | CLAUDE.md "Git Conventions" (same section as branch-creation) |
-| `feedback_review_findings_block_dont_punt.md` | feedback | **Move** | `/review` SKILL.md |
-| `feedback_skills_no_autocommit.md` | feedback | **Move** | Each affected skill's SKILL.md (positive contract: "this skill commits / does not commit"); delete the cross-cutting memory once skill files are authoritative |
-| `feedback_spex_pipeline_errors_are_signal.md` | feedback | **Move** | CLAUDE.md "Technical Constraints" or `/converge` SKILL.md |
-| `feedback_spex_pipeline_not_hash.md` | feedback | **Move** | `/converge` SKILL.md (operational rule) |
-| `feedback_supersession_delete_create.md` | feedback | **Move** | `/spec` SKILL.md |
-| `feedback_test_section_ownership_distinct_from_file_ownership.md` | feedback | **Move** | `/implement` and `/review` SKILL.md |
+### 7.1 Already redundant — delete
 
-Migration test: a fresh docker container with only `git clone` of this
-repo (no `~/.claude/projects/...` state) must yield the same agent
-behavior as the current dev environment. If a rule fails to fire after a
-fresh clone, the migration of that rule is incomplete.
+These memories state in their own body that they're already codified in
+SKILL.md or are duplicated by existing prose:
+
+- **`feedback_test_section_ownership_distinct_from_file_ownership.md`** —
+  rule: test-section ownership is distinct from file ownership; bead
+  scope is per `test_section`, not per source-file. The memory's own
+  closing line says: *"This is now codified in
+  `skills/implement/SKILL.md` (test-section scope guard within step 5)
+  and `skills/review/SKILL.md` (cross-bead test scope as Step 3 check
+  #8)."* → **Delete.** Verify the SKILL.md text is still present and
+  authoritative, then drop the memory.
+
+### 7.2 Already substantively covered by CLAUDE.md (delete or trim)
+
+- **`feedback_check_branch_before_editing.md`** — rule: check current
+  branch before any Edit/Write; branch from origin/main if on main.
+  CLAUDE.md L37 already says *"main is protected: never commit directly
+  to it. All changes land via a dedicated branch + PR merge, even
+  one-line data fixes."* The memory adds the operational "check before
+  the first edit" framing, which is what the incident actually needed.
+  → **Enforce as R4 hook (CC PreToolUse on Edit/Write/Bash-git-commit
+  that asserts HEAD ≠ main), then delete.** Once the hook exists the
+  prose is sufficient.
+
+### 7.3 Skill-scoped — move into individual SKILL.md files
+
+Each of these is operational guidance for one specific skill. Belongs in
+that skill's file, not in cross-cutting memory or CLAUDE.md:
+
+- **`feedback_review_findings_block_dont_punt.md`** — rule: every real
+  finding goes into the review as a blocker; never "non-blocker for
+  follow-up." If a finding is named, verdict is `ISSUES`. → **Move into
+  `/review` SKILL.md**, ideally as a numbered step in the verdict-mapping
+  section.
+- **`feedback_skills_no_autocommit.md`** — rule: `/spec` and `/converge`
+  must not auto-commit; `/fix`, `/review`, `/cleanup`, `/implement` MUST
+  commit and push (per their explicit contracts). → **Move per-skill: a
+  one-line "Commits and pushes: yes / no" line at the top of each
+  SKILL.md.** Once each skill is self-describing, the cross-cutting memory
+  is redundant. The carve-out paragraph in the memory exists *because* the
+  memory was overly broad; per-skill statements eliminate the need for it.
+- **`feedback_spex_pipeline_not_hash.md`** — rule: never run `spex hash`
+  to "fix" a non-empty diff; it bypasses impact/emit/ingest and orphans
+  bead-map records. → **Move into `/converge` SKILL.md and `/review`
+  SKILL.md** (the closing-bead context). Also enforceable as a CC hook
+  blocking `spex hash` outside an explicit re-baseline marker — captured
+  as R12 below.
+- **`feedback_spex_pipeline_errors_are_signal.md`** — rule: spex pipeline
+  errors are correctness signals; never bypass with manual workarounds
+  (especially manual `br close`). → **Move into `/converge` SKILL.md.**
+  Tie to R6 (br close outside /review) — manual br close to escape
+  pipeline friction is exactly what R6 blocks.
+- **`feedback_supersession_delete_create.md`** — rule: when a proposal
+  splits/merges/reshapes modules, delete the old module entirely and
+  create fresh nodes; don't rename or reuse IDs. → **Move into `/spec`
+  SKILL.md** (mode-detection / restructure section). No enforcement path
+  (semantic decision, not a syntactic command pattern).
+
+### 7.4 General git/tracker operations — move into CLAUDE.md
+
+These are short operational facts about `git` and `br` that any
+contributor (model or human, on any machine) should know:
+
+- **`feedback_branch_creation_avoid_inherited_upstream.md`** — gotcha:
+  `git checkout -b <name> origin/main` sets origin/main as upstream and
+  breaks bare `git push`. Use `git push -u origin <name>` on first push.
+  → **Move into CLAUDE.md "Git Conventions"** as a one-line note under
+  the existing "branch from origin/main" rule.
+- **`feedback_br_list_filters_silently.md`** — gotcha: `br list --json`
+  silently filters to open-only with `--limit 50`. For canonical state,
+  use `jq -s '{issues: .}' .beads/issues.jsonl`. CLAUDE.md already says
+  *"Use `br` commands or `.beads/issues.jsonl`"* (L62) but doesn't warn
+  about the silent filter. → **Move into CLAUDE.md "Issue Tracking"** as
+  a one-line note.
+- **`feedback_beads_undo_requires_db_reset.md`** — recovery procedure:
+  to undo a `br` mutation, checkout jsonl + delete db + re-import (db is
+  source-of-truth, jsonl is a reflection). → **Move into CLAUDE.md
+  "Bead Context Resolution"** under a new "Recovery procedures"
+  subsection. This is the kind of thing that has to be discoverable
+  without a session-bound memory.
+- **`feedback_read_main_not_current_branch.md`** — rule: when answering
+  "current state" questions, verify `HEAD` first; read from
+  `origin/main` explicitly if not on main. → **Move into CLAUDE.md
+  "Git Conventions"** as a short paragraph. Not enforceable mechanically
+  (the model has to recognize the question shape) but should be a
+  repo-visible rule.
+- **`feedback_read_branch_commits_not_diff_stat.md`** — rule: for rebase
+  risk, read `git log base..branch --oneline` and per-commit `git show
+  --stat`; do not judge by `git diff base..branch --stat`. → **Move into
+  CLAUDE.md "Git Conventions"** as a one-liner pointing to the right
+  command.
+
+### 7.5 Keep in memory — genuine domain knowledge or meta-guidance
+
+These don't fit CLAUDE.md (too specialized, too meta, or no clean
+enforcement path):
+
+- **`feedback_merkle_test_section_keying.md`** — domain knowledge: a
+  test_section's leaf hash covers only its markdown content;
+  `describes`/`id`/`name` changes show up only in module meta. This is a
+  property of `merkle/tree_builder.go:155-164`, valuable when reviewing
+  describes-only PRs whose `spex diff` looks misleading. → **Keep in
+  memory** *or* fold into `spec/merkle/arch_tree_builder.md` (the spec
+  leaf where this property is implemented). The latter is better
+  long-term: the rule lives next to the code it describes.
+- **`feedback_dont_paraphrase_existing_rules.md`** — meta-rule: when
+  asked to fix a recurring failure, look for the workflow gap, not the
+  wording. Adding more prose to an already-existing rule is decorative.
+  Hard to enforce mechanically. → **Keep in memory** for now. This RFC
+  is in part an embodiment of this rule — it's the workflow-gap
+  enforcement layer the memory advocates for. Once the RFC's hooks land,
+  consider promoting this rule into a short "When to add a hook vs. a
+  paragraph" note in CLAUDE.md.
+
+### 7.6 Acceptance test for the migration
+
+A fresh docker container with only `git clone` of this repo and no
+`~/.claude/projects/...` state must produce the same agent behavior as
+the current dev environment for every rule in §7.1–§7.4. Items in §7.5
+explicitly do not need to survive the test; they are the residual
+machine-local knowledge.
+
+To verify: spin up a fresh container, run a representative task
+(`/implement <bead>` or `/fix <pr>`) and check that the agent picks up
+the rules now in CLAUDE.md / SKILL.md without consulting memory.
+Anything that requires a memory lookup post-migration is a migration
+gap.
 
 ## 8. Implementation roadmap
 
 Out of scope for this RFC PR. Suggested order, riskiest gaps first:
 
-1. **Git pre-push hook + `core.hooksPath` wiring** (one PR). Closes the
-   "push to `main`" gap globally. Lowest coordination cost.
-2. **Git pre-commit hook** for SSH-signing verification (one PR). Pairs
-   with #1; covers the signing rule.
-3. **CC hook: `br close` outside `/review`** (one PR). Requires the
-   `/review` skill to export `SPEX_SKILL=review`; landing them together.
-4. **CC hook: `.beads/beads.db` direct reads** (one PR). Pure block, no
-   skill changes.
-5. **CC hook: `--no-gpg-sign` and `-c commit.gpgsign=false`** (one PR).
-   Defense-in-depth alongside #2.
-6. **Memory migration** (one PR, documentation-only). Per §7 table.
-7. **Skill pre-flight checks** for R3, R4, R9 (one PR per skill).
-8. **`scripts/hook-violations-summary` helper** (one PR). Quality-of-life
-   tool for tuning rules.
+1. **Git pre-push hook + `core.hooksPath` wiring** (R1/R2). One PR.
+   Closes the "push to `main`" gap globally. Lowest coordination cost,
+   no skill-context dependency.
+2. **Git pre-commit + post-commit hooks for signing** (R5). One PR.
+   Pre-commit verifies config; post-commit verifies the just-created
+   commit has a `gpgsig` block (§9.2).
+3. **CC hook: `.beads/beads.db` direct reads** (R7/R8). One PR. Pure
+   syntactic block, no skill-context dependency.
+4. **CC hook: deny `--no-gpg-sign` and `-c commit.gpgsign=false` flags**
+   (R5 complement). One PR. Defense-in-depth alongside #2.
+5. **CC hook: editing on protected branch** (R13). One PR. Reads
+   `git rev-parse --abbrev-ref HEAD`; no skill-context dependency. This
+   is the §7.2 "delete memory after enforcement" pickup.
+6. **Resolve skill-context propagation** (§9.1). One PR with a small
+   spike: investigate harness-native skill identity, fall back to the
+   marker-file pattern if needed. This unblocks #7/#8/#9.
+7. **CC hook: `br close` outside `/review`** (R6). Depends on #6.
+8. **CC hook: skill-aware commit rules** (R9/R10). Depends on #6.
+9. **CC hook: `spex hash` requires re-baseline marker** (R12). Depends
+   on #6 (or stands alone if the marker is purely env-var-based, with
+   no skill check needed — see implementation note in §9.1).
+10. **Memory migration** (one PR, documentation-only). Per §7 table.
+    Can land in parallel with hook work since it's text-only.
+11. **`scripts/hook-violations-summary` helper** (one PR). Quality of
+    life for tuning rules.
 
-Each PR ships its own row(s) from the catalog and updates the catalog
-status. The RFC itself does not change as rows land.
+Each PR ships its own row(s) from the catalog, updates the row's
+"Today's enforcement" column, and adds a `make verify-enforcement` case
+for its rule. The RFC itself does not change as rows land — it stays a
+design reference. The catalog can be promoted to its own
+`docs/enforcement-catalog.md` once it has more than a few rows in
+"enforced" state, with the RFC pointing to it.
 
-## 9. Open questions
+## 9. Open questions and risks
 
-- **Skill context to hooks.** Setting `SPEX_SKILL=<name>` at the top of
-  each SKILL.md works if skills are invoked via Bash (the env propagates).
-  Confirm during #3 implementation; fallback is to inspect process
-  ancestry or read from a `.claude/current-skill` marker file the skill
-  writes on entry.
-- **Hook violation log rotation.** At one line per block, unlikely to
-  matter for a year. Defer until log size warrants.
-- **CI verification.** Should CI fail if `core.hooksPath` is not set
-  correctly on a contributor's clone? Probably no — CI can't see the
-  setting. Better: a `make verify-enforcement` target that fakes each
-  blocked action and asserts the hook fires, run as part of `make check`.
-- **Interaction with auto-mode classifier.** Once these hooks exist, the
-  classifier may stop citing memory entries (because the hook IS the
-  authority). Worth observing post-implementation; no design change
-  needed up front.
+### 9.1 Skill-context propagation (primary risk)
+
+The catalog includes rules that depend on knowing which skill is active:
+R6 (`br close` only from `/review`), R9/R10 (`/spec` and `/converge` do
+not commit, others do), R12 (`spex hash` requires explicit re-baseline
+marker). All three §6 reference implementations use
+`SPEX_SKILL=<name>`, set by the skill itself, to disambiguate.
+
+**The fragility:** a skill file is a markdown instruction to the model,
+not a process boundary. "/review exports `SPEX_SKILL=review` at the top"
+only works if the model runs that Bash command. If the model skips it,
+the hook sees `SPEX_SKILL` unset, the rule falls back to "block all" (R6
+case) or "allow all" (R9 case), and we have either a false-positive
+block or — worse — a silent failure that lets the wrong skill close a
+bead. This is the same model-dependency that motivates the RFC in the
+first place.
+
+**Options to investigate during implementation, in preference order:**
+
+1. **Harness-native skill identity.** Investigate whether Claude Code
+   exposes the active skill name to hooks (env var, JSON field on
+   `tool_input`, etc.). If yes, use it; the harness is the authority and
+   model compliance is not required.
+2. **Marker file with TTL.** `/review` writes `.claude/skill-context.json`
+   with `{skill: "review", started_at: <iso>, pid: <self>}` on entry.
+   Hooks read it and refuse the operation if the file is missing, older
+   than N minutes, or names a different skill. Forgetful failure becomes
+   a hard block rather than a silent pass.
+3. **Defense in depth.** Combine (2) with a fail-closed default: if the
+   hook can't determine the skill context, it blocks (not allows). R6
+   becomes "block `br close` unless we can positively verify
+   skill=review." This is the safest default; the cost is more spurious
+   blocks until the marker mechanism is reliable.
+
+The current RFC text under §6 picks the env-var approach for
+readability; the implementation PR for R6 must answer this question
+before landing.
+
+### 9.2 `--no-gpg-sign` flag bypass (R5 gap)
+
+A git `pre-commit` hook can verify `commit.gpgsign=true` in config but
+cannot catch `git commit --no-gpg-sign` or `git -c commit.gpgsign=false
+commit`, because those produce an unsigned commit object that the hook
+sees as "valid commit, signing config is fine globally." Two
+complementary mitigations:
+
+1. **CC hook denying the flags** in the Bash command string. Catches
+   model-driven attempts but not direct user invocation.
+2. **Post-commit hook** verifying the just-created commit has a `gpgsig`
+   block via `git cat-file -p HEAD`. If absent, the hook errors
+   loudly — the commit is already made, but the user has the slug to
+   amend before pushing. Pair this with a pre-push hook that re-checks
+   signing on every ref being pushed (last-line defense).
+
+### 9.3 Skill pre-flight is not a real enforcement layer
+
+The catalog has §6/§4 calling "skill pre-flight" a layer. As written
+(text at the top of SKILL.md), it's the same enforcement strength as
+prose: the model has to read it and act. To count as enforcement,
+pre-flight checks must run as hooks (UserPromptSubmit on slash-command
+invocation, or PreToolUse wrapping the skill's first tool call) — not
+as markdown the model reads.
+
+The implementation roadmap should treat "skill pre-flight" rows as
+"unenforced until wired as a real hook." R3 and R4 should probably be
+demoted to skill-pre-flight-as-hook in the catalog, with the explicit
+note that they require harness wiring (see §9.1).
+
+### 9.4 R3 (always git fetch) is overweight
+
+Requiring a network fetch + SSH-SK tap before every branch creation is
+painful. Two softer formulations to consider:
+
+- **TTL fetch**: hook passes if `.git/FETCH_HEAD` mtime is within last N
+  minutes (default 15). Avoids the tap on a fast iteration loop.
+- **Skip on no-network**: hook passes if the network check itself fails
+  fast (offline contexts).
+
+Either is honest about what the rule is protecting against (working
+against months-stale origin/main), without the punitive enforcement on
+every branch.
+
+### 9.5 Hook violation log rotation
+
+At one line per block, log size is unlikely to matter for a year. Defer
+until the log warrants it. If/when it does, add a `logrotate`-style
+trim to `scripts/hook-violations-summary`.
+
+### 9.6 Verification target
+
+A `make verify-enforcement` target should simulate each blocked action
+and assert the hook fires with the correct slug. Lives in the
+implementation PR for each hook, not the RFC. Should be wired into
+`make check` so regressions are caught locally before push.
+
+### 9.7 Interaction with the auto-mode classifier
+
+Once these hooks exist, the classifier may stop citing memory entries
+because the hook is now the authority for the rules it covers. Worth
+observing post-implementation; no design change is needed up front. If
+the classifier continues to cite memory after a rule has migrated to a
+hook, that's a signal the migration of that specific rule is
+incomplete — the prose still exists somewhere it shouldn't.
 
 ## 10. Acceptance criteria for the RFC
 
