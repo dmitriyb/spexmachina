@@ -1,5 +1,41 @@
 {
   "hooks": {
-    "PreToolUse": []
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "command": "scripts/hooks/check-not-on-main.sh" },
+          { "type": "command", "command": "scripts/hooks/block-signing-bypass.sh" },
+          { "type": "command", "command": "scripts/hooks/block-beads-db-read.sh" },
+          { "type": "command", "command": "scripts/hooks/block-interactive-git.sh" },
+          { "type": "command", "command": "scripts/hooks/check-fetched-recent.sh" },
+          { "type": "command", "command": "scripts/hooks/check-branch-from-origin-main.sh" }
+        ]
+      },
+      {
+        "matcher": "Edit",
+        "hooks": [
+          { "type": "command", "command": "scripts/hooks/check-not-on-main.sh" }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          { "type": "command", "command": "scripts/hooks/check-not-on-main.sh" }
+        ]
+      },
+      {
+        "matcher": "NotebookEdit",
+        "hooks": [
+          { "type": "command", "command": "scripts/hooks/check-not-on-main.sh" }
+        ]
+      },
+      {
+        "matcher": "Read",
+        "hooks": [
+          { "type": "command", "command": "scripts/hooks/block-beads-db-read.sh" }
+        ]
+      }
+    ]
   }
 }
