@@ -71,9 +71,62 @@ Cleanup beads (carrying the `spex:cleanup` label) have no map record by design �
 - **Spec traceability**: All code must trace back to bead requirements
 - **Self-hosting**: Spex Machina's own spec is managed by Spex Machina (after bootstrap)
 
+## Enforcement
+
+The repo ships machine-enforced rules via Claude Code hooks
+(`.claude/settings.json` + `scripts/hooks/`) and git hooks
+(`scripts/git-hooks/`). Full design in `docs/enforcement-rfc.md`.
+
+**One-time per clone:** `make setup-hooks`. This wires
+`core.hooksPath` and makes the scripts executable.
+
+**Halt protocol — when a hook denies a tool call.** Claude Code
+surfaces a `permissionDecisionReason` string. If the string parses as
+JSON with `"protocol": "spex-halt/v1"`, the agent MUST:
+
+1. Halt the current tool sequence. No further tools on the same
+   goal-path until the user has responded.
+2. Render the payload to the user verbatim, including: the `rule`
+   slug, the `invariant`, the `source` (file:line), and every entry
+   in `recovery`.
+3. Propose a recovery path drawn from `recovery`, but do not execute.
+4. Destructive recovery steps (`destructive: true` entries, plus the
+   syntactic backstop list: `rm`, `rm -rf`, `git reset --hard`,
+   `git checkout -- <file>`, `git clean -f`, `git branch -D`,
+   force-push, `br delete`, any DB wipe, any operation that
+   overwrites unstaged work) require explicit per-step user
+   confirmation. Never bundle destructive steps.
+5. Non-destructive recovery (file edits, `git add`, `git stash`,
+   `git fetch`, `br update`, additional `Read`s) may proceed once the
+   user acknowledges the block and names the path.
+
+**Skill identity.** Hooks consult `.claude/skill-context.json` to know
+which skill is active. Each skill MUST write this marker as its first
+action:
+
+```bash
+printf '{"skill":"<name>","started_at":"%s","pid":%d}\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
+```
+
+Hooks treat a missing/stale (>60 min) marker as "skill unknown" and
+apply their per-rule fail-mode (R6/R12 block; R9 allows on the
+assumption the commit is user-driven). See `docs/enforcement-rfc.md`
+§9.1 for the asymmetry.
+
+**Override env vars.** Two narrow overrides exist, both user-set:
+- `SPEX_REBASELINE=1` permits `spex hash` (R12 carve-out).
+- `SPEX_OFFLINE=1` skips R3's fetch-recency check.
+The agent must not set either; if the agent believes an override is
+warranted, it asks the user.
+
+**Before opening a PR** that touches `.claude/settings.json`,
+`scripts/hooks/`, or `scripts/git-hooks/`: run `make verify-enforcement`.
+
 ## Where to Find Details
 
 - **Skills**: `skills/` — all skill definitions (`/propose`, `/spec`, `/implement`, `/review`, `/fix`)
 - **Discovery**: `.claude/skills/` — symlinks for Claude Code slash commands
 - **Proposal**: `spec/proposals/` — project and change proposals
 - **Beads**: `.beads/` — task tracking database
+- **Enforcement**: `docs/enforcement-rfc.md` — hook design, catalog, halt protocol
