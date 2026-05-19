@@ -4,6 +4,22 @@ description: "Read a proposal and author spec files: project.json, module.json, 
 argument-hint: "<proposal-path-or-name>"
 ---
 
+**Commits and pushes:** no. This skill authors spec files and leaves all changes staged for the user to review and commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec`.
+
+## Module supersession: delete+create, never rename
+
+When a proposal involves a module being structurally superseded (one module splits into multiple; multiple merge into one; a module's components are reshaped significantly):
+
+1. Remove the old module's entry from `project.json`
+2. Delete the entire old module directory (`spec/<old>/`)
+3. Create the new module(s) as completely fresh nodes with freshly-computed identity hashes
+
+**Do not** rename directories. **Do not** reuse module or component IDs. **Do not** leave forward-pointing shells.
+
+The rename-style restructuring confuses ActionClassifier's state transitions — a reshape may register as "modified" when the semantic reality is "removed (old apply) + added (new emit+ingest)". Delete+create produces clean `removed → obsolete + cleanup bead` signals for the old nodes and `added → create bead` for the new ones, with no false lineage implied between old and new component beads.
+
+Detect the pattern when a proposal's affected-spec-nodes lists both "Deleted: old module X" and "New modules: Y, Z (where Y/Z cover the same conceptual surface X did)."
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

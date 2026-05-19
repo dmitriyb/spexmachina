@@ -4,6 +4,8 @@ description: "Audit shipped code against its spec, identify drift, and draft a c
 argument-hint: "[module-name]"
 ---
 
+**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-drift`.
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

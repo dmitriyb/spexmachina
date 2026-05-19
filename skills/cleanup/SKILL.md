@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: <bead-id>
 ---
 
+**Commits and pushes:** yes. This skill commits and pushes its changes and opens a PR. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `cleanup`.
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

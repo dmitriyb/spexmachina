@@ -37,6 +37,9 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 - `main` is protected: never commit directly to it. All changes land via a dedicated branch + PR merge, even one-line data fixes.
 - Always `git fetch origin` before creating a new branch
 - Always branch from `origin/main`, not from the current branch
+- On first push, use `git push -u origin <branch>` so the upstream tracks the new branch (not `origin/main`). The pattern `git checkout -b <name> origin/main` followed by bare `git push` fails under git's default `push.simple` because the upstream's name doesn't match the local branch's name.
+- When you need the **current** state of any committed artifact (bead statuses, schemas, source, TODO markers, snapshots), run `git rev-parse --abbrev-ref HEAD` first. If you are not on `main`, read explicitly from `origin/main` via `git show origin/main:<path>` or a worktree at `origin/main`. The working tree of a stale branch will give wrong answers to "current state" questions.
+- For rebase-risk assessment, read `git log <base>..<branch> --oneline` and `git show --stat <sha>` per commit. Do **not** judge by `git diff <base>..<branch> --stat` — that includes everything `main` has done since the branch was cut and wildly overstates conflict surface.
 - Commits must be SSH-signed. Never bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`). To verify a commit is actually signed, inspect the raw object for a `gpgsig` block: `git cat-file -p <sha>`. Do NOT trust `git log --show-signature` or `%G?` — both report `N`/"No signature" on correctly-signed commits when `gpg.ssh.allowedSignersFile` is not configured locally. That is a verification-side gap, not a signing failure.
 
 ## Issue Tracking
@@ -47,6 +50,7 @@ This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) f
 - Claim work: `br update <id> --status in_progress`
 - Link PR: `br update <id> --external-ref "PR#<number>"`
 - Close work: performed by `/review` after LGTM, never by `/implement`. The command is `br close <id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."` — do not run it from any other skill or context.
+- `br list --json` is NOT canonical state: by default it filters to open-only and paginates at `--limit 50`, both silently. For full tracker state, read `.beads/issues.jsonl` directly: `jq -s '{issues: .}' .beads/issues.jsonl`. If you must use `br list`, pass `--all --limit 0` explicitly.
 
 ## Bead Context Resolution
 
@@ -64,6 +68,16 @@ Hard rules:
 - If you need bead/spec data and the documented tools don't expose it, ask the user — do not improvise with general-purpose tools.
 
 Cleanup beads (carrying the `spex:cleanup` label) have no map record by design — see `/cleanup` for that workflow.
+
+### Recovery procedure: undoing a `br` mutation
+
+To unwind a `br` mutation cleanly (status change, label edit, external-ref, close, create):
+
+1. `git checkout -- .beads/issues.jsonl` to restore the committed file
+2. Delete the beads db: `rm .beads/beads.db`
+3. Re-import from the restored jsonl to rebuild the db fresh
+
+The db is the source of truth; `.beads/issues.jsonl` is a reflection. `git checkout` only restores the file — the db still holds the mutated state. Re-running `br update <id> --status <old>` writes a new timestamp so the jsonl never returns to the committed bytes. Only a fresh rebuild from the restored reflection gives a byte-for-byte and state-for-state restore.
 
 ## Organizational Constraints
 

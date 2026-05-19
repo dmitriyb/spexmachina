@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: <pr-number>
 ---
 
+**Commits and pushes:** yes. This skill commits each set of fixes and pushes. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `fix`.
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

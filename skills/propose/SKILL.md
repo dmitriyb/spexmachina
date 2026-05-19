@@ -4,6 +4,8 @@ description: "Research the spec and draft a structured proposal in plan mode"
 argument-hint: "[proposal-name]"
 ---
 
+**Commits and pushes:** no. This skill drafts a proposal in plan mode and leaves it for the user to review and commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `propose`.
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

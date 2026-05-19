@@ -5,6 +5,8 @@ disable-model-invocation: true
 argument-hint: <bead-id>
 ---
 
+**Commits and pushes:** yes. This skill commits, pushes, opens a PR, and links the bead. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `implement`. This skill does NOT close beads — `br close` is the `/review` skill's responsibility (R6 enforcement).
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):

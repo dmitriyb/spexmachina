@@ -4,6 +4,8 @@ description: "Audit the spec for internal inconsistencies (no code reading) and 
 argument-hint: "[module-name]"
 ---
 
+**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-review`.
+
 ## Step 0: Declare skill identity to enforcement hooks
 
 Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
