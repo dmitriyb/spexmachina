@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# pre-push — enforce:
+#   R2  Refuse direct push to main (CLAUDE.md:37)
+#   R5a Re-verify every commit being pushed has a gpgsig block
+#
+# Git passes refs being pushed on stdin:
+#   <local_ref> <local_sha> <remote_ref> <remote_sha>
+# Blocks the push as a whole if any ref violates either rule.
+
+set -uo pipefail
+
+hook_dir="$(cd "$(dirname "$0")" && pwd)"
+lib_dir="$(cd "$hook_dir/../hooks/lib" 2>/dev/null && pwd || true)"
+if [[ -z "$lib_dir" || ! -f "$lib_dir/emit-halt.sh" ]]; then
+  echo "pre-push: cannot locate scripts/hooks/lib/emit-halt.sh (looked from $hook_dir)" >&2
+  exit 1
+fi
+source "$lib_dir/emit-halt.sh"
+
+block=0
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Skip deletes (local_sha is all zeros).
+  if [[ "$local_sha" =~ ^0+$ ]]; then continue; fi
+
+  # --- R2: no push to main -------------------------------------------------
+  if [[ "$remote_ref" == "refs/heads/main" ]]; then
+    emit_git_halt \
+      "no-direct-push-to-main" \
+      "git push: $local_ref -> $remote_ref" \
+      "main is protected; all changes land via PR merge." \
+      "CLAUDE.md:37" \
+      "Push to a feature branch: git push -u origin <branch-name>" false \
+      "Open a PR: gh pr create" false \
+      "If genuinely exceptional, the user disables core.hooksPath out-of-band — the agent must not" true
+    block=1
+    continue
+  fi
+
+  # --- R5a per-ref re-verification -----------------------------------------
+  # Walk the commits being pushed (range from remote_sha..local_sha, or
+  # all commits reachable from local_sha if the remote ref is new).
+  local_range="$local_sha"
+  if [[ -n "$remote_sha" && ! "$remote_sha" =~ ^0+$ ]]; then
+    local_range="$remote_sha..$local_sha"
+  fi
+
+  unsigned_shas=()
+  while read -r commit; do
+    [[ -z "$commit" ]] && continue
+    if ! git cat-file -p "$commit" 2>/dev/null | grep -q '^gpgsig '; then
+      unsigned_shas+=("$commit")
+    fi
+  done < <(git rev-list "$local_range" 2>/dev/null)
+
+  if (( ${#unsigned_shas[@]} > 0 )); then
+    short_list="$(printf '%s ' "${unsigned_shas[@]:0:5}")"
+    emit_git_halt \
+      "unsigned-commit-detected" \
+      "pre-push: unsigned commits on $local_ref: $short_list" \
+      "Commits must be SSH-signed. Never bypass signing." \
+      "CLAUDE.md:40" \
+      "Identify the unsigned commit(s) above and re-sign with: git rebase --exec 'git commit --amend -S --no-edit' <base>" false \
+      "Verify config and try again: git config --global commit.gpgsign true" false
+    block=1
+  fi
+done
+
+exit "$block"

@@ -1,51 +1,39 @@
 #!/usr/bin/env bash
-# emit-halt.sh — produce the wire-format response that Claude Code's
-# PreToolUse hook protocol expects for a "deny" decision, AND log the
-# canonical spex-halt/v1 payload to .claude/hook-violations.log.
+# emit-halt.sh — build and emit spex-halt/v1 payloads.
 #
-# Sourced by every hook script under scripts/hooks/. Do not run directly.
+# Three public functions, layered:
 #
-# Wire protocol (Claude Code):
-#   {"hookSpecificOutput": {"hookEventName": "PreToolUse",
-#                           "permissionDecision": "deny",
-#                           "permissionDecisionReason": "<inner JSON as string>"}}
-#   Exit 0. (Exit 2 + stderr also blocks but only as raw text.)
+#   build_halt_inner  -> compact JSON string (the canonical payload)
+#   emit_halt         -> Claude Code PreToolUse wire envelope on stdout
+#                        (uses build_halt_inner, also logs)
+#   emit_git_halt     -> structured stderr message for git hooks
+#                        (uses build_halt_inner, also logs)
 #
-# Inner spex-halt/v1 schema (the canonical form):
-#   {"protocol": "spex-halt/v1",
-#    "rule": "<slug>",
-#    "command": "<attempted command or target>",
-#    "cwd": "<pwd>",
-#    "head": "<branch>",
-#    "skill": "<active skill or null>",
-#    "invariant": "<the rule>",
-#    "source": "<file:line>",
-#    "recovery": [{"path": "<step>", "destructive": <bool>}, ...],
-#    "directive": "halt"}
+# Sourced by every hook script. Do not run directly.
 #
-# Usage:
-#   emit_halt <rule> <command> <invariant> <source> [<path> <destructive> ...]
+# Canonical inner spex-halt/v1 schema (see docs/enforcement-rfc.md §4.1):
+#   {protocol, rule, command, cwd, head, skill, invariant, source,
+#    recovery: [{path, destructive}, ...], directive}
+#
+# Usage (all three functions take the same args):
+#   <fn> <rule> <command> <invariant> <source> [<path> <destructive> ...]
 #   Trailing args are recovery items as alternating pairs.
-#   Pass false/true literally (no quotes) so jq --argjson can consume them.
-#
-# Side effects:
-#   - Appends one line of spex-halt/v1 JSON (with `ts`) to
-#     .claude/hook-violations.log via scripts/hooks/log-violation.
-#
-# Output:
-#   - Writes the wire-format envelope to stdout.
-#   - Caller MUST exit 0 after calling this (the envelope is the block).
+#   Pass `false`/`true` literally (no quotes) so jq --argjson can consume them.
 
-emit_halt() {
+_repo_root_for_halt() {
+  git rev-parse --show-toplevel 2>/dev/null || echo "$PWD"
+}
+
+build_halt_inner() {
   if [[ $# -lt 4 ]]; then
-    echo "emit_halt: need at least <rule> <command> <invariant> <source>" >&2
+    echo "build_halt_inner: need at least <rule> <command> <invariant> <source>" >&2
     return 1
   fi
   local rule="$1" command="$2" invariant="$3" source_loc="$4"
   shift 4
 
   if (( $# % 2 != 0 )); then
-    echo "emit_halt: trailing recovery args must be (path, destructive) pairs" >&2
+    echo "build_halt_inner: trailing recovery args must be (path, destructive) pairs" >&2
     return 1
   fi
 
@@ -56,8 +44,7 @@ emit_halt() {
     shift 2
   done
 
-  local inner
-  inner="$(jq -nc \
+  jq -nc \
     --arg rule "$rule" \
     --arg command "$command" \
     --arg invariant "$invariant" \
@@ -77,18 +64,40 @@ emit_halt() {
       source: $source_loc,
       recovery: $recovery,
       directive: "halt"
-    }')"
+    }'
+}
 
-  local repo_root log_violation
-  repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
-  log_violation="$repo_root/scripts/hooks/log-violation"
+_log_halt() {
+  # Append the inner payload to .claude/hook-violations.log. Non-fatal.
+  local inner="$1"
+  local log_violation
+  log_violation="$(_repo_root_for_halt)/scripts/hooks/log-violation"
   if [[ -x "$log_violation" ]]; then
     printf '%s\n' "$inner" | "$log_violation" || true
   fi
+}
 
+emit_halt() {
+  # For Claude Code PreToolUse hooks. Prints the wire envelope to stdout.
+  # Caller MUST exit 0 after invoking this.
+  local inner
+  inner="$(build_halt_inner "$@")" || return 1
+  _log_halt "$inner"
   jq -nc --arg reason "$inner" \
     '{hookSpecificOutput:
         {hookEventName: "PreToolUse",
          permissionDecision: "deny",
          permissionDecisionReason: $reason}}'
+}
+
+emit_git_halt() {
+  # For git hooks. Prints a structured banner + pretty-printed inner
+  # payload to stderr. Caller decides exit code (1 for pre-commit /
+  # pre-push, error-ignored for post-commit).
+  local inner rule
+  inner="$(build_halt_inner "$@")" || return 1
+  rule="$1"
+  _log_halt "$inner"
+  printf 'BLOCKED — git hook (%s):\n' "$rule" >&2
+  printf '%s\n' "$inner" | jq . >&2
 }
