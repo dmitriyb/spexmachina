@@ -68,9 +68,16 @@ strip_quoted_strings() {
 
 # Command-start boundary: line start (^ — also covers post-newline
 # since grep is line-based), or immediately after a shell command
-# separator. A real command begins at one of these; the same words
-# inside a quoted argument do not.
-SPEX_CMD_BOUNDARY='(^|[;&|`(])[[:space:]]*'
+# separator (; & | ` (), THEN optionally an `env` word and/or a run
+# of leading `VAR=value` environment-assignment prefixes. A real
+# command begins at one of these; the same words inside a quoted
+# argument do not.
+#
+# The env-prefix clause is load-bearing: without it,
+# `GIT_DIR=.git git commit`, `GIT_SSH_COMMAND=… git push`, and
+# `env FOO=1 br close x` slip past the anchor — idiomatic git usage,
+# not an exotic respelling — and hollow out every cmd_matches rule.
+SPEX_CMD_BOUNDARY='(^|[;&|`(])[[:space:]]*(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
 
 # cmd_matches <full-command> <command-ere> — true if <command-ere>
 # occurs at a command-start boundary, after heredoc bodies are

@@ -64,6 +64,16 @@ assert_deny "$hooks_dir/deny-commit.sh" \
 assert_deny "$hooks_dir/deny-commit.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"git -C /some/path commit -m x"}}' \
   "skill-must-not-commit" "R9-denies-C-flag" "spec"
+# Regression (env-prefix): a leading VAR=value / env prefix must not bypass.
+assert_deny "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"FOO=bar git commit -m x"}}' \
+  "skill-must-not-commit" "R9-denies-env-assignment-prefix" "spec"
+assert_deny "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"GIT_DIR=.git git commit -m x"}}' \
+  "skill-must-not-commit" "R9-denies-git-env-prefix" "spec"
+assert_deny "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"cd /tmp && FOO=1 git commit -m x"}}' \
+  "skill-must-not-commit" "R9-denies-env-prefix-mid-chain" "spec"
 # Regression B2: `git commit` inside a single-line quoted string is prose.
 assert_allow "$hooks_dir/deny-commit.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"echo \"run git commit now\""}}' \
@@ -99,6 +109,10 @@ assert_deny "$hooks_dir/deny-br-close.sh" \
 assert_deny "$hooks_dir/deny-br-close.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"/usr/local/bin/br close x"}}' \
   "br-close-outside-review" "R6-denies-abspath-br-close" "implement"
+# Regression (env-prefix): VAR=value / env prefix must not bypass.
+assert_deny "$hooks_dir/deny-br-close.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"env FOO=1 br close x"}}' \
+  "br-close-outside-review" "R6-denies-env-prefix" "implement"
 # Regression B2: `br close` inside a single-line quoted string is prose.
 assert_allow "$hooks_dir/deny-br-close.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"echo \"to finish, run br close x\""}}' \
@@ -120,5 +134,9 @@ out="$(printf '%s' "$spex_hash" \
 assert_allow "$hooks_dir/check-spex-hash-rebaseline.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"bin/spex diff"}}' \
   "R12-allows-spex-diff"
+# Regression (env-prefix): VAR=value prefix must not bypass.
+assert_deny "$hooks_dir/check-spex-hash-rebaseline.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"FOO=1 bin/spex hash"}}' \
+  "spex-hash-bypasses-pipeline" "R12-denies-env-prefix"
 
 echo "ok"

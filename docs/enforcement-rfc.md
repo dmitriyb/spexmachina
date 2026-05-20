@@ -373,13 +373,16 @@ uses helpers from `scripts/hooks/lib/emit-halt.sh`:
 - `strip_quoted_strings` — blanks single-line quoted-string contents.
   Used by hooks matching a flag/token never legitimately quoted.
 - `cmd_matches <cmd> <ere>` — true if `<ere>` occurs at a
-  command-start boundary (line start, or after `; & | \` (`), after
-  heredoc stripping. The matcher for rules keyed on a *command*: it
-  rejects the command word inside quoted prose while still matching a
-  real command whose later argument is quoted. Shared EREs
-  (`SPEX_ERE_GIT_COMMIT`, `SPEX_ERE_BR_CLOSE`, `SPEX_ERE_SPEX_HASH`,
-  `SPEX_ERE_BRANCH_CREATE`) tolerate path prefixes and git global
-  options so a rule cannot be bypassed by trivial respelling.
+  command-start boundary (line start, or after `; & | \` (`),
+  optionally past an `env` word and/or a run of leading `VAR=value`
+  environment-assignment prefixes, after heredoc stripping. The
+  matcher for rules keyed on a *command*: it rejects the command word
+  inside quoted prose while still matching a real command whose later
+  argument is quoted — and a real command behind a `GIT_DIR=… ` /
+  `env FOO=1 ` prefix. Shared EREs (`SPEX_ERE_GIT_COMMIT`,
+  `SPEX_ERE_BR_CLOSE`, `SPEX_ERE_SPEX_HASH`, `SPEX_ERE_BRANCH_CREATE`)
+  tolerate path prefixes and git global options so a rule cannot be
+  bypassed by trivial respelling.
 
 ### 6.1 CC skill hook: block `br close` outside `/review`
 

@@ -118,6 +118,10 @@ assert_allow "$hooks_dir/block-interactive-git.sh" \
 assert_allow "$hooks_dir/block-interactive-git.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"git add ."}}' \
   "R11-allows-add-all"
+# Regression (env-prefix): VAR=value prefix must not bypass.
+assert_deny "$hooks_dir/block-interactive-git.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"FOO=1 git rebase -i HEAD~2"}}' \
+  "interactive-git-not-supported" "R11-denies-env-prefix"
 
 # --- R13: editing on main ---------------------------------------------------
 # We can't change HEAD inside the test (we're in the real repo, on
@@ -190,5 +194,9 @@ assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
 assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"echo \"git checkout -b feature/x\""}}' \
   "R4-allows-creation-text-in-quotes"
+# Regression (env-prefix): VAR=value prefix must not bypass.
+assert_deny "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"FOO=1 git checkout -b feature/x"}}' \
+  "branch-not-from-origin-main" "R4-denies-env-prefix"
 
 echo "ok"
