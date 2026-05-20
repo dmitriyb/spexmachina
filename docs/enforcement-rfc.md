@@ -3,7 +3,7 @@
 **Status:** Draft
 **Branch:** `rfc/enforcement-guardrails`
 **Author:** Dmitrii Bozhko (with Claude)
-**Date:** 2026-05-19
+**Date:** 2026-05-19 (revised 2026-05-20 — Phase 2: skill-frontmatter hooks)
 
 ## 1. Context
 
@@ -67,8 +67,9 @@ escalate to the user. The human is the only override path.
   gitignored) using the same JSON schema so `jq` is the only tool
   needed to mine them.
 - All enforcement lives in the repo (`.claude/settings.json`,
-  `scripts/hooks/`, `scripts/git-hooks/`, `Makefile`), so it travels
-  across docker containers and machines.
+  the skills' frontmatter `hooks:` blocks, `scripts/hooks/`,
+  `scripts/git-hooks/`), so it travels across docker containers and
+  machines.
 
 **Non-goals**
 
@@ -92,40 +93,55 @@ escalate to the user. The human is the only override path.
 | R4 | New branches must be created from `origin/main` | CLAUDE.md:39 | Prose | **CC hook** (PreToolUse Bash on `git checkout -b *` / `git switch -c *`) | `scripts/hooks/check-branch-from-origin-main.sh` | `branch-not-from-origin-main` |
 | R5a | Commits must have `gpgsig` block (verify post-commit) | CLAUDE.md:40 | `/implement` runs `ssh-add -l` | **Git post-commit + pre-push** | `scripts/git-hooks/post-commit`, `pre-push` | `unsigned-commit-detected` |
 | R5b | Deny `--no-gpg-sign` and `-c commit.gpgsign=false` flags | CLAUDE.md:40 | Prose | **CC hook** (PreToolUse Bash matcher) | `scripts/hooks/block-signing-bypass.sh` | `signing-flag-denied` |
-| R6 | `br close` only from `/review` after LGTM | CLAUDE.md:49 | Prose | **CC hook** (PreToolUse Bash on `br close *`) | `scripts/hooks/check-br-close-skill.sh` | `br-close-outside-review` |
-| R7 | Never read `.beads/beads.db` directly | CLAUDE.md:62 | Prose | **CC hook** (PreToolUse Bash, Read tool) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
-| R8 | Never bypass `br` / `spex` to dig into storage | CLAUDE.md:63 | Prose | **CC hook** (same matcher as R7, extended) | `scripts/hooks/block-tracker-bypass.sh` | `tracker-storage-bypass` |
-| R9 | `/spec` and `/converge` must not commit | `feedback_skills_no_autocommit` | Prose + memory | **CC hook** (PreToolUse Bash on `git commit *`) | `scripts/hooks/check-skill-commit-allowed.sh` | `skill-must-not-commit` |
-| R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **Inverse guard** inside R9's script — never block these skills | (same as R9) | n/a |
-| R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
-| R12 | Never run `spex hash` outside an explicit re-baseline | `feedback_spex_pipeline_not_hash` | Memory only | **CC hook** (PreToolUse Bash on `spex hash *`; allow only if `SPEX_REBASELINE=1`) | `scripts/hooks/check-spex-hash-rebaseline.sh` | `spex-hash-bypasses-pipeline` |
-| R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
+| R6 | `br close` only from `/review` after LGTM | CLAUDE.md:49 | Prose | **CC skill hook** (`deny-br-close.sh` declared in the frontmatter of every skill except `/review`) | `scripts/hooks/deny-br-close.sh` | `br-close-outside-review` |
+| R7 | Never read `.beads/beads.db` directly | CLAUDE.md:62 | Prose | **CC project hook** (PreToolUse Bash, Read tool) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
+| R8 | Never bypass `br` / `spex` to dig into storage | CLAUDE.md:63 | Prose | **CC project hook** (same script as R7) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
+| R9 | `/spec`, `/propose`, `/converge`, `/spec-review`, `/spec-drift` must not commit | `feedback_skills_no_autocommit` | Prose + memory | **CC skill hook** (`deny-commit.sh` declared in the frontmatter of each non-committing skill) | `scripts/hooks/deny-commit.sh` | `skill-must-not-commit` |
+| R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **No hook** — these skills simply do not declare a `deny-commit` frontmatter hook; commit is allowed by default | n/a | n/a |
+| R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC project hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
+| R12 | Never run `spex hash` outside an explicit re-baseline | `feedback_spex_pipeline_not_hash` | Memory only | **CC project hook** (PreToolUse Bash on `spex hash *`; allow only if `SPEX_REBASELINE=1`) | `scripts/hooks/check-spex-hash-rebaseline.sh` | `spex-hash-bypasses-pipeline` |
+| R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC project hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
 
 Layer key:
-- **CC hook**: `PreToolUse` matcher in `.claude/settings.json`, executes a script under `scripts/hooks/`. The script returns structured JSON per §4.1 and exits non-zero to block.
-- **Git hook**: script under repo-tracked `scripts/git-hooks/`, installed via `git config core.hooksPath scripts/git-hooks` (one-time `make setup-hooks`).
+- **CC project hook**: `PreToolUse` matcher in `.claude/settings.json`, executes a script under `scripts/hooks/`. Active for the whole session. Used for rules that apply universally.
+- **CC skill hook**: `PreToolUse` matcher declared in a `SKILL.md`'s YAML frontmatter `hooks:` block, executes a script under `scripts/hooks/`. Active only while that skill is active. Used for rules that depend on *which skill is running* (R6, R9).
+- **Git hook**: script under repo-tracked `scripts/git-hooks/`, installed via `git config core.hooksPath scripts/git-hooks` (one-time `scripts/setup-hooks`).
 
-**No "skill pre-flight" layer.** An earlier draft included it for rules
-like R3, R4, R9. We removed the layer entirely: a check that's only text
-at the top of a SKILL.md file is prose, not enforcement. Every row in
-the catalog now maps to a CC hook or git hook that runs without
-model cooperation. See §9.3 for the reasoning trail.
+All three return the structured JSON of §4.1 and block by `permissionDecision: "deny"` (CC hooks) or non-zero exit (git hooks).
+
+**No "skill pre-flight" layer, and no marker file.** Earlier drafts
+included a "skill pre-flight" layer (rejected — see §9.3) and then a
+marker-file mechanism (`.claude/skill-context.json`) so a *project*
+hook could tell which skill was active. The marker file is also gone:
+the **CC skill hook** layer makes skill identity intrinsic — a hook
+declared in `/spec`'s frontmatter only runs while `/spec` is active, so
+the hook script needs no skill-detection logic at all. See §9.1.
+
+Why not the permissions system for R6/R9? Claude Code's `permissions`
+block (`allow`/`deny`/`ask`) cannot express per-skill rules:
+`deny` is absolute ("if a tool is denied at any level, no other level
+can allow it"), so "deny `br close` globally, allow it for `/review`"
+is structurally impossible; and skill frontmatter has no `deny` field
+(only `allowed-tools`, which is positive-only and matches tool *names*,
+not command patterns). Permission denials are also terse — they cannot
+carry the `spex-halt/v1` recovery payload. Hooks are the only mechanism
+that can do contextual, per-skill, structured-message enforcement.
 
 Layer choice rationale:
 - **Git hooks** for anything involving `git commit` or `git push` — they
   run regardless of who drove the action (model, user, CI, another
   tool). Once `core.hooksPath` is set, hooks are active in every clone.
-- **CC hooks** for tool-shape rules where the violation is visible in
-  the Bash command string or tool input (`br close`, `sqlite3 .beads/`,
-  `--no-gpg-sign`, Edit on main). They block the model before the
-  syscall.
+- **CC project hooks** for tool-shape rules that apply universally
+  (`sqlite3 .beads/`, `--no-gpg-sign`, Edit on main, `spex hash`).
+- **CC skill hooks** for rules that are *per-skill*: R6 (`br close`
+  belongs to `/review` alone) and R9 (`/spec` and the other authoring
+  skills must not commit). The skill that should be restricted carries
+  the restriction in its own frontmatter.
 
-Note: rules R3, R4, R6, R9, R12, R13 are all CC hooks that consult some
-form of *context* (recent fetch time, branch name, active skill,
-re-baseline marker, HEAD). The "active skill" piece is the only piece
-that depends on the model setting state correctly — see §9.1 for the
-implementation options. Everything else reads state directly from the
-filesystem or git, with no model-mediated input.
+Note: only R3, R4, R12 consult runtime *state* beyond the tool input
+(fetch-recency, branch name, the `SPEX_REBASELINE` env var). R6 and R9
+no longer consult any state — frontmatter scoping replaces what the
+marker file used to do. R7, R8, R11, R13 are pure tool-shape matches.
 
 ## 4. Halt-and-recover protocol
 
@@ -351,23 +367,28 @@ and uses the §4.1 JSON halt format via the `emit_halt` helper from
 `scripts/hooks/lib/emit-halt.sh`. The implementation PR (§8) lands all
 the scripts together.
 
-### 6.1 CC hook: block `br close` outside `/review`
+### 6.1 CC skill hook: block `br close` outside `/review`
 
-`.claude/settings.json`:
+R6 is enforced by a **skill-frontmatter hook**, not a project hook. The
+hook script is declared in the frontmatter of every skill *except*
+`/review`. Because the hook only runs while one of those skills is
+active, the script needs no skill-detection logic.
 
-```jsonc
-{
-  "hooks": {
-    "PreToolUse": [
-      { "matcher": "Bash",
-        "hooks": [{ "type": "command",
-                    "command": "scripts/hooks/check-br-close-skill.sh" }] }
-    ]
-  }
-}
+`SKILL.md` frontmatter (every skill except `/review`):
+
+```yaml
+---
+name: implement
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-br-close.sh
+---
 ```
 
-`scripts/hooks/check-br-close-skill.sh`:
+`scripts/hooks/deny-br-close.sh`:
 
 ```bash
 #!/usr/bin/env bash
@@ -376,26 +397,25 @@ source "$(dirname "$0")/lib/emit-halt.sh"
 
 input="$(cat)"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+[[ -z "$command" ]] && exit 0
 
-if [[ "$command" =~ ^[[:space:]]*br[[:space:]]+close([[:space:]]|$) ]]; then
-  if [[ "${SPEX_SKILL:-}" != "review" ]]; then
-    payload="$(emit_halt \
-      "br-close-outside-review" \
-      "$command" \
-      "br close is only allowed from /review after LGTM" \
-      "CLAUDE.md:49" \
-      "Run /review on the PR; that skill is the only authorized closer" false \
-      "User invokes br close directly outside the agent context" false)"
-    printf '%s\n' "$payload"
-    printf '%s\n' "$payload" | scripts/hooks/log-violation
-    exit 2
-  fi
+# Strip heredoc bodies so doc text mentioning `br close` doesn't trip.
+stripped="$(strip_heredoc_bodies "$command")"
+
+if printf '%s' " $stripped " | grep -qE "[[:space:]]br[[:space:]]+close([[:space:]]|$)"; then
+  emit_halt \
+    "br-close-outside-review" \
+    "$command" \
+    "br close is allowed only from /review after LGTM." \
+    "CLAUDE.md:49" \
+    "If the PR is LGTM, run /review — it is the only skill that may close beads" false \
+    "If the bead must be closed for an exceptional reason, the user invokes br close directly outside the agent" false
 fi
 exit 0
 ```
 
-`/review` declares `SPEX_SKILL=review` via the skill-context propagation
-mechanism chosen in §9.1.
+`emit_halt` writes the deny envelope to stdout and the caller exits 0
+(per §4.1). `/review` declares no such hook, so it can close beads.
 
 ### 6.2 CC hook: block direct reads of `.beads/beads.db`
 
@@ -425,23 +445,23 @@ case "$tool" in
   *) exit 0 ;;
 esac
 
-payload="$(emit_halt \
+emit_halt \
   "beads-db-direct-read" \
   "$target" \
   "Never read .beads/beads.db directly. Use br commands or .beads/issues.jsonl." \
   "CLAUDE.md:62" \
   "For a single bead: br show <id> --json" false \
   "For listings: br list --all --limit 0 (the bare br list filters silently — open-only, limit 50)" false \
-  "For raw tracker dump: jq -s '{issues: .}' .beads/issues.jsonl" false)"
-printf '%s\n' "$payload"
-printf '%s\n' "$payload" | scripts/hooks/log-violation
-exit 2
+  "For raw tracker dump: jq -s '{issues: .}' .beads/issues.jsonl" false
+exit 0
 ```
 
-Note: this hook matches both `Bash` (to catch `sqlite3 .beads/beads.db`)
-and `Read` (to catch the model trying to read the file directly via the
-Read tool). The CC matcher list in `.claude/settings.json` enumerates
-both.
+`emit_halt` (per §4.1) builds the inner payload, appends it to the
+violation log, and prints the `permissionDecision: "deny"` envelope to
+stdout. The hook always `exit 0` — the envelope, not the exit code, is
+what blocks. This hook matches both `Bash` (to catch
+`sqlite3 .beads/beads.db`) and `Read` (the model reading the file
+directly); `.claude/settings.json` enumerates both matchers.
 
 ### 6.3 Git pre-push: block push to `main`
 
@@ -473,24 +493,35 @@ exit 0
 
 ### 6.4 Installation and the agent contract
 
-`Makefile`:
+Two plain scripts under `scripts/` (the project has no Makefile and
+does not use `make`; `make` is not a Claude Code dependency):
 
-```make
-.PHONY: setup-hooks verify-enforcement
-setup-hooks:
-	git config core.hooksPath scripts/git-hooks
-	chmod +x scripts/git-hooks/* scripts/hooks/*.sh
-verify-enforcement:
-	scripts/hooks/test/run-all.sh
+```bash
+# scripts/setup-hooks
+#!/usr/bin/env bash
+set -euo pipefail
+git config core.hooksPath scripts/git-hooks
+chmod +x scripts/git-hooks/* scripts/hooks/*.sh scripts/hooks/log-violation \
+         scripts/hooks/test/*.sh
+echo "git hooks active at scripts/git-hooks; CC hooks read by .claude/settings.json"
 ```
 
-`CLAUDE.md` gains a "Enforcement" section pointing at this RFC and
+```bash
+# scripts/verify-enforcement
+#!/usr/bin/env bash
+exec scripts/hooks/test/run-all.sh
+```
+
+`CLAUDE.md` gains an "Enforcement" section pointing at this RFC and
 codifying:
-- Run `make setup-hooks` once per clone.
+- Run `scripts/setup-hooks` once per clone.
 - On any hook response containing `"protocol": "spex-halt/v1"`,
   follow the §4.2 agent-side contract.
-- Run `make verify-enforcement` before opening a PR that touches
+- Run `scripts/verify-enforcement` before opening a PR that touches
   `.claude/settings.json`, `scripts/hooks/`, or `scripts/git-hooks/`.
+
+(Phase 1 shipped these as `Makefile` targets; Phase 2 Commit 12
+converts them to plain scripts — see §8.)
 
 ## 7. Memory migration
 
@@ -638,9 +669,13 @@ and neither model nor user can reason about which is which). The §7.6 fresh-con
 acceptance test also only works if the migration is atomic. One review cycle,
 one merge, one verification.
 
-The PR ships the work in this commit order. Each commit is independently
-buildable and tested. The commit boundaries are essential checkpoints,
-not arbitrary slices:
+The work lands in two phases. **Phase 1** (Commits 1–8) shipped the
+13-rule catalog with the marker-file mechanism for skill identity.
+**Phase 2** (Commits 9+) refactors R6 and R9 onto CC skill-frontmatter
+hooks per the §9.1 decision, deleting the marker file and the skill
+"Step 0" boilerplate, and strips the now-redundant prose the hooks
+made unnecessary. Phase 2 exists because a review of Phase 1 found the
+marker file was still model-dependent and bloated every SKILL.md.
 
 **Ordering rule:** the CLAUDE.md "Enforcement" section (which contains
 the agent-side contract for `spex-halt/v1` payloads, per §4.2) MUST
@@ -648,6 +683,8 @@ land *before* any hook that can block. Otherwise the model sees JSON
 output from a hook and has no contract telling it what to do. Hence
 Commit 1 ships the agent contract in CLAUDE.md alongside the hook
 infrastructure — not in a late commit.
+
+### Phase 1 — catalog with marker-file skill identity (Commits 1–8, shipped)
 
 ### Commit 1 — Foundation + agent contract
 
@@ -693,28 +730,17 @@ Outcome: R1, R2, R5a enforced.
 
 Outcome: R3, R4, R5b, R7, R8, R11, R13 enforced.
 
-### Commit 4 — Skill-context propagation
+### Commit 4 — Skill-context propagation (marker file) — *superseded by Phase 2*
 
-Per §9.1, ship the chosen mechanism (harness-native if available,
-marker file otherwise). Adds `scripts/hooks/lib/active-skill.sh` —
-single helper every skill-aware hook calls. Updates each SKILL.md to
-declare its identity according to the chosen mechanism. Updates
-CLAUDE.md "## Enforcement" section to document the mechanism.
+Shipped `scripts/hooks/lib/active-skill.sh` and a "Step 0" marker-write
+block in all 9 SKILL.md files. Phase 2 (Commit 9) deletes all of it.
 
-Outcome: skill identity observable to hooks. No new rules enforced yet.
+### Commit 5 — CC hooks: skill-aware blocks (marker-based) — *refactored in Phase 2*
 
-### Commit 5 — CC hooks: skill-aware blocks
-
-- `scripts/hooks/check-br-close-skill.sh` — R6 (fail-closed per §9.1).
-- `scripts/hooks/check-skill-commit-allowed.sh` — R9 + R10. Fail-open
-  when skill unknown (per §9.1 asymmetry); fail-closed when skill
-  positively names `/spec` or `/converge`.
-- `scripts/hooks/check-spex-hash-rebaseline.sh` — R12. Honors
-  `SPEX_REBASELINE=1`; no skill check.
-- `.claude/settings.json` matchers extended.
-- Fixtures.
-
-Outcome: R6, R9, R10, R12 enforced. **All 13 rows now machine-enforced.**
+Shipped `check-br-close-skill.sh` and `check-skill-commit-allowed.sh`
+(marker-consuming) plus `check-spex-hash-rebaseline.sh` (R12, env-var,
+unaffected by Phase 2). Phase 2 replaces the first two with
+context-free frontmatter-hook scripts.
 
 ### Commit 6 — Memory migration
 
@@ -730,82 +756,180 @@ Outcome: memory holds only ephemeral observations.
 
 - `scripts/hook-violations-summary` — `jq`-based rollup.
 
-Outcome: rule tuning is one command away.
+### Commit 8 — Heredoc-strip backfill
+
+- Factored `strip_heredoc_bodies` into `emit-halt.sh`; applied to every
+  Bash-matching hook. Caught a false-positive where rule-discussion
+  text inside a `gh pr edit` heredoc tripped R5b.
+
+Outcome of Phase 1: all 13 rows machine-enforced via project hooks +
+git hooks + the marker file.
+
+### Phase 2 — refactor skill identity onto frontmatter hooks (Commits 9+)
+
+#### Commit 9 — CC skill-frontmatter hooks for R6 and R9
+
+- `scripts/hooks/deny-commit.sh` — context-free: deny if the Bash
+  command is a `git commit`, else allow. (No skill detection — the
+  frontmatter scoping does that.)
+- `scripts/hooks/deny-br-close.sh` — context-free: deny if the Bash
+  command is a `br close`, else allow.
+- Each non-committing skill (`spec`, `propose`, `converge`,
+  `spec-review`, `spec-drift`) gets a `hooks:` block in its YAML
+  frontmatter referencing `deny-commit.sh`.
+- Each non-`/review` skill (8 of them) gets a `hooks:` block
+  referencing `deny-br-close.sh`.
+- The frontmatter passes the skill's own name as a hook-command
+  argument (e.g. `command: scripts/hooks/deny-commit.sh spec`); the
+  script sets `SPEX_SKILL="$1"` before calling `emit_halt`, so the
+  violation log's `skill` field stays populated for tuning. This is
+  the only thing the script does with the skill name — it is NOT used
+  for a decision (the decision is "am I running at all", answered by
+  frontmatter scoping).
+- `.claude/settings.json` loses the `check-br-close-skill.sh` and
+  `check-skill-commit-allowed.sh` matchers.
+- Delete `scripts/hooks/check-br-close-skill.sh`,
+  `scripts/hooks/check-skill-commit-allowed.sh`,
+  `scripts/hooks/lib/active-skill.sh`, and its test.
+- Delete the "Step 0" marker-write block from all 9 SKILL.md files.
+- Delete the `.claude/skill-context.json` line from `.gitignore`.
+- Remove the marker-file mechanism from CLAUDE.md "## Enforcement".
+- Fixtures: `deny-commit.sh` and `deny-br-close.sh` deny their target
+  command and allow everything else.
+
+#### Commit 10 — Live lifecycle verification (§9.1 remaining risk)
+
+Not a code commit — a verification step recorded in the PR. Invoke
+`/spec`, attempt a `git commit`, confirm it is denied. Let `/spec`
+finish, invoke `/fix`, attempt a `git commit`, confirm it is allowed.
+If the frontmatter-hook lifecycle misbehaves, this is the point to
+fall back to the marker-file design (Commits 4–5 are in git history).
+
+#### Commit 11 — Strip redundant skill prose
+
+The Phase 1 memory migration (Commit 6) *added* to SKILL.md files. With
+hooks now enforcing the rules, some of that prose is redundant and
+should be deleted (the review feedback that prompted Phase 2):
+
+- Remove the hook-narration half of each "Commits and pushes" tagline
+  (keep the plain intent statement, drop "Enforcement hook X permits…").
+- Remove `/implement`'s "This skill does NOT close beads" sentence —
+  R6 enforces it.
+- Audit `First run git checkout main && git pull --rebase` in
+  `/implement` and `/cleanup`: keep the *workflow instruction* (get to
+  a clean base) but do not restate the branch-hygiene *rules* that
+  R3/R4/R13 now enforce.
+- Keep genuine authoring guidance that was never mechanically
+  enforceable (review-findings-no-punt, supersession, pipeline-errors).
+
+#### Commit 12 — Makefile → plain scripts
+
+Replace the `Makefile` with `scripts/setup-hooks` and
+`scripts/verify-enforcement`. The project never had a Makefile; `make`
+is not used by Claude Code and adds a build-tool dependency for two
+convenience targets. Plain scripts match the existing `scripts/`
+directory. Update CLAUDE.md and this RFC's command references.
 
 ### Acceptance gate (before merge)
 
-- `make verify-enforcement` passes locally.
-- Fresh docker container test (§7.6): clone, `make setup-hooks`, run
-  a representative skill; agent picks up rules without any memory
+- `scripts/verify-enforcement` passes locally (all fixture suites).
+- The §9.1 live lifecycle test (Commit 10) passes — frontmatter hooks
+  activate and deactivate with their skill.
+- Fresh-container test (§7.6): clone, `scripts/setup-hooks`, run a
+  representative skill; agent picks up rules without any memory
   directory present.
-- Every catalog row in §3 has a fixture under `scripts/hooks/test/`
-  that asserts the hook fires.
-- If the repo has CI (not currently configured per the audit): add a
-  check that `core.hooksPath` is `scripts/git-hooks`. Otherwise leave
-  this as a documented post-merge follow-up.
+- Every catalog row in §3 has a fixture that asserts the hook fires.
+- CI check for `core.hooksPath` is a documented post-merge follow-up
+  (no CI configured as of this PR).
 
 ## 9. Open questions and risks
 
-### 9.1 Skill-context propagation (primary risk)
+### 9.1 Skill-scoped enforcement: from marker file to skill-frontmatter hooks
 
-R6, R9, and R12 depend on knowing which skill is active. §6 examples
-use `SPEX_SKILL=<name>` set by the skill itself.
+R6 and R9 depend on knowing which skill is active. This section records
+the design evolution and the chosen mechanism.
 
-**The fragility:** a skill file is markdown read by the model, not a
-process boundary. "/review exports SPEX_SKILL=review at the top" only
-works if the model runs that bash command. If the model skips it, the
-hook sees `SPEX_SKILL` unset and falls back to a per-rule default.
+**Rejected — `SPEX_SKILL` env var.** A skill exports `SPEX_SKILL=<name>`
+at its top; a project hook reads it. Fails because a SKILL.md is
+markdown the model reads — the export only happens if the model runs
+it. Model-dependent, same weakness the RFC exists to remove.
 
-**The per-rule fail-mode asymmetry (important):** even with a marker
-file, model forgetfulness doesn't fail uniformly across rules.
+**Rejected — marker file (`.claude/skill-context.json`).** A skill
+writes a JSON marker as its first action; a project hook reads it with
+a TTL. Implemented in the first pass of this PR (Commits 4–5) and then
+removed. Same model-dependency as the env var — the skill has to run
+the write command — plus it required a "Step 0" boilerplate block in
+all 9 SKILL.md files, which is exactly the skill bloat the user
+objected to in review.
 
-| Rule | Hook default when skill unknown | Fail mode | Safety |
-|------|--------------------------------|-----------|--------|
-| R6   | Block `br close`               | Closed    | Safe — false-blocks a legitimate `/review`, surfaces to user. |
-| R9   | Allow commit                   | Open      | **Unsafe** — `/spec` or `/converge` could commit, which the rule exists to prevent. |
-| R12  | Block `spex hash`              | Closed    | Safe — same shape as R6. |
+**Rejected — the permissions system.** See §3 "Why not the permissions
+system" — `deny` is absolute and cannot be exempted per-skill, and
+skill frontmatter has no `deny` field.
 
-For R9 specifically, fail-closed ("block all commits when skill
-unknown") is not viable: the user commits directly outside any skill
-context routinely, and blocking that breaks normal workflow. So R9 is
-either model-dependent (open by default) or requires a stricter
-mechanism than marker files.
+**Chosen — CC skill-frontmatter hooks.** Claude Code lets a `SKILL.md`
+declare hooks in its YAML frontmatter:
 
-**Chosen mechanism (per Claude Code hooks-guide research):** Claude
-Code does not expose active-skill identity to hooks. Hook stdin carries
-`session_id`, `cwd`, `hook_event_name`, `tool_name`, `tool_input` —
-none of those name a skill or slash command. Therefore Commit 4 ships
-the **marker-file pattern**:
+```yaml
+---
+name: spec
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh
+---
+```
 
-- Each skill writes `.claude/skill-context.json` as its first action,
-  with shape:
-  ```json
-  {"skill": "review", "started_at": "2026-05-19T07:00:00Z", "pid": 12345}
-  ```
-- `scripts/hooks/lib/active-skill.sh` reads the file. It returns the
-  skill name if the file exists *and* `started_at` is within the last
-  60 minutes (TTL). Otherwise empty string.
-- Skill-aware hooks consult the helper and apply their per-rule
-  fail-mode (R6/R12 closed when unknown, R9 open when unknown but
-  closed when positively `/spec` or `/converge`).
+A frontmatter hook is active **only while that skill is active**. This
+makes skill identity *intrinsic*: the hook script does not detect the
+skill — its mere presence in `/spec`'s frontmatter means "this runs
+during `/spec`." `deny-commit.sh` becomes a trivial context-free
+script: "if the command is a `git commit`, deny; else allow." No
+marker, no `active-skill.sh`, no Step 0.
 
-The marker-file pattern is itself model-dependent (the skill has to
-run the write command) and the table above still applies. We accept
-that:
+- **R9**: `deny-commit.sh` is declared in the frontmatter of the 5
+  non-committing skills (`spec`, `propose`, `converge`, `spec-review`,
+  `spec-drift`). `/fix`, `/review`, `/cleanup`, `/implement` declare
+  nothing — commit allowed by default (R10).
+- **R6**: `deny-br-close.sh` is declared in the frontmatter of the 8
+  skills that are *not* `/review`. `/review` declares nothing — it is
+  the sole skill that can `br close`.
 
-- **R6** (`br close`): fail-closed default means a skipped marker
-  causes a false-block surfaced to the user. Worst case: the user has
-  to acknowledge the block and run `/review` again with a fresh
-  marker. Inconvenient, not unsafe.
-- **R9** (`/spec` and `/converge` must not commit): improvement over
-  today is partial. If the skill writes the marker, R9 enforces. If
-  the skill skips it, R9 fails open — same as the status quo.
-- **R12** (`spex hash` re-baseline): does not consult the marker;
-  uses `SPEX_REBASELINE=1` env var instead, so the marker pattern
-  doesn't affect it.
+**Eliminated by this design:** the marker file, `active-skill.sh` and
+its TTL logic, all 9 "Step 0" blocks, and the two context-branching
+scripts (`check-skill-commit-allowed.sh`, `check-br-close-skill.sh`).
+The fail-mode asymmetry table from the marker-file design no longer
+applies — there is no "skill unknown" state, because the hook only
+exists in contexts where the skill *is* known.
 
-The mechanism is documented in CLAUDE.md (Commit 1's "## Enforcement"
-section) so future skills know how to declare their identity.
+**Behavioral note — ad-hoc actions.** With R6/R9 as frontmatter hooks,
+an agent action taken outside *any* skill (e.g. the user directly says
+"commit this" or "close bead X" in a bare conversation) is not blocked
+by R6/R9. This is acceptable and arguably correct: it is an explicit
+user instruction, not a skill running unsupervised, and CC hooks only
+ever gate the agent — the user can always run the command themselves.
+The git hooks (R1, R2, R5a) still apply to every commit/push
+regardless of skill.
+
+**Remaining risk — skill-hook lifecycle (must be verified live).** The
+Claude Code docs say frontmatter hooks are "scoped to component
+lifecycle" but do **not** define when a skill's lifecycle ends. Two
+failure shapes:
+
+1. *Hook deactivates too early* — the restriction lifts before the
+   skill's work is done. R9 would stop blocking commits mid-`/spec`.
+2. *Hook lingers too long* — the restriction outlives the skill. After
+   `/spec` finishes, a stale `deny-commit` hook blocks unrelated
+   commits later in the session.
+
+This cannot be unit-tested — it depends on Claude Code's runtime. The
+implementation plan (§8) therefore **keeps the marker-file machinery
+in place until a live test confirms the lifecycle is correct**, and
+only then deletes it. The live test: invoke `/spec`, confirm a commit
+is blocked; let `/spec` finish, invoke `/fix`, confirm a commit is
+*allowed*. If lifecycle behaviour is wrong, fall back to the
+marker-file design (which is model-dependent but lifecycle-correct).
 
 ### 9.2 `--no-gpg-sign` flag bypass (R5 gap)
 
@@ -861,12 +985,14 @@ At one line per block, log size is unlikely to matter for a year. Defer
 until the log warrants it. If/when it does, add a `logrotate`-style
 trim to `scripts/hook-violations-summary`.
 
-### 9.6 Verification target
+### 9.6 Verification
 
-A `make verify-enforcement` target should simulate each blocked action
-and assert the hook fires with the correct slug. Lives in the
-implementation PR for each hook, not the RFC. Should be wired into
-`make check` so regressions are caught locally before push.
+`scripts/verify-enforcement` runs every fixture under
+`scripts/hooks/test/`; each fixture simulates a blocked action and
+asserts the hook fires with the correct slug. Run it before any PR
+that touches the enforcement files. The skill-frontmatter-hook
+lifecycle (§9.1) cannot be fixture-tested — it needs the live check
+described in §8 Commit 10.
 
 ### 9.7 Interaction with the auto-mode classifier
 
