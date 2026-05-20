@@ -18,15 +18,14 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-# Strip heredoc bodies — documentation mentioning these flags inside a
-# `git commit -m "$(cat <<EOF ... EOF)"` body must not trip the hook.
-stripped="$(strip_heredoc_bodies "$command")"
+# Strip heredoc bodies AND single-line quoted strings: a real bypass
+# flag is unquoted; the same text inside `-m "..."`, `echo "..."` or
+# a `--body` argument is documentation and must not trip the hook.
+stripped="$(strip_quoted_strings "$(strip_heredoc_bodies "$command")")"
 
-# Match either: `--no-gpg-sign` flag, or `-c commit.gpgsign=` set to
-# anything other than `true` (matches false/0/no/off).
-if [[ "$stripped" =~ --no-gpg-sign ]] \
-   || [[ "$stripped" =~ -c[[:space:]]+commit\.gpgsign=(false|0|no|off|FALSE) ]] \
-   || [[ "$stripped" =~ -c[[:space:]]+commit\.gpgsign[[:space:]]*=[[:space:]]*(false|0|no|off|FALSE) ]]; then
+# Match `--no-gpg-sign`, or `-c commit.gpgsign=<not-true>`. grep -i:
+# git config keys are case-insensitive (commit.gpgSign == commit.gpgsign).
+if printf '%s' "$stripped" | grep -qiE '(--no-gpg-sign|-c[[:space:]]+commit\.gpgsign[[:space:]]*=[[:space:]]*(false|0|no|off))'; then
   emit_halt \
     "signing-flag-denied" \
     "$command" \

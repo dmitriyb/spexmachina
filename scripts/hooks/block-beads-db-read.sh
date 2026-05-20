@@ -16,13 +16,15 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 case "$tool" in
   Bash)
     command="$(jq -r '.tool_input.command // empty' <<<"$input")"
-    target="$(strip_heredoc_bodies "$command")"
-    # Direct reads of .beads/beads.db
-    if [[ "$target" =~ (sqlite3|cat|head|tail|less|more|xxd|hexdump|od|strings|file|python|python3|perl|ruby).*\.beads/beads\.db ]] \
-       || [[ "$target" =~ \.beads/beads\.db.*\.(dump|backup) ]] \
-       || [[ "$target" =~ sqlite[0-9]?[[:space:]]+.*\.beads/ ]]; then
+    # A reading/copying tool, at a command boundary, with a
+    # .beads/beads.db (or br internal-state file) argument on the SAME
+    # command — [^;&|`] keeps the path bound to this command, not a
+    # later one in a `&&` chain. The path may itself be quoted
+    # (`cat ".beads/beads.db"`); cmd_matches anchors the keyword, so
+    # quoting the path does not bypass and prose mentioning the
+    # keyword inside a quoted arg does not false-trigger.
+    if cmd_matches "$command" '(sqlite3?|cat|head|tail|less|more|xxd|hexdump|od|strings|file|python3?|perl|ruby|cp|dd|mv|install)[^;&|`]*\.beads/(beads\.db|\.br_)'; then
       rule="beads-db-direct-read"
-      # Restore original for the deny message.
       target="$command"
     else
       exit 0

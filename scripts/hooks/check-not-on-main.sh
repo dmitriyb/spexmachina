@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # check-not-on-main.sh — R13 (editing-on-protected-branch)
 #
-# Fires on PreToolUse for Edit, Write, and `git commit` Bash calls.
-# Blocks if HEAD's symbolic ref is `main`.
+# Fires on PreToolUse for Edit, Write, NotebookEdit, and `git commit`
+# Bash calls. Blocks if HEAD's symbolic ref is `main`.
 #
 # CLAUDE.md:37 — main is protected.
 
@@ -12,8 +12,8 @@ source "$(dirname "$0")/lib/emit-halt.sh"
 input="$(cat)"
 tool="$(jq -r '.tool_name // empty' <<<"$input")"
 
-# For Bash, only flag actual mutations: git commit, git apply, etc.
-# Read tool calls and most Bash inspection commands are allowed on main.
+# For Bash, only flag `git commit` (the mutating action). Read tool
+# calls and inspection Bash commands are allowed on main.
 case "$tool" in
   Edit|Write|NotebookEdit)
     target="$(jq -r '.tool_input.file_path // empty' <<<"$input")"
@@ -21,8 +21,7 @@ case "$tool" in
     ;;
   Bash)
     command="$(jq -r '.tool_input.command // empty' <<<"$input")"
-    stripped="$(strip_heredoc_bodies "$command")"
-    if [[ ! "$stripped" =~ ^[[:space:]]*git[[:space:]]+commit($|[[:space:]]) ]]; then
+    if ! cmd_matches "$command" "$SPEX_ERE_GIT_COMMIT"; then
       exit 0
     fi
     target="$command"

@@ -23,27 +23,28 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 [[ "$tool" != "Bash" ]] && exit 0
 
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+
+# Gate: only a real branch-CREATION command at a command boundary.
+if ! cmd_matches "$command" "$SPEX_ERE_BRANCH_CREATE"; then
+  exit 0
+fi
+
 stripped="$(strip_heredoc_bodies "$command")"
 
-# Capture form + remaining args. Three branch-creation forms:
-form=""
+# Parse the start point. Three creation forms; `switch -C` (force) and
+# `branch -f` (force-create) are handled so they cannot bypass.
 rest=""
 if [[ "$stripped" =~ git[[:space:]]+checkout[[:space:]]+-b[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
-  form="checkout-b"
   rest="${BASH_REMATCH[3]:-}"
-elif [[ "$stripped" =~ git[[:space:]]+switch[[:space:]]+-c[[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
-  form="switch-c"
+elif [[ "$stripped" =~ git[[:space:]]+switch[[:space:]]+-[cC][[:space:]]+([^[:space:]]+)([[:space:]]+(.*))? ]]; then
   rest="${BASH_REMATCH[3]:-}"
-elif [[ "$stripped" =~ git[[:space:]]+branch[[:space:]]+([^-][^[:space:]]*)([[:space:]]+(.*))? ]]; then
-  # `git branch <name> [<start>]` — first arg must not begin with `-`
-  form="branch"
-  rest="${BASH_REMATCH[3]:-}"
+elif [[ "$stripped" =~ git[[:space:]]+branch[[:space:]]+(-f[[:space:]]+)?([^-][^[:space:]]*)([[:space:]]+(.*))? ]]; then
+  rest="${BASH_REMATCH[4]:-}"
 else
   exit 0
 fi
 
-# Strip trailing flags / unrelated noise; take the first whitespace
-# token of rest as the start point.
+# First whitespace token of the remainder is the start point.
 start="$(awk '{print $1}' <<<"$rest")"
 
 if [[ "$start" == "origin/main" ]]; then

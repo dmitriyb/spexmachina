@@ -24,10 +24,11 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-stripped="$(strip_heredoc_bodies "$command")"
-
-# Match `git commit` (also `git -c k=v commit`).
-if printf '%s' " $stripped " | grep -qE "[[:space:]]git[[:space:]]+(-c[[:space:]]+[^[:space:]]+[[:space:]]+)*commit([[:space:]]|$)"; then
+# Match a real `git ... commit` invocation at a command boundary —
+# tolerates git global options (-c, -C, --git-dir=...) so a
+# path/flag-qualified commit cannot bypass; rejects `git commit` text
+# inside quoted args / heredoc bodies.
+if cmd_matches "$command" "$SPEX_ERE_GIT_COMMIT"; then
   emit_halt \
     "skill-must-not-commit" \
     "$command" \

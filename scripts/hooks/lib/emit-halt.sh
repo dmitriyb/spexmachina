@@ -25,34 +25,80 @@ _repo_root_for_halt() {
 }
 
 # strip_heredoc_bodies <command> — print the command with bash heredoc
-# bodies removed. Used by every hook that pattern-matches on Bash
-# commands, to prevent false positives from rule-discussion text
-# inside `git commit -m "$(cat <<'EOF' ... EOF)"` style commit
-# messages and similar literals.
+# bodies removed. A heredoc body is literal data (commit messages, doc
+# text) and must not be matched as command text.
 #
-# Recognises both quoted and unquoted heredoc delimiters: <<EOF,
-# <<'EOF', <<"EOF", <<-EOF (tab-stripped form). Anything between the
-# `<<DELIM` opener and a line matching `^DELIM$` is dropped.
-#
-# Limitations: doesn't try to parse single-line double-quoted strings
-# (`-m "..."` without a heredoc); those are rare and the trade-off
-# is acceptable. Doesn't escape nested heredocs (rare; would need a
-# stack).
+# Recognises <<EOF, <<'EOF', <<"EOF", <<-EOF. Anything between the
+# `<<DELIM` opener and a line equal to DELIM (whitespace-trimmed) is
+# dropped. Pure bash — no awk — so it is portable across mawk/gawk
+# (Debian docker images default to mawk, which lacks 3-arg match()).
 strip_heredoc_bodies() {
-  printf '%s\n' "$1" | awk '
-    BEGIN { in_heredoc = 0; delim = "" }
-    in_heredoc {
-      if ($0 ~ "^" delim "$") { in_heredoc = 0; next }
-      next
-    }
-    match($0, /<<-?[[:space:]]*'\''?"?([A-Za-z_][A-Za-z0-9_]*)/, m) {
-      delim = m[1]; in_heredoc = 1
-      print substr($0, 1, RSTART - 1)
-      next
-    }
-    { print }
-  '
+  local cmd="$1" line out="" in_heredoc=0 delim="" trimmed
+  local re='<<-?[[:space:]]*['\''"]?([A-Za-z_][A-Za-z0-9_]*)'
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if (( in_heredoc )); then
+      trimmed="${line#"${line%%[![:space:]]*}"}"
+      trimmed="${trimmed%"${trimmed##*[![:space:]]}"}"
+      [[ "$trimmed" == "$delim" ]] && in_heredoc=0
+      continue
+    fi
+    if [[ "$line" =~ $re ]]; then
+      delim="${BASH_REMATCH[1]}"
+      in_heredoc=1
+      out+="${line%%<<*}"$'\n'
+      continue
+    fi
+    out+="$line"$'\n'
+  done <<< "$cmd"
+  printf '%s' "$out"
 }
+
+# strip_quoted_strings <text> — blank the contents of single-line
+# single- and double-quoted strings. Used by hooks that match a flag
+# or token that is never legitimately quoted (e.g. --no-gpg-sign): a
+# real flag is unquoted; the same text inside `-m "..."` or `echo
+# "..."` is data and must not match.
+#
+# NOT used by hooks that match a path argument (R7) — a path CAN be
+# legitimately quoted (`cat ".beads/beads.db"`); those use cmd_matches
+# instead, which anchors the command keyword rather than stripping.
+strip_quoted_strings() {
+  printf '%s' "$1" | sed 's/"[^"]*"//g' | sed "s/'[^']*'//g"
+}
+
+# Command-start boundary: line start (^ — also covers post-newline
+# since grep is line-based), or immediately after a shell command
+# separator. A real command begins at one of these; the same words
+# inside a quoted argument do not.
+SPEX_CMD_BOUNDARY='(^|[;&|`(])[[:space:]]*'
+
+# cmd_matches <full-command> <command-ere> — true if <command-ere>
+# occurs at a command-start boundary, after heredoc bodies are
+# stripped. This is the matcher for rules that key on a *command*
+# (git commit, br close, spex hash, sqlite3 <path>, ...): it rejects
+# the command word appearing inside quoted prose while still seeing it
+# when it is a real command (even if a later argument is quoted).
+cmd_matches() {
+  strip_heredoc_bodies "$1" | grep -qE "${SPEX_CMD_BOUNDARY}$2"
+}
+
+# Shared command EREs, used as the second arg to cmd_matches.
+#
+# GIT_COMMIT tolerates git global options between `git` and `commit`
+# (-c k=v, -C path, --git-dir=..., etc.) so `git -C /p commit` and
+# `git --git-dir=/r/.git commit` cannot bypass the rule — while still
+# rejecting `git checkout commit` (a non-option token before `commit`).
+SPEX_ERE_GIT_COMMIT='git[[:space:]]+((-[cC][[:space:]]+[^-][^[:space:]]*|-[^[:space:]]+)[[:space:]]+)*commit([[:space:]]|$)'
+
+# BR_CLOSE / SPEX_HASH tolerate a path prefix (`bin/br`, `/usr/bin/br`,
+# `./bin/spex`) so a path-qualified invocation cannot bypass the rule.
+SPEX_ERE_BR_CLOSE='([^[:space:]]*/)?br[[:space:]]+close([[:space:]]|$)'
+SPEX_ERE_SPEX_HASH='([^[:space:]]*/)?spex[[:space:]]+hash([[:space:]]|$)'
+
+# BRANCH_CREATE matches the branch-CREATION forms only — `git branch`
+# with no name (a listing) is not creation and is not matched. Handles
+# `switch -C` (force) and `branch -f` (force-create).
+SPEX_ERE_BRANCH_CREATE='git[[:space:]]+(checkout[[:space:]]+-b[[:space:]]|switch[[:space:]]+-[cC][[:space:]]|branch[[:space:]]+(-f[[:space:]]+)?[^-[:space:]])'
 
 build_halt_inner() {
   if [[ $# -lt 4 ]]; then

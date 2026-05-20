@@ -19,11 +19,10 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-# Strip heredocs.
-stripped="$(strip_heredoc_bodies "$command")"
-
-# Match `spex hash` (and `bin/spex hash`, `./bin/spex hash`).
-if ! printf '%s' " $stripped " | grep -qE "[[:space:]](\./)?(bin/)?spex[[:space:]]+hash([[:space:]]|$)"; then
+# Match a real `spex hash` at a command boundary — tolerates any path
+# prefix (bin/spex, ./bin/spex); rejects mentions in quoted args /
+# heredoc bodies.
+if ! cmd_matches "$command" "$SPEX_ERE_SPEX_HASH"; then
   exit 0
 fi
 

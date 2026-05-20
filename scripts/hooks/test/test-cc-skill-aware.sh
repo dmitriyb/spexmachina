@@ -57,6 +57,21 @@ assert_allow "$hooks_dir/deny-commit.sh" \
 assert_allow "$hooks_dir/deny-commit.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"echo hi > f && cat <<EOF\nrun git commit later\nEOF"}}' \
   "R9-allows-commit-in-heredoc" "spec"
+# Regression S2: git global flags before `commit` must not bypass.
+assert_deny "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git --git-dir=/r/.git commit -m x"}}' \
+  "skill-must-not-commit" "R9-denies-git-dir-flag" "spec"
+assert_deny "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git -C /some/path commit -m x"}}' \
+  "skill-must-not-commit" "R9-denies-C-flag" "spec"
+# Regression B2: `git commit` inside a single-line quoted string is prose.
+assert_allow "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"echo \"run git commit now\""}}' \
+  "R9-allows-commit-in-quotes" "spec"
+# `git checkout commit` (a ref named commit) is not a commit command.
+assert_allow "$hooks_dir/deny-commit.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git checkout commit"}}' \
+  "R9-allows-checkout-of-ref-named-commit" "spec"
 
 # ============================================================================
 # deny-br-close.sh (R6) — denies `br close`, allows everything else.
@@ -77,6 +92,17 @@ assert_allow "$hooks_dir/deny-br-close.sh" \
 assert_allow "$hooks_dir/deny-br-close.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"git commit -m \"$(cat <<EOF\nbr close docs\nEOF\n)\""}}' \
   "R6-allows-br-close-in-heredoc" "implement"
+# Regression S1: a path-prefixed `br` must not bypass.
+assert_deny "$hooks_dir/deny-br-close.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"bin/br close x"}}' \
+  "br-close-outside-review" "R6-denies-bin-br-close" "implement"
+assert_deny "$hooks_dir/deny-br-close.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"/usr/local/bin/br close x"}}' \
+  "br-close-outside-review" "R6-denies-abspath-br-close" "implement"
+# Regression B2: `br close` inside a single-line quoted string is prose.
+assert_allow "$hooks_dir/deny-br-close.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"echo \"to finish, run br close x\""}}' \
+  "R6-allows-br-close-in-quotes" "implement"
 
 # ============================================================================
 # check-spex-hash-rebaseline.sh (R12) — project hook, env-var gated.

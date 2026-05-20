@@ -67,6 +67,14 @@ assert_allow "$hooks_dir/block-signing-bypass.sh" \
 assert_allow "$hooks_dir/block-signing-bypass.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"gh pr edit 170 --body \"$(cat <<EOF\nDescribes the --no-gpg-sign rule and commit.gpgsign=false bypass.\nEOF\n)\""}}' \
   "R5b-allows-flag-mentioned-in-heredoc"
+# Regression B2: the flag inside a single-line quoted string is prose.
+assert_allow "$hooks_dir/block-signing-bypass.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"echo \"never pass --no-gpg-sign\""}}' \
+  "R5b-allows-flag-in-quotes"
+# Regression S4: git config keys are case-insensitive — gpgSign bypasses.
+assert_deny "$hooks_dir/block-signing-bypass.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git -c commit.gpgSign=false commit -m x"}}' \
+  "signing-flag-denied" "R5b-mixed-case-key"
 
 # --- R7+R8: beads.db direct read --------------------------------------------
 assert_deny "$hooks_dir/block-beads-db-read.sh" \
@@ -84,6 +92,18 @@ assert_allow "$hooks_dir/block-beads-db-read.sh" \
 assert_allow "$hooks_dir/block-beads-db-read.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"jq -s . .beads/issues.jsonl"}}' \
   "R7-allows-jsonl"
+# A quoted db path is still a real read and must be denied.
+assert_deny "$hooks_dir/block-beads-db-read.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"cat \".beads/beads.db\""}}' \
+  "beads-db-direct-read" "R7-denies-quoted-path"
+# Regression B2: the path mentioned in quoted prose is not a read.
+assert_allow "$hooks_dir/block-beads-db-read.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"echo \"to inspect, run cat .beads/beads.db\""}}' \
+  "R7-allows-mention-in-quotes"
+# A reading keyword and the path in different chained commands: not bound.
+assert_allow "$hooks_dir/block-beads-db-read.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"cat README.md && echo .beads/beads.db"}}' \
+  "R7-allows-keyword-and-path-in-different-commands"
 
 # --- R11: interactive git ----------------------------------------------------
 assert_deny "$hooks_dir/block-interactive-git.sh" \
@@ -150,5 +170,25 @@ assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
 assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"git checkout main"}}' \
   "R4-allows-non-create"
+# Regression S3: `git branch -f <name> <start>` must not bypass.
+assert_deny "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git branch -f feature/x HEAD"}}' \
+  "branch-not-from-origin-main" "R4-denies-branch-force"
+# `git switch -C` (force create) must not bypass either.
+assert_deny "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git switch -C feature/x HEAD"}}' \
+  "branch-not-from-origin-main" "R4-denies-switch-force"
+# git branch -f FROM origin/main is fine.
+assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git branch -f feature/x origin/main"}}' \
+  "R4-allows-branch-force-from-origin-main"
+# Bare `git branch` (a listing) is not branch creation — allowed.
+assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"git branch"}}' \
+  "R4-allows-bare-branch-listing"
+# Regression B2: branch-creation text inside quoted prose must not trip.
+assert_allow "$hooks_dir/check-branch-from-origin-main.sh" \
+  '{"tool_name":"Bash","tool_input":{"command":"echo \"git checkout -b feature/x\""}}' \
+  "R4-allows-creation-text-in-quotes"
 
 echo "ok"

@@ -21,9 +21,9 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 [[ "$tool" != "Bash" ]] && exit 0
 
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
-stripped="$(strip_heredoc_bodies "$command")"
-# Match: git checkout -b <name>, git switch -c <name>, git branch <name> <start>
-if [[ ! "$stripped" =~ git[[:space:]]+(checkout[[:space:]]+-b|switch[[:space:]]+-c|branch)([[:space:]]|$) ]]; then
+# Fire only on real branch-CREATION commands at a command boundary.
+# Bare `git branch` (a listing) and quoted mentions do not count.
+if ! cmd_matches "$command" "$SPEX_ERE_BRANCH_CREATE"; then
   exit 0
 fi
 

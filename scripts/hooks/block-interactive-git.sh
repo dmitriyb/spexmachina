@@ -19,41 +19,32 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-# Real interactive git rebase/add commands never use heredocs.
-# Strip heredoc bodies so doc strings / commit messages mentioning
-# `git rebase -i` don't trip the hook.
-stripped="$(strip_heredoc_bodies "$command")"
+# Strip heredoc bodies AND quoted strings: a real interactive flag is
+# unquoted; the same text in a commit message, an `--exec '<cmd>'`
+# argument, or doc prose must not trip the hook.
+stripped="$(strip_quoted_strings "$(strip_heredoc_bodies "$command")")"
 
-# has_flag <command> <flag>  — true if command contains the flag as
-# a whitespace-separated token.
+# has_flag <text> <flag> — true if <flag> appears as a whitespace-
+# separated token.
 has_flag() {
-  local cmd=" $1 "
-  printf '%s' "$cmd" | grep -qE "[[:space:]]$2[[:space:]]"
+  printf '%s' " $1 " | grep -qE "[[:space:]]$2[[:space:]]"
 }
-
-# is_subcmd <command> <git-subcommand>  — true if command contains
-# `git <subcommand>` (handles leading `git` with optional `-c k=v` flags).
-is_subcmd() {
-  local cmd=" $1 "
-  printf '%s' "$cmd" | grep -qE "[[:space:]]git[[:space:]]+(-c[[:space:]]+[^[:space:]]+[[:space:]]+)*$2([[:space:]]|$)"
-}
-
-# Replace command with the heredoc-stripped form for matching below.
-command="$stripped"
 
 block=false
-if is_subcmd "$command" "rebase"; then
-  if has_flag "$command" "-i" \
-     || has_flag "$command" "--interactive" \
-     || has_flag "$command" "--edit-todo"; then
+# `git rebase` / `git add` must be a real command (boundary-anchored),
+# not the words appearing inside an argument.
+if cmd_matches "$command" 'git[[:space:]]+rebase([[:space:]]|$)'; then
+  if has_flag "$stripped" "-i" \
+     || has_flag "$stripped" "--interactive" \
+     || has_flag "$stripped" "--edit-todo"; then
     block=true
   fi
 fi
-if is_subcmd "$command" "add"; then
-  if has_flag "$command" "-i" \
-     || has_flag "$command" "-p" \
-     || has_flag "$command" "--interactive" \
-     || has_flag "$command" "--patch"; then
+if cmd_matches "$command" 'git[[:space:]]+add([[:space:]]|$)'; then
+  if has_flag "$stripped" "-i" \
+     || has_flag "$stripped" "-p" \
+     || has_flag "$stripped" "--interactive" \
+     || has_flag "$stripped" "--patch"; then
     block=true
   fi
 fi

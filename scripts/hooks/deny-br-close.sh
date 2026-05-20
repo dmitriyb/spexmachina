@@ -26,9 +26,10 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-stripped="$(strip_heredoc_bodies "$command")"
-
-if printf '%s' " $stripped " | grep -qE "[[:space:]]br[[:space:]]+close([[:space:]]|$)"; then
+# Match a real `br close` at a command boundary — tolerates a path
+# prefix (bin/br, /usr/bin/br) so a path-qualified call cannot bypass;
+# rejects `br close` text inside quoted args / heredoc bodies.
+if cmd_matches "$command" "$SPEX_ERE_BR_CLOSE"; then
   emit_halt \
     "br-close-outside-review" \
     "$command" \

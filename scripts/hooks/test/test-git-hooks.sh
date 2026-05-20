@@ -71,4 +71,15 @@ if ! echo "$output" | grep -q "unsigned-commit-detected"; then
   exit 1
 fi
 
+# Test 6 (regression B1): a push that DELETES refs/heads/main (all-zero
+# local_sha) must be blocked — deleting the protected branch is worse
+# than pushing to it.
+push_input="refs/heads/feature/test 0000000000000000000000000000000000000000 refs/heads/main $sha"
+output="$(echo "$push_input" | "$repo_root/scripts/git-hooks/pre-push" 2>&1 || true)"
+if ! echo "$output" | grep -q "no-direct-push-to-main"; then
+  echo "FAIL test6: pre-push DELETE of refs/heads/main should be blocked" >&2
+  echo "actual output: $output" >&2
+  exit 1
+fi
+
 echo "ok"
