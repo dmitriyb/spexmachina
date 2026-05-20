@@ -95,7 +95,7 @@ escalate to the user. The human is the only override path.
 | R5b | Deny `--no-gpg-sign` and `-c commit.gpgsign=false` flags | CLAUDE.md:40 | Prose | **CC hook** (PreToolUse Bash matcher) | `scripts/hooks/block-signing-bypass.sh` | `signing-flag-denied` |
 | R6 | `br close` only from `/review` after LGTM | CLAUDE.md:49 | Prose | **CC skill hook** (`deny-br-close.sh` declared in the frontmatter of every skill except `/review`) | `scripts/hooks/deny-br-close.sh` | `br-close-outside-review` |
 | R7 | Never read `.beads/beads.db` directly | CLAUDE.md:62 | Prose | **CC project hook** (PreToolUse Bash, Read tool) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
-| R8 | Never bypass `br` / `spex` to dig into storage | CLAUDE.md:63 | Prose | **CC project hook** (same script as R7) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
+| R8 | Never read `br`'s internal state files (`.beads/.br_history`, `.beads/.br_recovery`) | CLAUDE.md:63 | Prose | **CC project hook** (same script as R7) | `scripts/hooks/block-beads-db-read.sh` | `beads-db-direct-read` |
 | R9 | `/spec`, `/propose`, `/converge`, `/spec-review`, `/spec-drift` must not commit | `feedback_skills_no_autocommit` | Prose + memory | **CC skill hook** (`deny-commit.sh` declared in the frontmatter of each non-committing skill) | `scripts/hooks/deny-commit.sh` | `skill-must-not-commit` |
 | R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **No hook** — these skills simply do not declare a `deny-commit` frontmatter hook; commit is allowed by default | n/a | n/a |
 | R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC project hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
@@ -363,10 +363,23 @@ seconds.
 
 ## 6. Reference hook implementations
 
-Worked examples for the three highest-value rules. Code is illustrative
-and uses the §4.1 JSON halt format via the `emit_halt` helper from
-`scripts/hooks/lib/emit-halt.sh`. The implementation PR (§8) lands all
-the scripts together.
+Worked examples for the highest-value rules. Code is illustrative and
+uses helpers from `scripts/hooks/lib/emit-halt.sh`:
+
+- `emit_halt` — builds the §4.1 JSON payload, logs it, prints the
+  deny envelope.
+- `strip_heredoc_bodies` — removes heredoc bodies (literal data, not
+  command text). Pure bash, portable across mawk/gawk.
+- `strip_quoted_strings` — blanks single-line quoted-string contents.
+  Used by hooks matching a flag/token never legitimately quoted.
+- `cmd_matches <cmd> <ere>` — true if `<ere>` occurs at a
+  command-start boundary (line start, or after `; & | \` (`), after
+  heredoc stripping. The matcher for rules keyed on a *command*: it
+  rejects the command word inside quoted prose while still matching a
+  real command whose later argument is quoted. Shared EREs
+  (`SPEX_ERE_GIT_COMMIT`, `SPEX_ERE_BR_CLOSE`, `SPEX_ERE_SPEX_HASH`,
+  `SPEX_ERE_BRANCH_CREATE`) tolerate path prefixes and git global
+  options so a rule cannot be bypassed by trivial respelling.
 
 ### 6.1 CC skill hook: block `br close` outside `/review`
 
@@ -393,17 +406,20 @@ hooks:
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 source "$(dirname "$0")/lib/emit-halt.sh"
+export SPEX_SKILL="${1:-}"   # declaring skill name, for the log only
 
 input="$(cat)"
+tool="$(jq -r '.tool_name // empty' <<<"$input")"
+[[ "$tool" != "Bash" ]] && exit 0
 command="$(jq -r '.tool_input.command // empty' <<<"$input")"
 [[ -z "$command" ]] && exit 0
 
-# Strip heredoc bodies so doc text mentioning `br close` doesn't trip.
-stripped="$(strip_heredoc_bodies "$command")"
-
-if printf '%s' " $stripped " | grep -qE "[[:space:]]br[[:space:]]+close([[:space:]]|$)"; then
+# SPEX_ERE_BR_CLOSE tolerates a path prefix (bin/br, /usr/bin/br);
+# cmd_matches anchors it to a command boundary so `br close` text
+# inside quoted prose / a heredoc body does not trip.
+if cmd_matches "$command" "$SPEX_ERE_BR_CLOSE"; then
   emit_halt \
     "br-close-outside-review" \
     "$command" \
@@ -424,7 +440,7 @@ exit 0
 
 ```bash
 #!/usr/bin/env bash
-set -euo pipefail
+set -uo pipefail
 source "$(dirname "$0")/lib/emit-halt.sh"
 
 input="$(cat)"
@@ -432,8 +448,15 @@ tool="$(jq -r '.tool_name // empty' <<<"$input")"
 
 case "$tool" in
   Bash)
-    target="$(jq -r '.tool_input.command // empty' <<<"$input")"
-    if [[ ! "$target" =~ (sqlite3|cat|head|tail|less|xxd|python).*\.beads/beads\.db ]]; then
+    command="$(jq -r '.tool_input.command // empty' <<<"$input")"
+    # A reading/copying tool, boundary-anchored, with a .beads/beads.db
+    # (or br internal-state) argument bound to the SAME command.
+    # [^;&|`] keeps the path from a later command in a chain out of
+    # the match. The path itself may be quoted — cmd_matches anchors
+    # the keyword, not the path.
+    if cmd_matches "$command" '(sqlite3?|cat|head|tail|less|more|xxd|hexdump|od|strings|file|python3?|perl|ruby|cp|dd|mv|install)[^;&|`]*\.beads/(beads\.db|\.br_)'; then
+      target="$command"
+    else
       exit 0
     fi
     ;;
@@ -1031,8 +1054,17 @@ incomplete — the prose still exists somewhere it shouldn't.
 
 This RFC is complete when the following hold:
 
-- §3 catalog covers every "Never / MUST NOT" rule grep'd from `CLAUDE.md`
-  and from `skills/*/SKILL.md`.
+- §3 catalog covers every "Never / MUST NOT" rule in `CLAUDE.md` and
+  `skills/*/SKILL.md` **that is expressible as a tool-shape or git
+  rule.** Two documented rules are deliberately *not* in the catalog
+  because they cannot be mechanically enforced by a hook:
+  - CLAUDE.md "Do NOT use markdown TODOs" — there is no tool-call
+    shape that distinguishes a TODO marker from ordinary text.
+  - CLAUDE.md:63's broad principle "never bypass the documented
+    `br`/`spex` interfaces" — R8 mechanically enforces the concrete,
+    catchable case (reading `br`'s internal state files); the broad
+    principle remains prose because "bypass" has no finite syntactic
+    form. R8's catalog text is scoped to what the hook actually does.
 - §4 halt-and-recover protocol is unambiguous: a follow-up implementer
   writing a new hook needs no clarifying questions about output format
   or agent behavior.

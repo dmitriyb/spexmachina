@@ -94,9 +94,17 @@ The repo ships machine-enforced rules via Claude Code hooks
 **One-time per clone:** `scripts/setup-hooks`. This wires
 `core.hooksPath` and makes the scripts executable.
 
-**Halt protocol — when a hook denies a tool call.** Claude Code
-surfaces a `permissionDecisionReason` string. If the string parses as
-JSON with `"protocol": "spex-halt/v1"`, the agent MUST:
+**Halt protocol — when a hook denies a tool call.** A halt arrives by
+one of two channels, both carrying the same `spex-halt/v1` JSON:
+- **Claude Code hooks** surface it as a `permissionDecisionReason`
+  string.
+- **git hooks** (pre-commit / post-commit / pre-push) print it to
+  **stderr** — so when a `git commit`/`git push` Bash command fails
+  with stderr containing `"protocol": "spex-halt/v1"`, that is a halt
+  too.
+
+In either case, if the payload parses as JSON with
+`"protocol": "spex-halt/v1"`, the agent MUST:
 
 1. Halt the current tool sequence. No further tools on the same
    goal-path until the user has responded.
