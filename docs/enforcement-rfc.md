@@ -101,6 +101,7 @@ escalate to the user. The human is the only override path.
 | R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC project hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
 | R12 | Never run `spex hash` outside an explicit re-baseline | `feedback_spex_pipeline_not_hash` | Memory only | **CC project hook** (PreToolUse Bash on `spex hash *`; allow only if `SPEX_REBASELINE=1`) | `scripts/hooks/check-spex-hash-rebaseline.sh` | `spex-hash-bypasses-pipeline` |
 | R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC project hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
+| R14 | One skill per session — no skill-mixing | user requirement (2026-05-20) | n/a (new) | **CC skill hook** (`assert-single-skill.sh` declared in *every* skill's frontmatter) | `scripts/hooks/assert-single-skill.sh` | `skill-mixing-detected` |
 
 Layer key:
 - **CC project hook**: `PreToolUse` matcher in `.claude/settings.json`, executes a script under `scripts/hooks/`. Active for the whole session. Used for rules that apply universally.
@@ -797,13 +798,19 @@ git hooks + the marker file.
 - Fixtures: `deny-commit.sh` and `deny-br-close.sh` deny their target
   command and allow everything else.
 
-#### Commit 10 — Live lifecycle verification (§9.1 remaining risk)
+#### Commit 10 — R14: one-skill-per-session guard
 
-Not a code commit — a verification step recorded in the PR. Invoke
-`/spec`, attempt a `git commit`, confirm it is denied. Let `/spec`
-finish, invoke `/fix`, attempt a `git commit`, confirm it is allowed.
-If the frontmatter-hook lifecycle misbehaves, this is the point to
-fall back to the marker-file design (Commits 4–5 are in git history).
+`scripts/hooks/assert-single-skill.sh` — declared in *every* skill's
+frontmatter. On each tool call it reads `session_id` from the hook
+stdin, looks up `.claude/skill-sessions/<session_id>`:
+- file absent → write the declaring skill's name, allow.
+- file names the same skill → allow.
+- file names a different skill → halt (`skill-mixing-detected`).
+
+Per §9.1 this makes "one skill per session" an enforced invariant and
+neutralises the frontmatter-hook lifecycle concern. `.gitignore` adds
+`.claude/skill-sessions/`. Fixture: same-skill repeat allowed,
+different-skill denied, fresh `session_id` starts clean.
 
 #### Commit 11 — Strip redundant skill prose
 
@@ -833,8 +840,10 @@ directory. Update CLAUDE.md and this RFC's command references.
 ### Acceptance gate (before merge)
 
 - `scripts/verify-enforcement` passes locally (all fixture suites).
-- The §9.1 live lifecycle test (Commit 10) passes — frontmatter hooks
-  activate and deactivate with their skill.
+- Reduced live check: confirm a frontmatter hook is active for the
+  *duration* of its skill (deactivation no longer matters — R14
+  enforces one-skill-per-session). Invoke `/spec`, attempt a
+  `git commit`, confirm it is denied.
 - Fresh-container test (§7.6): clone, `scripts/setup-hooks`, run a
   representative skill; agent picks up rules without any memory
   directory present.
@@ -912,24 +921,39 @@ ever gate the agent — the user can always run the command themselves.
 The git hooks (R1, R2, R5a) still apply to every commit/push
 regardless of skill.
 
-**Remaining risk — skill-hook lifecycle (must be verified live).** The
-Claude Code docs say frontmatter hooks are "scoped to component
-lifecycle" but do **not** define when a skill's lifecycle ends. Two
-failure shapes:
+**Skill-hook lifecycle — resolved by the one-skill-per-session rule
+(R14).** The Claude Code docs say frontmatter hooks are "scoped to
+component lifecycle" but do not define when a skill's lifecycle ends.
+Two failure shapes were originally a concern:
 
 1. *Hook deactivates too early* — the restriction lifts before the
-   skill's work is done. R9 would stop blocking commits mid-`/spec`.
-2. *Hook lingers too long* — the restriction outlives the skill. After
-   `/spec` finishes, a stale `deny-commit` hook blocks unrelated
-   commits later in the session.
+   skill's work is done.
+2. *Hook lingers too long* — the restriction outlives the skill, so a
+   stale `deny-commit` could block an unrelated later action.
 
-This cannot be unit-tested — it depends on Claude Code's runtime. The
-implementation plan (§8) therefore **keeps the marker-file machinery
-in place until a live test confirms the lifecycle is correct**, and
-only then deletes it. The live test: invoke `/spec`, confirm a commit
-is blocked; let `/spec` finish, invoke `/fix`, confirm a commit is
-*allowed*. If lifecycle behaviour is wrong, fall back to the
-marker-file design (which is model-dependent but lifecycle-correct).
+The project's actual workflow eliminates failure shape 2: **each skill
+runs in its own Claude Code session.** A session never reaches a
+second skill, so a lingering hook can only ever affect the *same*
+skill it belongs to — which is correct behaviour, not a false block.
+The user has explicitly accepted that frontmatter hooks need not
+deactivate.
+
+To make "one skill per session" an enforced invariant rather than a
+convention, **R14** adds `assert-single-skill.sh` to every skill's
+frontmatter. It records which skill owns the current session (keyed by
+the `session_id` field in the hook's stdin, under
+`.claude/skill-sessions/<session_id>`). If a *different* skill's hook
+fires in a session that already has an owner, it halts with
+`skill-mixing-detected` — recovery: "start a fresh session for the
+second skill." With R14 in place, skill-mixing cannot happen silently,
+so failure shape 2 cannot cause an incorrect block.
+
+Failure shape 1 (deactivate too early) remains the only thing worth a
+live check: confirm a frontmatter hook is active for the *duration* of
+its skill. This is the reduced acceptance check in §8 — no marker-file
+fallback is retained, because the marker file was itself
+model-dependent and the one-skill-per-session model is the cleaner
+guarantee.
 
 ### 9.2 `--no-gpg-sign` flag bypass (R5 gap)
 
