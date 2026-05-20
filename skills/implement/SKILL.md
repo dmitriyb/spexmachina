@@ -13,8 +13,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh implement
 ---
 
-**Commits and pushes:** yes. This skill commits, pushes, opens a PR, and links the bead. It does not close beads.
-
 First run `git checkout main && git pull --rebase` to ensure you are on the latest main.
 
 Implement bead $ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific guidance.

@@ -14,8 +14,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh spec-drift
 ---
 
-**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits.
-
 # /spec-drift — Audit Code Against Spec
 
 Read the spec content for shipped components and compare it against the actual code. Identify cases where spec and code have diverged: spec describes behavior X, code does behavior Y. Draft a correction proposal in plan mode if drift is found.

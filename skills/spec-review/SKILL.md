@@ -14,8 +14,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh spec-review
 ---
 
-**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits.
-
 # /spec-review — Audit Spec for Internal Inconsistencies
 
 Read the current spec and identify inconsistencies WITHIN the spec itself: prose that contradicts JSON declarations, JSON that references nonexistent nodes, content that doesn't match the structural shape its parent claims. **No code reading.** Code-vs-spec alignment is a separate skill (`/spec-drift`).

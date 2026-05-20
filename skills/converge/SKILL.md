@@ -14,13 +14,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh converge
 ---
 
-**Commits and pushes:** no. This skill leaves all changes staged for the user to commit.
-
-## Pipeline correctness rules
-
-- `bin/spex diff`, `bin/spex impact`, `bin/spex validate` errors and unexpected drift ARE the project's primary correctness signal. Investigate and resolve before commit/PR. Never plan around the signal: do not manually `br close` to skip a refusing pipeline; do not dismiss merkle errors as "heuristic overshoots." Unexpected drift in `main` is itself a problem (missing snapshot refresh or overlapping pending work) — stop and surface to the user before adding changes on top.
-- **Never run `spex hash`** to "fix" a non-empty diff. The tool re-baselines the snapshot directly, bypassing impact/emit/ingest and orphaning bead-map records. The legitimate use is regenerating the baseline after the TreeBuilder keying scheme itself changed (see commit `b847f45`); in that case, the user sets `SPEX_REBASELINE=1` for the shell and runs it. Enforcement hook `check-spex-hash-rebaseline.sh` blocks `spex hash` without the env var.
-
 # /converge — Drive the Spex Pipeline
 
 Take a proposal that has already been processed by `/spec`, and execute the

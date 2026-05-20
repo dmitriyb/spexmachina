@@ -11,22 +11,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh review
 ---
 
-**Commits and pushes:** yes. This skill commits `.beads/issues.jsonl` when it closes a bead. It is the only skill that runs `br close`.
-
-## Review findings rule (no punting)
-
-If `/review` surfaces a real issue — even one whose root cause is outside the bead's stated scope (stale spec, drift in another file, oversight by a proposal author) — write it up as a blocker in the review body or inline comment. **Do not punt it to a follow-up bead** or "non-blocker for separate work."
-
-- If the reviewer noticed it, the fixer who reads the review is the right person to handle it. Splitting "review found this but the next bead will fix it" creates orphan work that gets forgotten.
-- Every real finding goes into the review: inline comment if a relevant line exists in the diff; otherwise a numbered blocker in the summary body.
-- Never end a review summary with "non-blocker for follow-up: …" — either it's a blocker in this PR, or it's not worth mentioning.
-
-**Verdict-mapping rule (no exceptions):** if the review body or any inline comment names a finding, the verdict is `ISSUES`, full stop. Do not call it LGTM. Do not close the bead. This applies even when the finding is technically unfixable on this branch (e.g. spec-leaf drift that would self-obsolete the bead if edited locally) — in that case the resolution path itself goes inline as the blocker's instruction (e.g. "amend existing chore X to cover this scope"), and the bead stays open until `/fix` executes that resolution. "Noted but LGTM" is the punt the rule forbids.
-
-## Closing-bead context: no `spex hash` to "clean" a non-empty diff
-
-Before closing a bead, if `bin/spex diff` is non-empty, the proper pipeline hasn't fully run yet. Surface to the user and ask whether to run `impact/emit/ingest`, fix completeness-checker false positives, or accept the staleness deliberately. **Never reach for `spex hash`** — it bypasses the impact/emit/ingest trail and orphans bead-map records. Enforcement hook `check-spex-hash-rebaseline.sh` blocks it.
-
 Review PR #$ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific review guidance.
 
 ## Context Loading

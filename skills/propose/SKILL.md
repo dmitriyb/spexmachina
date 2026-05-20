@@ -14,8 +14,6 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh propose
 ---
 
-**Commits and pushes:** no. This skill drafts a proposal in plan mode and leaves it for the user to review and commit.
-
 # /propose — Create a Spec Proposal
 
 Draft a structured proposal by researching the spec, code, and existing proposals, then present the full draft in plan mode for user approval.
