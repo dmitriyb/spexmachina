@@ -114,19 +114,15 @@ JSON with `"protocol": "spex-halt/v1"`, the agent MUST:
    `git fetch`, `br update`, additional `Read`s) may proceed once the
    user acknowledges the block and names the path.
 
-**Skill identity.** Hooks consult `.claude/skill-context.json` to know
-which skill is active. Each skill MUST write this marker as its first
-action:
-
-```bash
-printf '{"skill":"<name>","started_at":"%s","pid":%d}\n' \
-  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
-
-Hooks treat a missing/stale (>60 min) marker as "skill unknown" and
-apply their per-rule fail-mode (R6/R12 block; R9 allows on the
-assumption the commit is user-driven). See `docs/enforcement-rfc.md`
-§9.1 for the asymmetry.
+**Skill-scoped rules.** Two rules depend on which skill is running —
+R6 (`br close` only from `/review`) and R9 (`/spec`, `/propose`,
+`/converge`, `/spec-review`, `/spec-drift` must not commit). These are
+enforced by hooks declared in each `SKILL.md`'s YAML frontmatter
+`hooks:` block, scoped to while that skill is active. No marker file,
+no per-skill boilerplate in the skill body. A skill that should be
+restricted carries the restriction in its own frontmatter; `/review`
+carries no `deny-br-close` hook, and the committing skills carry no
+`deny-commit` hook.
 
 **Override env vars.** Two narrow overrides exist, both user-set:
 - `SPEX_REBASELINE=1` permits `spex hash` (R12 carve-out).

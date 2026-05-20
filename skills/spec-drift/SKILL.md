@@ -2,17 +2,17 @@
 name: spec-drift
 description: "Audit shipped code against its spec, identify drift, and draft a correction proposal in plan mode if found"
 argument-hint: "[module-name]"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh spec-drift
+        - type: command
+          command: scripts/hooks/deny-br-close.sh spec-drift
 ---
 
 **Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-drift`.
-
-## Step 0: Declare skill identity to enforcement hooks
-
-Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
-
-```bash
-mkdir -p .claude && printf '{"skill":"spec-drift","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
 
 # /spec-drift — Audit Code Against Spec
 

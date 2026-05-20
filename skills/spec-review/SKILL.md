@@ -2,17 +2,17 @@
 name: spec-review
 description: "Audit the spec for internal inconsistencies (no code reading) and draft a correction proposal in plan mode if findings exist"
 argument-hint: "[module-name]"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh spec-review
+        - type: command
+          command: scripts/hooks/deny-br-close.sh spec-review
 ---
 
 **Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-review`.
-
-## Step 0: Declare skill identity to enforcement hooks
-
-Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
-
-```bash
-mkdir -p .claude && printf '{"skill":"spec-review","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
 
 # /spec-review — Audit Spec for Internal Inconsistencies
 

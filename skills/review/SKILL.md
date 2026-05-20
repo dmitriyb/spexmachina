@@ -21,14 +21,6 @@ If `/review` surfaces a real issue — even one whose root cause is outside the 
 
 Before closing a bead, if `bin/spex diff` is non-empty, the proper pipeline hasn't fully run yet. Surface to the user and ask whether to run `impact/emit/ingest`, fix completeness-checker false positives, or accept the staleness deliberately. **Never reach for `spex hash`** — it bypasses the impact/emit/ingest trail and orphans bead-map records. Enforcement hook `check-spex-hash-rebaseline.sh` blocks it.
 
-## Step 0: Declare skill identity to enforcement hooks
-
-Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
-
-```bash
-mkdir -p .claude && printf '{"skill":"review","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
-
 Review PR #$ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific review guidance.
 
 ## Context Loading

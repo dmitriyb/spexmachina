@@ -13,6 +13,3 @@ bin/
 
 # Hook violation log (per-machine; format documented in docs/enforcement-rfc.md §5)
 .claude/hook-violations.log
-
-# Skill-context marker file (per-session; format documented in docs/enforcement-rfc.md §9.1)
-.claude/skill-context.json

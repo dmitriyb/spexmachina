@@ -3,17 +3,15 @@ name: fix
 description: Fix review comments on a pull request
 disable-model-invocation: true
 argument-hint: <pr-number>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-br-close.sh fix
 ---
 
 **Commits and pushes:** yes. This skill commits each set of fixes and pushes. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `fix`.
-
-## Step 0: Declare skill identity to enforcement hooks
-
-Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
-
-```bash
-mkdir -p .claude && printf '{"skill":"fix","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
 
 Read PR #$ARGUMENTS feedback from BOTH sources below, fix each item, commit and push, and provide a concise short response like "Fixed" or "Addressed", or answer in more detail if it is a question. Reply to EACH comment individually on GitHub. Do NOT post a single bulk comment summarizing all changes.
 

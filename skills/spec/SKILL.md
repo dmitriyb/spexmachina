@@ -2,6 +2,14 @@
 name: spec
 description: "Read a proposal and author spec files: project.json, module.json, and markdown content leaves"
 argument-hint: "<proposal-path-or-name>"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh spec
+        - type: command
+          command: scripts/hooks/deny-br-close.sh spec
 ---
 
 **Commits and pushes:** no. This skill authors spec files and leaves all changes staged for the user to review and commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec`.
@@ -19,14 +27,6 @@ When a proposal involves a module being structurally superseded (one module spli
 The rename-style restructuring confuses ActionClassifier's state transitions — a reshape may register as "modified" when the semantic reality is "removed (old apply) + added (new emit+ingest)". Delete+create produces clean `removed → obsolete + cleanup bead` signals for the old nodes and `added → create bead` for the new ones, with no false lineage implied between old and new component beads.
 
 Detect the pattern when a proposal's affected-spec-nodes lists both "Deleted: old module X" and "New modules: Y, Z (where Y/Z cover the same conceptual surface X did)."
-
-## Step 0: Declare skill identity to enforcement hooks
-
-Before any other action, run this command verbatim so the hook layer knows the active skill (see CLAUDE.md "## Enforcement"):
-
-```bash
-mkdir -p .claude && printf '{"skill":"spec","started_at":"%s","pid":%d}\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$$" > .claude/skill-context.json
-```
 
 # /spec — Author Spec from Proposal
 
