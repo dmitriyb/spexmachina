@@ -14,7 +14,7 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh converge
 ---
 
-**Commits and pushes:** no. This skill leaves all changes staged for the user to commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `converge`.
+**Commits and pushes:** no. This skill leaves all changes staged for the user to commit.
 
 ## Pipeline correctness rules
 

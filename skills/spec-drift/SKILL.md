@@ -14,7 +14,7 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh spec-drift
 ---
 
-**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-drift`.
+**Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits.
 
 # /spec-drift — Audit Code Against Spec
 

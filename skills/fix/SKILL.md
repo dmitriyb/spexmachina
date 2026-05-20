@@ -13,7 +13,7 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh fix
 ---
 
-**Commits and pushes:** yes. This skill commits each set of fixes and pushes. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `fix`.
+**Commits and pushes:** yes. This skill commits each set of fixes and pushes.
 
 Read PR #$ARGUMENTS feedback from BOTH sources below, fix each item, commit and push, and provide a concise short response like "Fixed" or "Addressed", or answer in more detail if it is a question. Reply to EACH comment individually on GitHub. Do NOT post a single bulk comment summarizing all changes.
 

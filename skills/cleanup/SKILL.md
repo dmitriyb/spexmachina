@@ -13,7 +13,7 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh cleanup
 ---
 
-**Commits and pushes:** yes. This skill commits and pushes its changes and opens a PR. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `cleanup`.
+**Commits and pushes:** yes. This skill commits and pushes its changes and opens a PR.
 
 First run `git checkout main && git pull --rebase` to ensure you are on the latest main.
 

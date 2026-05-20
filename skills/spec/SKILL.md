@@ -14,7 +14,7 @@ hooks:
           command: scripts/hooks/assert-single-skill.sh spec
 ---
 
-**Commits and pushes:** no. This skill authors spec files and leaves all changes staged for the user to review and commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec`.
+**Commits and pushes:** no. This skill authors spec files and leaves all changes staged for the user to review and commit.
 
 ## Module supersession: delete+create, never rename
 
