@@ -34,16 +34,23 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null || echo "$PWD")"
 session_dir="$repo_root/.claude/skill-sessions"
 mkdir -p "$session_dir" 2>/dev/null || exit 0
 
+# Sweep markers older than 24h so the dir does not grow unbounded
+# (one file per session). Non-fatal.
+find "$session_dir" -maxdepth 1 -type f -mmin +1440 -delete 2>/dev/null || true
+
 # Sanitise session_id for use as a filename (UUIDs are safe, but be
 # defensive against unexpected characters).
 safe_id="$(printf '%s' "$session_id" | tr -c 'A-Za-z0-9_.-' '_')"
 marker="$session_dir/$safe_id"
 
-if [[ ! -f "$marker" ]]; then
-  printf '%s\n' "$this_skill" > "$marker" 2>/dev/null || true
-  exit 0
+# Atomic create-if-absent: `set -o noclobber` makes `>` fail when the
+# file already exists, so the test-and-write is a single operation —
+# no TOCTOU between checking and writing.
+if ( set -o noclobber; printf '%s\n' "$this_skill" > "$marker" ) 2>/dev/null; then
+  exit 0  # we created it — first (and so far only) skill in this session
 fi
 
+# Marker already existed — read the owning skill.
 owner="$(cat "$marker" 2>/dev/null || echo '')"
 if [[ -z "$owner" || "$owner" == "$this_skill" ]]; then
   exit 0
