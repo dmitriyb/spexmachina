@@ -3,6 +3,14 @@ name: implement
 description: Implement a beads task — write code, tests, and create a PR
 disable-model-invocation: true
 argument-hint: <bead-id>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-br-close.sh implement
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh implement
 ---
 
 First run `git checkout main && git pull --rebase` to ensure you are on the latest main.

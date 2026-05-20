@@ -3,6 +3,14 @@ name: fix
 description: Fix review comments on a pull request
 disable-model-invocation: true
 argument-hint: <pr-number>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-br-close.sh fix
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh fix
 ---
 
 Read PR #$ARGUMENTS feedback from BOTH sources below, fix each item, commit and push, and provide a concise short response like "Fixed" or "Addressed", or answer in more detail if it is a question. Reply to EACH comment individually on GitHub. Do NOT post a single bulk comment summarizing all changes.

@@ -2,6 +2,16 @@
 name: converge
 description: "Drive a /spec'd proposal through the deterministic spex pipeline (validate → diff → impact → emit → adapter → ingest). Halt and diagnose any stage failure; never auto-fix the spec or the binary."
 argument-hint: "<proposal-path-or-name>"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh converge
+        - type: command
+          command: scripts/hooks/deny-br-close.sh converge
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh converge
 ---
 
 # /converge — Drive the Spex Pipeline

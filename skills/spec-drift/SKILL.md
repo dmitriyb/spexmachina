@@ -2,6 +2,16 @@
 name: spec-drift
 description: "Audit shipped code against its spec, identify drift, and draft a correction proposal in plan mode if found"
 argument-hint: "[module-name]"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh spec-drift
+        - type: command
+          command: scripts/hooks/deny-br-close.sh spec-drift
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh spec-drift
 ---
 
 # /spec-drift — Audit Code Against Spec

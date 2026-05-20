@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# post-commit — R5a post-commit half: verify the commit just created
+# has a gpgsig block. Catches `git commit --no-gpg-sign` (which the
+# pre-commit hook cannot prevent because the flag overrides config
+# without touching the file changes pre-commit sees).
+#
+# The commit already exists when this fires. The hook errors loudly so
+# the user (or model running git via Bash) sees a structured halt and
+# can amend with `git commit --amend -S` before pushing.
+
+set -uo pipefail
+
+hook_dir="$(cd "$(dirname "$0")" && pwd)"
+lib_dir="$(cd "$hook_dir/../hooks/lib" 2>/dev/null && pwd || true)"
+if [[ -z "$lib_dir" || ! -f "$lib_dir/emit-halt.sh" ]]; then
+  echo "post-commit: cannot locate scripts/hooks/lib/emit-halt.sh (looked from $hook_dir)" >&2
+  exit 0
+fi
+source "$lib_dir/emit-halt.sh"
+
+if ! git cat-file -p HEAD 2>/dev/null | grep -q '^gpgsig '; then
+  sha="$(git rev-parse HEAD 2>/dev/null || echo '?')"
+  emit_git_halt \
+    "unsigned-commit-detected" \
+    "post-commit verification of $sha" \
+    "Commits must be SSH-signed. Never bypass signing." \
+    "CLAUDE.md:40" \
+    "Amend with signing before pushing: git commit --amend -S --no-edit" false \
+    "Verify config: git config --global commit.gpgsign true && git config --global user.signingkey <key>" false
+  # post-commit cannot reject the commit (it already exists). Exit 0
+  # so git doesn't print "hook failed" in addition to our structured
+  # message — but the user has seen the BLOCKED banner.
+fi
+
+exit 0

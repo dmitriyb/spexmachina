@@ -2,6 +2,16 @@
 name: spec
 description: "Read a proposal and author spec files: project.json, module.json, and markdown content leaves"
 argument-hint: "<proposal-path-or-name>"
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-commit.sh spec
+        - type: command
+          command: scripts/hooks/deny-br-close.sh spec
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh spec
 ---
 
 # /spec — Author Spec from Proposal

@@ -3,6 +3,12 @@ name: review
 description: Review a pull request for correctness, spec traceability, and test quality
 disable-model-invocation: true
 argument-hint: <pr-number>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh review
 ---
 
 Review PR #$ARGUMENTS. Use @~/.claude/skills/go-expert/SKILL.md for Go-specific review guidance.

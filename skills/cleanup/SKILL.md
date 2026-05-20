@@ -3,6 +3,14 @@ name: cleanup
 description: Remove code for a component that was deleted from the spec — driven by a spex:cleanup bead
 disable-model-invocation: true
 argument-hint: <bead-id>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/deny-br-close.sh cleanup
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh cleanup
 ---
 
 First run `git checkout main && git pull --rebase` to ensure you are on the latest main.
