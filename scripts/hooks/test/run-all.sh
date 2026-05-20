@@ -3,7 +3,7 @@
 # and report pass/fail. Each fixture is a script `test-*.sh` that
 # returns 0 on pass, non-zero on fail.
 #
-# Invoked by `make verify-enforcement`.
+# Invoked by `scripts/verify-enforcement`.
 
 set -uo pipefail
 

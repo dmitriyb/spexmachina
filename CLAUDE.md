@@ -91,7 +91,7 @@ The repo ships machine-enforced rules via Claude Code hooks
 (`.claude/settings.json` + `scripts/hooks/`) and git hooks
 (`scripts/git-hooks/`). Full design in `docs/enforcement-rfc.md`.
 
-**One-time per clone:** `make setup-hooks`. This wires
+**One-time per clone:** `scripts/setup-hooks`. This wires
 `core.hooksPath` and makes the scripts executable.
 
 **Halt protocol — when a hook denies a tool call.** Claude Code
@@ -131,7 +131,8 @@ The agent must not set either; if the agent believes an override is
 warranted, it asks the user.
 
 **Before opening a PR** that touches `.claude/settings.json`,
-`scripts/hooks/`, or `scripts/git-hooks/`: run `make verify-enforcement`.
+`scripts/hooks/`, `scripts/git-hooks/`, or a skill's frontmatter
+`hooks:` block: run `scripts/verify-enforcement`.
 
 ## Where to Find Details
 

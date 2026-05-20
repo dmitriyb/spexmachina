@@ -105,7 +105,7 @@ assert_allow "$hooks_dir/block-interactive-git.sh" \
 # block path is exercised in the git-hooks fixture via the throwaway
 # repo's pre-commit run on main.
 assert_allow "$hooks_dir/check-not-on-main.sh" \
-  '{"tool_name":"Edit","tool_input":{"file_path":"/workspace/spexmachina/Makefile"}}' \
+  '{"tool_name":"Edit","tool_input":{"file_path":"/workspace/spexmachina/CLAUDE.md"}}' \
   "R13-allows-edit-on-feature-branch"
 assert_allow "$hooks_dir/check-not-on-main.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"git status"}}' \
