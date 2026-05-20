@@ -10,6 +10,8 @@ hooks:
           command: scripts/hooks/deny-commit.sh spec-drift
         - type: command
           command: scripts/hooks/deny-br-close.sh spec-drift
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh spec-drift
 ---
 
 **Commits and pushes:** no. This skill audits and drafts a proposal in plan mode; the user reviews and commits. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `spec-drift`.

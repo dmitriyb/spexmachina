@@ -3,6 +3,12 @@ name: review
 description: Review a pull request for correctness, spec traceability, and test quality
 disable-model-invocation: true
 argument-hint: <pr-number>
+hooks:
+  PreToolUse:
+    - matcher: Bash
+      hooks:
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh review
 ---
 
 **Commits and pushes:** yes. This skill is the ONLY skill authorised to run `br close` (R6 enforcement) and commits `.beads/issues.jsonl` on close. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `review`; `check-br-close-skill.sh` permits `br close` only when the active skill is `review`.

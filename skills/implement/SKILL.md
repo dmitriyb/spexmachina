@@ -9,6 +9,8 @@ hooks:
       hooks:
         - type: command
           command: scripts/hooks/deny-br-close.sh implement
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh implement
 ---
 
 **Commits and pushes:** yes. This skill commits, pushes, opens a PR, and links the bead. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `implement`. This skill does NOT close beads — `br close` is the `/review` skill's responsibility (R6 enforcement).

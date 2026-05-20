@@ -10,6 +10,8 @@ hooks:
           command: scripts/hooks/deny-commit.sh propose
         - type: command
           command: scripts/hooks/deny-br-close.sh propose
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh propose
 ---
 
 **Commits and pushes:** no. This skill drafts a proposal in plan mode and leaves it for the user to review and commit. Enforcement hook `check-skill-commit-allowed.sh` blocks `git commit` when the active skill is `propose`.

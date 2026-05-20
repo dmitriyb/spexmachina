@@ -9,6 +9,8 @@ hooks:
       hooks:
         - type: command
           command: scripts/hooks/deny-br-close.sh fix
+        - type: command
+          command: scripts/hooks/assert-single-skill.sh fix
 ---
 
 **Commits and pushes:** yes. This skill commits each set of fixes and pushes. Enforcement hook `check-skill-commit-allowed.sh` permits `git commit` when the active skill is `fix`.
