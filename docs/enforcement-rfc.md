@@ -101,6 +101,7 @@ escalate to the user. The human is the only override path.
 | R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC project hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
 | R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC project hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
 | R14 | One skill per session — no skill-mixing | user requirement (2026-05-20) | n/a (new) | **CC skill hook** (`assert-single-skill.sh` declared in *every* skill's frontmatter) | `scripts/hooks/assert-single-skill.sh` | `skill-mixing-detected` |
+| R15 | Commit messages must not exceed two sentences | CLAUDE.md:44 | n/a (new) | **Git commit-msg hook** | `scripts/git-hooks/commit-msg` | `commit-message-too-long` |
 
 Layer key:
 - **CC project hook**: `PreToolUse` matcher in `.claude/settings.json`, executes a script under `scripts/hooks/`. Active for the whole session. Used for rules that apply universally.
@@ -513,7 +514,25 @@ done
 exit 0
 ```
 
-### 6.4 Installation and the agent contract
+### 6.4 Git commit-msg hook: message length
+
+R15 is enforced by a `commit-msg` git hook. The CLAUDE.md rule is
+stated in prose — "at most two full sentences" — because that is how a
+human reads a commit message; but a prose rule the agent is merely told
+to follow is only as strong as the agent's compliance. The hook is the
+hard backstop: it measures the message — git comment lines and trailers
+(`Co-Authored-By:`, `Signed-off-by:`) excluded — against a 500-character
+cap and rejects the commit if the prose runs over.
+
+500 is deliberately loose. "Two sentences" is the real rule; the hook
+only has to catch the egregious case — the multi-paragraph essay —
+without false-rejecting a legitimate subject plus two genuine sentences,
+which lands near 350 characters. It is a floor on sloppiness, not the
+definition of concise. `commit-msg` is the correct phase: it is the
+only git hook that receives the finished message, and like every git
+hook it fires regardless of who drove the commit.
+
+### 6.5 Installation and the agent contract
 
 Two plain scripts under `scripts/` (the project has no Makefile and
 does not use `make`; `make` is not a Claude Code dependency):
