@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # test-cc-skill-aware.sh — verify the skill-frontmatter hooks
-# (deny-commit.sh, deny-br-close.sh) and the R12 project hook
-# (check-spex-hash-rebaseline.sh).
+# (deny-commit.sh, deny-br-close.sh).
 #
 # deny-commit.sh and deny-br-close.sh are context-free: they are
 # scoped by *being declared in a skill's frontmatter*, so the script
@@ -117,26 +116,5 @@ assert_deny "$hooks_dir/deny-br-close.sh" \
 assert_allow "$hooks_dir/deny-br-close.sh" \
   '{"tool_name":"Bash","tool_input":{"command":"echo \"to finish, run br close x\""}}' \
   "R6-allows-br-close-in-quotes" "implement"
-
-# ============================================================================
-# check-spex-hash-rebaseline.sh (R12) — project hook, env-var gated.
-# ============================================================================
-spex_hash='{"tool_name":"Bash","tool_input":{"command":"bin/spex hash"}}'
-
-unset SPEX_REBASELINE
-assert_deny "$hooks_dir/check-spex-hash-rebaseline.sh" "$spex_hash" \
-  "spex-hash-bypasses-pipeline" "R12-default-denies"
-
-out="$(printf '%s' "$spex_hash" \
-  | SPEX_REBASELINE=1 "$hooks_dir/check-spex-hash-rebaseline.sh" 2>/dev/null)"
-[[ -z "$out" ]] || fail "R12-rebaseline-1" "SPEX_REBASELINE=1 should allow, got: $out"
-
-assert_allow "$hooks_dir/check-spex-hash-rebaseline.sh" \
-  '{"tool_name":"Bash","tool_input":{"command":"bin/spex diff"}}' \
-  "R12-allows-spex-diff"
-# Regression (env-prefix): VAR=value prefix must not bypass.
-assert_deny "$hooks_dir/check-spex-hash-rebaseline.sh" \
-  '{"tool_name":"Bash","tool_input":{"command":"FOO=1 bin/spex hash"}}' \
-  "spex-hash-bypasses-pipeline" "R12-denies-env-prefix"
 
 echo "ok"

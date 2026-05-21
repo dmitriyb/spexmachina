@@ -136,23 +136,19 @@ assert_allow "$hooks_dir/check-not-on-main.sh" \
   "R13-allows-status-bash"
 
 # --- R3: stale-origin -------------------------------------------------------
-# The current repo has .git/FETCH_HEAD; if its mtime is within TTL,
-# the hook allows. Force the stale path by setting TTL to 0.
-assert_deny "$hooks_dir/check-fetched-recent.sh" \
-  '{"tool_name":"Bash","tool_input":{"command":"git switch -c feature/new origin/main"}}' \
-  "stale-origin" "R3-stale-ttl0" \
-  2>/dev/null || true
-# That last assert ran with default TTL; the file may be fresh. Run
-# again with TTL=0 to force stale.
+# Force the stale path with a negative TTL: `age <= ttl` can never hold
+# when ttl is -1, so the hook always denies — deterministic regardless
+# of FETCH_HEAD mtime. (TTL=0 is not enough: a fetch in the same second
+# gives age 0, and 0 <= 0 would count as fresh.)
 out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git switch -c feature/new origin/main"}}' \
-  | SPEX_FETCH_TTL=0 "$hooks_dir/check-fetched-recent.sh" 2>/dev/null)"
+  | SPEX_FETCH_TTL=-1 "$hooks_dir/check-fetched-recent.sh" 2>/dev/null)"
 rule="$(echo "$out" | jq -r '.hookSpecificOutput.permissionDecisionReason' | jq -r '.rule // empty')"
 if [[ "$rule" != "stale-origin" ]]; then
-  fail "R3-ttl0" "want stale-origin, got '$rule'"
+  fail "R3-stale" "want stale-origin, got '$rule'"
 fi
-# SPEX_OFFLINE=1 must bypass.
+# SPEX_OFFLINE=1 must bypass even when stale.
 out="$(printf '%s' '{"tool_name":"Bash","tool_input":{"command":"git switch -c feature/new origin/main"}}' \
-  | SPEX_FETCH_TTL=0 SPEX_OFFLINE=1 "$hooks_dir/check-fetched-recent.sh" 2>/dev/null)"
+  | SPEX_FETCH_TTL=-1 SPEX_OFFLINE=1 "$hooks_dir/check-fetched-recent.sh" 2>/dev/null)"
 if [[ -n "$out" ]]; then
   fail "R3-offline-bypass" "SPEX_OFFLINE=1 should allow, got: $out"
 fi

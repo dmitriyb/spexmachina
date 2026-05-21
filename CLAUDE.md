@@ -132,10 +132,9 @@ restricted carries the restriction in its own frontmatter; `/review`
 carries no `deny-br-close` hook, and the committing skills carry no
 `deny-commit` hook.
 
-**Override env vars.** Two narrow overrides exist, both user-set:
-- `SPEX_REBASELINE=1` permits `spex hash` (R12 carve-out).
+**Override env vars.** One narrow override exists, user-set:
 - `SPEX_OFFLINE=1` skips R3's fetch-recency check.
-The agent must not set either; if the agent believes an override is
+The agent must not set it; if the agent believes an override is
 warranted, it asks the user.
 
 **Before opening a PR** that touches `.claude/settings.json`,

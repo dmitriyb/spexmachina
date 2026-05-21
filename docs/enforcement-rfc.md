@@ -99,7 +99,6 @@ escalate to the user. The human is the only override path.
 | R9 | `/spec`, `/propose`, `/converge`, `/spec-review`, `/spec-drift` must not commit | `feedback_skills_no_autocommit` | Prose + memory | **CC skill hook** (`deny-commit.sh` declared in the frontmatter of each non-committing skill) | `scripts/hooks/deny-commit.sh` | `skill-must-not-commit` |
 | R10 | `/fix`, `/review`, `/cleanup`, `/implement` *must* commit and push | skill docs | Prose | **No hook** — these skills simply do not declare a `deny-commit` frontmatter hook; commit is allowed by default | n/a | n/a |
 | R11 | Never use `git rebase -i` / `git add -i` (interactive) | operational | Prose | **CC project hook** (PreToolUse Bash matcher) | `scripts/hooks/block-interactive-git.sh` | `interactive-git-not-supported` |
-| R12 | Never run `spex hash` outside an explicit re-baseline | `feedback_spex_pipeline_not_hash` | Memory only | **CC project hook** (PreToolUse Bash on `spex hash *`; allow only if `SPEX_REBASELINE=1`) | `scripts/hooks/check-spex-hash-rebaseline.sh` | `spex-hash-bypasses-pipeline` |
 | R13 | Edit/Write/commit when `HEAD == main` | `feedback_check_branch_before_editing` + CLAUDE.md:37 | Memory only | **CC project hook** (PreToolUse on Edit, Write, Bash on `git commit *`) | `scripts/hooks/check-not-on-main.sh` | `editing-on-protected-branch` |
 | R14 | One skill per session — no skill-mixing | user requirement (2026-05-20) | n/a (new) | **CC skill hook** (`assert-single-skill.sh` declared in *every* skill's frontmatter) | `scripts/hooks/assert-single-skill.sh` | `skill-mixing-detected` |
 
@@ -133,16 +132,16 @@ Layer choice rationale:
   run regardless of who drove the action (model, user, CI, another
   tool). Once `core.hooksPath` is set, hooks are active in every clone.
 - **CC project hooks** for tool-shape rules that apply universally
-  (`sqlite3 .beads/`, `--no-gpg-sign`, Edit on main, `spex hash`).
+  (`sqlite3 .beads/`, `--no-gpg-sign`, Edit on main).
 - **CC skill hooks** for rules that are *per-skill*: R6 (`br close`
   belongs to `/review` alone) and R9 (`/spec` and the other authoring
   skills must not commit). The skill that should be restricted carries
   the restriction in its own frontmatter.
 
-Note: only R3, R4, R12 consult runtime *state* beyond the tool input
-(fetch-recency, branch name, the `SPEX_REBASELINE` env var). R6 and R9
-no longer consult any state — frontmatter scoping replaces what the
-marker file used to do. R7, R8, R11, R13 are pure tool-shape matches.
+Note: only R3, R4 consult runtime *state* beyond the tool input
+(fetch-recency, branch name). R6 and R9 no longer consult any state —
+frontmatter scoping replaces what the marker file used to do. R7, R8,
+R11, R13 are pure tool-shape matches.
 
 ## 4. Halt-and-recover protocol
 
@@ -326,19 +325,15 @@ A rule MAY introduce its own narrow env-var override only if all of:
    never the agent). The agent must not set the override; if it
    believes the override is warranted, it asks the user.
 
-Currently two rules qualify under this carve-out:
+Currently one rule qualifies under this carve-out:
 
-- **R12 `SPEX_REBASELINE=1`** — the re-baseline operation is legitimate
-  when the TreeBuilder keying scheme changes (see commit
-  `b847f45 spec: regenerate snapshot baseline against current
-  TreeBuilder keying`). Without the marker, `spex hash` is blocked.
 - **R3 `SPEX_OFFLINE=1`** — in offline contexts (no network), the
   fetch-recency check is meaningless. The user sets this when working
   intentionally offline. Without it, the hook treats stale
   `FETCH_HEAD` as a stale-origin block (which is the desired default).
 
 Future rules adding their own override must update this section and
-justify the addition. Two overrides today, period.
+justify the addition. One override today, period.
 
 ## 5. Logging contract
 
@@ -380,9 +375,9 @@ uses helpers from `scripts/hooks/lib/emit-halt.sh`:
   inside quoted prose while still matching a real command whose later
   argument is quoted — and a real command behind a `GIT_DIR=… ` /
   `env FOO=1 ` prefix. Shared EREs (`SPEX_ERE_GIT_COMMIT`,
-  `SPEX_ERE_BR_CLOSE`, `SPEX_ERE_SPEX_HASH`, `SPEX_ERE_BRANCH_CREATE`)
-  tolerate path prefixes and git global options so a rule cannot be
-  bypassed by trivial respelling.
+  `SPEX_ERE_BR_CLOSE`, `SPEX_ERE_BRANCH_CREATE`) tolerate path prefixes
+  and git global options so a rule cannot be bypassed by trivial
+  respelling.
 
 ### 6.1 CC skill hook: block `br close` outside `/review`
 
@@ -604,9 +599,7 @@ that skill's file, not in cross-cutting memory or CLAUDE.md:
 - **`feedback_spex_pipeline_not_hash.md`** — rule: never run `spex hash`
   to "fix" a non-empty diff; it bypasses impact/emit/ingest and orphans
   bead-map records. → **Move into `/converge` SKILL.md and `/review`
-  SKILL.md** (the closing-bead context). Also enforceable as a CC hook
-  blocking `spex hash` outside an explicit re-baseline marker — captured
-  as R12 below.
+  SKILL.md** (the closing-bead context).
 - **`feedback_spex_pipeline_errors_are_signal.md`** — rule: spex pipeline
   errors are correctness signals; never bypass with manual workarounds
   (especially manual `br close`). → **Move into `/converge` SKILL.md.**
@@ -765,9 +758,8 @@ block in all 9 SKILL.md files. Phase 2 (Commit 9) deletes all of it.
 ### Commit 5 — CC hooks: skill-aware blocks (marker-based) — *refactored in Phase 2*
 
 Shipped `check-br-close-skill.sh` and `check-skill-commit-allowed.sh`
-(marker-consuming) plus `check-spex-hash-rebaseline.sh` (R12, env-var,
-unaffected by Phase 2). Phase 2 replaces the first two with
-context-free frontmatter-hook scripts.
+(marker-consuming). Phase 2 replaces both with context-free
+frontmatter-hook scripts.
 
 ### Commit 6 — Memory migration
 
@@ -1012,7 +1004,7 @@ The catalog now maps every row to either a CC hook (PreToolUse running
 a script) or a git hook (pre-commit, post-commit, pre-push). Both run
 without model cooperation, both return structured JSON per §4.1.
 
-The cost: rules that genuinely depend on skill context (R6, R9, R12)
+The cost: rules that genuinely depend on skill context (R6, R9)
 need a way to know which skill is active. That's §9.1 — a real spike
 with a tractable resolution path, not a "model is supposed to remember"
 hope.

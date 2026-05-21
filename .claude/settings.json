@@ -9,8 +9,7 @@
           { "type": "command", "command": "scripts/hooks/block-beads-db-read.sh" },
           { "type": "command", "command": "scripts/hooks/block-interactive-git.sh" },
           { "type": "command", "command": "scripts/hooks/check-fetched-recent.sh" },
-          { "type": "command", "command": "scripts/hooks/check-branch-from-origin-main.sh" },
-          { "type": "command", "command": "scripts/hooks/check-spex-hash-rebaseline.sh" }
+          { "type": "command", "command": "scripts/hooks/check-branch-from-origin-main.sh" }
         ]
       },
       {

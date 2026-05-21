@@ -82,7 +82,7 @@ SPEX_CMD_BOUNDARY='(^|[;&|`(])[[:space:]]*(env[[:space:]]+)?([A-Za-z_][A-Za-z0-9
 # cmd_matches <full-command> <command-ere> — true if <command-ere>
 # occurs at a command-start boundary, after heredoc bodies are
 # stripped. This is the matcher for rules that key on a *command*
-# (git commit, br close, spex hash, sqlite3 <path>, ...): it rejects
+# (git commit, br close, sqlite3 <path>, ...): it rejects
 # the command word appearing inside quoted prose while still seeing it
 # when it is a real command (even if a later argument is quoted).
 cmd_matches() {
@@ -97,10 +97,9 @@ cmd_matches() {
 # rejecting `git checkout commit` (a non-option token before `commit`).
 SPEX_ERE_GIT_COMMIT='git[[:space:]]+((-[cC][[:space:]]+[^-][^[:space:]]*|-[^[:space:]]+)[[:space:]]+)*commit([[:space:]]|$)'
 
-# BR_CLOSE / SPEX_HASH tolerate a path prefix (`bin/br`, `/usr/bin/br`,
-# `./bin/spex`) so a path-qualified invocation cannot bypass the rule.
+# BR_CLOSE tolerates a path prefix (`bin/br`, `/usr/bin/br`) so a
+# path-qualified invocation cannot bypass the rule.
 SPEX_ERE_BR_CLOSE='([^[:space:]]*/)?br[[:space:]]+close([[:space:]]|$)'
-SPEX_ERE_SPEX_HASH='([^[:space:]]*/)?spex[[:space:]]+hash([[:space:]]|$)'
 
 # BRANCH_CREATE matches the branch-CREATION forms only — `git branch`
 # with no name (a listing) is not creation and is not matched. Handles
