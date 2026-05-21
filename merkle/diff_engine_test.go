@@ -36,6 +36,47 @@ func TestREQ4_Diff_NoSnapshot_AllAdded(t *testing.T) {
 	}
 }
 
+func TestREQ4_Diff_BootstrapEmptyTreeBaseline(t *testing.T) {
+	specDir := setupSpecDir(t)
+	current := mustBuildTree(t, specDir)
+
+	// Bootstrap path: spex diff calls SnapshotStore.Load, which returns
+	// EmptyTree() (a non-nil project root with no children) when
+	// spec/.snapshot.json is absent. DiffEngine must treat that empty
+	// baseline the same as a fresh project and report every current leaf
+	// as "added" — see arch_diff_engine.md "Bootstrap behavior".
+	changes := Diff(current, EmptyTree())
+
+	if len(changes) == 0 {
+		t.Fatal("expected every leaf reported as added, got no changes")
+	}
+	for _, c := range changes {
+		if c.Type != Added {
+			t.Errorf("expected Added for %s, got %s", c.Path, c.Type)
+		}
+		if c.OldHash != "" {
+			t.Errorf("expected empty OldHash for added %s, got %q", c.Path, c.OldHash)
+		}
+		if c.NewHash == "" {
+			t.Errorf("expected non-empty NewHash for added %s", c.Path)
+		}
+	}
+
+	// One change per current leaf — nothing dropped, nothing synthesized.
+	leaves := make(map[string]leafInfo)
+	flattenLeaves(leaves, current)
+	if len(changes) != len(leaves) {
+		t.Errorf("expected %d added changes (one per leaf), got %d", len(leaves), len(changes))
+	}
+
+	// The EmptyTree() baseline and the nil baseline must agree: bootstrap
+	// and the no-snapshot path share the same DiffEngine call.
+	if nilChanges := Diff(current, nil); len(nilChanges) != len(changes) {
+		t.Errorf("EmptyTree() baseline (%d changes) disagrees with nil baseline (%d changes)",
+			len(changes), len(nilChanges))
+	}
+}
+
 func TestREQ4_Diff_IdenticalTrees_NoChanges(t *testing.T) {
 	specDir := setupSpecDir(t)
 	current, err := BuildTree(specDir)
