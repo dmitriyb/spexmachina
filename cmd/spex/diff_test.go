@@ -455,8 +455,11 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
 
 	// Create initial snapshot.
-	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -493,8 +496,11 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
 
-	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -518,8 +524,11 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
 
-	_, err := runSpex(t, "hash", "--spec-dir", specDir)
+	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 

@@ -41,6 +41,7 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 - When you need the **current** state of any committed artifact (bead statuses, schemas, source, TODO markers, snapshots), run `git rev-parse --abbrev-ref HEAD` first. If you are not on `main`, read explicitly from `origin/main` via `git show origin/main:<path>` or a worktree at `origin/main`. The working tree of a stale branch will give wrong answers to "current state" questions.
 - For rebase-risk assessment, read `git log <base>..<branch> --oneline` and `git show --stat <sha>` per commit. Do **not** judge by `git diff <base>..<branch> --stat` — that includes everything `main` has done since the branch was cut and wildly overstates conflict surface.
 - Commits must be SSH-signed. Never bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`). To verify a commit is actually signed, inspect the raw object for a `gpgsig` block: `git cat-file -p <sha>`. Do NOT trust `git log --show-signature` or `%G?` — both report `N`/"No signature" on correctly-signed commits when `gpg.ssh.allowedSignersFile` is not configured locally. That is a verification-side gap, not a signing failure.
+- Commit messages must not exceed two full sentences; state what changed and, only if non-obvious, why.
 
 ## Issue Tracking
 
@@ -132,10 +133,9 @@ restricted carries the restriction in its own frontmatter; `/review`
 carries no `deny-br-close` hook, and the committing skills carry no
 `deny-commit` hook.
 
-**Override env vars.** Two narrow overrides exist, both user-set:
-- `SPEX_REBASELINE=1` permits `spex hash` (R12 carve-out).
+**Override env vars.** One narrow override exists, user-set:
 - `SPEX_OFFLINE=1` skips R3's fetch-recency check.
-The agent must not set either; if the agent believes an override is
+The agent must not set it; if the agent believes an override is
 warranted, it asks the user.
 
 **Before opening a PR** that touches `.claude/settings.json`,

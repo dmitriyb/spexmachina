@@ -249,7 +249,6 @@ func runSpexWithStderr(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
 	rootCmd := cli.NewRootCmd()
 	rootCmd.AddCommand(
-		newHashCmd(),
 		newDiffCmd(),
 		newValidateCmd(),
 		newImpactCmd(),
