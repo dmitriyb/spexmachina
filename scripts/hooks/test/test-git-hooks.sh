@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# test-git-hooks.sh — verify pre-commit, post-commit, pre-push hooks
-# fire correctly on a throwaway repo. The hooks self-locate their lib
-# via their own script path, so pointing core.hooksPath at the real
-# scripts/git-hooks dir is enough.
+# test-git-hooks.sh — verify pre-commit, post-commit, pre-push, and
+# commit-msg hooks fire correctly on a throwaway repo. The hooks
+# self-locate their lib via their own script path, so pointing
+# core.hooksPath at the real scripts/git-hooks dir is enough.
 
 set -euo pipefail
 
@@ -79,6 +79,42 @@ output="$(echo "$push_input" | "$repo_root/scripts/git-hooks/pre-push" 2>&1 || t
 if ! echo "$output" | grep -q "no-direct-push-to-main"; then
   echo "FAIL test6: pre-push DELETE of refs/heads/main should be blocked" >&2
   echo "actual output: $output" >&2
+  exit 1
+fi
+
+# Test 7 (R15): commit-msg accepts an under-limit message — exit 0.
+echo "A concise commit message under the limit." > msg-ok
+if ! "$repo_root/scripts/git-hooks/commit-msg" msg-ok >/dev/null 2>&1; then
+  echo "FAIL test7: commit-msg should accept an under-limit message" >&2
+  exit 1
+fi
+
+# Test 8 (R15): commit-msg rejects an over-limit message — exit 1 and
+# emit rule commit-message-too-long.
+head -c 600 < /dev/zero | tr '\0' 'x' > msg-long
+output="$("$repo_root/scripts/git-hooks/commit-msg" msg-long 2>&1 || true)"
+if "$repo_root/scripts/git-hooks/commit-msg" msg-long >/dev/null 2>&1; then
+  echo "FAIL test8: commit-msg should reject an over-limit message" >&2
+  exit 1
+fi
+if ! echo "$output" | grep -q "commit-message-too-long"; then
+  echo "FAIL test8: over-limit message should emit commit-message-too-long" >&2
+  echo "actual output: $output" >&2
+  exit 1
+fi
+
+# Test 9 (R15): # comment lines and Co-Authored-By:/Signed-off-by:
+# trailers are excluded from the count. Prose is short, but a 600-char
+# comment line plus trailers would blow the limit if counted — the
+# message must still pass.
+{
+  echo "A concise commit message under the limit."
+  printf '# '; head -c 600 < /dev/zero | tr '\0' 'x'; echo
+  echo "Co-Authored-By: Someone <someone@example.com>"
+  echo "Signed-off-by: Someone <someone@example.com>"
+} > msg-trailers
+if ! "$repo_root/scripts/git-hooks/commit-msg" msg-trailers >/dev/null 2>&1; then
+  echo "FAIL test9: comment lines and trailers must be excluded from the count" >&2
   exit 1
 fi
 
