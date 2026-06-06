@@ -542,6 +542,49 @@ func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
 	}
 }
 
+// TestREQ8_FindingsAreTypedErrors locks the output-semantics clarification from
+// the 2026-04-27-pipeline-cleanup-and-refresh-mode proposal: CompletenessChecker
+// findings are errors, not warnings. Per arch_completeness_checker.md the return
+// value is []DiffError, and per arch_diff_command.md each entry's `type` is a
+// specific error kind (e.g. incomplete_change) — never empty and never an
+// advisory "warning" label. This guards against any regression that would let a
+// finding leak out without a typed error kind or message.
+func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
+	fx := setupCompletenessSpecDir(t)
+
+	// Drive every incomplete-change branch so the assertion covers all error
+	// producers, not just one path.
+	changes := []ClassifiedChange{
+		reqChange(fx.req1Hash, fx.alphaHash, Modified), // modified req, component unchanged
+		reqChange(fx.req99Hash, fx.alphaHash, Added),   // added req, no implementor
+		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // removed req, still referenced
+		reqChange(fx.projReq5Key, "", Modified),        // project req, no derivation
+		{ // meta-only change, no component content changed
+			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Impact: Structural,
+		},
+	}
+
+	// The return type is []DiffError by construction; binding it here makes the
+	// "findings are DiffError, not a warning type" contract explicit at compile time.
+	var errs []DiffError = CheckCompleteness(changes, fx.specDir)
+	if len(errs) == 0 {
+		t.Fatal("expected at least one DiffError across the incomplete-change branches, got 0")
+	}
+
+	for i, e := range errs {
+		if e.Type == "" {
+			t.Errorf("errs[%d]: error kind (Type) is empty; findings must carry a specific error kind, not an advisory blank/warning (message: %q)", i, e.Message)
+		}
+		if e.Type != "incomplete_change" {
+			t.Errorf("errs[%d]: Type = %q, want the documented error kind %q", i, e.Type, "incomplete_change")
+		}
+		if e.Message == "" {
+			t.Errorf("errs[%d]: Message is empty; every error must explain the incomplete edit", i)
+		}
+	}
+}
+
 // collectIdentityHashes returns the set of every raw identity hash stored in
 // project.json and every module.json — the values any Path/Related field is
 // allowed to take.
