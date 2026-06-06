@@ -542,6 +542,64 @@ func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
 	}
 }
 
+// TestREQ8_FindingsAreTypedErrors locks the output-semantics clarification from
+// the 2026-04-27-pipeline-cleanup-and-refresh-mode proposal: CompletenessChecker
+// findings are errors, not warnings. Per arch_completeness_checker.md the return
+// value is []DiffError, and per arch_diff_command.md each entry's `type` is a
+// specific error kind (e.g. incomplete_change) — never empty and never an
+// advisory "warning" label. This guards against any regression that would let a
+// finding leak out without a typed error kind or message.
+func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
+	fx := setupCompletenessSpecDir(t)
+
+	// assertTyped verifies the contract on a set of errors: every finding is a
+	// typed incomplete_change error with a non-empty message, never a blank or
+	// advisory "warning" label.
+	assertTyped := func(t *testing.T, branch string, errs []DiffError) {
+		t.Helper()
+		if len(errs) == 0 {
+			t.Fatalf("%s: expected at least one DiffError, got 0", branch)
+		}
+		for i, e := range errs {
+			if e.Type == "" {
+				t.Errorf("%s: errs[%d]: error kind (Type) is empty; findings must carry a specific error kind, not an advisory blank/warning (message: %q)", branch, i, e.Message)
+			}
+			if e.Type != "incomplete_change" {
+				t.Errorf("%s: errs[%d]: Type = %q, want the documented error kind %q", branch, i, e.Type, "incomplete_change")
+			}
+			if e.Message == "" {
+				t.Errorf("%s: errs[%d]: Message is empty; every error must explain the incomplete edit", branch, i)
+			}
+		}
+	}
+
+	// Drive the requirement-leaf branches (modified, added-orphan, removed,
+	// project-no-derivation). The return type is []DiffError by construction;
+	// binding it here makes the "findings are DiffError, not a warning type"
+	// contract explicit at compile time.
+	var reqErrs []DiffError = CheckCompleteness([]ClassifiedChange{
+		reqChange(fx.req1Hash, fx.alphaHash, Modified), // modified req, component unchanged
+		reqChange(fx.req99Hash, fx.alphaHash, Added),   // added req, no implementor
+		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // removed req, still referenced
+		reqChange(fx.projReq5Key, "", Modified),        // project req, no derivation
+	}, fx.specDir)
+	assertTyped(t, "requirement branches", reqErrs)
+
+	// Drive the meta/component-edge branch in isolation. Per
+	// impl_completeness_algorithm.md step 9 it only fires when no requirement
+	// leaf in the same module changed, so it must run on its own module-meta
+	// change rather than alongside the alpha requirement changes above (which
+	// would suppress it). This is the only test that locks the typed-error
+	// invariant for this branch.
+	var metaErrs []DiffError = CheckCompleteness([]ClassifiedChange{
+		{
+			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Impact: Structural,
+		},
+	}, fx.specDir)
+	assertTyped(t, "meta/component-edge branch", metaErrs)
+}
+
 // collectIdentityHashes returns the set of every raw identity hash stored in
 // project.json and every module.json — the values any Path/Related field is
 // allowed to take.
