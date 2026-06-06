@@ -1,16 +1,50 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// runDiff executes `spex diff` with the given args and returns stdout, stderr,
+// and the process exit code, mirroring main.go's exit-code and stderr
+// handling: the exit code is 0 on success, the error's ExitCode() when it
+// implements that interface, or 1 otherwise. The returned error message is
+// written to stderr exactly as main.go does, so E1/E2 stderr assertions hold.
+func runDiff(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	rootCmd := cli.NewRootCmd()
+	rootCmd.AddCommand(newDiffCmd())
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(append([]string{"diff"}, args...))
+
+	var execErr error
+	stdout = captureStdout(t, func() {
+		execErr = rootCmd.Execute()
+	})
+
+	if execErr != nil {
+		fmt.Fprintln(errBuf, execErr)
+		exitCode = 1
+		var ec interface{ ExitCode() int }
+		if errors.As(execErr, &ec) {
+			exitCode = ec.ExitCode()
+		}
+	}
+	return stdout, errBuf.String(), exitCode
+}
 
 // setupDiffTestSpec creates a spec directory where every entity has a distinct
 // identity hash so that per-leaf merkle keys do not collide. Returns the
@@ -369,6 +403,25 @@ func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
 	}
 }
 
+// E2: a corrupted snapshot is an IO/parse failure — exit 1, and stderr names
+// the offending snapshot path. Distinct from the exit-2 errors-array case.
+func TestFR4_E2_DiffCommand_CorruptedSnapshot(t *testing.T) {
+	specDir := setupTestSpec(t)
+
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := os.WriteFile(snapshotPath, []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, exitCode := runDiff(t, "--spec-dir", specDir)
+	if exitCode != 1 {
+		t.Fatalf("want exit 1 on corrupted snapshot, got %d", exitCode)
+	}
+	if !strings.Contains(stderr, snapshotPath) {
+		t.Fatalf("stderr should name the snapshot path %q, got: %s", snapshotPath, stderr)
+	}
+}
+
 // setupTestSpecWithRequirements creates a spec fixture with requirements and
 // implements edges so completeness checking can detect incomplete changes.
 // Each entity uses a distinct identity hash so that merkle leaf keys do not
@@ -468,9 +521,9 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 	alphaDir := filepath.Join(specDir, "alpha")
 	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
 
-	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 2 {
+		t.Fatalf("want exit code 2 when errors array is non-empty, got %d", exitCode)
 	}
 
 	var result diffOutput
@@ -508,13 +561,16 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 	alphaDir := filepath.Join(specDir, "alpha")
 	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
 
-	out, err := runSpex(t, "diff", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
+	out, _, exitCode := runDiff(t, "--spec-dir", specDir)
+	if exitCode != 2 {
+		t.Fatalf("want exit code 2 when errors array is non-empty, got %d", exitCode)
 	}
 
-	if !strings.Contains(out, "warning:") {
-		t.Fatalf("human output should contain warning for completeness errors, got: %s", out)
+	if !strings.Contains(out, "error:") {
+		t.Fatalf("human output should prefix completeness findings with error:, got: %s", out)
+	}
+	if strings.Contains(out, "warning") {
+		t.Fatalf("human output must not use warning terminology for errors, got: %s", out)
 	}
 	if !strings.Contains(out, "incomplete_change") {
 		t.Fatalf("human output should contain error type, got: %s", out)
@@ -602,5 +658,164 @@ func TestNFR6_DiffCommand_Deterministic(t *testing.T) {
 		if r1.Changes[i].Type != r2.Changes[i].Type {
 			t.Fatalf("determinism: change %d type differs: %s vs %s", i, r1.Changes[i].Type, r2.Changes[i].Type)
 		}
+	}
+}
+
+// snapshotIncompleteSpec writes a fresh snapshot for the requirements fixture,
+// then mutates a requirement leaf without touching its implementing component
+// so the next diff carries a CompletenessChecker error.
+func snapshotIncompleteSpec(t *testing.T) (specDir string) {
+	t.Helper()
+	specDir = setupTestSpecWithRequirements(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	alphaDir := filepath.Join(specDir, "alpha")
+	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
+	return specDir
+}
+
+// TestFR8_E5_DiffCommand_ExitCodeSemantics locks the exit-code contract from
+// arch_diff_command.md: changes alone exit 0, no changes exit 0, and any
+// non-empty errors array exits 2 while still emitting the full diff on stdout.
+func TestFR8_E5_DiffCommand_ExitCodeSemantics(t *testing.T) {
+	t.Run("changes but no errors exits 0", func(t *testing.T) {
+		specDir, _, _ := setupDiffTestSpec(t)
+		tree, err := merkle.BuildTree(specDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		implPath := filepath.Join(specDir, "alpha", "impl_comp1.md")
+		if err := os.WriteFile(implPath, []byte("# Changed implementation\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		stdout, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+		if exitCode != 0 {
+			t.Fatalf("want exit 0 when there are changes but no errors, got %d", exitCode)
+		}
+		var result diffOutput
+		if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+			t.Fatalf("invalid JSON: %v\noutput: %s", err, stdout)
+		}
+		if result.Summary.Total == 0 {
+			t.Fatal("expected the impl-only change to be reported")
+		}
+		if len(result.Errors) != 0 {
+			t.Fatalf("expected no errors for an impl-only change, got: %+v", result.Errors)
+		}
+	})
+
+	t.Run("no changes exits 0", func(t *testing.T) {
+		specDir := setupTestSpec(t)
+		tree, err := merkle.BuildTree(specDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+			t.Fatal(err)
+		}
+
+		_, _, exitCode := runDiff(t, "--spec-dir", specDir)
+		if exitCode != 0 {
+			t.Fatalf("want exit 0 when there are no changes, got %d", exitCode)
+		}
+	})
+
+	t.Run("non-empty errors exits 2 with full diff on stdout", func(t *testing.T) {
+		specDir := snapshotIncompleteSpec(t)
+
+		stdout, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+		if exitCode != 2 {
+			t.Fatalf("want exit 2 when errors array is non-empty, got %d", exitCode)
+		}
+		var result diffOutput
+		if err := json.Unmarshal([]byte(stdout), &result); err != nil {
+			t.Fatalf("full diff must still be valid JSON on stdout: %v\noutput: %s", err, stdout)
+		}
+		if len(result.Changes) == 0 {
+			t.Fatal("full diff (changes) must still be emitted on stdout under exit 2")
+		}
+		if len(result.Errors) == 0 {
+			t.Fatal("full diff (errors) must still be emitted on stdout under exit 2")
+		}
+	})
+
+	t.Run("text output renders findings under error heading", func(t *testing.T) {
+		specDir := snapshotIncompleteSpec(t)
+
+		stdout, _, exitCode := runDiff(t, "--spec-dir", specDir)
+		if exitCode != 2 {
+			t.Fatalf("want exit 2 for text output with errors, got %d", exitCode)
+		}
+		if !strings.Contains(stdout, "error(s):") {
+			t.Fatalf("text output should render findings under an error(s): heading, got: %s", stdout)
+		}
+		if !strings.Contains(stdout, "error:") {
+			t.Fatalf("text output should prefix each finding line with error:, got: %s", stdout)
+		}
+		if strings.Contains(stdout, "warning") {
+			t.Fatalf("text output must never use warning terminology, got: %s", stdout)
+		}
+	})
+}
+
+// TestFR8_E6_DiffCommand_ErrorTerminologyMatch locks the terminology contract:
+// JSON exposes a top-level errors array (never warnings) with type/message/
+// path/related entries, and the text output labels the same findings error:,
+// never warning:.
+func TestFR8_E6_DiffCommand_ErrorTerminologyMatch(t *testing.T) {
+	specDir := snapshotIncompleteSpec(t)
+
+	jsonOut, _, jsonExit := runDiff(t, "--json", "--spec-dir", specDir)
+	if jsonExit != 2 {
+		t.Fatalf("want exit 2 for JSON run with errors, got %d", jsonExit)
+	}
+
+	// Raw-string check: the JSON keys themselves must not drift to warnings.
+	if strings.Contains(jsonOut, "\"warnings\"") || strings.Contains(jsonOut, "warning") {
+		t.Fatalf("JSON output must not contain warning terminology, got: %s", jsonOut)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(jsonOut), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, jsonOut)
+	}
+	if len(result.Errors) == 0 {
+		t.Fatal("expected a non-empty errors array")
+	}
+	for _, e := range result.Errors {
+		if e.Type == "" {
+			t.Fatalf("each error entry must carry a type, got: %+v", e)
+		}
+		if e.Message == "" {
+			t.Fatalf("each error entry must carry a message, got: %+v", e)
+		}
+		if e.Path == "" {
+			t.Fatalf("each error entry must carry a path, got: %+v", e)
+		}
+		if e.Related == nil {
+			t.Fatalf("each error entry must carry a related field, got: %+v", e)
+		}
+	}
+
+	textOut, _, textExit := runDiff(t, "--spec-dir", specDir)
+	if textExit != 2 {
+		t.Fatalf("want exit 2 for text run with errors, got %d", textExit)
+	}
+	if !strings.Contains(textOut, "error:") {
+		t.Fatalf("text output should label findings with error:, got: %s", textOut)
+	}
+	if strings.Contains(textOut, "warning") {
+		t.Fatalf("text output must not contain warning terminology, got: %s", textOut)
 	}
 }

@@ -52,11 +52,37 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		return printDiffJSON(classified, completenessErrors)
+		if err := printDiffJSON(classified, completenessErrors); err != nil {
+			return err
+		}
+	} else {
+		printDiffSummary(classified, completenessErrors)
 	}
-	printDiffSummary(classified, completenessErrors)
+
+	// A non-empty errors array is a pipeline halt signal: the full diff is
+	// already on stdout, but the non-zero exit tells callers not to pipe this
+	// into `spex impact`. See arch_diff_command.md "Exit codes".
+	if len(completenessErrors) > 0 {
+		return &diffError{
+			code: 2,
+			err:  fmt.Errorf("diff: %d completeness error(s) found", len(completenessErrors)),
+		}
+	}
 	return nil
 }
+
+// diffError carries a process exit code alongside the wrapped error. main
+// inspects the ExitCode interface to honour the codes documented in
+// arch_diff_command.md (1 for IO/parse failure, 2 for a non-empty errors
+// array).
+type diffError struct {
+	code int
+	err  error
+}
+
+func (e *diffError) Error() string { return e.err.Error() }
+func (e *diffError) Unwrap() error { return e.err }
+func (e *diffError) ExitCode() int { return e.code }
 
 // diffOutput is the JSON representation of the diff command result.
 type diffOutput struct {
@@ -148,9 +174,9 @@ func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.Diff
 	}
 
 	if len(errors) > 0 {
-		fmt.Printf("\n%d warning(s):\n", len(errors))
+		fmt.Printf("\n%d error(s):\n", len(errors))
 		for _, e := range errors {
-			fmt.Printf("  warning: [%s] %s\n", e.Type, e.Message)
+			fmt.Printf("  error: [%s] %s\n", e.Type, e.Message)
 			if e.Path != "" {
 				fmt.Printf("    path: %s\n", e.Path)
 			}
