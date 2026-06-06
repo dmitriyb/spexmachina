@@ -45,6 +45,12 @@ Run `ssh-add -l` and verify at least one key is loaded. If no keys are found (or
 
 This ensures all commits will be signed. Do NOT bypass signing with `--no-gpg-sign` or `-c commit.gpgsign=false`.
 
+## Already-satisfied replacement path
+
+A doc-only edit to a component's `arch_*`/`impl_*` leaf still changes its hash, so the pipeline emits a replacement bead with zero code work. If the implementation and tests already exist on `origin/main` and satisfy the current spec, take this path instead of the TDD workflow. Verify first: the spec delta is non-behavioral (`git show <spec-commit> -- <arch_file>`) and `go build/vet/test` pass unchanged. Do not fabricate a diff; do not `br close` (R6 — `/review` closes).
+
+Then claim and branch as below, commit the bead-state change (the only diff), and open a PR whose body explains why it should be closed: delivering commit, the non-behavioral spec delta, and verification run. `/review` re-checks and closes.
+
 ## Workflow (TDD)
 
 1. Read the bead fully. Understand acceptance criteria before writing code.
