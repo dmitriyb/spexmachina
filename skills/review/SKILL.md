@@ -65,6 +65,8 @@ Produce a `result` of either `CLEAN` (nothing to flag) or `ISSUES` (one or more 
 
 **If `mode = REVIEW`:** examine the diff against the bead and spec. Every check below must pass for `result = CLEAN`.
 
+**Already-satisfied replacement:** if the diff is bead-state-only (+ optional skill/doc), the diff-anchored checks below don't apply — there's no implementing code, tests, or shipped spec change in the diff to check. Verify against `origin/main` instead: the PR body's delivering commit is an ancestor and satisfies the requirement, the triggering spec delta is non-behavioral, `go build/vet/test` pass, and the cross-bead scope guard holds. All four → `CLEAN + REVIEW → close`.
+
 1. **Spec traceability**: code maps to bead requirements, no unrelated changes.
 2. **Spec hygiene** (blocker): the bead's spec leaves (`arch_*.md`, `impl_*.md`, `test_*.md` resolved via `spex map context`) must match the implementation that ships in this PR. Stale prose is a blocker, not a follow-up — list every offender as an inline comment and reject. Common drift to look for:
    - `impl_*.md` referencing methods or types that no longer exist (e.g. an old `Foo.Bar()` after a struct refactor).
