@@ -36,13 +36,13 @@ merkle diff                bead metadata        mapping file
 
 ## Pipeline Position
 
-Impact sits between merkle diff and apply:
+Impact sits between merkle diff and the emit → adapter → ingest tail:
 
 ```
-spex validate → spex hash → spex diff → spex impact → spex apply
+spex validate → spex diff → spex impact → spex emit → adapter → spex ingest
 ```
 
-The impact report is the decision document — it shows what will happen before `apply` executes it. This supports the supervised spec change workflow: review the impact report, then approve apply.
+The impact report is the decision document — it shows what will happen before `spex emit` turns it into a changeset and the adapter executes it. This supports the supervised spec change workflow: review the impact report, then approve the emit → adapter run.
 
 ## Data Shapes
 
@@ -79,7 +79,7 @@ that a dedicated data_flow task bead is produced.
   - node_type: string enum — `component` | `data_flow` | `test_section`
     (impl_section is never an action target)
   - spec_node_id: string, 12-char hex
-  - bead_id: string — target bead (create: empty until apply; obsolete: existing)
+  - bead_id: string — target bead (create: empty until the adapter run; obsolete: existing)
   - dep_bead_ids: list of string — resolved spec-graph dependencies
     (uses and requires_module → current open bead IDs); populated on `create`
     actions only
@@ -90,18 +90,18 @@ Gating rules applied by ActionClassifier:
 
 | node_type | produce bead? |
 |-----------|---------------|
-| module | yes (via proposal epic creation, handled by apply) |
+| module | yes (via proposal epic creation, handled by emit) |
 | component | yes (feature) |
 | data_flow | yes (task) |
 | test_section, len(describes) >= 2 | yes (task) |
 | test_section, len(describes) == 1 | no (bundled with that component's feature bead) |
 | impl_section | no |
 
-### ReportGenerator → downstream (apply)
+### ReportGenerator → downstream (emit)
 
 - ImpactReport:
-  - proposal: string — proposal reference (from register/apply flag)
+  - proposal: string — proposal reference (from the register/emit flag)
   - actions: list of Action
   - generated_at: string, ISO-8601 UTC timestamp
 
-Apply consumes this shape as its input.
+Emit consumes this shape as its input.

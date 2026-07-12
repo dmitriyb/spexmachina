@@ -3,6 +3,7 @@ package emit
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -468,6 +469,67 @@ func TestBuild_CleanupOpShape(t *testing.T) {
 	}
 }
 
+// TestBuild_BodyLinksSpecFiles covers the impl spec's "Title and Body"
+// contract: a create op's body is a markdown blob linking the node's spec
+// files (content leaf + module.json), which the adapter passes through to
+// the tracker's description field.
+func TestBuild_BodyLinksSpecFiles(t *testing.T) {
+	env := newBuilderEnv()
+	env.graph.paths["c1"] = NodePaths{
+		Content: "spec/emit/arch_foo.md",
+		Module:  "spec/emit/module.json",
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("c1", "emit", "Foo", nil),
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	op := findOp(t, cs.Ops, "c1")
+	if !strings.Contains(op.Body, "spec/emit/arch_foo.md") {
+		t.Errorf("body must link the content leaf, got %q", op.Body)
+	}
+	if !strings.Contains(op.Body, "spec/emit/module.json") {
+		t.Errorf("body must link module.json, got %q", op.Body)
+	}
+}
+
+// TestBuild_BodyEmptyWithoutSpecPaths pins the two empty-body cases: the
+// proposal epic (no on-disk content leaf) and cleanup ops (body empty per
+// arch_changeset_builder.md "Cleanup op shape"), plus creates whose node
+// is unknown to the spec graph.
+func TestBuild_BodyEmptyWithoutSpecPaths(t *testing.T) {
+	env := newBuilderEnv()
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("nopath", "m", "X", nil),
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "Y",
+				NodeType:   "component",
+				SpecNodeID: "cleanup1",
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: m/Y",
+			},
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	for _, id := range []string{"p", "nopath", "cleanup1"} {
+		if op := findOp(t, cs.Ops, id); op.Body != "" {
+			t.Errorf("op %s: want empty body, got %q", id, op.Body)
+		}
+	}
+}
+
 // TestBuild_CleanupDoesNotAdvanceCursor covers the spec scenario:
 // "Cursor non-advancement: build a changeset containing one cleanup
 // create AND one fresh component create. Assert the fresh create's
@@ -746,3 +808,217 @@ func TestBuild_OpFieldOrderInJSON(t *testing.T) {
 	}
 }
 
+
+// opIndex returns the position of the op targeting specNodeID, or -1.
+func opIndex(ops []Op, specNodeID string) int {
+	for i, op := range ops {
+		if op.SpecNodeID == specNodeID {
+			return i
+		}
+	}
+	return -1
+}
+
+// crossComponentEnv seeds the fixture shared by the byte-identical
+// cross-component scenario: a fresh proposal, four component creates
+// (x1 depending on in-batch y1, existing-bead z-open, and fallback
+// w-none; aa1/ab1 independent for the lex tiebreak), and a mapping
+// store whose cursor starts at 50 with one open record for z-open.
+func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
+	env := newBuilderEnv()
+	env.store.nextID = 50
+	env.store.bySpecNode["z-open"] = []mapping.Record{
+		{ID: 7, SpecNodeID: "z-open", BeadID: "br-z", BeadStatus: "open"},
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("x1", "m", "X", []string{"y1", "z-open", "w-none"}),
+			sampleComponentCreate("y1", "m", "Y", nil),
+			sampleComponentCreate("ab1", "m", "AB", nil),
+			sampleComponentCreate("aa1", "m", "AA", nil),
+		},
+	}
+	return env, report
+}
+
+// TestBuild_CrossComponent_ByteIdenticalAcrossRuns covers the spec's
+// "Resolver + Sorter + Labeler + Builder produce byte-identical output
+// across runs" scenario. Two independently constructed Builders (fresh
+// stores, fresh labelers — no shared in-memory state) over identical
+// inputs must serialize to byte-identical JSON. Resolver classifies the
+// three dep shapes, TopologicalSorter orders epic-first with lex
+// tiebreak, IdempotencyLabeler pairs cursor ids with sorted order, and
+// ChangesetBuilder composes the canonical output.
+func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
+	env1, report1 := crossComponentEnv()
+	cs1, err := env1.build(report1, "prop", "deadbeefcafe")
+	if err != nil {
+		t.Fatalf("first Build: %v", err)
+	}
+	env2, report2 := crossComponentEnv()
+	cs2, err := env2.build(report2, "prop", "deadbeefcafe")
+	if err != nil {
+		t.Fatalf("second Build: %v", err)
+	}
+
+	json1, err := json.MarshalIndent(cs1, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal first: %v", err)
+	}
+	json2, err := json.MarshalIndent(cs2, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal second: %v", err)
+	}
+	if !bytes.Equal(json1, json2) {
+		t.Fatalf("changesets not byte-identical:\n%s\n---\n%s", json1, json2)
+	}
+
+	// Sorter: epic first; lex tiebreak among independent peers aa1 < ab1
+	// < y1; dependent x1 after its in-batch predecessor y1.
+	if cs1.Ops[0].SpecNodeKind != "proposal_epic" {
+		t.Fatalf("op[0]: want proposal_epic first, got %+v", cs1.Ops[0])
+	}
+	iAA, iAB, iY, iX := opIndex(cs1.Ops, "aa1"), opIndex(cs1.Ops, "ab1"), opIndex(cs1.Ops, "y1"), opIndex(cs1.Ops, "x1")
+	if !(iAA < iAB && iAB < iY && iY < iX) {
+		t.Errorf("sort order: want aa1 < ab1 < y1 < x1, got indices %d %d %d %d", iAA, iAB, iY, iX)
+	}
+
+	// Labeler: cursor ids 50.. paired with the sorted op order.
+	wantLabels := []string{"spex:50", "spex:51", "spex:52", "spex:53", "spex:54"}
+	for i, want := range wantLabels {
+		if cs1.Ops[i].Idempotency == nil || cs1.Ops[i].Idempotency.Label != want {
+			t.Errorf("op[%d] label: want %s, got %+v", i, want, cs1.Ops[i].Idempotency)
+		}
+	}
+
+	// Resolver: the three dep shapes on x1, input order preserved.
+	x := findOp(t, cs1.Ops, "x1")
+	if len(x.Deps) != 3 {
+		t.Fatalf("x1 deps: want 3, got %+v", x.Deps)
+	}
+	y := findOp(t, cs1.Ops, "y1")
+	if x.Deps[0].Kind != RefOp || x.Deps[0].OpID != y.OpID {
+		t.Errorf("x1 dep[0]: want ref:op %s, got %+v", y.OpID, x.Deps[0])
+	}
+	if x.Deps[1].Kind != RefBead || x.Deps[1].BeadID != "br-z" {
+		t.Errorf("x1 dep[1]: want ref:bead br-z, got %+v", x.Deps[1])
+	}
+	if x.Deps[2].Kind != RefSpecNode || x.Deps[2].SpecNodeID != "w-none" {
+		t.Errorf("x1 dep[2]: want ref:spec_node w-none, got %+v", x.Deps[2])
+	}
+}
+
+// TestBuild_CrossComponent_ThreeRefShapesOneCreate covers the spec's "dep
+// classification round-trip through Builder" scenario: one dependent
+// create whose deps array simultaneously carries ref:op, ref:bead, and
+// ref:spec_node — none flattened or coerced — with the in-batch
+// predecessor sequenced earlier by the Sorter.
+func TestBuild_CrossComponent_ThreeRefShapesOneCreate(t *testing.T) {
+	env := newBuilderEnv()
+	env.store.bySpecNode["q-open"] = []mapping.Record{
+		{ID: 3, SpecNodeID: "q-open", BeadID: "br-q", BeadStatus: "open"},
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("d1", "m", "D", []string{"p1", "q-open", "r-none"}),
+			sampleComponentCreate("p1", "m", "P", nil),
+		},
+	}
+	cs, err := env.build(report, "prop", "deadbeefcafe")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	d := findOp(t, cs.Ops, "d1")
+	p := findOp(t, cs.Ops, "p1")
+	if len(d.Deps) != 3 {
+		t.Fatalf("d1 deps: want exactly 3 shapes, got %+v", d.Deps)
+	}
+	if d.Deps[0].Kind != RefOp || d.Deps[0].OpID != p.OpID || d.Deps[0].BeadID != "" || d.Deps[0].SpecNodeID != "" {
+		t.Errorf("dep[0]: want pure ref:op %s, got %+v", p.OpID, d.Deps[0])
+	}
+	if d.Deps[1].Kind != RefBead || d.Deps[1].BeadID != "br-q" || d.Deps[1].OpID != "" || d.Deps[1].SpecNodeID != "" {
+		t.Errorf("dep[1]: want pure ref:bead br-q, got %+v", d.Deps[1])
+	}
+	if d.Deps[2].Kind != RefSpecNode || d.Deps[2].SpecNodeID != "r-none" || d.Deps[2].OpID != "" || d.Deps[2].BeadID != "" {
+		t.Errorf("dep[2]: want pure ref:spec_node r-none, got %+v", d.Deps[2])
+	}
+	if opIndex(cs.Ops, "p1") >= opIndex(cs.Ops, "d1") {
+		t.Errorf("sorter must sequence in-batch predecessor p1 before dependent d1: %+v", cs.Ops)
+	}
+}
+
+// TestBuild_CrossComponent_LabelsPairWithTopoOrder covers the spec's
+// "idempotency label reservation paired with sort order" scenario: an
+// A → B → C in-batch chain against a counter at 100 labels the topo
+// order A, B, C as spex:100/101/102; a second run against a counter
+// advanced to 103 produces 103/104/105 with the same pairing. An
+// existing proposal epic keeps the epic op out of the batch, matching
+// the spec's three-label expectation.
+func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
+	run := func(nextID int) Changeset {
+		env := newBuilderEnv()
+		env.store.nextID = nextID
+		env.store.epic["prop"] = mapping.Record{ID: 1, BeadID: "br-epic", BeadStatus: "open"}
+		report := impact.ImpactReport{
+			Creates: []impact.Action{
+				sampleComponentCreate("cC", "m", "C", []string{"cB"}),
+				sampleComponentCreate("cB", "m", "B", []string{"cA"}),
+				sampleComponentCreate("cA", "m", "A", nil),
+			},
+		}
+		cs, err := env.build(report, "prop", "deadbeefcafe")
+		if err != nil {
+			t.Fatalf("Build(counter=%d): %v", nextID, err)
+		}
+		return cs
+	}
+
+	assertPairing := func(cs Changeset, base int) {
+		t.Helper()
+		wantOrder := []string{"cA", "cB", "cC"}
+		if len(cs.Ops) != 3 {
+			t.Fatalf("ops: want 3 (existing epic emits no op), got %+v", cs.Ops)
+		}
+		for i, id := range wantOrder {
+			if cs.Ops[i].SpecNodeID != id {
+				t.Errorf("op[%d]: want %s (topo order A,B,C), got %s", i, id, cs.Ops[i].SpecNodeID)
+			}
+			want := fmt.Sprintf("spex:%d", base+i)
+			if cs.Ops[i].Idempotency == nil || cs.Ops[i].Idempotency.Label != want {
+				t.Errorf("op[%d] label: want %s, got %+v", i, want, cs.Ops[i].Idempotency)
+			}
+		}
+	}
+
+	assertPairing(run(100), 100)
+	assertPairing(run(103), 103)
+}
+
+// TestBuild_CrossComponent_CycleErrorNamesBothNodes covers the spec's
+// "cycle detection surfaces through Builder.Build error" scenario:
+// Resolver classifies both deps in-batch, Sorter's Kahn pass detects the
+// cycle, and Builder propagates a structured error naming BOTH
+// spec_node_ids with no partial changeset.
+func TestBuild_CrossComponent_CycleErrorNamesBothNodes(t *testing.T) {
+	env := newBuilderEnv()
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("cycA", "m", "A", []string{"cycB"}),
+			sampleComponentCreate("cycB", "m", "B", []string{"cycA"}),
+		},
+	}
+	cs, err := env.build(report, "prop", "deadbeefcafe")
+	if err == nil {
+		t.Fatal("want cycle error, got nil")
+	}
+	if !strings.Contains(err.Error(), "cycle") {
+		t.Errorf("error must mention the cycle: %v", err)
+	}
+	if !strings.Contains(err.Error(), "cycA") || !strings.Contains(err.Error(), "cycB") {
+		t.Errorf("error must name both spec_node_ids in the cycle: %v", err)
+	}
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset on cycle: got %d ops", len(cs.Ops))
+	}
+}

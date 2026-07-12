@@ -13,14 +13,17 @@ func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
             out = append(out, Ref{Kind: "op", OpID: opID})
             continue
         }
-        // 2. Mapping store has an open bead?
-        rec, err := r.MappingStore.GetBySpecNode(id)
-        if err == nil && rec.Status != "closed" {
-            out = append(out, Ref{Kind: "bead", BeadID: rec.BeadID})
-            continue
-        }
-        // 2b. Mapping store has a closed bead? → drop (satisfied).
-        if err == nil && rec.Status == "closed" {
+        // 2. Mapping store has an open bead? GetBySpecNode returns
+        //    ALL records for the node; pickOpenRecord chooses the
+        //    highest-ID record whose BeadStatus is not "closed"
+        //    (empty status counts as open).
+        recs, err := r.MappingStore.GetBySpecNode(id)
+        if err == nil {
+            if rec, anyOpen := pickOpenRecord(recs); anyOpen {
+                out = append(out, Ref{Kind: "bead", BeadID: rec.BeadID})
+                continue
+            }
+            // 2b. All records closed → drop (satisfied).
             continue
         }
         // 3. Fallback: adapter-time lookup.

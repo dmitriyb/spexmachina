@@ -47,8 +47,8 @@ func MatchNodes(changes []merkle.ClassifiedChange, records []mapping.Record) ([]
 			continue
 		}
 
-		// Direct ID lookup: change.Path == record.SpecNodeID.
-		found := copyRecords(index[c.Path])
+		// Direct ID lookup: change.Key == record.SpecNodeID.
+		found := copyRecords(index[c.Key])
 
 		if len(found) > 0 {
 			sort.Slice(found, func(i, j int) bool {

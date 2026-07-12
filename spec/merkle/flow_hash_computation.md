@@ -133,9 +133,9 @@ here is a contract change: all three components must be updated in lockstep.
 
 ### Tree root
 
-The root Node has key `root`, type `project`, and children = [project envelope
-leaf, each module's subtree]. The root hash is the SHA-256 of the sorted
-concatenation of children hashes.
+The root Node has key `project`, type `project`, and children = [project
+envelope leaf, project requirement leaves, each module's subtree]. The root
+hash is the SHA-256 of the sorted concatenation of children hashes.
 
 ### SnapshotStore.Load missing-file contract
 

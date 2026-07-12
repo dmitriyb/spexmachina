@@ -78,7 +78,7 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
+				Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "validator",
 			},
@@ -88,7 +88,7 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 		},
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.HCMP, Type: merkle.Modified, OldHash: "ddd", NewHash: "eee", NodeType: "impl_section"},
+				Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, OldHash: "ddd", NewHash: "eee", NodeType: "impl_section"},
 				Impact: merkle.ImplOnly,
 				Module: "merkle",
 			},
@@ -100,7 +100,7 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.NEW, Type: merkle.Added, NewHash: "fff", NodeType: "component"},
+				Change: merkle.Change{Key: h.NEW, Type: merkle.Added, NewHash: "fff", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "validator",
 			},
@@ -154,7 +154,7 @@ func TestFR3_S2_ClassifyActions_ModifiedUnmatched(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: hash, Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
+				Change: merkle.Change{Key: hash, Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "render",
 			},
@@ -188,7 +188,7 @@ func TestFR3_S3_ClassifyActions_AddedWithExistingBead(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.REG, Type: merkle.Added, NewHash: "new111", NodeType: "component"},
+				Change: merkle.Change{Key: h.REG, Type: merkle.Added, NewHash: "new111", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "proposal",
 			},
@@ -223,7 +223,7 @@ func TestFR3_S4_ClassifyActions_RemovedNoRecord(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: hash, Type: merkle.Removed, OldHash: "aaa", NodeType: "component"},
+				Change: merkle.Change{Key: hash, Type: merkle.Removed, OldHash: "aaa", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "schema",
 			},
@@ -244,7 +244,7 @@ func TestFR3_S5_ClassifyActions_MultipleBeadsPerNode(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "validator",
 			},
@@ -352,7 +352,7 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 			matches := []Match{
 				{
 					Change: merkle.ClassifiedChange{
-						Change: merkle.Change{Path: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+						Change: merkle.Change{Key: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 						Impact: level,
 						Module: "alpha",
 					},
@@ -389,7 +389,7 @@ func TestFR3_ClassifyActions_ImplSectionFiltered(t *testing.T) {
 	impl := schema.IdentityHash("render", "impl_section", "Section1")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: impl, Type: merkle.Added, NewHash: "aaa", NodeType: "impl_section"},
+			Change: merkle.Change{Key: impl, Type: merkle.Added, NewHash: "aaa", NodeType: "impl_section"},
 			Impact: merkle.ImplOnly, Module: "render",
 		}},
 	}
@@ -413,7 +413,7 @@ func TestFR3_E1_ClassifyActions_EmptyInputs(t *testing.T) {
 func TestFR3_E5_ClassifyActions_DuplicatesPreserved(t *testing.T) {
 	hash := schema.IdentityHash("alpha", "component", "Comp1")
 	change := merkle.ClassifiedChange{
-		Change: merkle.Change{Path: hash, Type: merkle.Added, NewHash: "aaa", NodeType: "component"},
+		Change: merkle.Change{Key: hash, Type: merkle.Added, NewHash: "aaa", NodeType: "component"},
 		Impact: merkle.ArchImpl,
 		Module: "alpha",
 	}
@@ -443,7 +443,7 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: betaHash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Change: merkle.Change{Key: betaHash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "beta",
 			},
@@ -453,7 +453,7 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 	unmatched := []Unmatched{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: alphaNew, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+				Change: merkle.Change{Key: alphaNew, Type: merkle.Added, NewHash: "x", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
@@ -482,7 +482,7 @@ func TestFR3_ClassifyActions_OldBeadIDOnCreate(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Change: merkle.Change{Key: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
@@ -516,7 +516,7 @@ func TestFR3_ClassifyActions_NodeTypePropagated(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Change: merkle.Change{Key: hash, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
@@ -614,7 +614,7 @@ func TestDepSpecNodeIDs_ComponentUsesEdgeCollected(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.AC, Type: merkle.Added, NewHash: "aaa", NodeType: "component"},
+			Change: merkle.Change{Key: h.AC, Type: merkle.Added, NewHash: "aaa", NodeType: "component"},
 			Module: "impact",
 		}},
 	}
@@ -650,7 +650,7 @@ func TestDepSpecNodeIDs_IgnoresBeadStatus(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: h.AC, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
+				Change: merkle.Change{Key: h.AC, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Module: "impact",
 			},
 			Records: []mapping.Record{
@@ -688,7 +688,7 @@ func TestDepSpecNodeIDs_TransitiveRequiresModule(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Change: merkle.Change{Key: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
 			Module: "modA",
 		}},
 	}
@@ -723,7 +723,7 @@ func TestDepSpecNodeIDs_ComponentUsesNotTransitive(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Change: merkle.Change{Key: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
 			Module: "mod",
 		}},
 	}
@@ -761,7 +761,7 @@ func TestDepSpecNodeIDs_MixedUsesAndRequiresModule(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Change: merkle.Change{Key: h.X, Type: merkle.Added, NewHash: "x", NodeType: "component"},
 			Module: "modA",
 		}},
 	}
@@ -785,7 +785,7 @@ func TestDepSpecNodeIDs_RequiresModuleCycle(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
+			Change: merkle.Change{Key: h.CompA, Type: merkle.Added, NewHash: "x", NodeType: "component"},
 			Module: "modA",
 		}},
 	}
@@ -816,7 +816,7 @@ func TestDepSpecNodeIDs_EmptyWhenNoEdges(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: standalone, Type: merkle.Added, NewHash: "s", NodeType: "component"},
+			Change: merkle.Change{Key: standalone, Type: merkle.Added, NewHash: "s", NodeType: "component"},
 			Module: "mod",
 		}},
 	}
@@ -853,11 +853,11 @@ func TestDepSpecNodeIDs_DataFlowAddOn(t *testing.T) {
 	// Both data_flow and component are created in the same batch.
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Change: merkle.Change{Key: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
 			Module: "merkle",
 		}},
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
+			Change: merkle.Change{Key: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
 			Module: "merkle",
 		}},
 	}
@@ -900,11 +900,11 @@ func TestDepSpecNodeIDs_DataFlowUnrelatedComponent(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Change: merkle.Change{Key: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
 			Module: "merkle",
 		}},
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.LEGACY, Type: merkle.Added, NewHash: "l", NodeType: "component"},
+			Change: merkle.Change{Key: h.LEGACY, Type: merkle.Added, NewHash: "l", NodeType: "component"},
 			Module: "merkle",
 		}},
 	}
@@ -948,7 +948,7 @@ func TestDepSpecNodeIDs_DataFlowNotInBatchIgnored(t *testing.T) {
 	// Only the component is in the batch; the flow is pre-existing.
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
+			Change: merkle.Change{Key: h.HASH, Type: merkle.Added, NewHash: "c", NodeType: "component"},
 			Module: "merkle",
 		}},
 	}
@@ -992,7 +992,7 @@ func TestDepSpecNodeIDs_NonComponentCreateNoUsesWalk(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
+			Change: merkle.Change{Key: flowID, Type: merkle.Added, NewHash: "f", NodeType: "data_flow"},
 			Module: "merkle",
 		}},
 	}
@@ -1015,7 +1015,7 @@ func TestDepSpecNodeIDs_NilGraphLeavesDepsEmpty(t *testing.T) {
 	h := newDepFixture()
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: h.AC, Type: merkle.Added, NewHash: "a", NodeType: "component"},
+			Change: merkle.Change{Key: h.AC, Type: merkle.Added, NewHash: "a", NodeType: "component"},
 			Module: "impact",
 		}},
 	}
@@ -1074,7 +1074,7 @@ func TestFR8_ClassifyActions_DataFlowAddedProducesBead(t *testing.T) {
 	flow := schema.IdentityHash("merkle", "data_flow", "HashFlow")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flow, Type: merkle.Added, NewHash: "ff1", NodeType: "data_flow"},
+			Change: merkle.Change{Key: flow, Type: merkle.Added, NewHash: "ff1", NodeType: "data_flow"},
 			Impact: merkle.Contract, Module: "merkle",
 		}},
 	}
@@ -1103,7 +1103,7 @@ func TestFR8_ClassifyActions_DataFlowModifiedMatched(t *testing.T) {
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: flow, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "data_flow"},
+				Change: merkle.Change{Key: flow, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "data_flow"},
 				Impact: merkle.Contract, Module: "merkle",
 			},
 			Records: []mapping.Record{
@@ -1155,7 +1155,7 @@ func TestFR8_ClassifyActions_TestSectionSingleDescribesSkipped(t *testing.T) {
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t1", NodeType: "test_section"},
+			Change: merkle.Change{Key: testID, Type: merkle.Added, NewHash: "t1", NodeType: "test_section"},
 			Impact: merkle.ImplOnly, Module: "impact",
 		}},
 	}
@@ -1189,7 +1189,7 @@ func TestFR8_ClassifyActions_TestSectionMultiDescribesProducesBead(t *testing.T)
 	}
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t2", NodeType: "test_section"},
+			Change: merkle.Change{Key: testID, Type: merkle.Added, NewHash: "t2", NodeType: "test_section"},
 			Impact: merkle.ImplOnly, Module: "impact",
 		}},
 	}
@@ -1210,7 +1210,7 @@ func TestFR8_ClassifyActions_TestSectionNilGraphDefaultsToProduce(t *testing.T) 
 	testID := schema.IdentityHash("mod", "test_section", "T")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "t3", NodeType: "test_section"},
+			Change: merkle.Change{Key: testID, Type: merkle.Added, NewHash: "t3", NodeType: "test_section"},
 			Impact: merkle.ImplOnly, Module: "mod",
 		}},
 	}
@@ -1245,7 +1245,7 @@ func TestFR8_ClassifyActions_TestSectionCoupledMatchedObsoleteOnly(t *testing.T)
 	matches := []Match{
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Path: testID, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "test_section"},
+				Change: merkle.Change{Key: testID, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "test_section"},
 				Impact: merkle.ImplOnly, Module: "impact",
 			},
 			Records: []mapping.Record{
@@ -1354,15 +1354,15 @@ func TestClassifyActions_ResolvesAddedNodeNames(t *testing.T) {
 
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: compID, Type: merkle.Added, NewHash: "h1", NodeType: "component"},
+			Change: merkle.Change{Key: compID, Type: merkle.Added, NewHash: "h1", NodeType: "component"},
 			Module: "emit",
 		}},
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: flowID, Type: merkle.Added, NewHash: "h2", NodeType: "data_flow"},
+			Change: merkle.Change{Key: flowID, Type: merkle.Added, NewHash: "h2", NodeType: "data_flow"},
 			Module: "emit",
 		}},
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: testID, Type: merkle.Added, NewHash: "h3", NodeType: "test_section"},
+			Change: merkle.Change{Key: testID, Type: merkle.Added, NewHash: "h3", NodeType: "test_section"},
 			Module: "emit",
 		}},
 	}
@@ -1400,7 +1400,7 @@ func TestClassifyActions_ResolvesNodeName_NilGraphFallback(t *testing.T) {
 	specNodeID := schema.IdentityHash("emit", "data_flow", "Emit flow")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Path: specNodeID, Type: merkle.Added, NewHash: "h1", NodeType: "data_flow"},
+			Change: merkle.Change{Key: specNodeID, Type: merkle.Added, NewHash: "h1", NodeType: "data_flow"},
 			Module: "emit",
 		}},
 	}

@@ -201,7 +201,26 @@ func (b *Builder) makeCreateOp(oc OrderedOp, label string, resolver *Resolver) (
 		Deps:         deps,
 		Priority:     resolver.Priority(oc.Action.SpecNodeID),
 		Title:        titleFor(oc.Action),
+		Body:         bodyFor(oc.Action, b.SpecGraph),
 	}, nil
+}
+
+// bodyFor renders a create op's markdown body: links to the spec files
+// that define the node, per impl_changeset_building.md "Title and Body".
+// The adapter passes body through to the tracker's description field.
+// Nodes without an on-disk content leaf (proposal epics) yield an empty
+// body, as do cleanup ops (never routed here — their shape pins body
+// empty per arch_changeset_builder.md "Cleanup op shape").
+func bodyFor(a CreateAction, graph SpecGraph) string {
+	p, ok := graph.Paths(a.SpecNodeID)
+	if !ok || p.Content == "" {
+		return ""
+	}
+	body := "Spec context:\n\n- " + p.Content + "\n"
+	if p.Module != "" {
+		body += "- " + p.Module + "\n"
+	}
+	return body
 }
 
 // titleFor maps a CreateAction to its canonical bead title per the impl

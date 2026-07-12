@@ -14,6 +14,7 @@ type fakeSpecGraph struct {
 	components   map[string]Component
 	moduleReqs   map[string]ModuleRequirement
 	projectReqs  map[string]ProjectRequirement
+	paths        map[string]NodePaths
 }
 
 func newFakeSpecGraph() *fakeSpecGraph {
@@ -21,6 +22,7 @@ func newFakeSpecGraph() *fakeSpecGraph {
 		components:  make(map[string]Component),
 		moduleReqs:  make(map[string]ModuleRequirement),
 		projectReqs: make(map[string]ProjectRequirement),
+		paths:       make(map[string]NodePaths),
 	}
 }
 
@@ -37,6 +39,11 @@ func (g *fakeSpecGraph) ModuleRequirement(id string) (ModuleRequirement, bool) {
 func (g *fakeSpecGraph) ProjectRequirement(id string) (ProjectRequirement, bool) {
 	r, ok := g.projectReqs[id]
 	return r, ok
+}
+
+func (g *fakeSpecGraph) Paths(id string) (NodePaths, bool) {
+	p, ok := g.paths[id]
+	return p, ok
 }
 
 func intPtr(i int) *int { return &i }
@@ -205,6 +212,27 @@ func TestResolveDeps_EmptyStatusTreatedAsOpen(t *testing.T) {
 	}
 	if len(got) != 1 || got[0].Kind != RefBead || got[0].BeadID != "br-x" {
 		t.Fatalf("empty status must be treated as open: got %+v", got)
+	}
+}
+
+// TestResolveDeps_HighestOpenRecordWins covers pickOpenRecord's tiebreak:
+// when two open records exist for one spec_node_id, the highest-ID record's
+// bead is chosen — the latest re-implementation supersedes earlier records.
+func TestResolveDeps_HighestOpenRecordWins(t *testing.T) {
+	store := newFakeStore()
+	store.bySpecNode["dup"] = []mapping.Record{
+		{ID: 3, SpecNodeID: "dup", BeadID: "br-newer", BeadStatus: "open"},
+		{ID: 2, SpecNodeID: "dup", BeadID: "br-older", BeadStatus: "open"},
+		{ID: 9, SpecNodeID: "dup", BeadID: "br-closed", BeadStatus: "closed"},
+	}
+	r := &Resolver{MappingStore: store, Batch: map[string]string{}}
+
+	got, err := r.ResolveDeps([]string{"dup"})
+	if err != nil {
+		t.Fatalf("ResolveDeps: %v", err)
+	}
+	if len(got) != 1 || got[0].Kind != RefBead || got[0].BeadID != "br-newer" {
+		t.Fatalf("want ref:bead br-newer (highest open ID wins, closed ignored), got %+v", got)
 	}
 }
 

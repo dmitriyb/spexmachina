@@ -22,7 +22,7 @@ func mkChange(path, typ, oldHash, newHash, nodeType, module string) merkle.Class
 		ct = merkle.Removed
 	}
 	return merkle.ClassifiedChange{
-		Change: merkle.Change{Path: path, Type: ct, OldHash: oldHash, NewHash: newHash, NodeType: nodeType},
+		Change: merkle.Change{Key: path, Type: ct, OldHash: oldHash, NewHash: newHash, NodeType: nodeType},
 		Impact: merkle.ArchImpl,
 		Module: module,
 	}

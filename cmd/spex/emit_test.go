@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -398,5 +399,100 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "git-head") {
 		t.Fatalf("want error mentioning git-head, got: %v", err)
+	}
+}
+
+// exitCodeOf extracts the process exit code an error carries via the
+// ExitCode interface main.go honors. Zero means no code attached.
+func exitCodeOf(err error) int {
+	var ec interface{ ExitCode() int }
+	if errors.As(err, &ec) {
+		return ec.ExitCode()
+	}
+	return 0
+}
+
+// TestEmitCommand_ValidationErrorsExit1 pins the arch_emit_command.md exit
+// code contract: input validation failures (bad --git-head, malformed
+// impact JSON, impact errors[] gate) carry exit code 1.
+func TestEmitCommand_ValidationErrorsExit1(t *testing.T) {
+	f := setupEmitFixture(t)
+
+	cases := []struct {
+		name  string
+		stdin string
+		head  string
+	}{
+		{"bad git-head", f.impactJSON, "not-a-sha"},
+		{"malformed impact JSON", "{not json", "deadbeefcafe"},
+		{"impact errors gate", `{"creates":[],"obsoletes":[],"errors":[{"type":"x"}]}`, "deadbeefcafe"},
+	}
+	for _, tc := range cases {
+		_, _, err := runEmit(t, tc.stdin,
+			"--proposal", "p",
+			"--git-head", tc.head,
+			"--map", f.mapPath,
+			"--spec-dir", f.specDir,
+		)
+		if err == nil {
+			t.Fatalf("%s: want error, got nil", tc.name)
+		}
+		if code := exitCodeOf(err); code != 1 {
+			t.Errorf("%s: want exit code 1, got %d (err: %v)", tc.name, code, err)
+		}
+	}
+}
+
+// TestEmitCommand_BuilderErrorsExit2 pins the other half of the exit code
+// contract: builder failures (in-batch dep cycle) carry exit code 2.
+func TestEmitCommand_BuilderErrorsExit2(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	aID := schema.IdentityHash("alpha", "component", "A")
+	bID := schema.IdentityHash("alpha", "component", "B")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "cycle-test",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+aID+`", "name": "A", "content": "arch_a.md"},
+			{"id": "`+bID+`", "name": "B", "content": "arch_b.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_b.md", "# B\n")
+
+	mapPath := filepath.Join(dir, ".bead-map.json")
+	if err := os.WriteFile(mapPath, []byte(`{"next_id":1,"records":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{Type: "create", Module: "alpha", Node: "A", NodeType: "component", SpecNodeID: aID, DepSpecNodeIDs: []string{bID}},
+			{Type: "create", Module: "alpha", Node: "B", NodeType: "component", SpecNodeID: bID, DepSpecNodeIDs: []string{aID}},
+		},
+		Summary: impact.Summary{CreateCount: 2},
+	}
+	data, _ := json.Marshal(report)
+
+	_, _, err := runEmit(t, string(data),
+		"--proposal", "p",
+		"--git-head", "deadbeefcafe",
+		"--map", mapPath,
+		"--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want builder error for in-batch cycle, got nil")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit code 2 for builder error, got %d (err: %v)", code, err)
 	}
 }

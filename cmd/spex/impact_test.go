@@ -81,7 +81,7 @@ func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
 
-	// The change.Path (identity hash) matches directly against the mapping
+	// The change.Key (identity hash) matches directly against the mapping
 	// record's SpecNodeID (also an identity hash) — no rekeying. Verify
 	// the match produced an obsolete+create pair for the existing bead.
 	if report.Summary.ObsoleteCount != 1 {

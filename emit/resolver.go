@@ -10,12 +10,22 @@ import (
 
 // SpecGraph supplies Resolver's reads of the
 // component.implements → module_requirement.preq_id → project_requirement
-// chain. ChangesetBuilder constructs a concrete SpecGraph from the parsed
+// chain, plus the on-disk paths Builder links in create-op bodies.
+// ChangesetBuilder constructs a concrete SpecGraph from the parsed
 // spec directory; tests use a fake.
 type SpecGraph interface {
 	Component(specNodeID string) (Component, bool)
 	ModuleRequirement(reqID string) (ModuleRequirement, bool)
 	ProjectRequirement(preqID string) (ProjectRequirement, bool)
+	Paths(specNodeID string) (NodePaths, bool)
+}
+
+// NodePaths locates a spec node's files on disk for changeset body links.
+// Both paths are repo-relative (e.g. "spec/emit/arch_resolver.md"), the
+// same form the mapping store records in content_file.
+type NodePaths struct {
+	Content string // the node's content leaf
+	Module  string // the owning module.json
 }
 
 // Component is the slice of a spec component Resolver needs: the list of

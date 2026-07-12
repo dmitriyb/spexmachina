@@ -9,7 +9,7 @@ import (
 
 func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
+		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -28,7 +28,7 @@ func TestREQ5_Classify_ImplOnly(t *testing.T) {
 
 func TestREQ5_Classify_DataFlowIsContract(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod1"},
+		{Key: "module/1/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -44,7 +44,7 @@ func TestREQ5_Classify_DataFlowIsContract(t *testing.T) {
 
 func TestREQ5_Classify_TestSectionIsImplOnly(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1"},
+		{Key: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1"},
 	}
 
 	classified := Classify(changes, nil)
@@ -56,7 +56,7 @@ func TestREQ5_Classify_TestSectionIsImplOnly(t *testing.T) {
 
 func TestREQ5_Classify_ArchImpl(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
+		{Key: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -75,7 +75,7 @@ func TestREQ5_Classify_ArchImpl(t *testing.T) {
 
 func TestREQ5_Classify_StructuralModuleMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/meta", Type: Modified, NodeType: "meta", Module: "mod1"},
+		{Key: "module/1/meta", Type: Modified, NodeType: "meta", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -91,7 +91,7 @@ func TestREQ5_Classify_StructuralModuleMeta(t *testing.T) {
 
 func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 	changes := []Change{
-		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
+		{Key: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
 	}
 
 	classified := Classify(changes, nil)
@@ -106,14 +106,14 @@ func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 
 func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1", OldHash: "aaa", NewHash: "bbb"},
+		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1", OldHash: "aaa", NewHash: "bbb"},
 	}
 
 	classified := Classify(changes, nil)
 
 	c := classified[0]
-	if c.Path != changes[0].Path {
-		t.Errorf("path mismatch: %s vs %s", c.Path, changes[0].Path)
+	if c.Key != changes[0].Key {
+		t.Errorf("path mismatch: %s vs %s", c.Key, changes[0].Key)
 	}
 	if c.Type != Modified {
 		t.Errorf("type mismatch: %v", c.Type)
@@ -125,10 +125,10 @@ func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 
 func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 	changes := []Change{
-		{Path: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
-		{Path: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
-		{Path: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
-		{Path: "module/2/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod2"},
+		{Key: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
+		{Key: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
+		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
+		{Key: "module/2/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod2"},
 	}
 	names := map[string]string{"mod1": "Alpha", "mod2": "Beta"}
 
@@ -187,13 +187,13 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 	// Should have at least one arch_impl and one impl_only
 	var hasArch, hasImpl bool
 	for _, c := range classified {
-		if c.Impact == ArchImpl && c.Path == comp1Key {
+		if c.Impact == ArchImpl && c.Key == comp1Key {
 			hasArch = true
 			if c.Module != "Alpha" {
 				t.Errorf("expected module Alpha for component change, got %q", c.Module)
 			}
 		}
-		if c.Impact == ImplOnly && c.Path == impl1Key {
+		if c.Impact == ImplOnly && c.Key == impl1Key {
 			hasImpl = true
 		}
 	}
@@ -237,7 +237,7 @@ func TestREQ5_ImpactLevel_String(t *testing.T) {
 
 func TestREQ5_Classify_RequirementIsStructural(t *testing.T) {
 	changes := []Change{
-		{Path: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: "mod1"},
+		{Key: "module/1/requirement/2", Type: Modified, NodeType: "requirement", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -256,7 +256,7 @@ func TestREQ5_Classify_RequirementIsStructural(t *testing.T) {
 
 func TestREQ5_Classify_ProjectRequirementIsStructural(t *testing.T) {
 	changes := []Change{
-		{Path: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: ""},
+		{Key: "project/requirement/1", Type: Modified, NodeType: "requirement", Module: ""},
 	}
 
 	classified := Classify(changes, nil)
@@ -274,7 +274,7 @@ func TestREQ5_Classify_ProjectRequirementIsStructural(t *testing.T) {
 
 func TestREQ5_Classify_NilModuleNames_FallsBackToID(t *testing.T) {
 	changes := []Change{
-		{Path: "module/3/component/1", Type: Modified, NodeType: "component", Module: "mod3"},
+		{Key: "module/3/component/1", Type: Modified, NodeType: "component", Module: "mod3"},
 	}
 
 	classified := Classify(changes, nil)

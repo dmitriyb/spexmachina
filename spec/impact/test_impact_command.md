@@ -117,14 +117,14 @@ Run `spex impact --diff diff.json` without the `--bead-cli` flag, with a mock `b
 
 Run `spex impact --diff diff.json --bead-cli ./mock_br` five times. Capture stdout each time. Assert all five outputs are byte-for-byte identical. This validates the determinism requirement: same merkle diff + same bead state always produces the same impact report.
 
-### S11: Report output is suitable for piping to spex apply
+### S11: Report output is suitable for piping to spex emit
 
 Run:
 ```
 spex impact --diff diff.json --bead-cli ./mock_br > report.json
 ```
 
-Then verify `report.json` can be parsed as an `ImpactReport` struct and passed to `spex apply`. Specifically:
+Then verify `report.json` can be parsed as an `ImpactReport` struct and passed to `spex emit`. Specifically:
 - The file contains only the JSON report (no log lines, no progress output mixed in)
 - Diagnostic or error messages go to stderr, not stdout
 - The JSON is terminated with a newline

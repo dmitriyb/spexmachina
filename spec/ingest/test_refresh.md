@@ -135,11 +135,13 @@ is run with a complete-status receipts file containing the `added`
 component's create receipt
 **Then** the new component's record is inserted with the receipt's
 `bead_id` and the current `spec_hash` (Reconciler's existing behavior)
-**And** the stale record's `spec_hash` is rewritten to current as a side
-effect of `SnapshotSaver` rebuilding the snapshot from the current spec
-state on every complete-status ingest (per the impact-expectation note in
-the proposal: impl-only drift on non-bead-producing leaves is absorbed by
-any complete-status normal run, not just refresh runs)
+**And** the SNAPSHOT-side drift of the stale leaf is absorbed because
+`SnapshotSaver` rebuilds the snapshot from the current spec state on
+every complete-status ingest (per the impact-expectation note in the
+proposal) — the stale record's `spec_hash` field itself is NOT rewritten
+by a normal run, because the Reconciler only touches records that
+receive receipts; aligning receipt-less records' `spec_hash` is exactly
+what refresh mode exists for
 **And** all other records are unchanged byte-for-byte
 **And** the snapshot is rewritten to current
 
@@ -197,9 +199,11 @@ together or neither does.
 
 ## Fixtures
 
-Under `ingest/testdata/refresh/`:
-- `spec_drift_modified_only/` — fixture for the headline scenario.
-- `spec_drift_with_add/` — fixture for the refusal-on-added scenario.
-- `spec_drift_with_remove/` — fixture for the refusal-on-removed scenario.
-- `bead_map_with_orphan/` — fixture for the orphan-record scenario.
-- `clean_spec_no_drift/` — fixture for the no-op scenario.
+In-code Go fixtures, no on-disk testdata (the package convention). The
+handler-level tests in `ingest/refresh_test.go` build a two-module spec
+tree, seed its snapshot and a `.bead-map.json` via `setupRefreshFixture`,
+then introduce per-scenario drift by editing content files (headline),
+adding or removing module.json entries (refusal gates), or appending an
+orphan record. The command-level tests in `cmd/spex/ingest_test.go`
+drive `spex ingest --mode refresh` through `setupRefreshedFixture`,
+which seeds the baseline by running a complete normal-mode ingest first.

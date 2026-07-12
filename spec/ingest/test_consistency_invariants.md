@@ -1,6 +1,6 @@
 # Consistency invariants
 
-Tests for the seven consistency invariants `Reconciler.AssertInvariants` enforces after applying receipts. Each test constructs a state that SHOULD violate an invariant and asserts that reconciliation rejects it with a specific error.
+Tests for the seven consistency invariants the ingest module enforces after applying receipts. The per-invariant scenarios construct a state that SHOULD violate an invariant and assert that reconciliation rejects it with a specific error; the invariant-6 scenarios assert the snapshot gate behaves on both partial and complete runs; and the Happy Path scenario asserts the positive integrated property that a clean complete run leaves `.bead-map.json` AND the snapshot both updated and schema-valid.
 
 ## The Seven Invariants
 
@@ -59,5 +59,10 @@ Tests for the seven consistency invariants `Reconciler.AssertInvariants` enforce
 
 ## Fixtures
 
-- `ingest/testdata/invariants/` — per-invariant setup files.
-- Helpers: `setupInjection.go` for constructing deliberately-inconsistent states.
+In-memory Go harness, no on-disk testdata. The shipped tests reuse the
+package's shared helpers — `newFakeSpecGraph` and `newTestStore` from
+`reconciler_test.go`, `setupSpecDir` from `snapshot_saver_test.go`, and
+the `idem` label helper — plus the local `runWithSnapshot` in
+`ingest/consistency_invariants_test.go`, which drives `Reconciler.Apply`
+then `Saver.Save` in the order IngestCommand wires them. Per-invariant
+violation states are built inline from those helpers.

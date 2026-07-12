@@ -49,4 +49,9 @@ Assertion: parse the written snapshot, compare merkle root hash to an independen
 
 ## Fixtures
 
-- `ingest/testdata/partial_recovery/` — run1 and run2 fixtures, plus the adapter-duplicate variant.
+Inline Go fixtures, no on-disk testdata. The shipped tests in
+`ingest/partial_run_recovery_test.go` build the run1/run2 changesets and
+receipts (including the adapter-duplicate variant) directly from the
+`emit` and `adapters` types, and reuse the package's shared helpers:
+`newFakeSpecGraph` and `newTestStore` from `reconciler_test.go`, `idem`,
+and `setupSpecDir` from `snapshot_saver_test.go`.

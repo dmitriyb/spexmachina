@@ -50,22 +50,22 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 	records := baseRecords(h)
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD, OldHash: "aaa", NewHash: "bbb"},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD, OldHash: "aaa", NewHash: "bbb"},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
 		{
-			Change: merkle.Change{Path: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD, OldHash: "ccc", NewHash: "ddd"},
+			Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD, OldHash: "ccc", NewHash: "ddd"},
 			Impact: merkle.ImplOnly,
 			Module: "merkle",
 		},
 		{
-			Change: merkle.Change{Path: h.NEW, Type: merkle.Added, NodeType: "component", Module: h.VALIDMOD, NewHash: "eee"},
+			Change: merkle.Change{Key: h.NEW, Type: merkle.Added, NodeType: "component", Module: h.VALIDMOD, NewHash: "eee"},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
 		{
-			Change: merkle.Change{Path: h.REMOVED, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "fff"},
+			Change: merkle.Change{Key: h.REMOVED, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "fff"},
 			Impact: merkle.ArchImpl,
 			Module: "merkle",
 		},
@@ -79,7 +79,7 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 
 	matchedByKey := map[string]Match{}
 	for _, m := range matched {
-		matchedByKey[m.Change.Path] = m
+		matchedByKey[m.Change.Key] = m
 	}
 	if m, ok := matchedByKey[h.SCHK]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-001" {
 		t.Errorf("want SCHK → spex-001, got %+v", m)
@@ -88,7 +88,7 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 		t.Errorf("want HCMP → spex-003, got %+v", m)
 	}
 
-	if len(unmatched) != 1 || unmatched[0].Change.Path != h.NEW {
+	if len(unmatched) != 1 || unmatched[0].Change.Key != h.NEW {
 		t.Errorf("want 1 unmatched (NEW), got %+v", unmatched)
 	}
 	if len(orphaned) != 0 {
@@ -104,7 +104,7 @@ func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 	)
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -140,7 +140,7 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD},
+			Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD},
 			Impact: merkle.ImplOnly,
 			Module: "merkle",
 		},
@@ -151,7 +151,7 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 	if len(matched) != 0 {
 		t.Errorf("want 0 matched (HCMP != HASR by exact string equality), got %+v", matched)
 	}
-	if len(unmatched) != 1 || unmatched[0].Change.Path != h.HCMP {
+	if len(unmatched) != 1 || unmatched[0].Change.Key != h.HCMP {
 		t.Errorf("want HCMP as unmatched, got %+v", unmatched)
 	}
 }
@@ -162,12 +162,12 @@ func TestFR2_S6_StructuralChangesSkipped(t *testing.T) {
 	records := baseRecords(h)
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "meta/project", Type: merkle.Modified, NodeType: "meta", Module: ""},
+			Change: merkle.Change{Key: "meta/project", Type: merkle.Modified, NodeType: "meta", Module: ""},
 			Impact: merkle.Structural,
 			Module: "",
 		},
 		{
-			Change: merkle.Change{Path: "meta/" + h.VALIDMOD, Type: merkle.Modified, NodeType: "meta", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: "meta/" + h.VALIDMOD, Type: merkle.Modified, NodeType: "meta", Module: h.VALIDMOD},
 			Impact: merkle.Structural,
 			Module: "validator",
 		},
@@ -192,12 +192,12 @@ func TestNFR5_S7_DeterministicOutput(t *testing.T) {
 	h := newFixture()
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.HASR, Type: merkle.Modified, NodeType: "component", Module: h.MERKLMOD},
+			Change: merkle.Change{Key: h.HASR, Type: merkle.Modified, NodeType: "component", Module: h.MERKLMOD},
 			Impact: merkle.ArchImpl,
 			Module: "merkle",
 		},
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -222,7 +222,7 @@ func TestNFR5_S7_DeterministicOutput(t *testing.T) {
 		t.Fatalf("want 2 matches, got %d", len(matchedA))
 	}
 	// Change order from input is preserved (HASR first, SCHK second).
-	if matchedA[0].Change.Path != h.HASR || matchedA[1].Change.Path != h.SCHK {
+	if matchedA[0].Change.Key != h.HASR || matchedA[1].Change.Key != h.SCHK {
 		t.Errorf("change order not preserved: %+v", matchedA)
 	}
 }
@@ -236,17 +236,17 @@ func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: "meta/project", Type: merkle.Modified, NodeType: "meta"},
+			Change: merkle.Change{Key: "meta/project", Type: merkle.Modified, NodeType: "meta"},
 			Impact: merkle.Structural,
 			Module: "",
 		},
 		{
-			Change: merkle.Change{Path: "meta/" + h.VALIDMOD, Type: merkle.Modified, NodeType: "meta", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: "meta/" + h.VALIDMOD, Type: merkle.Modified, NodeType: "meta", Module: h.VALIDMOD},
 			Impact: merkle.Structural,
 			Module: "validator",
 		},
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD, OldHash: "aaa", NewHash: "bbb"},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD, OldHash: "aaa", NewHash: "bbb"},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -257,8 +257,8 @@ func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match (leaf only), got %d", len(matched))
 	}
-	if matched[0].Change.Path != h.SCHK {
-		t.Errorf("want matched path %s, got %s", h.SCHK, matched[0].Change.Path)
+	if matched[0].Change.Key != h.SCHK {
+		t.Errorf("want matched path %s, got %s", h.SCHK, matched[0].Change.Key)
 	}
 	if len(unmatched) != 0 {
 		t.Errorf("want 0 unmatched, got %d", len(unmatched))
@@ -285,7 +285,7 @@ func TestFR2_S9_NoRekeying(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -296,7 +296,7 @@ func TestFR2_S9_NoRekeying(t *testing.T) {
 	if len(matched) != 0 {
 		t.Errorf("want 0 matches (no key rewriting), got %+v", matched)
 	}
-	if len(unmatched) != 1 || unmatched[0].Change.Path != h.SCHK {
+	if len(unmatched) != 1 || unmatched[0].Change.Key != h.SCHK {
 		t.Errorf("want SCHK as unmatched — identity hash must not be rewritten into the legacy formats: %+v", unmatched)
 	}
 }
@@ -307,7 +307,7 @@ func TestFR2_E1_NoRecordsForModule(t *testing.T) {
 	h := newFixture()
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -318,7 +318,7 @@ func TestFR2_E1_NoRecordsForModule(t *testing.T) {
 	if len(matched) != 0 {
 		t.Errorf("want 0 matched for empty records, got %d", len(matched))
 	}
-	if len(unmatched) != 1 || unmatched[0].Change.Path != h.SCHK {
+	if len(unmatched) != 1 || unmatched[0].Change.Key != h.SCHK {
 		t.Errorf("want SCHK as unmatched, got %+v", unmatched)
 	}
 	if len(orphaned) != 0 {
@@ -333,7 +333,7 @@ func TestFR2_E2_RecordWithoutMatchingChange(t *testing.T) {
 	changes := []merkle.ClassifiedChange{
 		// Only SCHK is in the diff; HASR and HCMP records should be silent.
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -357,7 +357,7 @@ func TestFR2_E3_RemovedChangeNoRecord(t *testing.T) {
 	h := newFixture()
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.REMOVED, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "fff"},
+			Change: merkle.Change{Key: h.REMOVED, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "fff"},
 			Impact: merkle.ArchImpl,
 			Module: "merkle",
 		},
@@ -384,7 +384,7 @@ func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.HASR, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "aaa"},
+			Change: merkle.Change{Key: h.HASR, Type: merkle.Removed, NodeType: "component", Module: h.MERKLMOD, OldHash: "aaa"},
 			Impact: merkle.ArchImpl,
 			Module: "merkle",
 		},
@@ -412,12 +412,12 @@ func TestFR2_OrphanNotCreatedIfRecordAlsoMatchesNonRemoved(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
 		{
-			Change: merkle.Change{Path: h.SCHK, Type: merkle.Removed, NodeType: "component", Module: h.VALIDMOD},
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Removed, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
 			Module: "validator",
 		},
@@ -443,7 +443,7 @@ func TestFR2_DataFlowChangeMatchesByIdentityHash(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Path: flowHash, Type: merkle.Modified, NodeType: "data_flow", Module: modHash},
+			Change: merkle.Change{Key: flowHash, Type: merkle.Modified, NodeType: "data_flow", Module: modHash},
 			Impact: merkle.ImplOnly,
 			Module: "impact",
 		},

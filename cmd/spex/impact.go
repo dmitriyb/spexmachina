@@ -140,7 +140,7 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 		}
 		changes[i] = merkle.ClassifiedChange{
 			Change: merkle.Change{
-				Path:     c.Path,
+				Key:      c.Path,
 				Type:     ct,
 				NodeType: c.NodeType,
 				OldHash:  c.OldHash,

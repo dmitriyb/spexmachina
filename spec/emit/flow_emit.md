@@ -36,8 +36,11 @@
                          ▼
            ┌───────────────────────────────────────┐
            │ 4. IdempotencyLabeler                 │
-           │   Reserves spex:N..spex:N+k           │
-           │   (counter from mapping store)        │
+           │   LabelFor per create action:         │
+           │   fresh → spex:<cursor>, advance      │
+           │   (cursor seeded from mapping store); │
+           │   cleanup → spex:cleanup-<node-id>;   │
+           │   modify-pair → reuse record's id     │
            └─────────────┬─────────────────────────┘
                          │
                          ▼

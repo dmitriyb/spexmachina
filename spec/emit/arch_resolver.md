@@ -40,8 +40,19 @@ If no priority chain is reachable (missing `preq_id` or missing project req), ap
 ## Interface
 
 ```go
+// SpecGraph is the narrow, emit-local read surface Resolver and Builder
+// need: the implements → preq_id → priority chain plus the on-disk paths
+// Builder links in create-op bodies. The CLI adapts the parsed spec
+// directory onto it; tests use a fake.
+type SpecGraph interface {
+    Component(specNodeID string) (Component, bool)
+    ModuleRequirement(reqID string) (ModuleRequirement, bool)
+    ProjectRequirement(preqID string) (ProjectRequirement, bool)
+    Paths(specNodeID string) (NodePaths, bool)
+}
+
 type Resolver struct {
-    SpecGraph    *spec.Graph
+    SpecGraph    SpecGraph
     MappingStore mapping.Store
     Batch        map[string]string // spec_node_id → op_id, populated by TopologicalSorter
 }

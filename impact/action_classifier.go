@@ -58,7 +58,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 	for _, m := range matches {
 		nodeType := m.Change.NodeType
 		newHash := m.Change.NewHash
-		specNodeID := m.Change.Path
+		specNodeID := m.Change.Key
 
 		switch m.Change.Type {
 		case merkle.Added, merkle.Modified:
@@ -101,7 +101,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 
 	for _, u := range unmatched {
 		nodeType := u.Change.NodeType
-		node := resolveNodeName(graph, u.Change.Module, nodeType, u.Change.Path)
+		node := resolveNodeName(graph, u.Change.Module, nodeType, u.Change.Key)
 
 		// Only bead-trackable node types produce actions.
 		if !beadProducingTypes[nodeType] {
@@ -109,7 +109,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 		}
 		// test_section gate: bundle single-describes sections into the
 		// component feature bead.
-		if nodeType == "test_section" && !testSectionProducesBead(graph, u.Change.Module, u.Change.Path) {
+		if nodeType == "test_section" && !testSectionProducesBead(graph, u.Change.Module, u.Change.Key) {
 			continue
 		}
 
@@ -120,7 +120,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 				Module:     u.Change.Module,
 				Node:       node,
 				NodeType:   nodeType,
-				SpecNodeID: u.Change.Path,
+				SpecNodeID: u.Change.Key,
 				SpecHash:   u.Change.NewHash,
 				Reason:     fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
 			})
@@ -130,7 +130,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 				Module:     u.Change.Module,
 				Node:       node,
 				NodeType:   nodeType,
-				SpecNodeID: u.Change.Path,
+				SpecNodeID: u.Change.Key,
 				SpecHash:   u.Change.NewHash,
 				Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", u.Change.Module, node),
 			})

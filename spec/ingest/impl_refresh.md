@@ -32,29 +32,42 @@ The IngestCommand calls `Apply` after parsing flags and confirming
 
 Reuse the merkle module's existing path:
 
-1. Build the current tree via `merkle.TreeBuilder` (calls `merkle.Hasher`
-   for every leaf).
-2. Load the pre-refresh snapshot via `merkle.SnapshotStore.Load`.
-3. Run `merkle.DiffEngine.Compare(current, snapshot)` to get the diff
-   result with `added`, `modified`, `removed` arrays.
+1. Build the current tree via `merkle.BuildTree` (which calls the hash
+   primitives for every leaf).
+2. Load the pre-refresh snapshot via `merkle.Load`. Note `merkle.Load`
+   returns the EmptyTree baseline (not an error) when the file is
+   missing, so the missing-snapshot pre-flight in Step 1 must stat the
+   path explicitly.
+3. Run `merkle.Diff(current, snapshot)`, which returns a flat
+   `[]merkle.Change`; each entry's `Type` is `Added`, `Removed`, or
+   `Modified`.
 
-The DiffEngine and SnapshotStore are the same primitives `spex diff`
-uses — RefreshHandler does not duplicate this code, it imports it.
+These are the same primitives `spex diff` uses — RefreshHandler does
+not duplicate this code, it imports it.
 
 ## Step 3: gate on diff shape
 
 ```go
-if len(diff.Added) > 0 {
+var added, removed []string
+for _, c := range merkle.Diff(current, snapshot) {
+    switch c.Type {
+    case merkle.Added:
+        added = append(added, c.Key)
+    case merkle.Removed:
+        removed = append(removed, c.Key)
+    }
+}
+if len(added) > 0 {
     return summary, &RefreshRefusal{
         Kind:    "added_entries",
-        Entries: diff.Added,
+        Entries: added,
         Hint:    "structural change; use the normal pipeline",
     }
 }
-if len(diff.Removed) > 0 {
+if len(removed) > 0 {
     return summary, &RefreshRefusal{
         Kind:    "removed_entries",
-        Entries: diff.Removed,
+        Entries: removed,
         Hint:    "structural change; use the normal pipeline",
     }
 }
@@ -97,11 +110,12 @@ For each bead-map record:
 Track which records were updated so the summary can report counts. Do not
 mutate `record.BeadID`, `record.Status`, `record.OpID`, or any other field.
 
-For records that map to nodes without a content leaf (e.g., a record that
-maps to a meta envelope, if such a record exists in this version of the
-schema), the content hash is the meta-leaf hash from the merkle tree. Use
-the tree built in Step 2 as the lookup table — `tree.LeafHash(spec_node_id)`
-returns the right hash regardless of node kind.
+Use the tree built in Step 2 as the lookup table: flatten its leaves
+into a `map[key]hash` once and read every record's current hash from
+that map — it returns the right hash regardless of node kind.
+Proposal-epic records (`node_type == "proposal"`) reference the proposal
+ref, not a spec node, and are skipped — the same exemption the
+Reconciler's orphan invariant applies.
 
 ## Step 6: atomic commit
 

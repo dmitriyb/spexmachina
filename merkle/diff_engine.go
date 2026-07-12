@@ -6,7 +6,7 @@ import "sort"
 type ChangeType int
 
 const (
-	Added    ChangeType = iota + 1
+	Added ChangeType = iota + 1
 	Removed
 	Modified
 )
@@ -26,7 +26,7 @@ func (ct ChangeType) String() string {
 
 // Change represents a single leaf-level difference between two merkle trees.
 type Change struct {
-	Path     string     // identity hash key
+	Key      string     // identity hash key
 	Type     ChangeType // Added, Removed, or Modified
 	NodeType string     // "component", "impl_section", "data_flow", "test_section", "meta", "requirement"
 	Module   string     // identity hash of parent module ("" for project-level nodes)
@@ -42,7 +42,7 @@ type leafInfo struct {
 }
 
 // Diff compares two merkle trees (current vs snapshot) and returns leaf-level
-// changes sorted by path. If snapshot is nil (first run), all current leaves
+// changes sorted by key. If snapshot is nil (first run), all current leaves
 // are reported as "added".
 func Diff(current, snapshot *Node) []Change {
 	currentLeaves := make(map[string]leafInfo)
@@ -55,12 +55,12 @@ func Diff(current, snapshot *Node) []Change {
 
 	var changes []Change
 
-	// Added and modified: paths in current
-	for path, cur := range currentLeaves {
-		old, exists := snapshotLeaves[path]
+	// Added and modified: keys in current
+	for key, cur := range currentLeaves {
+		old, exists := snapshotLeaves[key]
 		if !exists {
 			changes = append(changes, Change{
-				Path:     path,
+				Key:      key,
 				Type:     Added,
 				NodeType: cur.NodeType,
 				Module:   cur.Module,
@@ -68,7 +68,7 @@ func Diff(current, snapshot *Node) []Change {
 			})
 		} else if cur.Hash != old.Hash {
 			changes = append(changes, Change{
-				Path:     path,
+				Key:      key,
 				Type:     Modified,
 				NodeType: cur.NodeType,
 				Module:   cur.Module,
@@ -78,11 +78,11 @@ func Diff(current, snapshot *Node) []Change {
 		}
 	}
 
-	// Removed: paths in snapshot but not in current
-	for path, old := range snapshotLeaves {
-		if _, exists := currentLeaves[path]; !exists {
+	// Removed: keys in snapshot but not in current
+	for key, old := range snapshotLeaves {
+		if _, exists := currentLeaves[key]; !exists {
 			changes = append(changes, Change{
-				Path:     path,
+				Key:      key,
 				Type:     Removed,
 				NodeType: old.NodeType,
 				Module:   old.Module,
@@ -92,7 +92,7 @@ func Diff(current, snapshot *Node) []Change {
 	}
 
 	sort.Slice(changes, func(i, j int) bool {
-		return changes[i].Path < changes[j].Path
+		return changes[i].Key < changes[j].Key
 	})
 
 	return changes

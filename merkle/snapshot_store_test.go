@@ -76,8 +76,8 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 	expectedKeys := []string{
 		"project",
 		"meta/project",
-		schema.IdentityHash("project", "requirement", "000000000001"),
-		schema.IdentityHash("project", "requirement", "000000000002"),
+		fixtureProjReq1ID,
+		fixtureProjReq2ID,
 		alphaHash,
 		"meta/" + alphaHash,
 		schema.IdentityHash("alpha", "requirement", "Alpha req 1"),

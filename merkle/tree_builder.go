@@ -57,8 +57,7 @@ func BuildTree(specDir string) (*Node, error) {
 
 	var projReqNodes []*Node
 	for _, req := range proj.Requirements {
-		key := schema.IdentityHash("project", "requirement", req.ID)
-		node, err := hashRequirement(req, key, "")
+		node, err := hashRequirement(req, req.ID, "")
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
@@ -101,7 +100,7 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
-	moduleHash := schema.IdentityHash("module", mod.Name)
+	moduleHash := mod.ID
 
 	metaKey := "meta/" + moduleHash
 	modLeaf, err := hashLeaf(modJSONPath, metaKey, "meta", moduleHash)
