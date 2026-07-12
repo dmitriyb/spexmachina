@@ -154,7 +154,7 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
 	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
 	alphaImpl2 := schema.IdentityHash("alpha", "impl_section", "Impl2")
-	projReq1 := schema.IdentityHash("project", "requirement", "000000000001")
+	projReq1 := fixtureProjReq1ID
 
 	alphaMod := `{
 		"name": "alpha",
@@ -399,8 +399,8 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		t.Fatal("expected changes, got none")
 	}
 
-	projReq1 := schema.IdentityHash("project", "requirement", "000000000001")
-	projReq2 := schema.IdentityHash("project", "requirement", "000000000002")
+	projReq1 := fixtureProjReq1ID
+	projReq2 := fixtureProjReq2ID
 	projectLevelKeys := map[string]bool{
 		"meta/project": true,
 		projReq1:       true,

@@ -23,15 +23,12 @@ type completenessFixture struct {
 	comp1Hash string
 	comp2Hash string
 	comp3Hash string
-	// projReq1ID/projReq5ID are the raw project requirement IDs stored in
+	// projReq1ID/projReq5ID are the project requirement ids stored in
 	// project.json (and used as module preq_id values, matching real specs).
+	// They are also the tree keys the diff engine emits as Change.Key for
+	// project-level requirement leaves.
 	projReq1ID string
 	projReq5ID string
-	// projReq1Key/projReq5Key are the TreeBuilder tree keys
-	// (IdentityHash("project","requirement",<id>)) — what the diff engine
-	// emits as Change.Key for project-level requirement leaves.
-	projReq1Key string
-	projReq5Key string
 }
 
 // setupCompletenessSpecDir creates a spec directory with requirements and
@@ -50,22 +47,20 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 		comp1Hash:   schema.IdentityHash("alpha", "component", "CompA"),
 		comp2Hash:   schema.IdentityHash("alpha", "component", "CompB"),
 		comp3Hash:   schema.IdentityHash("alpha", "component", "CompC"),
-		projReq1ID:  "000000000001",
-		projReq5ID:  "000000000005",
-		projReq1Key: schema.IdentityHash("project", "requirement", "000000000001"),
-		projReq5Key: schema.IdentityHash("project", "requirement", "000000000005"),
+		projReq1ID:  schema.IdentityHash("project", "requirement", "Proj Req 1"),
+		projReq5ID:  schema.IdentityHash("project", "requirement", "Proj Req 5"),
 	}
 
-	proj := `{
+	proj := fmt.Sprintf(`{
 		"name": "test-project",
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "Proj Req 1"},
-			{"id": "000000000005", "type": "functional", "title": "Proj Req 5"}
+			{"id": %q, "type": "functional", "title": "Proj Req 1"},
+			{"id": %q, "type": "functional", "title": "Proj Req 5"}
 		],
 		"modules": [
-			{"id": "000000000001", "name": "Alpha", "path": "alpha"}
+			{"id": %q, "name": "Alpha", "path": "alpha"}
 		]
-	}`
+	}`, fx.projReq1ID, fx.projReq5ID, fx.alphaHash)
 	writeFile(t, dir, "project.json", proj)
 
 	alphaDir := filepath.Join(dir, "alpha")
@@ -232,7 +227,7 @@ func TestREQ8_C6_ProjectRequirementNoModuleDerivation(t *testing.T) {
 	fx := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq5Key, "", Modified),
+		reqChange(fx.projReq5ID, "", Modified),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
@@ -257,7 +252,7 @@ func TestREQ8_C7_ProjectRequirementChainIncomplete(t *testing.T) {
 	// projReq1 modified. Module reqs 1 and 2 both derive from it.
 	// Req 1 → CompA. Req 2 → CompB, CompC. None of the components are in the diff.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1Key, "", Modified),
+		reqChange(fx.projReq1ID, "", Modified),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
@@ -288,7 +283,7 @@ func TestREQ8_C8_ProjectRequirementChainComplete(t *testing.T) {
 	// projReq1 changed. CompA, CompB, CompC all in the diff — all derived
 	// module requirements (req1, req2) are fully covered.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1Key, "", Modified),
+		reqChange(fx.projReq1ID, "", Modified),
 		compChange(fx.comp1Hash, fx.alphaHash, Modified),
 		compChange(fx.comp2Hash, fx.alphaHash, Modified),
 		compChange(fx.comp3Hash, fx.alphaHash, Modified),
@@ -396,7 +391,7 @@ func TestREQ8_ProjectRequirement_Added_NoDerivation(t *testing.T) {
 	fx := setupCompletenessSpecDir(t)
 
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq5Key, "", Added),
+		reqChange(fx.projReq5ID, "", Added),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
@@ -415,7 +410,7 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 
 	// projReq1 removed. Module reqs 1, 2, and 99 still have preq_id = projReq1ID.
 	changes := []ClassifiedChange{
-		reqChange(fx.projReq1Key, "", Removed),
+		reqChange(fx.projReq1ID, "", Removed),
 	}
 
 	errs := CheckCompleteness(changes, fx.specDir)
@@ -444,14 +439,14 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 }
 
 // TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation verifies that derivation
-// resolution recognizes module requirements whose preq_id stores the raw project
-// requirement ID (as the real repo's module.json files do) rather than the
-// TreeBuilder's double-hashed tree key. Regression guard for spexmachina-elv.
+// resolution recognizes module requirements whose preq_id stores the project
+// requirement id (as the real repo's module.json files do). The diff engine
+// emits that same id as Change.Key — no re-derived tree key exists anymore.
+// Regression guard for spexmachina-elv, updated for spexmachina-f7re.
 func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 	dir := t.TempDir()
 
 	rawProjReqID := "0a0f49f9be9b"
-	projReqTreeKey := schema.IdentityHash("project", "requirement", rawProjReqID)
 	modReqID := schema.IdentityHash("alpha", "requirement", "Derived")
 	compID := schema.IdentityHash("alpha", "component", "CompA")
 
@@ -480,12 +475,12 @@ func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 	writeFile(t, alphaDir, "module.json", alphaMod)
 	writeFile(t, alphaDir, "arch_comp_a.md", "# CompA\n")
 
-	// Diff carries the TREE KEY (projReqTreeKey) as c.Key for the added project
-	// requirement. The module requirement's preq_id stores the RAW ID. The
-	// checker must resolve that the module req derives from the project req.
-	// With CompA also modified, we expect zero errors.
+	// Diff carries the requirement's id as c.Key for the added project
+	// requirement, and the module requirement's preq_id stores that same id.
+	// The checker must resolve that the module req derives from the project
+	// req. With CompA also modified, we expect zero errors.
 	changes := []ClassifiedChange{
-		reqChange(projReqTreeKey, "", Added),
+		reqChange(rawProjReqID, "", Added),
 		compChange(compID, schema.IdentityHash("module", "Alpha"), Modified),
 	}
 
@@ -509,8 +504,8 @@ func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
 		reqChange(fx.req1Hash, fx.alphaHash, Modified), // C2 branch
 		reqChange(fx.req99Hash, fx.alphaHash, Added),   // C3 branch (req in module.json, no implementor)
 		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // C5 branch
-		reqChange(fx.projReq1Key, "", Modified),        // project modified branch
-		reqChange(fx.projReq5Key, "", Added),           // project no-derivation branch
+		reqChange(fx.projReq1ID, "", Modified),        // project modified branch
+		reqChange(fx.projReq5ID, "", Added),           // project no-derivation branch
 		{ // meta-only branch
 			Change: Change{Key: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
 			Impact: Structural,
@@ -581,7 +576,7 @@ func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
 		reqChange(fx.req1Hash, fx.alphaHash, Modified), // modified req, component unchanged
 		reqChange(fx.req99Hash, fx.alphaHash, Added),   // added req, no implementor
 		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // removed req, still referenced
-		reqChange(fx.projReq5Key, "", Modified),        // project req, no derivation
+		reqChange(fx.projReq5ID, "", Modified),        // project req, no derivation
 	}, fx.specDir)
 	assertTyped(t, "requirement branches", reqErrs)
 

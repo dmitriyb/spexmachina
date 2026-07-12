@@ -59,15 +59,14 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 
 	moduleByHash := make(map[string]schema.Module, len(proj.Modules))
 	for _, m := range proj.Modules {
-		moduleByHash[schema.IdentityHash("module", m.Name)] = m
+		moduleByHash[m.ID] = m
 	}
 
-	// Map the TreeBuilder's project-requirement tree key back to the
-	// underlying Requirement so project-level errors carry the identity hash
-	// (req.ID) instead of the double-hashed tree key.
-	projReqByTreeKey := make(map[string]schema.Requirement, len(proj.Requirements))
+	// Index project requirements by id — the same value TreeBuilder uses as
+	// the tree key for project-requirement leaves.
+	projReqByID := make(map[string]schema.Requirement, len(proj.Requirements))
 	for _, req := range proj.Requirements {
-		projReqByTreeKey[schema.IdentityHash("project", "requirement", req.ID)] = req
+		projReqByID[req.ID] = req
 	}
 
 	moduleSpecCache := make(map[string]*schema.ModuleSpec)
@@ -107,14 +106,11 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 	}
 
 	for _, c := range projectReqChanges {
-		// c.Key is the TreeBuilder tree key (double hash). Resolve it to the
-		// underlying req.ID so path/related carry identity hashes that appear
-		// in project.json. If the project requirement was truly removed from
-		// the current spec, the lookup fails and we fall back to the tree key.
+		// c.Key is the requirement's id. The lookup only supplies the title;
+		// for a requirement removed from the current spec it simply misses.
 		reqHash := c.Key
 		var reqTitle string
-		if req, ok := projReqByTreeKey[c.Key]; ok {
-			reqHash = req.ID
+		if req, ok := projReqByID[c.Key]; ok {
 			reqTitle = req.Title
 		}
 
@@ -287,22 +283,17 @@ type derivedRequirement struct {
 }
 
 // findDerivedModuleRequirements returns all module requirements whose preq_id
-// matches projReqHash. Callers may pass projReqHash as either the raw project
-// requirement ID (as stored in project.json) or the TreeBuilder-computed tree
-// key IdentityHash("project", "requirement", req.ID). Module requirements in
-// real specs store preq_id with the raw ID, while some fixtures use the tree
-// key directly — both forms are accepted so the checker works in both cases.
+// matches projReqHash (the project requirement's id, which is also its tree key).
 func findDerivedModuleRequirements(projReqHash string, proj *schema.Project, loadModule func(string) *schema.ModuleSpec) []derivedRequirement {
 	var result []derivedRequirement
 	for _, m := range proj.Modules {
-		mHash := schema.IdentityHash("module", m.Name)
+		mHash := m.ID
 		modSpec := loadModule(mHash)
 		if modSpec == nil {
 			continue
 		}
 		for _, req := range modSpec.Requirements {
-			preqTreeKey := schema.IdentityHash("project", "requirement", req.PreqID)
-			if req.PreqID == projReqHash || preqTreeKey == projReqHash {
+			if req.PreqID == projReqHash {
 				result = append(result, derivedRequirement{
 					moduleHash: mHash,
 					reqHash:    req.ID,
