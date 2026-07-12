@@ -468,6 +468,67 @@ func TestBuild_CleanupOpShape(t *testing.T) {
 	}
 }
 
+// TestBuild_BodyLinksSpecFiles covers the impl spec's "Title and Body"
+// contract: a create op's body is a markdown blob linking the node's spec
+// files (content leaf + module.json), which the adapter passes through to
+// the tracker's description field.
+func TestBuild_BodyLinksSpecFiles(t *testing.T) {
+	env := newBuilderEnv()
+	env.graph.paths["c1"] = NodePaths{
+		Content: "spec/emit/arch_foo.md",
+		Module:  "spec/emit/module.json",
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("c1", "emit", "Foo", nil),
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	op := findOp(t, cs.Ops, "c1")
+	if !strings.Contains(op.Body, "spec/emit/arch_foo.md") {
+		t.Errorf("body must link the content leaf, got %q", op.Body)
+	}
+	if !strings.Contains(op.Body, "spec/emit/module.json") {
+		t.Errorf("body must link module.json, got %q", op.Body)
+	}
+}
+
+// TestBuild_BodyEmptyWithoutSpecPaths pins the two empty-body cases: the
+// proposal epic (no on-disk content leaf) and cleanup ops (body empty per
+// arch_changeset_builder.md "Cleanup op shape"), plus creates whose node
+// is unknown to the spec graph.
+func TestBuild_BodyEmptyWithoutSpecPaths(t *testing.T) {
+	env := newBuilderEnv()
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("nopath", "m", "X", nil),
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "Y",
+				NodeType:   "component",
+				SpecNodeID: "cleanup1",
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: m/Y",
+			},
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	for _, id := range []string{"p", "nopath", "cleanup1"} {
+		if op := findOp(t, cs.Ops, id); op.Body != "" {
+			t.Errorf("op %s: want empty body, got %q", id, op.Body)
+		}
+	}
+}
+
 // TestBuild_CleanupDoesNotAdvanceCursor covers the spec scenario:
 // "Cursor non-advancement: build a changeset containing one cleanup
 // create AND one fresh component create. Assert the fresh create's

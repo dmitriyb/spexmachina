@@ -14,6 +14,7 @@ type fakeSpecGraph struct {
 	components   map[string]Component
 	moduleReqs   map[string]ModuleRequirement
 	projectReqs  map[string]ProjectRequirement
+	paths        map[string]NodePaths
 }
 
 func newFakeSpecGraph() *fakeSpecGraph {
@@ -21,6 +22,7 @@ func newFakeSpecGraph() *fakeSpecGraph {
 		components:  make(map[string]Component),
 		moduleReqs:  make(map[string]ModuleRequirement),
 		projectReqs: make(map[string]ProjectRequirement),
+		paths:       make(map[string]NodePaths),
 	}
 }
 
@@ -37,6 +39,11 @@ func (g *fakeSpecGraph) ModuleRequirement(id string) (ModuleRequirement, bool) {
 func (g *fakeSpecGraph) ProjectRequirement(id string) (ProjectRequirement, bool) {
 	r, ok := g.projectReqs[id]
 	return r, ok
+}
+
+func (g *fakeSpecGraph) Paths(id string) (NodePaths, bool) {
+	p, ok := g.paths[id]
+	return p, ok
 }
 
 func intPtr(i int) *int { return &i }

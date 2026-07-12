@@ -195,6 +195,7 @@ type emitSpecGraph struct {
 	components  map[string]emit.Component
 	moduleReqs  map[string]emit.ModuleRequirement
 	projectReqs map[string]emit.ProjectRequirement
+	paths       map[string]emit.NodePaths
 }
 
 func newEmitSpecGraph(specDir string) (*emitSpecGraph, error) {
@@ -211,6 +212,7 @@ func newEmitSpecGraph(specDir string) (*emitSpecGraph, error) {
 		components:  map[string]emit.Component{},
 		moduleReqs:  map[string]emit.ModuleRequirement{},
 		projectReqs: map[string]emit.ProjectRequirement{},
+		paths:       map[string]emit.NodePaths{},
 	}
 	for _, r := range proj.Requirements {
 		g.projectReqs[r.ID] = emit.ProjectRequirement{Priority: r.Priority}
@@ -232,8 +234,31 @@ func newEmitSpecGraph(specDir string) (*emitSpecGraph, error) {
 		for _, mr := range ms.Requirements {
 			g.moduleReqs[mr.ID] = emit.ModuleRequirement{PreqID: mr.PreqID}
 		}
+		// Index every content-bearing node's repo-relative paths for
+		// create-op body links. The "spec/" prefix matches the form the
+		// mapping store records in content_file.
+		modFile := filepath.Join("spec", mod.Path, "module.json")
+		addPath := func(id, content string) {
+			if content == "" {
+				return
+			}
+			g.paths[id] = emit.NodePaths{
+				Content: filepath.Join("spec", mod.Path, content),
+				Module:  modFile,
+			}
+		}
 		for _, c := range ms.Components {
 			g.components[c.ID] = emit.Component{Implements: c.Implements}
+			addPath(c.ID, c.Content)
+		}
+		for _, s := range ms.ImplSections {
+			addPath(s.ID, s.Content)
+		}
+		for _, f := range ms.DataFlows {
+			addPath(f.ID, f.Content)
+		}
+		for _, ts := range ms.TestSections {
+			addPath(ts.ID, ts.Content)
 		}
 	}
 	return g, nil
@@ -252,4 +277,9 @@ func (g *emitSpecGraph) ModuleRequirement(id string) (emit.ModuleRequirement, bo
 func (g *emitSpecGraph) ProjectRequirement(id string) (emit.ProjectRequirement, bool) {
 	r, ok := g.projectReqs[id]
 	return r, ok
+}
+
+func (g *emitSpecGraph) Paths(id string) (emit.NodePaths, bool) {
+	p, ok := g.paths[id]
+	return p, ok
 }
