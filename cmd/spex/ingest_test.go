@@ -14,6 +14,7 @@ import (
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/ingest"
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -508,4 +509,185 @@ func TestIngestCommand_ReRun_LeavesMappingByteIdentical(t *testing.T) {
 	// only assert that the file still exists and has well-formed JSON.
 	_ = snapAfter1
 	_ = snapAfter2
+}
+
+// setupRefreshedFixture runs a complete normal-mode ingest over the
+// fixture (materialising a record and the snapshot baseline), then
+// writes the empty changeset+receipts pair refresh mode requires.
+// Returns the fixture plus the two empty artifact paths.
+func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
+	t.Helper()
+	f := setupIngestFixture(t, adapters.StatusComplete)
+	_, stderr, exit, err := runIngest(t,
+		"--changeset", f.changesetPath,
+		"--receipts", f.receiptsPath,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if err != nil || exit != 0 {
+		t.Fatalf("seed normal ingest: exit %d err %v stderr %s", exit, err, stderr)
+	}
+
+	dir := filepath.Dir(f.changesetPath)
+	emptyCS := filepath.Join(dir, "refresh-changeset.json")
+	writeJSON(t, emptyCS, emit.Changeset{Version: emit.ChangesetVersion})
+	emptyRC := filepath.Join(dir, "refresh-receipts.json")
+	writeJSON(t, emptyRC, adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete})
+	return f, emptyCS, emptyRC
+}
+
+// TestIngestCommand_RefreshMode_AbsorbsDrift covers the command-level
+// happy path: --mode refresh dispatches to RefreshHandler, updates the
+// stale record's spec_hash, rewrites the snapshot, and emits the
+// refresh summary shape.
+func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
+	f, emptyCS, emptyRC := setupRefreshedFixture(t)
+
+	// Content-only drift on the component's arch leaf.
+	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp1.md", "# Comp1 (revised)\n")
+
+	stdout, _, exit, err := runIngest(t,
+		"--mode", "refresh",
+		"--changeset", emptyCS,
+		"--receipts", emptyRC,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if err != nil || exit != 0 {
+		t.Fatalf("refresh run: exit %d err %v", exit, err)
+	}
+
+	var sum ingest.RefreshSummary
+	if err := json.Unmarshal([]byte(stdout), &sum); err != nil {
+		t.Fatalf("parse summary %q: %v", stdout, err)
+	}
+	if sum.RecordsUpdated != 1 || !sum.SnapshotSaved || sum.Status != adapters.StatusComplete {
+		t.Errorf("summary: want 1 updated, snapshot_saved, complete; got %+v", sum)
+	}
+
+	store := mapping.NewFileStore(f.mapPath)
+	rec, err := store.Get(f.recordID)
+	if err != nil {
+		t.Fatalf("get record: %v", err)
+	}
+	wantHash, err := merkle.HashFile(filepath.Join(f.specDir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.SpecHash != wantHash {
+		t.Errorf("record spec_hash: want current %s, got %s", wantHash, rec.SpecHash)
+	}
+	if rec.BeadID != f.beadID {
+		t.Errorf("bead_id must be untouched: want %s, got %s", f.beadID, rec.BeadID)
+	}
+}
+
+// TestIngestCommand_RefreshMode_RefusalExits2 covers the exit-code
+// contract: a structural diff (added leaf) maps the RefreshRefusal to
+// exit code 2 with the entries named on the error.
+func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
+	f, emptyCS, emptyRC := setupRefreshedFixture(t)
+
+	newID := schema.IdentityHash("alpha", "component", "Comp2")
+	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+f.compID+`", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "`+newID+`", "name": "Comp2", "content": "arch_comp2.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp2.md", "# Comp2\n")
+
+	mapBefore, err := os.ReadFile(f.mapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, exit, runErr := runIngest(t,
+		"--mode", "refresh",
+		"--changeset", emptyCS,
+		"--receipts", emptyRC,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if exit != 2 {
+		t.Fatalf("want exit 2 for refresh refusal, got %d (err %v)", exit, runErr)
+	}
+	if runErr == nil || !strings.Contains(runErr.Error(), newID) {
+		t.Errorf("refusal must name the added entry %s: %v", newID, runErr)
+	}
+	mapAfter, err := os.ReadFile(f.mapPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(mapAfter) != string(mapBefore) {
+		t.Error("bead-map must be unchanged after refusal")
+	}
+}
+
+// TestIngestCommand_RefreshMode_MissingSnapshotExits1 covers the
+// pre-flight edge: refresh without a snapshot baseline is an input
+// error (exit 1), pointing the caller at a normal-mode bootstrap.
+func TestIngestCommand_RefreshMode_MissingSnapshotExits1(t *testing.T) {
+	f := setupIngestFixture(t, adapters.StatusComplete)
+	dir := filepath.Dir(f.changesetPath)
+	emptyCS := filepath.Join(dir, "refresh-changeset.json")
+	writeJSON(t, emptyCS, emit.Changeset{Version: emit.ChangesetVersion})
+	emptyRC := filepath.Join(dir, "refresh-receipts.json")
+	writeJSON(t, emptyRC, adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete})
+
+	_, _, exit, err := runIngest(t,
+		"--mode", "refresh",
+		"--changeset", emptyCS,
+		"--receipts", emptyRC,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if exit != 1 {
+		t.Fatalf("want exit 1 for missing snapshot, got %d (err %v)", exit, err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "snapshot") {
+		t.Errorf("error must mention the missing snapshot: %v", err)
+	}
+}
+
+// TestIngestCommand_RefreshMode_NonEmptyArtifactsExits1 covers the
+// configuration-error edge: passing the normal (op-carrying) changeset
+// and receipts to a refresh run exits 1.
+func TestIngestCommand_RefreshMode_NonEmptyArtifactsExits1(t *testing.T) {
+	f, _, _ := setupRefreshedFixture(t)
+
+	_, _, exit, err := runIngest(t,
+		"--mode", "refresh",
+		"--changeset", f.changesetPath,
+		"--receipts", f.receiptsPath,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if exit != 1 {
+		t.Fatalf("want exit 1 for non-empty artifacts, got %d (err %v)", exit, err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error must say the artifacts must be empty: %v", err)
+	}
+}
+
+// TestIngestCommand_UnknownModeExits1 pins flag validation: --mode
+// accepts only normal or refresh.
+func TestIngestCommand_UnknownModeExits1(t *testing.T) {
+	f, emptyCS, emptyRC := setupRefreshedFixture(t)
+
+	_, _, exit, err := runIngest(t,
+		"--mode", "bogus",
+		"--changeset", emptyCS,
+		"--receipts", emptyRC,
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if exit != 1 {
+		t.Fatalf("want exit 1 for unknown mode, got %d (err %v)", exit, err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "--mode") {
+		t.Errorf("error must mention --mode: %v", err)
+	}
 }

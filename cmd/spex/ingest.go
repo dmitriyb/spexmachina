@@ -17,7 +17,7 @@ import (
 )
 
 func newIngestCmd() *cobra.Command {
-	var changesetPath, receiptsPath, mapPath string
+	var changesetPath, receiptsPath, mapPath, mode string
 
 	cmd := &cobra.Command{
 		Use:   "ingest",
@@ -26,15 +26,23 @@ func newIngestCmd() *cobra.Command {
 receipts.json an adapter wrote after applying it, reconciles the bead
 mapping store, and writes spec/.snapshot.json when the run is complete.
 
+With --mode refresh (empty changeset + empty receipts), ingest instead
+absorbs content-only drift: every mapping record's spec_hash is aligned
+with current content and the snapshot is rewritten, atomically, with no
+bead lifecycle. Structural diffs (added/removed leaves) are refused.
+
 Inputs:
   --changeset <file>   changeset JSON (required)
   --receipts <file>    receipts JSON (required)
   --map <file>         bead mapping file (default: .bead-map.json)
+  --mode <mode>        normal (default) or refresh
 
 Exit codes:
   0 — success (complete OR partial with no reconciler errors)
-  1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure)
-  2 — invariant failure (mapping store unchanged on disk)`,
+  1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure,
+      missing pre-refresh snapshot, non-empty refresh artifacts)
+  2 — invariant failure (mapping store unchanged on disk) or refresh
+      refusal (added/removed entries, orphan record)`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			specDir, err := resolveSpecDir(cmd)
 			if err != nil {
@@ -54,6 +62,13 @@ Exit codes:
 			}
 
 			store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
+
+			if mode == "refresh" {
+				return runRefreshMode(cmd, store, specDir, cs, rc)
+			}
+			if mode != "normal" {
+				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
+			}
 
 			graph, err := newIngestSpecGraph(specDir)
 			if err != nil {
@@ -92,9 +107,35 @@ Exit codes:
 	cmd.Flags().StringVar(&changesetPath, "changeset", "", "path to changeset.json")
 	cmd.Flags().StringVar(&receiptsPath, "receipts", "", "path to receipts.json")
 	cmd.Flags().StringVar(&mapPath, "map", ".bead-map.json", "path to bead mapping file")
+	cmd.Flags().StringVar(&mode, "mode", "normal", "run mode: normal or refresh")
 	_ = cmd.MarkFlagRequired("changeset")
 	_ = cmd.MarkFlagRequired("receipts")
 	return cmd
+}
+
+// runRefreshMode dispatches to the RefreshHandler pathway. Refusals
+// (structural diff entries, orphan records) map to the invariant exit
+// code 2; pre-flight failures (missing snapshot, non-empty artifacts)
+// and IO errors map to input-error exit code 1, per arch_ingest_command.md.
+func runRefreshMode(cmd *cobra.Command, store mapping.Store, specDir string, cs emit.Changeset, rc adapters.Receipts) error {
+	h := &ingest.RefreshHandler{
+		Store:     store,
+		Changeset: &cs,
+		Receipts:  &rc,
+	}
+	sum, err := h.Apply(specDir)
+	if err != nil {
+		var refusal *ingest.RefreshRefusal
+		if errors.As(err, &refusal) {
+			return ingestInvariantErr(err)
+		}
+		return ingestInputErr(err)
+	}
+
+	enc := json.NewEncoder(cmd.OutOrStdout())
+	enc.SetIndent("", "  ")
+	enc.SetEscapeHTML(false)
+	return enc.Encode(sum)
 }
 
 func loadChangeset(path string) (emit.Changeset, error) {
