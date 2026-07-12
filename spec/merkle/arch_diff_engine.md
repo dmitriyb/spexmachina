@@ -16,7 +16,7 @@ Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash
 type Change struct {
     Key      string // identity hash of the spec node, e.g. "a1b2c3d4e5f6";
                     //   or "meta/project" / "meta/<module-hash>" for envelope leaves
-    Type     string // "added", "removed", "modified"
+    Type     ChangeType // int enum; String() yields "added", "removed", "modified"
     NodeType string // "component", "impl_section", "data_flow", "test_section", "meta", "requirement", "module"
     Module   string // identity hash of the parent module ("" for project-level nodes)
     OldHash  string // empty for "added"

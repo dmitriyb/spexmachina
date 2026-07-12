@@ -84,5 +84,6 @@ Each checker appends to a shared `[]ValidationError` slice. No checker short-cir
   - schema_version: string
 
 Exit code: `0` if `valid == true`, `1` otherwise. Shape changes here cascade
-into downstream consumers (CI pipelines, `spex hash` preflight, skills that
-parse the report).
+into downstream consumers (CI pipelines, `spex diff` — which builds the
+merkle tree on demand and assumes a validated spec — and skills that parse
+the report).

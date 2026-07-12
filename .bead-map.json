@@ -9,7 +9,7 @@
       "module": "schema",
       "component": "ProjectSchema",
       "content_file": "spec/schema/arch_project_schema.md",
-      "spec_hash": "a3c773c552921dc4bb235ec816da1fe08da401a12703f878600efdef6121ccbf"
+      "spec_hash": "641d503c2bc179dc90fcfc994c9e3a81c645af2b87fe87cd4e83c96e46d43d47"
     },
     {
       "id": 2,
@@ -153,7 +153,7 @@
       "module": "merkle",
       "component": "DiffEngine",
       "content_file": "spec/merkle/arch_diff_engine.md",
-      "spec_hash": "164c1892d2aee09b1e5b4ba693013b92e1dbb6485ddff4c5980e7bf0387020c2"
+      "spec_hash": "7598f818f85ff3d399f4346e0a1feebe6782368ede60142756a8feb92d9d80a1"
     },
     {
       "id": 16,
@@ -215,7 +215,7 @@
       "module": "impact",
       "component": "ReportGenerator",
       "content_file": "spec/impact/arch_report_generator.md",
-      "spec_hash": "97f25db569bd88690eecddba570764161d9c6e485d0664762e4441ce1908afef"
+      "spec_hash": "c89a355659ecd53236fa772cae480b212a25b01044c522e61dccbd03f506dc90"
     },
     {
       "id": 23,
@@ -451,7 +451,7 @@
       "module": "emit",
       "component": "Emit flow",
       "content_file": "",
-      "spec_hash": "dbf868d7a79b2459c1f0dabb9d55f62a2f3599a033e6342ccba33d8609baaf7d"
+      "spec_hash": "4311bc13ee12df91fcad9d4e4068989639ed711ba2c735ad3e74bed0c98178f7"
     },
     {
       "id": 65,
@@ -484,7 +484,7 @@
       "module": "emit",
       "component": "Resolver",
       "content_file": "spec/emit/arch_resolver.md",
-      "spec_hash": "4ecded1122620a62191eee481fbd913162c99a7a64515b3d73409871261c8c51"
+      "spec_hash": "d13e44f64ad419c98add41e020ee6a09cc2f81b6bb6540f28fc0f922b93e8292"
     },
     {
       "id": 68,
@@ -561,7 +561,7 @@
       "module": "ingest",
       "component": "Consistency invariants",
       "content_file": "",
-      "spec_hash": "cd99a806ad8f468e0f109105c2687254db3d3b2a62ad56c5c90808b6dccb6b53"
+      "spec_hash": "26a1a1c2f0c6fd8f1cd1a46713581f9fea09f0c6955c90904b545f993af7ce01"
     },
     {
       "id": 76,
@@ -572,7 +572,7 @@
       "module": "ingest",
       "component": "Partial run recovery tests",
       "content_file": "",
-      "spec_hash": "bfb4ae1114d105d387c9d4020582fc9e781478cdbb87bf0c1d69fdfcccb76caa"
+      "spec_hash": "e60b5e501e0249009e31e91a400961683e7ed730b5bdadbc50093940e41e8e9d"
     },
     {
       "id": 77,
@@ -616,7 +616,7 @@
       "module": "merkle",
       "component": "Hash computation flow",
       "content_file": "spec/merkle/flow_hash_computation.md",
-      "spec_hash": "a367ec7511cd97cf0f3c0c88f86dc9877048ad8348bf31df26cf9e452b226fc4"
+      "spec_hash": "2ea591407ac017f4aaa0e1ced473b565c9e1c55bbeb277c4e02bc454700ad022"
     },
     {
       "id": 81,
@@ -638,7 +638,7 @@
       "module": "emit",
       "component": "Changeset builder tests",
       "content_file": "spec/emit/test_changeset_builder.md",
-      "spec_hash": "fadddbdc9e493659429fa9cccaa4a0456d9cf28fa083e914621f1bb18f8e527c"
+      "spec_hash": "35dab464bfcbc4b8dd55499e8c0e1f92932687f3f1af07830e45a1f0fbd5d31f"
     }
   ]
 }

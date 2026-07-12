@@ -8,9 +8,11 @@ All scenarios operate against a temporary spec directory created in `t.TempDir()
 
 ```
 tmpdir/
-  project.json          (lists one module: "alpha")
+  project.json          (lists one module: "alpha", with a 12-char hex id)
   alpha/
-    module.json          (lists components, impl_sections with content paths)
+    module.json          (lists components, impl_sections, data_flows —
+                          each carrying a 12-char hex identity `id` plus a
+                          content path; leaf keys are read from those ids)
     arch_widget.md       ("# Widget\nHandles widgets.")
     arch_gadget.md       ("# Gadget\nHandles gadgets.")
     impl_widget_logic.md ("# Widget Logic\nImplementation details.")
@@ -60,22 +62,19 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 **Given** the full fixture directory described in Setup
 **When** `BuildTree(tmpdir)` is called
-**Then** the root node has type `"project"` and two children: `project.json` (leaf) and `alpha` (module)
-**And** the `alpha` module node has children: `alpha/module.json` (leaf), `alpha/arch` (interior), `alpha/impl` (interior), `alpha/flow` (interior)
-**And** the `alpha/arch` interior node has children `alpha/arch_widget.md` and `alpha/arch_gadget.md`
-**And** the `alpha/impl` interior node has child `alpha/impl_widget_logic.md`
-**And** the `alpha/flow` interior node has child `alpha/flow_data_path.md`
+**Then** the root node has type `"project"` and two children: the `meta/project` envelope leaf and the `alpha` module node (keyed by alpha's identity hash)
+**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the impl_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
+**And** there are no per-type `arch`/`impl`/`flow` interior group nodes and no path-style keys anywhere in the tree
 
-**Rationale**: Validates the tree structure algorithm from `arch_tree_builder.md` and `impl_tree_construction.md`: `project.json` discovery, module enumeration, and content file grouping by prefix type.
+**Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md` and `impl_tree_construction.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
 
 ### S6: BuildTree hashes propagate bottom-up
 
 **Given** the full fixture directory
 **When** `BuildTree(tmpdir)` is called
 **Then** each leaf node's hash matches `HashFile` of its corresponding file
-**And** the `alpha/arch` interior hash equals `HashChildren` of its two leaf hashes
-**And** the `alpha` module hash equals `HashChildren` of `[module.json hash, arch hash, impl hash, flow hash]`
-**And** the root hash equals `HashChildren` of `[project.json hash, alpha module hash]`
+**And** the `alpha` module interior hash equals `HashChildren` over the meta envelope leaf hash plus each spec-node leaf hash directly — no intermediate group hashes
+**And** the root hash equals `HashChildren` of `[project envelope leaf hash, alpha module hash]`
 
 **Rationale**: End-to-end verification that the bottom-up hash propagation produces a consistent merkle tree. This is the core correctness property of the entire module.
 

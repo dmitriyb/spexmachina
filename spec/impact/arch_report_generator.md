@@ -6,7 +6,7 @@ Produces the structured JSON impact report from classified actions. Reports two 
 
 - Format classified actions as a JSON report
 - Include summary statistics (counts by action type)
-- Write to stdout for piping to `spex apply`
+- Write to stdout for piping to `spex emit`
 
 ## Interface
 
@@ -48,11 +48,11 @@ func GenerateReport(actions []Action, w io.Writer) error
 }
 ```
 
-The `dep_bead_ids` field on create actions carries resolved spec-graph dependency bead IDs. It may be empty or omitted when no spec-graph dependencies exist. Downstream, `spex apply` reads this field to pass `--deps depends:<bead-id>` flags to the bead CLI.
+The `dep_bead_ids` field on create actions carries resolved spec-graph dependency bead IDs. It may be empty or omitted when no spec-graph dependencies exist. Downstream, `spex emit` resolves this field into the changeset's dep refs, which the adapter turns into `--deps` flags on the tracker CLI.
 
 ## Composability
 
 The report is written to stdout as JSON, enabling piping:
 ```
-spex diff | spex impact | spex apply
+spex diff | spex impact | spex emit
 ```

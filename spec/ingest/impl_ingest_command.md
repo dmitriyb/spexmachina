@@ -21,24 +21,35 @@ import (
 )
 
 func newIngestCmd() *cobra.Command {
-    var changesetPath, receiptsPath string
+    var changesetPath, receiptsPath, mapPath, mode string
     cmd := &cobra.Command{
         Use:   "ingest",
         Short: "Reconcile mapping records and save snapshot from a receipts.json produced by an adapter",
         RunE: func(cmd *cobra.Command, args []string) error {
+            specDir, err := resolveSpecDir(cmd)
+            if err != nil { return exitInput(err) }
+
             cs, err := loadChangeset(changesetPath)
-            if err != nil { return err }
+            if err != nil { return exitInput(err) }
             rc, err := loadReceipts(receiptsPath)
-            if err != nil { return err }
+            if err != nil { return exitInput(err) }
 
-            if err := preflightPair(cs, rc); err != nil { return err }
+            if err := preflightPair(cs, rc); err != nil { return exitInput(err) }
 
-            store, err := mapping.Open("./.bead-map.json")
-            if err != nil { return err }
-            defer store.Close()
+            store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
 
-            graph, err := spec.Load("./spec")
-            if err != nil { return err }
+            // --mode dispatch: refresh routes to RefreshHandler and
+            // returns its RefreshSummary; any other value than
+            // normal|refresh is an input error.
+            if mode == "refresh" {
+                return runRefreshMode(cmd, store, specDir, cs, rc)
+            }
+            if mode != "normal" {
+                return exitInput(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
+            }
+
+            graph, err := newIngestSpecGraph(specDir)
+            if err != nil { return exitInput(err) }
 
             reconciler := &ingest.Reconciler{MappingStore: store, SpecGraph: graph}
             summary, err := reconciler.Apply(cs, rc)
@@ -46,7 +57,7 @@ func newIngestCmd() *cobra.Command {
                 return exitInvariant(err)
             }
 
-            saver := &ingest.Saver{SpecDir: "./spec"}
+            saver := &ingest.Saver{SpecDir: specDir}
             wrote, err := saver.Save(rc.Status)
             if err != nil {
                 return fmt.Errorf("ingest: snapshot: %w", err)
@@ -67,10 +78,17 @@ func newIngestCmd() *cobra.Command {
     }
     cmd.Flags().StringVar(&changesetPath, "changeset", "", "path to changeset.json")
     cmd.Flags().StringVar(&receiptsPath,  "receipts",  "", "path to receipts.json")
+    cmd.Flags().StringVar(&mapPath,       "map",       ".bead-map.json", "path to bead mapping file")
+    cmd.Flags().StringVar(&mode,          "mode",      "normal", "run mode: normal or refresh")
     _ = cmd.MarkFlagRequired("changeset")
     _ = cmd.MarkFlagRequired("receipts")
     return cmd
 }
+
+// runRefreshMode wires ingest.RefreshHandler with the parsed (empty)
+// changeset+receipts and the mapping store, maps RefreshRefusal to the
+// invariant exit code 2 and every other failure to input-error exit 1,
+// and encodes the RefreshSummary to stdout.
 ```
 
 ## Preflight

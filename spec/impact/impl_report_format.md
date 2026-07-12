@@ -42,4 +42,4 @@ Use `json.NewEncoder(w).Encode(&report)` with 2-space indentation for human read
 
 ## Empty Report
 
-When no changes are detected, the report has empty arrays and zero counts. This is a valid report — `spex apply` handles it as a no-op.
+When no changes are detected, the report has empty arrays and zero counts. This is a valid report — `spex emit` handles it as a no-op (an empty or epic-only changeset).

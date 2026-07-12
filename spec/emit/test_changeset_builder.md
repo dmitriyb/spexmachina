@@ -172,10 +172,13 @@ component's implementation bead.
 
 ## Fixtures
 
-Under `emit/testdata/`:
-- `changeset_canonical.json` — expected output for the canonical test.
-- `impact_chain.json` — dep-chain fixture.
-- `bead_map_mixed.json` — mix of open, closed, and missing mapping records.
+In-code Go fixtures, no on-disk testdata (the package convention). The
+tests in `emit/builder_test.go` compose `builderEnv` (a `fakeStore`
+mapping-store double plus a `fakeSpecGraph`), `sampleComponentCreate`
+for impact actions, and per-scenario seeded records — mixes of open,
+closed, and missing mapping records are seeded directly on
+`fakeStore.bySpecNode`. Canonical-output and determinism scenarios
+assert against JSON marshalled in-test rather than a golden file.
 
 ## Edge cases
 

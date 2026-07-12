@@ -5,51 +5,52 @@ Implementation notes for `ChangesetBuilder.Build`.
 ## Steps
 
 ```go
-func (b *Builder) Build(report impact.Report) (Changeset, error) {
-    // 1. Partition actions by type tier.
-    tiers := partitionByTier(report.Actions, b.SpecGraph)
+func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
+    // 1. Detect a pre-existing proposal epic; a fresh proposal prepends
+    //    a synthetic epic create to the batch.
+    hasExistingEpic, err := b.lookupExistingEpic()
+    if err != nil { return Changeset{}, err }
+    creates := b.collectCreates(report, hasExistingEpic)
 
-    // 2. Sort creates within each tier.
-    sorter := &Sorter{}
-    ordered, batchMap, err := sorter.Sort(tiers.AllCreates())
-    if err != nil {
-        return Changeset{}, err
-    }
+    // 2. Sort creates (tiered Kahn, lex tiebreak), then assign
+    //    zero-padded op ids in sorted order and build batchMap
+    //    (spec_node_id → op_id, plus the synthetic
+    //    "proposal/<ref>/epic" key when the epic is in-batch).
+    ordered, _, err := (&Sorter{}).Sort(creates)
+    if err != nil { return Changeset{}, err }
+    batchMap := assignOpIDs(ordered)
 
-    // 3. Reserve idempotency labels.
-    labels := (&Labeler{MappingStore: b.MappingStore}).Reserve(len(ordered))
-
-    // 4. Resolve parents and deps via Resolver (which now has batchMap).
+    // 3. Wire the per-action Labeler and the Resolver (which reads
+    //    batchMap for in-batch dep classification).
+    labeler := &Labeler{MappingStore: b.MappingStore}
     resolver := &Resolver{SpecGraph: b.SpecGraph, MappingStore: b.MappingStore, Batch: batchMap}
 
-    ops := make([]Op, 0, len(ordered)+len(tiers.Closes))
-    for i, oc := range ordered {
-        parent, err := resolver.ResolveParent(b.Proposal)
+    // 4. One label and one op per ordered create action. LabelFor
+    //    branches per action class: fresh creates consume the cursor,
+    //    cleanup creates derive spex:cleanup-<spec_node_id>, and
+    //    modify-pairs reuse the existing record id via GetByBead —
+    //    there is no bulk Reserve(len(ordered)) call.
+    ops := make([]Op, 0, len(ordered)+len(report.Obsoletes))
+    for _, oc := range ordered {
+        label, err := labeler.LabelFor(oc.Action)
         if err != nil { return Changeset{}, err }
-        deps, err := resolver.ResolveDeps(oc.Action.DepSpecNodeIDs)
+        // makeCreateOp applies the epic/cleanup/conventional shapes:
+        // parent + deps via Resolver, priority via the implements
+        // chain, Title via titleFor(oc.Action), Body via
+        // bodyFor(oc.Action, b.SpecGraph).
+        op, err := b.makeCreateOp(oc, label, resolver)
         if err != nil { return Changeset{}, err }
-        ops = append(ops, Op{
-            OpID: oc.OpID,
-            Type: "create",
-            SpecNodeKind: oc.Action.NodeType,
-            SpecNodeID: oc.Action.SpecNodeID,
-            Idempotency: Idem{Label: labels[i]},
-            Parent: parent,
-            Deps: deps,
-            Priority: resolver.Priority(oc.Action.SpecNodeID),
-            Title: titleFor(oc.Action, b.SpecGraph),
-            Body: bodyFor(oc.Action, b.SpecGraph),
-        })
+        ops = append(ops, op)
     }
 
     // 5. Append close ops.
-    for _, cl := range tiers.Closes {
+    for _, ob := range report.Obsoletes {
         ops = append(ops, Op{
             OpID: nextOpID(),
             Type: "close",
-            Target: Ref{Kind: "bead", BeadID: cl.BeadID},
+            Target: &Ref{Kind: RefBead, BeadID: ob.BeadID},
             Labels: []string{"spex:obsolete", "commit:" + b.GitHead},
-            Reason: cl.Reason,
+            Reason: ob.Reason,
         })
     }
 
