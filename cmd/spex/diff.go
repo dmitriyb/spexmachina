@@ -123,7 +123,7 @@ func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffErr
 
 	for i, cc := range classified {
 		out.Changes[i] = diffChange{
-			Path:     cc.Path,
+			Path:     cc.Key,
 			Type:     cc.Type.String(),
 			Impact:   cc.Impact.String(),
 			Module:   cc.Module,
@@ -150,7 +150,7 @@ func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.Diff
 	}
 
 	for _, cc := range classified {
-		fmt.Printf("%-10s %-12s %-10s %s\n", cc.Type, cc.Impact, cc.Module, cc.Path)
+		fmt.Printf("%-10s %-12s %-10s %s\n", cc.Type, cc.Impact, cc.Module, cc.Key)
 	}
 
 	byType := make(map[string]int)

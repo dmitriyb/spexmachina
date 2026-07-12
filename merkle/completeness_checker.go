@@ -28,7 +28,7 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 
 	changedPaths := make(map[string]bool, len(changes))
 	for _, c := range changes {
-		changedPaths[c.Path] = true
+		changedPaths[c.Key] = true
 	}
 
 	var moduleReqChanges []ClassifiedChange
@@ -94,7 +94,7 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 		if modSpec == nil {
 			continue
 		}
-		reqHash := c.Path
+		reqHash := c.Key
 
 		switch c.Type {
 		case Modified:
@@ -107,13 +107,13 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 	}
 
 	for _, c := range projectReqChanges {
-		// c.Path is the TreeBuilder tree key (double hash). Resolve it to the
+		// c.Key is the TreeBuilder tree key (double hash). Resolve it to the
 		// underlying req.ID so path/related carry identity hashes that appear
 		// in project.json. If the project requirement was truly removed from
 		// the current spec, the lookup fails and we fall back to the tree key.
-		reqHash := c.Path
+		reqHash := c.Key
 		var reqTitle string
-		if req, ok := projReqByTreeKey[c.Path]; ok {
+		if req, ok := projReqByTreeKey[c.Key]; ok {
 			reqHash = req.ID
 			reqTitle = req.Title
 		}

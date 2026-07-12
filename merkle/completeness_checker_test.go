@@ -29,14 +29,14 @@ type completenessFixture struct {
 	projReq5ID string
 	// projReq1Key/projReq5Key are the TreeBuilder tree keys
 	// (IdentityHash("project","requirement",<id>)) — what the diff engine
-	// emits as Change.Path for project-level requirement leaves.
+	// emits as Change.Key for project-level requirement leaves.
 	projReq1Key string
 	projReq5Key string
 }
 
 // setupCompletenessSpecDir creates a spec directory with requirements and
 // implements edges keyed by identity hashes. All module-level IDs match the
-// canonical IdentityHash derivation so that ClassifiedChange.Path values
+// canonical IdentityHash derivation so that ClassifiedChange.Key values
 // used in tests line up with what the spec files declare.
 func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 	t.Helper()
@@ -104,14 +104,14 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 // NodeType and Impact fields so tests stay focused on the assertion.
 func reqChange(path string, module string, t ChangeType) ClassifiedChange {
 	return ClassifiedChange{
-		Change: Change{Path: path, Type: t, NodeType: "requirement", Module: module},
+		Change: Change{Key: path, Type: t, NodeType: "requirement", Module: module},
 		Impact: Structural,
 	}
 }
 
 func compChange(path, module string, t ChangeType) ClassifiedChange {
 	return ClassifiedChange{
-		Change: Change{Path: path, Type: t, NodeType: "component", Module: module},
+		Change: Change{Key: path, Type: t, NodeType: "component", Module: module},
 		Impact: ArchImpl,
 	}
 }
@@ -307,7 +307,7 @@ func TestREQ8_C9_MetaChangedWithoutRequirementChanges(t *testing.T) {
 
 	changes := []ClassifiedChange{
 		{
-			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Change: Change{Key: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
 			Impact: Structural,
 		},
 	}
@@ -355,7 +355,7 @@ func TestREQ8_C11_NoStructuralOrRequirementChanges(t *testing.T) {
 
 	implOnly := ClassifiedChange{
 		Change: Change{
-			Path:     schema.IdentityHash("alpha", "impl_section", "Impl1"),
+			Key:      schema.IdentityHash("alpha", "impl_section", "Impl1"),
 			Type:     Modified,
 			NodeType: "impl_section",
 			Module:   fx.alphaHash,
@@ -480,7 +480,7 @@ func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 	writeFile(t, alphaDir, "module.json", alphaMod)
 	writeFile(t, alphaDir, "arch_comp_a.md", "# CompA\n")
 
-	// Diff carries the TREE KEY (projReqTreeKey) as c.Path for the added project
+	// Diff carries the TREE KEY (projReqTreeKey) as c.Key for the added project
 	// requirement. The module requirement's preq_id stores the RAW ID. The
 	// checker must resolve that the module req derives from the project req.
 	// With CompA also modified, we expect zero errors.
@@ -512,7 +512,7 @@ func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
 		reqChange(fx.projReq1Key, "", Modified),        // project modified branch
 		reqChange(fx.projReq5Key, "", Added),           // project no-derivation branch
 		{ // meta-only branch
-			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Change: Change{Key: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
 			Impact: Structural,
 		},
 	}
@@ -593,7 +593,7 @@ func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
 	// invariant for this branch.
 	var metaErrs []DiffError = CheckCompleteness([]ClassifiedChange{
 		{
-			Change: Change{Path: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
+			Change: Change{Key: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
 			Impact: Structural,
 		},
 	}, fx.specDir)

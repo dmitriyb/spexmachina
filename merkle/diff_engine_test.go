@@ -22,16 +22,16 @@ func TestREQ4_Diff_NoSnapshot_AllAdded(t *testing.T) {
 
 	for _, c := range changes {
 		if c.Type != Added {
-			t.Errorf("expected type 'added' for %s, got %q", c.Path, c.Type)
+			t.Errorf("expected type 'added' for %s, got %q", c.Key, c.Type)
 		}
 		if c.NewHash == "" {
-			t.Errorf("expected non-empty NewHash for %s", c.Path)
+			t.Errorf("expected non-empty NewHash for %s", c.Key)
 		}
 		if c.OldHash != "" {
-			t.Errorf("expected empty OldHash for added %s, got %q", c.Path, c.OldHash)
+			t.Errorf("expected empty OldHash for added %s, got %q", c.Key, c.OldHash)
 		}
 		if c.NodeType == "" {
-			t.Errorf("expected non-empty NodeType for %s", c.Path)
+			t.Errorf("expected non-empty NodeType for %s", c.Key)
 		}
 	}
 }
@@ -52,13 +52,13 @@ func TestREQ4_Diff_BootstrapEmptyTreeBaseline(t *testing.T) {
 	}
 	for _, c := range changes {
 		if c.Type != Added {
-			t.Errorf("expected Added for %s, got %s", c.Path, c.Type)
+			t.Errorf("expected Added for %s, got %s", c.Key, c.Type)
 		}
 		if c.OldHash != "" {
-			t.Errorf("expected empty OldHash for added %s, got %q", c.Path, c.OldHash)
+			t.Errorf("expected empty OldHash for added %s, got %q", c.Key, c.OldHash)
 		}
 		if c.NewHash == "" {
-			t.Errorf("expected non-empty NewHash for added %s", c.Path)
+			t.Errorf("expected non-empty NewHash for added %s", c.Key)
 		}
 	}
 
@@ -123,8 +123,8 @@ func TestREQ4_Diff_ModifiedLeaf(t *testing.T) {
 	}
 	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
 	alphaHash := schema.IdentityHash("module", "Alpha")
-	if modified[0].Path != comp1Key {
-		t.Errorf("expected modified key %s, got %s", comp1Key, modified[0].Path)
+	if modified[0].Key != comp1Key {
+		t.Errorf("expected modified key %s, got %s", comp1Key, modified[0].Key)
 	}
 	if modified[0].NodeType != "component" {
 		t.Errorf("expected NodeType 'component', got %q", modified[0].NodeType)
@@ -192,7 +192,7 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 	alphaHash := schema.IdentityHash("module", "Alpha")
 	foundNewImpl := false
 	for _, c := range added {
-		if c.Path == alphaImpl2 {
+		if c.Key == alphaImpl2 {
 			foundNewImpl = true
 			if c.NodeType != "impl_section" {
 				t.Errorf("expected NodeType 'impl_section', got %q", c.NodeType)
@@ -254,22 +254,22 @@ func TestREQ4_Diff_RemovedLeaf(t *testing.T) {
 	foundBetaMeta := false
 	foundBetaComp := false
 	for _, c := range removed {
-		if c.Path == betaMetaKey {
+		if c.Key == betaMetaKey {
 			foundBetaMeta = true
 			if c.NodeType != "meta" {
-				t.Errorf("expected NodeType 'meta' for %s, got %q", c.Path, c.NodeType)
+				t.Errorf("expected NodeType 'meta' for %s, got %q", c.Key, c.NodeType)
 			}
 			if c.Module != betaHash {
-				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Path, c.Module)
+				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Key, c.Module)
 			}
 		}
-		if c.Path == betaComp {
+		if c.Key == betaComp {
 			foundBetaComp = true
 			if c.NodeType != "component" {
-				t.Errorf("expected NodeType 'component' for %s, got %q", c.Path, c.NodeType)
+				t.Errorf("expected NodeType 'component' for %s, got %q", c.Key, c.NodeType)
 			}
 			if c.Module != betaHash {
-				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Path, c.Module)
+				t.Errorf("expected Module %s for %s, got %q", betaHash, c.Key, c.Module)
 			}
 		}
 	}
@@ -301,7 +301,7 @@ func TestREQ4_Diff_LeafOnlyReporting(t *testing.T) {
 	validTypes := map[ChangeType]bool{Added: true, Removed: true, Modified: true}
 	for _, c := range changes {
 		if !validTypes[c.Type] {
-			t.Errorf("unexpected change type %d for path: %s", c.Type, c.Path)
+			t.Errorf("unexpected change type %d for path: %s", c.Type, c.Key)
 		}
 	}
 
@@ -347,8 +347,8 @@ func TestREQ4_Diff_Deterministic(t *testing.T) {
 
 	// Verify sorted by path
 	for i := 1; i < len(changes1); i++ {
-		if changes1[i].Path < changes1[i-1].Path {
-			t.Errorf("changes not sorted: %q comes after %q", changes1[i].Path, changes1[i-1].Path)
+		if changes1[i].Key < changes1[i-1].Key {
+			t.Errorf("changes not sorted: %q comes after %q", changes1[i].Key, changes1[i-1].Key)
 		}
 	}
 }
@@ -414,11 +414,11 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 
 		// Every leaf must carry metadata.
 		if c.NodeType == "" {
-			t.Errorf("missing NodeType for %s", c.Path)
+			t.Errorf("missing NodeType for %s", c.Key)
 		}
 		// Project-level leaves have empty Module; all module-scoped leaves must have it.
-		if !projectLevelKeys[c.Path] && c.Module == "" {
-			t.Errorf("missing Module for %s", c.Path)
+		if !projectLevelKeys[c.Key] && c.Module == "" {
+			t.Errorf("missing Module for %s", c.Key)
 		}
 	}
 
