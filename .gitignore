@@ -16,3 +16,4 @@ bin/
 
 # Per-session skill-ownership markers (R14; format documented in docs/enforcement-rfc.md §9.1)
 .claude/skill-sessions/
+.claude/settings.local.json

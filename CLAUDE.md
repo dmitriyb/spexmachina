@@ -8,21 +8,26 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 
 ## Module Hierarchy
 
+The pipeline is `spex validate → diff → impact → emit → <adapter> → ingest`.
+
 | Module | Purpose | Depends On |
 |--------|---------|------------|
-| Schema | JSON Schema for project.json + module.json | — |
-| Validator | Spec directory validation (DAG, refs, orphans) | Schema |
+| Schema | JSON Schema for project.json + module.json + bead-map | — |
+| Validator | Spec directory validation (DAG, refs, orphans, coverage) | Schema |
 | Merkle | Hash tree, snapshots, diff, impact classification | Schema |
-| Impact | Map merkle diff to affected beads | Merkle |
-| Apply | Execute bead actions via `br` CLI | Impact |
+| Impact | Map merkle diff to bead actions | Merkle |
+| Emit | Compose a tool-agnostic changeset from an impact report | Impact, Mapping |
+| Adapters | Contract for external adapters (`scripts/apply-br.sh` is the reference) that apply a changeset and write receipts | Emit |
+| Ingest | Reconcile the bead-map + save the snapshot from changeset+receipts; `--mode refresh` absorbs content-only drift | Emit, Adapters, Merkle |
+| Mapping | `.bead-map.json` store linking spec nodes to beads (`spex map context`) | Schema |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |
 
 ## Technical Constraints
 
-- **Go standard library first**: Minimal external dependencies
-- **Deterministic**: Same spec state + snapshot = same diff, impact, actions. No LLM calls in `spex`.
-- **Composable**: Every subcommand reads stdin or files, writes stdout or files, exits 0/1. Pipeable.
+- **Go standard library first**: Minimal external dependencies.
+- **Deterministic**: Same spec state + snapshot = same diff, impact, changeset. No LLM calls in `spex`.
+- **Composable**: Every subcommand reads stdin or files, writes stdout or files, exits with documented codes. Pipeable.
 - **Git-native**: Snapshots and proposals are files committed to git. No external state.
 
 ## Build & Test
@@ -33,119 +38,57 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 
 ## Git Conventions
 
-- Default branch is `main` (never `master`)
-- `main` is protected: never commit directly to it. All changes land via a dedicated branch + PR merge, even one-line data fixes.
-- Always `git fetch origin` before creating a new branch
-- Always branch from `origin/main`, not from the current branch
-- On first push, use `git push -u origin <branch>` so the upstream tracks the new branch (not `origin/main`). The pattern `git checkout -b <name> origin/main` followed by bare `git push` fails under git's default `push.simple` because the upstream's name doesn't match the local branch's name.
-- When you need the **current** state of any committed artifact (bead statuses, schemas, source, TODO markers, snapshots), run `git rev-parse --abbrev-ref HEAD` first. If you are not on `main`, read explicitly from `origin/main` via `git show origin/main:<path>` or a worktree at `origin/main`. The working tree of a stale branch will give wrong answers to "current state" questions.
-- For rebase-risk assessment, read `git log <base>..<branch> --oneline` and `git show --stat <sha>` per commit. Do **not** judge by `git diff <base>..<branch> --stat` — that includes everything `main` has done since the branch was cut and wildly overstates conflict surface.
-- Commits must be SSH-signed. Never bypass signing (`--no-gpg-sign`, `-c commit.gpgsign=false`). To verify a commit is actually signed, inspect the raw object for a `gpgsig` block: `git cat-file -p <sha>`. Do NOT trust `git log --show-signature` or `%G?` — both report `N`/"No signature" on correctly-signed commits when `gpg.ssh.allowedSignersFile` is not configured locally. That is a verification-side gap, not a signing failure.
-- Commit messages must not exceed two full sentences; state what changed and, only if non-obvious, why.
+- Default branch is `main` (never `master`). `main` is protected: land changes via a branch + PR, not direct commits.
+- Commits are SSH-signed. To verify a commit is actually signed, inspect the raw object for a `gpgsig` block: `git cat-file -p <sha>`. Do NOT trust `git log --show-signature` or `%G?` — both report `N`/"No signature" on correctly-signed commits when `gpg.ssh.allowedSignersFile` is not configured locally; that is a verification-side gap, not a signing failure.
+- Commit messages: state what changed and, only if non-obvious, why. Keep them short (≈two sentences).
+- For "current state" of any committed artifact, read from `origin/main` (`git show origin/main:<path>`) rather than a stale branch's working tree.
+- For rebase-risk, read `git log <base>..<branch> --oneline` and `git show --stat <sha>` per commit — not `git diff <base>..<branch> --stat`, which overstates conflict surface.
 
 ## Issue Tracking
 
-This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) for task selection. Do NOT use markdown TODOs or other tracking methods.
+This project uses `br` (beads_rust) for issue tracking and `bv` (beads_viewer) for task selection. Do NOT use markdown TODOs.
 
 - Find work: `bv --robot-next` or `br ready`
 - Claim work: `br update <id> --status in_progress`
 - Link PR: `br update <id> --external-ref "PR#<number>"`
-- Close work: performed by `/review` after LGTM, never by `/implement`. The command is `br close <id> --reason "Reviewed and approved in PR#<number>. All review feedback addressed."` — do not run it from any other skill or context.
-- `br list --json` is NOT canonical state: by default it filters to open-only and paginates at `--limit 50`, both silently. For full tracker state, read `.beads/issues.jsonl` directly: `jq -s '{issues: .}' .beads/issues.jsonl`. If you must use `br list`, pass `--all --limit 0` explicitly.
+- Close work: only after review approval — `br close <id> --reason "..."`. In the automated pipeline this is the reviewer role's job and is gated at the git boundary (see Enforcement); do not close beads you implemented.
+- `br list --json` is NOT canonical: it filters to open-only and paginates at `--limit 50`, both silently. For full tracker state, read `.beads/issues.jsonl`: `jq -s '{issues: .}' .beads/issues.jsonl`. If you must use `br list`, pass `--all --limit 0`.
 
 ## Bead Context Resolution
 
-Beads in this repo intentionally carry empty `description`, `design`, `acceptance_criteria`, and `notes` fields. The bead's title plus its `spex:<record_id>` label is the entry point — the spec files are the source of truth.
+Beads carry empty `description`/`design`/`acceptance_criteria`/`notes` by design. The bead's title plus its `spex:<record_id>` label is the entry point — the spec files are the source of truth.
 
-To resolve the spec context for any bead (review, fix, implement, ad-hoc):
-
-1. `br show <bead-id> --json` — read the bead, find the `spex:<record_id>` label in `labels`.
-2. `bin/spex map context <record_id>` — returns the JSON record plus the `arch_file`, `impl_files`, `test_files`, `flow_files`, and `module_file` paths.
-3. Read those spec files. Do not hunt elsewhere for the bead's "real" description — there isn't one.
+1. `br show <bead-id> --json` — find the `spex:<record_id>` label.
+2. `bin/spex map context <record_id>` — returns the record plus `arch_file`, `impl_files`, `test_files`, `flow_files`, `module_file`.
+3. Read those spec files. Do not hunt elsewhere for a bead's "real" description — there isn't one.
 
 Hard rules:
-- Never read `.beads/beads.db` directly (sqlite3, python sqlite3, raw file reads, etc.). Use `br` commands or `.beads/issues.jsonl`.
-- Never bypass the documented `br` / `spex` interfaces to dig into their storage. If `br` says a field is empty, treat it as empty.
-- If you need bead/spec data and the documented tools don't expose it, ask the user — do not improvise with general-purpose tools.
+- Never read `.beads/beads.db` directly (it is a reflection of `.beads/issues.jsonl`, rebuilt from it). Use `br` commands or read `issues.jsonl`.
+- Cleanup beads (label `spex:cleanup`) have no map record by design.
 
-Cleanup beads (carrying the `spex:cleanup` label) have no map record by design — see `/cleanup` for that workflow.
+### Recovery: undoing a `br` mutation
 
-### Recovery procedure: undoing a `br` mutation
-
-To unwind a `br` mutation cleanly (status change, label edit, external-ref, close, create):
-
-1. `git checkout -- .beads/issues.jsonl` to restore the committed file
-2. Delete the beads db: `rm .beads/beads.db`
-3. Re-import from the restored jsonl to rebuild the db fresh
-
-The db is the source of truth; `.beads/issues.jsonl` is a reflection. `git checkout` only restores the file — the db still holds the mutated state. Re-running `br update <id> --status <old>` writes a new timestamp so the jsonl never returns to the committed bytes. Only a fresh rebuild from the restored reflection gives a byte-for-byte and state-for-state restore.
+The db is the source of truth; `issues.jsonl` is its reflection. To unwind a `br` mutation cleanly: `git checkout -- .beads/issues.jsonl`, then `rm .beads/beads.db`, then re-import from the restored jsonl to rebuild the db. `git checkout` alone leaves the db holding the mutated state.
 
 ## Organizational Constraints
 
-- **Module dependency order**: Schema first, then Validator/Merkle, then Impact, then Apply
-- **Spec traceability**: All code must trace back to bead requirements
-- **Self-hosting**: Spex Machina's own spec is managed by Spex Machina (after bootstrap)
+- **Module dependency order**: Schema first, then Validator/Merkle, then Impact, then Emit → Adapters → Ingest.
+- **Spec traceability**: All code traces back to bead requirements.
+- **Self-hosting**: Spex Machina's own spec is managed by Spex Machina.
 
 ## Enforcement
 
-The repo ships machine-enforced rules via Claude Code hooks
-(`.claude/settings.json` + `scripts/hooks/`) and git hooks
-(`scripts/git-hooks/`). Full design in `docs/enforcement-rfc.md`.
+Enforcement is **external** and lives outside this repo — there are no in-repo Claude Code or git hooks.
 
-**One-time per clone:** `scripts/setup-hooks`. This wires
-`core.hooksPath` and makes the scripts executable.
+- **portitor** (git gateway) is the hard result-gate: agents push over SSH to a gated mirror, and a `pre-receive` gate verifies signature → signer role → branch/ancestry/content rules before anything reaches GitHub. portitor holds the only GitHub credential. The bead-close rule (only the reviewer/owner role may add `"status":"closed"` to `.beads/issues.jsonl`) is a portitor content rule.
+- **faber** orchestrates the implement/review/fix boxes; each box runs one skill headlessly in an isolated container and lands its branch through portitor.
 
-**Halt protocol — when a hook denies a tool call.** A halt arrives by
-one of two channels, both carrying the same `spex-halt/v1` JSON:
-- **Claude Code hooks** surface it as a `permissionDecisionReason`
-  string.
-- **git hooks** (pre-commit / post-commit / pre-push) print it to
-  **stderr** — so when a `git commit`/`git push` Bash command fails
-  with stderr containing `"protocol": "spex-halt/v1"`, that is a halt
-  too.
-
-In either case, if the payload parses as JSON with
-`"protocol": "spex-halt/v1"`, the agent MUST:
-
-1. Halt the current tool sequence. No further tools on the same
-   goal-path until the user has responded.
-2. Render the payload to the user verbatim, including: the `rule`
-   slug, the `invariant`, the `source` (file:line), and every entry
-   in `recovery`.
-3. Propose a recovery path drawn from `recovery`, but do not execute.
-4. Destructive recovery steps (`destructive: true` entries, plus the
-   syntactic backstop list: `rm`, `rm -rf`, `git reset --hard`,
-   `git checkout -- <file>`, `git clean -f`, `git branch -D`,
-   force-push, `br delete`, any DB wipe, any operation that
-   overwrites unstaged work) require explicit per-step user
-   confirmation. Never bundle destructive steps.
-5. Non-destructive recovery (file edits, `git add`, `git stash`,
-   `git fetch`, `br update`, additional `Read`s) may proceed once the
-   user acknowledges the block and names the path.
-
-**Skill-scoped rules.** Two rules depend on which skill is running —
-R6 (`br close` only from `/review`) and R9 (`/spec`, `/propose`,
-`/converge`, `/spec-review`, `/spec-drift` must not commit). These are
-enforced by hooks declared in each `SKILL.md`'s YAML frontmatter
-`hooks:` block, scoped to while that skill is active. No marker file,
-no per-skill boilerplate in the skill body. A skill that should be
-restricted carries the restriction in its own frontmatter; `/review`
-carries no `deny-br-close` hook, and the committing skills carry no
-`deny-commit` hook.
-
-**Override env vars.** One narrow override exists, user-set:
-- `SPEX_OFFLINE=1` skips R3's fetch-recency check.
-The agent must not set it; if the agent believes an override is
-warranted, it asks the user.
-
-**Before opening a PR** that touches `.claude/settings.json`,
-`scripts/hooks/`, `scripts/git-hooks/`, or a skill's frontmatter
-`hooks:` block: run `scripts/verify-enforcement`.
+Interactive (human) sessions push to GitHub directly and are the design/authoring entrypoint; the gate constrains the autonomous agents. What used to be in-repo hooks/skills and where each rule moved is recorded in `docs/enforcement-migration.md`.
 
 ## Where to Find Details
 
-- **Skills**: `skills/` — all skill definitions (`/propose`, `/spec`, `/implement`, `/review`, `/fix`)
-- **Discovery**: `.claude/skills/` — symlinks for Claude Code slash commands
-- **Proposal**: `spec/proposals/` — project and change proposals
-- **Beads**: `.beads/` — task tracking database
-- **Enforcement**: `docs/enforcement-rfc.md` — hook design, catalog, halt protocol
+- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency). The implement/review/fix/cleanup lifecycle runs through faber boxes, not slash skills.
+- **Proposals**: `spec/proposals/`
+- **Beads**: `.beads/`
+- **Pipeline runner**: `scripts/run-pipeline.sh`; reference adapter `scripts/apply-br.sh`.
+- **Enforcement migration**: `docs/enforcement-migration.md`

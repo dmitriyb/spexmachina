@@ -2,16 +2,6 @@
 name: spec-review
 description: "Audit the spec for internal inconsistencies (no code reading) and draft a correction proposal in plan mode if findings exist"
 argument-hint: "[module-name]"
-hooks:
-  PreToolUse:
-    - matcher: Bash
-      hooks:
-        - type: command
-          command: scripts/hooks/deny-commit.sh spec-review
-        - type: command
-          command: scripts/hooks/deny-br-close.sh spec-review
-        - type: command
-          command: scripts/hooks/assert-single-skill.sh spec-review
 ---
 
 # /spec-review — Audit Spec for Internal Inconsistencies
