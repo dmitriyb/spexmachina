@@ -2,16 +2,6 @@
 name: propose
 description: "Research the spec and draft a structured proposal in plan mode"
 argument-hint: "[proposal-name]"
-hooks:
-  PreToolUse:
-    - matcher: Bash
-      hooks:
-        - type: command
-          command: scripts/hooks/deny-commit.sh propose
-        - type: command
-          command: scripts/hooks/deny-br-close.sh propose
-        - type: command
-          command: scripts/hooks/assert-single-skill.sh propose
 ---
 
 # /propose — Create a Spec Proposal

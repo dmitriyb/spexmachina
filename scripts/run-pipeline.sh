@@ -33,8 +33,8 @@
 #   validate.json, diff.json, impact.json, changeset.json, receipts.json,
 #   ingest_summary.json, log
 #
-# This script never commits and never prompts. Pause-and-review is the
-# caller's responsibility (typically /converge between phase emit and phase apply).
+# This script never commits and never prompts. Pause-and-review between the
+# emit and adapter phases is the caller's responsibility.
 
 set -euo pipefail
 
@@ -159,7 +159,7 @@ stage_diff() {
     if [[ "$err_count" -gt 0 ]]; then
         log "diff: $err_count completeness error(s)"
         echo "error: spex diff has $err_count completeness error(s); see $RUN_DIR/diff.json" >&2
-        echo "       run /spec to address — /converge does not auto-fix completeness findings" >&2
+        echo "       run /spec to address these completeness findings before re-running" >&2
         exit 10
     fi
     log "diff: ok ($(jq -r '.changes | length' "$RUN_DIR/diff.json") changes)"

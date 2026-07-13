@@ -1,9 +1,0 @@
-#!/usr/bin/env bash
-# verify-enforcement — run every enforcement hook fixture under
-# scripts/hooks/test/. Run before any PR that touches
-# .claude/settings.json, scripts/hooks/, scripts/git-hooks/, or a
-# skill's frontmatter hooks block.
-#
-# See docs/enforcement-rfc.md.
-
-exec "$(git rev-parse --show-toplevel)/scripts/hooks/test/run-all.sh"
