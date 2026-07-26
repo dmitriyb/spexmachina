@@ -19,13 +19,21 @@ never assumed: a part that only "adds a checker" still edits the chain in `cmd/s
 a part that only "adds a property" still rewrites `schema/module.schema.json`. Before spawning a
 fan-out group, list each part's write set in `commit-plan.md` and confirm the intersection is empty.
 
+**You never commit unattended.** The signing key is a hardware token (`sk-ssh-ed25519`): every
+signature needs a physical touch from the author, who will not be present for most of this run. So
+each commit boundary is a **hard stop**. Finish the wave, mark its parts `DONE`, report exactly what
+is ready and what each commit message will be, and **wait**. Do not commit, do not push, and do not
+start the next wave. When the author returns and approves, make that wave's queued commits back to
+back — one touch each — then continue. A wave's work sitting `DONE` and uncommitted is the normal
+resting state of this migration, not a fault.
+
 **Your state is `commit-plan.md` plus `commit-plan.d/`**, both at the repo root and both added to
 `.git/info/exclude` before wave 1. `commit-plan.md` records intent; `git log` records fact. Every part
 gets an entry **before** its subagent is spawned:
 
 ```
 ### 6e — migrate `ingest`
-status: IN_PROGRESS            # TODO → IN_PROGRESS → DONE → QUARANTINED
+status: IN_PROGRESS            # TODO → IN_PROGRESS → DONE → COMMITTED, or QUARANTINED
 writes:  spec/ingest/
 revert:  git checkout HEAD -- spec/ingest/ && git clean -fd spec/ingest/
 ```
@@ -102,8 +110,8 @@ the rest and is the only one that edits `spec/validator/module.json`.
    QUARANTINES the part: record the findings, revert only that part's files
    (`git checkout HEAD -- <its writes>`), let every sibling in the wave finish, and stop before the
    wave gate. Never carry a quarantined part into W8 — refresh baselines whatever is on disk.
-5. Mark the part `DONE` in `commit-plan.md` with the gate output pasted under it, then commit its
-   chunk. The commit makes the part durable; the marker only makes it findable.
+5. Mark the part `DONE` in `commit-plan.md` with the gate output pasted under it. **Do not commit.**
+   Commits happen only at a wave's commit boundary, with the author present — see "Committing".
 
 ### The briefing packet
 
@@ -288,7 +296,24 @@ third argument its behaviour is byte-identical to the two-argument form.
 
 ### Committing
 
-**Commit each chunk when its work is `DONE` and reviewed. Do not defer commits to the end.** Thirty-five
+**Commits are attended, and they are the only hard stop in this plan.** The signing key is a hardware
+token, so an unattended agent cannot produce a signature at all — a deferred or unattended commit does
+not fail loudly, it fails with `agent refused operation` and leaves the wave in limbo. At each commit
+boundary:
+
+1. Stop. Do not start the next wave.
+2. Report: which parts are `DONE`, which chunks are queued, the exact `git add` path list and commit
+   message for each, and the gate output that justifies them.
+3. Wait for the author's approval. This may be hours or days; the tree is safe because nothing
+   uncommitted is at risk from anything except another run.
+4. On approval, make the queued commits back to back — the author touches the key once per commit —
+   then mark each part `COMMITTED` and continue.
+
+**Commit boundaries are wave boundaries, not part boundaries.** W6's eleven parts queue eleven chunks
+and are approved in one sitting; asking for eleven separate approvals would summon the author eleven
+times for work that is already complete and gated. Within a wave, parts reach `DONE` and stop there.
+
+**Commit each chunk when its wave is approved. Do not defer commits past the end of their wave.** Thirty-five
 files are required by more than one chunk — every `spec/<MOD>/module.json` carries W4's `apis` array
 and W6's `impl_sections` removal; `spec/project.json` carries W3's and W5's edits — and three impl
 leaves (`spec/ingest/impl_refresh.md`, `spec/map/impl_crud_operations.md`,
@@ -323,8 +348,15 @@ git log --oneline origin/main..HEAD     # every part that reached a commit — f
 git status --porcelain                  # every part that did not
 ```
 
-Each committed chunk is a completed part. Every uncommitted path belongs to an interrupted part;
-`commit-plan.md` names which, because its entry was written before the subagent was spawned.
+Each committed chunk is an approved part. Uncommitted paths belong either to a part that finished and
+is awaiting the author's signature, or to one that was interrupted — `commit-plan.md` tells you which,
+because its entry was written before the subagent was spawned.
+
+**Distinguish `DONE`-but-uncommitted from interrupted.** Uncommitted work is *expected* here — a wave
+that finished and is waiting for the author's approval looks exactly like a wave that died, on disk.
+`commit-plan.md` is what separates them: a part marked `DONE` with gate output pasted under it is
+complete and awaiting a signature; **never revert it**. Only parts marked `IN_PROGRESS` were
+interrupted.
 
 **Revert interrupted parts; do not resume them.** A subagent that died mid-part left a state no gate
 accepts and no reviewer can bound:
