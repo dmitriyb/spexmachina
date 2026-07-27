@@ -109,6 +109,22 @@ Measured against the corpus during W1 and W2:
 
 The mechanisms are right; the counts drifted. Do not change behaviour to match the numbers.
 
+**Where this file and the proposal disagree on a number, this file wins.** Do not re-derive either set
+to reconcile them — the numbers below were measured against the committed tree at the W5 boundary.
+
+### 3.4.1 Two stale counts that will bite W6 and W8 specifically
+
+These are in waves that have **not** run, so nobody has hit them yet:
+
+| the plan expects | the corpus actually has | why |
+|---|---|---|
+| **56** `removed/impl_section` at W8 | **55** | 1h removed `impl_orphan_detection` (`9843e4075916`); `spec/validator/` went 11 → 10 impl_sections |
+| W8 refresh `records_updated: 55, records_unchanged: 6` (**61** records) | **60** records | 1h deleted the `OrphanDetector` bead-map record |
+
+Neither is drift and neither should trigger a stop. W6's total is **55 impl leaves / 55 declared
+impl_sections**; W8 should expect 60 bead-map records, not 61. The proposal's W8 acceptance says to stop
+if `ingest` refuses — that still holds, but a count one lower than printed is not a refusal.
+
 ### 3.5 Two smaller ones
 
 - §1.11 read literally ("a CI job that runs `spex validate`") is satisfied by a step the 1g paragraph
