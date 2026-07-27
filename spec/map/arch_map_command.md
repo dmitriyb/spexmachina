@@ -75,12 +75,22 @@ All from the record ID, all deterministic, no duplication. Exit code 0 on succes
 ## Interface
 
 ```go
-func NewMapCmd(store Store) *cobra.Command
+func newMapCmd() *cobra.Command
 ```
 
-The map command is registered on the root `spex` command via the CLI module's subcommand registration framework.
+`newMapCmd` builds the `map` parent command and attaches `get`, `list` and `context` as its children. It is unexported and lives in `cmd/spex/map.go` alongside every other subcommand constructor; the root `spex` command picks it up through the single `rootCmd.AddCommand(...)` call in `cmd/spex/main.go`.
+
+Each of the three children declares its own `--map-file` flag, defaulting to `.bead-map.json` relative to the working directory. The store is opened inside `RunE` from that flag, not injected at construction, so building the command tree touches no files and `spex --help` works with no bead-map present. `--spec-dir` is not a store input: `get` and `list` never resolve it, and `context` resolves it only to pass a spec root to `ResolveContext` for the `module.json` read.
 
 ## Design Rationale
+
+### Read-only by construction
+
+Every `spex map` subcommand is a read. None of them creates, updates or deletes a record, and none of them contacts a tracker.
+
+This is not a scope decision that could be revisited subcommand by subcommand — it follows from where records come from. A mapping record's id is allocated by emit as an op's idempotency label, applied to a bead by the adapter, and materialised by ingest from the changeset/receipts pair. A record written by `spex map` would have no op behind it, no receipt, and no bead carrying its label, and `Reconciler.AssertInvariants` would reject the store on the next ingest — invariant 1 (every ok create has a record) and invariant 4 (no orphan records) both key off that correspondence.
+
+So MapCommand is the query face of a store whose write path runs through the pipeline. Skills read spec context through it; nothing writes through it.
 
 ### JSON-only output
 

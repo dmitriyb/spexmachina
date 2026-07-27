@@ -32,7 +32,7 @@ Where:
 ]
 ```
 
-The `node_type` field is now part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, ApplyCommand) read it from this field.
+The `node_type` field is now part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, and emit's ChangesetBuilder via the action's `NodeType`) read it from this field.
 
 ## Scenarios
 

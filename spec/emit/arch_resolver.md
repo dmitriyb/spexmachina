@@ -14,9 +14,11 @@ If the mapping store has a record with `status == "closed"`, the dep is **droppe
 
 ## Why Three Shapes
 
-`ref:op` is the structural fix for the broken-dep-graph bug (commit `21defea`). Pre-this-proposal, impact resolved deps against the mapping store at impact time. When a dep was itself being obsoleted+recreated in the same batch, impact picked up the OLD (soon-closed) bead ID. The current `apply` then passed that old ID to `br create --deps blocks:<old>`, and the close phase killed the referenced bead, leaving the new bead pointing at a dead predecessor.
+`ref:op` is the structural fix for the broken-dep-graph bug (commit `21defea`). Pre-decouple, impact resolved deps against the mapping store at impact time. When a dep was itself being obsoleted+recreated in the same batch, impact picked up the OLD (soon-closed) bead ID, passed it to `br create --deps blocks:<old>`, and the close phase then killed the referenced bead — leaving the new bead pointing at a dead predecessor.
 
-`ref:op` sidesteps the problem by deferring resolution to adapter-exec time: the adapter builds A, knows A's fresh bead_id, then builds B with `--deps depends:<A-new>`. Structural guarantee, no apply-time patching.
+`ref:op` sidesteps the problem by deferring resolution to adapter-exec time: the adapter builds A, knows A's fresh bead_id, then builds B with `--deps depends:<A-new>`. Structural guarantee, no post-hoc patching.
+
+Resolver is where the project requirement's "parent hierarchy, lineage tracking, and priority propagation" is actually decided, and it decides all three **without knowing what tracker will execute the result**. A ref names a spec node, an op, or a bead — never a `br` flag. The translation to `--parent`, `--deps <edge>:<id>` and `--priority` happens in the adapter, which is the only component permitted to know a tracker's command surface. That separation is what lets a second adapter target a different tracker against an unchanged changeset.
 
 ## Parent Resolution
 

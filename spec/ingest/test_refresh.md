@@ -49,9 +49,9 @@ non-bead-producing modifications without bead churn.
 
 ### Refresh refuses on diff with `added` entries
 
-**Given** the fixture has been edited to introduce a new content leaf
-(e.g., `alpha/impl_new_thing.md` referenced from `alpha/module.json`) so the
-diff contains an `added` entry
+**Given** the fixture has been edited to introduce a new **bead-producing**
+content leaf (e.g., a new component `alpha/arch_new_thing.md` referenced from
+`alpha/module.json`) so the diff contains a non-absorbable `added` entry
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is non-zero
 **And** stderr contains a structured error naming the added entries and the
@@ -60,23 +60,45 @@ pipeline")
 **And** `.bead-map.json` is unchanged byte-for-byte
 **And** `spec/.snapshot.json` is unchanged byte-for-byte
 
-**Rationale**: Structural changes must go through the normal Reconciler path
-so bead lifecycle runs. Refresh mode's job is to NOT trigger bead lifecycle —
-it must refuse anything that would normally produce beads.
+**Rationale**: Structural changes that owe bead work must go through the
+normal Reconciler path so bead lifecycle runs. Refresh mode's job is to NOT
+trigger bead lifecycle — it must refuse anything that would normally produce
+beads. The fixture must add a `component`, `data_flow` or `test_section`; an
+added `impl_section`, `requirement` or `api` is absorbed and would not refuse.
 
 ### Refresh refuses on diff with `removed` entries
 
-**Given** the fixture has been edited to delete an existing content leaf
-(e.g., `beta/arch_service.md` removed from `beta/module.json`) so the diff
-contains a `removed` entry
+**Given** the fixture has been edited to delete an existing **non-absorbable**
+content leaf (e.g., a data_flow `beta/flow_service.md` removed from
+`beta/module.json`) so the diff contains a non-absorbable `removed` entry
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is non-zero
 **And** stderr contains a structured error naming the removed entries and
 the same "use the normal pipeline" reason
 **And** `.bead-map.json` and `spec/.snapshot.json` are unchanged
 
-**Rationale**: Same as the added-entry case — removals are bead-producing
-and must go through the normal pipeline.
+**Rationale**: Same as the added-entry case. The removal direction is
+narrower than the addition direction: `component` removal IS absorbed, so the
+fixture must remove a `data_flow` or a `test_section` to exercise the gate.
+
+### Refresh absorbs the absorbable structural set
+
+**Given** the fixture has been edited to add a requirement, add and remove an
+impl_section, add an api, and remove a component whose bead-map record has
+already been retired
+**When** `runIngest("--mode", "refresh", ...)` is called
+**Then** exit code is 0
+**And** the summary reports `status: "complete"`
+**And** `spec/.snapshot.json` is rewritten to match the current spec state
+
+**Rationale**: The refusal gate is a filter on node type and direction, not a
+blanket ban on `added`/`removed`. `requirement`, `impl_section` and `api` are
+absorbed in both directions and `component` in the removed direction, because
+none of those transitions owes any bead work. A test that only exercises the
+refusal side would pass against an implementation that refused everything —
+which is the contract this spec previously described and the code never had.
+The component removal is paired with a retired record deliberately: the orphan
+gate, not the structural gate, is what keeps a component removal honest.
 
 ### Refresh refuses on bead-map record with no live spec node
 
@@ -168,9 +190,10 @@ proposal.
 **And** stderr indicates a missing-snapshot error and that refresh requires
 a pre-existing snapshot (use a normal-mode bootstrap run instead)
 
-**Rationale**: Refresh's diff baseline is the snapshot. Without one, the
-refusal-on-adds-or-removes contract degrades to "everything looks added,"
-which is exactly the bootstrap case that requires the normal pipeline.
+**Rationale**: Refresh's diff baseline is the snapshot. Without one, every
+leaf looks added — including every component — so the structural gate would
+refuse anyway, but with an error naming the whole spec instead of the real
+problem. This is exactly the bootstrap case that requires the normal pipeline.
 
 ### Refresh with non-empty changeset or non-empty receipts
 

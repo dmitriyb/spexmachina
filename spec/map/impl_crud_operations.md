@@ -34,7 +34,8 @@ func (s *fileStore) Create(r Record) (int, error) {
 Lookup methods scan the records array. Three access patterns:
 
 - **By ID**: `Get(id int)` — primary key lookup
-- **By bead ID**: `GetByBead(beadID string)` — used by `spex check`
+- **By bead ID**: `GetByBead(beadID string)` — used by emit's IdempotencyLabeler to
+  recover a modify-pair's existing record id from the obsoleted bead
 - **By spec node ID**: `GetBySpecNode(specNodeID string)` — used by impact analysis
 
 `Get` and `GetByBead` return `(Record, error)` where error is a not-found sentinel if no match.

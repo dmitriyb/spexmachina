@@ -59,9 +59,35 @@ func BuildTree(specDir string) (*Node, error)
 1. Read `project.json`. Hash it as the `meta/project` leaf. For each project-level requirement, create a leaf keyed by its identity hash (`id` field) with a deterministic JSON hash of its fields.
 2. For each module entry, read its `module.json`. Hash it as the `meta/<module-identity-hash>` leaf.
 3. For each module requirement, create a leaf keyed by its identity hash with a deterministic JSON hash of its fields.
-4. For each component, impl_section, data_flow, and test_section, hash the referenced content file and key the leaf by the node's identity hash.
+4. For each component, impl_section, data_flow, and test_section, hash the referenced content file and key the leaf by the node's identity hash. A node whose `content` field is empty is skipped — see "Empty content is not a node" below.
 5. Compute the module interior hash from its sorted child hashes.
 6. Compute the project root hash from sorted module hashes plus the `meta/project` leaf and the project requirement leaves.
+
+## Empty content is not a node
+
+For components, impl_sections, data_flows and test_sections, TreeBuilder skips
+any entry whose `content` field is the empty string. The skip is silent: no leaf
+is created, nothing is logged, and no error is returned.
+
+The consequence is total, not partial. A skipped node has no leaf, so it has no
+hash; with no hash it can never appear in a diff, so impact never sees it, emit
+never emits an op for it, and it never acquires a bead. It is declared in
+`module.json` and invisible to every stage of the pipeline — and because its
+absence is also stable across runs, no diff ever reports it as missing. The
+failure mode is a spec node that exists to a reader and does not exist to the
+tool.
+
+This is why `content` is **required** with `minLength: 1` on all four node types
+in `module.schema.json`. The constraint is what makes the skip unreachable: a
+schema-valid `module.json` cannot contain an entry the tree builder would drop.
+The branch remains in TreeBuilder as a defensive guard against a malformed file
+reaching it ahead of validation — it must not be read as an opt-out. A node that
+genuinely has no prose still needs a content file; the way to declare a node
+without a content leaf is to use an `api`, which hashes from its JSON fields and
+has no `content` field at all.
+
+Requirements and apis are unaffected: neither has a `content` field, and both
+hash from a deterministic serialization of their JSON fields.
 
 ## Why this keying scheme
 

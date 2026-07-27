@@ -5,7 +5,7 @@ The top-level `spex` cobra command. All other subcommands are children of this c
 ## Responsibilities
 
 - Define the root `cobra.Command` with the binary name `spex`, a short description, and long usage text.
-- Provide a `Register(cmd *cobra.Command)` function (or equivalent) that each module calls to add its subcommand.
+- Export a single constructor, `NewRootCmd() *cobra.Command`, that returns the configured root with no subcommands attached. Attaching them is the binary's job, not the root's.
 - Set global persistent flags (e.g., `--spec-dir` to override the default `spec/` directory).
 - When invoked with no args, print help.
 - When invoked with an unknown subcommand, cobra's built-in "did you mean?" suggestion fires automatically.
@@ -13,25 +13,30 @@ The top-level `spex` cobra command. All other subcommands are children of this c
 
 ## Subcommand Registration Pattern
 
-Each functional module defines its own `cobra.Command` in a `cmd.go` file within its package (e.g., `merkle/cmd.go` exports `NewCmd() *cobra.Command`). The root command does not import module internals — it only calls each module's command constructor and adds the result via `rootCmd.AddCommand(...)`.
+Every subcommand is defined in the `cmd/spex` package — one file per command (`cmd/spex/diff.go`, `cmd/spex/emit.go`, `cmd/spex/ingest.go`, and so on), each exporting nothing and providing an unexported `newXxxCmd() *cobra.Command` constructor. The worker packages hold no command definitions at all.
 
-Wiring happens in `main.go`:
+Wiring happens in `cmd/spex/main.go`:
 
 ```
 rootCmd := cli.NewRootCmd()
 rootCmd.AddCommand(
-    validate.NewCmd(),
-    merkle.NewCmd(),
-    impact.NewCmd(),
-    apply.NewCmd(),
-    proposal.NewCmd(),
-    render.NewCmd(),
-    cli.NewVersionCmd(),
+    newHashIDCmd(),
+    newDiffCmd(),
+    newValidateCmd(),
+    newImpactCmd(),
+    newMapCmd(),
+    newRegisterCmd(),
+    newLogCmd(),
+    newTemplateCmd(),
+    newVersionCmd(),
+    newRenderCmd(),
+    newEmitCmd(),
+    newIngestCmd(),
 )
 rootCmd.Execute()
 ```
 
-This keeps command definitions close to the code they invoke and avoids circular imports.
+The root command imports no worker package; `cmd/spex` imports both the root and the workers, and is the only place the two meet. Keeping the constructors unexported in a `main` package is what makes that boundary unforgeable — nothing outside the binary can reach a subcommand constructor, so no worker package can grow a CLI dependency by accident.
 
 ## Global Flags
 
@@ -50,10 +55,10 @@ cobra is the only third-party CLI framework in the binary. No second command lib
 | Argument and flag parsing | cobra, via pflag |
 | Help and usage text | cobra's generated help |
 
-cobra is not confined to a single import site. Under the Subcommand Registration Pattern above, every package that defines a subcommand constructs its own `cobra.Command` and therefore imports cobra; the root command is only the first of them. What this boundary fixes is *which* third-party module may be reached for and *how far* it reaches:
+cobra is confined to exactly two packages — `cli` and `cmd/spex`. Under the Subcommand Registration Pattern above, no other package imports it. What this boundary fixes is *which* third-party module may be reached for and *how far* it reaches:
 
 - `cli/root.go` imports cobra and nothing else — no standard library, no internal package.
-- cobra stops at command construction. The packages that do the work — validator, merkle, impact, emit, ingest, mapping, render, schema — import no CLI framework at all; a subcommand's `RunE` reads flags into plain Go values and calls into them.
+- cobra stops at command construction, all of which happens under `cmd/spex`. The packages that do the work — validator, merkle, impact, emit, ingest, mapping, proposal, render, schema — import no CLI framework at all; a subcommand's `RunE` reads flags into plain Go values and calls into them.
 - pflag and mousetrap arrive transitively through cobra and are never imported directly.
 
 A subcommand needing something cobra does not provide uses the standard library; anything else amends the project's `Declared stack` requirement first, which enumerates the permitted modules against which `go.mod`'s direct requires are read.

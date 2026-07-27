@@ -18,6 +18,12 @@ Kahn's algorithm with deterministic tiebreak:
 3. Kahn with priority queue: at each step, among nodes with zero remaining incoming edges, pick the one with the smallest `spec_node_id` lex order (tiebreak). This makes the output deterministic across runs.
 4. Assign `op_id` as a zero-padded sequential string (`op-0001`, `op-0002`, …) in the emitted order.
 
+## Why order is emit's to decide
+
+The parent hierarchy and lineage the project requirement calls for are expressed as refs, and a ref is only meaningful once the op it points at is known to come earlier. Ordering is therefore not a presentation choice — it is what makes `ref:op` resolvable at all. TopologicalSorter runs **before** Resolver for exactly this reason: it assigns every op_id, and Resolver then classifies each dep against the batch map it produces. An op referencing an op_id that has not yet been emitted is a forward reference the adapter cannot resolve, because the adapter's substitution table is populated as it executes, strictly in file order.
+
+This is also why the adapter is allowed to be a single-pass sequential loop with no planner of its own. The changeset arrives already ordered; the adapter executes `ops` top to bottom and never reorders, retries out of sequence, or looks ahead. All ordering intelligence lives here, on the deterministic side of the pipeline, so two runs over the same inputs produce byte-identical changesets and the adapter has nothing left to decide.
+
 ## Cycle Handling
 
 If Kahn terminates with nodes still having incoming edges, there's a cycle. Return an error naming every node in the cycle's strongly-connected component — the cycle is a spec bug (invalid `uses` graph) that validator's `dag_checker` should have caught; emit is the last line of defense and fails fast rather than emitting a partially-ordered changeset.

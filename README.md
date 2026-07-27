@@ -34,18 +34,19 @@ Every change starts with a **proposal** — a traceable document committed to gi
 
 ## Agent skills
 
-Before `spex` CLI exists, two Claude Code skills drive the creative work:
+Three Claude Code skills drive the creative work alongside the CLI:
 
 - `/propose` — turns a free-form conversation into a structured proposal (project or change)
 - `/spec` — reads a proposal and authors the spec (JSON + markdown), creating or modifying modules
+- `/spec-review` — audits the spec for internal inconsistencies and drafts a correction proposal
 
-These skills handle the LLM-side of spec authoring. Once the CLI is built, `/propose` and `/spec` will call `spex` subcommands for validation and registration, keeping the creative and structural halves cleanly separated.
+These skills handle the LLM-side of spec authoring. They call `spex` subcommands for validation, registration and impact, keeping the creative and structural halves cleanly separated.
 
 ## Spec format
 
 Specs are JSON skeleton + markdown leaves:
 
-- `project.json` — requirements, module declarations, milestones
+- `project.json` — project requirements and module declarations
 - `<module>/module.json` — module requirements, architecture components, implementation sections
 - `<module>/*.md` — rich content (diagrams, algorithms, narratives) linked from JSON
 
@@ -55,13 +56,17 @@ The JSON is machine-readable for graph operations. The markdown is human-readabl
 
 | Module | What it does |
 |--------|-------------|
-| **Schema** | JSON Schema definitions for project.json and module.json |
-| **Validator** | Validates spec structure: DAG acyclicity, cross-references, orphan detection |
+| **Schema** | JSON Schema definitions for project.json, module.json and the bead-map |
+| **Validator** | Validates spec structure: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness |
 | **Merkle** | Hash tree over the spec, snapshots, diff, impact classification |
 | **Impact** | Maps changed spec nodes to affected beads tasks |
-| **Apply** | Executes bead actions (create/close/update) from impact reports |
+| **Emit** | Composes `changeset.json` — an ordered, tool-agnostic list of bead operations — from the impact report |
+| **Adapters** | Reference adapter scripts outside the binary; each executes a changeset against a tracker and writes `receipts.json` |
+| **Ingest** | Reconciles the bead-map from changeset + receipts and saves the new snapshot |
+| **Map** | Owns `.bead-map.json`, linking spec node IDs to bead IDs; CRUD, context resolution, CLI queries |
 | **Proposal** | Proposal lifecycle: registration, validation, history |
 | **Render** | Generates markdown, graphviz DOT, or JSON from the spec |
+| **CLI** | Root command, version subcommand, and the subcommand registration framework |
 
 ## Task tracking
 
@@ -69,7 +74,7 @@ Uses [beads](https://github.com/steveyegge/beads) via `br` (beads_rust) for issu
 
 ## Status
 
-Bootstrap phase. Schema complete, working through Validator and Merkle. Once Apply is built, it will generate its own tasks from the spec (self-hosting).
+Self-hosting. The full `validate → diff → impact → emit → adapter → ingest` pipeline ships, and Spex Machina's own spec is managed by Spex Machina — the tasks in `.beads/` are generated from the spec in `spec/`.
 
 ## License
 

@@ -53,6 +53,25 @@ Prior to this proposal, ActionClassifier resolved deps to bead IDs at impact tim
 
 ActionClassifier now emits spec_node_ids — identity hashes that stay stable across batches. Emit's Resolver classifies each at emit time with full knowledge of the current batch's op_ids.
 
+## Where classification stops
+
+An `Action` is a decision about *what happened to a spec node*, never an instruction to a tracker. Everything in the project requirement's "deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation" list belongs to emit, not here:
+
+| Concern | Owner |
+|---------|-------|
+| bead type (`epic` / `feature` / `task`) | the adapter, from the op's `spec_node_kind` |
+| `spec_node_kind` on the op | ChangesetBuilder |
+| parent (the proposal epic) | Resolver |
+| dep refs resolved from `Action.DepSpecNodeIDs`, and whether each takes the `ref:op` / `ref:bead` / `ref:spec_node` shape | Resolver |
+| the extra `ref:bead` lineage dep on a modify pair's create op, derived from `Action.OldBeadID` | ChangesetBuilder, appending it after Resolver has returned |
+| priority, via the `implements → preq_id → priority` chain | Resolver |
+| idempotency label / record id | IdempotencyLabeler |
+| op ordering and `op_id` assignment | TopologicalSorter |
+
+The node-type gate above is the one apparent exception, and it is not one: it decides whether a node produces an action *at all*, which is a property of the spec graph, not of the tracker. `Action.NodeType` is carried forward as data so emit can make the type decision — ActionClassifier does not make it.
+
+Holding this line is what lets impact be re-run against a changed tracker state without re-deciding anything structural, and what lets emit be a pure function of `(impact report, bead-map, spec dir, git HEAD)`.
+
 ## Interface
 
 ```go

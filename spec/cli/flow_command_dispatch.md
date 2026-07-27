@@ -90,5 +90,11 @@ No custom code is needed — cobra generates completions from the registered com
 - exit code: 0 on RunE returning nil, 1 otherwise
 
 Any new persistent flag on RootCommand must be documented here. Any new
-subcommand must be registered via the CommandRegistrar pattern — drive-by
-additions outside that pattern break shell completion and help output.
+subcommand must be added the one way subcommands are added: a
+`newXxxCmd() *cobra.Command` constructor in its own `cmd/spex/<name>.go` file,
+attached in the single `rootCmd.AddCommand(...)` call in `cmd/spex/main.go`.
+There is no registrar type and no registration side effect — the `AddCommand`
+call is the whole registry, and it is exhaustive by construction. A command
+constructed anywhere else is unreachable from the binary; a command attached
+outside that call splits the list the help output and shell completions are
+generated from.

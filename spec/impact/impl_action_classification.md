@@ -39,7 +39,7 @@ The "review" action from the previous model is eliminated entirely. Modified nod
 
 ## OldBeadID Propagation
 
-When a modified or unexpectedly-matched-added node generates both an obsolete and a create action, the create action carries `OldBeadID` set to the obsoleted bead's ID. This enables `BeadCreator` to set `--deps blocks:<old-bead-id>` for lineage tracking.
+When a modified or unexpectedly-matched-added node generates both an obsolete and a create action, the create action carries `OldBeadID` set to the obsoleted bead's ID. Emit reads it twice: IdempotencyLabeler uses it to look the existing record id back up (`MappingStore.GetByBead`) so the modify pair reuses one record, and ChangesetBuilder turns it into a `{"ref":"bead","bead_id":"<old-bead-id>","type":"blocks"}` dep on the create op. The adapter renders that dep as `--deps blocks:<old-bead-id>`, which is where lineage tracking actually lands in the tracker.
 
 ## Reason Generation
 

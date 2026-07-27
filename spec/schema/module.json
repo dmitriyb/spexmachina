@@ -7,7 +7,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define project schema",
-      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), module declarations with inter-module dependencies, and milestones. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), and module declarations with inter-module dependencies. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": "eed2cf85d5c3",
@@ -63,14 +63,14 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Identity hash algorithm",
-      "description": "Provide a deterministic identity hash function shared across the schema, validator, merkle, impact, apply, and map modules. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like; all other modules import it rather than reimplement it."
+      "description": "Provide a deterministic identity hash function that defines the ID format every module reads and writes. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like. The validator and the hash-id command call it to derive and check IDs; every other module treats the resulting 12-character hex string as an opaque key carried in the JSON id field, so it never recomputes and never reimplements the algorithm."
     }
   ],
   "components": [
     {
       "id": "79946d618829",
       "name": "ProjectSchema",
-      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and milestones.",
+      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and the project-level sections array.",
       "content": "arch_project_schema.md",
       "implements": [
         "f471f2764ab8",

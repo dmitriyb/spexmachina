@@ -164,8 +164,10 @@ error and never print a summary.
 - Whether to extract a `RefreshableTreeBuilder` interface or call merkle
   directly. The component's tests should not need to mock merkle —
   fixtures with real spec trees are clearer.
-- Where the atomic-write helper lives. If `internal/atomic.go` doesn't
-  exist yet, create it; if `Reconciler` already has one inline, lift it.
+- Whether the atomic-write helper stays where it is. RefreshHandler currently
+  reuses `writeAtomic` from `ingest/snapshot_saver.go` — the same temp-file +
+  rename primitive SnapshotSaver uses. Lifting it to a shared helper is
+  optional; sharing the primitive is not.
 - Whether to reuse `IngestSummary` or define `RefreshSummary` separately.
   Separate types keep the refresh path's stdout shape explicit and make
   consumers (skills) easier to migrate.

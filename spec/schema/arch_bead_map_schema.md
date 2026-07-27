@@ -26,4 +26,4 @@ The schema does not enforce uniqueness of `bead_id` or `spec_node_id` across rec
 
 ### bead_status is optional
 
-The `bead_status` field is populated at runtime by preflight/apply operations. It is not required on disk — records written by the migration or by `spex apply` may omit it.
+The `bead_status` field carries a live tracker status and is populated only by callers that have queried the tracker. It is not required on disk — `spex ingest` writes records from changeset ops and receipts, neither of which carries a status, so reconciled records normally omit it. Consumers must treat its absence as "status unknown", never as a value.

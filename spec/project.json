@@ -42,7 +42,7 @@
       "id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply changes",
-      "description": "Execute bead actions via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tag with proposal, save snapshot.",
+      "description": "Turn an impact report into applied tracker state through emit, an external adapter, and ingest. Emit composes a tool-agnostic changeset carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest reconciles the bead-map from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
       "depends_on": [
         "0a0f49f9be9b"
       ],
@@ -187,7 +187,7 @@
       "id": "742ff18345ed",
       "name": "emit",
       "path": "emit",
-      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and caller-supplied git HEAD. Emits changeset.json \u2014 an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding \u2014 that an external adapter consumes.",
+      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json \u2014 an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding \u2014 that an external adapter consumes.",
       "requires_module": [
         "725a083f66a1",
         "fb20a21b62f1"
@@ -197,7 +197,7 @@
       "id": "1374b24a3086",
       "name": "ingest",
       "path": "ingest",
-      "description": "Records the outcome of an adapter run. Pure function over changeset.json and receipts.json. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via idempotency.",
+      "description": "Records the outcome of an adapter run. Pure function over changeset.json and receipts.json. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
       "requires_module": [
         "742ff18345ed",
         "fb20a21b62f1",
@@ -208,7 +208,7 @@
       "id": "585284979da9",
       "name": "adapters",
       "path": "adapters",
-      "description": "Reference adapter scripts outside the spex binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br; authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex."
+      "description": "Reference adapter scripts outside the spex binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br (beads_rust); authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex. Requirements in this module double as the contract any adapter must satisfy."
     },
     {
       "id": "51016138121c",
@@ -235,7 +235,7 @@
       "id": "fb20a21b62f1",
       "name": "map",
       "path": "map",
-      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
+      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
       "requires_module": [
         "f03774b40bd5"
       ]

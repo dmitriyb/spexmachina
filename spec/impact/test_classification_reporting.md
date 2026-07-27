@@ -301,7 +301,7 @@ Given component X `uses: [Y]` and Y `uses: [Z]`.
 
 When a create action for X is classified:
 
-Then `DepSpecNodeIDs` contains only `id_Y`. Z is not included — component `uses` walks one hop only, matching PreflightChecker semantics.
+Then `DepSpecNodeIDs` contains only `id_Y`. Z is not included — component `uses` walks one hop only. Only `requires_module` is walked transitively; a component's direct `uses` edges are its declared collaborators, not its closure.
 
 ### D5: Mixed `uses` and `requires_module` are merged and deduplicated
 

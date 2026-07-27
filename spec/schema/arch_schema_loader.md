@@ -30,6 +30,10 @@ func IdentityHash(parts ...string) string
 
 Embedding schemas in the binary eliminates external file dependencies. The `spex` binary is self-contained — it carries the schema definitions it validates against. This supports the deterministic requirement: the same binary version always validates against the same schema.
 
-`IdentityHash` lives in this package because the schema is what *defines* what an ID is — the hex pattern in the JSON Schema and the algorithm that produces strings matching that pattern are two halves of one contract. Co-locating them keeps that contract honest. Every other module imports this single function rather than reimplementing the algorithm; if the truncation length, hash function, or join separator ever changes, only one place needs to change.
+`IdentityHash` lives in this package because the schema is what *defines* what an ID is — the hex pattern in the JSON Schema and the algorithm that produces strings matching that pattern are two halves of one contract. Co-locating them keeps that contract honest.
+
+Callers divide into two kinds, and the split is deliberate. The validator and the `hash-id` command **derive** IDs: they reconstruct an identity string from a node's position and check it against the stored `id`, so they call `IdentityHash` directly. Every other module **carries** IDs: it reads the 12-character hex string out of the JSON `id` field and treats it as an opaque key — a merkle tree key, a `spec_node_id` in the bead-map, a `spec_node_id` on a changeset op — without ever recomputing it.
+
+That is what makes the tree rename-stable. A module that recomputed an ID from a name or a path would silently re-key a node the moment either changed; a module that carries the stored value cannot. Only one place in the codebase needs to change if the truncation length, hash function, or join separator ever changes, and nothing downstream can drift from it because nothing downstream computes it.
 
 No schema versioning is needed initially. Schema changes are tracked via git commits on the schema files themselves. If multiple schema versions need coexistence in the future, a version parameter can be added.

@@ -43,4 +43,12 @@ ResolveContext takes a spec directory and a record, reads files, and returns a r
 
 ### Why a separate component?
 
-Context resolution is reusable beyond the CLI — Apply, skills, and other tools need the same "give me everything about this component" capability. Keeping it out of MapCommand makes it callable as a library function.
+Context resolution is reusable beyond the CLI — skills, review tooling and any future consumer need the same "give me everything about this component" capability. Keeping it out of MapCommand makes it callable as a library function.
+
+### Resolution reads the spec graph, not the tracker
+
+`ResolveContext` takes a record and a spec directory, and that is the whole of its input. It never reads a bead, a changeset or a receipt.
+
+The record contributes exactly three things: `record.Module`, which locates the module directory and is authoritative for the `module.json` path; `record.SpecNodeID`, matched against `describes` and `uses` arrays in that module.json; and `record.ContentFile`, returned as `ArchFile`. `record.Module` is the load-bearing one — every path in the result except `ArchFile` is joined under `<specDir>/<record.Module>/`, so a wrong module on the record misdirects the whole resolution rather than degrading it. Everything else in the result is derived from the spec graph on disk. The record's `bead_id`, `bead_type` and `spec_hash` are passed through in `Record` for the caller's benefit and are never consulted during resolution.
+
+That is why the result is stable against tracker churn: a bead can be closed, replaced by a modify-pair, or re-created under a new id, and `spex map context` returns the same files — because the record id survives the pair and the identity hash survives the rename. A resolver that consulted bead state would return different context depending on when it was asked, and the skills that consume it would lose the determinism they rely on.

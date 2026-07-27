@@ -38,7 +38,7 @@ type Summary struct {
 | create  | `proposal_epic` | ok            | false        | **Insert** proposal record (see Proposal-Epic Ops below — no spec-graph lookup, special metadata defaults) |
 | create  | `cleanup`       | ok            | any          | **No mapping change** — cleanup beads have no map record by design (see Cleanup-Create Ops below). Counter does NOT advance. |
 | create  | other          | ok             | false        | **Insert** record at `id = parse(idempotency.label)`, spec_node_id = op's, bead_id = receipt's |
-| create  | other          | ok             | true         | **No-op** if existing record already matches receipt's bead_id; else update fields that drift |
+| create  | other          | ok             | true         | Record present with the receipt's bead_id → strict **no-op**, nothing reconciled. Record present with a *different* bead_id → **error**. No record at that id → fall through and **insert** (adapter-side recovery, below) |
 | create  | any            | error          | —            | No-op |
 | create  | any            | skipped        | —            | No-op |
 | close   | —              | ok (reason="Spec node removed")  | — | **Delete** record by bead_id match |
@@ -57,6 +57,12 @@ Emit generates two ops for a modified node: a close op for the old bead, plus a 
 Record-id preservation is what makes this "an update" rather than "delete + insert" at the mapping level. The record-id is the persistent identity; the bead_id is what changes.
 
 Detection mechanism: the close op's reason field. "Spec node removed" → delete on close; "Spec node modified" → wait for create.
+
+## Adapter-Side Recovery
+
+`was_existing = true` means the adapter found an open bead already carrying the op's record-id label. Usually the local store agrees and the transition is a strict no-op — the store is already in the target state, so no field is refreshed and no counter moves. If the store instead holds a record at that id bound to a *different* bead, the two sources of truth have diverged and Reconciler errors out rather than picking a winner.
+
+The remaining case is the interesting one: `was_existing = true` with **no** record at that id. That is the signature of a previous run where the adapter created the bead and then died before its receipt reached disk. Reconciler falls through to the ordinary insert path and materialises the record now, so the next emit sees the id as taken and does not re-create the bead. See `test_partial_run_recovery.md`, "Partial with Adapter-Side Duplicates".
 
 ## Proposal-Epic Ops
 
@@ -166,6 +172,14 @@ func (r *Reconciler) AssertInvariants(cs emit.Changeset, rc receipts.Receipts) e
 - Reconciler applies changes to an in-memory copy of the mapping store.
 - Only after AssertInvariants succeeds does it commit to disk via the store's atomic write.
 - A failure at any step leaves the on-disk .bead-map.json untouched.
+
+## Sole writer, no tracker
+
+Reconciler is the only component that writes `.bead-map.json` on the normal path. Emit reads the store — record lookup for modify-pairs, the `next_id` counter for fresh labels — and never writes it; the counter advances here, on a reconcile, not at emit time. That asymmetry is deliberate: a failed emit that never reaches ingest must leave the store byte-identical, so the next emit re-derives the same labels and the run is retryable.
+
+Reconciler also never contacts a tracker. It learns what happened solely from the `(changeset, receipts)` pair — which is why a receipt's `bead_id` and `was_existing` are load-bearing rather than advisory, and why an op with an `error` receipt is a no-op rather than a trigger for a status query. `spex` closes the loop on file evidence alone; the adapter is the only participant that ever ran a tracker command.
+
+The practical consequence is that ingest is replayable. Given the same changeset and receipts, reconciling twice produces the same store, because every transition is keyed off the record id carried in `idempotency.label` rather than off tracker state that may have moved underneath.
 
 ## Ordering
 

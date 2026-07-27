@@ -66,13 +66,15 @@ type Store interface {
 
 ## File Location
 
-The mapping file lives at `spec/.bead-map.json`, adjacent to `.snapshot.json`. It is committed to git alongside the spec but is NOT hashed into the merkle tree — it is metadata about the relationship between spec and beads, not spec content.
+The mapping file is `.bead-map.json` in the repository root, not inside the spec directory. Every command that touches it — `diff`, `impact`, `emit`, `ingest` via `--map`, and `map get/list/context` via `--map-file` — defaults to that bare relative path, resolved against the working directory, and `scripts/apply-br.sh` reads the same default through `SPEX_MAPPING_FILE`. It is never derived from `--spec-dir`.
+
+That separation is deliberate. `spec/.snapshot.json` belongs to the spec tree; `.bead-map.json` does not. The file is committed to git but is NOT hashed into the merkle tree — it is metadata about the relationship between spec and beads, not spec content, and keeping it outside `--spec-dir` means pointing spex at a different spec directory does not silently point it at a different mapping store.
 
 ## Design Rationale
 
 ### Why a separate file?
 
-Embedding mapping data in module.json would make spec content depend on bead state, breaking the separation of concerns. The mapping file is maintained by `spex apply`, not by spec authoring.
+Embedding mapping data in module.json would make spec content depend on bead state, breaking the separation of concerns. The mapping file is maintained by `spex ingest`, which reconciles it from a changeset and the adapter's receipts — never by spec authoring, and never by the tracker directly. Emit only reads the store (record lookup and the `next_id` counter); ingest is the sole writer.
 
 ### Why not bead labels?
 

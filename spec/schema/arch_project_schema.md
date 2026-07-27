@@ -22,24 +22,14 @@ project.json
 │   ├── path (string, required)
 │   ├── description (string)
 │   └── requires_module (string[], identity hashes)
-├── milestones[]
-│   ├── id (string, 12-char hex identity hash)
-│   ├── title (string, required)
-│   ├── description (string)
-│   └── groups (string[], identity hashes)
-├── sections[]
-│   ├── id (string, 12-char hex identity hash)
-│   ├── name (string, required)
-│   ├── type (string, required)
-│   └── ... (additional properties allowed — freeform content)
-└── test_plan
-    └── scenarios[]
-        ├── id (string, 12-char hex identity hash)
-        ├── name (string, required)
-        ├── description (string)
-        ├── content (string, path to test_*.md)
-        └── modules (string[], identity hashes)
+└── sections[]
+    ├── id (string, 12-char hex identity hash)
+    ├── name (string, required)
+    ├── type (string, required)
+    └── ... (additional properties allowed — freeform content)
 ```
+
+`name` and `modules` are the schema's only top-level required properties, and `$defs` holds exactly four definitions: `identityHash`, `requirement`, `module` and `section`. There is no `milestones` array and no `test_plan` — both node types were retired from `schema/project.schema.json` along with their `$defs`.
 
 All `id` and cross-reference fields use the identity hash string format `^[a-f0-9]{12}$`. IDs are computed deterministically from each node's identity string by `schema.IdentityHash` — see `impl_identity_hash.md` for the algorithm and the table of identity strings per node type. IDs are never assigned manually.
 
@@ -47,8 +37,6 @@ All `id` and cross-reference fields use the identity hash string format `^[a-f0-
 
 - `depends_on`: requirement → requirement (within project-level requirements)
 - `requires_module`: module → module (inter-module dependency)
-- `groups`: milestone → module (milestone grouping)
-- `modules` (test_plan): test_scenario → module (cross-module test coverage)
 
 ## Sections and Coupled Modules
 
@@ -66,12 +54,10 @@ Each coupled module provides a `section.schema.json` file in its spec directory 
 
 - `depends_on`: requirement → requirement (within project-level requirements)
 - `requires_module`: module → module (inter-module dependency)
-- `groups`: milestone → module (milestone grouping)
-- `modules` (test_plan): test_scenario → module (cross-module test coverage)
 - `sections[].name` → `modules[].name`: coupled section references its implementing module by name match
 
 ## Design Rationale
 
-Only `name` and `modules` are required at the project level. Requirements and milestones are optional — a minimal spec needs only a name and at least one module declaration. This supports incremental spec authoring: start with structure, add requirements later.
+Only `name` and `modules` are required at the project level. Requirements and sections are optional — a minimal spec needs only a name and at least one module declaration. This supports incremental spec authoring: start with structure, add requirements later.
 
 `additionalProperties: false` ensures strict conformance at the project level — no extra top-level fields allowed. However, section entries within the `sections` array allow additional properties to support freeform content validated externally.

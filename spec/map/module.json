@@ -1,6 +1,6 @@
 {
   "name": "map",
-  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs. Provides CRUD operations, context resolution, and CLI query interface.",
+  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
   "requirements": [
     {
       "id": "934d627f0e90",
@@ -106,7 +106,7 @@
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "When Apply creates a bead, it calls MappingStore to create a mapping record. The record ID is stored as the bead label. Skills query mappings via MapCommand.",
+      "description": "How a record id travels from emit to the tracker and back. Emit reads MappingStore to stamp each create op with a spex:<record-id> idempotency label, the adapter applies that label to the bead it creates, and ingest materialises the mapping record at exactly that id from the changeset and the receipts. Skills query mappings via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",

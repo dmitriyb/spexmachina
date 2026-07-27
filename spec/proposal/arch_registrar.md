@@ -11,9 +11,22 @@ Registers proposals by copying them to `spec/proposals/` and validating their st
 
 ## Interface
 
-```go
-func Register(ctx context.Context, proposalPath, specDir string) error
-```
+`Register` takes two strings — the path to the source proposal file and the spec
+directory to register it into — and returns two values: the **basename** the
+proposal was written under, and an error. It is a bare `YYYY-MM-DD-<name>.md`,
+not a path: the caller holds the spec directory it passed in and joins the two
+itself, which is why `cmd/spex/register.go` prints `registered:
+spec/proposals/<filename>` rather than echoing the return value directly.
+
+Returning the filename is what makes the caller's next step possible: its stem
+*is* the proposal reference threaded through the rest of the pipeline
+(`spex emit --proposal <ref>`), and the registrar is the component that decides
+it, since it may rename the file to satisfy the `YYYY-MM-DD-<name>.md`
+convention. A caller that only learned success or failure would have to
+re-derive the reference by guessing at the same naming rules.
+
+There is no context parameter. Registration is a local file read, a structural
+check and a file write — no subprocess, no network, nothing to cancel.
 
 ## Section Validation
 
