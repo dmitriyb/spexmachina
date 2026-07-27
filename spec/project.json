@@ -139,6 +139,13 @@
       "title": "No runtime subprocesses",
       "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
       "priority": 2
+    },
+    {
+      "id": "96c6c15ecc3e",
+      "type": "non_functional",
+      "title": "Declared stack",
+      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and .bead-map.json; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
+      "priority": 2
     }
   ],
   "modules": [
@@ -233,107 +240,5 @@
         "f03774b40bd5"
       ]
     }
-  ],
-  "milestones": [
-    {
-      "id": "b7d589082283",
-      "title": "Bootstrap",
-      "description": "Core schema and validation working. Spec can be authored and validated.",
-      "groups": [
-        "f03774b40bd5",
-        "9ddd3d22e686"
-      ]
-    },
-    {
-      "id": "2f3f6ec61342",
-      "title": "Change Tracking",
-      "description": "Merkle tree and impact analysis. Spec changes detected and mapped to beads.",
-      "groups": [
-        "085966b6bfa1",
-        "725a083f66a1"
-      ]
-    },
-    {
-      "id": "7d855b64740e",
-      "title": "Automation",
-      "description": "Full pipeline: spec change \u2192 impact \u2192 emit changeset \u2192 adapter \u2192 ingest (reconcile + snapshot). Bead actions execute via a user-owned adapter rather than spex subprocesses.",
-      "groups": [
-        "742ff18345ed",
-        "1374b24a3086",
-        "585284979da9"
-      ]
-    },
-    {
-      "id": "a0e561d715a6",
-      "title": "Lifecycle",
-      "description": "Proposal management and spec rendering for human consumption.",
-      "groups": [
-        "51016138121c",
-        "8f2beb43e606"
-      ]
-    },
-    {
-      "id": "2acc2c4270ac",
-      "title": "CLI Infrastructure",
-      "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
-      "groups": [
-        "430f8b037415"
-      ]
-    },
-    {
-      "id": "61df84a34d4f",
-      "title": "Mapping Layer",
-      "description": "Spec-to-bead bridge via mapping file, deterministic preflight checking, and CLI query interface.",
-      "groups": [
-        "fb20a21b62f1"
-      ]
-    }
-  ],
-  "test_plan": {
-    "scenarios": [
-      {
-        "id": "21305a37d0d5",
-        "name": "CLI subcommand registration and help",
-        "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
-        "modules": [
-          "430f8b037415"
-        ]
-      },
-      {
-        "id": "90cba605889f",
-        "name": "Cross-module mapping integration",
-        "description": "Merkle ID-based diff feeds impact analysis, impact report drives emit with mapping record maintenance, skills query mappings via spex map CLI.",
-        "modules": [
-          "085966b6bfa1",
-          "725a083f66a1",
-          "742ff18345ed",
-          "1374b24a3086",
-          "fb20a21b62f1"
-        ]
-      },
-      {
-        "id": "ff5550d79a3a",
-        "name": "Coupled sections integration",
-        "description": "Sections array in project.json validated by schema, coupled module enforcement by validator, generic section rendering by render module.",
-        "modules": [
-          "f03774b40bd5",
-          "9ddd3d22e686",
-          "8f2beb43e606"
-        ]
-      },
-      {
-        "id": "ae8e80473159",
-        "name": "End-to-end pipeline consistency",
-        "description": "A full emit \u2192 adapter \u2192 ingest run against a real spec change leaves .bead-map.json consistent with the tracker state: every successful create has a mapping record pointing to the new bead_id, every successful close on a removed node has no record, and the merkle snapshot is saved only when top-level receipts status is complete. Partial runs leave the snapshot untouched so the next emit recomputes from the same baseline.",
-        "content": "test_end_to_end_pipeline.md",
-        "modules": [
-          "742ff18345ed",
-          "1374b24a3086",
-          "585284979da9",
-          "fb20a21b62f1",
-          "085966b6bfa1"
-        ]
-      }
-    ]
-  }
+  ]
 }

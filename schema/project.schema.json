@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spexmachina.dev/schema/project.json",
   "title": "Spex Machina Project",
-  "description": "Schema for the project-level spec file (project.json). Defines project metadata, top-level requirements, module declarations with inter-module dependencies, and milestones. IDs are 12-character hex identity hashes.",
+  "description": "Schema for the project-level spec file (project.json). Defines project metadata, top-level requirements, and module declarations with inter-module dependencies. IDs are 12-character hex identity hashes.",
   "type": "object",
   "required": ["name", "modules"],
   "additionalProperties": false,
@@ -30,23 +30,6 @@
       "description": "Module declarations. Each module has its own directory with a module.json.",
       "minItems": 1,
       "items": { "$ref": "#/$defs/module" }
-    },
-    "milestones": {
-      "type": "array",
-      "description": "Project milestones that group modules.",
-      "items": { "$ref": "#/$defs/milestone" }
-    },
-    "test_plan": {
-      "type": "object",
-      "description": "Project-level test plan for cross-module and end-to-end scenarios.",
-      "additionalProperties": false,
-      "properties": {
-        "scenarios": {
-          "type": "array",
-          "description": "Cross-module test scenarios.",
-          "items": { "$ref": "#/$defs/test_scenario" }
-        }
-      }
     },
     "sections": {
       "type": "array",
@@ -118,56 +101,6 @@
         "requires_module": {
           "type": "array",
           "description": "Identity hashes of other modules this one depends on (requires_module edge).",
-          "items": { "$ref": "#/$defs/identityHash" },
-          "uniqueItems": true
-        }
-      }
-    },
-    "test_scenario": {
-      "type": "object",
-      "required": ["id", "name"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/identityHash" },
-        "name": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Test scenario name."
-        },
-        "description": {
-          "type": "string",
-          "description": "Test scenario description."
-        },
-        "content": {
-          "type": "string",
-          "description": "Relative path to the markdown file with test scenario details (described_in edge to content leaf)."
-        },
-        "modules": {
-          "type": "array",
-          "description": "Module identity hashes involved in this test scenario (modules edge).",
-          "items": { "$ref": "#/$defs/identityHash" },
-          "uniqueItems": true
-        }
-      }
-    },
-    "milestone": {
-      "type": "object",
-      "required": ["id", "title"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "$ref": "#/$defs/identityHash" },
-        "title": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Milestone title."
-        },
-        "description": {
-          "type": "string",
-          "description": "Milestone description."
-        },
-        "groups": {
-          "type": "array",
-          "description": "Module identity hashes grouped under this milestone (groups edge).",
           "items": { "$ref": "#/$defs/identityHash" },
           "uniqueItems": true
         }

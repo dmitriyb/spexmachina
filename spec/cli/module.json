@@ -22,6 +22,13 @@
       "type": "functional",
       "title": "Identity hash computation command",
       "description": "`spex hash-id --module \u003cmodule\u003e --type \u003ctype\u003e --name \u003cname\u003e` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing."
+    },
+    {
+      "id": "293b27f73924",
+      "preq_id": "96c6c15ecc3e",
+      "type": "non_functional",
+      "title": "Bounded third-party CLI surface",
+      "description": "cobra is the only third-party CLI framework in the binary: no second command library and no hand-rolled argument parser stands beside it, and argument and flag parsing, help text, unknown-command suggestions and shell completions are taken from cobra's built-ins rather than reimplemented. cobra is not confined to a single import site — the subcommand registration pattern has every package that defines a subcommand construct its own cobra.Command, so cobra is imported wherever a subcommand lives, the root command being only the first of them. What is bounded is which third-party module may be reached for and how far it reaches: the root command imports cobra and nothing else, and cobra stops at command construction, so no package doing the module's actual work imports a CLI framework at all. pflag and mousetrap arrive transitively through cobra and are never imported directly. A subcommand needing a capability cobra does not provide reaches for the standard library; anything else amends the project's declared stack before it is written."
     }
   ],
   "components": [
@@ -31,7 +38,8 @@
       "description": "Top-level `spex` command. Registers all subcommands, sets global flags, prints help when invoked with no args.",
       "content": "arch_root_command.md",
       "implements": [
-        "0d7b10a39eb0"
+        "0d7b10a39eb0",
+        "293b27f73924"
       ]
     },
     {

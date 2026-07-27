@@ -38,13 +38,6 @@
       "description": "Add test_sections array to module.json schema, parallel to impl_sections. Each test_section has id, name, content (path to test_*.md), and describes (component IDs)."
     },
     {
-      "id": "61f3238dfd74",
-      "preq_id": "92dfddf840b0",
-      "type": "functional",
-      "title": "Define test_plan in project schema",
-      "description": "Add test_plan object to project.json schema with a scenarios array. Each scenario has id, name, content (path to test_*.md), and modules (module IDs)."
-    },
-    {
       "id": "f7ef8bef0ba1",
       "preq_id": "9120788210c9",
       "type": "functional",
@@ -82,7 +75,6 @@
       "implements": [
         "f471f2764ab8",
         "237fd8ffb610",
-        "61f3238dfd74",
         "581178718888",
         "20da31e277e5"
       ]

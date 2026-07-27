@@ -27,8 +27,7 @@ func setupRenderSpec(t *testing.T) string {
 		"modules": [
 			{"id": "000000000001", "name": "alpha", "path": "alpha", "description": "Alpha module"},
 			{"id": "000000000002", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["000000000001"]}
-		],
-		"milestones": [{"id": "000000000001", "title": "MVP", "groups": ["000000000001", "000000000002"]}]
+		]
 	}`
 	writeTestFile(t, dir, "project.json", proj)
 

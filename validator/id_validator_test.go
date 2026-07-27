@@ -169,22 +169,6 @@ func TestREQ6_DanglingRequiresModule(t *testing.T) {
 	}
 }
 
-// --- I11: Milestone groups references non-existent module ---
-
-func TestREQ6_DanglingMilestoneGroups(t *testing.T) {
-	errs := CheckIDs(filepath.Join("testdata", "id_dangling"))
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Message, "groups references non-existent module 000000000099") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatal("expected dangling milestone groups error, got none")
-	}
-}
-
 // --- I12: Requirement preq_id references non-existent project requirement ---
 
 func TestREQ6_DanglingPreqID(t *testing.T) {

@@ -31,15 +31,17 @@ import (
 //
 // Module-scoped nodes only: requirements, components, impl_sections,
 // data_flows, test_sections and apis declared in a module.json. Project-level
-// requirement, milestone and scenario ids are legacy — this project's own
-// project.json carries 15 requirement, 6 milestone and 3 scenario ids that
-// predate the identity-hash convention (`Render spec` declares 6b00623735ac
-// against a computed 060ca1db054d) — and correcting them would rewrite the
-// snapshot and every bead-map record keyed off them. They are exempt, not
-// "correct". Module ids in project.json do all derive today, but they are not
-// checked either: the merkle tree keys module nodes by the declared id, so a
-// spec whose module ids are synthetic is still internally consistent, and
-// several fixtures outside this package rely on that.
+// requirement ids are the sole remaining exemption — 15 of the ones this
+// project's own project.json carries predate the identity-hash convention
+// (`Render spec` declares 6b00623735ac against a computed 060ca1db054d) — and
+// correcting them would rewrite the snapshot and every bead-map record keyed
+// off them. They are exempt, not "correct". Milestones and test_plan scenarios
+// used to be exempt on the same grounds; both node types are gone from the
+// schema, so requirements are the only project-level exemption left. Module ids
+// in project.json do all derive today, but they are not checked either: the
+// merkle tree keys module nodes by the declared id, so a spec whose module ids
+// are synthetic is still internally consistent, and several fixtures outside
+// this package rely on that.
 //
 // The one consequence worth naming: because a module id is unchecked, the
 // module-name recovery in CheckRemovedNames can fail on a spec whose module

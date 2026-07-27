@@ -41,6 +41,23 @@ This keeps command definitions close to the code they invoke and avoids circular
 
 Global flags are defined as persistent flags on the root command so they are available to all subcommands.
 
+## Dependency Boundary
+
+cobra is the only third-party CLI framework in the binary. No second command library and no hand-rolled parser stands beside it, and every capability the CLI framework owes the user is taken from a cobra built-in rather than added alongside it:
+
+| Capability | Source |
+|------------|--------|
+| Argument and flag parsing | cobra, via pflag |
+| Help and usage text | cobra's generated help |
+
+cobra is not confined to a single import site. Under the Subcommand Registration Pattern above, every package that defines a subcommand constructs its own `cobra.Command` and therefore imports cobra; the root command is only the first of them. What this boundary fixes is *which* third-party module may be reached for and *how far* it reaches:
+
+- `cli/root.go` imports cobra and nothing else — no standard library, no internal package.
+- cobra stops at command construction. The packages that do the work — validator, merkle, impact, emit, ingest, mapping, render, schema — import no CLI framework at all; a subcommand's `RunE` reads flags into plain Go values and calls into them.
+- pflag and mousetrap arrive transitively through cobra and are never imported directly.
+
+A subcommand needing something cobra does not provide uses the standard library; anything else amends the project's `Declared stack` requirement first, which enumerates the permitted modules against which `go.mod`'s direct requires are read.
+
 ## Design Rationale
 
-cobra is the de facto standard for Go CLIs (kubectl, docker, hugo). It provides declarative subcommand registration, auto-generated help, POSIX flag parsing via pflag, and shell completions with zero custom code. This is an intentional exception to the "Go standard library first" constraint — reimplementing this infrastructure would add complexity without value.
+cobra is the de facto standard for Go CLIs (kubectl, docker, hugo). It provides declarative subcommand registration, auto-generated help, POSIX flag parsing via pflag, and shell completions with zero custom code. This is the one sanctioned exception to the standard-library-first rule of the declared stack — reimplementing this infrastructure would add complexity without value — and the Dependency Boundary above is what keeps the exception from widening.

@@ -231,7 +231,7 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 		t.Fatalf("requirement ID should be 12-char hex, got %q", mod.Requirements[0].ID)
 	}
 
-	// Project-level node types: requirement, module, milestone.
+	// Project-level node types: requirement, module.
 	projData := readTestdata(t, "valid_project.json")
 	var proj Project
 	if err := json.Unmarshal(projData, &proj); err != nil {
@@ -242,12 +242,6 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 	}
 	if len(proj.Modules) == 0 {
 		t.Fatal("expected project modules in fixture")
-	}
-	if len(proj.Milestones) == 0 {
-		t.Fatal("expected project milestones in fixture")
-	}
-	if proj.TestPlan == nil || len(proj.TestPlan.Scenarios) == 0 {
-		t.Fatal("expected project test_plan with scenarios in fixture")
 	}
 }
 
@@ -274,9 +268,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"depends_on", len(mod.Requirements) > 2 && len(mod.Requirements[2].DependsOn) > 0},
 		{"preq_id", len(mod.Requirements) > 0 && mod.Requirements[0].PreqID != ""},
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
-		{"groups", len(proj.Milestones) > 0 && len(proj.Milestones[0].Groups) > 0},
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},
-		{"modules (test_scenario)", proj.TestPlan != nil && len(proj.TestPlan.Scenarios) > 0 && len(proj.TestPlan.Scenarios[0].Modules) > 0},
 		{"describes (test_section)", len(mod.TestSections) > 0 && len(mod.TestSections[0].Describes) > 0},
 		{"provided_by (api)", len(mod.APIs) > 0 && len(mod.APIs[0].ProvidedBy) > 0},
 	}
@@ -345,14 +337,6 @@ func TestFR5_ProjectIDsAreIdentityHashes(t *testing.T) {
 	for _, m := range proj.Modules {
 		checkHash("module", m.ID)
 	}
-	for _, ms := range proj.Milestones {
-		checkHash("milestone", ms.ID)
-	}
-	if proj.TestPlan != nil {
-		for _, s := range proj.TestPlan.Scenarios {
-			checkHash("test_scenario", s.ID)
-		}
-	}
 }
 
 func TestFR6_ContentPaths(t *testing.T) {
@@ -363,8 +347,9 @@ func TestFR6_ContentPaths(t *testing.T) {
 	}
 
 	// The schema requires a non-empty content on components, impl_sections,
-	// data_flows and test_sections; test_plan scenarios below may still omit
-	// it, so the non-empty guard stays on every loop.
+	// data_flows and test_sections — the only node types that carry one — so
+	// against a schema-valid fixture every guard below holds. They stay as a
+	// cheap assertion that the count only ever reflects real content paths.
 	var found int
 	for _, c := range mod.Components {
 		if c.Content != "" {
@@ -386,18 +371,6 @@ func TestFR6_ContentPaths(t *testing.T) {
 			found++
 		}
 	}
-	projData := readTestdata(t, "valid_project.json")
-	var proj Project
-	if err := json.Unmarshal(projData, &proj); err != nil {
-		t.Fatalf("unmarshal project: %v", err)
-	}
-	if proj.TestPlan != nil {
-		for _, s := range proj.TestPlan.Scenarios {
-			if s.Content != "" {
-				found++
-			}
-		}
-	}
 	if found == 0 {
 		t.Fatal("expected at least one node with a content path in fixture")
 	}
@@ -414,7 +387,7 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 		t.Fatalf("unmarshal project schema: %v", err)
 	}
 	props := projRaw["properties"].(map[string]any)
-	for _, key := range []string{"requirements", "modules", "milestones", "test_plan"} {
+	for _, key := range []string{"requirements", "modules", "sections"} {
 		if props[key] == nil {
 			t.Fatalf("project schema missing property %q", key)
 		}

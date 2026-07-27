@@ -31,9 +31,6 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"modules": [
 			{"id": "111111111111", "name": "alpha", "path": "alpha", "description": "Alpha module"},
 			{"id": "222222222222", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["111111111111"]}
-		],
-		"milestones": [
-			{"id": "ccbbaa998877", "title": "MVP", "description": "First release", "groups": ["111111111111", "222222222222"]}
 		]
 	}`
 	writeFile(t, dir, "project.json", proj)
@@ -172,8 +169,8 @@ func TestFR1_S3_MultiModule(t *testing.T) {
 	}
 }
 
-// S4: Project-level requirements and milestones preserved
-func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
+// S4: Project-level requirements preserved
+func TestFR1_S4_ProjectRequirements(t *testing.T) {
 	dir := setupMultiModuleSpec(t)
 
 	graph, err := ReadSpec(dir)
@@ -185,12 +182,6 @@ func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
 		t.Fatalf("want 3 project requirements, got %d", len(graph.Project.Requirements))
 	}
 
-	if len(graph.Project.Milestones) != 1 {
-		t.Fatalf("want 1 milestone, got %d", len(graph.Project.Milestones))
-	}
-	if len(graph.Project.Milestones[0].Groups) != 2 {
-		t.Fatalf("want 2 groups in milestone, got %d", len(graph.Project.Milestones[0].Groups))
-	}
 }
 
 // S5: All module-level edge types preserved

@@ -1,5 +1,55 @@
 # Emit flow
 
+## Position in the pipeline
+
+Emit sits fourth in a six-stage run, and it is the stage that has to be right
+about both of its neighbours: it consumes the impact report the upstream stages
+produce, and the changeset it writes is a contract the adapter executes and
+`spex ingest` reconciles. Every hand-off from `spex diff` onwards goes through a
+file, so each of those stages can be re-run from the artifact its predecessor
+wrote. `spex validate` is the exception — it is a gate, not a producer, and
+`spex diff` reads only `--snapshot`, `--map` and `--spec-dir` — so restarting at
+`diff` means re-reading the spec directory, not a validate artifact.
+
+```
+   spec change (project.json, module.json, *.md)
+         │
+         ▼
+   spex validate  ──▶  spex diff  ──▶  spex impact --beads
+                                             │
+                                             ▼
+                                      impact report
+                                             │
+                                             ▼
+                              ┌──────────────────────────┐
+                              │ spex emit                │
+                              └─────────────┬────────────┘
+                                            │
+                                            ▼
+                                     changeset.json
+                                            │
+                                            ▼
+                              scripts/apply-br.sh (reference adapter)
+                                            │
+                                            ▼
+                                      receipts.json
+                                            │
+                                            ▼
+                              ┌──────────────────────────┐
+                              │ spex ingest              │
+                              └─────────────┬────────────┘
+                                            │
+                                            ▼
+                          .bead-map.json  +  spec/.snapshot.json
+                                             (snapshot iff status == complete)
+```
+
+A partial run — any op with `status: error` in the receipts — leaves the
+snapshot untouched, so the next `spex diff` recomputes from the same baseline
+and emit sees only the ops that never landed.
+
+## Emit internals
+
 ```
                     ┌──────────────────────┐
                     │  spex emit            │

@@ -57,10 +57,6 @@ func checkProjectUniqueness(project *schema.Project) []ValidationError {
 
 	errs = append(errs, checkDuplicateIDs("project.json:/requirements", reqIDs(project.Requirements))...)
 	errs = append(errs, checkDuplicateIDs("project.json:/modules", moduleIDs(project.Modules))...)
-	errs = append(errs, checkDuplicateIDs("project.json:/milestones", milestoneIDs(project.Milestones))...)
-	if project.TestPlan != nil {
-		errs = append(errs, checkDuplicateIDs("project.json:/test_plan/scenarios", scenarioIDs(project.TestPlan.Scenarios))...)
-	}
 	errs = append(errs, checkDuplicateIDs("project.json:/sections", sectionIDs(project.Sections))...)
 
 	return errs
@@ -239,34 +235,6 @@ func checkProjectRefs(project *schema.Project) []ValidationError {
 		}
 	}
 
-	for _, ms := range project.Milestones {
-		for _, groupID := range ms.Groups {
-			if !modIDSet[groupID] {
-				errs = append(errs, ValidationError{
-					Check:    "id",
-					Severity: "error",
-					Path:     fmt.Sprintf("project.json:/milestones/%s", ms.ID),
-					Message:  fmt.Sprintf("groups references non-existent module %s", groupID),
-				})
-			}
-		}
-	}
-
-	if project.TestPlan != nil {
-		for _, sc := range project.TestPlan.Scenarios {
-			for _, modID := range sc.Modules {
-				if !modIDSet[modID] {
-					errs = append(errs, ValidationError{
-						Check:    "id",
-						Severity: "error",
-						Path:     fmt.Sprintf("project.json:/test_plan/scenarios/%s", sc.ID),
-						Message:  fmt.Sprintf("modules references non-existent module %s", modID),
-					})
-				}
-			}
-		}
-	}
-
 	return errs
 }
 
@@ -425,22 +393,6 @@ func moduleIDs(mods []schema.Module) []string {
 	ids := make([]string, len(mods))
 	for i, m := range mods {
 		ids[i] = m.ID
-	}
-	return ids
-}
-
-func milestoneIDs(mss []schema.Milestone) []string {
-	ids := make([]string, len(mss))
-	for i, ms := range mss {
-		ids[i] = ms.ID
-	}
-	return ids
-}
-
-func scenarioIDs(scs []schema.TestScenario) []string {
-	ids := make([]string, len(scs))
-	for i, s := range scs {
-		ids[i] = s.ID
 	}
 	return ids
 }

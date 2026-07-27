@@ -26,9 +26,6 @@ func fixtureGraph() *SpecGraph {
 				{ID: "665544332211", Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
 				{ID: "778899aabbcc", Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
 			},
-			Milestones: []schema.Milestone{
-				{ID: "ccbbaa998877", Title: "MVP", Groups: []string{"111111111111", "222222222222"}},
-			},
 		},
 		Modules: []ModuleGraph{
 			{
@@ -1485,8 +1482,7 @@ func TestFR3_J15_SlimEmitsDeclaredIDs(t *testing.T) {
 	}
 
 	// Declaration order, exhaustively. Pinning the whole list also pins what
-	// --slim leaves out: the project root, and the milestone the fixture
-	// declares (ccbbaa998877, "MVP") — neither of which RenderJSON emits.
+	// --slim leaves out: the project root, which RenderJSON does not emit.
 	want := []SlimNode{
 		{ID: "112233445566", Type: "requirement", Name: "Parse input"},
 		{ID: "665544332211", Type: "requirement", Name: "Build output"},
@@ -1741,8 +1737,6 @@ func TestFR2_D10_DOTDeclaresDeclaredIDs(t *testing.T) {
 		}
 	}
 
-	// Exhaustive: also pins that the fixture's milestone (ccbbaa998877) gets
-	// no DOT node, matching the JSON renderers.
 	want := []string{
 		"112233445566", "665544332211", "778899aabbcc", // project requirements
 		"111111111111",                 // module alpha

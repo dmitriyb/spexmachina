@@ -67,25 +67,20 @@ func TestFR58_S4_ModuleRequirementWithModuleFlag(t *testing.T) {
 	}
 }
 
-func TestFR58_S5_MilestoneHash(t *testing.T) {
-	stdout, _, err := runHashID(t, "--type", "milestone", "--name", "Bootstrap")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := schema.IdentityHash("milestone", "Bootstrap")
-	if got := strings.TrimSpace(stdout); got != want {
-		t.Errorf("want %q, got %q", want, got)
-	}
-}
-
-func TestFR58_S6_ScenarioHash(t *testing.T) {
-	stdout, _, err := runHashID(t, "--type", "scenario", "--name", "Cross-module mapping integration")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := schema.IdentityHash("test_plan", "scenario", "Cross-module mapping integration")
-	if got := strings.TrimSpace(stdout); got != want {
-		t.Errorf("want %q, got %q", want, got)
+// TestFR58_S5_RetiredTypesRejected pins that the two node types deleted from
+// the project schema no longer hash. A command that still minted ids for them
+// would hand authors ids for nodes the schema rejects.
+func TestFR58_S5_RetiredTypesRejected(t *testing.T) {
+	for _, typ := range []string{"milestone", "scenario"} {
+		t.Run(typ, func(t *testing.T) {
+			_, _, err := runHashID(t, "--type", typ, "--name", "x")
+			if err == nil {
+				t.Fatalf("type %q was retired but still hashes", typ)
+			}
+			if want := "unknown type"; !strings.Contains(err.Error(), want) {
+				t.Errorf("want error containing %q, got %q", want, err)
+			}
+		})
 	}
 }
 
@@ -115,8 +110,6 @@ func TestFR58_S8_OutputMatchesHexPattern(t *testing.T) {
 		{"--module", "impact", "--type", "test_section", "--name", "T"},
 		{"--module", "merkle", "--type", "api", "--name", "spex diff"},
 		{"--type", "module", "--name", "x"},
-		{"--type", "milestone", "--name", "M"},
-		{"--type", "scenario", "--name", "S"},
 		{"--type", "requirement", "--name", "req a"},
 		{"--module", "m", "--type", "requirement", "--name", "req b"},
 	}
@@ -184,7 +177,7 @@ func TestFR58_E4_UnknownType(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	msg := err.Error()
-	for _, want := range []string{"requirement", "component", "api", "module", "milestone", "scenario"} {
+	for _, want := range []string{"requirement", "component", "impl_section", "data_flow", "test_section", "api", "module"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("expected error listing valid types, missing %q in %q", want, msg)
 		}

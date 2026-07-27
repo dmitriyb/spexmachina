@@ -85,10 +85,12 @@ func TestREQ5_EveryModuleScopedNodeTypeChecked(t *testing.T) {
 }
 
 // TestREQ5_ProjectLevelIDsExempt: this project's own project.json carries 15
-// requirement, 6 milestone and 3 scenario ids that predate the identity-hash
-// convention. They are load-bearing keys in the snapshot and in every
-// bead-map record, so they are exempt rather than wrong; the fixture's
-// project requirement id derives from nothing and must still validate.
+// requirement ids that predate the identity-hash convention. They are
+// load-bearing keys in the snapshot and in every bead-map record, so they are
+// exempt rather than wrong; the fixture's project requirement id derives from
+// nothing and must still validate. Requirements are the only project-level
+// node type left to exempt — milestones and test_plan scenarios, which were
+// exempt for the same reason, no longer exist.
 func TestREQ5_ProjectLevelIDsExempt(t *testing.T) {
 	errs := CheckIDDerivation(filepath.Join("testdata", "id_derivation_valid"))
 	for _, e := range errs {
@@ -99,7 +101,7 @@ func TestREQ5_ProjectLevelIDsExempt(t *testing.T) {
 }
 
 // TestREQ5_SelfValidateIDDerivation is the claim that makes the removal sweep
-// sound on this corpus: all 238 module-scoped nodes derive, so every one of
+// sound on this corpus: all 237 module-scoped nodes derive, so every one of
 // their names can be recovered from its hash.
 func TestREQ5_SelfValidateIDDerivation(t *testing.T) {
 	errs := CheckIDDerivation(filepath.Join("..", "spec"))

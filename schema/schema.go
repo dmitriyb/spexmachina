@@ -4,8 +4,8 @@
 // The JSON Schema files are embedded and accessible via [ProjectSchema] and
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
-// Node types: requirement, component, impl_section, data_flow, api, milestone, module, test_scenario.
-// Edge types: implements, uses, describes, described_in, provided_by, depends_on, groups, requires_module, modules.
+// Node types: requirement, component, impl_section, data_flow, api, module, test_section.
+// Edge types: implements, uses, describes, described_in, provided_by, depends_on, requires_module.
 package schema
 
 import (
@@ -69,8 +69,6 @@ type Project struct {
 	Version      string        `json:"version,omitempty"`
 	Requirements []Requirement `json:"requirements,omitempty"`
 	Modules      []Module      `json:"modules"`
-	Milestones   []Milestone   `json:"milestones,omitempty"`
-	TestPlan     *TestPlan     `json:"test_plan,omitempty"`
 	Sections     []Section     `json:"sections,omitempty"`
 }
 
@@ -126,30 +124,6 @@ type Requirement struct {
 	Description string   `json:"description,omitempty"`
 	Priority    *int     `json:"priority,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`
-}
-
-// Milestone represents a milestone in project.json.
-// IDs are 12-character hex identity hash strings.
-type Milestone struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description,omitempty"`
-	Groups      []string `json:"groups,omitempty"`
-}
-
-// TestPlan represents the test_plan object in project.json.
-type TestPlan struct {
-	Scenarios []TestScenario `json:"scenarios,omitempty"`
-}
-
-// TestScenario represents a cross-module test scenario in a project's test_plan.
-// IDs are 12-character hex identity hash strings.
-type TestScenario struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Content     string   `json:"content,omitempty"`
-	Modules     []string `json:"modules,omitempty"`
 }
 
 // ModuleSpec represents a module.json file.
