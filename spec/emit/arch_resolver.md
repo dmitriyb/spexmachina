@@ -66,6 +66,12 @@ func (r *Resolver) Priority(componentID string) int
 
 `Batch` is populated before `ResolveDeps` is called — TopologicalSorter runs first to assign op_ids; Resolver then classifies each dep.
 
+## Every ref names a node that can own a bead
+
+`DepSpecNodeIDs` arrives already filtered: impact produces actions only for the node kinds that can own a bead, and the sorter refuses to tier a create whose kind it does not recognise. The three ref shapes are therefore exhaustive over what actually reaches Resolver. There is no fourth case for a spec node that has no bead and can never acquire one — for such a node `ref:bead` would find no record and `ref:spec_node` would hand the adapter a hash the mapping store can never satisfy, so the dep would be unresolvable at exec time rather than merely deferred.
+
+The priority walk enters the same set from the other end. It starts at a component's `implements` array, so a project requirement's priority reaches a bead through the component that implements the requirement and through no other kind of node. A section of that component's contract carries no `implements` edge and never begins a chain of its own; it inherits whatever priority the component it belongs to resolves.
+
 ## Determinism
 
 - Iteration order over `DepSpecNodeIDs` in the impact report is preserved as given (impact emits them in a deterministic order).

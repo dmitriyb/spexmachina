@@ -32,12 +32,15 @@ Each mapping record contains:
 | `spec_node_id` | string | Identity hash of the spec node (12-char lowercase hex, pattern `^[a-f0-9]{12}$`). Identical to the merkle tree key for the same node. |
 | `bead_id` | string | Bead ID from `br` or `bd` |
 | `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) — determined by spec node type. Carried as a separate field because identity hashes do not embed type information. |
+| `node_type` | string | The kind of spec node the record points at: `component`, `data_flow`, `test_section`, or `proposal`. Optional — it is present on records that need to distinguish a proposal epic from a spec-graph node, and the bead-map schema constrains it to that closed set. |
 | `module` | string | Module name (human-readable, for context-resolver output and debug) |
 | `component` | string | Component or section name (human-readable) |
 | `content_file` | string | Path to the spec content markdown file |
 | `spec_hash` | string | Merkle content hash of the spec node at time of mapping |
 
 `spec_node_id` is the bead-map's primary key into the spec graph. It is identical, byte for byte, to the merkle tree key for the same node, so the impact command can look up changed merkle nodes in the bead-map with no translation step.
+
+A record points at a whole node, never at a part of one. The values `node_type` may take are exactly the kinds of node that can own a bead: a section of a component's contract is content belonging to that component's leaf and reaches the tracker inside the component's bead, so it never acquires a record, an identity in this file, or a `spex:<id>` label of its own. That is what makes the mapping store indifferent to how a component's contract is laid out across files — the store keys on the component, and a change to which files carry that contract is a content change to the component's leaf, not a change to the set of records.
 
 ## Interface
 

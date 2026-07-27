@@ -24,7 +24,7 @@
       "id": "9120788210c9",
       "type": "functional",
       "title": "Map spec nodes to beads",
-      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal).",
+      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, module, spec_hash, proposal). Plan-relevant is a closed set of node types — component, data_flow and test_section, plus one epic per proposal — and a mapping record points at a node in that set, never at prose that elaborates one.",
       "priority": 1
     },
     {

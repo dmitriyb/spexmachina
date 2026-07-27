@@ -162,10 +162,20 @@ func (r *Reconciler) AssertInvariants(cs emit.Changeset, rc receipts.Receipts) e
 
     // Invariant 6: enforced by SnapshotSaver's gate.
 
-    // Invariant 7: re-validate .bead-map.json against schema.
-    return r.MappingStore.ValidateSchema()
+    // Invariant 7: not checked here. Store.Replace validates the whole
+    // candidate file against the bead-map schema before the atomic
+    // rename, so the commit itself enforces it.
+    return nil
 }
 ```
+
+## Where a record's `node_type` comes from
+
+The `node_type` written onto a record is the kind of the spec node the op targets: the spec graph's metadata for `op.spec_node_id`, falling back to the op's own `spec_node_kind` when the graph has nothing to say (the `proposal_epic` case above, which maps to `proposal`). Reconciler does not choose the vocabulary; it copies it.
+
+Two independent gates keep that copied value inside the closed enum the bead-map schema declares. Emit refuses to order a create op for a kind it cannot tier, so an op for an unmappable node kind never exists to be reconciled; and `Store.Replace` re-validates the entire candidate file against the bead-map schema before the atomic rename, which is invariant 7. The pair fails closed — a kind outside the enum is rejected at the write boundary, leaving `.bead-map.json` untouched, rather than persisting a record that no later run could resolve.
+
+This is why the set of mappable node kinds belongs in the schema rather than being implied by the transition table above. The table discriminates the cases Reconciler handles specially; the enum states which kinds may reach a record at all. Retiring a kind that was never in the enum changes neither: no op was ever built for one, so no transition and no record refers to it.
 
 ## Transaction Semantics
 

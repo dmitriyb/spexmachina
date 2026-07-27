@@ -103,6 +103,12 @@ This is not a scope decision that could be revisited subcommand by subcommand â€
 
 So MapCommand is the query face of a store whose write path runs through the pipeline. Skills read spec context through it; nothing writes through it.
 
+### A record is the only thing addressable
+
+`get` and `context` address a record by its integer `id`; `list` addresses none and returns them all. A record in turn addresses a spec node by identity hash. Neither the record `id` nor the identity hash is a path and neither is a node kind, so no `spex map` invocation names a file, a section, or a type of spec content â€” which is why the four declared api names are stable against changes in how the spec graph is laid out. `get` and `list` hand records back verbatim; `context` is the one place the spec's own vocabulary shows through, and it shows through in the payload's key set rather than in the surface a caller types.
+
+That asymmetry is worth stating because it bounds the blast radius of a spec-format change. Retiring a kind of section changes what `context` prints and changes nothing about `get`, `list`, the record-id argument, or the names themselves.
+
 ### JSON-only output
 
 All output is structured JSON for machine consumption. Skills parse this output to get spec context. Human-readable formatting is left to `jq` or similar tools.

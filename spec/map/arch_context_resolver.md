@@ -45,6 +45,12 @@ ResolveContext takes a spec directory and a record, reads files, and returns a r
 
 Context resolution is reusable beyond the CLI — skills, review tooling and any future consumer need the same "give me everything about this component" capability. Keeping it out of MapCommand makes it callable as a library function.
 
+### The result's shape follows the module, not the record
+
+The record contributes an identity hash, a module and an arch path; every other path in the result is *discovered*, by scanning the module for declarations that name that hash. So the key set of a `ContextResult` is a function of which kinds of section `module.json` declares, not of anything stored on the record — one key per kind of section that can name a component, plus the arch leaf and the module file.
+
+The practical consequence is that retiring a kind of section is a change to this component and to nothing downstream of it. One arm of the scan goes away and one key leaves the result; no record is touched, because no record ever pointed at a section — they point at components, and a component's arch leaf is the thing a record's `content_file` names. A resolver that had instead stored resolved section paths on the record would have needed a bead-map migration for the same change.
+
 ### Resolution reads the spec graph, not the tracker
 
 `ResolveContext` takes a record and a spec directory, and that is the whole of its input. It never reads a bead, a changeset or a receipt.
