@@ -28,7 +28,7 @@
       "preq_id": "91f6f338de19",
       "type": "non_functional",
       "title": "Composable output",
-      "description": "All render output goes to stdout. Format is selected via subcommand or flag. Output is pipeable to other tools."
+      "description": "All render output goes to stdout. Format is selected by the --format flag (markdown, dot, json); --slim reduces the json graph to bare nodes. Output is pipeable to other tools. The module exposes one external surface, the api `spex render`, provided by RenderCommand: the formats are flags behind that single name, not separate entry points, so adding a format or a flag moves no name and the diff cannot see it, while renaming the subcommand is a removal plus an addition. Composability also binds what the surface must carry — every node type SpecReader surfaces has to reach all three outputs, apis included, and an api reaches them through its JSON fields alone because it has no content file to inline."
     },
     {
       "id": "d1a61942bc21",
@@ -192,6 +192,17 @@
       "describes": [
         "c56eefd05f42"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "2c08890a5e56",
+      "name": "spex render",
+      "description": "Render spec as markdown, DOT, or JSON",
+      "provided_by": [
+        "c56eefd05f42"
+      ],
+      "group": "cli"
     }
   ]
 }

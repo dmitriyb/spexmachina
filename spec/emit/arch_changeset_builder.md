@@ -63,6 +63,12 @@ Create ops carry `spec_node_kind` matching the underlying spec node category:
 
 The `cleanup` value is what tells the adapter and Reconciler that this op produces a bead with no mapping record (per CLAUDE.md "no map record" rule).
 
+The vocabulary is closed, and `api` is deliberately not in it. An api is a declared external surface, not a unit of work, and impact produces no action for one, so no action carrying an api ever reaches `Build()`.
+
+The closure is upstream, not here. On a conventional create the builder copies `Action.NodeType` into `spec_node_kind` verbatim — it overrides the value only for the cleanup shape below — so it validates nothing against the table above. An api action that did reach `Build()` would emit `"spec_node_kind": "api"`, a value outside the table, and the adapter's kind-to-bead-type mapping would fall through its default arm and file the surface as a `feature` bead. The guarantee is therefore ActionClassifier's, not the builder's: it holds because impact never emits an api action, not because emit would refuse one. A future kind added to the table has to be added there too.
+
+Declaring, describing or retiring a surface therefore produces an empty changeset unless a component leaf moved alongside it — which is the intended shape, because the work behind a surface belongs to the components its `provided_by` array names.
+
 ## Cleanup op shape
 
 Cleanup actions (those whose `Action.Reason` starts with `"Code cleanup:"`) are emitted with a distinct op shape rather than the conventional component/data_flow form. The discriminator is the same `isCleanup(a)` test pre-decouple `apply/bead_creator.go` used; emit lifts it from the implementation layer up into the changeset contract:

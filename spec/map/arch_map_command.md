@@ -82,6 +82,17 @@ func newMapCmd() *cobra.Command
 
 Each of the three children declares its own `--map-file` flag, defaulting to `.bead-map.json` relative to the working directory. The store is opened inside `RunE` from that flag, not injected at construction, so building the command tree touches no files and `spex --help` works with no bead-map present. `--spec-dir` is not a store input: `get` and `list` never resolve it, and `context` resolves it only to pass a spec root to `ResolveContext` for the `module.json` read.
 
+## Declared surfaces
+
+Four api nodes cover this command tree: the parent `spex map` and each of its three children. Every one names MapCommand in `provided_by`, paired with the worker that answers it — MappingStore for `spex map get` and `spex map list`, ContextResolver for `spex map context`. The parent names MapCommand alone, because on its own it dispatches and prints help; it opens no store.
+
+Declaring the children rather than only the parent is what makes the surface legible and what makes the parent retirable.
+
+- **Legible.** MapCommand's `uses` edges reach MappingStore and ContextResolver whichever child ran, so they cannot say which subcommand needs which. `provided_by` is the only place that pairing is recorded.
+- **Retirable.** The removal-time name check searches the corpus for a removed api's name, longest-match-first, discarding hits that a longer *live* name already covers. `spex map` is a prefix of all three children, so most of its corpus occurrences belong to them; with the children declared, retiring the bare parent reports only the occurrences that are genuinely bare. Without them, every mention of every child would count against it.
+
+A declared name is the string a caller types and nothing more. The api is `spex map get`, not `spex map get <record-id>` — an argument placeholder does not survive the corpus tokenization the check relies on, so a name carrying one could never be matched again. The `--map-file` flag sits behind the names for the same reason.
+
 ## Design Rationale
 
 ### Read-only by construction

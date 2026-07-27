@@ -17,6 +17,12 @@ Flags:
 | `--impact`   | no (stdin default) | Path to impact report JSON. If omitted, reads from stdin. |
 | `--out`      | no (stdout default) | Path to write changeset.json. If omitted, writes to stdout. |
 
+## Declared surface
+
+`spex emit` is this module's only external entry point, declared as an api node in `spec/emit/module.json` with `provided_by` naming EmitCommand. The declared name is the invocation string alone — the four flags above are not part of it.
+
+That boundary decides what the pipeline can see. Renaming the subcommand changes the api's identity hash and so reads as a removal plus an addition, and the removal-time name check then reports every place in the spec corpus that still says `spex emit`. Changing a flag — adding one, renaming one, changing what `--out` accepts — moves no name and no hash, and the diff cannot see it. Flag-level contract changes are therefore documented here, in the table above, and are caught by review rather than by the tool.
+
 ## Pre-flight
 
 Before running the builder:

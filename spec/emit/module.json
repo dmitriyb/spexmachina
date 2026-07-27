@@ -7,7 +7,7 @@
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "title": "Pure function over inputs",
-      "description": "spex emit reads the impact report (stdin or --impact), .bead-map.json, the spec directory, and the --git-head SHA; writes changeset.json to stdout. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output."
+      "description": "spex emit reads the impact report (stdin or --impact), .bead-map.json, the spec directory, and the --git-head SHA; writes changeset.json to stdout. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output. The invocation itself is a declared external surface — the api `spex emit`, provided by EmitCommand — and the declared name is the bare invocation, so the flags listed here sit behind it: adding, renaming or dropping one moves no name and is invisible to the diff. Nothing that reaches this function can carry an api node either, because an api produces no impact action, so no changeset op ever names one."
     },
     {
       "id": "f379c06c6a53",
@@ -172,7 +172,7 @@
     {
       "id": "dbe8d1e707d5",
       "name": "Emit flow",
-      "description": "Impact report + .bead-map.json + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v1.",
+      "description": "Emit's place in the run and its internals. Position: emit is the fourth of six stages — spex validate gates, spex diff and spex impact --beads produce the impact report, emit turns it into changeset.json, the adapter executes that and writes receipts.json, and spex ingest reconciles the pair; every hand-off from diff onwards goes through a file, so each stage can be re-run from the artifact its predecessor wrote, and a partial run leaves the snapshot untouched so the next diff recomputes from the same baseline. Internals: impact report + .bead-map.json + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v1.",
       "content": "flow_emit.md",
       "uses": [
         "7f06f7d80e94",
@@ -202,6 +202,17 @@
       "describes": [
         "cbe835d38c3e"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "7cccc4a96101",
+      "name": "spex emit",
+      "description": "Emit a tool-agnostic changeset from an impact report",
+      "provided_by": [
+        "cbe835d38c3e"
+      ],
+      "group": "cli"
     }
   ]
 }

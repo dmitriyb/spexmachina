@@ -32,6 +32,8 @@ type BeadRecord struct {
 
 The viewer does NOT fetch beads itself. That responsibility is the caller's — the `ProposalCommands` cobra handler for `spex log` reads stdin, JSON-decodes into `[]BeadRecord`, and invokes `ShowHistory`.
 
+That split is declared, not just described: the api `spex log` names both ProposalCommands and HistoryViewer in its `provided_by` array. HistoryViewer is half of one external surface rather than a component that happens to be called by another — the parse belongs to the command, the rendering belongs here, and neither half is `spex log` on its own. The other two surfaces this module exposes, `spex register` and `spex template`, pair ProposalCommands with Registrar and TemplateProvider the same way.
+
 ## Why Accept Parsed Data
 
 The proposal-level requirement "No runtime subprocesses" (project req `58ea35f52b86`) forbids `exec.Command` inside the spex binary. The previous `CLIBeadLister` type did `br list --json` as a subprocess; it is retired. The viewer is a pure function over data it's given.

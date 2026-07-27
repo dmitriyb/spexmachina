@@ -42,7 +42,7 @@
       "preq_id": "58ea35f52b86",
       "type": "non_functional",
       "title": "No runtime subprocess",
-      "description": "spex ingest invokes no external subprocesses. Inputs are local files (changeset.json, receipts.json); outputs are local files (.bead-map.json, spec/.snapshot.json). No tracker calls, no git calls."
+      "description": "spex ingest invokes no external subprocesses. Inputs are local files (changeset.json, receipts.json); outputs are local files (.bead-map.json, spec/.snapshot.json). No tracker calls, no git calls. The invocation is declared as the api `spex ingest`, provided by IngestCommand, and the declared name is the bare invocation: `--mode refresh` selects a pathway behind that single surface rather than standing up a second one, so both modes are bound by the guarantee above and neither can drift away from it in the graph."
     },
     {
       "id": "fd6f08ef34fa",
@@ -196,6 +196,17 @@
       "describes": [
         "f9033352c13f"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "3589714e50f8",
+      "name": "spex ingest",
+      "description": "Reconcile mapping records and save snapshot from a changeset+receipts pair",
+      "provided_by": [
+        "db90eb607bcb"
+      ],
+      "group": "cli"
     }
   ]
 }

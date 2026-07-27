@@ -12,7 +12,7 @@ Determines the action for each affected bead or unmatched spec node using a simp
 
 ## Node-Type Gate
 
-Before applying the state transition table, each change is gated by its node type:
+A change with no existing bead is gated by its node type before the state transition table runs:
 
 | NodeType | Produces beads? | Notes |
 |----------|-----------------|-------|
@@ -21,7 +21,16 @@ Before applying the state transition table, each change is gated by its node typ
 | `test_section`, `len(describes) >= 2` | yes (task) | cross-component integration test, needs its own bead |
 | `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead |
 | `impl_section` | no | implementation detail; owned by the component bead |
+| `api` | no | declared external surface; the components in its `provided_by` array carry the work |
 | `meta`, `requirement` | no | filtered upstream by NodeMatcher (`structural` skip) |
+
+The node-type half of that table is consulted on one path only — the unmatched changes, those with no `.bead-map.json` record. The matched and orphaned paths walk records rather than changes, and a record exists only where a create once ran, so a type the gate has always rejected can never have acquired one and there is nothing there for a gate to reject. The two halves hold each other up: with no record only the unmatched path is reachable, the unmatched path drops the change, and so no record is ever written.
+
+The `describes`-length check is the exception, because a test_section *can* hold a record and later drop to one component. It is applied on the matched path too, and there it means "obsolete the old bead, create no replacement" — the section's coverage folds back into the described component's feature bead.
+
+`api` is the one row in this table that has to be here rather than upstream. Merkle classifies an api change as `contract` — the same level as `data_flow`, because an api is a contract — so the `structural` skip that removes `meta` and `requirement` never sees it, and the change arrives at this gate. It is filtered by omission from the bead-producing set: an api names a surface, and every unit of work behind that surface is a component the api's `provided_by` array already points at. A bead per api would duplicate those components' beads and then obsolete-and-recreate them whenever the surface's description changed.
+
+An added, modified or removed api therefore yields zero actions, and the reason is the reachability argument above rather than the gate alone: an added or modified api arrives unmatched and the gate drops it, a removed one has no record to orphan, and neither ever leaves a record behind for the ungated paths to pick up on a later run. That invariant lives only in the absence of an `api` entry in the bead-producing set, so it is pinned by a dedicated test rather than by the shape of the code. The test covers the added and modified cases on the unmatched path — the two where the gate is what makes the difference; a removed api reaches the same gate but would yield nothing even past it.
 
 ## State Transition Table
 

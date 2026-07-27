@@ -5,10 +5,21 @@ Validates identity-hash uniqueness, cross-reference integrity, mandatory `preq_i
 ## Responsibilities
 
 ### ID Uniqueness
-- Check that every identity hash ID is unique within the array that contains it. In project.json the checked arrays are `requirements`, `modules`, `milestones`, `test_plan.scenarios` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows` and `test_sections`
-- One array is not yet covered: module.json `apis`. The schema declares an api's `id` unique within the apis array, but nothing enforces it — duplicate api IDs pass validation today
+- Check that every identity hash ID is unique within the array that contains it. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections` and `apis`
 - Uniqueness is checked by tallying each hash in a per-array set of strings — any hash counted more than once is reported with its array location and the offending hash
 - Collisions across distinct logical nodes are mathematically improbable in the 48-bit hash space, but the validator still checks them so hand-edited or hand-merged files cannot smuggle a stale ID into a new node
+
+### API Name Uniqueness
+
+One uniqueness rule in the spec is not scoped to a single array in a single file. An api's `name` is the exact external surface string callers type, so two modules declaring the same name are not two nodes that happen to collide — they are two claims on one surface. API names are therefore checked across every module.json in the project, and a duplicate is reported once, naming every module that declared it.
+
+This is the only cross-file uniqueness check in this component. Every other one compares a single array against itself, so it needs one file at a time; this one needs every module.json in the project loaded together, and reports against the first module that declared the name.
+
+### API Name Recoverability
+
+A declared api or component name is rejected unless tokenizing it the way the removal-time corpus scan tokenizes prose reproduces it exactly, in at least one and at most six whitespace-separated words. The rule is not a style preference: it is the corpus scan's reachability condition applied at the point of declaration. Every phrase that scan builds is a join of corpus tokens with single spaces, so a name that is not itself such a join is a name no candidate phrase can equal — the node would be unsweepable from the moment it was declared, and nothing would say so.
+
+`spex validate [--json]` is the shape this rejects: the brackets are stripped by the tokenizer, so the declared name and the phrase the scan rebuilds differ. `spex validate --json` is declarable; so is `spex map get`. The api name is the surface string alone — never a signature, never an argument placeholder.
 
 ### Cross-Reference Integrity
 All references are identity hash strings, validated by string set membership against the appropriate per-array set:
@@ -19,10 +30,11 @@ All references are identity hash strings, validated by string set membership aga
 - `uses` (data_flow): data_flow → component identity hashes within the same module
 - `depends_on`: requirement → requirement identity hashes within the same scope
 - `requires_module`: module → module identity hashes in project.json
-- `groups`: milestone → module identity hashes in project.json
 - `preq_id`: module requirement → project requirement identity hash (must exist)
 - `describes` (test_section): test_section → component identity hashes within the same module
-- `modules` (test_plan): test_plan scenario → module identity hashes in project.json
+- `provided_by`: api → component identity hashes within the same module
+
+`provided_by` is module-local like every other edge in this list. An api belongs to the module owning its entry point, and a component in another module that participates in the surface is reached through the entry point's `uses` edges — never by pointing `provided_by` across a module boundary.
 
 There is no integer parsing, no path decomposition (`module/N/component/M`), and no comparison across types — every check is a single `set[hash]` lookup.
 

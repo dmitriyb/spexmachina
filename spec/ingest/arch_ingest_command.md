@@ -19,6 +19,8 @@ Flags:
 | `--receipts`  | yes | Path to receipts.json (the one produced by the adapter). For refresh mode, this is an empty receipts file. |
 | `--mode`      | no  | `normal` (default) or `refresh`. Selects the dispatch pathway. |
 
+The module declares one external surface, the api `spex ingest`, with `provided_by` naming IngestCommand. `--mode refresh` is a flag on that surface, not a second one: the declared name is the invocation string alone, so both pathways answer to the same identity hash and a rename of the subcommand would move both together. This is the deliberate reading — refresh is an alternative reconciliation strategy for the same job, not a separate entry point, and splitting it into its own api node would let the two halves of one command drift apart in the graph.
+
 ## Output (mode: normal)
 
 Writes a JSON summary to stdout:
@@ -59,8 +61,12 @@ Exit code reflects the outcome:
 - `1` — input error (bad flags, malformed JSON, op_id mismatch in normal
   mode, missing pre-refresh snapshot in refresh mode, non-empty
   changeset/receipts in refresh mode, atomic-write failure).
-- `2` — invariant failure (normal mode only) or refresh refusal
-  (added/removed entries, orphan record).
+- `2` — invariant failure (normal mode only) or refresh refusal (a
+  *non-absorbable* added or removed entry, orphan record). Not every
+  structural entry refuses: refresh absorbs `requirement`, `impl_section`
+  and `api` entries in either direction, plus `component` removals. See
+  RefreshHandler's absorbable set for the full table — declaring an api
+  is the common case that would otherwise refuse for nothing.
 
 ## Wiring
 

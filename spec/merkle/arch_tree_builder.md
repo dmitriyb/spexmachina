@@ -12,7 +12,7 @@ Builds the merkle tree from the parsed spec graph. Each node's key is the spec n
 
 ## Tree Structure
 
-Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, impl_section, data_flow, or test_section is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also what the mapping store uses as `spec_node_id` — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
+Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, impl_section, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also what the mapping store uses as `spec_node_id` — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
 
 ```
 project (root, key: "project")
@@ -24,6 +24,7 @@ project (root, key: "project")
 │   ├── requirement        (leaf, key: <identity hash of req>)
 │   ├── component          (leaf, key: <identity hash of component>)
 │   ├── impl_section       (leaf, key: <identity hash of impl_section>)
+│   ├── api                (leaf, key: <identity hash of api>)
 │   └── ...
 ├── validator module       (interior, key: <identity hash of module "validator">)
 │   └── ...
@@ -44,7 +45,7 @@ type Node struct {
     Key      string   // identity hash, or "meta/..." for envelope leaves
     Hash     string   // content hash
     Type     string   // "leaf", "module", "project"
-    NodeType string   // "component", "impl_section", "data_flow", "test_section", "meta", "requirement", "module"
+    NodeType string   // "component", "impl_section", "data_flow", "test_section", "api", "meta", "requirement", "module"
     Module   string   // identity hash of the parent module ("" for project-level nodes)
     Children []*Node
 }
@@ -104,6 +105,12 @@ For project-level requirements, the serialized fields are: `depends_on`, `descri
 The `id` field is now a 12-character hex string rather than an integer, but it is still serialized as part of the leaf so that a node which is moved between modules (and therefore gets a new identity hash) is detected as a content change too — not just a key change.
 
 This ensures that any change to a requirement's text, type, dependencies, or derivation produces a different content hash, making it visible as an individual change in the diff.
+
+## API Leaf Hashing
+
+APIs take the same path. An api has no content file, so its JSON fields are its content: the serialized fields are `description`, `group`, `id`, `name` and `provided_by`, sorted by key with zero-value fields excluded.
+
+The consequence is that the diff sees exactly what the identity carries. Changing an api's `provided_by` set, its description or its group modifies the leaf; renaming the surface changes `name`, which changes the identity hash, which is a removal plus an addition rather than a modification. A change *behind* the name — a new flag, a dropped argument, a reshaped response — moves nothing here, because none of it is part of the declared surface string.
 
 ## Call sites
 

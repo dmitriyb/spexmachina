@@ -14,7 +14,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Query mappings via CLI",
-      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context."
+      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context. All four invocations are declared as api nodes — the parent `spex map` and its three children — and each names MapCommand in provided_by alongside the worker it drives: MappingStore for get and list, ContextResolver for context. A declared name carries no argument placeholder: the api is `spex map get`, not `spex map get \u003crecord-id\u003e`, because the name must be the string a caller types and must survive corpus tokenization unchanged. Declaring the children alongside the parent is also what keeps the parent retirable — the removal-time name check discards hits that a longer live name already covers, so the mentions of `spex map` that belong to `spex map get`, `spex map list` or `spex map context` are never counted against the bare parent."
     },
     {
       "id": "4aee62bd3c15",
@@ -138,6 +138,47 @@
       "describes": [
         "6b79188dff4c"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "1f1b7fdacbf3",
+      "name": "spex map",
+      "description": "Manage bead mapping records",
+      "provided_by": [
+        "08909d62930b"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "38ddf587012f",
+      "name": "spex map get",
+      "description": "Get a mapping record by ID",
+      "provided_by": [
+        "08909d62930b",
+        "205e67ca4aad"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "394ec2c8d669",
+      "name": "spex map list",
+      "description": "List all mapping records",
+      "provided_by": [
+        "08909d62930b",
+        "205e67ca4aad"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "3c8a43221ed2",
+      "name": "spex map context",
+      "description": "Resolve full spec context for a mapping record",
+      "provided_by": [
+        "08909d62930b",
+        "6b79188dff4c"
+      ],
+      "group": "cli"
     }
   ]
 }

@@ -24,7 +24,7 @@
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Classify actions",
-      "description": "Determine action for each affected bead: create (added or modified spec nodes) or obsolete (modified or removed spec nodes with existing beads). Modified nodes trigger both obsolete and create.",
+      "description": "Determine action for each affected bead: create (added or modified spec nodes) or obsolete (modified or removed spec nodes with existing beads). Modified nodes trigger both obsolete and create. A change with no existing bead is gated by node type before the transition table runs, and api is absent from the bead-producing set: merkle classifies an api change as contract-level (alongside data_flow) so it is not skipped upstream as structural, but the components named in the api's provided_by array already carry the work, so a bead per api would duplicate them. An added or modified api is dropped by that gate; the matched and orphaned paths apply no node-type gate, but they walk bead-map records rather than changes, and an api never acquires a record because no create is ever produced for one. An added, modified or removed api therefore yields zero actions.",
       "depends_on": [
         "d165e2fe215e"
       ]
@@ -248,6 +248,17 @@
       "describes": [
         "5d6813710879"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "62b47fdb7f2d",
+      "name": "spex impact",
+      "description": "Compute impact of spec changes on beads",
+      "provided_by": [
+        "5d6813710879"
+      ],
+      "group": "cli"
     }
   ]
 }

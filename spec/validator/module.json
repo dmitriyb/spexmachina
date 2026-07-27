@@ -31,7 +31,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "ID uniqueness",
-      "description": "Every identity hash ID is unique within the array that contains it, in project.json and in each module.json. Uniqueness is checked by string comparison against a per-array set. One array is not yet covered: duplicate IDs in the module.json apis array are not detected. Collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
+      "description": "Every identity hash ID is unique within the array that contains it, in project.json and in each module.json — the apis array included. Uniqueness is checked by string comparison against a per-array set. Exactly one uniqueness rule is not per-array: an api name is the external surface string callers type, so two modules declaring the same name describe the same surface twice, and api names are therefore unique across every module.json in the project. A declared api name must also be recoverable — tokenizing it the way the removal-time corpus scan tokenizes prose must reproduce it exactly, in at most six words — because a name that is not its own tokenization is one no corpus phrase can ever match. Collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
       "id": "4b399b1c568f",
@@ -371,6 +371,17 @@
       "describes": [
         "e36112523589"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "528f91e5fb7d",
+      "name": "spex validate",
+      "description": "Validate spec directory structure",
+      "provided_by": [
+        "59235a75aa44"
+      ],
+      "group": "cli"
     }
   ]
 }

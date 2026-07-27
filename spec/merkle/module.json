@@ -61,7 +61,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Identity-hash tree keying",
-      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, impl_section, data_flow, or test_section is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
+      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, impl_section, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
     },
     {
       "id": "6f8284df92a2",
@@ -280,6 +280,17 @@
       "describes": [
         "c8b958ec310d"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "d487fc9c4fa5",
+      "name": "spex diff",
+      "description": "Compute changes between snapshot and current spec",
+      "provided_by": [
+        "c8b958ec310d"
+      ],
+      "group": "cli"
     }
   ]
 }
