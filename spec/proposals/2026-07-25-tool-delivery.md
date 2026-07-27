@@ -52,10 +52,32 @@ into `/tmp` to read the details below. Portitor is the closer analog (a single b
 Register a `delivery` module in `project.json`'s `modules[]` and author `spec/delivery/` through
 `/spec`. At the level of components, the module covers:
 
-- **CI pipeline** — trigger-tiered GitHub Actions: a fast gate on every PR (build, vet, test), the
-  same gate plus `-race` on push to main, and a nightly fuzz run that discovers `Fuzz*` targets at
-  run time (no hardcoded list). Docs-only changes skip the runner; each workflow cancels its own
-  superseded runs.
+- **CI pipeline** — trigger-tiered GitHub Actions: a fast gate on every PR (build, vet, test, **plus
+  the spec gate below**), the same gate plus `-race` on push to main, and a nightly fuzz run that
+  discovers `Fuzz*` targets at run time (no hardcoded list). Docs-only changes skip the runner; each
+  workflow cancels its own superseded runs.
+- **Spec gate** — the half of CI that makes spex self-hosting rather than merely tested. On every PR,
+  after `go build -o bin/ ./cmd/spex/`, run `bin/spex validate` and then assert that `spex diff`
+  reports no completeness errors. **The second step is the one that matters.** `spex validate` returns
+  success on warnings, and `incomplete_change` — the class that catches a spec edit whose obligations
+  were not met — surfaces *only* in the diff `errors` array, never in `validate`. Without it the job
+  is decorative: a spec change can merge having silently broken the graph it claims to describe.
+
+  Two implementation constraints, both learned the hard way and both non-obvious:
+
+  - **Do not write it as `bin/spex diff --json | jq -e '.errors == []'`.** The pipe discards `diff`'s
+    own exit code. `spex diff` exits **0** clean, **2** on completeness errors and **1** when the tree
+    does not build — and on exit 1 it writes *nothing* to stdout, so `jq` fails with an opaque parse
+    error naming no file, while a `diff` that exited 1 having emitted `{"errors":[]}` would pass.
+    Capture to a file, preserve the status, and branch on all three cases.
+  - **"Required for merge" is a branch-protection rule**, not something the workflow can declare. The
+    status check to mark required is the job name.
+
+  This closes the root cause the *declarative spec contracts* proposal identifies as its fourth
+  defect — *"Nothing runs the checks."* On the day `spex apply` was deleted, nothing would have
+  invoked `spex validate`, and the spec drifted for three months undetected. That proposal originally
+  carried the CI job itself; it was withdrawn from there and moved here, so this is now the only place
+  the check is specified.
 - **Release pipeline** — a GoReleaser build triggered by a `v*` tag, cross-compiling linux/darwin ×
   amd64/arm64 with `CGO_ENABLED=0`, `-trimpath`, and ldflags stamping `main.version/commit/date`,
   publishing a GitHub Release.
@@ -80,7 +102,34 @@ component, and content-leaf structure is authored by `/spec`, not enumerated her
 - **Installable and self-updating** (non-functional) — pre-built signed binaries for linux and macOS
   (amd64, arm64), installable via a verified `install.sh` and `go install`, and updatable in place
   with `spex upgrade`.
-- A **Delivery** milestone grouping the module.
+- ~~A **Delivery** milestone grouping the module.~~ **Not available — see below.**
+
+### Depends on the declarative spec contracts migration
+
+That migration (`2026-07-25-declarative-spec-contracts.md`, in flight on
+`proposal/declarative-spec-contracts`) changes the spec format under this proposal. Two things written
+above are no longer authorable, and one is new:
+
+- **Milestones are deleted.** The node type is gone from `schema/schema.go`,
+  `schema/project.schema.json`, `cmd/spex/hashid.go` and `validator/id_validator.go`;
+  `spex hash-id --type milestone` now exits 1 and a `milestones` key in `project.json` is a hard schema
+  failure. The **Delivery** milestone cannot be created. Grouping the module needs no node — the module
+  registration is the grouping — so the simplest resolution is to drop the bullet.
+- **Impl sections are being removed.** The *Impact expectation* section below says "Task beads for each
+  component's **impl** and test content leaves". After the migration a component's contract lives wholly
+  in its arch leaf; there are no impl leaves to cut beads from. Expect arch + test only.
+- **Arch leaves carry no Go.** No `func` signatures, no ```go fences — the exception is narrow (a
+  requirement whose *description* names the algorithm or bound the fence encodes). This matters here
+  because delivery's arch leaves will want to describe workflow YAML and shell, and the same rule
+  applies: describe the contract, not the implementation.
+- **A new `api` node type exists**, declaring an external surface as callers write it. `spex upgrade`
+  below is exactly that — it should be declared as an api in the `cli` module (`hash-id --type api
+  --module cli --name "spex upgrade"`), not only as a component. Note names must be *declarable*:
+  tokenizing must reproduce the name exactly, in at most six whitespace-separated words, so
+  `spex upgrade` is fine and `spex upgrade [--check]` is rejected.
+
+None of this blocks authoring; it changes what `/spec` may write. **Author `spec/delivery/` after that
+migration merges**, or expect to redo the impl leaves.
 
 ### `spex upgrade` in the `cli` module
 
