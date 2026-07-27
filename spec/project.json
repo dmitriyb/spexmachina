@@ -152,7 +152,7 @@
       "id": "9ddd3d22e686",
       "name": "validator",
       "path": "validator",
-      "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
+      "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness.",
       "requires_module": [
         "f03774b40bd5"
       ]

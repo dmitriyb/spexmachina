@@ -5,8 +5,9 @@ Validates identity-hash uniqueness, cross-reference integrity, mandatory `preq_i
 ## Responsibilities
 
 ### ID Uniqueness
-- Check that all identity hash IDs within each array are unique (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios)
-- Uniqueness is checked by inserting into a `map[string]bool` per array — duplicates fail the insert and are reported with their array location and the offending hash
+- Check that every identity hash ID is unique within the array that contains it. In project.json the checked arrays are `requirements`, `modules`, `milestones`, `test_plan.scenarios` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows` and `test_sections`
+- One array is not yet covered: module.json `apis`. The schema declares an api's `id` unique within the apis array, but nothing enforces it — duplicate api IDs pass validation today
+- Uniqueness is checked by tallying each hash in a per-array set of strings — any hash counted more than once is reported with its array location and the offending hash
 - Collisions across distinct logical nodes are mathematically improbable in the 48-bit hash space, but the validator still checks them so hand-edited or hand-merged files cannot smuggle a stale ID into a new node
 
 ### Cross-Reference Integrity
@@ -36,11 +37,13 @@ There is no integer parsing, no path decomposition (`module/N/component/M`), and
 
 ## Interface
 
-```go
-func CheckIDs(project *schema.Project, modules map[string]*schema.Module) []ValidationError
-```
+Given the path to a spec directory, the checker loads project.json and every module.json and returns a flat list of validation entries — empty when the spec is clean. If the spec cannot be loaded, the load failures are returned and no further checks run. The checker never mutates the spec and never writes output: aggregation, sorting and formatting belong to ErrorReporter.
 
-The `Project` and `Module` Go structs use `string` rather than `int` for every ID and cross-reference field, so the validator can compare them directly without conversion.
+Uniqueness runs before cross-reference resolution, and the two do not mix in a single run. When any duplicate is found, the checker returns the duplicate entries alone and skips reference resolution — a reference cannot be unambiguously resolved while two nodes share a hash, so resolving anyway would produce misleading errors.
+
+Modules are visited in sorted name order, so the same spec always produces the same entries in the same sequence.
+
+Every ID and cross-reference field is a string end to end — the loaded spec carries identity hashes as text, so the checker compares them directly with no conversion, parsing or decomposition.
 
 ## Error Format
 

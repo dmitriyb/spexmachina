@@ -1,0 +1,13 @@
+{
+  "apis": [
+    {
+      "id": "0000000000a1",
+      "name": "spex diff"
+    },
+    {
+      "id": "0000000000a2",
+      "name": "spex diff"
+    }
+  ],
+  "name": "core"
+}

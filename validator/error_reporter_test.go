@@ -7,15 +7,15 @@ import (
 	"testing"
 )
 
-func TestREQ7_ReportSortsErrorsBeforeWarnings(t *testing.T) {
+func TestREQ7_ReportSortsErrorsByPath(t *testing.T) {
 	errs := []ValidationError{
-		{Check: "dag", Severity: "warning", Path: "a/module.json", Message: "unused dep"},
+		{Check: "dag", Severity: "error", Path: "c/module.json", Message: "unused dep"},
 		{Check: "schema", Severity: "error", Path: "b/module.json", Message: "missing field"},
 		{Check: "id", Severity: "error", Path: "a/module.json", Message: "duplicate id"},
 	}
 
 	var buf bytes.Buffer
-	if err := Report(errs, &buf, false); err != nil {
+	if _, err := Report(errs, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -27,57 +27,27 @@ func TestREQ7_ReportSortsErrorsBeforeWarnings(t *testing.T) {
 	if report.Valid {
 		t.Fatal("expected valid=false, got true")
 	}
-	if report.ErrorCount != 2 {
-		t.Fatalf("want error_count=2, got %d", report.ErrorCount)
+	if report.ErrorCount != 3 {
+		t.Fatalf("want error_count=3, got %d", report.ErrorCount)
 	}
-	if report.WarningCount != 1 {
-		t.Fatalf("want warning_count=1, got %d", report.WarningCount)
+	if report.WarningCount != 0 {
+		t.Fatalf("want warning_count=0, got %d", report.WarningCount)
 	}
 	if len(report.Errors) != 3 {
 		t.Fatalf("want 3 entries, got %d", len(report.Errors))
 	}
 
-	// First two should be errors (sorted by path), last should be warning
-	if report.Errors[0].Severity != "error" || report.Errors[0].Path != "a/module.json" {
-		t.Errorf("errors[0]: want error at a/module.json, got %s at %s", report.Errors[0].Severity, report.Errors[0].Path)
-	}
-	if report.Errors[1].Severity != "error" || report.Errors[1].Path != "b/module.json" {
-		t.Errorf("errors[1]: want error at b/module.json, got %s at %s", report.Errors[1].Severity, report.Errors[1].Path)
-	}
-	if report.Errors[2].Severity != "warning" {
-		t.Errorf("errors[2]: want warning, got %s", report.Errors[2].Severity)
-	}
-}
-
-func TestREQ7_ReportValidWhenNoErrors(t *testing.T) {
-	errs := []ValidationError{
-		{Check: "orphan", Severity: "warning", Path: "x.md", Message: "unreferenced file"},
-	}
-
-	var buf bytes.Buffer
-	if err := Report(errs, &buf, false); err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	var report ValidationReport
-	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
-		t.Fatalf("unmarshal report: %v", err)
-	}
-
-	if !report.Valid {
-		t.Fatal("expected valid=true when only warnings present")
-	}
-	if report.ErrorCount != 0 {
-		t.Fatalf("want error_count=0, got %d", report.ErrorCount)
-	}
-	if report.WarningCount != 1 {
-		t.Fatalf("want warning_count=1, got %d", report.WarningCount)
+	wantPaths := []string{"a/module.json", "b/module.json", "c/module.json"}
+	for i, want := range wantPaths {
+		if report.Errors[i].Path != want {
+			t.Errorf("errors[%d]: want path %s, got %s", i, want, report.Errors[i].Path)
+		}
 	}
 }
 
 func TestREQ7_ReportEmptyErrors(t *testing.T) {
 	var buf bytes.Buffer
-	if err := Report(nil, &buf, false); err != nil {
+	if _, err := Report(nil, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -97,18 +67,101 @@ func TestREQ7_ReportEmptyErrors(t *testing.T) {
 	}
 }
 
+// TestREQ7_ReportReturnsTheReportItWrote pins that the returned report is the
+// one serialized to w. Callers derive their exit status from it, so the two
+// must never differ — including for an entry whose Severity is unset, which no
+// checker produces but which the exported field still permits, and which under
+// the old severity-scanning exit rule would have printed valid=false alongside
+// a zero exit status.
+func TestREQ7_ReportReturnsTheReportItWrote(t *testing.T) {
+	tests := []struct {
+		name string
+		errs []ValidationError
+	}{
+		{"no errors", nil},
+		{"severity error", []ValidationError{
+			{Check: "schema", Severity: "error", Path: "project.json", Message: "bad"},
+		}},
+		{"severity unset", []ValidationError{
+			{Check: "schema", Path: "project.json", Message: "bad"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			got, err := Report(tt.errs, &buf, false)
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var written ValidationReport
+			if err := json.Unmarshal(buf.Bytes(), &written); err != nil {
+				t.Fatalf("unmarshal report: %v", err)
+			}
+
+			if got.Valid != written.Valid {
+				t.Errorf("returned valid=%v, wrote valid=%v", got.Valid, written.Valid)
+			}
+			if got.ErrorCount != written.ErrorCount {
+				t.Errorf("returned error_count=%d, wrote error_count=%d", got.ErrorCount, written.ErrorCount)
+			}
+			if got.WarningCount != 0 || written.WarningCount != 0 {
+				t.Errorf("want warning_count=0, returned %d and wrote %d", got.WarningCount, written.WarningCount)
+			}
+			if want := len(tt.errs) == 0; got.Valid != want {
+				t.Errorf("want valid=%v for %d entries, got %v", want, len(tt.errs), got.Valid)
+			}
+		})
+	}
+}
+
+// TestREQ7_ReportAlwaysEmitsWarningCountKey pins the JSON contract: no checker
+// emits warnings any more, but `warning_count` must still appear in the output
+// (as 0) because gates and CI assert on `.warning_count == 0`.
+func TestREQ7_ReportAlwaysEmitsWarningCountKey(t *testing.T) {
+	tests := []struct {
+		name string
+		errs []ValidationError
+	}{
+		{"no errors", nil},
+		{"with errors", []ValidationError{
+			{Check: "schema", Severity: "error", Path: "project.json", Message: "bad"},
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if _, err := Report(tt.errs, &buf, false); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(buf.Bytes(), &raw); err != nil {
+				t.Fatalf("unmarshal report: %v", err)
+			}
+			v, ok := raw["warning_count"]
+			if !ok {
+				t.Fatal("report is missing the warning_count key")
+			}
+			if string(v) != "0" {
+				t.Fatalf("want warning_count=0, got %s", v)
+			}
+		})
+	}
+}
+
 func TestREQ7_ReportTTYIndentation(t *testing.T) {
 	errs := []ValidationError{
 		{Check: "schema", Severity: "error", Path: "project.json", Message: "bad"},
 	}
 
 	var compact bytes.Buffer
-	if err := Report(errs, &compact, false); err != nil {
+	if _, err := Report(errs, &compact, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	var pretty bytes.Buffer
-	if err := Report(errs, &pretty, true); err != nil {
+	if _, err := Report(errs, &pretty, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -122,13 +175,13 @@ func TestREQ7_ReportTTYIndentation(t *testing.T) {
 
 func TestREQ7_ReportDoesNotMutateInput(t *testing.T) {
 	errs := []ValidationError{
-		{Check: "b", Severity: "warning", Path: "z", Message: "w"},
+		{Check: "b", Severity: "error", Path: "z", Message: "w"},
 		{Check: "a", Severity: "error", Path: "a", Message: "e"},
 	}
 
 	origFirst := errs[0]
 	var buf bytes.Buffer
-	if err := Report(errs, &buf, false); err != nil {
+	if _, err := Report(errs, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

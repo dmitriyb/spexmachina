@@ -2,7 +2,7 @@
 
 ## Aggregation
 
-Each checker returns a `[]ValidationError` slice. The main validation function concatenates all slices, sorts by severity (errors first, then warnings), then by path.
+Each checker returns a `[]ValidationError` slice. The main validation function concatenates all slices and sorts by path. Path is the only sort key: every entry has severity `"error"`, because no checker can produce any other severity.
 
 ## JSON Serialization
 
@@ -19,11 +19,11 @@ Serialize with `json.NewEncoder(w).Encode(&report)`. Use 2-space indentation for
 
 ## Exit Code
 
-The `spex validate` subcommand sets the process exit code:
-- 0 if `report.ErrorCount == 0`
-- 1 if `report.ErrorCount > 0`
+`Report` returns the `ValidationReport` it serialized. The `spex validate` subcommand reads the exit code off that returned value, so the process status can never disagree with the `valid` field on stdout:
+- 0 if `report.Valid`
+- 1 otherwise
 
-Warnings do not affect the exit code.
+`ErrorCount` is the length of the aggregated slice, so every entry counts toward it. `WarningCount` is always 0.
 
 ## TTY Detection
 

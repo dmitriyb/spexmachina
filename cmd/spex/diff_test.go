@@ -819,3 +819,318 @@ func TestFR8_E6_DiffCommand_ErrorTerminologyMatch(t *testing.T) {
 		t.Fatalf("text output must not contain warning terminology, got: %s", textOut)
 	}
 }
+
+// setupRemovalSpec writes a one-module spec whose arch leaf names two
+// components, snapshots it, then deletes CompB from module.json and from its
+// own arch leaf while CompA's leaf goes on naming it. The next diff therefore
+// reports CompB as removed with its name still in the corpus, which is the
+// only way to reach the surviving-name path through the real command.
+func setupRemovalSpec(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	compAHash := schema.IdentityHash("alpha", "component", "CompA")
+	compBHash := schema.IdentityHash("alpha", "component", "CompB")
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "`+schema.IdentityHash("module", "alpha")+`", "name": "alpha", "path": "alpha"}
+		]
+	}`)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+compAHash+`", "name": "CompA", "content": "arch_comp_a.md"},
+			{"id": "`+compBHash+`", "name": "CompB", "content": "arch_comp_b.md"}
+		]
+	}`)
+	writeTestFile(t, alphaDir, "arch_comp_a.md", "# CompA\n\nCompA delegates to CompB.\n")
+	writeTestFile(t, alphaDir, "arch_comp_b.md", "# CompB\n")
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+compAHash+`", "name": "CompA", "content": "arch_comp_a.md"}
+		]
+	}`)
+	if err := os.Remove(filepath.Join(alphaDir, "arch_comp_b.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
+// TestFR8_DiffCommand_SurvivingName_JSON covers the wiring `spex diff` adds on
+// top of CheckRemovedNames: the DiffError it builds, the site it reports as
+// the path, and the exit-2 halt that stops the changeset pipeline. The checker
+// has its own tests; none of them exercise this translation.
+func TestFR8_DiffCommand_SurvivingName_JSON(t *testing.T) {
+	specDir := setupRemovalSpec(t)
+	compBHash := schema.IdentityHash("alpha", "component", "CompB")
+
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 2 {
+		t.Fatalf("want exit 2 while a removed name survives, got %d\noutput: %s", exitCode, out)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	var found *merkle.DiffError
+	for i, e := range result.Errors {
+		if e.Type == "surviving_name" {
+			found = &result.Errors[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("want a surviving_name error, got: %+v", result.Errors)
+	}
+	if !strings.Contains(found.Message, `component "CompB"`) || !strings.Contains(found.Message, compBHash) {
+		t.Fatalf("message must name the node and its hash, got %q", found.Message)
+	}
+	if !strings.Contains(found.Message, "1 site(s)") {
+		t.Fatalf("message must carry the site count, got %q", found.Message)
+	}
+	if found.Path != "alpha/arch_comp_a.md:3" {
+		t.Fatalf("want the first site as the path, got %q", found.Path)
+	}
+	if len(found.Related) != 1 || found.Related[0] != found.Path {
+		t.Fatalf("related must carry every site, got %v", found.Related)
+	}
+}
+
+// TestFR8_DiffCommand_SurvivingName_HumanOutput: the same finding under the
+// text renderer, which shares the error heading with CompletenessChecker.
+func TestFR8_DiffCommand_SurvivingName_HumanOutput(t *testing.T) {
+	specDir := setupRemovalSpec(t)
+
+	out, _, exitCode := runDiff(t, "--spec-dir", specDir)
+	if exitCode != 2 {
+		t.Fatalf("want exit 2, got %d\noutput: %s", exitCode, out)
+	}
+	if !strings.Contains(out, "error: [surviving_name]") {
+		t.Fatalf("text output should render the finding as an error, got: %s", out)
+	}
+	if !strings.Contains(out, "alpha/arch_comp_a.md:3") {
+		t.Fatalf("text output should name the surviving site, got: %s", out)
+	}
+	if strings.Contains(out, "warning") {
+		t.Fatalf("text output must never use warning terminology, got: %s", out)
+	}
+}
+
+// TestFR8_DiffCommand_SweptRemovalPasses: once the mention is gone the removal
+// is complete and the pipeline is free to advance. Without this, the two tests
+// above would pass just as well on a checker that failed every removal.
+func TestFR8_DiffCommand_SweptRemovalPasses(t *testing.T) {
+	specDir := setupRemovalSpec(t)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp_a.md", "# CompA\n\nCompA delegates to nothing.\n")
+
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 0 {
+		t.Fatalf("want exit 0 for a swept removal, got %d\noutput: %s", exitCode, out)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("want no errors once the mention is swept, got: %+v", result.Errors)
+	}
+}
+
+// TestFR8_DiffCommand_UnverifiableRemovalNoted: retiring the module as well is
+// the highest-volume removal case, and when the module name cannot be
+// recovered the sweep cannot check anything at all. It says so on stdout under
+// a note heading rather than exiting 0 in silence. A note is not a violation,
+// so the exit code stays 0 and the errors array stays empty.
+func TestFR8_DiffCommand_UnverifiableRemovalNoted(t *testing.T) {
+	specDir := setupRemovalSpec(t)
+
+	// Retire the module too: alpha leaves project.json, so the diff can only
+	// report its children against the module identity hash, and the name
+	// "alpha" is nowhere in what remains of the corpus.
+	writeTestFile(t, specDir, "project.json", `{"name": "test-project", "modules": []}`)
+	if err := os.RemoveAll(filepath.Join(specDir, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 0 {
+		t.Fatalf("an unverifiable removal is not a violation, got exit %d\noutput: %s", exitCode, out)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("want no errors, got: %+v", result.Errors)
+	}
+	if len(result.Notes) != 1 {
+		t.Fatalf("want exactly 1 note, got: %+v", result.Notes)
+	}
+	if result.Notes[0].Type != "unverifiable_module" {
+		t.Fatalf("want an unverifiable_module note, got: %+v", result.Notes[0])
+	}
+	if !strings.Contains(result.Notes[0].Message, "could not be checked") {
+		t.Fatalf("note must say the sweep did not run, got %q", result.Notes[0].Message)
+	}
+
+	textOut, _, _ := runDiff(t, "--spec-dir", specDir)
+	if !strings.Contains(textOut, "note: [unverifiable_module]") {
+		t.Fatalf("text output should render the note, got: %s", textOut)
+	}
+}
+
+// setupRetiredModuleSpec retires a whole module: alpha declares Retiree, beta's
+// leaf names it, and after the snapshot alpha leaves project.json and disk
+// entirely. What remains never writes the word "alpha", so the module name is
+// unrecoverable from the corpus — the case where `spex diff` can only report
+// the removed component against a module identity hash.
+func setupRetiredModuleSpec(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	retireeHash := schema.IdentityHash("alpha", "component", "Retiree")
+	keeperHash := schema.IdentityHash("beta", "component", "Keeper")
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "`+schema.IdentityHash("module", "alpha")+`", "name": "alpha", "path": "alpha"},
+			{"id": "`+schema.IdentityHash("module", "beta")+`", "name": "beta", "path": "beta"}
+		]
+	}`)
+
+	for _, sub := range []string{"alpha", "beta"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeTestFile(t, filepath.Join(dir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+retireeHash+`", "name": "Retiree", "content": "arch_retiree.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(dir, "alpha"), "arch_retiree.md", "# Retiree\n")
+	writeTestFile(t, filepath.Join(dir, "beta"), "module.json", `{
+		"name": "beta",
+		"components": [
+			{"id": "`+keeperHash+`", "name": "Keeper", "content": "arch_keeper.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(dir, "beta"), "arch_keeper.md", "# Keeper\n\nKeeper used to delegate to Retiree.\n")
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "`+schema.IdentityHash("module", "beta")+`", "name": "beta", "path": "beta"}
+		]
+	}`)
+	if err := os.RemoveAll(filepath.Join(dir, "alpha")); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// TestFR8_DiffCommand_BeadMapRecoversRetiredModule is the wiring for the
+// --map flag, and the hole it closes. The surviving mention of Retiree is
+// identical in both runs; only the hash → name source differs. Without a map
+// the sweep can prove nothing about a module whose name was swept out of the
+// prose, and discloses that; with the map ingest already wrote, the same run
+// recovers "alpha", reports the survivor and halts the pipeline. The sweep's
+// reach must not depend on how thoroughly the module name itself was swept.
+func TestFR8_DiffCommand_BeadMapRecoversRetiredModule(t *testing.T) {
+	specDir := setupRetiredModuleSpec(t)
+	retireeHash := schema.IdentityHash("alpha", "component", "Retiree")
+
+	mapPath := filepath.Join(t.TempDir(), ".bead-map.json")
+	writeTestFile(t, filepath.Dir(mapPath), ".bead-map.json", `{
+		"next_id": 2,
+		"records": [
+			{
+				"id": 1,
+				"spec_node_id": "`+retireeHash+`",
+				"bead_id": "test-retiree",
+				"bead_type": "task",
+				"module": "alpha",
+				"component": "Retiree",
+				"content_file": "spec/alpha/arch_retiree.md",
+				"spec_hash": "deadbeef"
+			}
+		]
+	}`)
+
+	t.Run("no map: unverifiable, disclosed but not gating", func(t *testing.T) {
+		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir, "--map", filepath.Join(specDir, "absent.json"))
+		if exitCode != 0 {
+			t.Fatalf("an unverifiable removal is not a violation, got exit %d\noutput: %s", exitCode, out)
+		}
+		var result diffOutput
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+		}
+		if len(result.Errors) != 0 {
+			t.Fatalf("want no errors without a hash -> name source, got: %+v", result.Errors)
+		}
+		if len(result.Notes) != 1 || result.Notes[0].Type != "unverifiable_module" {
+			t.Fatalf("want exactly one unverifiable_module note, got: %+v", result.Notes)
+		}
+	})
+
+	t.Run("bead map: the same survivor is reported", func(t *testing.T) {
+		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir, "--map", mapPath)
+		if exitCode != 2 {
+			t.Fatalf("want exit 2 once the module name is recovered, got %d\noutput: %s", exitCode, out)
+		}
+		var result diffOutput
+		if err := json.Unmarshal([]byte(out), &result); err != nil {
+			t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+		}
+		if len(result.Notes) != 0 {
+			t.Fatalf("a recovered module needs no note, got: %+v", result.Notes)
+		}
+		var found *merkle.DiffError
+		for i, e := range result.Errors {
+			if e.Type == "surviving_name" {
+				found = &result.Errors[i]
+			}
+		}
+		if found == nil {
+			t.Fatalf("want a surviving_name error, got: %+v", result.Errors)
+		}
+		if !strings.Contains(found.Message, `component "Retiree"`) || !strings.Contains(found.Message, retireeHash) {
+			t.Fatalf("message must name the node and its hash, got %q", found.Message)
+		}
+		if found.Path != "beta/arch_keeper.md:3" {
+			t.Fatalf("want the surviving site as the path, got %q", found.Path)
+		}
+	})
+}

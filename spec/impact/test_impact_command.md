@@ -12,7 +12,7 @@ Tests use a temporary directory containing:
 
 3. **A diff file** (or piped stdin) containing the merkle diff output. The diff fixture represents:
    - `validator/arch_schema_checker.md` modified (impact: arch_impl)
-   - `validator/arch_orphan_detector.md` added (impact: arch_impl)
+   - `validator/arch_coupled_section_checker.md` added (impact: arch_impl)
    - `merkle/impl_hash_computation.md` modified (impact: impl_only)
    - `merkle/arch_diff_engine.md` removed (impact: arch_impl)
 
@@ -46,7 +46,7 @@ spex impact --diff diff.json --bead-cli ./mock_br
 ```
 
 Capture stdout. Parse the output as JSON. Assert the report contains:
-- **creates**: 1 entry for `validator/OrphanDetector` (added node, no matching bead)
+- **creates**: 1 entry for `validator/CoupledSectionChecker` (added node, no matching bead)
 - **closes**: 1 entry for bead `spex-010` / `merkle/LegacyHasher` (bead references a component in merkle, and `arch_diff_engine.md` was removed — but LegacyHasher is the orphaned bead whose spec node was removed)
 - **reviews**: 2 entries — `spex-001` for `validator/SchemaChecker` (modified) and `spex-003` for `merkle/Hash computation` (modified)
 - **summary**: `create_count: 1, close_count: 1, review_count: 2`

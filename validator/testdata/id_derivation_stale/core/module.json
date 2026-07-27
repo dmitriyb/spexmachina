@@ -1,0 +1,41 @@
+{
+  "apis": [
+    {
+      "id": "b9396c0c9d8b",
+      "name": "spex parse"
+    }
+  ],
+  "components": [
+    {
+      "id": "0000000000c9",
+      "name": "Parser"
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "6c75c0b6a41c",
+      "name": "Ingest"
+    }
+  ],
+  "impl_sections": [
+    {
+      "id": "1ab45c2d22f3",
+      "name": "Parser impl"
+    }
+  ],
+  "name": "core",
+  "requirements": [
+    {
+      "id": "238cb470617e",
+      "preq_id": "0000000000f1",
+      "title": "Feat A",
+      "type": "functional"
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "2426b8f1226f",
+      "name": "Parser tests"
+    }
+  ]
+}

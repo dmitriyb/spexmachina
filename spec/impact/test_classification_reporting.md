@@ -41,7 +41,7 @@ matches := []Match{
 unmatched := []Unmatched{
     {
         Change: ClassifiedChange{
-            Path:   "validator/arch_orphan_detector.md",
+            Path:   "validator/arch_coupled_section_checker.md",
             Type:   "added",
             Impact: "arch_impl",
             Module: "validator",
@@ -72,7 +72,7 @@ Call `ClassifyActions(matches, unmatched, orphaned)`. Assert the returned `[]Act
 | 2 | create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
 | 3 | obsolete | spex-003 | merkle | Hash computation | Spec node modified: merkle/Hash computation |
 | 4 | create | (empty) | merkle | Hash computation | Spec node modified (new): merkle/Hash computation |
-| 5 | create | (empty) | validator | OrphanDetector | New spec node: validator/OrphanDetector |
+| 5 | create | (empty) | validator | CoupledSectionChecker | New spec node: validator/CoupledSectionChecker |
 | 6 | obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
 
 Modified nodes produce TWO actions (obsolete old + create new). Added nodes produce one create. Removed nodes produce one obsolete.
@@ -203,7 +203,7 @@ Call `GenerateReport(actions, &buf)` with the six actions from S1. Parse the out
   "creates": [
     {"type": "create", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified (new): validator/SchemaChecker"},
     {"type": "create", "module": "merkle", "node": "Hash computation", "reason": "Spec node modified (new): merkle/Hash computation"},
-    {"type": "create", "module": "validator", "node": "OrphanDetector", "reason": "New spec node: validator/OrphanDetector"}
+    {"type": "create", "module": "validator", "node": "CoupledSectionChecker", "reason": "New spec node: validator/CoupledSectionChecker"}
   ],
   "obsoletes": [
     {"type": "obsolete", "bead_id": "spex-001", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified: validator/SchemaChecker"},

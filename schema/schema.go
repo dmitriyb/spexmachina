@@ -4,8 +4,8 @@
 // The JSON Schema files are embedded and accessible via [ProjectSchema] and
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
-// Node types: requirement, component, impl_section, data_flow, milestone, module, test_scenario.
-// Edge types: implements, uses, describes, described_in, depends_on, groups, requires_module, modules.
+// Node types: requirement, component, impl_section, data_flow, api, milestone, module, test_scenario.
+// Edge types: implements, uses, describes, described_in, provided_by, depends_on, groups, requires_module, modules.
 package schema
 
 import (
@@ -162,6 +162,7 @@ type ModuleSpec struct {
 	ImplSections []ImplSection       `json:"impl_sections,omitempty"`
 	DataFlows    []DataFlow          `json:"data_flows,omitempty"`
 	TestSections []TestSection       `json:"test_sections,omitempty"`
+	APIs         []API               `json:"apis,omitempty"`
 }
 
 // ModuleRequirement represents a requirement in module.json.
@@ -200,6 +201,21 @@ type ImplSection struct {
 	Name      string   `json:"name"`
 	Content   string   `json:"content,omitempty"`
 	Describes []string `json:"describes,omitempty"`
+}
+
+// API represents an external surface entry point exposed by a module: a CLI
+// subcommand, an HTTP route, or a library entry point. Name is the exact
+// surface string as callers write it ("spex diff", "GET /v1/specs/{id}",
+// "schema.IdentityHash") — never a signature. APIs have no content file; like
+// project requirements they hash from their JSON fields alone. Group is
+// freeform and spex never branches on it; it exists so renderers can group a
+// project's surface. ProvidedBy is module-local.
+type API struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	ProvidedBy  []string `json:"provided_by,omitempty"`
+	Group       string   `json:"group,omitempty"`
 }
 
 // DataFlow represents a data flow in a module.

@@ -1,0 +1,32 @@
+{
+  "apis": [
+    {
+      "id": "0000000000a1",
+      "name": "spex core ok",
+      "provided_by": [
+        "000000000001"
+      ]
+    },
+    {
+      "id": "0000000000a2",
+      "name": "spex core dangling",
+      "provided_by": [
+        "000000000000"
+      ]
+    },
+    {
+      "id": "0000000000a3",
+      "name": "spex core cross",
+      "provided_by": [
+        "0000000000b1"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "Engine"
+    }
+  ],
+  "name": "core"
+}

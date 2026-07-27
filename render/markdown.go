@@ -82,6 +82,7 @@ func writeModule(w io.Writer, mg *ModuleGraph) {
 	}
 
 	writeModuleRequirements(w, mg.Spec.Requirements)
+	writeModuleAPIs(w, mg.Spec.APIs)
 
 	if len(mg.Spec.Components) > 0 {
 		fmt.Fprintf(w, "### Architecture\n\n")
@@ -153,6 +154,28 @@ func writeModuleRequirements(w io.Writer, reqs []schema.ModuleRequirement) {
 		fmt.Fprintf(w, "- NFR%d: %s", i+1, r.Title)
 		if r.Description != "" {
 			fmt.Fprintf(w, " — %s", r.Description)
+		}
+		fmt.Fprintf(w, "\n")
+	}
+	fmt.Fprintf(w, "\n")
+}
+
+// writeModuleAPIs lists the module's external surface in declaration order.
+// An api has no content leaf, so the whole node renders on one line: the exact
+// surface string, its freeform group when set, and its description.
+func writeModuleAPIs(w io.Writer, apis []schema.API) {
+	if len(apis) == 0 {
+		return
+	}
+
+	fmt.Fprintf(w, "### APIs\n\n")
+	for _, a := range apis {
+		fmt.Fprintf(w, "- `%s`", a.Name)
+		if a.Group != "" {
+			fmt.Fprintf(w, " (%s)", a.Group)
+		}
+		if a.Description != "" {
+			fmt.Fprintf(w, " — %s", a.Description)
 		}
 		fmt.Fprintf(w, "\n")
 	}

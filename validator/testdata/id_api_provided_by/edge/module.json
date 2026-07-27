@@ -1,0 +1,9 @@
+{
+  "components": [
+    {
+      "id": "0000000000b1",
+      "name": "EdgeEngine"
+    }
+  ],
+  "name": "edge"
+}

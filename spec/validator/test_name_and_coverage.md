@@ -1,6 +1,6 @@
 # Name and Coverage Tests
 
-Integration and acceptance test scenarios for NameConsistencyChecker (component 8) and TestCoverageChecker (component 9).
+Integration and acceptance test scenarios for NameConsistencyChecker (component 7) and TestCoverageChecker (component 8).
 
 ## Setup
 
@@ -55,7 +55,7 @@ tmp/spec/
 - `check`: `"name_consistency"`
 - `message` containing both `"alpha"` and `"Alpha"`
 - `message` containing a fix suggestion (e.g., "change module.json name to 'alpha'")
-**Rationale** Case-insensitive comparison detects likely matches (requirement 10).
+**Rationale** Case-insensitive comparison detects likely matches (requirement 9).
 
 #### N4: Entirely different names
 
@@ -169,12 +169,6 @@ tmp/spec/
 **Given** `alpha/module.json` fails schema validation (e.g., missing required fields) but has a `name` field that mismatches project.json.
 **When** both SchemaChecker and NameConsistencyChecker run in the pipeline.
 **Then** both produce errors independently. NameConsistencyChecker does not depend on schema validity to extract the `name` field from a parseable JSON file.
-
-### E2: TestCoverageChecker does not duplicate OrphanDetector
-
-**Given** alpha has component 1 which is not described by any impl_section (orphan) and not described by any test_section (uncovered).
-**When** both OrphanDetector and TestCoverageChecker run.
-**Then** OrphanDetector reports component 1 as an orphan (no impl_section). TestCoverageChecker reports component 1 as uncovered (no test_section). These are independent, non-duplicative findings.
 
 ### E3: Module path differs from module name
 

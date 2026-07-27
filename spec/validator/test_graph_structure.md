@@ -1,6 +1,6 @@
 # Graph Structure Tests
 
-Integration and acceptance test scenarios for DAGChecker (component 3), OrphanDetector (component 4), and IDValidator (component 5).
+Integration and acceptance test scenarios for DAGChecker and IDValidator.
 
 ## Setup
 
@@ -80,48 +80,6 @@ tmp/spec/
 **Given** module `gamma` has an empty `requires_module` array and its requirements have no `depends_on`.
 **When** `CheckDAG(project, modules)` is called.
 **Then** zero errors for gamma. Isolated nodes are valid DAG members.
-
----
-
-### OrphanDetector Scenarios
-
-#### O1: No orphans in baseline
-
-**Given** every requirement in alpha is referenced by at least one component's `implements`, and every component is referenced by at least one impl_section's `describes`.
-**When** `CheckOrphans(modules)` is called.
-**Then** it returns an empty slice (or zero warnings, depending on severity model).
-
-#### O2: Orphan requirement (not implemented by any component)
-
-**Given** alpha has requirement 3 and no component includes `3` in its `implements` array.
-**When** `CheckOrphans(modules)` is called.
-**Then** one warning with:
-- `severity`: `"warning"` (orphans are warnings, not hard errors)
-- `message` identifying requirement 3 in module alpha as unimplemented
-
-#### O3: Orphan component (not described by any impl_section)
-
-**Given** alpha has component 2 and no impl_section includes `2` in its `describes` array.
-**When** `CheckOrphans(modules)` is called.
-**Then** one warning identifying component 2 in alpha as undescribed.
-
-#### O4: Multiple orphans across multiple modules
-
-**Given** alpha has one orphan requirement AND beta has one orphan component.
-**When** `CheckOrphans(modules)` is called.
-**Then** two warnings, each referencing the correct module.
-
-#### O5: Requirement referenced by component in another module
-
-**Given** component in beta includes requirement ID 1 in its `implements`, but requirement 1 belongs to alpha, not beta. Beta has no requirement 1.
-**When** `CheckOrphans(modules)` is called.
-**Then** alpha's requirement 1 is still orphaned within alpha (cross-module implements is not valid coverage). Beta's cross-reference is an IDValidator concern, not an OrphanDetector concern.
-
-#### O6: All requirements orphaned (empty components list)
-
-**Given** alpha has three requirements and an empty `components` array.
-**When** `CheckOrphans(modules)` is called.
-**Then** three warnings, one per orphan requirement.
 
 ---
 
@@ -221,8 +179,8 @@ tmp/spec/
 ### E1: Module with empty arrays
 
 **Given** alpha has `requirements: []`, `components: []`, `impl_sections: []`.
-**When** all three checkers run.
-**Then** DAGChecker: zero errors (no edges to form cycles). OrphanDetector: zero warnings (nothing to be orphaned). IDValidator: zero errors (no IDs to duplicate or reference).
+**When** both checkers run.
+**Then** DAGChecker: zero errors (no edges to form cycles). IDValidator: zero errors (no IDs to duplicate or reference).
 
 ### E2: Identical identity hash collision across different array types is impossible by construction
 
@@ -235,12 +193,6 @@ tmp/spec/
 **Given** a project with 50 modules, each with 20 requirements and 10 components, forming a deep but acyclic dependency chain.
 **When** `CheckDAG(project, modules)` is called.
 **Then** it completes in under 100ms and returns zero errors. Validates the O(V+E) complexity claim.
-
-### E4: Orphan detection severity does not affect exit code
-
-**Given** alpha has one orphan requirement (warning) and zero hard errors across all other checkers.
-**When** the full validation pipeline runs.
-**Then** exit code is 0 because warnings do not cause failure. The report includes the warning in the `errors` array with `severity: "warning"`.
 
 #### I15: Module requirement missing preq_id fails validation
 

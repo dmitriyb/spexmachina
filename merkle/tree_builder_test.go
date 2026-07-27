@@ -455,6 +455,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	impl1 := schema.IdentityHash("fullmod", "impl_section", "I1")
 	flow1 := schema.IdentityHash("fullmod", "data_flow", "F1")
 	test1 := schema.IdentityHash("fullmod", "test_section", "T1")
+	api1 := schema.IdentityHash("fullmod", "api", "spex full")
 
 	proj := `{
 		"name": "full-project",
@@ -477,6 +478,9 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		],
 		"test_sections": [
 			{"id": "` + test1 + `", "name": "T1", "content": "test_c1.md"}
+		],
+		"apis": [
+			{"id": "` + api1 + `", "name": "spex full", "provided_by": ["` + comp1 + `"], "group": "cli"}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
@@ -492,9 +496,9 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 
 	fullModHash := schema.IdentityHash("module", "FullMod")
 	fullMod := findChild(t, root, fullModHash)
-	// meta + 1 component + 1 impl_section + 1 data_flow + 1 test_section = 5 children
-	if len(fullMod.Children) != 5 {
-		t.Fatalf("fullmod children: want 5, got %d", len(fullMod.Children))
+	// meta + 1 component + 1 impl_section + 1 data_flow + 1 test_section + 1 api = 6 children
+	if len(fullMod.Children) != 6 {
+		t.Fatalf("fullmod children: want 6, got %d", len(fullMod.Children))
 	}
 
 	wantKeys := map[string]string{
@@ -503,6 +507,7 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		impl1:                 "impl_section",
 		flow1:                 "data_flow",
 		test1:                 "test_section",
+		api1:                  "api",
 	}
 	for _, child := range fullMod.Children {
 		wantType, ok := wantKeys[child.Key]
@@ -512,6 +517,25 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		}
 		if child.NodeType != wantType {
 			t.Errorf("child %s: want node_type %s, got %s", child.Key, wantType, child.NodeType)
+		}
+		// Every module child — the file-backed leaves and the file-less
+		// requirement/api leaves alike — must carry Type "leaf".
+		// ingest.collectLeafHashes early-returns on Type == "leaf", so a
+		// child with any other Type is silently dropped from the leaf-hash
+		// map backing the refresh orphan gate and spec_hash updates.
+		if child.Type != "leaf" {
+			t.Errorf("child %s: want type leaf, got %s", child.Key, child.Type)
+		}
+		// Every module child must be attributed to its parent module. The
+		// file-less api leaf is the fragile one: hashLeaf takes module as a
+		// parameter for the file-backed types, but hashAPI sets Module from
+		// its own argument, so the field can be dropped there alone. Diff
+		// copies Change.Module straight through and merkle.resolveModule
+		// passes "" along untouched, so an unattributed api surfaces in
+		// `diff --json` as "module": "" and every consumer that groups or
+		// keys by module reattributes it as a project-level change.
+		if child.Module != fullModHash {
+			t.Errorf("child %s: want module %s, got %q", child.Key, fullModHash, child.Module)
 		}
 		delete(wantKeys, child.Key)
 	}
@@ -810,6 +834,98 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 	})
 	if req.Hash != expected {
 		t.Fatalf("minimal requirement hash mismatch: want %s, got %s", expected, req.Hash)
+	}
+}
+
+// buildAPIModule writes a spec dir whose single module "m" holds exactly the
+// given apis JSON array body, and returns the dir and the module identity hash.
+func buildAPIModule(t *testing.T, apisJSON string) (string, string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	mHash := schema.IdentityHash("module", "M")
+	proj := `{
+		"name": "api-test",
+		"modules": [{"id": "` + mHash + `", "name": "M", "path": "m"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+	modDir := filepath.Join(dir, "m")
+	must(t, os.MkdirAll(modDir, 0755))
+	writeFile(t, modDir, "module.json", `{"name": "m", "apis": [`+apisJSON+`]}`)
+
+	return dir, mHash
+}
+
+func TestREQ7_BuildTree_APIHashDeterministic(t *testing.T) {
+	apiID := schema.IdentityHash("m", "api", "spex diff")
+	dir, mHash := buildAPIModule(t, `{"id": "`+apiID+`", "name": "spex diff", "description": "Compute changes", "group": "cli"}`)
+
+	root1, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+	root2, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+
+	// API hashes should be identical across builds.
+	api1 := findChild(t, findChild(t, root1, mHash), apiID)
+	api2 := findChild(t, findChild(t, root2, mHash), apiID)
+	if api1.Hash != api2.Hash {
+		t.Fatalf("api hash not deterministic: %s vs %s", api1.Hash, api2.Hash)
+	}
+}
+
+func TestREQ7_BuildTree_APIHashSortedKeys(t *testing.T) {
+	// Verify that api hashing uses sorted JSON keys for determinism.
+	apiID := schema.IdentityHash("m", "api", "spex diff")
+	compID := schema.IdentityHash("m", "component", "DiffEngine")
+	dir, mHash := buildAPIModule(t, `{"id": "`+apiID+`", "name": "spex diff", "description": "Desc", "provided_by": ["`+compID+`"], "group": "cli"}`)
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	api := findChild(t, findChild(t, root, mHash), apiID)
+
+	// Hash should be 64 chars (SHA-256 hex)
+	if len(api.Hash) != 64 {
+		t.Fatalf("api hash length: want 64, got %d", len(api.Hash))
+	}
+
+	// Compute expected hash from deterministic JSON
+	expected := hashRequirementJSON(t, map[string]interface{}{
+		"description": "Desc",
+		"group":       "cli",
+		"id":          apiID,
+		"name":        "spex diff",
+		"provided_by": []string{compID},
+	})
+	if api.Hash != expected {
+		t.Fatalf("api hash mismatch: want %s, got %s", expected, api.Hash)
+	}
+}
+
+func TestREQ7_BuildTree_APIOmitsZeroFields(t *testing.T) {
+	apiID := schema.IdentityHash("m", "api", "spex diff")
+	dir, mHash := buildAPIModule(t, `{"id": "`+apiID+`", "name": "spex diff"}`)
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	api := findChild(t, findChild(t, root, mHash), apiID)
+
+	// Minimal api: only id and name are set.
+	expected := hashRequirementJSON(t, map[string]interface{}{
+		"id":   apiID,
+		"name": "spex diff",
+	})
+	if api.Hash != expected {
+		t.Fatalf("minimal api hash mismatch: want %s, got %s", expected, api.Hash)
 	}
 }
 

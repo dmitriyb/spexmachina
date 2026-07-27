@@ -12,22 +12,22 @@ Validates that every requirement in the spec is covered by implementation: proje
 
 ### Project requirement → module requirement coverage
 
-For each project requirement ID, scan all module requirements across all modules for a matching `preq_id`. If no module requirement derives from a project requirement, report:
+For each project requirement ID, scan all module requirements across all modules for a matching `preq_id`. If no module requirement derives from a project requirement, report an entry at path `project.json` whose message interpolates the requirement's identity hash and its title, quoted — no ordinal, no trailing parenthetical. Were `a65bbd37c7ec` uncovered, the message would read:
 
 ```
-project requirement 15 "Delivery specification" is not derived into any module requirement (no preq_id references it)
+project requirement a65bbd37c7ec "Coupled sections" is not derived into any module requirement
 ```
 
 ### Module requirement → component coverage
 
-For each module requirement ID within a module, scan the module's components for a matching `implements` entry. If no component implements a module requirement, report:
+For each module requirement ID within a module, scan the module's components for a matching `implements` entry. If no component implements a module requirement, report an entry at path `<module>/module.json` whose message leads with the module name, then the requirement's identity hash and quoted title. Were `168ae8fde8e2` uncovered, the message would read:
 
 ```
-validator requirement 14 "Requirement coverage validation" is not implemented by any component (no implements references it)
+validator requirement 168ae8fde8e2 "Requirement coverage validation" is not implemented by any component
 ```
 
 ## Design Rationale
 
-This checker complements the existing OrphanDetector (component 4), which checks that every requirement is referenced by at least one component. RequirementCoverageChecker adds the project→module derivation check (preq_id coverage) which OrphanDetector does not cover.
+This checker owns both links of the coverage chain: project requirement → module requirement (`preq_id`) and module requirement → component (`implements`). Keeping them in one checker means a requirement that is declared but never derived, and one that is derived but never implemented, are reported by the same check with the same shape of message.
 
-Together they ensure the full chain: project requirement → module requirement (preq_id) → component (implements) is wired up.
+Together the two checks ensure the full chain: project requirement → module requirement (preq_id) → component (implements) is wired up.

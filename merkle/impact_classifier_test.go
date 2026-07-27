@@ -42,6 +42,22 @@ func TestREQ5_Classify_DataFlowIsContract(t *testing.T) {
 	}
 }
 
+func TestREQ5_Classify_APIIsContract(t *testing.T) {
+	changes := []Change{
+		{Key: "module/1/api/1", Type: Added, NodeType: "api", Module: "mod1"},
+	}
+	names := map[string]string{"mod1": "Alpha"}
+
+	classified := Classify(changes, names)
+
+	if classified[0].Impact != Contract {
+		t.Errorf("expected contract for api, got %s", classified[0].Impact)
+	}
+	if classified[0].Module != "Alpha" {
+		t.Errorf("expected module Alpha, got %q", classified[0].Module)
+	}
+}
+
 func TestREQ5_Classify_TestSectionIsImplOnly(t *testing.T) {
 	changes := []Change{
 		{Key: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1"},

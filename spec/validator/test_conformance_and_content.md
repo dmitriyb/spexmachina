@@ -95,7 +95,7 @@ tmp/spec/
 **Given** `alpha/module.json` has a `test_sections` entry with `"content": "test_widget_behavior.md"` and that file is deleted.
 **When** `CheckContentPaths(specDir, project)` is called.
 **Then** one error referencing the test_section content path `"alpha/test_widget_behavior.md"`.
-**Rationale** Validates that ContentResolver was updated to walk `test_sections` (requirement 11).
+**Rationale** Validates that ContentResolver was updated to walk `test_sections` (requirement 10).
 
 ### S11: Content path with path traversal (`..`)
 

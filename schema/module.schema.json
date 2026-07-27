@@ -40,6 +40,11 @@
       "type": "array",
       "description": "Test sections describing module integration and acceptance tests for components.",
       "items": { "$ref": "#/$defs/test_section" }
+    },
+    "apis": {
+      "type": "array",
+      "description": "External surface entry points this module provides (CLI subcommands, HTTP routes, library entry points).",
+      "items": { "$ref": "#/$defs/api" }
     }
   },
   "$defs": {
@@ -86,7 +91,7 @@
     },
     "component": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["id", "name", "content"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -105,6 +110,7 @@
         },
         "content": {
           "type": "string",
+          "minLength": 1,
           "description": "Relative path to the markdown file with detailed content (described_in edge to content leaf)."
         },
         "implements": {
@@ -129,7 +135,7 @@
     },
     "impl_section": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["id", "name", "content"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -144,6 +150,7 @@
         },
         "content": {
           "type": "string",
+          "minLength": 1,
           "description": "Relative path to the markdown file with implementation details (described_in edge to content leaf)."
         },
         "describes": {
@@ -159,7 +166,7 @@
     },
     "test_section": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["id", "name", "content"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -174,6 +181,7 @@
         },
         "content": {
           "type": "string",
+          "minLength": 1,
           "description": "Relative path to the markdown file with test details (described_in edge to content leaf)."
         },
         "describes": {
@@ -189,7 +197,7 @@
     },
     "data_flow": {
       "type": "object",
-      "required": ["id", "name"],
+      "required": ["id", "name", "content"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -208,6 +216,7 @@
         },
         "content": {
           "type": "string",
+          "minLength": 1,
           "description": "Relative path to the markdown file with data flow details (described_in edge to content leaf)."
         },
         "uses": {
@@ -218,6 +227,41 @@
             "pattern": "^[a-f0-9]{12}$"
           },
           "uniqueItems": true
+        }
+      }
+    },
+    "api": {
+      "$comment": "An external surface entry point. No content file — an api hashes from these fields alone. Identity is <module>/api/<name>, computed by schema.IdentityHash.",
+      "type": "object",
+      "required": ["id", "name"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{12}$",
+          "description": "Identity hash ID (12-char hex), unique within the apis array."
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The exact external surface string as callers write it (e.g. \"spex diff\", \"GET /v1/specs/{id}\"). Never a signature."
+        },
+        "description": {
+          "type": "string",
+          "description": "What the entry point does."
+        },
+        "provided_by": {
+          "type": "array",
+          "description": "Identity hashes of components in this module that provide this entry point (module-local).",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{12}$"
+          },
+          "uniqueItems": true
+        },
+        "group": {
+          "type": "string",
+          "description": "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it."
         }
       }
     }

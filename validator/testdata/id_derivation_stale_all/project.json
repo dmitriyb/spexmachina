@@ -1,0 +1,18 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
+  "name": "id-derivation-stale-all-test",
+  "requirements": [
+    {
+      "id": "0000000000f1",
+      "priority": 0,
+      "title": "Legacy project requirement",
+      "type": "functional"
+    }
+  ]
+}

@@ -399,6 +399,41 @@ func TestFR3_ClassifyActions_ImplSectionFiltered(t *testing.T) {
 	}
 }
 
+// --- api is always filtered ---
+
+// TestFR3_ClassifyActions_APIFiltered pins the absence of "api" from
+// beadProducingTypes. An api is a contract surface (merkle classifies it as
+// Contract, alongside data_flow) but it is deliberately not bead-producing:
+// the components named in its provided_by array carry the work, so a bead per
+// api would duplicate them. That invariant is expressed only by omission from
+// the beadProducingTypes map, so nothing but this test stops an "api": true
+// entry from being added there.
+func TestFR3_ClassifyActions_APIFiltered(t *testing.T) {
+	api := schema.IdentityHash("cli", "api", "spex diff")
+
+	tests := []struct {
+		name       string
+		changeType merkle.ChangeType
+	}{
+		{"added", merkle.Added},
+		{"modified", merkle.Modified},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unmatched := []Unmatched{
+				{Change: merkle.ClassifiedChange{
+					Change: merkle.Change{Key: api, Type: tt.changeType, NewHash: "aaa", NodeType: "api"},
+					Impact: merkle.Contract, Module: "cli",
+				}},
+			}
+			actions := ClassifyActions(nil, nil, unmatched, nil)
+			if len(actions) != 0 {
+				t.Errorf("want 0 actions for api, got %d: %+v", len(actions), actions)
+			}
+		})
+	}
+}
+
 // --- E1: Empty inputs produce empty result ---
 
 func TestFR3_E1_ClassifyActions_EmptyInputs(t *testing.T) {

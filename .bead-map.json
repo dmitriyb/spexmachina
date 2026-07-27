@@ -52,16 +52,6 @@
       "spec_hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9"
     },
     {
-      "id": 6,
-      "spec_node_id": "bbb1ae43d00d",
-      "bead_id": "spexmachina-wei",
-      "bead_type": "task",
-      "module": "validator",
-      "component": "OrphanDetector",
-      "content_file": "spec/validator/arch_orphan_detector.md",
-      "spec_hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928"
-    },
-    {
       "id": 7,
       "spec_node_id": "00beeeda5ddd",
       "bead_id": "spexmachina-qg2",

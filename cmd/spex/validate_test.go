@@ -48,6 +48,41 @@ func TestFR7_ValidateCommand_InvalidSpec_Exit1(t *testing.T) {
 	}
 }
 
+// TestFR7_ValidateCommand_ExitStatusMatchesReportValid pins that the exit
+// status and the `valid` field of the JSON report are decided by one rule.
+// Both derive from the ValidationReport that Report serializes, so a report
+// with entries can never be printed alongside a zero exit status, nor an
+// empty report alongside a non-zero one.
+func TestFR7_ValidateCommand_ExitStatusMatchesReportValid(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*testing.T) string
+	}{
+		{"valid spec", setupTestSpec},
+		{"invalid spec", setupInvalidTestSpec},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			out, err := runSpex(t, "validate", "--spec-dir", tt.setup(t))
+
+			var report validator.ValidationReport
+			if jsonErr := json.Unmarshal([]byte(out), &report); jsonErr != nil {
+				t.Fatalf("output should be valid JSON: %v\noutput: %s", jsonErr, out)
+			}
+
+			if report.Valid != (err == nil) {
+				t.Fatalf("report.valid=%v but exit error=%v; the two must agree", report.Valid, err)
+			}
+			if report.Valid != (report.ErrorCount == 0) {
+				t.Fatalf("report.valid=%v but error_count=%d", report.Valid, report.ErrorCount)
+			}
+			if report.WarningCount != 0 {
+				t.Fatalf("want warning_count=0, got %d", report.WarningCount)
+			}
+		})
+	}
+}
+
 func TestFR7_ValidateCommand_NonexistentDir(t *testing.T) {
 	_, err := runSpex(t, "validate", "--spec-dir", "/nonexistent/spec/dir")
 	if err == nil {
@@ -103,26 +138,6 @@ func TestFR7_ValidateCommand_DefaultDir(t *testing.T) {
 	}
 }
 
-func TestFR7_ValidateCommand_WarningsDoNotFail(t *testing.T) {
-	specDir := setupSpecWithOrphans(t)
-
-	out, err := runSpex(t, "validate", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error when only warnings, got %v", err)
-	}
-
-	var report validator.ValidationReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
-	}
-	if report.WarningCount == 0 {
-		t.Fatal("want at least 1 warning for orphan spec")
-	}
-	if !report.Valid {
-		t.Fatal("report should be valid when only warnings exist")
-	}
-}
-
 // setupInvalidTestSpec creates a spec with a missing content file.
 func setupInvalidTestSpec(t *testing.T) string {
 	t.Helper()
@@ -148,50 +163,6 @@ func setupInvalidTestSpec(t *testing.T) string {
 			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
-
-	return dir
-}
-
-// setupSpecWithOrphans creates a valid spec with orphan requirements (warnings only).
-func setupSpecWithOrphans(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-
-	writeTestFile(t, dir, "project.json", `{
-		"name": "test-project",
-		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "Project req", "priority": 1}
-		],
-		"modules": [
-			{"id": "000000000001", "name": "alpha", "path": "alpha"}
-		]
-	}`)
-
-	alphaDir := dir + "/alpha"
-	if err := makeDir(alphaDir); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, alphaDir, "module.json", `{
-		"name": "alpha",
-		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "Req1", "preq_id": "000000000001"},
-			{"id": "ffeeddccbbaa", "type": "functional", "title": "Req2", "preq_id": "000000000001"}
-		],
-		"components": [
-			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md", "implements": ["aabbccddeeff", "ffeeddccbbaa"]},
-			{"id": "ffeeddccbbaa", "name": "Comp2", "content": "arch_comp2.md", "implements": ["ffeeddccbbaa"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
-		],
-		"test_sections": [
-			{"id": "aabbccddeeff", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["aabbccddeeff", "ffeeddccbbaa"]}
-		]
-	}`)
-	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")
-	writeTestFile(t, alphaDir, "arch_comp2.md", "# Comp2\n")
-	writeTestFile(t, alphaDir, "impl_comp1.md", "# Impl1\n")
-	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
 	return dir
 }

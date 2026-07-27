@@ -90,7 +90,7 @@ func TestFR58_S6_ScenarioHash(t *testing.T) {
 }
 
 func TestFR58_S7_AllModuleScopedTypes(t *testing.T) {
-	types := []string{"component", "impl_section", "data_flow", "test_section"}
+	types := []string{"component", "impl_section", "data_flow", "test_section", "api"}
 	for _, typ := range types {
 		t.Run(typ, func(t *testing.T) {
 			stdout, _, err := runHashID(t, "--module", "alpha", "--type", typ, "--name", "Foo")
@@ -113,6 +113,7 @@ func TestFR58_S8_OutputMatchesHexPattern(t *testing.T) {
 		{"--module", "impact", "--type", "impl_section", "--name", "Build"},
 		{"--module", "impact", "--type", "data_flow", "--name", "Flow"},
 		{"--module", "impact", "--type", "test_section", "--name", "T"},
+		{"--module", "merkle", "--type", "api", "--name", "spex diff"},
 		{"--type", "module", "--name", "x"},
 		{"--type", "milestone", "--name", "M"},
 		{"--type", "scenario", "--name", "S"},
@@ -183,7 +184,7 @@ func TestFR58_E4_UnknownType(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	msg := err.Error()
-	for _, want := range []string{"requirement", "component", "module", "milestone", "scenario"} {
+	for _, want := range []string{"requirement", "component", "api", "module", "milestone", "scenario"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("expected error listing valid types, missing %q in %q", want, msg)
 		}

@@ -397,3 +397,59 @@ func TestFR1_E9_HelpFlag(t *testing.T) {
 		t.Fatal("help should mention --format flag")
 	}
 }
+
+// S11: --format json --slim emits nodes only, compact, without content
+func TestFR3_S11_SlimJSONFlag(t *testing.T) {
+	dir := setupRenderSpec(t)
+	out, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", "json", "--slim")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var slim map[string]any
+	if err := json.Unmarshal([]byte(out), &slim); err != nil {
+		t.Fatalf("slim output is not valid JSON: %v\n%s", err, out)
+	}
+	if _, ok := slim["edges"]; ok {
+		t.Error("--slim must not emit edges")
+	}
+	nodes, ok := slim["nodes"].([]any)
+	if !ok || len(nodes) == 0 {
+		t.Fatalf("--slim should emit a non-empty nodes array, got: %s", out)
+	}
+	for _, n := range nodes {
+		obj := n.(map[string]any)
+		for _, banned := range []string{"content", "description"} {
+			if _, present := obj[banned]; present {
+				t.Errorf("--slim node still carries %q: %#v", banned, obj)
+			}
+		}
+	}
+
+	// The same spec rendered without --slim inlines content, so --slim must be
+	// substantially smaller.
+	full, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", "json")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if len(out) >= len(full) {
+		t.Errorf("--slim output (%d bytes) should be smaller than full JSON (%d bytes)", len(out), len(full))
+	}
+	if strings.Contains(out, "Parses input.") {
+		t.Errorf("--slim must not inline content leaves, got:\n%s", out)
+	}
+}
+
+// E10: --slim is rejected for non-JSON formats
+func TestFR3_E10_SlimRequiresJSON(t *testing.T) {
+	dir := setupRenderSpec(t)
+	for _, format := range []string{"markdown", "dot"} {
+		_, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", format, "--slim")
+		if err == nil {
+			t.Fatalf("--slim with --format %s should fail", format)
+		}
+		if !strings.Contains(err.Error(), "--slim requires --format json") {
+			t.Errorf("want a --slim/--format json error, got %v", err)
+		}
+	}
+}

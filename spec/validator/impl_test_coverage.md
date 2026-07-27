@@ -20,10 +20,6 @@ for each module in project.modules:
 
 ## Integration with ValidateCommand
 
-TestCoverageChecker plugs into the existing validation pipeline alongside SchemaChecker, ContentResolver, DAGChecker, OrphanDetector, IDValidator, and NameConsistencyChecker. It runs after SchemaChecker (needs valid JSON) but has no ordering dependency on other checkers.
+TestCoverageChecker plugs into the existing validation pipeline alongside SchemaChecker, ContentResolver, DAGChecker, IDValidator, and NameConsistencyChecker. It runs after SchemaChecker (needs valid JSON) but has no ordering dependency on other checkers.
 
 All errors are collected and passed to ErrorReporter for aggregated output.
-
-## Relationship to OrphanDetector
-
-OrphanDetector checks that every requirement has an implementing component and every component has a describing impl_section. TestCoverageChecker adds a parallel check: every component must also have a describing test_section. These are independent checks — a component can pass orphan detection (has an impl_section) but fail test coverage (no test_section).

@@ -1,6 +1,6 @@
 {
   "name": "validator",
-  "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
+  "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness.",
   "requirements": [
     {
       "id": "8599f07272ad",
@@ -27,21 +27,11 @@
       ]
     },
     {
-      "id": "a34f8aa47fad",
-      "preq_id": "d5a8407d38e1",
-      "type": "functional",
-      "title": "Orphan detection",
-      "description": "Every requirement is referenced by at least one component (implements). Every component is referenced by at least one impl_section (describes).",
-      "depends_on": [
-        "8599f07272ad"
-      ]
-    },
-    {
       "id": "707094f8868b",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "ID uniqueness",
-      "description": "All identity hash IDs are unique within their containing array (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios). Uniqueness is checked by string comparison against a set; collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
+      "description": "Every identity hash ID is unique within the array that contains it, in project.json and in each module.json. Uniqueness is checked by string comparison against a per-array set. One array is not yet covered: duplicate IDs in the module.json apis array are not detected. Collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
       "id": "4b399b1c568f",
@@ -155,18 +145,9 @@
       ]
     },
     {
-      "id": "bbb1ae43d00d",
-      "name": "OrphanDetector",
-      "description": "Analyzes reference coverage to find requirements not implemented by any component and components not described by any impl_section.",
-      "content": "arch_orphan_detector.md",
-      "implements": [
-        "a34f8aa47fad"
-      ]
-    },
-    {
       "id": "00beeeda5ddd",
       "name": "IDValidator",
-      "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use string sets (map[string]bool) — no integer parsing or path decomposition.",
+      "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use per-array sets of hash strings — no integer parsing or path decomposition.",
       "content": "arch_id_validator.md",
       "implements": [
         "707094f8868b",
@@ -196,7 +177,6 @@
         "651d5315eebf",
         "5dcca0dab9bd",
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd",
         "0f98ca780873",
         "88dd4060cb44",
@@ -271,14 +251,6 @@
       ]
     },
     {
-      "id": "9843e4075916",
-      "name": "Orphan detection implementation",
-      "content": "impl_orphan_detection.md",
-      "describes": [
-        "bbb1ae43d00d"
-      ]
-    },
-    {
       "id": "c4067e692e75",
       "name": "ID and reference validation",
       "content": "impl_id_validation.md",
@@ -339,13 +311,12 @@
     {
       "id": "832e170fa3c0",
       "name": "Validation pipeline",
-      "description": "Spec directory flows through schema check, content check, DAG check, orphan check, and ID check. All errors are aggregated into a single structured report.",
+      "description": "Spec directory flows through eight checkers in a fixed order: schema, content, ID, DAG, name consistency, test coverage, requirement coverage, coupled sections. No checker short-circuits on entries from an earlier one. ErrorReporter aggregates every entry into a single structured report, sorted by path.",
       "content": "flow_validation_pipeline.md",
       "uses": [
         "651d5315eebf",
         "5dcca0dab9bd",
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd",
         "0f98ca780873",
         "88dd4060cb44",
@@ -371,7 +342,6 @@
       "content": "test_graph_structure.md",
       "describes": [
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd"
       ]
     },

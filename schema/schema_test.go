@@ -213,6 +213,7 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 		{"impl_sections", len(mod.ImplSections)},
 		{"data_flows", len(mod.DataFlows)},
 		{"test_sections", len(mod.TestSections)},
+		{"apis", len(mod.APIs)},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -277,6 +278,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 		{"requires_module", len(proj.Modules) > 1 && len(proj.Modules[1].RequiresModule) > 0},
 		{"modules (test_scenario)", proj.TestPlan != nil && len(proj.TestPlan.Scenarios) > 0 && len(proj.TestPlan.Scenarios[0].Modules) > 0},
 		{"describes (test_section)", len(mod.TestSections) > 0 && len(mod.TestSections[0].Describes) > 0},
+		{"provided_by (api)", len(mod.APIs) > 0 && len(mod.APIs[0].ProvidedBy) > 0},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -317,6 +319,12 @@ func TestFR5_ModuleIDsAreIdentityHashes(t *testing.T) {
 	for _, ts := range mod.TestSections {
 		checkHash("test_section", ts.ID)
 	}
+	for _, a := range mod.APIs {
+		checkHash("api", a.ID)
+		for _, p := range a.ProvidedBy {
+			checkHash("api.provided_by", p)
+		}
+	}
 }
 
 func TestFR5_ProjectIDsAreIdentityHashes(t *testing.T) {
@@ -354,7 +362,9 @@ func TestFR6_ContentPaths(t *testing.T) {
 		t.Fatalf("unmarshal module: %v", err)
 	}
 
-	// Content is optional in the schema, so only validate non-empty values.
+	// The schema requires a non-empty content on components, impl_sections,
+	// data_flows and test_sections; test_plan scenarios below may still omit
+	// it, so the non-empty guard stays on every loop.
 	var found int
 	for _, c := range mod.Components {
 		if c.Content != "" {
@@ -419,7 +429,7 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 		t.Fatalf("unmarshal module schema: %v", err)
 	}
 	modProps := modRaw["properties"].(map[string]any)
-	for _, key := range []string{"requirements", "components", "impl_sections", "data_flows", "test_sections"} {
+	for _, key := range []string{"requirements", "components", "impl_sections", "data_flows", "test_sections", "apis"} {
 		if modProps[key] == nil {
 			t.Fatalf("module schema missing property %q", key)
 		}

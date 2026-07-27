@@ -29,6 +29,42 @@ var (
 	ErrRefreshNonEmptyArtifacts = errors.New("ingest: refresh: changeset and receipts must be empty in refresh mode")
 )
 
+// refreshDirections records, for one node type, which structural diff
+// directions refresh may absorb.
+type refreshDirections struct {
+	added   bool
+	removed bool
+}
+
+// refreshAbsorbable is the allow-list of node types whose structural
+// addition or removal refresh absorbs; every type absent from it — and
+// in particular "meta", "module", "data_flow" and "test_section" — is
+// refused in both directions.
+//
+// The list is deliberately written out rather than derived by negating
+// impact's bead-producing set. That negation also admits "meta", the
+// project.json / module.json envelope leaf, and refresh runs neither
+// `spex validate` nor the completeness checker: it would happily
+// baseline a project-requirement addition `spex diff` rejects with exit
+// 2 and a module-requirement removal `spex validate` rejects with exit
+// 1, hiding both from every downstream tool.
+//
+// "component" is removal-only. A removed component's bead already
+// exists, and absorbing the node's disappearance is safe only because
+// the orphan gate below still demands the bead-map record be retired
+// first. An *added* component is a bead that was never created;
+// baselining it into the snapshot would remove it from `spex diff`
+// permanently, which is precisely the bead lifecycle refresh must not
+// bypass. component is on the list at all only because retiring a spec
+// component whose code is gone is a structural removal with no bead
+// work left to do.
+var refreshAbsorbable = map[string]refreshDirections{
+	"requirement":  {added: true, removed: true},
+	"impl_section": {added: true, removed: true},
+	"api":          {added: true, removed: true},
+	"component":    {added: false, removed: true},
+}
+
 // RefreshRefusal is the typed error for the refresh gates: structural
 // diff entries or orphan mapping records. IngestCommand maps it to a
 // non-zero exit with a structured stderr message naming the entries.
@@ -54,10 +90,11 @@ type RefreshSummary struct {
 	Status           string `json:"status"`
 }
 
-// RefreshHandler is the refresh-mode ingest pathway: it absorbs
-// content-only drift on non-bead-producing leaves by re-hashing every
-// content leaf, updating stale mapping-record spec_hash fields, and
-// rewriting the snapshot — atomically, with no bead lifecycle. See
+// RefreshHandler is the refresh-mode ingest pathway: it absorbs drift
+// that owes no bead work — content edits to any leaf, plus additions
+// and removals of the node types on refreshAbsorbable — by re-hashing
+// every content leaf, updating stale mapping-record spec_hash fields,
+// and rewriting the snapshot — atomically, with no bead lifecycle. See
 // spec/ingest/arch_refresh.md for the refusal contract.
 type RefreshHandler struct {
 	// Store is the bead-map the handler updates in place. Only
@@ -108,14 +145,21 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, fmt.Errorf("ingest: refresh: %w", err)
 	}
 
+	// Structural gate. Only the node types on refreshAbsorbable may
+	// appear as an addition or a removal, and only in the direction
+	// that type allows; everything else refuses the run.
 	changes := merkle.Diff(tree, snapshot)
 	var added, removed []string
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
-			added = append(added, c.Key)
+			if !refreshAbsorbable[c.NodeType].added {
+				added = append(added, c.Key)
+			}
 		case merkle.Removed:
-			removed = append(removed, c.Key)
+			if !refreshAbsorbable[c.NodeType].removed {
+				removed = append(removed, c.Key)
+			}
 		}
 	}
 	if len(added) > 0 {

@@ -1,0 +1,15 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    },
+    {
+      "id": "000000000002",
+      "name": "edge",
+      "path": "edge"
+    }
+  ],
+  "name": "id-api-name-whitespace-test"
+}

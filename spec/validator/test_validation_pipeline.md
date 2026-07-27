@@ -1,6 +1,6 @@
 # Validation Pipeline Tests
 
-Integration and acceptance test scenarios for ErrorReporter (component 6) and ValidateCommand (component 7).
+Integration and acceptance test scenarios for ErrorReporter and ValidateCommand.
 
 ## Setup
 
@@ -40,7 +40,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 #### R1: Empty error list produces valid report
 
 **Given** all checkers return empty error slices.
-**When** `Report(errors, w)` is called with the aggregated (empty) slice.
+**When** `Report(errors, w, false)` is called with the aggregated (empty) slice.
 **Then** it writes JSON to the writer:
 ```json
 {
@@ -54,61 +54,41 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 #### R2: Single error produces correct report structure
 
 **Given** one `ValidationError` with `check: "schema"`, `severity: "error"`, `path: "project.json:name"`, `message: "required field missing"`.
-**When** `Report(errors, w)` is called.
+**When** `Report(errors, w, false)` is called.
 **Then** it writes:
 - `valid: false`
 - `error_count: 1`
 - `warning_count: 0`
 - `errors` array with exactly one entry matching the input
 
-#### R3: Warnings do not make report invalid
+#### R5: Errors sorted by path
 
-**Given** two warnings (severity `"warning"`) and zero errors.
-**When** `Report(errors, w)` is called.
-**Then** it writes:
-- `valid: true`
-- `error_count: 0`
-- `warning_count: 2`
-- `errors` array with two entries, both with `severity: "warning"`
-
-#### R4: Mixed errors and warnings counted separately
-
-**Given** three errors and two warnings from different checkers.
-**When** `Report(errors, w)` is called.
-**Then**:
-- `valid: false`
-- `error_count: 3`
-- `warning_count: 2`
-- `errors` array has five entries total
-
-#### R5: Errors sorted by severity then path
-
-**Given** errors in arbitrary order: a warning at path `z`, an error at path `b`, an error at path `a`.
-**When** `Report(errors, w)` is called.
-**Then** the `errors` array is sorted: error at `a`, error at `b`, warning at `z`. Errors come before warnings, and within the same severity, entries are sorted by path.
+**Given** errors in arbitrary order: an entry at path `z`, an entry at path `b`, an entry at path `a`.
+**When** `Report(errors, w, false)` is called.
+**Then** the `errors` array is sorted `a`, `b`, `z`. Path is the only sort key.
 
 #### R6: Errors from multiple checkers are aggregated
 
-**Given** errors from `"schema"`, `"content"`, `"dag"`, `"orphan"`, `"id"`, and `"name_consistency"` checkers.
-**When** `Report(errors, w)` is called.
+**Given** errors from `"schema"`, `"content"`, `"dag"`, `"id"`, `"name_consistency"`, and `"test_coverage"` checkers.
+**When** `Report(errors, w, false)` is called.
 **Then** all six appear in the `errors` array, each with its correct `check` field. No errors are dropped during aggregation.
 
 #### R7: Report output is valid JSON
 
 **Given** any combination of errors (including errors with special characters in messages like quotes, newlines, unicode).
-**When** `Report(errors, w)` is called.
+**When** `Report(errors, w, false)` is called.
 **Then** the output is parseable by `json.Unmarshal` into a `ValidationReport` struct without error.
 
 #### R8: Compact JSON when writing to non-TTY
 
-**Given** the writer is a `bytes.Buffer` (not a terminal).
-**When** `Report(errors, w)` is called.
+**Given** the writer is a `bytes.Buffer` and the caller passes `isTTY: false`.
+**When** `Report(errors, w, false)` is called.
 **Then** the output is compact JSON (no indentation, no trailing newlines between fields).
 
 #### R9: Pretty-printed JSON when writing to TTY
 
-**Given** the writer is connected to a terminal (stdout is a TTY).
-**When** `Report(errors, w)` is called.
+**Given** the caller passes `isTTY: true`. The reporter does not detect the terminal itself — the flag is the only input that changes formatting, so the writer can still be a `bytes.Buffer` for assertion purposes.
+**When** `Report(errors, w, true)` is called.
 **Then** the output uses 2-space indentation for human readability.
 
 ---
@@ -117,7 +97,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 #### V1: Valid spec exits 0
 
-**Given** a fully valid spec directory with no schema errors, no missing content, no cycles, no orphans, no ID issues, no name mismatches, and full test coverage.
+**Given** a fully valid spec directory with no schema errors, no missing content, no cycles, no ID issues, no name mismatches, and full test coverage.
 **When** `spex validate tmp/spec/` is executed.
 **Then** exit code is 0. Stdout contains JSON with `valid: true` and `error_count: 0`.
 
@@ -138,12 +118,6 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **Given** modules alpha and beta form a circular dependency.
 **When** `spex validate tmp/spec/` is executed.
 **Then** exit code is 1 with a `"dag"` check error.
-
-#### V5: Orphan warnings do not cause exit 1
-
-**Given** alpha has one orphan requirement (warning) and no hard errors anywhere.
-**When** `spex validate tmp/spec/` is executed.
-**Then** exit code is 0. The report includes `warning_count: 1` and `valid: true`. The warning appears in the errors array with `severity: "warning"`.
 
 #### V6: ID duplication exits 1
 
@@ -167,7 +141,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 **Given** a spec with errors in every checker.
 **When** `spex validate tmp/spec/` is executed.
-**Then** the errors in the output reflect the pipeline order: SchemaChecker, ContentResolver, IDValidator, DAGChecker, OrphanDetector, NameConsistencyChecker, TestCoverageChecker. Within each checker's errors, ordering is by path.
+**Then** every checker has contributed to the output. The command runs them in a fixed order — SchemaChecker, ContentResolver, IDValidator, DAGChecker, NameConsistencyChecker, TestCoverageChecker, RequirementCoverageChecker, CoupledSectionChecker — and the aggregated report is then sorted by path, so the checker sequence is not observable in the output ordering.
 
 #### V10: Default spec directory
 
@@ -191,7 +165,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 **Given** the spex-machina repo's own `spec/` directory.
 **When** `spex validate spec/` is executed from the repo root.
-**Then** exit code is 0. This validates requirement 9 (self-validate): the tool can validate its own spec.
+**Then** exit code is 0. This validates requirement 8 (self-validate): the tool can validate its own spec.
 
 #### V14: Piped output is compact JSON
 
@@ -219,7 +193,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 **Given** `project.json` has `modules: []`.
 **When** `spex validate tmp/spec/` is executed.
-**Then** exit code is 0 (or a warning). A project with no modules is structurally valid (no nodes to check). Schema validation determines whether empty modules is allowed.
+**Then** exit code is 0. A project with no modules is structurally valid (no nodes to check). Schema validation determines whether empty modules is allowed.
 
 ### E3: Concurrent-safe error aggregation
 
@@ -249,4 +223,4 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 **Given** a spec with 100 modules, 10 requirements per module, 5 components per module, 5 impl_sections per module, and 5 test_sections per module (5500 nodes total).
 **When** `spex validate tmp/spec/` is executed.
-**Then** the full pipeline completes in under 1 second (requirement 8: fast validation). Each checker operates in linear or near-linear time relative to node count.
+**Then** the full pipeline completes in under 1 second (requirement 7: fast validation). Each checker operates in linear or near-linear time relative to node count.

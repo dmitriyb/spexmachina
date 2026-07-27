@@ -57,7 +57,8 @@ func classifyNodeType(nodeType string) ImpactLevel {
 	switch nodeType {
 	case "impl_section", "test_section":
 		return ImplOnly
-	case "data_flow":
+	// Both are contract surfaces: data_flow between components, api to callers.
+	case "data_flow", "api":
 		return Contract
 	case "component":
 		return ArchImpl

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/validator"
 	"github.com/spf13/cobra"
 )
 
@@ -17,6 +18,7 @@ func newDiffCmd() *cobra.Command {
 		RunE:  runDiffE,
 	}
 	cmd.Flags().String("snapshot", "", "path to snapshot file (default: <dir>/.snapshot.json)")
+	cmd.Flags().String("map", ".bead-map.json", "path to bead mapping file, read as a hash -> name source for removal checks")
 	cmd.Flags().Bool("json", false, "output as JSON")
 	return cmd
 }
@@ -50,13 +52,53 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	classified := merkle.Classify(changes, moduleNames)
 	completenessErrors := merkle.CheckCompleteness(classified, specDir)
 
+	// Removal-time name checking. It belongs here rather than in `spex
+	// validate` because it is the only check in the system that is
+	// relative to history: it needs the snapshot to know what was removed,
+	// and every validator checker takes a spec directory and nothing else.
+	// This is the same shape as CheckCompleteness above — a corpus-wide
+	// gate keyed off the classified diff, reported through .errors, and
+	// halting the pipeline with exit 2.
+	//
+	// The bead map is passed as a second hash -> name source: when a whole
+	// module is retired, its component records still carry the module name
+	// the diff can only report as a hash. It is read, never written, and an
+	// absent file is not an error — `spex diff` runs in trees that have
+	// never been ingested.
+	mapPath, _ := cmd.Flags().GetString("map")
+	removed, err := validator.CheckRemovedNames(specDir, mapPath, classified)
+	if err != nil {
+		return fmt.Errorf("diff: %w", err)
+	}
+	for _, s := range removed.Survivors {
+		completenessErrors = append(completenessErrors, merkle.DiffError{
+			Type: "surviving_name",
+			Message: fmt.Sprintf("removed %s %q (%s) is still named in the spec corpus at %d site(s); sweep the mentions or restore the node",
+				s.NodeType, s.Name, s.Key, len(s.Sites)),
+			Path:    s.Sites[0],
+			Related: s.Sites,
+		})
+	}
+
+	// Notes are the sweep's disclosures, not violations: a removal it could
+	// not check, or hits it discarded because a live node covers them. They
+	// never gate the exit code — a suppressed hit is a correct answer, and
+	// after the bead-map fallback an unverifiable one is a state no author
+	// action can clear (see unverifiableModuleNote) — but every one of them
+	// is a place where "no errors" means less than it looks, so they are
+	// printed rather than dropped.
+	notes := make([]diffNote, 0, len(removed.Notes))
+	for _, n := range removed.Notes {
+		notes = append(notes, diffNote{Type: n.Kind, Message: n.Message, Related: n.Keys})
+	}
+
 	jsonOut, _ := cmd.Flags().GetBool("json")
 	if jsonOut {
-		if err := printDiffJSON(classified, completenessErrors); err != nil {
+		if err := printDiffJSON(classified, completenessErrors, notes); err != nil {
 			return err
 		}
 	} else {
-		printDiffSummary(classified, completenessErrors)
+		printDiffSummary(classified, completenessErrors, notes)
 	}
 
 	// A non-empty errors array is a pipeline halt signal: the full diff is
@@ -85,10 +127,23 @@ func (e *diffError) Unwrap() error { return e.err }
 func (e *diffError) ExitCode() int { return e.code }
 
 // diffOutput is the JSON representation of the diff command result.
+//
+// Notes is omitted when empty so the documented three-key shape (changes,
+// errors, summary) is what every clean run emits. It is never a place a
+// violation can hide: `errors` remains the only field the exit code reads.
 type diffOutput struct {
-	Changes []diffChange    `json:"changes"`
+	Changes []diffChange       `json:"changes"`
 	Errors  []merkle.DiffError `json:"errors"`
-	Summary diffSummary     `json:"summary"`
+	Notes   []diffNote         `json:"notes,omitempty"`
+	Summary diffSummary        `json:"summary"`
+}
+
+// diffNote mirrors merkle.DiffError's shape for a finding that is not a
+// failure, so both render the same way in text and in JSON.
+type diffNote struct {
+	Type    string   `json:"type"`
+	Message string   `json:"message"`
+	Related []string `json:"related,omitempty"`
 }
 
 type diffChange struct {
@@ -107,10 +162,11 @@ type diffSummary struct {
 	ByImpact map[string]int `json:"by_impact"`
 }
 
-func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffError) error {
+func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffError, notes []diffNote) error {
 	out := diffOutput{
 		Changes: make([]diffChange, len(classified)),
 		Errors:  errors,
+		Notes:   notes,
 		Summary: diffSummary{
 			Total:    len(classified),
 			ByType:   make(map[string]int),
@@ -143,8 +199,8 @@ func printDiffJSON(classified []merkle.ClassifiedChange, errors []merkle.DiffErr
 	return nil
 }
 
-func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.DiffError) {
-	if len(classified) == 0 && len(errors) == 0 {
+func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.DiffError, notes []diffNote) {
+	if len(classified) == 0 && len(errors) == 0 && len(notes) == 0 {
 		fmt.Println("no changes")
 		return
 	}
@@ -181,6 +237,16 @@ func printDiffSummary(classified []merkle.ClassifiedChange, errors []merkle.Diff
 				fmt.Printf("    path: %s\n", e.Path)
 			}
 			for _, r := range e.Related {
+				fmt.Printf("    related: %s\n", r)
+			}
+		}
+	}
+
+	if len(notes) > 0 {
+		fmt.Printf("\n%d note(s):\n", len(notes))
+		for _, n := range notes {
+			fmt.Printf("  note: [%s] %s\n", n.Type, n.Message)
+			for _, r := range n.Related {
 				fmt.Printf("    related: %s\n", r)
 			}
 		}
