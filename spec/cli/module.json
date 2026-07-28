@@ -7,7 +7,7 @@
       "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Root command and subcommand registration",
-      "description": "A top-level cobra root command that registers all module subcommands, sets global flags, and prints help when invoked with no args or an unknown command."
+      "description": "A top-level cobra root command that the binary's entry point attaches the module subcommands onto, sets global flags, and prints help when invoked with no args."
     },
     {
       "id": "e15f238e9534",
@@ -64,32 +64,6 @@
       ],
       "uses": [
         "b6758cdfabc4"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "d0dbdac909dc",
-      "name": "Cobra Setup and Registration",
-      "content": "impl_cobra_setup.md",
-      "describes": [
-        "b6758cdfabc4"
-      ]
-    },
-    {
-      "id": "39aebe007a94",
-      "name": "Version Injection",
-      "content": "impl_version_injection.md",
-      "describes": [
-        "bbdb70e6f9f7"
-      ]
-    },
-    {
-      "id": "7b12fb6f10f3",
-      "name": "Hash ID implementation",
-      "content": "impl_hash_id.md",
-      "describes": [
-        "a338e50fec70"
       ]
     }
   ],

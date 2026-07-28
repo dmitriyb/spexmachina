@@ -1,6 +1,6 @@
 # HashIDCommand
 
-`spex hash-id` — computes and prints the identity hash for a spec node.
+[[6c378662424f|`spex hash-id`]] — computes and prints the identity hash for a spec node. It exists so an id is derived rather than invented, which is the whole of [[0c395440d59f|Identity hash computation command]].
 
 ## Usage
 
@@ -8,7 +8,7 @@
 spex hash-id --module <module> --type <type> --name <name>
 ```
 
-Prints a single 12-character lowercase hex string to stdout and exits 0.
+Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing else reaches stdout, so the output can be substituted straight into a spec file. The command reads no spec directory and opens no file — it is a pure function of its three flags. It is a child of [[b6758cdfabc4|RootCommand]] and inherits the root's persistent flags, but consults none of them: `--spec-dir` has no effect here.
 
 ## Flags
 
@@ -20,7 +20,7 @@ Prints a single 12-character lowercase hex string to stdout and exits 0.
 
 ## Identity String Construction
 
-The command maps `--type` to the correct identity string format and calls `schema.IdentityHash`:
+The command maps `--type` onto the identity string the schema defines for that node type, then hashes it. The table below is the whole mapping; there is no fallback branch behind it, so the set of types that produce a hash is exactly the set of rows here.
 
 | --type | --module required? | Identity string |
 |---|---|---|

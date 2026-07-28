@@ -12,7 +12,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 1. No arguments prints help
 
 **Input**: `spex` (no args)
-**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (validate, merkle, impact, apply, proposal, render, version, completion).
+**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, impact, map, register, log, template, version, render, emit, ingest), plus cobra's own `completion` and `help`.
 
 ### 2. --help flag prints help
 
@@ -32,7 +32,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 5. All subcommands registered
 
 **Input**: `spex --help`
-**Expected**: Output lists all expected subcommands. Verify by checking that each of `validate`, `merkle`, `impact`, `apply`, `proposal`, `render`, `version`, `completion` appears in the output.
+**Expected**: Output lists all expected subcommands. Verify by checking that each of `hash-id`, `diff`, `validate`, `impact`, `map`, `register`, `log`, `template`, `version`, `render`, `emit`, `ingest`, `completion` and `help` appears in the output.
 
 ### 6. Subcommand --help works
 
