@@ -1,6 +1,6 @@
 # SnapshotSaver
 
-Writes `spec/.snapshot.json` with the current merkle tree **iff** receipts top-level status is `complete`. Partial runs leave the snapshot file untouched so the next emit recomputes against the same baseline.
+[[cf47671793fa|Writes `spec/.snapshot.json` with the current merkle tree **iff** the receipts' top-level status is `complete`]]. Partial runs leave the snapshot file untouched so the next emit recomputes against the same baseline.
 
 ## Responsibilities
 
@@ -11,34 +11,15 @@ Writes `spec/.snapshot.json` with the current merkle tree **iff** receipts top-l
 
 ## Interface
 
-```go
-type Saver struct {
-    SpecDir     string // default "./spec"
-    SnapshotPath string // default "./spec/.snapshot.json"
-}
+The saver is configured with two paths: the spec directory it hashes, and the snapshot file it writes. Both carry defaults — the spec root when the directory is unset, and `.snapshot.json` inside that directory when the path is unset. The shipped command sets only the directory, to whatever `--spec-dir` resolved to, so the snapshot lands beside the spec it describes.
 
-// Save writes the snapshot iff status == "complete".
-// Returns (wrote bool, err error).
-func (s *Saver) Save(status string) (bool, error)
-```
+One call hands it the run's top-level status. It answers whether it wrote, or it fails. It is never told *what* to write: the tree is computed from the spec directory as it stands at the moment of the call.
 
 ## Gate Logic
 
-```go
-func (s *Saver) Save(status string) (bool, error) {
-    if status != "complete" {
-        return false, nil
-    }
-    tree, err := merkle.BuildTree(s.SpecDir)
-    if err != nil {
-        return false, fmt.Errorf("ingest: snapshot: build tree: %w", err)
-    }
-    if err := writeAtomic(s.SnapshotPath, tree); err != nil {
-        return false, err
-    }
-    return true, nil
-}
-```
+Any status other than `complete` skips the write and reports that nothing was written. Nothing is read and no tree is built on that path — the previous `spec/.snapshot.json` is left byte-for-byte as it was. Only on `complete` is the current merkle tree computed and written.
+
+That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so a caller reading stdout can tell a saved snapshot from a skipped one without stat-ing the file.
 
 ## Why the Gate
 
@@ -50,32 +31,15 @@ This is the "unfinished operations resurface through the idempotency path" mecha
 
 ## Atomic Write
 
-```go
-func writeAtomic(path string, tree merkle.Tree) error {
-    tmp := path + ".tmp"
-    f, err := os.Create(tmp)
-    if err != nil {
-        return fmt.Errorf("ingest: snapshot: create: %w", err)
-    }
-    enc := json.NewEncoder(f)
-    enc.SetIndent("", "  ")
-    if err := enc.Encode(tree); err != nil {
-        _ = f.Close()
-        _ = os.Remove(tmp)
-        return err
-    }
-    if err := f.Close(); err != nil {
-        return err
-    }
-    return os.Rename(tmp, path)
-}
-```
+The snapshot is serialized in full, written to a temp file beside the destination, flushed, and only then renamed into place. Rename is atomic on POSIX filesystems for a same-device move, so a reader of `spec/.snapshot.json` sees either the previous snapshot or the new one and never a splice of the two. [[ffab5d1337ac|The destination is never opened for truncation and rewritten in place]].
 
-`os.Rename` is atomic on POSIX filesystems (same-device rename). A crash between `Create` and `Rename` leaves the temp file behind but the original snapshot untouched — subsequent runs clean up the .tmp file.
+Flushing before the rename is what carries that guarantee across a crash: the bytes are on disk before the name points at them, so a crash immediately after the rename cannot leave a snapshot that is empty or half-written.
+
+A write that fails part-way removes its own temp file, so a failed save leaves nothing behind but the untouched original. A crash can still strand one; the next save writes to the same name and renames it away.
 
 ## Snapshot Format
 
-Inherited from the `merkle` module. Each node: `{id, kind, hash}`. Root hash is derivable from the tree structure. See `spec/merkle/module.json` for the authoritative schema.
+Inherited from the `merkle` module. The file records the root key, the root hash, the time it was written, and a flat map holding one entry per node in the tree — leaves, modules and the project root alike. Most keys are the node's identity hash; the exceptions are the project root, keyed `project`, and the envelope leaves, keyed `meta/project` and `meta/<module identity hash>`. Each entry carries that node's hash and what kind of node it is, plus its owning module and the keys of its children where those apply. See `spec/merkle/module.json` for the authoritative schema.
 
 ## Non-Responsibilities
 

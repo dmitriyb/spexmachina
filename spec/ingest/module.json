@@ -56,7 +56,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Refresh mode for impl_only drift",
-      "description": "Refresh mode is a parallel ingest pathway for absorbing content drift on non-bead-producing leaves (impl_section, test_section, data_flow content) without triggering bead lifecycle. Activated via proposal frontmatter mode: refresh; pipeline routing reads the frontmatter and routes the run through the RefreshHandler instead of the normal Reconciler+SnapshotSaver path. The RefreshHandler accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf via merkle.HashFile, and updates each bead-map record's spec_hash to match current content (other fields untouched). Runs are refused if the underlying diff (computed against the snapshot before refresh) contains any added or removed entries, or if any bead-map record points to a spec node that no longer exists — those signal structural drift that requires the normal pipeline. After a successful refresh, the snapshot is saved atomically using the same complete-status path the Reconciler uses, preserving the snapshot+bead-map atomicity invariant. Same spec state plus same snapshot input always produces the same refresh output (no-op on second run)."
+      "description": "Refresh mode is a parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering bead lifecycle. Content modifications are never gated, whatever leaf they land on. Structural additions and removals are absorbed only for an explicitly declared allow-list: requirements and apis in either direction, additions or removals of the implementation-section leaf type, and component removals but not component additions. The first three produce no bead in either direction, so baselining one costs nothing. Components do produce beads, and a component removal is absorbable only because the orphan refusal described below still blocks the run while the bead-map holds a record for the removed node — that record must be retired first. An added component is a bead that was never created, so it is refused. Every other structural entry is refused — data_flow and test_section in either direction, because both produce beads, and the module and envelope node types, because baselining one would hide from every downstream tool a change that spex diff or spex validate rejects. RefreshHandler's absorbable table is the authoritative list; it is written out rather than derived by negation. Activation is the --mode refresh flag on spex ingest and nothing else. The pathway accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf, and updates each bead-map record's spec_hash to match current content (other fields untouched; records for proposal epics are skipped). A run is also refused if any bead-map record points to a spec node that no longer exists — that signals structural drift requiring the normal pipeline. After a successful refresh the bead-map and the snapshot move under one atomic commit boundary, preserving the snapshot+bead-map atomicity invariant. Same spec state plus same snapshot input always produces the same refresh output (no-op on second run, which rewrites neither file)."
     }
   ],
   "components": [
@@ -99,44 +99,10 @@
     {
       "id": "f9033352c13f",
       "name": "RefreshHandler",
-      "description": "Refresh-mode ingest pathway. Consumes an empty changeset plus an empty receipts file, walks the current spec graph, re-hashes every content leaf via merkle.HashFile, and updates each bead-map record's spec_hash to the current content hash (other record fields untouched). Refuses if the diff against the pre-refresh snapshot contains any added or removed entries — refresh is for modified content only. Refuses if any bead-map record points to a spec node that no longer exists. After a successful refresh, saves the new snapshot atomically using the same write path the SnapshotSaver uses for complete-status runs, preserving the snapshot+bead-map atomicity invariant. Separated from Reconciler so the bead-lifecycle rules and the drift-absorption rules live in distinct components with distinct test surfaces.",
+      "description": "Refresh-mode ingest pathway. Consumes an empty changeset plus an empty receipts file, rebuilds the merkle tree over the current spec directory and reads each content leaf's hash off that tree rather than introducing a hashing step of its own, and updates each bead-map record's spec_hash to the current content hash (other record fields untouched; proposal-epic records are passed over). An added or removed diff entry refuses the run unless its node type is absorbable in that direction — requirement, api and implementation-section leaves in either direction, component on removal but not on addition; modified entries never reach that gate. Refuses if any bead-map record points to a spec node that no longer exists. After a successful refresh, saves the new snapshot atomically using the same write path the SnapshotSaver uses for complete-status runs, preserving the snapshot+bead-map atomicity invariant. Separated from Reconciler so the bead-lifecycle rules and the drift-absorption rules live in distinct components with distinct test surfaces.",
       "content": "arch_refresh.md",
       "implements": [
         "e68653819f38"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "3ae29d706b7d",
-      "name": "Reconciliation rules",
-      "content": "impl_reconciliation.md",
-      "describes": [
-        "2b5158af774b"
-      ]
-    },
-    {
-      "id": "65bab56e5646",
-      "name": "Snapshot saving",
-      "content": "impl_snapshot_saving.md",
-      "describes": [
-        "f85bd2f94aeb"
-      ]
-    },
-    {
-      "id": "4fc05ab335c9",
-      "name": "Ingest command implementation",
-      "content": "impl_ingest_command.md",
-      "describes": [
-        "db90eb607bcb"
-      ]
-    },
-    {
-      "id": "4f1323053279",
-      "name": "Refresh handler implementation",
-      "content": "impl_refresh.md",
-      "describes": [
-        "f9033352c13f"
       ]
     }
   ],
@@ -144,7 +110,7 @@
     {
       "id": "6fd1f0cbb76c",
       "name": "Ingest flow",
-      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes spec/.snapshot.json iff status=complete); mode: refresh routes through RefreshHandler (re-hash every content leaf, update bead-map spec_hash for changed records, save snapshot atomically, refuse on adds/removes). Both pathways write atomically.",
+      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes spec/.snapshot.json iff status=complete); mode: refresh routes through RefreshHandler (re-hash every content leaf off a freshly built merkle tree, update bead-map spec_hash for changed records, save snapshot atomically, refuse on an added or removed entry outside the absorbable set). Both pathways write atomically.",
       "content": "flow_ingest.md",
       "uses": [
         "2b5158af774b",
