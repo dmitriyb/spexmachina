@@ -7,7 +7,7 @@
       "id": "d5a8407d38e1",
       "type": "functional",
       "title": "Validate spec structure",
-      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references. Structured error output.",
+      "description": "Given a spec directory, confirm it is a valid DAG with no cycles and no broken references, that every declared content path resolves, and that coverage holds in both directions — every component described by a test_section, every requirement derived and implemented. Structured error output.",
       "priority": 1
     },
     {
