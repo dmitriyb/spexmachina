@@ -60,11 +60,6 @@ func ReadSpec(specDir string) (*SpecGraph, error) {
 				refs = append(refs, c.Content)
 			}
 		}
-		for _, s := range spec.ImplSections {
-			if s.Content != "" {
-				refs = append(refs, s.Content)
-			}
-		}
 		for _, f := range spec.DataFlows {
 			if f.Content != "" {
 				refs = append(refs, f.Content)

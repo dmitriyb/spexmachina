@@ -12,7 +12,7 @@ Builds the merkle tree from the parsed spec graph. [[3ada6b800cc5|Each node's ke
 
 ## Tree Structure
 
-Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, impl_section, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also what the mapping store uses as `spec_node_id` — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
+Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also what the mapping store uses as `spec_node_id` — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
 
 Every entry in the tree is one of the following, and its key, level and hash source are fixed by which one it is:
 
@@ -25,9 +25,9 @@ Every entry in the tree is one of the following, and its key, level and hash sou
 | `meta/<module identity hash>` | leaf | `meta` | the bytes of that module's `module.json` |
 | identity hash of a module requirement | leaf | `requirement` | that requirement's JSON fields |
 | identity hash of an api | leaf | `api` | that api's JSON fields |
-| identity hash of a component, impl_section, data_flow or test_section | leaf | that node's type | the bytes of the file its `content` field names |
+| identity hash of a component, data_flow or test_section | leaf | that node's type | the bytes of the file its `content` field names |
 
-A module's children are its own envelope leaf plus the requirement, api, component, impl_section, data_flow and test_section entries that `module.json` declares — with the one exception described under "Empty content is not a node" below. The root's children are the project envelope leaf, the project requirement leaves, and one interior node per module. The root and the module interiors carry no node type at all; every leaf carries one.
+A module's children are its own envelope leaf plus the requirement, api, component, data_flow and test_section entries that `module.json` declares — with the one exception described under "Empty content is not a node" below. The root's children are the project envelope leaf, the project requirement leaves, and one interior node per module. The root and the module interiors carry no node type at all; every leaf carries one.
 
 The only synthetic keys are for the JSON envelope leaves that have no `id` field of their own:
 
@@ -54,7 +54,7 @@ Because the owning module is carried as an identity hash rather than an integer,
 2. For each module entry, read its `module.json`. Hash it as the `meta/<module-identity-hash>` leaf.
 3. For each module requirement, create a leaf keyed by its identity hash with a deterministic JSON hash of its fields.
 4. For each api, create a leaf keyed by its identity hash with a deterministic JSON hash of its fields. An api has no content file — see "API Leaf Hashing" below.
-5. For each component, impl_section, data_flow, and test_section, hash the referenced content file and key the leaf by the node's identity hash. A node whose `content` field is empty is skipped — see "Empty content is not a node" below.
+5. For each component, data_flow, and test_section, hash the referenced content file and key the leaf by the node's identity hash. A node whose `content` field is empty is skipped — see "Empty content is not a node" below.
 6. Compute the module interior hash from its sorted child hashes.
 7. Compute the project root hash from sorted module hashes plus the `meta/project` leaf and the project requirement leaves.
 
@@ -64,7 +64,7 @@ Content files reach step 5 only by being named in a `content` field. No director
 
 ## Empty content is not a node
 
-For components, impl_sections, data_flows and test_sections, TreeBuilder skips
+For components, data_flows and test_sections, TreeBuilder skips
 any entry whose `content` field is the empty string. The skip is silent: no leaf
 is created, nothing is logged, and no error is returned.
 

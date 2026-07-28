@@ -8,22 +8,6 @@
       "name": "Engine"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Engine impl"
-    },
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Engine impl dup"
-    }
-  ],
   "name": "core",
   "requirements": [
     {
@@ -31,6 +15,22 @@
       "preq_id": "000000000001",
       "title": "Feature A",
       "type": "functional"
+    }
+  ],
+  "test_sections": [
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Engine tests"
+    },
+    {
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Engine tests dup"
     }
   ]
 }

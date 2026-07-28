@@ -68,7 +68,7 @@ never writes anything.
 
 | check | catches |
 |---|---|
-| `schema` | JSON Schema conformance of `project.json` and every `module.json`; **`content` required and non-empty** (`minLength: 1`) on component, impl_section, data_flow and test_section; unknown fields rejected (`additionalProperties: false`); id shape `^[a-f0-9]{12}$` |
+| `schema` | JSON Schema conformance of `project.json` and every `module.json`; **`content` required and non-empty** (`minLength: 1`) on component, data_flow and test_section; unknown fields rejected (`additionalProperties: false`); id shape `^[a-f0-9]{12}$` |
 | `content` | every declared content file exists, is not an absolute path, and contains no `..` |
 | `link` | `[[<12-hex>\|<display text>]]` resolves to a live leaf; a name-based target is rejected; a link with no display text is rejected; an unterminated `[[` is rejected; a module node as target is rejected. **Only a fenced code block is skipped** — a link inside an HTML comment, inside a 4-space-indented block, or wrapped entirely in backticks is still scanned and must resolve. A bare 12-hex token is ignored everywhere except inside a `dot` fence, where it is a DOT node ID and is resolved |
 | `id` | per-array id uniqueness; **api names are globally unique across modules**; api/component name declarability; referential integrity of `implements`, `uses`, `describes`, `provided_by` (module-local), `depends_on` and `preq_id`; project requirement **`priority` present and in 0–4** |
@@ -101,7 +101,7 @@ Three facts that change how the report reads:
   separated words. `spex validate [--json]`, `Validator (core)`, `Widget.` and `Bob's` all fail. The
   error names the replacement it will accept — quote that, do not invent one.
 
-The valid node types are `requirement`, `component`, `impl_section`, `data_flow`, `test_section`,
+The valid node types are `requirement`, `component`, `data_flow`, `test_section`,
 `api` and `module`; `spex hash-id --type` accepts exactly those seven and rejects anything else.
 
 ## Step 4: Read the spec
@@ -122,17 +122,12 @@ bin/spex render --format json --slim | jq -r '.nodes[] | "\(.type)\t\(.module //
 Slim output lists `module` rows too. **Module nodes are not link targets** — only leaves resolve — so
 an id copied from a `module` row into a `[[…]]` is an error, not a shortcut.
 
-**Do not audit impl sections.** They produce no beads, they duplicate what the arch leaf already
-owns, and they are being removed corpus-wide. A module that still declares `impl_sections` is
-mid-migration, not a finding. Never propose new impl content, and never count impl leaves toward any
-coverage question.
-
 **A `.md` under `spec/` that no `module.json` declares is invisible** to the merkle tree and to the
 link check — nothing reports it, so check by hand:
 
 ```bash
 for m in spec/*/module.json; do d=$(dirname "$m"); jq -r --arg d "$d" \
-  '[.components[]?, .impl_sections[]?, .data_flows[]?, .test_sections[]?] | .[].content | $d + "/" + .' "$m"; done \
+  '[.components[]?, .data_flows[]?, .test_sections[]?] | .[].content | $d + "/" + .' "$m"; done \
   | sort -u > /tmp/declared
 find spec -name '*.md' -not -path 'spec/proposals/*' | sort > /tmp/ondisk
 comm -3 /tmp/declared /tmp/ondisk   # empty output = clean
@@ -219,7 +214,7 @@ This is LLM judgment: every question below is one neither gate can answer.
 
 Bead-producing node types are **`component`, `data_flow`, and `test_section` with `describes >= 2`**
 (contract in `spec/impact/arch_action_classifier.md`). Everything else produces no bead: `requirement`
-(project or module), **`api`**, `impl_section`, `test_section` with `describes == 1`, `meta`, and
+(project or module), **`api`**, `test_section` with `describes == 1`, `meta`, and
 **`module`**. A module is not a leaf, so no change ever reaches the classifier carrying node type
 `module`; a `module.json` edit surfaces as that module's `meta/<hash>` leaf, and `meta` produces no
 bead.
@@ -231,7 +226,6 @@ structural additions and removals of an explicit type list (`ingest/refresh.go`,
 | node type | added | removed |
 |---|---|---|
 | `requirement` | absorbed | absorbed |
-| `impl_section` | absorbed | absorbed |
 | `api` | absorbed | absorbed |
 | `component` | **refused** | absorbed |
 | anything else (`data_flow`, `test_section`, `module`, `meta`) | refused | refused |
@@ -308,5 +302,4 @@ Where N and M come from the audit scope. Exit without entering plan mode and wit
   provenance for a rule, never a reading assignment — and no skill in this repo audits code-vs-spec
   alignment.
 - Anything `spex validate` or `spex diff` already reports (Step 3). Surface it; never re-derive it.
-- Impl sections. They are being removed corpus-wide — do not audit them and do not write them.
 - Applying corrections. `/spec` does that, from the drafted proposal.

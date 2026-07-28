@@ -5,7 +5,7 @@ Validates identity-hash uniqueness, cross-reference integrity, mandatory `preq_i
 ## Responsibilities
 
 ### ID Uniqueness
-- [[707094f8868b|ID uniqueness]] is scoped to one array: every identity hash must be unique within the array that contains it, and nowhere wider. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections` and `apis`
+- [[707094f8868b|ID uniqueness]] is scoped to one array: every identity hash must be unique within the array that contains it, and nowhere wider. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `data_flows`, `test_sections` and `apis`
 - Uniqueness is checked by tallying each hash in a per-array set of strings — any hash counted more than once is reported with its array location and the offending hash
 - Collisions across distinct logical nodes are mathematically improbable in the 48-bit hash space, but the validator still checks them so hand-edited or hand-merged files cannot smuggle a stale ID into a new node
 
@@ -26,7 +26,6 @@ A declared api or component name is rejected unless tokenizing it the way the re
 
 - `implements`: component → requirement identity hashes within the same module
 - `uses` (component): component → component identity hashes within the same module
-- `describes`: impl_section → component identity hashes within the same module
 - `uses` (data_flow): data_flow → component identity hashes within the same module
 - `depends_on`: requirement → requirement identity hashes within the same scope
 - `requires_module`: module → module identity hashes in project.json

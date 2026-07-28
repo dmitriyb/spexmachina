@@ -14,7 +14,7 @@ All scenarios share a common fixture layout. Identity hashes in fixtures are pla
   "records": [
     {"id": 1, "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker",    "content_file": "<SCHK_FILE>", "spec_hash": "<SCHK_SPEC_SHA>"},
     {"id": 2, "spec_node_id": "<HASR_HASH>", "bead_id": "spex-002", "bead_type": "task", "module": "merkle",    "component": "Hasher",           "content_file": "<HASR_FILE>", "spec_hash": "<HASR_SPEC_SHA>"},
-    {"id": 3, "spec_node_id": "<HCMP_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hash computation", "content_file": "<HCMP_FILE>", "spec_hash": "<HCMP_SPEC_SHA>"}
+    {"id": 3, "spec_node_id": "<HTST_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hashing tests",    "content_file": "<HTST_FILE>", "spec_hash": "<HTST_SPEC_SHA>"}
   ]
 }
 ```
@@ -22,14 +22,14 @@ All scenarios share a common fixture layout. Identity hashes in fixtures are pla
 Where:
 - `SCHK_HASH = IdentityHash("validator", "component", "SchemaChecker")`
 - `HASR_HASH = IdentityHash("merkle", "component", "Hasher")`
-- `HCMP_HASH = IdentityHash("merkle", "impl_section", "Hash computation")`
+- `HTST_HASH = IdentityHash("merkle", "test_section", "Hashing tests")`
 
 - A merkle diff with classified changes (the `path` field is the same identity hash that appears in `spec_node_id`):
 
 ```json
 [
   {"path": "<SCHK_HASH>",  "type": "modified", "impact": "arch_impl", "module": "validator", "node_type": "component"},
-  {"path": "<HCMP_HASH>",  "type": "modified", "impact": "impl_only", "module": "merkle",    "node_type": "impl_section"},
+  {"path": "<HTST_HASH>",  "type": "modified", "impact": "impl_only", "module": "merkle",    "node_type": "test_section"},
   {"path": "<NEW_COMP>",   "type": "added",    "impact": "arch_impl", "module": "validator", "node_type": "component"},
   {"path": "<REMOVED>",    "type": "removed",  "impact": "arch_impl", "module": "merkle",    "node_type": "component"}
 ]
@@ -51,7 +51,7 @@ A mapping file holding no records — a bead-map document whose `records` array 
 
 Call `MatchNodes(changes, records)` with the fixture data. Expected:
 
-- **Matched (2 entries):** `SCHK_HASH` matches spex-001, `HCMP_HASH` matches spex-003
+- **Matched (2 entries):** `SCHK_HASH` matches spex-001, `HTST_HASH` matches spex-003
 - **Unmatched (1 entry):** `NEW_COMP` (added, no record)
 - **Orphaned:** none in this fixture (no removed node has a matching record)
 
@@ -61,7 +61,7 @@ Add a second record with `spec_node_id: SCHK_HASH`. Assert the match contains bo
 
 ### S5: NodeMatcher uses direct identity-hash comparison
 
-`SCHK_HASH` matches by exact string equality, not by parsing or rebuilding any path. Different identity hashes never match, even when they reference logically related nodes (e.g., a component and an impl_section in the same module). Two distinct spec nodes always have distinct identity hashes by construction.
+`SCHK_HASH` matches by exact string equality, not by parsing or rebuilding any path. Different identity hashes never match, even when they reference logically related nodes (e.g., a component and a test_section in the same module). Two distinct spec nodes always have distinct identity hashes by construction.
 
 ### S6: Structural changes produce zero matches
 

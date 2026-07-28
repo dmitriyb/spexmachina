@@ -21,7 +21,7 @@ The JSON Schema validator is initialized with the bead-map schema loaded from `B
   "records": [
     {
       "id": 1,
-      "spec_node_id": "schema/component/1",
+      "spec_node_id": "79946d618829",
       "bead_id": "abc-123",
       "bead_type": "feature",
       "module": "schema",
@@ -31,7 +31,7 @@ The JSON Schema validator is initialized with the bead-map schema loaded from `B
     },
     {
       "id": 2,
-      "spec_node_id": "validator/component/1",
+      "spec_node_id": "651d5315eebf",
       "bead_id": "def-456",
       "bead_type": "task",
       "module": "validator",
@@ -77,20 +77,18 @@ The JSON Schema validator is initialized with the bead-map schema loaded from `B
 ```
 **Expected:** Validation fails. Error references `records/0`, missing `spec_node_id`.
 
-### S6: Invalid spec_node_id pattern fails
+### S6: Empty spec_node_id fails
 
-**Input:** Record with `spec_node_id: "invalid-format"`.
-**Expected:** Validation fails. The pattern `^[a-z_]+/(component|impl_section|data_flow|test_section)/[0-9]+$` rejects the value.
+**Input:** Record with `spec_node_id: ""`.
+**Expected:** Validation fails on `minLength`. That is the only constraint the schema puts on the field — there is no pattern.
 
-### S7: Valid spec_node_id patterns pass
+### S7: spec_node_id accepts both identities it has to carry
 
 **Input:** Records with:
-- `"schema/component/1"` — passes
-- `"map/impl_section/3"` — passes
-- `"render/data_flow/1"` — passes
-- `"validator/test_section/2"` — passes
+- `"79946d618829"` — a 12-character identity hash, what a component, data_flow or test_section record carries
+- `"2026-07-25-declarative-spec-contracts"` — a proposal reference, what a proposal epic record carries
 
-**Expected:** All pass validation.
+**Expected:** Both pass. One array holds records keyed two different ways, so the field is typed as a non-empty string and the shape is left to whoever writes the record.
 
 ### S8: next_id below minimum fails
 
@@ -112,14 +110,14 @@ The JSON Schema validator is initialized with the bead-map schema loaded from `B
 ### E1: Empty string for required string fields
 
 **Input:** Record with `bead_id: ""`.
-**Expected:** Depends on schema — if `minLength: 1` is set, fails. If not, passes. Documents the boundary.
+**Expected:** Validation fails. `minLength: 1` is set on `spec_node_id`, `bead_id`, `bead_type` and `component`; the remaining string fields carry no minimum and accept the empty string, which is how a proposal epic record leaves `module`, `content_file` and `spec_hash` blank.
 
-### E2: spec_node_id with uppercase module name
+### E2: node_type outside the enum fails
 
-**Input:** `spec_node_id: "Schema/component/1"`.
-**Expected:** Validation fails. Pattern requires lowercase `[a-z_]+`.
+**Input:** Record with `node_type: "requirement"`.
+**Expected:** Validation fails. The enum is `proposal`, `component`, `data_flow`, `test_section` and nothing else — this is the one place the schema names which spec node types a record may stand for.
 
-### E3: spec_node_id with unknown type segment
+### E3: node_type absent passes
 
-**Input:** `spec_node_id: "schema/requirement/1"`.
-**Expected:** Validation fails. Pattern enum only allows `component|impl_section|data_flow|test_section`.
+**Input:** A record with no `node_type` at all.
+**Expected:** Validation passes. The property is optional, so a record can omit it; it is present only where a proposal epic has to be told apart from a node record.

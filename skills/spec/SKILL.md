@@ -65,11 +65,8 @@ Tell the user which mode was detected and why before proceeding.
 | api | `module.json` → `apis` | **no** | no |
 | data flow | `module.json` → `data_flows` | `flow_*.md`, **required** | yes |
 | test section | `module.json` → `test_sections` | `test_*.md`, **required** | only when `describes` has ≥ 2 entries |
-| impl section | `module.json` → `impl_sections` | `impl_*.md`, required | no |
 
-**Do not author impl sections.** They produce no beads, they duplicate what the arch leaf and the code already carry, and they bind the spec to a language. The type still exists in `module.schema.json` and `bin/spex hash-id` still accepts it only because the existing ones are being folded into arch leaves module by module; see "Deciding what belongs in an arch leaf". Every fact a new impl section would carry belongs either in the component's `arch_*.md` or nowhere.
-
-**Node types that no longer exist:** `milestones` and `test_plan` (with its `scenarios`). Both are gone from `project.json`. `project.schema.json` declares `additionalProperties: false`, so writing either one back is a hard schema failure:
+**Node types that no longer exist:** `impl_sections`, `milestones` and `test_plan` (with its `scenarios`). Impl sections are gone from `module.schema.json`, from `bin/spex hash-id` and from the corpus — every fact one used to carry belongs in the component's `arch_*.md` or nowhere; see "Deciding what belongs in an arch leaf". Milestones and the test plan are gone from `project.json`. `project.schema.json` declares `additionalProperties: false`, so writing either one back is a hard schema failure:
 
 ```
 [schema] project.json :: additional properties 'test_plan' not allowed :: /additionalProperties
@@ -95,14 +92,14 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 ### module.json
 
 - **Required**: `name`
-- **Optional**: `description`, `requirements`, `components`, `apis`, `data_flows`, `test_sections`, `impl_sections` (legacy — do not author)
+- **Optional**: `description`, `requirements`, `components`, `apis`, `data_flows`, `test_sections`
 - Requirements: `id`, `type`, `title`, **`preq_id`** all required — `preq_id` is the identity hash of the project requirement this one derives from. `description`, `depends_on` optional. A module requirement **must not** carry `priority`: the module `requirement` definition sets `additionalProperties: false` and has no such property, so it is a schema error.
 - Components: `id`, `name`, **`content`** required, `content` non-empty (`minLength: 1`); `description`, `implements`, `uses` optional. If users or other systems invoke the module externally, that entry point is a component **and** should also be declared as an `api`.
 - APIs: `id`, `name` required; `description`, `provided_by`, `group` optional. **No `content`.**
 - Data flows: `id`, `name`, **`content`** required and non-empty; `description`, `uses` optional
 - Test sections: `id`, `name`, **`content`** required and non-empty (path to `test_*.md`); `describes` (component IDs) optional
 
-`content` is required and non-empty on component, data_flow, test_section and impl_section. A node with empty `content` is silently skipped by the merkle tree builder, which means it is not a leaf, produces no diff, and cannot be linked to — the schema now rejects it outright rather than letting it disappear.
+`content` is required and non-empty on component, data_flow and test_section. A node with empty `content` is silently skipped by the merkle tree builder, which means it is not a leaf, produces no diff, and cannot be linked to — the schema now rejects it outright rather than letting it disappear.
 
 ### `api` — the external surface node
 
@@ -147,7 +144,6 @@ The hash is `SHA256(identity_string)` truncated to the first 6 bytes (12 hex cha
 | API | `<module>/api/<name>` |
 | Data flow | `<module>/data_flow/<name>` |
 | Test section | `<module>/test_section/<name>` |
-| Impl section (legacy) | `<module>/impl_section/<name>` |
 
 Use `bin/spex hash-id`. It calls the same `schema.IdentityHash` helper the rest of the pipeline uses:
 
@@ -164,10 +160,10 @@ bin/spex hash-id --type module       --name merkle
 Valid `--type` values, and the whole list:
 
 ```
-requirement, component, impl_section, data_flow, test_section, api, module
+requirement, component, data_flow, test_section, api, module
 ```
 
-Anything else exits 1 with `hash-id: unknown type "<x>"; valid types: …`. `--module` is required for `component`, `impl_section`, `data_flow`, `test_section` and `api`; it is omitted for `module` and for project-level requirements, and supplying it to `--type requirement` is what makes the hash module-scoped.
+Anything else exits 1 with `hash-id: unknown type "<x>"; valid types: …`. `--module` is required for `component`, `data_flow`, `test_section` and `api`; it is omitted for `module` and for project-level requirements, and supplying it to `--type requirement` is what makes the hash module-scoped.
 
 **Never hand-write a module-scoped id.** The `id_derivation` checker recomputes every one of them and errors when a declared id is not its own identity hash:
 
@@ -177,7 +173,7 @@ a module-scoped id must equal IdentityHash("demo", "component", "Widget") or the
 cannot be recovered from its hash after removal
 ```
 
-This covers module requirements, components, impl_sections, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
+This covers module requirements, components, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
 
 > **Legacy project requirement hashes — never recompute them.**
 > 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and every `.bead-map.json` record keyed off it, and destroys the lineage of every bead already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
@@ -218,7 +214,6 @@ Write the name the way a caller types it, then check it before committing to it:
 | `provided_by` | api | component (**same module**) | `provided_by: [id, ...]` |
 | `uses` | data flow | component | `uses: [id, ...]` |
 | `describes` | test section | component | `describes: [id, ...]` |
-| `describes` | impl section (legacy) | component | `describes: [id, ...]` |
 | `described_in` | node | markdown leaf | `content: "path.md"` |
 
 `requires_module`, `depends_on` and component `uses` must each stay acyclic; the `dag` checker reports cycles.
@@ -313,7 +308,7 @@ Use this when folding an `impl_*.md` into an arch leaf, and as the standing test
 
 **Preamble, once per component:**
 
-- **P1 — the destination is chosen by requirement, not by `describes`.** The content belongs in the arch leaf of the component that `implements` the requirement the content documents, which is often not a component the impl section names.
+- **P1 — the destination is chosen by requirement, not by `describes`.** The content belongs in the arch leaf of the component that `implements` the requirement the content documents, which was often not a component the retired impl section named.
 - **P2 — read the destination arch leaf to completion first and write down its `##` headings.** Freezing that list before reading the source is what makes arm 2 mechanical.
 - **P3 — the unit of verdict is a `##` section.** The H1 and any prose before the first `##` is one section, `[preamble]`. If a section mixes a language fence with prose that would take a different arm, split it at the fence boundary and record one verdict per part. Splitting is recorded, never silent.
 

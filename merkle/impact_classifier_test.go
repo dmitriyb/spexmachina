@@ -9,7 +9,7 @@ import (
 
 func TestREQ5_Classify_ImplOnly(t *testing.T) {
 	changes := []Change{
-		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
+		{Key: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1"},
 	}
 	names := map[string]string{"mod1": "Alpha"}
 
@@ -122,7 +122,7 @@ func TestREQ5_Classify_StructuralProjectMeta(t *testing.T) {
 
 func TestREQ5_Classify_PreservesChangeFields(t *testing.T) {
 	changes := []Change{
-		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1", OldHash: "aaa", NewHash: "bbb"},
+		{Key: "module/1/test_section/1", Type: Modified, NodeType: "test_section", Module: "mod1", OldHash: "aaa", NewHash: "bbb"},
 	}
 
 	classified := Classify(changes, nil)
@@ -143,15 +143,14 @@ func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 	changes := []Change{
 		{Key: "project/meta", Type: Modified, NodeType: "meta", Module: ""},
 		{Key: "module/1/component/1", Type: Modified, NodeType: "component", Module: "mod1"},
-		{Key: "module/1/impl_section/1", Type: Modified, NodeType: "impl_section", Module: "mod1"},
 		{Key: "module/2/data_flow/1", Type: Added, NodeType: "data_flow", Module: "mod2"},
 	}
 	names := map[string]string{"mod1": "Alpha", "mod2": "Beta"}
 
 	classified := Classify(changes, names)
 
-	if len(classified) != 4 {
-		t.Fatalf("expected 4 classified changes, got %d", len(classified))
+	if len(classified) != 3 {
+		t.Fatalf("expected 3 classified changes, got %d", len(classified))
 	}
 
 	expected := []struct {
@@ -160,7 +159,6 @@ func TestREQ5_Classify_MultipleChanges(t *testing.T) {
 	}{
 		{Structural, ""},
 		{ArchImpl, "Alpha"},
-		{ImplOnly, "Alpha"},
 		{Contract, "Beta"},
 	}
 
@@ -181,9 +179,9 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// Modify a component file and an impl file
+	// Modify a component file and a test file
 	writeFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Modified arch\n")
-	writeFile(t, filepath.Join(specDir, "alpha"), "impl_comp1.md", "# Modified impl\n")
+	writeFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Modified tests\n")
 	current, err := BuildTree(specDir)
 	if err != nil {
 		t.Fatalf("BuildTree: %v", err)
@@ -198,7 +196,7 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 	}
 
 	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
-	impl1Key := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	test1Key := schema.IdentityHash("alpha", "test_section", "Test1")
 
 	// Should have at least one arch_impl and one impl_only
 	var hasArch, hasImpl bool
@@ -209,7 +207,7 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 				t.Errorf("expected module Alpha for component change, got %q", c.Module)
 			}
 		}
-		if c.Impact == ImplOnly && c.Key == impl1Key {
+		if c.Impact == ImplOnly && c.Key == test1Key {
 			hasImpl = true
 		}
 	}
@@ -217,7 +215,7 @@ func TestREQ5_Classify_Integration_WithDiff(t *testing.T) {
 		t.Errorf("expected arch_impl change for %s", comp1Key)
 	}
 	if !hasImpl {
-		t.Errorf("expected impl_only change for %s", impl1Key)
+		t.Errorf("expected impl_only change for %s", test1Key)
 	}
 }
 

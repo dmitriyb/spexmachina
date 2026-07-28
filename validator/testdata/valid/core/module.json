@@ -10,16 +10,6 @@
     }
   ],
   "description": "Core module spec.",
-  "impl_sections": [
-    {
-      "content": "impl_widget.md",
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Widget implementation"
-    }
-  ],
   "name": "core",
   "requirements": [
     {

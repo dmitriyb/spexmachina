@@ -14,8 +14,8 @@ import (
 // The syntax is [[<identity hash>|<display text>]]: a 12-character hex
 // identity hash, a pipe, and free-form display text that is never checked.
 // Name-based links are rejected — a name carries no <type> segment, so it
-// cannot be turned back into an identity hash, and `Identity hash algorithm`
-// is already both a requirement and an impl_section in one module.
+// cannot be turned back into an identity hash, and one module may carry the
+// same name on nodes of two different types.
 //
 // Targets resolve against the merkle leaf keys, collected exactly as
 // ingest's refresh pathway collects them. That is what makes module nodes
@@ -84,11 +84,6 @@ func checkModuleLinks(specDir string, mod schema.Module, modSpec *schema.ModuleS
 	for _, c := range modSpec.Components {
 		if c.Content != "" {
 			contents = append(contents, c.Content)
-		}
-	}
-	for _, s := range modSpec.ImplSections {
-		if s.Content != "" {
-			contents = append(contents, s.Content)
 		}
 	}
 	for _, d := range modSpec.DataFlows {

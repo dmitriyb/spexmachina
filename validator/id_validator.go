@@ -68,7 +68,6 @@ func checkModuleUniqueness(modName string, mod *schema.ModuleSpec) []ValidationE
 
 	errs = append(errs, checkDuplicateIDs(prefix+"/requirements", moduleReqIDs(mod.Requirements))...)
 	errs = append(errs, checkDuplicateIDs(prefix+"/components", compIDs(mod.Components))...)
-	errs = append(errs, checkDuplicateIDs(prefix+"/impl_sections", implIDs(mod.ImplSections))...)
 	errs = append(errs, checkDuplicateIDs(prefix+"/data_flows", flowIDs(mod.DataFlows))...)
 	errs = append(errs, checkDuplicateIDs(prefix+"/test_sections", testSectionIDs(mod.TestSections))...)
 	errs = append(errs, checkDuplicateIDs(prefix+"/apis", apiIDs(mod.APIs))...)
@@ -291,19 +290,6 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 		}
 	}
 
-	for _, sec := range mod.ImplSections {
-		for _, descID := range sec.Describes {
-			if !compSet[descID] {
-				errs = append(errs, ValidationError{
-					Check:    "id",
-					Severity: "error",
-					Path:     fmt.Sprintf("%s/impl_sections/%s", prefix, sec.ID),
-					Message:  fmt.Sprintf("describes references non-existent component %s", descID),
-				})
-			}
-		}
-	}
-
 	for _, flow := range mod.DataFlows {
 		for _, useID := range flow.Uses {
 			if !compSet[useID] {
@@ -417,14 +403,6 @@ func compIDs(comps []schema.Component) []string {
 	ids := make([]string, len(comps))
 	for i, c := range comps {
 		ids[i] = c.ID
-	}
-	return ids
-}
-
-func implIDs(secs []schema.ImplSection) []string {
-	ids := make([]string, len(secs))
-	for i, s := range secs {
-		ids[i] = s.ID
 	}
 	return ids
 }

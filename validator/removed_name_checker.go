@@ -86,8 +86,8 @@ type RemovedNameReport struct {
 // the diff reports as removed, and returns one finding per node whose name
 // survives somewhere, plus a note for every removal it could not fully check.
 //
-// Only api and component names are searched. The impl_section names are
-// generic noun phrases — "Hash computation" alone survives sixteen times in
+// Only api and component names are searched. Other node types carry generic
+// noun phrases for names — "Hash computation" alone survives sixteen times in
 // another module's test leaves — and searching them would report the corpus
 // as broken on every removal.
 //

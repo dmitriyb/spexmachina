@@ -57,7 +57,7 @@ is a flag, a file on disk or a stream.
 
 The refresh-mode pathway absorbs drift that owes no bead work — content edits
 to any leaf, plus additions and removals of the node types that produce no
-bead (requirements, impl_sections and apis in either direction) and component
+bead (requirements and apis in either direction) and component
 *removals* — without any bead lifecycle running. Typical caller: a follow-up
 skill that reads a proposal marked `mode: refresh` and invokes
 `spex ingest --mode refresh` with an empty changeset/receipts pair. See

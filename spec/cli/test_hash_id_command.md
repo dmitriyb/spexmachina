@@ -46,7 +46,7 @@ S6 asserted that `--type scenario` produced `test_plan/scenario/<name>` and exit
 
 ### S7: All module-scoped types produce correct hashes
 
-For each type in `[component, impl_section, data_flow, test_section, api]`:
+For each type in `[component, data_flow, test_section, api]`:
 
 Run `spex hash-id --module alpha --type <type> --name Foo`.
 

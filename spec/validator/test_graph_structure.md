@@ -12,11 +12,11 @@ All scenarios use a temporary spec directory with a valid baseline project. The 
 tmp/spec/
   project.json                 # 3 modules: alpha, beta, gamma
   alpha/
-    module.json                # 3 requirements (1,2,3), 2 components (1,2), 2 impl_sections (1,2)
+    module.json                # 3 requirements (1,2,3), 2 components (1,2), 2 test_sections (1,2)
   beta/
-    module.json                # 2 requirements (1,2), 1 component (1), 1 impl_section (1)
+    module.json                # 2 requirements (1,2), 1 component (1), 1 test_section (1)
   gamma/
-    module.json                # 1 requirement (1), 1 component (1), 1 impl_section (1)
+    module.json                # 1 requirement (1), 1 component (1), 1 test_section (1)
 ```
 
 ### Dependency Baseline
@@ -103,9 +103,9 @@ tmp/spec/
 **When** `CheckIDs(project, modules)` is called.
 **Then** one error identifying duplicate component ID `1` in alpha.
 
-#### I4: Duplicate impl_section IDs within a module
+#### I4: Duplicate test_section IDs within a module
 
-**Given** alpha has two impl_sections both with `id: 1`.
+**Given** alpha has two test_sections both with `id: 1`.
 **When** `CheckIDs(project, modules)` is called.
 **Then** one error identifying the duplicate.
 
@@ -130,9 +130,9 @@ tmp/spec/
 **When** `CheckIDs(project, modules)` is called.
 **Then** one error identifying the dangling `uses` reference.
 
-#### I8: impl_section `describes` references non-existent component
+#### I8: test_section `describes` references non-existent component
 
-**Given** alpha's impl_section 1 has `describes: [77]` and no component 77 exists.
+**Given** alpha's test_section 1 has `describes: [77]` and no component 77 exists.
 **When** `CheckIDs(project, modules)` is called.
 **Then** one error identifying the dangling `describes` reference.
 
@@ -180,13 +180,13 @@ tmp/spec/
 
 ### E1: Module with empty arrays
 
-**Given** alpha has `requirements: []`, `components: []`, `impl_sections: []`.
+**Given** alpha has `requirements: []`, `components: []`, `test_sections: []`.
 **When** both checkers run.
 **Then** DAGChecker: zero errors (no edges to form cycles). IDValidator: zero errors (no IDs to duplicate or reference).
 
 ### E2: Identical identity hash collision across different array types is impossible by construction
 
-**Given** alpha has a requirement, component, and impl_section all named `"Foo"`. Each gets a different identity hash because the type segment differs (`alpha/requirement/Foo` vs `alpha/component/Foo` vs `alpha/impl_section/Foo`).
+**Given** alpha has a requirement, component, and test_section all named `"Foo"`. Each gets a different identity hash because the type segment differs (`alpha/requirement/Foo` vs `alpha/component/Foo` vs `alpha/test_section/Foo`).
 **When** `CheckIDs(project, modules)` is called.
 **Then** zero errors. The identity hash function takes the node type as a part, so two nodes with the same name in different array types always produce different hashes. Uniqueness is still checked per array (defense in depth against hand-edited collisions), but cross-array collisions cannot occur naturally.
 
@@ -216,8 +216,3 @@ tmp/spec/
 
 ---
 
-### E5: test_section `describes` references non-existent component
-
-**Given** alpha has a test_section with `describes: [99]` and no component 99 exists.
-**When** `CheckIDs(project, modules)` is called.
-**Then** one error for the dangling test_section `describes` reference. IDValidator must walk test_sections in addition to impl_sections.

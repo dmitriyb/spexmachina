@@ -14,7 +14,6 @@ import (
 type ContextResult struct {
 	Record     Record   `json:"record"`
 	ArchFile   string   `json:"arch_file"`
-	ImplFiles  []string `json:"impl_files"`
 	TestFiles  []string `json:"test_files"`
 	FlowFiles  []string `json:"flow_files"`
 	ModuleFile string   `json:"module_file"`
@@ -44,13 +43,6 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 
 	modDir := filepath.Join(specDir, record.Module)
 
-	var implFiles []string
-	for _, sec := range ms.ImplSections {
-		if slices.Contains(sec.Describes, compHash) {
-			implFiles = append(implFiles, filepath.Join(modDir, sec.Content))
-		}
-	}
-
 	var testFiles []string
 	for _, sec := range ms.TestSections {
 		if slices.Contains(sec.Describes, compHash) {
@@ -68,7 +60,6 @@ func ResolveContext(specDir string, record Record) (ContextResult, error) {
 	return ContextResult{
 		Record:     record,
 		ArchFile:   record.ContentFile,
-		ImplFiles:  implFiles,
 		TestFiles:  testFiles,
 		FlowFiles:  flowFiles,
 		ModuleFile: modPath,

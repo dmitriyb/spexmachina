@@ -41,9 +41,6 @@ func fixtureGraph() *SpecGraph {
 						{ID: "c1c1c1c1c1c1", Name: "Parser", Description: "Parses input into AST.", Content: "arch_parser.md", Implements: []string{"a1a1a1a1a1a1"}},
 						{ID: "c2c2c2c2c2c2", Name: "Builder", Description: "Builds output from AST.", Content: "arch_builder.md", Implements: []string{"a2a2a2a2a2a2"}, Uses: []string{"c1c1c1c1c1c1"}},
 					},
-					ImplSections: []schema.ImplSection{
-						{ID: "d1d1d1d1d1d1", Name: "Parsing Implementation", Content: "impl_parsing.md", Describes: []string{"c1c1c1c1c1c1"}},
-					},
 					DataFlows: []schema.DataFlow{
 						{ID: "f1f1f1f1f1f1", Name: "Build Pipeline", Description: "Parse then build.", Content: "flow_build_pipeline.md", Uses: []string{"c1c1c1c1c1c1", "c2c2c2c2c2c2"}},
 					},
@@ -51,7 +48,6 @@ func fixtureGraph() *SpecGraph {
 				Content: map[string]string{
 					"arch_parser.md":         "# Parser\n\nParses input into AST.\n",
 					"arch_builder.md":        "# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first.\n",
-					"impl_parsing.md":        "# Parsing Implementation\n\nUse recursive descent.\n",
 					"flow_build_pipeline.md": "# Build Pipeline\n\nParse then build.\n",
 				},
 			},
@@ -66,13 +62,9 @@ func fixtureGraph() *SpecGraph {
 					Components: []schema.Component{
 						{ID: "c3c3c3c3c3c3", Name: "Consumer", Description: "Consumes built output.", Content: "arch_consumer.md", Implements: []string{"b1b1b1b1b1b1"}},
 					},
-					ImplSections: []schema.ImplSection{
-						{ID: "d2d2d2d2d2d2", Name: "Consumption Implementation", Content: "impl_consumption.md", Describes: []string{"c3c3c3c3c3c3"}},
-					},
 				},
 				Content: map[string]string{
 					"arch_consumer.md":    "# Consumer\n\nConsumes built output.\n",
-					"impl_consumption.md": "# Consumption Implementation\n\nConsume the output.\n",
 				},
 			},
 		},
@@ -97,7 +89,6 @@ func TestFR1_M1_MarkdownStructureAndOrdering(t *testing.T) {
 		"### Non-functional",
 		"## Module: alpha",
 		"### Architecture",
-		"### Implementation",
 		"### Data Flows",
 		"## Module: beta",
 	}
@@ -405,7 +396,6 @@ func TestFR2_D3_NodeShapes(t *testing.T) {
 	}{
 		{`"a1a1a1a1a1a1"`, "shape=box"},
 		{`"c1c1c1c1c1c1"`, "shape=component"},
-		{`"d1d1d1d1d1d1"`, "shape=note"},
 		{`"f1f1f1f1f1f1"`, "shape=ellipse"},
 	}
 	for _, tt := range tests {
@@ -482,7 +472,6 @@ func TestFR2_D6_ValidNodeIDs(t *testing.T) {
 		`"c2c2c2c2c2c2"`, // Builder component
 		`"a1a1a1a1a1a1"`, // alpha Parse requirement
 		`"a2a2a2a2a2a2"`, // alpha Build requirement
-		`"d1d1d1d1d1d1"`, // alpha impl_section
 		`"f1f1f1f1f1f1"`, // alpha data_flow
 		`"c3c3c3c3c3c3"`, // Consumer component
 		`"b1b1b1b1b1b1"`, // beta Consume requirement
@@ -497,8 +486,8 @@ func TestFR2_D6_ValidNodeIDs(t *testing.T) {
 
 	// No composite <module>_<type>_<hash> identifier survives.
 	for _, legacy := range []string{
-		"alpha_comp_", "alpha_req_", "alpha_impl_", "alpha_flow_",
-		"beta_comp_", "beta_req_", "beta_impl_", "preq_112233445566",
+		"alpha_comp_", "alpha_req_", "alpha_flow_",
+		"beta_comp_", "beta_req_", "preq_112233445566",
 	} {
 		if strings.Contains(out, legacy) {
 			t.Errorf("legacy composite node ID %q still emitted:\n%s", legacy, out)
@@ -629,11 +618,9 @@ func TestFR3_J3_SyntheticNodeIDs(t *testing.T) {
 		"module:alpha:req:a2a2a2a2a2a2":  true,
 		"module:alpha:comp:c1c1c1c1c1c1": true,
 		"module:alpha:comp:c2c2c2c2c2c2": true,
-		"module:alpha:impl:d1d1d1d1d1d1": true,
 		"module:alpha:flow:f1f1f1f1f1f1": true,
 		"module:beta:req:b1b1b1b1b1b1":   true,
 		"module:beta:comp:c3c3c3c3c3c3":  true,
-		"module:beta:impl:d2d2d2d2d2d2":  true,
 	}
 
 	nodeIDs := make(map[string]bool)
@@ -691,7 +678,6 @@ func TestFR3_J5_AllEdgeTypes(t *testing.T) {
 	expectedEdges := []GraphEdge{
 		{From: "module:alpha:comp:c1c1c1c1c1c1", To: "module:alpha:req:a1a1a1a1a1a1", Type: "implements"},
 		{From: "module:alpha:comp:c2c2c2c2c2c2", To: "module:alpha:comp:c1c1c1c1c1c1", Type: "uses"},
-		{From: "module:alpha:impl:d1d1d1d1d1d1", To: "module:alpha:comp:c1c1c1c1c1c1", Type: "describes"},
 		{From: "module:beta", To: "module:alpha", Type: "requires_module"},
 	}
 
@@ -1013,9 +999,9 @@ func TestFR3_J8_NodeCount(t *testing.T) {
 	}
 	json.Unmarshal(buf.Bytes(), &result)
 
-	// 1 project + 2 modules + 3 proj reqs + (2+1) mod reqs + (2+1) comps + (1+1) impls + 1 flow = 15
-	if len(result.Nodes) != 15 {
-		t.Fatalf("want 15 nodes, got %d", len(result.Nodes))
+	// 1 project + 2 modules + 3 proj reqs + (2+1) mod reqs + (2+1) comps + 1 flow = 13
+	if len(result.Nodes) != 13 {
+		t.Fatalf("want 13 nodes, got %d", len(result.Nodes))
 	}
 }
 
@@ -1221,7 +1207,6 @@ func surfaceGraph() *SpecGraph {
 	projReqID := schema.IdentityHash("project", "requirement", "Expose a surface")
 	reqID := schema.IdentityHash(mod, "requirement", "Serve requests")
 	compID := schema.IdentityHash(mod, "component", "Server")
-	implID := schema.IdentityHash(mod, "impl_section", "Request loop")
 	flowID := schema.IdentityHash(mod, "data_flow", "Request path")
 	testID := schema.IdentityHash(mod, "test_section", "Server tests")
 
@@ -1240,9 +1225,6 @@ func surfaceGraph() *SpecGraph {
 				},
 				Components: []schema.Component{
 					{ID: compID, Name: "Server", Description: "Serves requests.", Content: "arch_server.md", Implements: []string{reqID}},
-				},
-				ImplSections: []schema.ImplSection{
-					{ID: implID, Name: "Request loop", Content: "impl_request_loop.md", Describes: []string{compID}},
 				},
 				DataFlows: []schema.DataFlow{
 					{ID: flowID, Name: "Request path", Description: "Request in, response out.", Content: "flow_request_path.md", Uses: []string{compID}},
@@ -1267,7 +1249,6 @@ func surfaceGraph() *SpecGraph {
 			},
 			Content: map[string]string{
 				"arch_server.md":       "# Server\n\nServes requests.\n",
-				"impl_request_loop.md": "# Request loop\n\nAccept, dispatch, reply.\n",
 				"flow_request_path.md": "# Request path\n\nRequest in, response out.\n",
 				"test_server.md":       "# Server tests\n\nDrive the server end to end.\n",
 			},
@@ -1391,7 +1372,6 @@ func TestFR3_J10_SlimBareIdentityHashes(t *testing.T) {
 		schema.IdentityHash("project", "requirement", "Expose a surface"): "requirement",
 		schema.IdentityHash(mod, "requirement", "Serve requests"):         "requirement",
 		schema.IdentityHash(mod, "component", "Server"):                   "component",
-		schema.IdentityHash(mod, "impl_section", "Request loop"):          "impl_section",
 		schema.IdentityHash(mod, "data_flow", "Request path"):             "data_flow",
 		schema.IdentityHash(mod, "test_section", "Server tests"):          "test_section",
 		schema.IdentityHash(mod, "api", "spex serve"):                     "api",
@@ -1493,12 +1473,10 @@ func TestFR3_J15_SlimEmitsDeclaredIDs(t *testing.T) {
 		{ID: "a2a2a2a2a2a2", Type: "requirement", Name: "Build", Module: "alpha"},
 		{ID: "c1c1c1c1c1c1", Type: "component", Name: "Parser", Module: "alpha"},
 		{ID: "c2c2c2c2c2c2", Type: "component", Name: "Builder", Module: "alpha"},
-		{ID: "d1d1d1d1d1d1", Type: "impl_section", Name: "Parsing Implementation", Module: "alpha"},
 		{ID: "f1f1f1f1f1f1", Type: "data_flow", Name: "Build Pipeline", Module: "alpha"},
 		{ID: "222222222222", Type: "module", Name: "beta"},
 		{ID: "b1b1b1b1b1b1", Type: "requirement", Name: "Consume", Module: "beta"},
 		{ID: "c3c3c3c3c3c3", Type: "component", Name: "Consumer", Module: "beta"},
-		{ID: "d2d2d2d2d2d2", Type: "impl_section", Name: "Consumption Implementation", Module: "beta"},
 	}
 	if len(got.Nodes) != len(want) {
 		t.Fatalf("want %d slim nodes, got %d: %+v", len(want), len(got.Nodes), got.Nodes)
@@ -1520,7 +1498,6 @@ func TestFR3_J15_SlimEmitsDeclaredIDs(t *testing.T) {
 		{"111111111111", []string{"module", "alpha"}},
 		{"a1a1a1a1a1a1", []string{"alpha", "requirement", "Parse"}},
 		{"c1c1c1c1c1c1", []string{"alpha", "component", "Parser"}},
-		{"d1d1d1d1d1d1", []string{"alpha", "impl_section", "Parsing Implementation"}},
 		{"f1f1f1f1f1f1", []string{"alpha", "data_flow", "Build Pipeline"}},
 	} {
 		if schema.IdentityHash(tc.identity...) == tc.id {
@@ -1654,7 +1631,6 @@ func TestFR2_D8_DOTNodeIDsMatchHashID(t *testing.T) {
 		{"project requirement", []string{"project", "requirement", "Expose a surface"}},
 		{"module requirement", []string{mod, "requirement", "Serve requests"}},
 		{"component", []string{mod, "component", "Server"}},
-		{"impl_section", []string{mod, "impl_section", "Request loop"}},
 		{"data_flow", []string{mod, "data_flow", "Request path"}},
 		{"api", []string{mod, "api", "spex serve"}},
 	} {
@@ -1665,9 +1641,9 @@ func TestFR2_D8_DOTNodeIDsMatchHashID(t *testing.T) {
 		}
 	}
 	// 1 project requirement + 1 module + 1 requirement + 1 component +
-	// 1 impl_section + 1 data_flow + 2 apis.
-	if len(declared) != 8 {
-		t.Errorf("want 8 node declarations, got %d: %v", len(declared), declared)
+	// 1 data_flow + 2 apis.
+	if len(declared) != 7 {
+		t.Errorf("want 7 node declarations, got %d: %v", len(declared), declared)
 	}
 
 	// The implements edge joins two hash-id values and nothing else.
@@ -1742,12 +1718,10 @@ func TestFR2_D10_DOTDeclaresDeclaredIDs(t *testing.T) {
 		"111111111111",                 // module alpha
 		"a1a1a1a1a1a1", "a2a2a2a2a2a2", // alpha requirements
 		"c1c1c1c1c1c1", "c2c2c2c2c2c2", // alpha components
-		"d1d1d1d1d1d1", // alpha impl_section
 		"f1f1f1f1f1f1", // alpha data_flow
 		"222222222222", // module beta
 		"b1b1b1b1b1b1", // beta requirement
 		"c3c3c3c3c3c3", // beta component
-		"d2d2d2d2d2d2", // beta impl_section
 	}
 	for _, id := range want {
 		if !declared[id] {
@@ -1792,7 +1766,6 @@ func TestFR1_M7_APIsInMarkdown(t *testing.T) {
 		"### Requirements",
 		"### APIs",
 		"### Architecture",
-		"### Implementation",
 		"### Data Flows",
 	} {
 		idx := strings.Index(out, heading)

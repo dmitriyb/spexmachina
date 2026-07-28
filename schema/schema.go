@@ -4,7 +4,7 @@
 // The JSON Schema files are embedded and accessible via [ProjectSchema] and
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
-// Node types: requirement, component, impl_section, data_flow, api, module, test_section.
+// Node types: requirement, component, data_flow, api, module, test_section.
 // Edge types: implements, uses, describes, described_in, provided_by, depends_on, requires_module.
 package schema
 
@@ -133,7 +133,6 @@ type ModuleSpec struct {
 	Description  string              `json:"description,omitempty"`
 	Requirements []ModuleRequirement `json:"requirements,omitempty"`
 	Components   []Component         `json:"components,omitempty"`
-	ImplSections []ImplSection       `json:"impl_sections,omitempty"`
 	DataFlows    []DataFlow          `json:"data_flows,omitempty"`
 	TestSections []TestSection       `json:"test_sections,omitempty"`
 	APIs         []API               `json:"apis,omitempty"`
@@ -167,14 +166,6 @@ type Component struct {
 	Content     string   `json:"content,omitempty"`
 	Implements  []string `json:"implements,omitempty"`
 	Uses        []string `json:"uses,omitempty"`
-}
-
-// ImplSection represents an implementation section in a module.
-type ImplSection struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Content   string   `json:"content,omitempty"`
-	Describes []string `json:"describes,omitempty"`
 }
 
 // API represents an external surface entry point exposed by a module: a CLI

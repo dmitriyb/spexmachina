@@ -18,7 +18,7 @@ The following fixture files live in `schema/testdata/`:
 
 - `valid_project.json` — a full project.json with the optional fields populated (`description`, `version`, requirements carrying `priority` and `depends_on`, modules with inter-module dependencies).
 - `minimal_project.json` — the smallest valid project.json (`name` + one module).
-- `valid_module.json` — a full module.json with the optional arrays populated (requirements with preq_id, components with implements/uses, impl_sections, data_flows, test_sections, apis).
+- `valid_module.json` — a full module.json with the optional arrays populated (requirements with preq_id, components with implements/uses, data_flows, test_sections, apis).
 - `minimal_module.json` — the smallest valid module.json (just `name`).
 
 ### Dependencies
@@ -73,8 +73,8 @@ The following fixture files live in `schema/testdata/`:
 - `type` field equals `"object"`.
 - `required` array contains `"name"`.
 - `additionalProperties` is `false`.
-- `properties` object contains keys: `name`, `description`, `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`, `apis`.
-- `$defs` object contains keys: `requirement`, `component`, `impl_section`, `data_flow`, `test_section`, `api`.
+- `properties` object contains keys: `name`, `description`, `requirements`, `components`, `data_flows`, `test_sections`, `apis`.
+- `$defs` object contains keys: `requirement`, `component`, `data_flow`, `test_section`, `api`.
 
 **Verifies:** The embedded file is the actual module schema and includes the `test_sections`/`test_section` and `apis`/`api` additions.
 

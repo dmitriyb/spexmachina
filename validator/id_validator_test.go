@@ -53,20 +53,20 @@ func TestREQ5_DuplicateCompIDsInModule(t *testing.T) {
 	}
 }
 
-// --- I4: Duplicate impl_section IDs within a module ---
+// --- I4: Duplicate test_section IDs within a module ---
 
-func TestREQ5_DuplicateImplSectionIDs(t *testing.T) {
-	errs := CheckIDs(filepath.Join("testdata", "id_dup_impl"))
+func TestREQ5_DuplicateTestSectionIDs(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_dup_testsec"))
 	found := false
 	for _, e := range errs {
-		if strings.Contains(e.Path, "core/module.json:/impl_sections") &&
+		if strings.Contains(e.Path, "core/module.json:/test_sections") &&
 			strings.Contains(e.Message, "duplicate ID 000000000001") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected duplicate impl_section ID error, got none")
+		t.Fatal("expected duplicate test_section ID error, got none")
 	}
 }
 
@@ -120,20 +120,20 @@ func TestREQ6_DanglingUses(t *testing.T) {
 	}
 }
 
-// --- I8: impl_section describes references non-existent component ---
+// --- I8: test_section describes references non-existent component ---
 
 func TestREQ6_DanglingDescribes(t *testing.T) {
 	errs := CheckIDs(filepath.Join("testdata", "id_dangling"))
 	found := false
 	for _, e := range errs {
-		if strings.Contains(e.Path, "impl_sections") &&
+		if strings.Contains(e.Path, "test_sections") &&
 			strings.Contains(e.Message, "describes references non-existent component 000000000099") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Fatal("expected dangling impl_section describes error, got none")
+		t.Fatal("expected dangling test_section describes error, got none")
 	}
 }
 
@@ -296,7 +296,7 @@ func TestREQ13_PriorityOutOfRange(t *testing.T) {
 
 func TestREQ5_SameIDacrossTypesIsValid(t *testing.T) {
 	// The id_valid fixture already uses ID 1 for requirements, components,
-	// impl_sections, data_flows, and test_sections. This is valid because
+	// data_flows and test_sections. This is valid because
 	// IDs only need to be unique within their own array type.
 	errs := CheckIDs(filepath.Join("testdata", "id_valid"))
 	if len(errs) > 0 {
@@ -388,7 +388,7 @@ func TestREQ5_DistinctAPINamesValid(t *testing.T) {
 // --- A3: api.provided_by is module-local ---
 
 // TestREQ6_DanglingProvidedBy: provided_by got no referential-integrity check
-// at all when apis shipped, while component.uses, impl_section.describes,
+// at all when apis shipped, while component.uses, test_section.describes,
 // test_section.describes and data_flow.uses were all checked against the
 // module's component set.
 func TestREQ6_DanglingProvidedBy(t *testing.T) {

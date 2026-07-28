@@ -55,7 +55,7 @@ func Classify(changes []Change, moduleNames map[string]string) []ClassifiedChang
 // classifyNodeType determines the impact level from node metadata.
 func classifyNodeType(nodeType string) ImpactLevel {
 	switch nodeType {
-	case "impl_section", "test_section":
+	case "test_section":
 		return ImplOnly
 	// Both are contract surfaces: data_flow between components, api to callers.
 	case "data_flow", "api":

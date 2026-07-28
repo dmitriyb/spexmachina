@@ -8,15 +8,6 @@
       "name": "CompA"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Impl A"
-    }
-  ],
   "name": "alpha",
   "requirements": [
     {

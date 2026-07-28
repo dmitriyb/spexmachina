@@ -12,7 +12,7 @@
 
 | Level | Condition | Meaning |
 |-------|-----------|---------|
-| `impl_only` | Node type is `impl_section` or `test_section` | Implementation detail changed, architecture stable |
+| `impl_only` | Node type is `test_section` | Implementation detail changed, architecture stable |
 | `contract` | Node type is `data_flow` or `api` | A surface shared beyond one component changed — for a data_flow, every component in its `uses` array must be updated in lockstep |
 | `arch_impl` | Node type is `component` | Architecture changed, dependent modules may be affected |
 | `structural` | Node type is `meta` or `requirement` | Spec structure changed — new/removed nodes, changed edges, changed requirements |
@@ -31,7 +31,7 @@ The module association already travels with each change from [[cb262b280963|Diff
 
 Classification reads the node metadata the DiffEngine attached to each change — its `node_type` and its `module` — and never a path:
 
-1. If a change's `node_type` is `impl_section` or `test_section` → `impl_only`
+1. If a change's `node_type` is `test_section` → `impl_only`
 2. If it is `data_flow` or `api` → `contract`
 3. If it is `component` → `arch_impl`
 4. If it is `meta` (module.json or project.json) → `structural`

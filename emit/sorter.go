@@ -50,9 +50,7 @@ func (s *Sorter) Sort(creates []CreateAction) ([]OrderedOp, map[string]string, e
 
 // tierOf maps a spec node type to its emit tier. Unknown types are an
 // error: every CreateAction reaching the sorter must come from impact's
-// classifier and so must carry a tier-able type. impl_section is
-// rejected because it is never independently emitted (impl sections
-// belong to a component).
+// classifier and so must carry a tier-able type.
 func tierOf(nodeType string) (int, error) {
 	switch nodeType {
 	case "proposal":

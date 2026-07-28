@@ -20,12 +20,11 @@ A change with no existing bead is gated by its node type before the state transi
 | `data_flow` | yes (task) | cross-component contract; the gate asks nothing further of it |
 | `test_section`, `len(describes) >= 2` | yes (task) | cross-component integration test, needs its own bead |
 | `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead |
-| `impl_section` | no | implementation detail; owned by the component bead |
 | `api` | no | declared external surface; the components in its `provided_by` array carry the work |
 | `meta`, `requirement` | no | filtered upstream by NodeMatcher (`structural` skip) |
 | `module` | yes, but the row is dead | admitted, yet no change ever carries this node type — see below |
 
-The `module` row admits a node type that never arrives. A diff reports leaves and nothing else, and the node types a leaf is ever given are `meta`, `requirement`, `api`, `component`, `data_flow`, `test_section` and `impl_section`; a module is an interior node of the merkle tree, so it is never diffed as a leaf and no change reaches this gate carrying `module`. The row is therefore unreachable rather than wrong, and no `module` action is ever produced. It is listed all the same, because the gate does admit it: a table that quietly left it out would disagree with the gate it documents, and with the flow leaf, whose shorter gating table carries the same `module` row for the same reason.
+The `module` row admits a node type that never arrives. A diff reports leaves and nothing else, and the node types a leaf is ever given are `meta`, `requirement`, `api`, `component`, `data_flow` and `test_section`; a module is an interior node of the merkle tree, so it is never diffed as a leaf and no change reaches this gate carrying `module`. The row is therefore unreachable rather than wrong, and no `module` action is ever produced. It is listed all the same, because the gate does admit it: a table that quietly left it out would disagree with the gate it documents, and with the flow leaf, whose shorter gating table carries the same `module` row for the same reason.
 
 The node-type half of that table is consulted on one path only — the unmatched changes NodeMatcher hands over, those with no `.bead-map.json` record. The matched and orphaned paths walk records rather than changes, and a record exists only where a create once ran, so a type the gate has always rejected can never have acquired one and there is nothing there for a gate to reject. The two halves hold each other up: with no record only the unmatched path is reachable, the unmatched path drops the change, and so no record is ever written.
 

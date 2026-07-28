@@ -350,9 +350,9 @@ func TestREQ8_C11_NoStructuralOrRequirementChanges(t *testing.T) {
 
 	implOnly := ClassifiedChange{
 		Change: Change{
-			Key:      schema.IdentityHash("alpha", "impl_section", "Impl1"),
+			Key:      schema.IdentityHash("alpha", "test_section", "Test1"),
 			Type:     Modified,
-			NodeType: "impl_section",
+			NodeType: "test_section",
 			Module:   fx.alphaHash,
 		},
 		Impact: ImplOnly,
@@ -620,9 +620,6 @@ func collectIdentityHashes(t *testing.T, specDir string) map[string]bool {
 		}
 		for _, c := range ms.Components {
 			set[c.ID] = true
-		}
-		for _, s := range ms.ImplSections {
-			set[s.ID] = true
 		}
 		for _, f := range ms.DataFlows {
 			set[f.ID] = true

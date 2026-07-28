@@ -25,9 +25,9 @@ that was wrong, or cleans up a section that has gone out of date. Content
 modifications are never gated, whatever leaf they land on.
 
 **Structural additions and removals of node types that produce no bead** —
-requirements, impl_sections and apis in either direction, plus component
-*removals*. Declaring a requirement, splitting an impl section, or adding
-an api creates nothing in the tracker, so baselining it costs nothing.
+requirements and apis in either direction, plus component *removals*.
+Declaring a requirement or adding an api creates nothing in the tracker, so
+baselining it costs nothing.
 
 Each of these leaves the bead-map's records semantically valid — same
 beads, same scope — but with stale `spec_hash` fields. Without refresh the
@@ -95,7 +95,6 @@ structural gate.
 | Node type | `added` | `removed` |
 |-----------|---------|-----------|
 | `requirement`   | absorbed | absorbed |
-| `impl_section`  | absorbed | absorbed |
 | `api`           | absorbed | absorbed |
 | `component`     | **refused** | absorbed |
 | `data_flow`, `test_section`, `meta`, `module` | refused | refused |

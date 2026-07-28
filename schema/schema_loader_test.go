@@ -40,7 +40,6 @@ func TestFR10_IH2_IdentityHashMatchesSchemaPattern(t *testing.T) {
 		{"schema", "component", "ProjectSchema"},
 		{"schema", "component", "ModuleSchema"},
 		{"schema", "component", "SchemaLoader"},
-		{"schema", "impl_section", "Schema definitions"},
 		{"schema", "data_flow", "ValidateSpec"},
 		{"schema", "test_section", "Schema validation tests"},
 		{"validator", "component", "DAGChecker"},
@@ -237,14 +236,14 @@ func TestFR3_S4_ModuleSchemaStructure(t *testing.T) {
 	}
 
 	props, _ := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "requirements", "components", "impl_sections", "data_flows", "test_sections", "apis"} {
+	for _, key := range []string{"name", "description", "requirements", "components", "data_flows", "test_sections", "apis"} {
 		if props[key] == nil {
 			t.Errorf("properties missing %q", key)
 		}
 	}
 
 	defs, _ := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "component", "impl_section", "data_flow", "test_section", "api"} {
+	for _, key := range []string{"requirement", "component", "data_flow", "test_section", "api"} {
 		if defs[key] == nil {
 			t.Errorf("$defs missing %q", key)
 		}

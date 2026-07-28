@@ -28,7 +28,7 @@ A worked example: a component's `id` field is `abc123def456`. The merkle tree bu
 
 Changes with `impact: "structural"` (the synthetic `meta/project` and `meta/<module-hash>` leaves from the merkle tree) are not matched against bead-map records. They produce no matches, no unmatched entries, and no orphans. They are filtered out before any lookup runs.
 
-Structural changes signal that the JSON envelope changed (a requirement was added, a module dependency was modified, etc.). Bead impact comes from leaf-level changes — components, impl_sections, test_sections, data_flows — which merkle detects independently as `arch_impl` or `impl_only` changes. When requirements change, affected components are expected to be updated too, and those component-level changes are the actual triggers for bead obsolete+create.
+Structural changes signal that the JSON envelope changed (a requirement was added, a module dependency was modified, etc.). Bead impact comes from leaf-level changes — components, test_sections, data_flows — which merkle detects independently as `arch_impl` or `impl_only` changes. When requirements change, affected components are expected to be updated too, and those component-level changes are the actual triggers for bead obsolete+create.
 
 The consistency between structural and leaf changes is enforced upstream by `spex validate` (state checks) and `spex diff` (change completeness checks). By the time matching runs, structural consistency is already guaranteed.
 

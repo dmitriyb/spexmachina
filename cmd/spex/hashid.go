@@ -24,7 +24,7 @@ func newHashIDCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&module, "module", "", "Module name (required for module-scoped node types)")
-	cmd.Flags().StringVar(&nodeType, "type", "", "Node type: requirement, component, impl_section, data_flow, test_section, api, module")
+	cmd.Flags().StringVar(&nodeType, "type", "", "Node type: requirement, component, data_flow, test_section, api, module")
 	cmd.Flags().StringVar(&name, "name", "", "Node name or title")
 	_ = cmd.MarkFlagRequired("type")
 	_ = cmd.MarkFlagRequired("name")
@@ -41,12 +41,12 @@ func buildIdentityParts(module, nodeType, name string) ([]string, error) {
 			return []string{"project", "requirement", name}, nil
 		}
 		return []string{module, "requirement", name}, nil
-	case "component", "impl_section", "data_flow", "test_section", "api":
+	case "component", "data_flow", "test_section", "api":
 		if module == "" {
 			return nil, fmt.Errorf("hash-id: --module is required for type %q", nodeType)
 		}
 		return []string{module, nodeType, name}, nil
 	default:
-		return nil, fmt.Errorf("hash-id: unknown type %q; valid types: requirement, component, impl_section, data_flow, test_section, api, module", nodeType)
+		return nil, fmt.Errorf("hash-id: unknown type %q; valid types: requirement, component, data_flow, test_section, api, module", nodeType)
 	}
 }

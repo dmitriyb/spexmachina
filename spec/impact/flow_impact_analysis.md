@@ -135,7 +135,6 @@ Gating rules applied by ActionClassifier:
 | data_flow | yes (task) |
 | test_section, len(describes) >= 2 | yes (task) |
 | test_section, len(describes) == 1 | no (bundled with that component's feature bead) |
-| impl_section | no |
 
 ### ReportGenerator → downstream (emit)
 

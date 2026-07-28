@@ -28,7 +28,7 @@ func (ct ChangeType) String() string {
 type Change struct {
 	Key      string     // identity hash key
 	Type     ChangeType // Added, Removed, or Modified
-	NodeType string     // "component", "impl_section", "data_flow", "test_section", "api", "meta", "requirement"
+	NodeType string     // "component", "data_flow", "test_section", "api", "meta", "requirement"
 	Module   string     // identity hash of parent module ("" for project-level nodes)
 	OldHash  string     // empty for Added
 	NewHash  string     // empty for Removed

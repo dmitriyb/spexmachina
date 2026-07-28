@@ -147,13 +147,13 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 		t.Fatalf("BuildTree: %v", err)
 	}
 
-	// Extend alpha's module.json with a second impl_section and create the file.
+	// Extend alpha's module.json with a second test_section and create the file.
 	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
 	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
 	alphaComp1 := schema.IdentityHash("alpha", "component", "Comp1")
 	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
-	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
-	alphaImpl2 := schema.IdentityHash("alpha", "impl_section", "Impl2")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+	alphaTest2 := schema.IdentityHash("alpha", "test_section", "Test2")
 	projReq1 := fixtureProjReq1ID
 
 	alphaMod := `{
@@ -166,14 +166,14 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 			{"id": "` + alphaComp1 + `", "name": "Comp1", "content": "arch_comp1.md"},
 			{"id": "` + alphaComp2 + `", "name": "Comp2", "content": "arch_comp2.md"}
 		],
-		"impl_sections": [
-			{"id": "` + alphaImpl1 + `", "name": "Impl1", "content": "impl_comp1.md"},
-			{"id": "` + alphaImpl2 + `", "name": "Impl2", "content": "impl_comp2.md"}
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"},
+			{"id": "` + alphaTest2 + `", "name": "Test2", "content": "test_comp2.md"}
 		]
 	}`
 	alphaDir := filepath.Join(specDir, "alpha")
 	writeFile(t, alphaDir, "module.json", alphaMod)
-	writeFile(t, alphaDir, "impl_comp2.md", "# New impl\n")
+	writeFile(t, alphaDir, "test_comp2.md", "# New tests\n")
 
 	current, err := BuildTree(specDir)
 	if err != nil {
@@ -192,10 +192,10 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 	alphaHash := schema.IdentityHash("module", "Alpha")
 	foundNewImpl := false
 	for _, c := range added {
-		if c.Key == alphaImpl2 {
+		if c.Key == alphaTest2 {
 			foundNewImpl = true
-			if c.NodeType != "impl_section" {
-				t.Errorf("expected NodeType 'impl_section', got %q", c.NodeType)
+			if c.NodeType != "test_section" {
+				t.Errorf("expected NodeType 'test_section', got %q", c.NodeType)
 			}
 			if c.Module != alphaHash {
 				t.Errorf("expected Module %s, got %q", alphaHash, c.Module)
@@ -203,7 +203,7 @@ func TestREQ4_Diff_AddedLeaf(t *testing.T) {
 		}
 	}
 	if !foundNewImpl {
-		t.Errorf("expected added change for %s, changes: %v", alphaImpl2, changes)
+		t.Errorf("expected added change for %s, changes: %v", alphaTest2, changes)
 	}
 }
 
@@ -422,8 +422,8 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 		}
 	}
 
-	// The test fixture has component, impl_section, and meta nodes at minimum.
-	for _, want := range []string{"component", "impl_section", "meta"} {
+	// The test fixture has component, test_section, and meta nodes at minimum.
+	for _, want := range []string{"component", "test_section", "meta"} {
 		if !nodeTypes[want] {
 			t.Errorf("expected at least one %s node type in changes", want)
 		}

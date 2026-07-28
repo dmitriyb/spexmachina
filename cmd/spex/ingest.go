@@ -213,7 +213,7 @@ func ingestInvariantErr(err error) error { return &ingestError{code: ingest.Exit
 
 // ingestSpecGraph implements ingest.SpecGraph by reading project.json
 // and each module.json under specDir, then computing the merkle leaf
-// hash for every component / impl_section / data_flow / test_section
+// hash for every component / data_flow / test_section
 // content file.
 type ingestSpecGraph struct {
 	nodes map[string]ingest.NodeMetadata
@@ -254,11 +254,6 @@ func newIngestSpecGraph(specDir string) (*ingestSpecGraph, error) {
 func (g *ingestSpecGraph) registerModule(mod schema.Module, modDir string, ms schema.ModuleSpec) error {
 	for _, c := range ms.Components {
 		if err := g.registerLeaf(mod, modDir, c.ID, c.Name, c.Content, "component"); err != nil {
-			return err
-		}
-	}
-	for _, s := range ms.ImplSections {
-		if err := g.registerLeaf(mod, modDir, s.ID, s.Name, s.Content, "impl_section"); err != nil {
 			return err
 		}
 	}

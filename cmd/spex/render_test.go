@@ -44,9 +44,6 @@ func setupRenderSpec(t *testing.T) string {
 			{"id": "aabbccddeeff", "name": "Parser", "content": "arch_parser.md", "implements": ["aabbccddeeff"]},
 			{"id": "ffeeddccbbaa", "name": "Builder", "content": "arch_builder.md", "implements": ["ffeeddccbbaa"], "uses": ["aabbccddeeff"]}
 		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Parsing Impl", "content": "impl_parsing.md", "describes": ["aabbccddeeff"]}
-		],
 		"data_flows": [
 			{"id": "aabbccddeeff", "name": "Build Pipeline", "content": "flow_build.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
 		]
@@ -54,7 +51,6 @@ func setupRenderSpec(t *testing.T) string {
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_parser.md", "# Parser\n\nParses input.\n")
 	writeTestFile(t, alphaDir, "arch_builder.md", "# Builder\n\nBuilds output.\n")
-	writeTestFile(t, alphaDir, "impl_parsing.md", "# Parsing\n\nImpl details.\n")
 	writeTestFile(t, alphaDir, "flow_build.md", "# Build Pipeline\n\nData flow.\n")
 
 	betaDir := filepath.Join(dir, "beta")
@@ -67,14 +63,10 @@ func setupRenderSpec(t *testing.T) string {
 		],
 		"components": [
 			{"id": "aabbccddeeff", "name": "Consumer", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Consumption Impl", "content": "impl_consumption.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, betaDir, "module.json", betaMod)
 	writeTestFile(t, betaDir, "arch_consumer.md", "# Consumer\n\nConsumes output.\n")
-	writeTestFile(t, betaDir, "impl_consumption.md", "# Consumption\n\nConsume impl.\n")
 
 	return dir
 }
@@ -188,7 +180,7 @@ func TestFR3_S4_JSONFormat(t *testing.T) {
 		json.Unmarshal(raw, &n)
 		types[n.Type] = true
 	}
-	for _, typ := range []string{"project", "module", "requirement", "component", "impl_section", "data_flow"} {
+	for _, typ := range []string{"project", "module", "requirement", "component", "data_flow"} {
 		if !types[typ] {
 			t.Errorf("missing node type %q", typ)
 		}

@@ -66,8 +66,8 @@ Exit code reflects the outcome:
   changeset/receipts in refresh mode, atomic-write failure).
 - `2` — invariant failure (normal mode only) or refresh refusal (a
   *non-absorbable* added or removed entry, orphan record). Not every
-  structural entry refuses: refresh absorbs `requirement`, `impl_section`
-  and `api` entries in either direction, plus `component` removals. See
+  structural entry refuses: refresh absorbs `requirement` and `api`
+  entries in either direction, plus `component` removals. See
   RefreshHandler's absorbable set for the full table — declaring an api
   is the common case that would otherwise refuse for nothing.
 

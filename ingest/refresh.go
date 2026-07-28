@@ -60,7 +60,6 @@ type refreshDirections struct {
 // work left to do.
 var refreshAbsorbable = map[string]refreshDirections{
 	"requirement":  {added: true, removed: true},
-	"impl_section": {added: true, removed: true},
 	"api":          {added: true, removed: true},
 	"component":    {added: false, removed: true},
 }

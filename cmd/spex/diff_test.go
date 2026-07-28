@@ -49,12 +49,12 @@ func runDiff(t *testing.T, args ...string) (stdout, stderr string, exitCode int)
 // setupDiffTestSpec creates a spec directory where every entity has a distinct
 // identity hash so that per-leaf merkle keys do not collide. Returns the
 // directory and the identity-hash keys for Comp1 and Impl1.
-func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, impl1Hash string) {
+func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, test1Hash string) {
 	t.Helper()
 	dir := t.TempDir()
 
 	comp1Hash = schema.IdentityHash("alpha", "component", "Comp1")
-	impl1Hash = schema.IdentityHash("alpha", "impl_section", "Impl1")
+	test1Hash = schema.IdentityHash("alpha", "test_section", "Test1")
 
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
@@ -72,15 +72,15 @@ func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, impl1Hash string) {
 		"components": [
 			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"}
 		],
-		"impl_sections": [
-			{"id": "` + impl1Hash + `", "name": "Impl1", "content": "impl_comp1.md"}
+		"test_sections": [
+			{"id": "` + test1Hash + `", "name": "Test1", "content": "test_comp1.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", modJSON)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
-	writeTestFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
+	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
-	return dir, comp1Hash, impl1Hash
+	return dir, comp1Hash, test1Hash
 }
 
 func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
@@ -135,7 +135,7 @@ func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 }
 
 func TestFR4_DiffCommand_Modified(t *testing.T) {
-	specDir, _, impl1Hash := setupDiffTestSpec(t)
+	specDir, _, test1Hash := setupDiffTestSpec(t)
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
@@ -146,8 +146,8 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	implPath := filepath.Join(specDir, "alpha", "impl_comp1.md")
-	if err := os.WriteFile(implPath, []byte("# Changed implementation\n"), 0644); err != nil {
+	testPath := filepath.Join(specDir, "alpha", "test_comp1.md")
+	if err := os.WriteFile(testPath, []byte("# Changed tests\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -167,15 +167,15 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 
 	foundModified := false
 	for _, c := range result.Changes {
-		if c.Type == "modified" && c.Path == impl1Hash {
+		if c.Type == "modified" && c.Path == test1Hash {
 			foundModified = true
-			if c.NodeType != "impl_section" {
-				t.Fatalf("want impl_section node_type for %s, got %q", impl1Hash, c.NodeType)
+			if c.NodeType != "test_section" {
+				t.Fatalf("want test_section node_type for %s, got %q", test1Hash, c.NodeType)
 			}
 		}
 	}
 	if !foundModified {
-		t.Fatalf("expected modified change for impl_section hash %s, got: %+v", impl1Hash, result.Changes)
+		t.Fatalf("expected modified change for test_section hash %s, got: %+v", test1Hash, result.Changes)
 	}
 }
 
@@ -436,7 +436,7 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")
 	compBHash := schema.IdentityHash("alpha", "component", "CompB")
-	implAHash := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	testAHash := schema.IdentityHash("alpha", "test_section", "Test1")
 
 	proj := `{
 		"name": "test-project",
@@ -463,14 +463,14 @@ func setupTestSpecWithRequirements(t *testing.T) string {
 			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
 			{"id": "` + compBHash + `", "name": "CompB", "content": "arch_comp_b.md", "implements": ["` + req2Hash + `"]}
 		],
-		"impl_sections": [
-			{"id": "` + implAHash + `", "name": "Impl1", "content": "impl_comp_a.md"}
+		"test_sections": [
+			{"id": "` + testAHash + `", "name": "Test1", "content": "test_comp_a.md"}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_comp_a.md", "# CompA architecture\n")
 	writeTestFile(t, alphaDir, "arch_comp_b.md", "# CompB architecture\n")
-	writeTestFile(t, alphaDir, "impl_comp_a.md", "# CompA implementation\n")
+	writeTestFile(t, alphaDir, "test_comp_a.md", "# CompA tests\n")
 
 	return dir
 }
@@ -486,7 +486,7 @@ func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
 	req2Hash := schema.IdentityHash("alpha", "requirement", "Req 2")
 	compAHash := schema.IdentityHash("alpha", "component", "CompA")
 	compBHash := schema.IdentityHash("alpha", "component", "CompB")
-	implAHash := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	testAHash := schema.IdentityHash("alpha", "test_section", "Test1")
 
 	return `{
 		"name": "alpha",
@@ -498,8 +498,8 @@ func mutatedAlphaModule(t *testing.T, req1Title, req2Title string) string {
 			{"id": "` + compAHash + `", "name": "CompA", "content": "arch_comp_a.md", "implements": ["` + req1Hash + `"]},
 			{"id": "` + compBHash + `", "name": "CompB", "content": "arch_comp_b.md", "implements": ["` + req2Hash + `"]}
 		],
-		"impl_sections": [
-			{"id": "` + implAHash + `", "name": "Impl1", "content": "impl_comp_a.md"}
+		"test_sections": [
+			{"id": "` + testAHash + `", "name": "Test1", "content": "test_comp_a.md"}
 		]
 	}`
 }
@@ -694,8 +694,8 @@ func TestFR8_E5_DiffCommand_ExitCodeSemantics(t *testing.T) {
 		if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
 			t.Fatal(err)
 		}
-		implPath := filepath.Join(specDir, "alpha", "impl_comp1.md")
-		if err := os.WriteFile(implPath, []byte("# Changed implementation\n"), 0644); err != nil {
+		testPath := filepath.Join(specDir, "alpha", "test_comp1.md")
+		if err := os.WriteFile(testPath, []byte("# Changed tests\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
 

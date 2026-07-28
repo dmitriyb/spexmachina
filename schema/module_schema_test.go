@@ -257,7 +257,7 @@ func TestNFR4_IDPatternValidation(t *testing.T) {
 		},
 		{
 			"valid describes hashes",
-			`{"name": "m", "impl_sections": [{"id": "aabbccddeeff", "name": "S", "content": "impl_s.md", "describes": ["112233445566"]}]}`,
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "S", "content": "test_s.md", "describes": ["112233445566"]}]}`,
 			false,
 		},
 	}
@@ -296,14 +296,6 @@ func TestFR2_ContentRequiredOnContentBearingNodes(t *testing.T) {
 		{
 			"component empty content",
 			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": ""}]}`,
-		},
-		{
-			"impl_section missing content",
-			`{"name": "m", "impl_sections": [{"id": "aabbccddeeff", "name": "S"}]}`,
-		},
-		{
-			"impl_section empty content",
-			`{"name": "m", "impl_sections": [{"id": "aabbccddeeff", "name": "S", "content": ""}]}`,
 		},
 		{
 			"test_section missing content",
@@ -408,12 +400,12 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 			t.Fatalf("implements[%d] mismatch: want %s, got %s", i, v, mod2.Components[0].Implements[i])
 		}
 	}
-	if len(mod.ImplSections[0].Describes) != len(mod2.ImplSections[0].Describes) {
+	if len(mod.TestSections[0].Describes) != len(mod2.TestSections[0].Describes) {
 		t.Fatalf("describes length mismatch")
 	}
-	for i, v := range mod.ImplSections[0].Describes {
-		if v != mod2.ImplSections[0].Describes[i] {
-			t.Fatalf("describes[%d] mismatch: want %s, got %s", i, v, mod2.ImplSections[0].Describes[i])
+	for i, v := range mod.TestSections[0].Describes {
+		if v != mod2.TestSections[0].Describes[i] {
+			t.Fatalf("describes[%d] mismatch: want %s, got %s", i, v, mod2.TestSections[0].Describes[i])
 		}
 	}
 	if len(mod.DataFlows[0].Uses) != len(mod2.DataFlows[0].Uses) {
@@ -462,7 +454,6 @@ func TestFR2_E1_EmptyOptionalArraysValid(t *testing.T) {
 		"name": "m",
 		"requirements": [],
 		"components": [],
-		"impl_sections": [],
 		"data_flows": [],
 		"test_sections": []
 	}`)
@@ -557,7 +548,7 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 
 	// Check properties keys
 	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "requirements", "components", "impl_sections", "data_flows", "test_sections"} {
+	for _, key := range []string{"name", "description", "requirements", "components", "data_flows", "test_sections"} {
 		if props[key] == nil {
 			t.Fatalf("module schema missing property %q", key)
 		}
@@ -565,7 +556,7 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 
 	// Check $defs keys
 	defs := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+	for _, key := range []string{"requirement", "component", "data_flow", "test_section"} {
 		if defs[key] == nil {
 			t.Fatalf("module schema missing $def %q", key)
 		}
@@ -586,7 +577,7 @@ func TestNFR4_IDFieldsUseIdentityHashPattern(t *testing.T) {
 	wantPattern := "^[a-f0-9]{12}$"
 
 	// Check all $def ID fields use identity hash pattern
-	for _, defName := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+	for _, defName := range []string{"requirement", "component", "data_flow", "test_section"} {
 		def := defs[defName].(map[string]any)
 		props := def["properties"].(map[string]any)
 		idProp := props["id"].(map[string]any)

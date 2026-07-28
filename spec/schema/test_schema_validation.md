@@ -57,9 +57,6 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
     { "id": 1, "name": "C1", "content": "arch_c1.md", "implements": [1] },
     { "id": 2, "name": "C2", "uses": [1], "implements": [2] }
   ],
-  "impl_sections": [
-    { "id": 1, "name": "Impl1", "content": "impl_c1.md", "describes": [1] }
-  ],
   "data_flows": [
     { "id": 1, "name": "Flow1", "description": "Data flow.", "content": "flow_main.md", "uses": [1, 2] }
   ],
@@ -98,7 +95,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:** `valid_module.json` (see Setup)
 **Expected:** Validation passes. Zero errors.
-**Verifies:** All optional arrays (`requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`) are accepted.
+**Verifies:** All optional arrays (`requirements`, `components`, `data_flows`, `test_sections`, `apis`) are accepted.
 
 ### S5: Project missing required field "name" fails
 
@@ -315,7 +312,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 - `mod.Components[0].Implements` matches
-- `mod.ImplSections[0].Describes` matches
+- `mod.TestSections[0].Describes` matches
 - `mod.DataFlows[0].Uses` matches
 
 ## Edge Cases
@@ -338,7 +335,6 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
   "name": "m",
   "requirements": [],
   "components": [],
-  "impl_sections": [],
   "data_flows": [],
   "test_sections": []
 }

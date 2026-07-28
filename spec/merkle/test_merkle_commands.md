@@ -22,12 +22,12 @@ tmpdir/
     module.json
     arch_widget.md
     arch_gadget.md
-    impl_widget_logic.md
+    test_widget_logic.md
     flow_data_path.md
   beta/
     module.json
     arch_service.md
-    impl_handler.md
+    test_handler.md
 ```
 
 Tests invoke the command programmatically (calling the command's `Run` function
@@ -45,8 +45,8 @@ the command execution.
 **Given** the full fixture directory with no existing `spec/.snapshot.json`
 **When** `runDiff(tmpdir)` is called
 **Then** exit code is 0
-**And** stdout lists every spec leaf (component, impl_section, data_flow,
-test_section, requirement, meta) as `added`
+**And** stdout lists every spec leaf (component, data_flow, test_section,
+requirement, meta) as `added`
 **And** every change carries an impact classification consistent with its node type
 
 **Rationale**: This is the bootstrap entry point — the first diff after `spex
@@ -77,13 +77,13 @@ mixed.
 
 **Given** the fixture directory with a snapshot from a previous complete
 ingest run
-**When** `alpha/impl_widget_logic.md` is modified (content appended)
+**When** `alpha/test_widget_logic.md` is modified (content appended)
 **And** `runDiff(tmpdir)` is called
 **Then** exit code is 0
-**And** stdout reports `alpha/impl_widget_logic.md` (or its identity hash) as
+**And** stdout reports `alpha/test_widget_logic.md` (or its identity hash) as
 `modified` with impact `impl_only`
 **And** no other leaves are listed as changed
-**And** the surrounding interior hashes (`alpha/impl`, `alpha`, root) update
+**And** the surrounding interior hashes (`alpha`, root) update
 internally but are not surfaced as user-facing changes
 
 **Rationale**: End-to-end test of the diff pipeline for the most common change
@@ -126,7 +126,7 @@ SnapshotStore.Load against a non-default path.
 ### S7: `spex diff` with multiple changes shows module-level aggregation
 
 **Given** the fixture directory with a snapshot
-**When** both `alpha/impl_widget_logic.md` and `alpha/arch_widget.md` are modified
+**When** both `alpha/test_widget_logic.md` and `alpha/arch_widget.md` are modified
 **And** `runDiff(tmpdir, "--json")` is called
 **Then** the JSON output lists both changes individually
 **And** both changes have `module` set to alpha's identity hash
@@ -144,7 +144,7 @@ per-module impact views.
 **And** the impact + emit + adapter + ingest cycle runs against that diff
 (simulated by writing a complete-status receipts file and invoking
 `spex ingest`, which causes SnapshotSaver to write the first snapshot)
-**And** `alpha/impl_widget_logic.md` and `beta/arch_service.md` are modified
+**And** `alpha/test_widget_logic.md` and `beta/arch_service.md` are modified
 **And** `runDiff(tmpdir)` is called again (compares against the
 ingest-written snapshot)
 **And** another simulated complete ingest runs

@@ -57,7 +57,6 @@ func TestREQ5_EveryModuleScopedNodeTypeChecked(t *testing.T) {
 	want := map[string]string{
 		"requirement":  "core/module.json:/requirements/0000000000a1",
 		"component":    "core/module.json:/components/0000000000a2",
-		"impl_section": "core/module.json:/impl_sections/0000000000a3",
 		"data_flow":    "core/module.json:/data_flows/0000000000a4",
 		"test_section": "core/module.json:/test_sections/0000000000a5",
 		"api":          "core/module.json:/apis/0000000000a6",

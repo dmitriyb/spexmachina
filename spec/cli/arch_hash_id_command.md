@@ -15,7 +15,7 @@ Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing
 | Flag | Required | Description |
 |---|---|---|
 | `--module` | for module-scoped nodes | Module name (e.g., `impact`). Omit for project-level nodes. |
-| `--type` | yes | Node type: `requirement`, `component`, `impl_section`, `data_flow`, `test_section`, `api`, `module` |
+| `--type` | yes | Node type: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
 | `--name` | yes | Node name or title (the human-readable identifier) |
 
 ## Identity String Construction
@@ -27,7 +27,6 @@ The command maps `--type` onto the identity string the schema defines for that n
 | `requirement` + `--module` | yes | `<module>/requirement/<name>` |
 | `requirement` (no `--module`) | no | `project/requirement/<name>` |
 | `component` | yes | `<module>/component/<name>` |
-| `impl_section` | yes | `<module>/impl_section/<name>` |
 | `data_flow` | yes | `<module>/data_flow/<name>` |
 | `test_section` | yes | `<module>/test_section/<name>` |
 | `api` | yes | `<module>/api/<name>` |
@@ -56,7 +55,7 @@ ddeeff001122
 ## Error Handling
 
 - Missing `--type` or `--name`: exit 1 with usage error.
-- `--module` omitted for a type that requires it (component, impl_section, etc.): exit 1 with error indicating `--module` is required for that type.
+- `--module` omitted for a type that requires it (component, data_flow, etc.): exit 1 with error indicating `--module` is required for that type.
 - `--module` supplied for `--type module`, the one type that ignores it: the flag is silently ignored (the identity string does not include it).
 - Unknown `--type` value: exit 1 listing valid types.
 

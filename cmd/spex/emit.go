@@ -251,9 +251,6 @@ func newEmitSpecGraph(specDir string) (*emitSpecGraph, error) {
 			g.components[c.ID] = emit.Component{Implements: c.Implements}
 			addPath(c.ID, c.Content)
 		}
-		for _, s := range ms.ImplSections {
-			addPath(s.ID, s.Content)
-		}
 		for _, f := range ms.DataFlows {
 			addPath(f.ID, f.Content)
 		}

@@ -10,12 +10,12 @@ All scenarios operate against a temporary spec directory created in `t.TempDir()
 tmpdir/
   project.json          (lists one module: "alpha", with a 12-char hex id)
   alpha/
-    module.json          (lists components, impl_sections, data_flows —
+    module.json          (lists components, test_sections, data_flows —
                           each carrying a 12-char hex identity `id` plus a
                           content path; leaf keys are read from those ids)
     arch_widget.md       ("# Widget\nHandles widgets.")
     arch_gadget.md       ("# Gadget\nHandles gadgets.")
-    impl_widget_logic.md ("# Widget Logic\nImplementation details.")
+    test_widget_logic.md ("# Widget Logic\nCoverage for the widget.")
     flow_data_path.md    ("# Data Path\nData flows from A to B.")
 ```
 
@@ -63,8 +63,8 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **Given** the full fixture directory described in Setup
 **When** `BuildTree(tmpdir)` is called
 **Then** the root node has type `"project"` and two children: the `meta/project` envelope leaf and the `alpha` module node (keyed by alpha's identity hash)
-**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the impl_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
-**And** there are no per-type `arch`/`impl`/`flow` interior group nodes and no path-style keys anywhere in the tree
+**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the test_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
+**And** there are no per-type `arch`/`flow`/`test` interior group nodes and no path-style keys anywhere in the tree
 
 **Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
 

@@ -58,12 +58,6 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 				c.ID, c.Name)
 		}
 
-		// Impl sections
-		for _, s := range mg.Spec.ImplSections {
-			fmt.Fprintf(w, "    %q [label=%q, shape=note, fillcolor=moccasin, style=filled];\n",
-				s.ID, s.Name)
-		}
-
 		// Data flows
 		for _, f := range mg.Spec.DataFlows {
 			fmt.Fprintf(w, "    %q [label=%q, shape=ellipse, fillcolor=plum1, style=filled];\n",
@@ -97,13 +91,6 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 			}
 			for _, useID := range c.Uses {
 				fmt.Fprintf(w, "  %q -> %q [label=\"uses\", style=dotted];\n", c.ID, useID)
-			}
-		}
-
-		// Impl section edges
-		for _, s := range mg.Spec.ImplSections {
-			for _, compID := range s.Describes {
-				fmt.Fprintf(w, "  %q -> %q [label=\"describes\", color=green];\n", s.ID, compID)
 			}
 		}
 

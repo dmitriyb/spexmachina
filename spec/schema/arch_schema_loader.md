@@ -31,7 +31,6 @@ The parts are the node's position in the spec graph, taken from fields the node 
 | Module | `module`, name | `module/<name>` |
 | Module requirement | module, `requirement`, title | `<module>/requirement/<title>` |
 | Component | module, `component`, name | `<module>/component/<name>` |
-| Impl section | module, `impl_section`, name | `<module>/impl_section/<name>` |
 | Data flow | module, `data_flow`, name | `<module>/data_flow/<name>` |
 | Test section | module, `test_section`, name | `<module>/test_section/<name>` |
 | API | module, `api`, name | `<module>/api/<name>` |

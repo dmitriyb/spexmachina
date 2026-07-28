@@ -18,7 +18,7 @@ type Node struct {
 	Key      string  `json:"key"`
 	Hash     string  `json:"hash"`
 	Type     string  `json:"type"`                // "leaf", "module", "project"
-	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "test_section", "api", "meta", "requirement", "module"
+	NodeType string  `json:"node_type,omitempty"`  // "component", "data_flow", "test_section", "api", "meta", "requirement", "module"
 	Module   string  `json:"module,omitempty"`     // identity hash of parent module ("" for project-level nodes)
 	Children []*Node `json:"children,omitempty"`
 	moduleName string // unexported; module name for ModuleNames extraction
@@ -131,17 +131,6 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 			continue
 		}
 		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), c.ID, "component", moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, leaf)
-	}
-
-	for _, s := range modSpec.ImplSections {
-		if s.Content == "" {
-			continue
-		}
-		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), s.ID, "impl_section", moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}

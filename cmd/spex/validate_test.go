@@ -158,9 +158,6 @@ func setupInvalidTestSpec(t *testing.T) string {
 		"name": "alpha",
 		"components": [
 			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 

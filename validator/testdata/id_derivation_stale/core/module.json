@@ -17,12 +17,6 @@
       "name": "Ingest"
     }
   ],
-  "impl_sections": [
-    {
-      "id": "1ab45c2d22f3",
-      "name": "Parser impl"
-    }
-  ],
   "name": "core",
   "requirements": [
     {

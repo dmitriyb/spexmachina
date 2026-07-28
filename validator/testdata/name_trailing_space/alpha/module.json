@@ -8,15 +8,6 @@
       "name": "Parser"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Impl"
-    }
-  ],
   "name": "alpha ",
   "requirements": [
     {

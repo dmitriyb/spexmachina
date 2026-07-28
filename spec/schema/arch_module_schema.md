@@ -28,9 +28,6 @@ The module.json JSON Schema (`schema/module.schema.json`) defines the structure 
       "uses": ["<identity hash>"]
     }
   ],
-  "impl_sections": [
-    { "id": "<identity hash>", "name": "...", "content": "impl_*.md", "describes": ["<identity hash>"] }
-  ],
   "data_flows": [
     { "id": "<identity hash>", "name": "...", "description": "...", "content": "flow_*.md", "uses": ["<identity hash>"] }
   ],
@@ -49,9 +46,9 @@ The module.json JSON Schema (`schema/module.schema.json`) defines the structure 
 }
 ```
 
-`name` is the only required property at the module level; every array is optional, so a module that declares nothing but its name is valid. Within the arrays the required sets are fixed: `id`, `preq_id`, `type` and `title` on a requirement; `id`, `name` and `content` on a component, a data_flow, an impl_section and a test_section alike; `id` and `name` on an api. `additionalProperties` is false at every level, so a misspelled field is an error rather than a silently ignored one.
+`name` is the only required property at the module level; every array is optional, so a module that declares nothing but its name is valid. Within the arrays the required sets are fixed: `id`, `preq_id`, `type` and `title` on a requirement; `id`, `name` and `content` on a component, a data_flow and a test_section alike; `id` and `name` on an api. `additionalProperties` is false at every level, so a misspelled field is an error rather than a silently ignored one.
 
-[[80debf6eb776|The `test_sections` array]] carries an id, a name, a path to a `test_*.md` leaf and a `describes` list of component ids — the same four fields, and the same `describes` semantics, as the `impl_sections` array beside it, so a test leaf is hashed into the merkle tree exactly like any other content leaf: by the bytes of the file its `content` names. The parity ends at field shape and hashing. What a bead-map record may point at is fixed by the bead-map schema's own `node_type` enum rather than by this one, and the two arrays fall on opposite sides of it. Being named in that enum is permission for a record, not a guarantee of one.
+[[80debf6eb776|The `test_sections` array]] carries an id, a name, a path to a `test_*.md` leaf and a `describes` list of component ids, so a test leaf is hashed into the merkle tree exactly like any other content leaf: by the bytes of the file its `content` names. Hashing alike is not eligibility alike. What a bead-map record may point at is fixed by the bead-map schema's own `node_type` enum rather than by this one, and `test_section` is named there. Being named in that enum is permission for a record, not a guarantee of one.
 
 All `id`, `preq_id`, and cross-reference fields carry [[237fd8ffb610|the same 12-character lowercase hex identity hash]], matched here by the pattern `^[a-f0-9]{12}$`. The pattern is all this schema can enforce: that a value has the shape of an identity hash, not that it is the right one for the node carrying it. Derivation, the identity string each node type hashes from, and the check that a declared id equals it all live with `arch_schema_loader.md`.
 
@@ -69,7 +66,6 @@ The `apis` array names the external surface the module provides: a CLI subcomman
 - `depends_on`: requirement → requirement (within module requirements)
 - `implements`: component → requirement (fulfillment)
 - `uses`: component → component (dependency)
-- `describes`: impl_section → component (implementation detail)
 - `uses` (data_flow): data_flow → component (involvement)
 - `describes` (test_section): test_section → component (test coverage)
 - `provided_by`: api → component (which component realises the entry point)

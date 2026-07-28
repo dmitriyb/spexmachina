@@ -22,7 +22,6 @@ The renderer is handed the graph [[7d1150c19724|SpecReader]] parsed and the stre
     {"id": "module:schema", "type": "module", "name": "schema", "description": "..."},
     {"id": "module:schema:req:<hash>", "type": "requirement", "name": "<title>", "description": "...", "module": "schema"},
     {"id": "module:schema:comp:<hash>", "type": "component", "name": "...", "description": "...", "content": "<inlined markdown>", "module": "schema"},
-    {"id": "module:schema:impl:<hash>", "type": "impl_section", "name": "...", "content": "<inlined markdown>", "module": "schema"},
     {"id": "module:schema:flow:<hash>", "type": "data_flow", "name": "...", "description": "...", "content": "<inlined markdown>", "module": "schema"},
     {"id": "module:schema:test:<hash>", "type": "test_section", "name": "...", "content": "<inlined markdown>", "module": "schema"},
     {"id": "module:render:api:<hash>", "type": "api", "name": "spex render", "description": "...", "module": "render", "group": "cli"}
@@ -36,7 +35,7 @@ The renderer is handed the graph [[7d1150c19724|SpecReader]] parsed and the stre
 }
 ```
 
-Every node carries `id`, `type` and `name`; `description`, `content`, `module` and `group` appear only where the declaration has them, so an api carries no `content` key at all and a test section carries no `description`. The document is indented two spaces, and both arrays follow one declaration walk — the project node, the project's requirements and sections, then each module in turn contributing its own node, its requirements, its components, its impl sections, its data flows, its test sections and its apis. Declaration order is the only order there is, which is what makes two renderings of one unchanged spec byte-identical.
+Every node carries `id`, `type` and `name`; `description`, `content`, `module` and `group` appear only where the declaration has them, so an api carries no `content` key at all and a test section carries no `description`. The document is indented two spaces, and both arrays follow one declaration walk — the project node, the project's requirements and sections, then each module in turn contributing its own node, its requirements, its components, its data flows, its test sections and its apis. Declaration order is the only order there is, which is what makes two renderings of one unchanged spec byte-identical.
 
 `--slim` replaces that envelope with a nodes-only one. There is no `edges` key at all — callers read edges from `module.json` — and each node carries exactly `id`, `type`, `name` and `module`, dropping the inlined content and descriptions that make up most of the full document's bytes. `module` names the owning module and is absent on the project's own requirements and sections and on module nodes themselves. The whole thing is one compact line rather than an indented document, because it is a lookup table and not something to read. Every node type the full graph emits is there, test sections and apis included; the one node the full graph has and the slim view does not is the project root, which has no identity hash to be looked up by.
 

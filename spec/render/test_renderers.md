@@ -5,17 +5,16 @@
 All renderer scenarios operate on a pre-built spec graph (output of `ReadSpec`). Every node in it is keyed by its declared 12-char identity hash, and the fixture graph contains:
 
 - **Project**: name "test-project", description "A test spec", 2 functional requirements (`112233445566` "Parse input", `665544332211` "Build output") and 1 non-functional requirement (`778899aabbcc` "Performance")
-- **Module alpha** (`111111111111`): 2 requirements (`a1a1a1a1a1a1` "Parse", `a2a2a2a2a2a2` "Build"), 2 components (Parser `c1c1c1c1c1c1`, Builder `c2c2c2c2c2c2`), 1 impl_section (`d1d1d1d1d1d1`), 1 data_flow (`f1f1f1f1f1f1`)
+- **Module alpha** (`111111111111`): 2 requirements (`a1a1a1a1a1a1` "Parse", `a2a2a2a2a2a2` "Build"), 2 components (Parser `c1c1c1c1c1c1`, Builder `c2c2c2c2c2c2`), 1 data_flow (`f1f1f1f1f1f1`)
   - Parser: `implements: [a1a1a1a1a1a1]`, `uses: []`, content: `"# Parser\n\nParses input into AST."`
   - Builder: `implements: [a2a2a2a2a2a2]`, `uses: [c1c1c1c1c1c1]`, content: `"# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first."`
-  - Impl_section `d1d1d1d1d1d1`: `describes: [c1c1c1c1c1c1]`, content: `"# Parsing Implementation\n\nUse recursive descent."`
   - Data_flow `f1f1f1f1f1f1`: `uses: [c1c1c1c1c1c1, c2c2c2c2c2c2]`, content: `"# Build Pipeline\n\nParse then build."`
-- **Module beta** (`222222222222`, `requires_module: [111111111111]`): 1 requirement (`b1b1b1b1b1b1` "Consume"), 1 component (Consumer `c3c3c3c3c3c3`), 1 impl_section (`d2d2d2d2d2d2`)
+- **Module beta** (`222222222222`, `requires_module: [111111111111]`): 1 requirement (`b1b1b1b1b1b1` "Consume"), 1 component (Consumer `c3c3c3c3c3c3`)
   - Consumer: `implements: [b1b1b1b1b1b1]`, `uses: []`, content: `"# Consumer\n\nConsumes built output."`
 
 None of those IDs is the identity hash the node's own identity string would produce. That is deliberate: it is what lets a scenario tell a renderer that copies declared IDs from one that recomputes them.
 
-A second **surface fixture** serves the api and slim scenarios. It is one module `gamma` whose every ID *is* the identity hash of its identity string, holding 1 project requirement ("Expose a surface"), 1 module requirement ("Serve requests"), 1 component (Server), 1 impl_section ("Request loop"), 1 data_flow ("Request path"), 1 test_section ("Server tests", describing Server) and 2 apis — `spex serve` (group `cli`, description "Start the server.", `provided_by` Server) and `GET /v1/specs/{id}` (group `http`, no description, no `provided_by`).
+A second **surface fixture** serves the api and slim scenarios. It is one module `gamma` whose every ID *is* the identity hash of its identity string, holding 1 project requirement ("Expose a surface"), 1 module requirement ("Serve requests"), 1 component (Server), 1 data_flow ("Request path"), 1 test_section ("Server tests", describing Server) and 2 apis — `spex serve` (group `cli`, description "Start the server.", `provided_by` Server) and `GET /v1/specs/{id}` (group `http`, no description, no `provided_by`).
 
 Each renderer writes to an in-memory buffer so output can be inspected as a string.
 
@@ -36,9 +35,8 @@ Each renderer writes to an in-memory buffer so output can be inspected as a stri
 4. `## Module: alpha` with module description
 5. Alpha's requirements section
 6. `### Architecture` with component subsections for Parser and Builder
-7. `### Implementation` with impl_section subsections
-8. `### Data Flows` with data_flow subsections
-9. `## Module: beta` following the same structure
+7. `### Data Flows` with data_flow subsections
+8. `## Module: beta` following the same structure
 
 Verify ordering by checking that the byte offset of each section heading is strictly increasing.
 
@@ -97,7 +95,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **Then:**
 - A `### APIs` heading appears, carrying `` - `spex serve` (cli) — Start the server. `` and `` - `GET /v1/specs/{id}` (http) ``, in declaration order
-- The headings `### Requirements`, `### APIs`, `### Architecture`, `### Implementation` and `### Data Flows` appear in that order, by byte offset
+- The headings `### Requirements`, `### APIs`, `### Architecture` and `### Data Flows` appear in that order, by byte offset
 - Rendering the base fixture, whose modules declare no apis, emits no `### APIs` heading at all
 
 ### DOTRenderer
@@ -127,14 +125,13 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### D3: Node shapes match spec node types
 
-**Given** the fixture SpecGraph with requirements, components, impl_sections, and data_flows.
+**Given** the fixture SpecGraph with requirements, components, and data_flows.
 
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
 - Requirement nodes have `shape=box`
 - Component nodes have `shape=component`
-- Impl_section nodes have `shape=note`
 - Data_flow nodes have `shape=ellipse`
 
 #### D4: Edge types rendered with correct styles
@@ -168,7 +165,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **Then:**
 - Every statement whose subject is a node — a declaration or an edge, either endpoint — names it by the node's declared 12-char hex identity hash, quoted and alone
-- No composite `<module>_<type>_<id>` identifier survives anywhere in the output: none of `alpha_comp_`, `alpha_req_`, `alpha_impl_`, `alpha_flow_`, `beta_comp_`, `beta_req_`, `beta_impl_` or `preq_112233445566` appears
+- No composite `<module>_<type>_<id>` identifier survives anywhere in the output: none of `alpha_comp_`, `alpha_req_`, `alpha_flow_`, `beta_comp_`, `beta_req_` or `preq_112233445566` appears
 - The quoting is required rather than cosmetic: an identity hash may begin with a digit, and unquoted such a token is not a legal DOT identifier
 - The scan finds at least one node ID to inspect, so a renderer emitting no nodes cannot pass by vacuity
 
@@ -187,7 +184,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- The module, the project requirement, the module requirement, the component, the impl_section, the data_flow and both apis are each declared under exactly that hash — eight declarations, no more and no fewer
+- The module, the project requirement, the module requirement, the component, the data_flow and both apis are each declared under exactly that hash — seven declarations, no more and no fewer
 - The `implements` edge joins two such hashes and nothing else
 - Declarations are matched on the whole line, not by substring: an edge's target is also followed by `[label=`, so a substring match would accept a composite declaration as long as some edge still mentioned the bare hash
 
@@ -209,8 +206,8 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- All 14 nodes — 3 project requirements, 2 modules, 3 module requirements, 3 components, 2 impl_sections and 1 data_flow — are declared under the ID the fixture declared for them
-- The declaration count is exactly 14: nothing is declared twice and nothing is missing
+- All 12 nodes — 3 project requirements, 2 modules, 3 module requirements, 3 components and 1 data_flow — are declared under the ID the fixture declared for them
+- The declaration count is exactly 12: nothing is declared twice and nothing is missing
 - Only declarations are collected, never edge endpoints; that distinction is the point of the scenario
 
 ### JSONRenderer
@@ -245,7 +242,6 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - Module node has `"id": "module:alpha"`
 - Requirement node has `"id": "module:alpha:req:a1a1a1a1a1a1"`
 - Component node has `"id": "module:alpha:comp:c1c1c1c1c1c1"`
-- Impl_section node has `"id": "module:alpha:impl:d1d1d1d1d1d1"`
 - Data_flow node has `"id": "module:alpha:flow:f1f1f1f1f1f1"`
 - The synthetic prefix carries the module name and the abbreviated node kind; the tail is the declared identity hash, copied
 - All IDs are globally unique across the entire nodes array
@@ -258,18 +254,18 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **Then:** The Parser node has a `"content"` field containing the full markdown string, not the file path. The content is the raw markdown as read from disk.
 
-#### J5: All edge types represented
+#### J5: Edge types represented
 
-**Given** the fixture SpecGraph with `implements`, `uses`, `describes`, `requires_module`, and `preq_id` relationships.
+**Given** the fixture SpecGraph with `implements`, `uses`, `requires_module`, and `preq_id` relationships.
 
 **When** `RenderJSON(spec, &buf)` is called.
 
 **Then** the edges array contains entries with:
 - `{"from": "module:alpha:comp:c1c1c1c1c1c1", "to": "module:alpha:req:a1a1a1a1a1a1", "type": "implements"}`
 - `{"from": "module:alpha:comp:c2c2c2c2c2c2", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "uses"}`
-- `{"from": "module:alpha:impl:d1d1d1d1d1d1", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "describes"}`
 - `{"from": "module:beta", "to": "module:alpha", "type": "requires_module"}`
 - Requirement nodes with `preq_id` produce edges with `"type": "preq_id"`
+- No `describes` edge appears at all: that edge is emitted from a test_section's `describes` array, and the base fixture declares no test_sections
 
 #### J6: Data flow uses edges
 
@@ -291,7 +287,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### J8: Node count matches spec contents
 
-**Given** the fixture SpecGraph with 1 project + 2 modules + 3 project requirements + (2+1) module requirements + (2+1) components + (1+1) impl_sections + 1 data_flow = 15 total nodes.
+**Given** the fixture SpecGraph with 1 project + 2 modules + 3 project requirements + (2+1) module requirements + (2+1) components + 1 data_flow = 13 total nodes.
 
 **When** `RenderJSON(spec, &buf)` is called.
 
@@ -317,7 +313,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **Then:**
 - Every `id` matches `^[0-9a-f]{12}$` and carries no `module:…:` synthetic prefix — no `:` at all
-- Each hash maps to the node type it identifies: the module, the project requirement, the module requirement, the component, the impl_section, the data_flow, the test_section and both apis — nine nodes, no more and no fewer
+- Each hash maps to the node type it identifies: the module, the project requirement, the module requirement, the component, the data_flow, the test_section and both apis — eight nodes, no more and no fewer
 
 #### J11: Test sections and apis are slim nodes
 
@@ -368,7 +364,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderJSONSlim(spec, &buf)` is called.
 
 **Then:**
-- The node list is exactly, in this order: the 3 project requirements, the section, module alpha, its 2 requirements, its 2 components, its impl_section, its data_flow, module beta, its requirement, its component, its impl_section — 15 nodes, each matching id, type, name and module
+- The node list is exactly, in this order: the 3 project requirements, the section, module alpha, its 2 requirements, its 2 components, its data_flow, module beta, its requirement, its component — 13 nodes, each matching id, type, name and module
 - Every ID is the declared one, copied verbatim
 - The project root is not among them: the full graph's `"id": "project"` node has no identity hash, so the slim view has no counterpart for it
 - The fixture guards itself: for each of the six checked nodes the declared ID differs from the identity hash its identity string would produce, so a renderer that recomputed IDs would fail this scenario rather than pass it by coincidence
@@ -453,7 +449,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - A `## Sections` heading appears after project requirements and before module sections
 - Under it, `### delivery` heading with the section type noted (e.g., "(coupled)")
 - The section's freeform content is rendered: versioning scheme, artifacts list, channels list
-- Content from the coupled module (components, impl_sections) is NOT duplicated here — it appears in the module's own `## Module: delivery` section
+- Content from the coupled module (components, data_flows) is NOT duplicated here — it appears in the module's own `## Module: delivery` section
 
 ### SM2: DOT renders section nodes and coupling edges
 

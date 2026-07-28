@@ -5,8 +5,8 @@
 All scenarios use an in-memory or temporary filesystem containing a valid spec directory structure. The minimal fixture includes:
 
 - `spec/project.json` with at least one module declaration
-- `spec/<module>/module.json` with requirements, components, impl_sections, data_flows, and test_sections
-- Content leaf files (`arch_*.md`, `impl_*.md`, `flow_*.md`, `test_*.md`) referenced by module.json
+- `spec/<module>/module.json` with requirements, components, data_flows, and test_sections
+- Content leaf files (`arch_*.md`, `flow_*.md`, `test_*.md`) referenced by module.json
 
 The fixture spec should have at least two modules with an inter-module dependency (`requires_module`) to exercise cross-module graph construction.
 
@@ -16,15 +16,15 @@ The fixture spec should have at least two modules with an inter-module dependenc
 spec/
   project.json          # name, description, 2+ modules, requirements
   alpha/
-    module.json          # 2 requirements, 2 components, 1 impl_section, 1 data_flow
+    module.json          # 2 requirements, 2 components, 1 test_section, 1 data_flow
     arch_parser.md
     arch_builder.md
-    impl_parsing.md
+    test_parsing.md
     flow_build_pipeline.md
   beta/
-    module.json          # 1 requirement, 1 component (uses alpha), 1 impl_section
+    module.json          # 1 requirement, 1 component (uses alpha), 1 test_section
     arch_consumer.md
-    impl_consumption.md
+    test_consumption.md
 ```
 
 ## Scenarios
@@ -43,7 +43,7 @@ spec/
 
 ### S2: Content map populated with all markdown leaves
 
-**Given** a module with 2 components (`arch_parser.md`, `arch_builder.md`), 1 impl_section (`impl_parsing.md`), and 1 data_flow (`flow_build_pipeline.md`).
+**Given** a module with 2 components (`arch_parser.md`, `arch_builder.md`), 1 test_section (`test_parsing.md`), and 1 data_flow (`flow_build_pipeline.md`).
 
 **When** `ReadSpec(specDir)` is called.
 
@@ -80,7 +80,7 @@ spec/
 **Given** a module with:
 - Requirements with `preq_id` and `depends_on`
 - Components with `implements` and `uses`
-- Impl_sections with `describes`
+- Test_sections with `describes`
 - Data_flows with `uses`
 
 **When** `ReadSpec(specDir)` is called.
@@ -88,7 +88,7 @@ spec/
 **Then:**
 - Component `implements` arrays contain the correct requirement IDs
 - Component `uses` arrays contain the correct peer component IDs
-- Impl_section `describes` arrays contain the correct component IDs
+- Test_section `describes` arrays contain the correct component IDs
 - Data_flow `uses` arrays contain the correct component IDs
 - Requirement `preq_id` values trace to project-level requirement IDs
 
@@ -164,7 +164,7 @@ spec/
 
 ### E8: Module with no content fields
 
-**Given** a module whose components, impl_sections, and data_flows all omit the `content` field (content is optional in the schema).
+**Given** a module whose components, test_sections, and data_flows all omit the `content` field (content is optional in the schema).
 
 **When** `ReadSpec(specDir)` is called.
 

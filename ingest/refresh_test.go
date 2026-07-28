@@ -25,11 +25,11 @@ type refreshFixture struct {
 	mapPath  string
 	store    mapping.Store
 	// widgetID/handlerID are component spec_node_ids with bead-map
-	// records; implID is a record-less impl_section leaf and flowID a
+	// records; testID is a record-less test_section leaf and flowID a
 	// record-less data_flow leaf.
 	widgetID  string
 	handlerID string
-	implID    string
+	testID    string
 	flowID    string
 }
 
@@ -49,7 +49,7 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 		snapPath:  filepath.Join(specDir, ".snapshot.json"),
 		widgetID:  "aabbccddee01",
 		handlerID: "aabbccddee02",
-		implID:    "aabbccddee03",
+		testID:    "aabbccddee03",
 		flowID:    "aabbccddee04",
 	}
 
@@ -69,12 +69,15 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 		"components": [
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
 		],
-		"impl_sections": [
-			{"id": "`+fx.implID+`", "name": "Widget logic", "content": "impl_widget_logic.md"}
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
+		],
+		"apis": [
+			{"id": "aabbccddee06", "name": "spex widget list", "group": "cli"}
 		]
 	}`)
 	writeFile(t, alphaDir, "arch_widget.md", "# Widget\n")
-	writeFile(t, alphaDir, "impl_widget_logic.md", "# Widget logic\n")
+	writeFile(t, alphaDir, "test_widget_logic.md", "# Widget logic\n")
 
 	betaDir := filepath.Join(specDir, "beta")
 	if err := os.MkdirAll(betaDir, 0755); err != nil {
@@ -203,9 +206,9 @@ func TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
 	// Drift two leaves: one with a record (Handler) and one without
-	// (the impl_section) — both are content-only modifications.
+	// (the test_section) — both are content-only modifications.
 	writeFile(t, filepath.Join(fx.specDir, "beta"), "arch_handler.md", "# Handler (revised)\n")
-	writeFile(t, filepath.Join(fx.specDir, "alpha"), "impl_widget_logic.md", "# Widget logic (clarified)\n")
+	writeFile(t, filepath.Join(fx.specDir, "alpha"), "test_widget_logic.md", "# Widget logic (clarified)\n")
 
 	widgetBefore := recordByID(t, fx.store, 1)
 
@@ -258,8 +261,8 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"},
 			{"id": "aabbccddee99", "name": "NewThing", "content": "arch_new_thing.md"}
 		],
-		"impl_sections": [
-			{"id": "`+fx.implID+`", "name": "Widget logic", "content": "impl_widget_logic.md"}
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
 		]
 	}`)
 	writeFile(t, alphaDir, "arch_new_thing.md", "# New thing\n")
@@ -326,22 +329,22 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
 	}
 }
 
-// TestREQ_e68653819f38_Refresh_AbsorbsRemovedImplSection covers the
-// absorbable side of the type filter: impl_section produces no bead, so
-// deleting one is content migration and refresh rebaselines it. No
-// bead-map record points at an impl_section, so the map is untouched.
-func TestREQ_e68653819f38_Refresh_AbsorbsRemovedImplSection(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI covers the absorbable
+// side of the type filter: an api produces no bead, so removing one is
+// content migration and refresh rebaselines it. No bead-map record points
+// at an api, so the map is untouched.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	alphaDir := filepath.Join(fx.specDir, "alpha")
 	writeFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
+		],
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
 		]
 	}`)
-	if err := os.Remove(filepath.Join(alphaDir, "impl_widget_logic.md")); err != nil {
-		t.Fatal(err)
-	}
 
 	mapBefore := readBytes(t, fx.mapPath)
 
@@ -353,11 +356,11 @@ func TestREQ_e68653819f38_Refresh_AbsorbsRemovedImplSection(t *testing.T) {
 		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
 	}
 	if summary.RecordsUpdated != 0 {
-		t.Errorf("records_updated: want 0 (no record names an impl_section), got %d", summary.RecordsUpdated)
+		t.Errorf("records_updated: want 0 (no record names an api), got %d", summary.RecordsUpdated)
 	}
 	assertSnapshotIsCurrent(t, fx)
 	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be unchanged: no record points at an impl_section")
+		t.Error("bead-map must be unchanged: no record points at an api")
 	}
 }
 
@@ -371,8 +374,8 @@ func TestREQ_e68653819f38_Refresh_AbsorbsAddedAPI(t *testing.T) {
 		"components": [
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
 		],
-		"impl_sections": [
-			{"id": "`+fx.implID+`", "name": "Widget logic", "content": "impl_widget_logic.md"}
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
 		],
 		"apis": [
 			{"id": "aabbccddee05", "name": "spex widget", "group": "cli"}
@@ -753,8 +756,8 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 	if on("module_requirement") {
 		sections = append(sections, `"requirements": [{"id": "`+refreshTypeModuleReqID+`", "preq_id": "`+refreshTypeProjectReqID+`", "type": "functional", "title": "Fixture module requirement"}]`)
 	}
-	if on("impl_section") {
-		sections = append(sections, `"impl_sections": [{"id": "`+refreshTypeImplID+`", "name": "Extra impl", "content": "impl_extra.md"}]`)
+	if on("project_api") {
+		sections = append(sections, `"apis": [{"id": "`+refreshTypeImplID+`", "name": "spex extra two", "group": "cli"}]`)
 	}
 	if on("api") {
 		sections = append(sections, `"apis": [{"id": "`+refreshTypeAPIID+`", "name": "spex extra", "group": "cli"}]`)
@@ -769,7 +772,6 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 
 	writeFile(t, alphaDir, "arch_anchor.md", "# Anchor\n")
 	setContentFile(t, alphaDir, "arch_extra.md", "# Extra component\n", on("component"))
-	setContentFile(t, alphaDir, "impl_extra.md", "# Extra impl\n", on("impl_section"))
 	setContentFile(t, alphaDir, "flow_extra.md", "# Extra flow\n", on("data_flow"))
 	setContentFile(t, alphaDir, "test_extra.md", "# Extra tests\n", on("test_section"))
 
@@ -820,8 +822,6 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 		{"module requirement removed", "module_requirement", refreshTypeModuleReqID, false, ""},
 		{"project requirement added", "project_requirement", refreshTypeProjectReqID, true, ""},
 		{"project requirement removed", "project_requirement", refreshTypeProjectReqID, false, ""},
-		{"impl_section added", "impl_section", refreshTypeImplID, true, ""},
-		{"impl_section removed", "impl_section", refreshTypeImplID, false, ""},
 		{"api added", "api", refreshTypeAPIID, true, ""},
 		{"api removed", "api", refreshTypeAPIID, false, ""},
 		{"component added", "component", refreshTypeComponentID, true, "added_entries"},
@@ -910,7 +910,7 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 // only, so refreshAbsorbable["module"] could never be looked up.
 func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T) {
 	variants := []string{
-		"module_requirement", "project_requirement", "impl_section",
+		"module_requirement", "project_requirement",
 		"api", "component", "meta", "data_flow", "test_section",
 	}
 	reachable := map[string]bool{}

@@ -252,14 +252,14 @@ func TestSorter_EmptyInput(t *testing.T) {
 
 func TestSorter_UnknownNodeTypeIsError(t *testing.T) {
 	creates := []CreateAction{
-		{SpecNodeID: "x", NodeType: "impl_section"},
+		{SpecNodeID: "x", NodeType: "unknown_kind"},
 	}
 	s := &Sorter{}
 	_, _, err := s.Sort(creates)
 	if err == nil {
 		t.Fatalf("unknown NodeType must produce an error")
 	}
-	if !strings.Contains(err.Error(), "impl_section") {
+	if !strings.Contains(err.Error(), "unknown_kind") {
 		t.Fatalf("error must name unknown NodeType, got: %s", err)
 	}
 }

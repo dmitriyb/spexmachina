@@ -210,7 +210,6 @@ func TestFR3_AllNodeTypes(t *testing.T) {
 	}{
 		{"requirements", len(mod.Requirements)},
 		{"components", len(mod.Components)},
-		{"impl_sections", len(mod.ImplSections)},
 		{"data_flows", len(mod.DataFlows)},
 		{"test_sections", len(mod.TestSections)},
 		{"apis", len(mod.APIs)},
@@ -264,7 +263,7 @@ func TestFR4_AllEdgeTypes(t *testing.T) {
 	}{
 		{"implements", len(mod.Components) > 0 && len(mod.Components[0].Implements) > 0},
 		{"uses (component)", len(mod.Components) > 1 && len(mod.Components[1].Uses) > 0},
-		{"describes", len(mod.ImplSections) > 0 && len(mod.ImplSections[0].Describes) > 0},
+		{"describes", len(mod.TestSections) > 0 && len(mod.TestSections[0].Describes) > 0},
 		{"depends_on", len(mod.Requirements) > 2 && len(mod.Requirements[2].DependsOn) > 0},
 		{"preq_id", len(mod.Requirements) > 0 && mod.Requirements[0].PreqID != ""},
 		{"uses (data_flow)", len(mod.DataFlows) > 0 && len(mod.DataFlows[0].Uses) > 0},
@@ -301,9 +300,6 @@ func TestFR5_ModuleIDsAreIdentityHashes(t *testing.T) {
 	}
 	for _, c := range mod.Components {
 		checkHash("component", c.ID)
-	}
-	for _, s := range mod.ImplSections {
-		checkHash("impl_section", s.ID)
 	}
 	for _, d := range mod.DataFlows {
 		checkHash("data_flow", d.ID)
@@ -346,18 +342,13 @@ func TestFR6_ContentPaths(t *testing.T) {
 		t.Fatalf("unmarshal module: %v", err)
 	}
 
-	// The schema requires a non-empty content on components, impl_sections,
-	// data_flows and test_sections — the only node types that carry one — so
+	// The schema requires a non-empty content on components, data_flows
+	// and test_sections — the only node types that carry one — so
 	// against a schema-valid fixture every guard below holds. They stay as a
 	// cheap assertion that the count only ever reflects real content paths.
 	var found int
 	for _, c := range mod.Components {
 		if c.Content != "" {
-			found++
-		}
-	}
-	for _, s := range mod.ImplSections {
-		if s.Content != "" {
 			found++
 		}
 	}
@@ -402,7 +393,7 @@ func TestFR7_SchemaDefinesNodeTypes(t *testing.T) {
 		t.Fatalf("unmarshal module schema: %v", err)
 	}
 	modProps := modRaw["properties"].(map[string]any)
-	for _, key := range []string{"requirements", "components", "impl_sections", "data_flows", "test_sections", "apis"} {
+	for _, key := range []string{"requirements", "components", "data_flows", "test_sections", "apis"} {
 		if modProps[key] == nil {
 			t.Fatalf("module schema missing property %q", key)
 		}

@@ -14,7 +14,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define module schema",
-      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), implementation-section leaves (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": "b7c3bccd7c64",
@@ -28,7 +28,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "non_functional",
       "title": "Identity hash ID constraints",
-      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/\u003ctitle\u003e'; modules use 'module/\u003cname\u003e'; module requirements use '\u003cmodule\u003e/requirement/\u003ctitle\u003e'; components use '\u003cmodule\u003e/component/\u003cname\u003e'; the implementation-section leaf type takes that same '\u003cmodule\u003e/\u003ctype\u003e/\u003cname\u003e' form under its own type name; data_flows use '\u003cmodule\u003e/data_flow/\u003cname\u003e'; test_sections use '\u003cmodule\u003e/test_section/\u003cname\u003e'; apis use '\u003cmodule\u003e/api/\u003cname\u003e'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
+      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/\u003ctitle\u003e'; modules use 'module/\u003cname\u003e'; module requirements use '\u003cmodule\u003e/requirement/\u003ctitle\u003e'; components use '\u003cmodule\u003e/component/\u003cname\u003e'; data_flows use '\u003cmodule\u003e/data_flow/\u003cname\u003e'; test_sections use '\u003cmodule\u003e/test_section/\u003cname\u003e'; apis use '\u003cmodule\u003e/api/\u003cname\u003e'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
     },
     {
       "id": "80debf6eb776",
@@ -82,7 +82,7 @@
     {
       "id": "78883b84c32d",
       "name": "ModuleSchema",
-      "description": "The module.json JSON Schema definition. Defines the structure for module requirements (with preq_id required), components, implementation-section leaves, data_flows, test_sections, and the apis array of external surface entry points.",
+      "description": "The module.json JSON Schema definition. Defines the structure for module requirements (with preq_id required), components, data_flows, test_sections, and the apis array of external surface entry points.",
       "content": "arch_module_schema.md",
       "implements": [
         "eed2cf85d5c3",

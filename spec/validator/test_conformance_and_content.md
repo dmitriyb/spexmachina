@@ -12,9 +12,9 @@ All scenarios operate on a temporary spec directory created per test. The fixtur
 tmp/spec/
   project.json                  # valid project referencing module "alpha"
   alpha/
-    module.json                 # valid module with 1 requirement, 1 component, 1 impl_section, 1 test_section
+    module.json                 # valid module with 1 requirement, 1 component, 1 data_flow, 1 test_section
     arch_widget.md              # component content
-    impl_widget_logic.md        # impl_section content
+    flow_widget_data.md         # data_flow content
     test_widget_behavior.md     # test_section content
 ```
 
@@ -84,11 +84,11 @@ tmp/spec/
 - `path`: `"alpha/arch_widget.md"`
 - `message` containing `"not found"` or `"does not exist"`
 
-### S9: Missing impl_section content file
+### S9: Missing data_flow content file
 
-**Given** `impl_widget_logic.md` is deleted.
+**Given** `flow_widget_data.md` is deleted.
 **When** `CheckContentPaths(specDir, project)` is called.
-**Then** one error referencing the impl_section's content path.
+**Then** one error referencing the data_flow's content path.
 
 ### S10: Missing test_section content file (test_*.md)
 
@@ -111,7 +111,7 @@ tmp/spec/
 
 ### S13: Multiple missing content paths across sections
 
-**Given** `alpha/module.json` references three content files: one in `components`, one in `impl_sections`, and one in `test_sections`. All three files are missing.
+**Given** `alpha/module.json` references three content files: one in `components`, one in `data_flows`, and one in `test_sections`. All three files are missing.
 **When** `CheckContentPaths(specDir, project)` is called.
 **Then** exactly three errors, one per missing file, each with the correct `path` identifying which section referenced it.
 
@@ -159,7 +159,7 @@ tmp/spec/
 
 **Given** `alpha/module.json` has a `data_flows` entry with `"content": "flow_missing.md"` and that file does not exist.
 **When** `CheckContentPaths(specDir, project)` is called.
-**Then** one error referencing `"alpha/flow_missing.md"`. ContentResolver must walk `data_flows` content paths in addition to components, impl_sections, and test_sections.
+**Then** one error referencing `"alpha/flow_missing.md"`. ContentResolver must walk `data_flows` content paths in addition to components and test_sections.
 
 ### E6: Unicode in content file names
 

@@ -19,7 +19,7 @@ One reader serves three outputs. [[8828685278e9|Render markdown]], [[a596d8caefb
 
 ## Content Inlining
 
-Markdown content files are read into memory and stored under their relative path — the same string the declaring node's `content` field holds. Four kinds of declaration can carry a `content` field, and every one of them that fills it has that file read: components, impl sections, data flows and test sections. Renderers then ask for a node's content by the path that node declared.
+Markdown content files are read into memory and stored under their relative path — the same string the declaring node's `content` field holds. Three kinds of declaration can carry a `content` field, and every one of them that fills it has that file read: components, data flows and test sections. Renderers then ask for a node's content by the path that node declared.
 
 ## Nodes Without Content
 

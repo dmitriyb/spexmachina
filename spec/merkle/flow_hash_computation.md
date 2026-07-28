@@ -115,8 +115,8 @@ here is a contract change: all three components must be updated in lockstep.
     for module.json envelopes; `meta/project` for project.json envelope
   - hash: string, 64-character lowercase hex SHA-256 digest
   - type: string enum — `leaf` | `module` | `project`
-  - node_type: string enum — `component` | `requirement` | `impl_section` |
-    `data_flow` | `test_section` | `api` | `meta` (for envelope leaves); absent on
+  - node_type: string enum — `component` | `requirement` | `data_flow` |
+    `test_section` | `api` | `meta` (for envelope leaves); absent on
     the root and on module interior nodes
   - module: string — identity_hash of the parent module; empty string for
     project-level nodes

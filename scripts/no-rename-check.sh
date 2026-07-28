@@ -30,7 +30,7 @@
 #
 # Scope: spec/project.json and spec/*/module.json. Every object anywhere in
 # those files carrying a 12-hex `id` plus a `name` or `title` is covered, so
-# modules, requirements, components, data_flows, impl_sections, test_sections,
+# modules, requirements, components, data_flows, test_sections,
 # milestones, scenarios and apis are all included without enumeration.
 #
 # Output tags: RENAMED, AMBIGUOUS_ID

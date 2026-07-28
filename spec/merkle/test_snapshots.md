@@ -15,7 +15,7 @@ root := &Node{
         {Key: alphaHash, Hash: "ccc...", Type: "module", Module: alphaHash, Children: []*Node{
             {Key: "meta/" + alphaHash, Hash: "ddd...", Type: "leaf", NodeType: "meta", Module: alphaHash},
             {Key: "1f00badc0de1", Hash: "eee...", Type: "leaf", NodeType: "component", Module: alphaHash},
-            {Key: "2f00badc0de2", Hash: "fff...", Type: "leaf", NodeType: "impl_section", Module: alphaHash},
+            {Key: "2f00badc0de2", Hash: "fff...", Type: "leaf", NodeType: "test_section", Module: alphaHash},
         }},
     },
 }

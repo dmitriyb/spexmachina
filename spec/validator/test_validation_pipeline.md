@@ -14,12 +14,12 @@ tmp/spec/
   alpha/
     module.json                # configurable: can be made valid or invalid per scenario
     arch_widget.md
-    impl_widget.md
+    flow_widget.md
     test_widget.md
   beta/
     module.json
     arch_encoder.md
-    impl_encoder.md
+    flow_encoder.md
     test_encoder.md
 ```
 
@@ -221,6 +221,6 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 ### E7: Performance budget for full pipeline
 
-**Given** a spec with 100 modules, 10 requirements per module, 5 components per module, 5 impl_sections per module, and 5 test_sections per module (5500 nodes total).
+**Given** a spec with 100 modules, 10 requirements per module, 5 components per module and 5 test_sections per module — 2000 module-scoped nodes plus the 100 module declarations themselves.
 **When** `spex validate tmp/spec/` is executed.
 **Then** the full pipeline completes in under 1 second (requirement 7: fast validation). Each checker operates in linear or near-linear time relative to node count.

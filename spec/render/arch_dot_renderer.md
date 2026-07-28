@@ -23,7 +23,6 @@ The renderer is handed the graph [[7d1150c19724|SpecReader]] parsed and the stre
 | Module | folder | lightgray |
 | Module requirement | box | lightgreen |
 | Component | component | lightyellow |
-| Impl section | note | moccasin |
 | Data flow | ellipse | plum1 |
 | Api | cds | paleturquoise |
 
@@ -39,11 +38,10 @@ Every node's label is the name a reader would recognise — a requirement's titl
 | requires_module | solid arrow |
 | implements | solid arrow (blue) |
 | uses | dotted arrow |
-| describes | solid arrow (green) |
 | provided_by | solid arrow (purple) |
 | preq_id | dashed arrow (blue) |
 
-Every edge also carries a label naming its kind, so the relationship survives in a rendering that drops colour. In this format `describes` has a single source — an impl section pointing at the component it documents. Test sections declare `describes` too, but they are not nodes here, so those edges appear only in the JSON output.
+Every edge also carries a label naming its kind, so the relationship survives in a rendering that drops colour. `describes` is declared only by test sections, and they are not nodes here, so no `describes` edge is drawn in this format at all — that edge survives only in the JSON output.
 
 ## Sections
 

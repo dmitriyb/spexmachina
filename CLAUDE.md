@@ -48,7 +48,6 @@ This project uses `br` (beads_rust) for issue tracking. Do NOT use markdown TODO
 
 Your task's spec context is provided on input, and the spec files are the source of truth — beads do not duplicate spec content. `design`, `acceptance_criteria` and `notes` are absent from bead data entirely; `description` is empty except on a legacy tail of older beads that still carries prose copied from the spec — read the spec, not the copy. To reach *another* bead's context mid-work, `br` is the entrypoint: `br show <id> --json` to inspect the bead and find its `spex:<record_id>` label, then `bin/spex map context <record_id>` for its full spec (`arch_file`, `test_files`, `flow_files`, `module_file`).
 
-- `impl_files` is deliberately not in that list. Impl sections are being removed corpus-wide and the field goes with them; ignore it wherever it still appears.
 - Cleanup beads (label `spex:cleanup`) have no map record by design.
 - `br` reads a local sqlite db rebuilt from `.beads/issues.jsonl`; pass `--no-db` to any `br` command to read JSONL-only (always fresh). `br list` hides rows by default (open-only, `--limit 50`) — use `br ready`, `br show`, or `br list --all --limit 0`.
 

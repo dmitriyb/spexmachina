@@ -28,22 +28,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Engine impl"
-    },
-    {
-      "describes": [
-        "000000000002"
-      ],
-      "id": "000000000002",
-      "name": "Store impl"
-    }
-  ],
   "name": "core",
   "requirements": [
     {

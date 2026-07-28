@@ -31,7 +31,7 @@ func setupSpecDir(t *testing.T) string {
 	alphaComp2 := schema.IdentityHash("alpha", "component", "Comp2")
 	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
 	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
-	alphaImpl1 := schema.IdentityHash("alpha", "impl_section", "Impl1")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
 	betaComp := schema.IdentityHash("beta", "component", "BetaComp")
 	alphaModID := schema.IdentityHash("module", "Alpha")
 	betaModID := schema.IdentityHash("module", "Beta")
@@ -50,7 +50,7 @@ func setupSpecDir(t *testing.T) string {
 	}`
 	writeFile(t, dir, "project.json", proj)
 
-	// Module alpha: has components, impl_sections, and requirements
+	// Module alpha: has components, test_sections, and requirements
 	alphaDir := filepath.Join(dir, "alpha")
 	must(t, os.MkdirAll(alphaDir, 0755))
 	alphaMod := `{
@@ -63,14 +63,14 @@ func setupSpecDir(t *testing.T) string {
 			{"id": "` + alphaComp1 + `", "name": "Comp1", "content": "arch_comp1.md"},
 			{"id": "` + alphaComp2 + `", "name": "Comp2", "content": "arch_comp2.md"}
 		],
-		"impl_sections": [
-			{"id": "` + alphaImpl1 + `", "name": "Impl1", "content": "impl_comp1.md"}
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
 		]
 	}`
 	writeFile(t, alphaDir, "module.json", alphaMod)
 	writeFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
 	writeFile(t, alphaDir, "arch_comp2.md", "# Comp2 architecture\n")
-	writeFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
+	writeFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
 	// Module beta: has only one component
 	betaDir := filepath.Join(dir, "beta")
@@ -206,7 +206,7 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 
 	alphaHash := schema.IdentityHash("module", "Alpha")
 	alpha := findChild(t, root, alphaHash)
-	// Alpha should have: meta + 2 requirements + 2 components + 1 impl_section = 6 children
+	// Alpha should have: meta + 2 requirements + 2 components + 1 test_section = 6 children
 	if len(alpha.Children) != 6 {
 		t.Fatalf("alpha children: want 6, got %d", len(alpha.Children))
 	}
@@ -230,7 +230,7 @@ func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 		"meta/" + alphaHash:                                       "meta",
 		schema.IdentityHash("alpha", "component", "Comp1"):        "component",
 		schema.IdentityHash("alpha", "component", "Comp2"):        "component",
-		schema.IdentityHash("alpha", "impl_section", "Impl1"):     "impl_section",
+		schema.IdentityHash("alpha", "test_section", "Test1"):     "test_section",
 		schema.IdentityHash("alpha", "requirement", "Alpha req 1"): "requirement",
 		schema.IdentityHash("alpha", "requirement", "Alpha req 2"): "requirement",
 	}
@@ -452,7 +452,6 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	dir := t.TempDir()
 
 	comp1 := schema.IdentityHash("fullmod", "component", "C1")
-	impl1 := schema.IdentityHash("fullmod", "impl_section", "I1")
 	flow1 := schema.IdentityHash("fullmod", "data_flow", "F1")
 	test1 := schema.IdentityHash("fullmod", "test_section", "T1")
 	api1 := schema.IdentityHash("fullmod", "api", "spex full")
@@ -470,9 +469,6 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 		"components": [
 			{"id": "` + comp1 + `", "name": "C1", "content": "arch_c1.md"}
 		],
-		"impl_sections": [
-			{"id": "` + impl1 + `", "name": "I1", "content": "impl_c1.md"}
-		],
 		"data_flows": [
 			{"id": "` + flow1 + `", "name": "F1", "content": "flow_c1.md"}
 		],
@@ -485,7 +481,6 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
 	writeFile(t, modDir, "arch_c1.md", "# arch\n")
-	writeFile(t, modDir, "impl_c1.md", "# impl\n")
 	writeFile(t, modDir, "flow_c1.md", "# flow\n")
 	writeFile(t, modDir, "test_c1.md", "# test\n")
 
@@ -496,15 +491,14 @@ func TestREQ7_BuildTree_WithAllNodeTypes(t *testing.T) {
 
 	fullModHash := schema.IdentityHash("module", "FullMod")
 	fullMod := findChild(t, root, fullModHash)
-	// meta + 1 component + 1 impl_section + 1 data_flow + 1 test_section + 1 api = 6 children
-	if len(fullMod.Children) != 6 {
-		t.Fatalf("fullmod children: want 6, got %d", len(fullMod.Children))
+	// meta + 1 component + 1 data_flow + 1 test_section + 1 api = 5 children
+	if len(fullMod.Children) != 5 {
+		t.Fatalf("fullmod children: want 5, got %d", len(fullMod.Children))
 	}
 
 	wantKeys := map[string]string{
 		"meta/" + fullModHash: "meta",
 		comp1:                 "component",
-		impl1:                 "impl_section",
 		flow1:                 "data_flow",
 		test1:                 "test_section",
 		api1:                  "api",

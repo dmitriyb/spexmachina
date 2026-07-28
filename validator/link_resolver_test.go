@@ -122,8 +122,8 @@ func TestREQ6_ContentlessNodeNotLinkable(t *testing.T) {
 }
 
 // TestREQ6_NameBasedLinkRejected: a name carries no <type> segment, so it
-// cannot be turned into an identity hash, and "Identity hash algorithm" is
-// already both a requirement and an impl_section in one module.
+// cannot be turned into an identity hash, and one module may carry the same
+// name on nodes of two different types.
 func TestREQ6_NameBasedLinkRejected(t *testing.T) {
 	dir := newLinkFixture(t, "See [[Comp2|the second component]].\n")
 

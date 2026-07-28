@@ -318,7 +318,7 @@ func TestREQ_6f8284df92a2_LongerLiveNameAloneIsSilent(t *testing.T) {
 	}
 }
 
-// TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched: the 56 impl_section
+// TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched: non-component node
 // names are generic noun phrases — "Hash computation" alone survives sixteen
 // times in another module's test leaves.
 func TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched(t *testing.T) {
@@ -327,7 +327,6 @@ func TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched(t *testing.T) {
 		nodeType string
 		name     string
 	}{
-		{"impl_section", "Hash computation"},
 		{"requirement", "Snapshot storage"},
 		{"data_flow", "Hash computation"},
 		{"test_section", "Hash computation"},
@@ -335,7 +334,7 @@ func TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.nodeType, func(t *testing.T) {
 			dir := newRemovalFixture().
-				withFile("merkle/impl_hashing.md", corpus).
+				withFile("merkle/flow_hashing.md", corpus).
 				build(t, "merkle")
 
 			if found := mustCheck(t, dir, removedChange("merkle", tt.nodeType, tt.name)); len(found) != 0 {

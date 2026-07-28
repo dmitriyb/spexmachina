@@ -75,7 +75,7 @@ These are the only things a proposal can ask for. Identity is `<module>/<type>/<
 
 **`api` is how a proposal declares an external surface** — a CLI invocation, an HTTP route, a library entry point. `name` is the exact string callers write (`spex diff`, `GET /v1/specs/{id}`, `schema.IdentityHash`), never a signature. It has no content file. `provided_by` lists identity hashes of components **in the same module** and is referentially checked; involvement from other modules is already expressed by component `uses` edges. `group` is a freeform renderer label — spex never branches on it. **API names are globally unique across every module**; component names only need to be unique inside their own module.
 
-**Never propose a new impl section.** The `impl_sections` array still exists while the migration that is deleting it runs, but it produces no bead, duplicates what the code already carries, and binds the spec to a language. Content that used to go there belongs in the arch leaf of the component implementing the relevant requirement — or nowhere.
+**Never propose an impl section.** The `impl_sections` array no longer exists: the schema rejects it and `bin/spex hash-id` refuses the type. Content that used to go there belongs in the arch leaf of the component implementing the relevant requirement — or nowhere.
 
 **Required fields a proposal has to supply values for:**
 
@@ -123,7 +123,7 @@ bin/spex hash-id --module widgets --type component --name WidgetLister
 bin/spex hash-id --module widgets --type api --name "widgetctl list"
 ```
 
-Valid `--type` values: `requirement`, `component`, `impl_section`, `data_flow`, `test_section`, `api`, `module`. `--module` is required for everything except a project requirement and a module. Anything else exits 1.
+Valid `--type` values: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module`. `--module` is required for everything except a project requirement and a module. Anything else exits 1.
 
 **Never recompute an existing project requirement id.** Fifteen of this project's eighteen project requirements carry hashes that predate the convention and `hash-id` cannot reproduce them. Project-level requirement ids are exempt from the derivation check for exactly that reason. If a proposal refers to one, copy the id out of `project.json`.
 

@@ -20,16 +20,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "content": "impl_setup.md",
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Setup"
-    }
-  ],
   "name": "core",
   "test_sections": [
     {

@@ -44,16 +44,6 @@
     }
   ],
   "description": "Full module fixture.",
-  "impl_sections": [
-    {
-      "content": "impl_c1.md",
-      "describes": [
-        "8a52d012caac"
-      ],
-      "id": "275282360e9a",
-      "name": "Impl1"
-    }
-  ],
   "name": "validator",
   "requirements": [
     {

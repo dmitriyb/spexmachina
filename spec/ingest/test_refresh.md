@@ -64,7 +64,7 @@ pipeline")
 normal Reconciler path so bead lifecycle runs. Refresh mode's job is to NOT
 trigger bead lifecycle — it must refuse anything that would normally produce
 beads. The fixture must add a `component`, `data_flow` or `test_section`; an
-added `impl_section`, `requirement` or `api` is absorbed and would not refuse.
+added `requirement` or `api` is absorbed and would not refuse.
 
 ### Refresh refuses on diff with `removed` entries
 
@@ -84,15 +84,14 @@ fixture must remove a `data_flow` or a `test_section` to exercise the gate.
 ### Refresh absorbs the absorbable structural set
 
 **Given** the fixture has been edited to add a requirement, add and remove an
-impl_section, add an api, and remove a component whose bead-map record has
-already been retired
+api, and remove a component whose bead-map record has already been retired
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is 0
 **And** the summary reports `status: "complete"`
 **And** `spec/.snapshot.json` is rewritten to match the current spec state
 
 **Rationale**: The refusal gate is a filter on node type and direction, not a
-blanket ban on `added`/`removed`. `requirement`, `impl_section` and `api` are
+blanket ban on `added`/`removed`. `requirement` and `api` are
 absorbed in both directions and `component` in the removed direction, because
 none of those transitions owes any bead work. A test that only exercises the
 refusal side would pass against an implementation that refused everything —

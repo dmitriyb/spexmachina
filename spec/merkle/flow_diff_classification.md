@@ -71,8 +71,8 @@ modified.
 
 - Change:
   - key: string — identity_hash or `meta/*`
-  - node_type: string enum — `component` | `requirement` | `impl_section` |
-    `data_flow` | `test_section` | `api` | `meta`
+  - node_type: string enum — `component` | `requirement` | `data_flow` |
+    `test_section` | `api` | `meta`
   - module: string — identity_hash of the parent module, empty for project-level
   - change_type: string enum — `added` | `removed` | `modified`
   - old_hash: string, 64-char hex (empty for added)
@@ -91,7 +91,7 @@ Mapping used by the classifier:
 
 | node_type   | impact_level |
 |-------------|--------------|
-| impl_section, test_section | impl_only |
+| test_section | impl_only |
 | data_flow, api | contract     |
 | component   | arch_impl    |
 | meta, requirement | structural |

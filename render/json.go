@@ -165,30 +165,6 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			}
 		}
 
-		// Impl sections
-		for _, s := range mg.Spec.ImplSections {
-			nodeID := fmt.Sprintf("module:%s:impl:%s", modName, s.ID)
-			contentText := ""
-			if s.Content != "" {
-				contentText = mg.Content[s.Content]
-			}
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:          nodeID,
-				Type:        "impl_section",
-				Name:        s.Name,
-				Description: "",
-				Content:     contentText,
-				Module:      modName,
-			})
-			for _, compID := range s.Describes {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
-					Type: "describes",
-				})
-			}
-		}
-
 		// Data flows
 		for _, f := range mg.Spec.DataFlows {
 			nodeID := fmt.Sprintf("module:%s:flow:%s", modName, f.ID)
@@ -309,9 +285,6 @@ func slimNodes(spec *SpecGraph) []SlimNode {
 		}
 		for _, c := range mg.Spec.Components {
 			nodes = append(nodes, SlimNode{ID: c.ID, Type: "component", Name: c.Name, Module: modName})
-		}
-		for _, s := range mg.Spec.ImplSections {
-			nodes = append(nodes, SlimNode{ID: s.ID, Type: "impl_section", Name: s.Name, Module: modName})
 		}
 		for _, f := range mg.Spec.DataFlows {
 			nodes = append(nodes, SlimNode{ID: f.ID, Type: "data_flow", Name: f.Name, Module: modName})

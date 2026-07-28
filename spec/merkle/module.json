@@ -44,7 +44,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Classify impact",
-      "description": "Classify each change by its impact level: impl_only (only implementation-section or test_section leaves changed), contract (data_flow or api leaves changed — a surface shared beyond one component, either a cross-component shape inside the module or a surface the module declares to its callers), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between impl_only and arch_impl: data_flow and api changes are not purely local to a single component, nor do they rewire graph topology like component or meta changes — a data_flow change alters the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created.",
+      "description": "Classify each change by its impact level: impl_only (only test_section leaves changed), contract (data_flow or api leaves changed — a surface shared beyond one component, either a cross-component shape inside the module or a surface the module declares to its callers), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between impl_only and arch_impl: data_flow and api changes are not purely local to a single component, nor do they rewire graph topology like component or meta changes — a data_flow change alters the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created.",
       "depends_on": [
         "f223179a540a"
       ]
@@ -61,7 +61,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Identity-hash tree keying",
-      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, implementation-section leaf, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
+      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add."
     },
     {
       "id": "6f8284df92a2",
@@ -123,7 +123,7 @@
     {
       "id": "f1a672216ce9",
       "name": "ImpactClassifier",
-      "description": "Analyzes diff results to classify changes by their impact level: impl_only (implementation-section, test_section), contract (data_flow, api), arch_impl (component), or structural (module.json, project.json, requirement). The contract level is distinct from impl_only because data_flow and api changes describe surfaces shared beyond one component — downstream matchers must not skip them. Uses node metadata (type, module association) instead of parsing path prefixes.",
+      "description": "Analyzes diff results to classify changes by their impact level: impl_only (test_section), contract (data_flow, api), arch_impl (component), or structural (module.json, project.json, requirement). The contract level is distinct from impl_only because data_flow and api changes describe surfaces shared beyond one component — downstream matchers must not skip them. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
         "425146f32e96"

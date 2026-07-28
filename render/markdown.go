@@ -97,19 +97,6 @@ func writeModule(w io.Writer, mg *ModuleGraph) {
 		}
 	}
 
-	if len(mg.Spec.ImplSections) > 0 {
-		fmt.Fprintf(w, "### Implementation\n\n")
-		for _, s := range mg.Spec.ImplSections {
-			if s.Content != "" {
-				if content, ok := mg.Content[s.Content]; ok && content != "" {
-					fmt.Fprintf(w, "%s\n", adjustHeadings(content, 3))
-				}
-			} else {
-				fmt.Fprintf(w, "#### %s\n\n", s.Name)
-			}
-		}
-	}
-
 	if len(mg.Spec.DataFlows) > 0 {
 		fmt.Fprintf(w, "### Data Flows\n\n")
 		for _, f := range mg.Spec.DataFlows {

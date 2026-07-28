@@ -5,8 +5,8 @@
 All scenarios invoke the `spex render` CLI command against a temporary spec directory containing a valid spec fixture. The fixture is the same multi-module spec described in the SpecReader and Renderer test setups:
 
 - `project.json` with 2 modules (alpha, beta) and project-level requirements
-- Module alpha: 2 components with content leaves, 1 impl_section, 1 data_flow
-- Module beta: 1 component with content leaf, 1 impl_section
+- Module alpha: 2 components with content leaves, 1 test_section, 1 data_flow
+- Module beta: 1 component with content leaf, 1 test_section
 
 No `spex` process is spawned. Each scenario assembles the command tree itself, hands it the scenario's arguments and runs it in place, capturing what the command writes to stdout and collecting stderr in a separate buffer. That still exercises the CLI path — flag parsing, argument handling and the stdout/stderr split — but it observes a returned error where a spawned process would have an exit status. So where a scenario below says "exit code 0" the assertion made is that the command returned no error, and "exit code 1" is that it returned one; turning that error into an exit status is the CLI entry point's step, asserted where that step lives rather than here. Where a scenario instead describes a shell pipeline, what it pins is the shape of the output such a pipeline consumes.
 
@@ -35,7 +35,7 @@ No `spex` process is spawned. Each scenario assembles the command tree itself, h
 - Exit code is 0
 - Stdout contains a collated markdown document
 - Output includes project heading, project requirements, and per-module sections
-- Output contains inlined content from `arch_*.md`, `impl_*.md`, and `flow_*.md` files
+- Output contains inlined content from `arch_*.md`, `flow_*.md`, and `test_*.md` files
 - Stderr is empty
 
 ### S3: DOT format output
@@ -61,7 +61,7 @@ No `spex` process is spawned. Each scenario assembles the command tree itself, h
 - Exit code is 0
 - Stdout is valid JSON
 - Parsed JSON has top-level `"nodes"` and `"edges"` arrays
-- Nodes array contains project, module, requirement, component, impl_section, and data_flow entries
+- Nodes array contains project, module, requirement, component, data_flow and test_section entries
 - Stderr is empty
 
 ### S5: Output is written to stdout only (composable)

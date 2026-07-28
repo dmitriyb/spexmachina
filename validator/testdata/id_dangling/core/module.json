@@ -20,15 +20,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000099"
-      ],
-      "id": "000000000001",
-      "name": "Engine impl"
-    }
-  ],
   "name": "core",
   "requirements": [
     {

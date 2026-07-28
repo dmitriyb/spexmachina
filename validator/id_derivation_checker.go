@@ -29,8 +29,8 @@ import (
 //
 // # Scope
 //
-// Module-scoped nodes only: requirements, components, impl_sections,
-// data_flows, test_sections and apis declared in a module.json. Project-level
+// Module-scoped nodes only: requirements, components, data_flows,
+// test_sections and apis declared in a module.json. Project-level
 // requirement ids are the sole remaining exemption — 15 of the ones this
 // project's own project.json carries predate the identity-hash convention
 // (`Render spec` declares 6b00623735ac against a computed 060ca1db054d) — and
@@ -66,9 +66,6 @@ func CheckIDDerivation(specDir string) []ValidationError {
 		}
 		for _, c := range modSpec.Components {
 			result = append(result, derivedIDError(prefix, "components", mod.Name, "component", c.Name, c.ID)...)
-		}
-		for _, s := range modSpec.ImplSections {
-			result = append(result, derivedIDError(prefix, "impl_sections", mod.Name, "impl_section", s.Name, s.ID)...)
 		}
 		for _, f := range modSpec.DataFlows {
 			result = append(result, derivedIDError(prefix, "data_flows", mod.Name, "data_flow", f.Name, f.ID)...)

@@ -4,7 +4,7 @@ Validates that all `content` paths in module.json files resolve to existing mark
 
 ## Responsibilities
 
-- Walk all `content` fields in components, impl_sections, data_flows, and test_sections
+- Walk all `content` fields in components, data_flows, and test_sections
 - Resolve each path relative to its module directory
 - Report missing files as validation errors
 
@@ -17,7 +17,7 @@ Given the path to a spec directory, the checker returns a flat list of validatio
 ## Behavior
 
 1. For each module in `project.json`, read its `module.json`
-2. For each component, impl_section, data_flow, and test_section with a `content` field:
+2. For each component, data_flow, and test_section with a `content` field:
    - Form the full path from the spec directory, the module's `path`, and the `content` value
    - Check if the file exists
 3. Report each missing file with the module name and node that references it
@@ -26,5 +26,5 @@ Each entry raised against a declared path is located by module, node type and no
 
 ## Edge Cases
 
-- A `content` value that is empty is passed over rather than reported. It is not a hole in the check: the module schema requires a non-empty `content` on every component, impl_section, data_flow and test_section, so an empty one is already reported against the schema
+- A `content` value that is empty is passed over rather than reported. It is not a hole in the check: the module schema requires a non-empty `content` on every component, data_flow and test_section, so an empty one is already reported against the schema
 - Content path should not contain `..` or absolute paths — flag these as errors. A path is rejected on its shape before its existence is looked at, so a traversal is refused at the declaration rather than followed
