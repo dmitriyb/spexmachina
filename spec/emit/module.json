@@ -126,48 +126,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "bb860a396d40",
-      "name": "Changeset building",
-      "content": "impl_changeset_building.md",
-      "describes": [
-        "7f06f7d80e94"
-      ]
-    },
-    {
-      "id": "f78cf15a5fdb",
-      "name": "Reference resolution",
-      "content": "impl_reference_resolution.md",
-      "describes": [
-        "f7775ac5f1f3"
-      ]
-    },
-    {
-      "id": "5f984d123929",
-      "name": "Topological sorting",
-      "content": "impl_topological_sorting.md",
-      "describes": [
-        "7249fd093b8a"
-      ]
-    },
-    {
-      "id": "cb9cd590dd6c",
-      "name": "Idempotency labeling",
-      "content": "impl_idempotency_labeling.md",
-      "describes": [
-        "6f4b6dd8928f"
-      ]
-    },
-    {
-      "id": "0e215d0ee35d",
-      "name": "Emit command implementation",
-      "content": "impl_emit_command.md",
-      "describes": [
-        "cbe835d38c3e"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "dbe8d1e707d5",

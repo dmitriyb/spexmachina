@@ -16,10 +16,13 @@ Flags:
 | `--git-head` | yes | Git HEAD SHA. Threaded into changeset.json as `git_head`; used by the adapter for `commit:<HEAD>` labels on obsoleted beads. |
 | `--impact`   | no (stdin default) | Path to impact report JSON. If omitted, reads from stdin. |
 | `--out`      | no (stdout default) | Path to write changeset.json. If omitted, writes to stdout. |
+| `--map`      | no (`.bead-map.json`) | Path to the bead mapping store. A relative path resolves against the spec directory's parent, so the default finds the repository's own `.bead-map.json`. |
+
+The root's persistent `--spec-dir` is read too: it is what the spec graph is loaded from and what a relative `--map` is resolved against.
 
 ## Declared surface
 
-`spex emit` is this module's only external entry point, declared as an api node in `spec/emit/module.json` with `provided_by` naming EmitCommand. The declared name is the invocation string alone — the four flags above are not part of it.
+`spex emit` is this module's only external entry point, declared as [[7cccc4a96101|an api node]] in `spec/emit/module.json` with `provided_by` naming EmitCommand. The declared name is the invocation string alone — the flags above are not part of it.
 
 That boundary decides what the pipeline can see. Renaming the subcommand changes the api's identity hash and so reads as a removal plus an addition, and the removal-time name check then reports every place in the spec corpus that still says `spex emit`. Changing a flag — adding one, renaming one, changing what `--out` accepts — moves no name and no hash, and the diff cannot see it. Flag-level contract changes are therefore documented here, in the table above, and are caught by review rather than by the tool.
 
@@ -27,31 +30,23 @@ That boundary decides what the pipeline can see. Renaming the subcommand changes
 
 Before running the builder:
 
-1. Validate `--git-head` matches `^[0-9a-f]{7,40}$`.
-2. Parse the impact report JSON; reject if `errors` array is non-empty (consistent with impact's own gate).
-3. Load `.bead-map.json` via `mapping.Store`.
-4. Load the spec graph rooted at `spec/project.json`.
+1. Require `--proposal`, and require `--git-head` to match `^[0-9a-f]{7,40}$`.
+2. Parse the impact report JSON; reject if `errors` array is non-empty (consistent with impact's own gate). The gate is re-applied here rather than trusted upstream, so a stale report piped in from an earlier run cannot slip past.
+3. Open the bead mapping store at the resolved `--map` path.
+4. Load the spec graph rooted at the spec directory's `project.json`.
 
 ## Wiring
 
-```
-EmitCommand
-  ├─ impact report (stdin or file)
-  ├─ mapping.Store
-  ├─ spec.Graph
-  └─ ChangesetBuilder{
-      ├─ Resolver{specGraph, mappingStore, batch}
-      ├─ TopologicalSorter{}
-      └─ IdempotencyLabeler{mappingStore}
-    }
-```
+EmitCommand assembles the run and then gets out of the way. It gathers five things — the impact report from stdin or `--impact`, the mapping store at the resolved `--map` path, the spec graph rooted at the spec directory, the `--git-head` SHA and the `--proposal` ref — and hands all five to [[7f06f7d80e94|ChangesetBuilder]], which owns everything from there.
 
-EmitCommand composes the builder, invokes `Build(report)`, serializes the returned `Changeset` with canonical JSON encoding, writes to the configured sink.
+The three subordinate components — Resolver, TopologicalSorter and IdempotencyLabeler — are reached only through the builder. EmitCommand neither builds nor calls them, which is why this module's `uses` graph runs command → builder → the three rather than command → all four: there is exactly one place a change to the composition has to be made.
+
+Once the builder answers, the command has one job left: serialize the changeset in canonical form and write it to the configured sink.
 
 ## Exit Codes
 
 - `0` — success; changeset written.
-- `1` — input validation error (bad flags, malformed JSON, impact report carries errors). Stderr carries the structured error.
+- `1` — input validation error (bad flags, malformed JSON, impact report carries errors). Stderr names the flag or the input that failed.
 - `2` — builder error (cycle detected, unresolvable parent). Stderr carries the error with spec_node_ids implicated.
 
 Failure modes never write a partial changeset.
@@ -60,12 +55,15 @@ Failure modes never write a partial changeset.
 
 - stdin input + stdout output makes `spex impact ... | spex emit ...` pipeline-friendly.
 - `--out` + a specific path lets callers capture the changeset for git review before handing to the adapter.
+- `--out` writes atomically: the changeset lands beside the target and is moved into place only once it is complete. A failure part-way through leaves no half-written file for the adapter to pick up, and the target path holds either the previous run's changeset or the new one, never a splice of the two.
 
 ## Non-Responsibilities
 
 - Does not run the adapter.
 - Does not update `.bead-map.json` or save a snapshot — those belong to ingest.
 - Does not invoke git — `--git-head` is caller-supplied.
+
+Those three absences are one property: [[aa2375420738|emit is a pure function of the files and flags it is handed]]. It starts no subprocess, opens no connection and asks no tracker anything, so the same impact report, mapping store, spec directory, proposal ref and SHA produce the same bytes on every machine and at every hour.
 
 ## Test surface
 

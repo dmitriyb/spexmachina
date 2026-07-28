@@ -4,13 +4,15 @@ Resolves each create action's `DepSpecNodeIDs` (from impact) and its parent into
 
 ## The Three Ref Shapes
 
-For every spec_node_id in `DepSpecNodeIDs`:
+A dep a create action names is written as one of the shapes below, or dropped — [[d096fd5d6cd8|the encoding that lets a changeset name work that does not exist yet]]. For each dep spec_node_id, first match wins:
 
-1. **`ref:op`** — if another create op in the same batch targets this spec_node_id. The op_id is known at resolve time because TopologicalSorter has already assigned op_ids in dependency order.
-2. **`ref:bead`** — if the mapping store has a record for this spec_node_id with `status != "closed"`. The bead_id is taken from the record.
-3. **`ref:spec_node`** — fallback; neither of the above applied. The adapter resolves at exec time by querying the mapping store at that moment (handles races where a record appeared between emit and adapter run).
+1. **`ref:op`** — another create op in the same batch targets this spec_node_id.
+2. **`ref:bead`** — the mapping store holds at least one record for this spec_node_id whose bead is not closed. Where several such records exist the highest record id wins, so the latest re-implementation supersedes the earlier ones; a record carrying no status at all counts as open, the conservative reading that attaches an edge rather than dropping one.
+3. **`ref:spec_node`** — the mapping store knows nothing about this spec_node_id. The adapter resolves it at exec time by querying the mapping store at that moment, which covers the race where a record appeared between emit and the adapter run.
 
-If the mapping store has a record with `status == "closed"`, the dep is **dropped** — the work is satisfied, no edge needed.
+That ordering is a precedence, not a search order: a dep that is both in the batch and open in the mapping store is written `ref:op`, because the in-batch op is the authoritative latest work and the record can be stale before the batch lands.
+
+If every record for the spec_node_id is closed, the dep is **dropped** — the work is satisfied, no edge needed.
 
 ## Why Three Shapes
 
@@ -22,14 +24,16 @@ Resolver is where the project requirement's "parent hierarchy, lineage tracking,
 
 ## Parent Resolution
 
-The proposal epic is the parent of every non-epic create in the run:
+The proposal epic is the parent of every non-epic create in the run, and [[79c821e01654|the mapping store is consulted first for which epic that is]]:
 
 - If the proposal is **new** (this is the first emit for this proposal), the epic is also a new create op (the first op). Each subsequent create's `parent` is `{ref:op,op_id:"<epic op>"}`.
-- If the proposal **already has an epic bead** in the mapping store (re-run of a partial run, or idempotent re-emit), the epic op is skipped; each create's `parent` is `{ref:bead,bead_id:"<existing epic bead>"}`.
+- If the proposal **already has an epic bead** in the mapping store (re-run of a partial run, or idempotent re-emit), the epic op is skipped; each create's `parent` is `{ref:bead,bead_id:"<existing epic bead>"}`. An epic that already exists wins over an in-batch one, so a re-run that misread the epic as new still parents its creates under the bead that is already there.
+
+The epic's own `spec_node_id` is synthetic: no node in the spec tree corresponds to it, so the value carried in `changeset.json` is the proposal ref itself rather than a 12-hex identity hash, and a reader can tell the epic apart from every other create by that shape alone.
 
 ## Priority
 
-Per create action, walk the chain:
+Per create action, [[af8c8ecf3519|priority is inherited from the project requirements the component ultimately implements]]. Walk the chain:
 
 1. Component → `implements: [req_id, …]`.
 2. For each `req_id`, module requirement → `preq_id`.
@@ -37,34 +41,15 @@ Per create action, walk the chain:
 
 Take the **minimum** priority across all reachable project requirements. Lowest number wins.
 
-If no priority chain is reachable (missing `preq_id` or missing project req), apply a deterministic fallback: priority `3` (mid-range). Surface a warning through the emit report but do not fail — the validator's `requirement_coverage_checker` is the authoritative gate for upstream chain completeness.
+If no priority chain is reachable (missing `preq_id` or missing project req), apply a deterministic fallback: priority `3` (mid-range). The fallback is silent — the op carries `3` and nothing in the changeset or on stderr records that the chain was unreachable — and it is not an error, because the validator's `requirement_coverage_checker` is the authoritative gate for upstream chain completeness.
 
 ## Interface
 
-```go
-// SpecGraph is the narrow, emit-local read surface Resolver and Builder
-// need: the implements → preq_id → priority chain plus the on-disk paths
-// Builder links in create-op bodies. The CLI adapts the parsed spec
-// directory onto it; tests use a fake.
-type SpecGraph interface {
-    Component(specNodeID string) (Component, bool)
-    ModuleRequirement(reqID string) (ModuleRequirement, bool)
-    ProjectRequirement(preqID string) (ProjectRequirement, bool)
-    Paths(specNodeID string) (NodePaths, bool)
-}
+Resolver is set up with three things — the spec graph, the mapping store, and the batch map of spec_node_id to op_id — and answers three questions per create action: what refs its deps become, what ref its parent becomes, and what priority number it carries.
 
-type Resolver struct {
-    SpecGraph    SpecGraph
-    MappingStore mapping.Store
-    Batch        map[string]string // spec_node_id → op_id, populated by TopologicalSorter
-}
+Its read surface on the spec graph is deliberately narrow. It reads the implements → preq_id → priority chain and nothing else, so nothing about a component's name, description or `uses` edges can reach a ref or a priority. The command adapts the parsed spec directory onto that surface; tests substitute a stand-in.
 
-func (r *Resolver) ResolveDeps(specNodeIDs []string) ([]Ref, error)
-func (r *Resolver) ResolveParent(proposal string) (Ref, error)
-func (r *Resolver) Priority(componentID string) int
-```
-
-`Batch` is populated before `ResolveDeps` is called — TopologicalSorter runs first to assign op_ids; Resolver then classifies each dep.
+The batch map must be complete before any dep is resolved. TopologicalSorter runs first for exactly that reason: it fixes the order the op_ids are handed out in, and ChangesetBuilder hands Resolver the finished map before the first dep is classified.
 
 ## Every ref names a node that can own a bead
 
