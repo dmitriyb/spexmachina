@@ -5,7 +5,7 @@ Validates identity-hash uniqueness, cross-reference integrity, mandatory `preq_i
 ## Responsibilities
 
 ### ID Uniqueness
-- Check that every identity hash ID is unique within the array that contains it. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections` and `apis`
+- [[707094f8868b|ID uniqueness]] is scoped to one array: every identity hash must be unique within the array that contains it, and nowhere wider. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections` and `apis`
 - Uniqueness is checked by tallying each hash in a per-array set of strings — any hash counted more than once is reported with its array location and the offending hash
 - Collisions across distinct logical nodes are mathematically improbable in the 48-bit hash space, but the validator still checks them so hand-edited or hand-merged files cannot smuggle a stale ID into a new node
 
@@ -22,7 +22,7 @@ A declared api or component name is rejected unless tokenizing it the way the re
 `spex validate [--json]` is the shape this rejects: the brackets are stripped by the tokenizer, so the declared name and the phrase the scan rebuilds differ. `spex validate --json` is declarable; so is `spex map get`. The api name is the surface string alone — never a signature, never an argument placeholder.
 
 ### Cross-Reference Integrity
-All references are identity hash strings, validated by string set membership against the appropriate per-array set:
+[[4b399b1c568f|Cross-reference integrity]] holds when every edge in the spec names a node that exists. All references are identity hash strings, validated by string set membership against the appropriate per-array set:
 
 - `implements`: component → requirement identity hashes within the same module
 - `uses` (component): component → component identity hashes within the same module
@@ -44,14 +44,14 @@ There is no integer parsing, no path decomposition (`module/N/component/M`), and
 - A `preq_id` that does not match any project requirement is reported as a dangling reference
 
 ### Priority Presence
-- Every project requirement must have a `priority` field (integer 0-4)
-- Missing or out-of-range priority is reported as an error
+- [[9445f0fe054d|Validate priority]] reaches project requirements only: each one must carry a `priority` field holding an integer 0-4. A module requirement has no priority of its own
+- Missing or out-of-range priority is reported as an error against the requirement that lacks it
 
 ## Interface
 
 Given the path to a spec directory, the checker loads project.json and every module.json and returns a flat list of validation entries — empty when the spec is clean. If the spec cannot be loaded, the load failures are returned and no further checks run. The checker never mutates the spec and never writes output: aggregation, sorting and formatting belong to ErrorReporter.
 
-Uniqueness runs before cross-reference resolution, and the two do not mix in a single run. When any duplicate is found, the checker returns the duplicate entries alone and skips reference resolution — a reference cannot be unambiguously resolved while two nodes share a hash, so resolving anyway would produce misleading errors.
+Uniqueness and name shape run before cross-reference resolution, and the two phases do not mix in a single run. When the first phase reports anything at all, the checker returns those entries alone and skips reference resolution — a reference cannot be unambiguously resolved while two nodes share a hash, so resolving anyway would produce misleading errors.
 
 Modules are visited in sorted name order, so the same spec always produces the same entries in the same sequence.
 
@@ -59,4 +59,4 @@ Every ID and cross-reference field is a string end to end — the loaded spec ca
 
 ## Error Format
 
-Each error includes the source node (type, identity hash, module) and the dangling reference hash or missing field. Identity hashes are short (12 characters) so error messages remain readable even when several appear in one report.
+Each error raised against a declaration is located by that declaration — the file, the array inside it and, where one node is at fault, that node's identity hash — and its message names the reference field that failed together with the dangling target hash. The load failures `## Interface` describes are the exception: they are located at `project.json` or at the `module.json` that failed, with no array or node beneath it. Naming the field is what keeps `implements` and `uses` on the same component apart in a single report. A missing field is reported the same way, naming the field in place of a target. Identity hashes are short (12 characters) so error messages remain readable even when several appear in one report.

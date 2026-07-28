@@ -148,11 +148,13 @@ tmp/spec/
 **When** `CheckIDs(project, modules)` is called.
 **Then** one error referencing the dangling module dependency.
 
-#### I11: Milestone `groups` references non-existent module
+#### I11: Project requirement `depends_on` references non-existent project requirement
 
-**Given** `project.json` has a milestone with `groups: [88]` and no module with id 88 exists.
+**Given** `project.json` has a requirement whose `depends_on` names an id that no project-level requirement carries.
 **When** `CheckIDs(project, modules)` is called.
-**Then** one error for the dangling milestone group reference.
+**Then** one error located at that requirement in `project.json`, reporting the dangling `depends_on` target. This is the project-level counterpart of I9, which covers the same field inside a module.
+
+> This scenario replaced a milestone `groups` check. Milestones were retired from the spec and from `schema/project.schema.json`, whose root rejects unknown properties, so a `project.json` carrying a `milestones` array now fails the schema check outright and there is no reference for IDValidator to dangle.
 
 #### I12: Requirement `preq_id` references non-existent project requirement
 
@@ -192,7 +194,7 @@ tmp/spec/
 
 **Given** a project with 50 modules, each with 20 requirements and 10 components, forming a deep but acyclic dependency chain.
 **When** `CheckDAG(project, modules)` is called.
-**Then** it completes in under 100ms and returns zero errors. Validates the O(V+E) complexity claim.
+**Then** it completes in under 100ms and returns zero errors.
 
 #### I15: Module requirement missing preq_id fails validation
 

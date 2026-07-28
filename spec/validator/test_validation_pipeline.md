@@ -141,7 +141,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 **Given** a spec with errors in every checker.
 **When** `spex validate tmp/spec/` is executed.
-**Then** every checker has contributed to the output. The command runs them in a fixed order — SchemaChecker, ContentResolver, IDValidator, DAGChecker, NameConsistencyChecker, TestCoverageChecker, RequirementCoverageChecker, CoupledSectionChecker — and the aggregated report is then sorted by path, so the checker sequence is not observable in the output ordering.
+**Then** every checker has contributed to the output. The command runs them in the fixed order `flow_validation_pipeline.md` numbers — schema, content, link, id, id_derivation, dag, name_consistency, test_coverage, requirement_coverage, coupled_section — and the aggregated report is then sorted by path, so entries from different checkers interleave by location. Where one path collects several, assert the set and not the sequence: a `module.json` that will not parse reports once per checker, all ten at that one path, carrying the ten `check` values listed above. Do not assert the order of those ten — the sort compares `path` alone, and tied entries come back in whatever order it produced.
 
 #### V10: Default spec directory
 

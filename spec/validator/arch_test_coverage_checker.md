@@ -1,6 +1,6 @@
 # TestCoverageChecker
 
-Validates that every component in each module is described by at least one `test_section`.
+Validates that every component in each module is described by at least one `test_section`, which is what [[a88e6fb4463d|test coverage checking]] requires of a spec.
 
 ## Responsibilities
 
@@ -10,23 +10,24 @@ Validates that every component in each module is described by at least one `test
 
 ## Interface
 
-```go
-func CheckTestCoverage(specDir string, project *schema.Project) []ValidationError
-```
+Given the path to a spec directory, the checker returns a flat list of validation entries — empty when every component is covered. If the spec cannot be loaded, the load failures are returned under this checker's own name and no coverage is computed. Modules are visited in sorted name order and, within a module, components in declaration order, so the same spec produces the same entries in the same sequence.
 
 ## Behavior
 
 1. For each module in `project.json`, read its `module.json`
 2. Collect all component IDs in the module
 3. Collect all component IDs referenced by `test_sections[].describes`
-4. Any component ID not in the describes set is uncovered — emit a validation error with the module name, component ID, and component name
+4. Any component ID not in the describes set is uncovered and produces one entry, located at that component's own declaration
+
+Coverage is judged inside a module: a `test_section` in one module does not cover a component in another, because `describes` is a module-local edge.
 
 ## Error Format
 
-Each error includes:
-- Module path and name
-- Component ID and name
-- Message: `"component <name> (id:<id>) has no test_section coverage"`
+Each entry raised against an uncovered component carries:
+- A path locating the declaration to fix: `<module>/module.json:/components/<component id>`
+- A message naming the component and repeating its identity hash: `component <name> (id:<id>) has no test_section coverage`
+
+The load failures `## Interface` describes are the exception: they are located at the file that failed to load and carry that file's read or parse error as their message.
 
 ## Edge Cases
 
