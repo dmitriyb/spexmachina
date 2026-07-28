@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -36,8 +37,7 @@ func Register(proposalPath, specDir string) (string, error) {
 		return "", err
 	}
 
-	slug := slugFromHeading(string(content), proposalPath)
-	filename := fmt.Sprintf("%s-%s.md", time.Now().Format("2006-01-02"), slug)
+	filename := targetName(proposalPath, string(content))
 
 	proposalsDir := filepath.Join(specDir, "proposals")
 	if err := os.MkdirAll(proposalsDir, 0755); err != nil {
@@ -108,6 +108,23 @@ func extractH2Headings(content string) []string {
 		}
 	}
 	return headings
+}
+
+// datedName matches the YYYY-MM-DD-<name>.md convention a registered
+// proposal is stored under.
+var datedName = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-.+\.md$`)
+
+// targetName is the basename the copy is written under. A source already
+// following the convention keeps its own name: re-dating it would file
+// today's registration under a date the proposal was not written on, and
+// break the spec_proposal:<stem> label every bead already carries. Anything
+// else is renamed to today's date plus a slug from its first heading.
+func targetName(proposalPath, content string) string {
+	base := filepath.Base(proposalPath)
+	if datedName.MatchString(base) {
+		return base
+	}
+	return fmt.Sprintf("%s-%s.md", time.Now().Format("2006-01-02"), slugFromHeading(content, proposalPath))
 }
 
 // slugFromHeading derives a URL-safe slug from the first H1 heading,

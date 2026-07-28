@@ -31,7 +31,7 @@ tmpdir/
 ### S1: Register a valid project proposal
 
 **Given** `valid-project.md` with all four required H2 sections.
-**When** `Register(ctx, "input/valid-project.md", "spec")` is called.
+**When** `Register("input/valid-project.md", "spec")` is called.
 **Then:**
 - File is copied to `spec/proposals/YYYY-MM-DD-<slug>.md` where YYYY-MM-DD is today's date.
 - The slug is derived from the H1 heading of the proposal (lowercased, spaces replaced with hyphens, non-alphanumeric characters stripped).
@@ -42,7 +42,7 @@ tmpdir/
 ### S2: Register a valid change proposal
 
 **Given** `valid-change.md` with all three required H2 sections.
-**When** `Register(ctx, "input/valid-change.md", "spec")` is called.
+**When** `Register("input/valid-change.md", "spec")` is called.
 **Then:**
 - File is copied to `spec/proposals/YYYY-MM-DD-<slug>.md`.
 - Proposal type is detected as "change" (because it contains `## Proposed change` and not `## Vision`).
@@ -51,7 +51,7 @@ tmpdir/
 ### S3: Reject project proposal with missing sections
 
 **Given** `partial-project.md` containing `## Vision`, `## Modules`, `## Key requirements` but missing `## Design decisions`.
-**When** `Register(ctx, "input/partial-project.md", "spec")` is called.
+**When** `Register("input/partial-project.md", "spec")` is called.
 **Then:**
 - Function returns an error.
 - Error message includes the name of every missing section ("Design decisions").
@@ -60,7 +60,7 @@ tmpdir/
 ### S4: Reject change proposal with missing sections
 
 **Given** `partial-change.md` containing `## Context`, `## Proposed change` but missing `## Impact expectation`.
-**When** `Register(ctx, "input/partial-change.md", "spec")` is called.
+**When** `Register("input/partial-change.md", "spec")` is called.
 **Then:**
 - Function returns an error.
 - Error message includes "Impact expectation".
@@ -69,7 +69,7 @@ tmpdir/
 ### S5: Report all missing sections, not just the first
 
 **Given** a file containing only `## Vision` (missing Modules, Key requirements, Design decisions).
-**When** `Register(ctx, "input/one-section.md", "spec")` is called.
+**When** `Register("input/one-section.md", "spec")` is called.
 **Then:**
 - Error lists all three missing sections: "Modules", "Key requirements", "Design decisions".
 - The error uses `errors.Join` or equivalent multi-error aggregation so each missing section is individually inspectable.
@@ -77,7 +77,7 @@ tmpdir/
 ### S6: Preserve existing date-prefixed filename
 
 **Given** `already-dated.md` is a valid change proposal file named `2026-05-10-caching.md`.
-**When** `Register(ctx, "input/2026-05-10-caching.md", "spec")` is called.
+**When** `Register("input/2026-05-10-caching.md", "spec")` is called.
 **Then:**
 - File is copied to `spec/proposals/2026-05-10-caching.md` preserving the original filename.
 - The registrar does not prepend a second date.
@@ -85,7 +85,7 @@ tmpdir/
 ### S7: Generate slug from H1 heading when filename lacks date prefix
 
 **Given** `valid-project.md` with H1 heading `# Project Proposal: Add Caching Layer`.
-**When** `Register(ctx, "input/valid-project.md", "spec")` is called.
+**When** `Register("input/valid-project.md", "spec")` is called.
 **Then:**
 - Target filename is `YYYY-MM-DD-add-caching-layer.md` (date is today, slug derived from the H1 after stripping the "Project Proposal:" prefix).
 - Slug generation strips common prefixes ("Project Proposal:", "Change Proposal:"), lowercases, replaces spaces with hyphens, and removes non-alphanumeric/non-hyphen characters.
@@ -93,7 +93,7 @@ tmpdir/
 ### S8: Case-insensitive section matching
 
 **Given** `mixed-case.md` with headings `## VISION`, `## modules`, `## key Requirements`, `## design Decisions`.
-**When** `Register(ctx, "input/mixed-case.md", "spec")` is called.
+**When** `Register("input/mixed-case.md", "spec")` is called.
 **Then:**
 - All four required sections are matched case-insensitively.
 - Registration succeeds.
@@ -102,7 +102,7 @@ tmpdir/
 ### S9: Source file does not exist
 
 **Given** no file at `input/nonexistent.md`.
-**When** `Register(ctx, "input/nonexistent.md", "spec")` is called.
+**When** `Register("input/nonexistent.md", "spec")` is called.
 **Then:**
 - Function returns an error wrapping the underlying filesystem error.
 - No file is written to `spec/proposals/`.
@@ -110,7 +110,7 @@ tmpdir/
 ### S10: Target proposals directory does not exist
 
 **Given** a valid proposal file but `spec/proposals/` directory has not been created.
-**When** `Register(ctx, "input/valid-project.md", "spec")` is called.
+**When** `Register("input/valid-project.md", "spec")` is called.
 **Then:**
 - The registrar creates `spec/proposals/` (with permissions 0755) before copying.
 - Registration succeeds.
@@ -120,7 +120,7 @@ tmpdir/
 ### E1: Empty file
 
 **Given** `empty.md` is a zero-byte file.
-**When** `Register(ctx, "input/empty.md", "spec")` is called.
+**When** `Register("input/empty.md", "spec")` is called.
 **Then:**
 - Function returns an error indicating the proposal type cannot be detected (no H2 headings found).
 - Error message is descriptive: "proposal: cannot detect type from headings".
@@ -128,7 +128,7 @@ tmpdir/
 ### E2: File with H2 headings but no recognizable type
 
 **Given** `no-headings.md` containing `## Introduction` and `## Conclusion` (neither "Vision" nor "Proposed change").
-**When** `Register(ctx, "input/no-headings.md", "spec")` is called.
+**When** `Register("input/no-headings.md", "spec")` is called.
 **Then:**
 - Function returns an error: "proposal: cannot detect type from headings".
 - No file is written.
