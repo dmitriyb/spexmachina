@@ -1,19 +1,22 @@
 # Bead Matching Tests
 
-Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (component 2). These tests verify that bead metadata is correctly read from the bead CLI and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
+Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (component 2). These tests verify that bead metadata is correctly read from the tracker listing the caller supplies as a file, never from a tracker command this binary runs, and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
 
 ## Setup
 
 All scenarios share a common fixture layout. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 
-- A set of mapping records linking identity hashes to bead IDs:
+- A bead-map document linking identity hashes to bead IDs. The mapping store schema-validates the file before parsing it, so the fixture is an object with `next_id` and `records`, and each record carries `bead_type`, `content_file` and `spec_hash` alongside the four fields the scenarios read. A bare array of records is refused with `map: schema validation …` and exit 1. `content_file` and `spec_hash` carry placeholders here, as the identity hashes do:
 
 ```json
-[
-  {"id": 1, "spec_node_id": "<SCHK_HASH>",  "bead_id": "spex-001", "module": "validator", "component": "SchemaChecker"},
-  {"id": 2, "spec_node_id": "<HASR_HASH>",  "bead_id": "spex-002", "module": "merkle",    "component": "Hasher"},
-  {"id": 3, "spec_node_id": "<HCMP_HASH>",  "bead_id": "spex-003", "module": "merkle",    "component": "Hash computation"}
-]
+{
+  "next_id": 4,
+  "records": [
+    {"id": 1, "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker",    "content_file": "<SCHK_FILE>", "spec_hash": "<SCHK_SPEC_SHA>"},
+    {"id": 2, "spec_node_id": "<HASR_HASH>", "bead_id": "spex-002", "bead_type": "task", "module": "merkle",    "component": "Hasher",           "content_file": "<HASR_FILE>", "spec_hash": "<HASR_SPEC_SHA>"},
+    {"id": 3, "spec_node_id": "<HCMP_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hash computation", "content_file": "<HCMP_FILE>", "spec_hash": "<HCMP_SPEC_SHA>"}
+  ]
+}
 ```
 
 Where:
@@ -42,7 +45,7 @@ Call the mapping store to list records. Assert the returned records contain the 
 
 ### S2: BeadReader returns empty slice when no records exist
 
-Empty mapping file. Assert an empty slice, not an error.
+A mapping file holding no records — a bead-map document whose `records` array is empty — and, separately, no file at the mapping path at all. Assert an empty slice rather than an error for each. A zero-byte file is a different case: it is not a bead-map document, and it is refused.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 

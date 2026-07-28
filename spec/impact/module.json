@@ -123,7 +123,7 @@
     {
       "id": "76d72cbe00f3",
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using the simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads (live status from BeadReader), also creates a cleanup bead. For create actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges \u2014 the list of spec_node_ids the created bead will depend on. Bead-ID resolution is NOT performed here; it moves to emit. Gates bead creation by node type: module, component, data_flow, and test_section produce beads; impl_section is always skipped; test_section is additionally gated by its describes array length \u2014 if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using the simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads (live status from BeadReader), also creates a cleanup bead. For create actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges \u2014 the list of spec_node_ids the created bead will depend on. Bead-ID resolution is NOT performed here; it moves to emit. Gates bead creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length \u2014 if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
       "content": "arch_action_classifier.md",
       "implements": [
         "06a081811e38",
@@ -163,48 +163,6 @@
         "06035e7f0c39",
         "76d72cbe00f3",
         "60d4747021ec"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "df9419abd371",
-      "name": "Bead metadata reading",
-      "content": "impl_bead_reading.md",
-      "describes": [
-        "bec96486c6b2"
-      ]
-    },
-    {
-      "id": "74694a681259",
-      "name": "Node matching algorithm",
-      "content": "impl_node_matching.md",
-      "describes": [
-        "06035e7f0c39"
-      ]
-    },
-    {
-      "id": "c4d8861def3d",
-      "name": "Action classification rules",
-      "content": "impl_action_classification.md",
-      "describes": [
-        "76d72cbe00f3"
-      ]
-    },
-    {
-      "id": "7169092e513c",
-      "name": "Report format",
-      "content": "impl_report_format.md",
-      "describes": [
-        "60d4747021ec"
-      ]
-    },
-    {
-      "id": "4c1f6ea7df9d",
-      "name": "Impact command implementation",
-      "content": "impl_impact_command.md",
-      "describes": [
-        "5d6813710879"
       ]
     }
   ],
