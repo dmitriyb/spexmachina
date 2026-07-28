@@ -28,7 +28,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Resolve full spec context from record",
-      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), impl_sections whose describes array contains the component ID, test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
+      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
     }
   ],
   "components": [
@@ -58,47 +58,13 @@
     {
       "id": "6b79188dff4c",
       "name": "ContextResolver",
-      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Looks up the component by matching `record.SpecNodeID` (an identity hash) against component IDs in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
+      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: the arch file, the test_sections and data_flows that name it, and the module file itself. Looks up the component by matching the record's spec_node_id (an identity hash) against the ids declared in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [
         "40a3d3155131"
       ],
       "uses": [
         "205e67ca4aad"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "12e88095cc9d",
-      "name": "Mapping file format",
-      "content": "impl_mapping_format.md",
-      "describes": [
-        "205e67ca4aad"
-      ]
-    },
-    {
-      "id": "a19bedd79ef6",
-      "name": "CRUD operations",
-      "content": "impl_crud_operations.md",
-      "describes": [
-        "205e67ca4aad"
-      ]
-    },
-    {
-      "id": "5c84dc2bdfc3",
-      "name": "Map command implementation",
-      "content": "impl_map_command.md",
-      "describes": [
-        "08909d62930b"
-      ]
-    },
-    {
-      "id": "bb6031b762aa",
-      "name": "Context resolution implementation",
-      "content": "impl_context_resolution.md",
-      "describes": [
-        "6b79188dff4c"
       ]
     }
   ],

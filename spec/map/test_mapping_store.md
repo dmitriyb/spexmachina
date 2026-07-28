@@ -3,7 +3,8 @@
 ## Setup
 
 - Create a temporary directory with a valid spec structure (project.json + one module)
-- Initialize an empty `.bead-map.json` file
+- Leave `.bead-map.json` absent, or write the bead-map document `{"next_id": 1, "records": []}`. A
+  zero-byte file is neither, and the store refuses it before any operation runs
 - Construct a MappingStore instance pointing at the temp directory
 
 ## Scenarios
@@ -52,7 +53,8 @@
 
 ### Empty mapping file
 
-- Load from a file containing `[]`
+- Load from a file containing `{"next_id": 1, "records": []}`. A bare `[]` will not do: the store
+  schema-validates the file first and refuses it with `map: schema validation …` and exit 1
 - All operations work on the empty list
 
 ### Missing mapping file
@@ -70,6 +72,7 @@
 
 - Attempt to create two records with the same spec_node_id but different bead_ids
 - Expected: error — with the obsolete+create model, the mapping file is current state only (one record per active spec node). The old record is updated with the new bead_id, not duplicated.
+- Exception: a create whose `node_type` is `proposal` skips this check — a second proposal record with the same spec_node_id and a different bead_id is created rather than refused.
 
 ### bead_type field is preserved
 

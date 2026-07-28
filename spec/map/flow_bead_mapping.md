@@ -8,46 +8,40 @@ changeset against the tracker. The record id travels ahead of the record: emit
 allocates it as an op's idempotency label, the adapter applies that label to the
 bead it creates, and ingest materialises the record at exactly that id.
 
-```
-spex diff ──▶ spex impact ──▶ spex emit
-                                 │
-                                 │  IdempotencyLabeler reads MappingStore's
-                                 │  next_id counter (read-only) and stamps each
-                                 │  create op with idempotency.label = spex:<record-id>
-                                 ▼
-                           changeset.json
-                                 │
-                                 ▼
-                    ┌──────────────────────┐
-                    │ adapter (external)    │── br create --labels spex:<record-id>
-                    │ scripts/apply-br.sh   │   captures the new bead id
-                    └──────────┬───────────┘
-                                 │
-                                 ▼
-                           receipts.json
-                                 │
-                                 ▼
-                    ┌──────────────────────┐
-                    │ spex ingest           │── Reconciler pairs each op with its
-                    │   Reconciler          │   receipt by op_id
-                    └──────────┬───────────┘
-                                 │
-                                 ▼
-                    ┌──────────────────────┐
-                    │ MappingStore          │── Insert/Update/Delete at
-                    │                       │   id = parse(idempotency.label)
-                    │                       │   bead_id from the receipt
-                    │                       │   metadata from the spec graph
-                    └──────────┬───────────┘
-                                 │
-                                 ▼
-                    .bead-map.json committed atomically,
-                    next_id advanced, snapshot saved
+```dot
+digraph bead_mapping {
+    "spex diff"           [style=dashed];
+    "spex impact"         [style=dashed];
+    "spex emit"           [style=dashed];
+    "changeset.json"      [style=dashed];
+    "scripts/apply-br.sh" [style=dashed];
+    "receipts.json"       [style=dashed];
+    "spex ingest"         [style=dashed];
+    ".bead-map.json"      [style=dashed];
+    "205e67ca4aad"        [label="MappingStore\n205e67ca"];
+    "08909d62930b"        [label="MapCommand\n08909d62"];
+
+    "spex diff"           -> "spex impact"         [label="diff report"];
+    "spex impact"         -> "spex emit"           [label="impact report"];
+    "205e67ca4aad"        -> "spex emit"           [label="record lookup + next_id, read only"];
+    "spex emit"           -> "changeset.json"      [label="idempotency.label = spex:<record-id>"];
+    "changeset.json"      -> "scripts/apply-br.sh";
+    "scripts/apply-br.sh" -> "receipts.json"       [label="br create --labels spex:<record-id>"];
+    "receipts.json"       -> "spex ingest"         [label="paired to its op by op_id"];
+    "spex ingest"         -> "205e67ca4aad"        [label="insert/update/delete at the labelled id"];
+    "205e67ca4aad"        -> ".bead-map.json"      [label="atomic write, next_id advanced"];
+    "08909d62930b"        -> "205e67ca4aad"        [label="spex map get / list / context"];
+}
 ```
 
-`spex` itself never invokes a bead CLI. Every tracker mutation happens inside
-the adapter; every mapping mutation happens inside ingest. Skills query the
-result through MapCommand (`spex map get` / `list` / `context`).
+[[205e67ca4aad|MappingStore]] appears at both ends of that graph on purpose, and the two edges are
+not the same kind of thing. Emit's IdempotencyLabeler only *reads* it — so the ids a changeset hands out are reserved rather
+than spent; ingest is the only thing that writes records back, and the persisted counter advances
+there or not at all.
+Everything between the two is the label doing the travelling: `spex` itself never invokes a bead
+CLI, so every tracker mutation happens inside the adapter and every mapping mutation happens inside
+ingest. Skills read the settled result through [[08909d62930b|MapCommand]] (`spex map get` / `list`
+/ `context`), which is a third kind of edge again — a query face that never writes.
 
 ## Lifecycle
 
@@ -82,8 +76,8 @@ the bead last run and died before writing its receipt.
 1. `spex impact` classifies a modified node as **obsolete + create**: the old
    bead is closed, a fresh bead replaces it.
 2. `spex emit` gives the create op the **same** record-id label as the old
-   bead's existing record, looked up via `MappingStore.GetByBead(OldBeadID)`.
-   The cursor does not advance.
+   bead's existing record, found by looking the obsoleted bead's id up in the
+   store. The cursor does not advance.
 3. The adapter closes the old bead and creates the new one.
 4. `spex ingest` sees the close op with reason `"Spec node modified: …"` and
    defers; the paired create op then rebinds that record's `bead_id` to the new
@@ -116,7 +110,8 @@ re-checked on every subsequent run:
 - No orphan records: each record's `spec_node_id` resolves in the spec graph.
   Records with `node_type == "proposal"` are exempt — their `spec_node_id` is a
   proposal reference, not an identity hash.
-- No duplicate records for one `spec_node_id`.
+- No duplicate records for one `spec_node_id` — records whose `node_type` is `proposal` are exempt
+  here too, as they are in the orphan check above.
 - The snapshot is saved only when receipts are complete, so the bead-map and the
   snapshot always describe the same point-in-time spec state.
 - `.bead-map.json` re-validates against the bead-map JSON Schema after every
@@ -172,9 +167,10 @@ A failure at any step leaves the on-disk `.bead-map.json` untouched.
 
 ### MappingStore query interface (CLI `spex map get`)
 
-- QueryResponse:
-  - records: list of MapRecord matched by the query predicate
-  - not_found: list of input identifiers that had no matching record
+There is no envelope on this boundary: what crosses it is the record itself. `spex map get` prints
+one MapRecord, `spex map list` prints every MapRecord as one JSON array in id order, and neither
+wraps the payload in a status object or reports back which identifiers matched nothing. A record
+that is not there is a non-zero exit and a line on stderr, never a field in the payload.
 
 No field renames, additions, or removals of these shapes without updating every
 consumer: emit's IdempotencyLabeler and ChangesetBuilder, the reference adapter
