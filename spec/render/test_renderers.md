@@ -2,18 +2,22 @@
 
 ## Setup
 
-All renderer scenarios operate on a pre-built `*SpecGraph` (output of `ReadSpec`). The fixture graph contains:
+All renderer scenarios operate on a pre-built spec graph (output of `ReadSpec`). Every node in it is keyed by its declared 12-char identity hash, and the fixture graph contains:
 
-- **Project**: name "test-project", description "A test spec", 2 functional requirements (FR1, FR2) and 1 non-functional requirement (NFR1)
-- **Module alpha** (id: 1): 2 requirements, 2 components (Parser, Builder), 1 impl_section, 1 data_flow
-  - Parser: `implements: [1]`, `uses: []`, content: `"# Parser\n\nParses input into AST."`
-  - Builder: `implements: [2]`, `uses: [1]`, content: `"# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first."`
-  - Impl_section 1: `describes: [1]`, content: `"# Parsing Implementation\n\nUse recursive descent."`
-  - Data_flow 1: `uses: [1, 2]`, content: `"# Build Pipeline\n\nParse then build."`
-- **Module beta** (id: 2, `requires_module: [1]`): 1 requirement, 1 component (Consumer), 1 impl_section
-  - Consumer: `implements: [1]`, `uses: []`, content: `"# Consumer\n\nConsumes built output."`
+- **Project**: name "test-project", description "A test spec", 2 functional requirements (`112233445566` "Parse input", `665544332211` "Build output") and 1 non-functional requirement (`778899aabbcc` "Performance")
+- **Module alpha** (`111111111111`): 2 requirements (`a1a1a1a1a1a1` "Parse", `a2a2a2a2a2a2` "Build"), 2 components (Parser `c1c1c1c1c1c1`, Builder `c2c2c2c2c2c2`), 1 impl_section (`d1d1d1d1d1d1`), 1 data_flow (`f1f1f1f1f1f1`)
+  - Parser: `implements: [a1a1a1a1a1a1]`, `uses: []`, content: `"# Parser\n\nParses input into AST."`
+  - Builder: `implements: [a2a2a2a2a2a2]`, `uses: [c1c1c1c1c1c1]`, content: `"# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first."`
+  - Impl_section `d1d1d1d1d1d1`: `describes: [c1c1c1c1c1c1]`, content: `"# Parsing Implementation\n\nUse recursive descent."`
+  - Data_flow `f1f1f1f1f1f1`: `uses: [c1c1c1c1c1c1, c2c2c2c2c2c2]`, content: `"# Build Pipeline\n\nParse then build."`
+- **Module beta** (`222222222222`, `requires_module: [111111111111]`): 1 requirement (`b1b1b1b1b1b1` "Consume"), 1 component (Consumer `c3c3c3c3c3c3`), 1 impl_section (`d2d2d2d2d2d2`)
+  - Consumer: `implements: [b1b1b1b1b1b1]`, `uses: []`, content: `"# Consumer\n\nConsumes built output."`
 
-Each renderer writes to a `bytes.Buffer` so output can be inspected as a string.
+None of those IDs is the identity hash the node's own identity string would produce. That is deliberate: it is what lets a scenario tell a renderer that copies declared IDs from one that recomputes them.
+
+A second **surface fixture** serves the api and slim scenarios. It is one module `gamma` whose every ID *is* the identity hash of its identity string, holding 1 project requirement ("Expose a surface"), 1 module requirement ("Serve requests"), 1 component (Server), 1 impl_section ("Request loop"), 1 data_flow ("Request path"), 1 test_section ("Server tests", describing Server) and 2 apis — `spex serve` (group `cli`, description "Start the server.", `provided_by` Server) and `GET /v1/specs/{id}` (group `http`, no description, no `provided_by`).
+
+Each renderer writes to an in-memory buffer so output can be inspected as a string.
 
 ## Scenarios
 
@@ -60,7 +64,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### M4: Module ordering matches project.json declaration order
 
-**Given** project.json declares alpha (id: 1) before beta (id: 2).
+**Given** project.json declares alpha (`111111111111`) before beta (`222222222222`).
 
 **When** `RenderMarkdown(spec, &buf)` is called.
 
@@ -76,6 +80,25 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - Output does not start with `---` (no YAML front matter)
 - Output does not contain HTML tags
 - Output starts with `# ` (the project heading)
+
+#### M6: Module requirement numbering is module-scoped
+
+**Given** module alpha's two functional requirements, `a1a1a1a1a1a1` "Parse" and `a2a2a2a2a2a2` "Build".
+
+**When** `RenderMarkdown(spec, &buf)` is called.
+
+**Then** they are listed as `FR1: Parse` and `FR2: Build` — numbered within the module, never prefixed with the requirement's identity hash (no `FRaabbccddeeff`).
+
+#### M7: APIs render one line each, between requirements and architecture
+
+**Given** the surface fixture: module gamma declaring `spex serve` (group cli, description "Start the server.") and then `GET /v1/specs/{id}` (group http).
+
+**When** `RenderMarkdown(spec, &buf)` is called.
+
+**Then:**
+- A `### APIs` heading appears, carrying `` - `spex serve` (cli) — Start the server. `` and `` - `GET /v1/specs/{id}` (http) ``, in declaration order
+- The headings `### Requirements`, `### APIs`, `### Architecture`, `### Implementation` and `### Data Flows` appear in that order, by byte offset
+- Rendering the base fixture, whose modules declare no apis, emits no `### APIs` heading at all
 
 ### DOTRenderer
 
@@ -116,19 +139,19 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### D4: Edge types rendered with correct styles
 
-**Given** Builder `implements: [2]` and `uses: [1]` (Parser).
+**Given** Builder `c2c2c2c2c2c2`, which implements the alpha Build requirement `a2a2a2a2a2a2` and uses Parser `c1c1c1c1c1c1`.
 
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- An edge exists from `alpha_comp_2` to `alpha_req_2` labeled `"implements"`
-- An edge exists from `alpha_comp_2` to `alpha_comp_1` labeled `"uses"` (or with dotted style)
+- An edge exists from `c2c2c2c2c2c2` to `a2a2a2a2a2a2` labeled `"implements"`
+- An edge exists from `c2c2c2c2c2c2` to `c1c1c1c1c1c1` labeled `"uses"`
 - The `implements` edge uses solid style
 - The `uses` edge uses dotted style
 
 #### D5: Cross-module edges rendered
 
-**Given** beta has `requires_module: [1]` (depends on alpha).
+**Given** beta has `requires_module: [111111111111]` (depends on alpha).
 
 **When** `RenderDOT(spec, &buf)` is called.
 
@@ -137,15 +160,17 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - This edge is labeled `"requires_module"` (or equivalent)
 - The edge crosses subgraph boundaries (source in cluster_beta, target in cluster_alpha)
 
-#### D6: Node IDs are valid DOT identifiers
+#### D6: Node IDs are bare identity hashes, and are quoted
 
 **Given** any valid SpecGraph.
 
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- All node IDs match the pattern `<module>_<type>_<id>` (e.g., `alpha_comp_1`, `beta_req_1`)
-- No node ID contains spaces, hyphens, or special characters that would require quoting in DOT
+- Every statement whose subject is a node — a declaration or an edge, either endpoint — names it by the node's declared 12-char hex identity hash, quoted and alone
+- No composite `<module>_<type>_<id>` identifier survives anywhere in the output: none of `alpha_comp_`, `alpha_req_`, `alpha_impl_`, `alpha_flow_`, `beta_comp_`, `beta_req_`, `beta_impl_` or `preq_112233445566` appears
+- The quoting is required rather than cosmetic: an identity hash may begin with a digit, and unquoted such a token is not a legal DOT identifier
+- The scan finds at least one node ID to inspect, so a renderer emitting no nodes cannot pass by vacuity
 
 #### D7: Node labels are human-readable
 
@@ -154,6 +179,39 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:** The Parser node has a `label` attribute containing the component name "Parser" (not the raw node ID).
+
+#### D8: Every node is declared under the ID `spex hash-id` prints
+
+**Given** the surface fixture, whose every node ID is the identity hash of that node's own identity string.
+
+**When** `RenderDOT(spec, &buf)` is called.
+
+**Then:**
+- The module, the project requirement, the module requirement, the component, the impl_section, the data_flow and both apis are each declared under exactly that hash — eight declarations, no more and no fewer
+- The `implements` edge joins two such hashes and nothing else
+- Declarations are matched on the whole line, not by substring: an edge's target is also followed by `[label=`, so a substring match would accept a composite declaration as long as some edge still mentioned the bare hash
+
+#### D9: API nodes and their provided_by edges
+
+**Given** the surface fixture's two apis, `spex serve` (provided_by the Server component) and `GET /v1/specs/{id}`.
+
+**When** `RenderDOT(spec, &buf)` is called.
+
+**Then:**
+- The `spex serve` node is declared with `shape=cds` and labeled with the api name
+- The `GET /v1/specs/{id}` node is declared too, labeled with the whole invocation string
+- An edge from the `spex serve` node to the Server component node is labeled `"provided_by"`
+
+#### D10: Declared IDs are emitted, never recomputed
+
+**Given** the base fixture, whose IDs are deliberately not the identity hashes its names would produce.
+
+**When** `RenderDOT(spec, &buf)` is called.
+
+**Then:**
+- All 14 nodes — 3 project requirements, 2 modules, 3 module requirements, 3 components, 2 impl_sections and 1 data_flow — are declared under the ID the fixture declared for them
+- The declaration count is exactly 14: nothing is declared twice and nothing is missing
+- Only declarations are collected, never edge endpoints; that distinction is the point of the scenario
 
 ### JSONRenderer
 
@@ -179,16 +237,17 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### J3: Synthetic node IDs follow path convention
 
-**Given** module alpha with component Parser (id: 1) and requirement (id: 1).
+**Given** module alpha with component Parser `c1c1c1c1c1c1` and requirement `a1a1a1a1a1a1`.
 
 **When** `RenderJSON(spec, &buf)` is called.
 
 **Then:**
 - Module node has `"id": "module:alpha"`
-- Requirement node has `"id": "module:alpha:req:1"`
-- Component node has `"id": "module:alpha:comp:1"`
-- Impl_section node has `"id": "module:alpha:impl:1"`
-- Data_flow node has `"id": "module:alpha:flow:1"`
+- Requirement node has `"id": "module:alpha:req:a1a1a1a1a1a1"`
+- Component node has `"id": "module:alpha:comp:c1c1c1c1c1c1"`
+- Impl_section node has `"id": "module:alpha:impl:d1d1d1d1d1d1"`
+- Data_flow node has `"id": "module:alpha:flow:f1f1f1f1f1f1"`
+- The synthetic prefix carries the module name and the abbreviated node kind; the tail is the declared identity hash, copied
 - All IDs are globally unique across the entire nodes array
 
 #### J4: Content inlined in component nodes
@@ -206,21 +265,21 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderJSON(spec, &buf)` is called.
 
 **Then** the edges array contains entries with:
-- `{"from": "module:alpha:comp:1", "to": "module:alpha:req:1", "type": "implements"}`
-- `{"from": "module:alpha:comp:2", "to": "module:alpha:comp:1", "type": "uses"}`
-- `{"from": "module:alpha:impl:1", "to": "module:alpha:comp:1", "type": "describes"}`
+- `{"from": "module:alpha:comp:c1c1c1c1c1c1", "to": "module:alpha:req:a1a1a1a1a1a1", "type": "implements"}`
+- `{"from": "module:alpha:comp:c2c2c2c2c2c2", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "uses"}`
+- `{"from": "module:alpha:impl:d1d1d1d1d1d1", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "describes"}`
 - `{"from": "module:beta", "to": "module:alpha", "type": "requires_module"}`
 - Requirement nodes with `preq_id` produce edges with `"type": "preq_id"`
 
 #### J6: Data flow uses edges
 
-**Given** alpha's data_flow 1 has `uses: [1, 2]` (both Parser and Builder).
+**Given** alpha's data_flow `f1f1f1f1f1f1` has `uses: [c1c1c1c1c1c1, c2c2c2c2c2c2]` (both Parser and Builder).
 
 **When** `RenderJSON(spec, &buf)` is called.
 
 **Then** the edges array contains:
-- `{"from": "module:alpha:flow:1", "to": "module:alpha:comp:1", "type": "uses"}`
-- `{"from": "module:alpha:flow:1", "to": "module:alpha:comp:2", "type": "uses"}`
+- `{"from": "module:alpha:flow:f1f1f1f1f1f1", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "uses"}`
+- `{"from": "module:alpha:flow:f1f1f1f1f1f1", "to": "module:alpha:comp:c2c2c2c2c2c2", "type": "uses"}`
 
 #### J7: Output is self-contained and parseable by jq
 
@@ -237,6 +296,82 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderJSON(spec, &buf)` is called.
 
 **Then:** The nodes array has exactly 15 entries. No nodes are duplicated or omitted.
+
+#### J9: `--slim` emits nodes only, with four keys and nothing else
+
+**Given** the surface fixture.
+
+**When** `RenderJSONSlim(spec, &buf)` is called.
+
+**Then:**
+- The output is an object with a `nodes` array and no `edges` key at all
+- The array is non-empty, and every node carries a non-empty `id`, `type` and `name`
+- No node carries a key outside `{id, type, name, module}`
+- Neither `content` nor `description` appears anywhere, and none of the text they would have carried — the component and data_flow descriptions, the api description, the inlined content leaves — survives in the raw bytes
+
+#### J10: Slim IDs are bare identity hashes
+
+**Given** the surface fixture, whose every declared ID is the identity hash of that node's identity string.
+
+**When** `RenderJSONSlim(spec, &buf)` is called.
+
+**Then:**
+- Every `id` matches `^[0-9a-f]{12}$` and carries no `module:…:` synthetic prefix — no `:` at all
+- Each hash maps to the node type it identifies: the module, the project requirement, the module requirement, the component, the impl_section, the data_flow, the test_section and both apis — nine nodes, no more and no fewer
+
+#### J11: Test sections and apis are slim nodes
+
+**Given** the surface fixture's test_section "Server tests" and its apis `spex serve` and `GET /v1/specs/{id}`.
+
+**When** `RenderJSONSlim(spec, &buf)` is called.
+
+**Then:**
+- Exactly one `test_section` node, named "Server tests"
+- Exactly two `api` nodes, in declaration order
+- Every node of either type carries `"module": "gamma"`
+
+#### J12: Slim output is one compact line
+
+**Given** the surface fixture.
+
+**When** `RenderJSONSlim(spec, &buf)` is called.
+
+**Then** the body carries no newline once a trailing one is trimmed, and is not pretty-printed — no `", "` separator appears. It is a lookup table, not a document.
+
+#### J13: Test section nodes and their describes edges in the full graph
+
+**Given** the surface fixture's test_section "Server tests", which describes the Server component.
+
+**When** `RenderJSON(spec, &buf)` is called.
+
+**Then:**
+- A node with id `module:gamma:test:<test_section hash>` exists, with `"type": "test_section"`, `"name": "Server tests"` and `"module": "gamma"`
+- Its `content` carries the inlined text of the test leaf
+- An edge from that node to `module:gamma:comp:<component hash>` has `"type": "describes"`
+
+#### J14: API nodes and their provided_by edges in the full graph
+
+**Given** the surface fixture's api `spex serve` — description "Start the server.", group "cli", `provided_by` the Server component.
+
+**When** `RenderJSON(spec, &buf)` is called.
+
+**Then:**
+- A node with id `module:gamma:api:<api hash>` exists, with `"type": "api"`, `"name": "spex serve"` and `"module": "gamma"`
+- It carries the declared description and the declared group
+- It carries no `content`: an api has no content leaf to inline
+- An edge from that node to `module:gamma:comp:<component hash>` has `"type": "provided_by"`
+
+#### J15: Slim emits declared IDs, in declaration order, and omits the project root
+
+**Given** the base fixture with one informational section `aaaabbbbcccc` "notes" added to the project.
+
+**When** `RenderJSONSlim(spec, &buf)` is called.
+
+**Then:**
+- The node list is exactly, in this order: the 3 project requirements, the section, module alpha, its 2 requirements, its 2 components, its impl_section, its data_flow, module beta, its requirement, its component, its impl_section — 15 nodes, each matching id, type, name and module
+- Every ID is the declared one, copied verbatim
+- The project root is not among them: the full graph's `"id": "project"` node has no identity hash, so the slim view has no counterpart for it
+- The fixture guards itself: for each of the six checked nodes the declared ID differs from the identity hash its identity string would produce, so a renderer that recomputed IDs would fail this scenario rather than pass it by coincidence
 
 ## Edge Cases
 
@@ -281,15 +416,19 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **When** MarkdownRenderer is called.
 
-**Then:** Heading adjustment adds the base offset to all levels. If base level is 4, headings become `####`, `#####`, `######`, and beyond `######` (markdown supports at most 6 `#` characters). The renderer must handle the overflow case gracefully (e.g., cap at `######` or use bold text for deeper levels).
+**Then:** The four headings render as `####`, `#####`, `######` and `######`. The first three take the full three-level shift; the fourth would need seven `#` characters, and markdown has only six, so it is capped at `######` rather than deepened or re-expressed as bold text. Two originally distinct levels therefore collapse onto the same rendered level, and this scenario pins that cap as the behaviour rather than as one acceptable way of handling the overflow.
 
 ### E6: Module name with special characters in DOT
 
-**Given** a module named `data-pipeline` (contains a hyphen).
+**Given** a module named `data-pipeline` with identity hash `datapipe0001`, holding one component `Ingest` with identity hash `aabbccddeeff`.
 
 **When** DOTRenderer is called.
 
-**Then:** The subgraph name and node IDs handle the hyphen correctly. Either the hyphen is replaced with an underscore in identifiers (e.g., `data_pipeline_comp_1`) or the identifier is quoted. The output remains valid DOT syntax.
+**Then:**
+- The cluster name substitutes the hyphen: `cluster_data_pipeline` appears in the output
+- The hyphen reaches no node ID, because a node ID is the declared identity hash and is never derived from the module name: the module node is `"datapipe0001" [label="data-pipeline"` and the component node is `"aabbccddeeff" [label="Ingest"`
+- The readable, hyphenated name survives as the cluster label and as the module node's label, never as an identifier
+- The output remains valid DOT syntax
 
 ### E7: Empty spec (project with one module, module has only name)
 
@@ -318,14 +457,14 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 ### SM2: DOT renders section nodes and coupling edges
 
-**Given** a spec with a coupled "delivery" section and a delivery module.
+**Given** a spec with a coupled section "delivery" (`section00001`) and a delivery module (`delivery0001`).
 
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- A section node `section_1` appears with a distinct shape (e.g., `shape=tab` or `shape=house`) and label "delivery"
-- An edge from `section_1` to the delivery module node represents the coupling relationship
-- The section node is outside any module subgraph (it's a project-level node)
+- The section is declared as `"section00001"` — its declared identity hash, quoted, never a `section_<n>` composite — carrying `shape=tab` and the label "delivery"
+- The coupling relationship is the edge `"section00001" -> "delivery0001"`, labelled `"coupled"`, joining two declared hashes and nothing else
+- That declaration appears before the first `subgraph cluster_`, which is what places the section outside every module subgraph rather than inside one
 
 ### SM3: JSON includes section nodes and coupling edges
 
@@ -340,7 +479,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 ### SM4: Multiple sections rendered in declaration order
 
-**Given** a spec with two sections: "delivery" (id: 1) and "performance" (id: 2).
+**Given** a spec with two sections: "delivery" (`section00001`) and "performance" (`section00002`).
 
 **When** any renderer is called.
 
@@ -348,7 +487,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 ### SM5: Non-coupled section rendered without module link
 
-**Given** a spec with a section `{ id: 1, name: "notes", type: "informational" }` and no module named "notes".
+**Given** a spec with a section `{ id: "section00001", name: "notes", type: "informational" }` and no module named "notes".
 
 **When** any renderer is called.
 

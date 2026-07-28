@@ -14,7 +14,7 @@
       "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render DOT",
-      "description": "Generate a graphviz DOT graph of spec nodes and edges. Nodes are requirements, components, impl_sections. Edges are implements, uses, describes, depends_on."
+      "description": "Generate a graphviz DOT graph of spec nodes and edges. Node kinds are distinguished by shape and fill, and every edge carries a label naming its kind, so a rendering that drops colour still shows the relationship. Which kinds reach the graph, and how each is drawn, is DOTRenderer's contract rather than a list held here."
     },
     {
       "id": "1078c088e0c6",
@@ -107,48 +107,6 @@
         "b4b4eba6b551",
         "45331bdc0bd0",
         "172d16ca0eac"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "d9131db2cb43",
-      "name": "Spec reading implementation",
-      "content": "impl_spec_reading.md",
-      "describes": [
-        "7d1150c19724"
-      ]
-    },
-    {
-      "id": "13d101c54d00",
-      "name": "Markdown rendering implementation",
-      "content": "impl_markdown_rendering.md",
-      "describes": [
-        "b4b4eba6b551"
-      ]
-    },
-    {
-      "id": "663e81f67b2f",
-      "name": "DOT generation implementation",
-      "content": "impl_dot_generation.md",
-      "describes": [
-        "45331bdc0bd0"
-      ]
-    },
-    {
-      "id": "95c3bcf1e3ec",
-      "name": "JSON serialization implementation",
-      "content": "impl_json_serialization.md",
-      "describes": [
-        "172d16ca0eac"
-      ]
-    },
-    {
-      "id": "134855db67a3",
-      "name": "Render command implementation",
-      "content": "impl_render_command.md",
-      "describes": [
-        "c56eefd05f42"
       ]
     }
   ],

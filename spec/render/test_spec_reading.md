@@ -14,7 +14,7 @@ The fixture spec should have at least two modules with an inter-module dependenc
 
 ```
 spec/
-  project.json          # name, description, 2+ modules, requirements, milestones
+  project.json          # name, description, 2+ modules, requirements
   alpha/
     module.json          # 2 requirements, 2 components, 1 impl_section, 1 data_flow
     arch_parser.md
@@ -55,26 +55,25 @@ spec/
 
 ### S3: Multi-module spec with cross-module dependency
 
-**Given** `project.json` declares modules `alpha` (id: 1) and `beta` (id: 2), where `beta` has `requires_module: [1]`.
+**Given** `project.json` declares modules `alpha` (`111111111111`) and `beta` (`222222222222`), where `beta` has `requires_module: ["111111111111"]`.
 
 **When** `ReadSpec(specDir)` is called.
 
 **Then:**
 - `SpecGraph.Modules` has length 2
 - Both modules are present with their full content maps populated
-- The `requires_module` relationship is preserved in the parsed `Module` struct (beta's module struct has `RequiresModule: [1]`)
+- The `requires_module` relationship is preserved in the parsed module (beta's `RequiresModule` is a one-element list holding alpha's declared hash, `"111111111111"` — the declared string, not a recomputed or renumbered id)
 - Module ordering in `SpecGraph.Modules` matches declaration order in `project.json`
 
-### S4: Project-level requirements and milestones preserved
+### S4: Project-level requirements preserved
 
-**Given** `project.json` has 3 requirements (2 functional, 1 non-functional) and 1 milestone grouping modules.
+**Given** `project.json` has 3 requirements (2 functional, 1 non-functional).
 
 **When** `ReadSpec(specDir)` is called.
 
 **Then:**
 - `SpecGraph.Project.Requirements` has length 3
 - Each requirement preserves `id`, `type`, `title`, `description`, and `depends_on`
-- `SpecGraph.Project.Milestones` has length 1 with correct `groups` references
 
 ### S5: All module-level edge types preserved
 
@@ -178,7 +177,7 @@ spec/
 {
   "sections": [
     {
-      "id": 1,
+      "id": "section00001",
       "name": "delivery",
       "type": "coupled",
       "versioning": { "scheme": "semver", "source": "git-tag" },
@@ -193,7 +192,8 @@ spec/
 **Then:**
 - `SpecGraph.Project.Sections` has length 1
 - The section preserves `id`, `name`, `type`, and all freeform content fields
-- The freeform content (versioning, artifacts) is accessible as a generic structure (e.g., `map[string]interface{}` or `json.RawMessage`)
+- The freeform content (versioning, artifacts) is accessible as a generic structure, preserved as the raw JSON body rather than as typed fields
+- Only the section's own `id` is an identity hash. Nothing inside the freeform body is interpreted, which is why the artifact's `"id": 1` survives as the number it was written as while a section declaring `"id": 1` would not be read at all — the read fails naming `project.json` and the offending field
 
 ### S8: Sections absent from project.json
 
