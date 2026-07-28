@@ -1,6 +1,6 @@
 # DiffEngine
 
-Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash = modified. ID in current but not snapshot = added. ID in snapshot but not current = removed.
+[[f223179a540a|Compares the current hash tree against a stored snapshot and reports what moved]]. Same identity hash + different content hash = modified. Identity hash in current but not in snapshot = added. Identity hash in snapshot but not in current = removed.
 
 ## Responsibilities
 
@@ -12,21 +12,11 @@ Compares two ID-keyed hash trees (current vs snapshot). Same ID + different hash
 
 ## Interface
 
-```go
-type Change struct {
-    Key      string // identity hash of the spec node, e.g. "a1b2c3d4e5f6";
-                    //   or "meta/project" / "meta/<module-hash>" for envelope leaves
-    Type     ChangeType // int enum; String() yields "added", "removed", "modified"
-    NodeType string // "component", "impl_section", "data_flow", "test_section", "meta", "requirement", "module"
-    Module   string // identity hash of the parent module ("" for project-level nodes)
-    OldHash  string // empty for "added"
-    NewHash  string // empty for "removed"
-}
+One comparison, taking the current tree and the snapshot tree and returning the list of changed leaves. It has no failure mode: two trees always compare, and where there is no stored snapshot at all every current leaf comes back as `added`.
 
-func Diff(current, snapshot *Node) []Change
-```
+Each entry in that list carries the key of the leaf that moved — an identity hash such as `a1b2c3d4e5f6`, or `meta/project` / `meta/<module-hash>` for the envelope leaves — the kind of movement (`added`, `removed` or `modified`), the node type, the identity hash of the owning module (empty for project-level nodes), and the two content hashes. The old hash is empty on an addition and the new hash is empty on a removal; a modification carries both, which is what lets a reader confirm from the report alone that the hash really changed.
 
-`NodeType` is carried as a separate field because identity hashes do not embed the node type — there is no way to look at `a1b2c3d4e5f6` and tell whether it points at a component or an impl_section. The diff propagates `NodeType` from the merkle tree leaf, where it was set during tree construction.
+The node type is carried as a separate field because identity hashes do not embed it — there is no way to look at `a1b2c3d4e5f6` and tell whether it points at a component or a test_section. The diff copies the node type off the merkle leaf, where the tree builder had already set it.
 
 ## Algorithm
 
@@ -36,17 +26,23 @@ func Diff(current, snapshot *Node) []Change
 4. For each identity hash in both with different content hashes: modified
 5. Sort changes by key for deterministic output
 
+Only leaves reach those maps. The module interiors and the root are walked through and never keyed, so no interior node is ever reported as a change. That loses nothing: an interior hash is composed from the hashes beneath it, so a moved leaf has already moved its module's hash, and reporting both would report one change twice. What the change is *about* comes from the node type on the leaf, not from the level it sat at.
+
+Step 5 is what makes the result reproducible. Changes come out in ascending lexicographic key order, with no timestamp and no map iteration order surviving into the list, so the same pair of trees always yields the same entries in the same order. Identity hashes sort consistently because they are pure lowercase hex.
+
 ## Rename Stability
 
-Because nodes are keyed by spec ID rather than file path, renaming a module directory or content file does not produce a remove + add. As long as the spec IDs remain the same, the diff correctly identifies the change as a modification.
+A module-scoped node's identity hash derives from its module, its node type and its own `name` — never from a filesystem path. So renaming a module directory or moving a content file produces no remove + add: the keys are untouched and a content edit alongside the move is still reported as a single modification.
+
+Renaming the *node* is the opposite case. Changing a `name` changes the identity string it derives from, so the node's `id` changes with it, and the diff sees the old key vanish and a new key appear: one `removed` and one `added`, with nothing tying them together. This is the "rename is destructive" behaviour the rest of the pipeline is built on — in the bead layer a rename is a delete plus a create, never an edit.
 
 ## Bootstrap behavior
 
-`DiffEngine` is invoked by `spex diff` against two trees: the tree
-TreeBuilder just built from the current spec, and the tree
-`SnapshotStore.Load` returned. On a fresh project where
-`spec/.snapshot.json` does not exist, `Load` returns the empty tree (per
-its missing-file contract). DiffEngine compares the populated current tree
+`DiffEngine` is invoked by `spex diff` against two trees: the one
+[[dfe1467b7a4b|TreeBuilder]] just built from the current spec, and the one
+[[b2fcd9457a28|SnapshotStore]] read back from the stored snapshot. On a fresh
+project where `spec/.snapshot.json` does not exist, the load returns the empty
+tree (per its missing-file contract). DiffEngine compares the populated current tree
 against the empty baseline and reports every leaf as `added`. That is the
 diff input the rest of the pipeline (impact → emit → adapter → ingest)
 consumes to produce the first bead-map and the first snapshot. There is no

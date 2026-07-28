@@ -34,7 +34,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** the JSON contains a `created_at` field carrying the supplied `createdAt` as an RFC 3339 timestamp
 **And** the JSON contains a `nodes` map
 
-**Rationale**: Validates the basic contract of `Save` — it must produce a well-formed JSON file conforming to the format defined in `impl_snapshot_format.md`.
+**Rationale**: Validates the basic contract of `Save` — it must produce a well-formed JSON file conforming to the format defined in `arch_snapshot_store.md`.
 
 ### S2: Save uses flat node map keyed by identity hash
 
@@ -44,7 +44,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** each node entry includes `hash` and `type` fields
 **And** interior nodes include a `children` array listing their child keys
 
-**Rationale**: Per `impl_snapshot_format.md`, the snapshot uses a flat map (not a nested tree) for O(1) lookup during diff, keyed by the same identity-hash keys the tree carries — never by file paths.
+**Rationale**: Per `arch_snapshot_store.md`, the snapshot uses a flat map (not a nested tree) for O(1) lookup during diff, keyed by the same identity-hash keys the tree carries — never by file paths.
 
 ### S3: Load round-trips the full tree
 

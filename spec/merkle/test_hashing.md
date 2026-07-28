@@ -39,7 +39,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **Then** it returns a valid 64-character hex hash without error
 **And** the hash matches `sha256Hex` of the same 10 MB content
 
-**Rationale**: Verifies the streaming `io.Copy` implementation described in `impl_hash_computation.md` handles large files without memory issues.
+**Rationale**: Verifies the streaming implementation handles large files without memory issues.
 
 ### S3: Interior hash sorts children before concatenation
 
@@ -66,7 +66,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the impl_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
 **And** there are no per-type `arch`/`impl`/`flow` interior group nodes and no path-style keys anywhere in the tree
 
-**Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md` and `impl_tree_construction.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
+**Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
 
 ### S6: BuildTree hashes propagate bottom-up
 
@@ -121,7 +121,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **Then** it returns an error indicating the missing content file path
 **And** no partial tree is returned
 
-**Rationale**: Per `impl_tree_construction.md`, missing content files are a build failure. The validator should be run first, but BuildTree must fail cleanly if a file is absent.
+**Rationale**: Per `arch_tree_builder.md`, missing content files are a build failure. The validator should be run first, but BuildTree must fail cleanly if a file is absent.
 
 ### E4: BuildTree ignores extraneous files in the directory
 
@@ -131,7 +131,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **And** `alpha/notes.txt` does not appear in the tree
 **And** the tree hashes are identical to a build without the extra file
 
-**Rationale**: Per `impl_tree_construction.md`, content files are discovered from `module.json`, not from directory listing. Extraneous files must be invisible to the merkle tree.
+**Rationale**: Per `arch_tree_builder.md`, content files are discovered from `module.json`, not from directory listing. Extraneous files must be invisible to the merkle tree.
 
 ### E5: Content file with empty body
 

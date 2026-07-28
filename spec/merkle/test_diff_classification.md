@@ -71,7 +71,7 @@ beta/impl_handler.md     hash=bh1  type=leaf
 **Then** the result contains exactly 3 changes
 **And** changes are sorted by key: `alpha/arch_new.md`, `alpha/impl_logic.md`, `beta/arch_service.md`
 
-**Rationale**: Validates that DiffEngine handles mixed change types across multiple modules and returns results sorted by key for deterministic output (per `impl_diff_algorithm.md`).
+**Rationale**: Validates that DiffEngine handles mixed change types across multiple modules and returns results sorted by key for deterministic output (per `arch_diff_engine.md`).
 
 ### S6: First diff with no snapshot (all nodes added)
 
@@ -81,7 +81,7 @@ beta/impl_handler.md     hash=bh1  type=leaf
 **Then** every leaf in the current tree appears as Type=`added`
 **And** the number of changes equals the number of leaves in the current tree
 
-**Rationale**: Per `impl_diff_algorithm.md`, the first run (no previous snapshot) reports everything as added. This is the baseline for future diffs.
+**Rationale**: Per `arch_diff_engine.md`, the first run (no previous snapshot) reports everything as added. This is the baseline for future diffs.
 
 ### S7: Classify impl_only change
 
@@ -89,7 +89,7 @@ beta/impl_handler.md     hash=bh1  type=leaf
 **When** `Classify(changes)` is called
 **Then** the result contains one ClassifiedChange with Impact=`impl_only` and Module=`ALPHA_HASH`
 
-**Rationale**: Classification reads the node metadata (NodeType, Module) carried on each Change — never the filename or path. `impl_section` nodes are implementation-only changes per `impl_impact_classification.md`.
+**Rationale**: Classification reads the node metadata (NodeType, Module) carried on each Change — never the filename or path. `impl_section` nodes are implementation-only changes per `arch_impact_classifier.md`.
 
 ### S8: Classify data_flow as contract
 
@@ -200,7 +200,7 @@ beta/impl_handler.md     hash=bh1  type=leaf
 **When** `Diff` is called 100 times with the same inputs
 **Then** the change list order is identical every time (sorted by key)
 
-**Rationale**: Per `impl_diff_algorithm.md`, deterministic output ordering is a hard requirement. No randomness or map iteration order leakage.
+**Rationale**: Per `arch_diff_engine.md`, deterministic output ordering is a hard requirement. No randomness or map iteration order leakage.
 
 ## Requirement Leaf Scenarios
 

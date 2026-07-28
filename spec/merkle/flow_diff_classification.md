@@ -2,24 +2,32 @@
 
 ## Data Flow
 
+```dot
+digraph diff_classification {
+    "current tree"        [style=dashed];
+    "spec/.snapshot.json" [style=dashed];
+    "b2fcd9457a28"        [label="SnapshotStore\nb2fcd945"];
+    "cb262b280963"        [label="DiffEngine\ncb262b28"];
+    "f1a672216ce9"        [label="ImpactClassifier\nf1a67221"];
+    "stdout"              [style=dashed];
+
+    "spec/.snapshot.json" -> "b2fcd9457a28" [label="read"];
+    "b2fcd9457a28"        -> "cb262b280963" [label="stored tree"];
+    "current tree"        -> "cb262b280963" [label="just built from the spec directory"];
+    "cb262b280963"        -> "f1a672216ce9" [label="changed leaves, sorted by key"];
+    "f1a672216ce9"        -> "stdout"       [label="classified changes"];
+}
 ```
-current tree          stored snapshot
-     │                      │
-     ▼                      ▼
-┌──────────────────────────────┐
-│ DiffEngine                    │── compare node-by-node
-│ (flatten + set operations)    │
-└──────────┬───────────────────┘
-           │ changes[]
-           ▼
-┌──────────────────┐
-│ ImpactClassifier  │── classify by node metadata
-│ (NodeType switch) │   aggregate by module
-└──────────┬───────┘
-           │ classified_changes[]
-           ▼
-    JSON output (stdout)
-```
+
+The three solid nodes are the components this flow is made of; everything dashed is a file or a
+stream. [[b2fcd9457a28|SnapshotStore]] contributes one of the two trees and nothing else — it reads
+the stored snapshot and hands it over, and where that file is absent it hands over the empty tree
+instead. [[cb262b280963|DiffEngine]] compares the two and emits one entry per leaf whose content hash
+moved, in ascending key order. [[f1a672216ce9|ImpactClassifier]] adds a level to each of those entries
+and replaces the owning module's identity hash with that module's name; it drops nothing and reorders
+nothing, so the list handed on is the diff's own list, one field longer and reporting the module by
+name rather than by hash. How much of each entry survives onto stdout depends on the output format —
+see `## Output` below.
 
 ## Input
 
@@ -28,11 +36,21 @@ current tree          stored snapshot
 
 ## Output
 
-A list of classified changes, each with:
-- File path
+A list of classified changes. The two output formats print different amounts of each one.
+
+`spex diff --json` carries seven fields per change, the last three dropped from the object when they
+are empty:
+- The identity hash of the changed spec node — the merkle key, not a file path
 - Change type (added/removed/modified)
 - Impact level (impl_only/contract/arch_impl/structural)
 - Module name
+- Node type
+- The leaf's previous content hash, omitted on an addition
+- The leaf's new content hash, omitted on a removal
+
+The default text format prints one line per change carrying four of those, in the column order
+change type, impact level, module name, identity hash. The node type and the two content hashes are
+on the JSON path only; a caller that needs them must ask for `--json`.
 
 This output feeds directly into the Impact module for bead matching.
 
@@ -54,7 +72,7 @@ modified.
 - Change:
   - key: string — identity_hash or `meta/*`
   - node_type: string enum — `component` | `requirement` | `impl_section` |
-    `data_flow` | `test_section` | `meta`
+    `data_flow` | `test_section` | `api` | `meta`
   - module: string — identity_hash of the parent module, empty for project-level
   - change_type: string enum — `added` | `removed` | `modified`
   - old_hash: string, 64-char hex (empty for added)
@@ -65,16 +83,21 @@ modified.
 - ClassifiedChange: Change plus
   - impact_level: string enum — `impl_only` | `contract` | `arch_impl` |
     `structural`
+  - module: string — the module's name, in place of the identity hash the Change
+    arrived with; empty for project-level changes, and the identity hash itself
+    when no name is known for it
 
 Mapping used by the classifier:
 
 | node_type   | impact_level |
 |-------------|--------------|
 | impl_section, test_section | impl_only |
-| data_flow   | contract     |
+| data_flow, api | contract     |
 | component   | arch_impl    |
 | meta, requirement | structural |
 
-The `contract` level is new — it is a cross-component shape change within a
-module that downstream matchers MUST NOT skip; it must reach the action
-classifier so a dedicated data_flow task bead is created.
+The `contract` level is a surface shared beyond a single component: for a
+data_flow, a cross-component shape inside a module; for an api, a surface the
+module declares to its callers. Downstream matchers MUST NOT skip it — a
+data_flow change must reach the action classifier so a dedicated data_flow task
+bead is created.
