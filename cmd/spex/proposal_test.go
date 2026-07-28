@@ -35,7 +35,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	if !strings.Contains(out.String(), "registered: spec/proposals/") {
+	if !strings.Contains(out.String(), "registered: "+filepath.Join(specDir, "proposals")+"/") {
 		t.Errorf("want registered message, got %q", out.String())
 	}
 

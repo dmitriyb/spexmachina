@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
@@ -27,6 +28,6 @@ func runRegisterE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "registered: spec/proposals/%s\n", filename)
+	fmt.Fprintf(cmd.OutOrStdout(), "registered: %s\n", filepath.Join(specDir, "proposals", filename))
 	return nil
 }

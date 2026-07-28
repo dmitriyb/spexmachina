@@ -52,9 +52,9 @@ pipe.
 ## `spex register` interface
 
 [[2b62ad5e8ef2|Register proposal]] at the command layer. On success the command writes one line to
-stdout, `registered: spec/proposals/<filename>`, whose filename half is the basename Registrar chose
-rather than one the command derived. The directory half is not derived at all: `spec/proposals/` is
-a literal in that line, not the spec directory the run resolved. On a refused proposal the command
+stdout, `registered: <spec-dir>/proposals/<filename>`. The filename half is the basename Registrar
+chose rather than one the command derived, and the directory half is the spec directory this run
+resolved — so a run pointed elsewhere by `--spec-dir` names the path it actually wrote. On a refused proposal the command
 writes nothing to stdout, reports Registrar's error and exits non-zero.
 
 ## `spex template` interface
