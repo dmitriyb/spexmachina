@@ -77,45 +77,11 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "2a9c563a1519",
-      "name": "Changeset consumption",
-      "content": "impl_changeset_consumption.md",
-      "describes": [
-        "7f2e76cecab3"
-      ]
-    },
-    {
-      "id": "5a483b619d7d",
-      "name": "Substitution table",
-      "content": "impl_substitution_table.md",
-      "describes": [
-        "7f2e76cecab3"
-      ]
-    },
-    {
-      "id": "5dd7dcf6b861",
-      "name": "Br subprocess invocation",
-      "content": "impl_br_subprocess.md",
-      "describes": [
-        "7f2e76cecab3"
-      ]
-    },
-    {
-      "id": "ac72eda46bf5",
-      "name": "Receipt writing",
-      "content": "impl_receipt_writing.md",
-      "describes": [
-        "7f2e76cecab3"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "703128d3ebd6",
       "name": "Adapter flow",
-      "description": "changeset.json → parse → iterate ops in order → for each op: resolve refs, query tracker for idempotency, run subcommand, record receipt → receipts.json written atomically after each op so a crash preserves partial state.",
+      "description": "changeset.json → parse → iterate ops in order → for each op: resolve refs, query tracker for idempotency, run subcommand, record receipt → receipts.json assembled in memory and written atomically once, after the last op, so a reader sees either the whole document or the path's previous contents; a run that dies mid-loop writes nothing and the caller reads the absent file as partial with unknown progress.",
       "content": "flow_adapter.md",
       "uses": [
         "7f2e76cecab3"
