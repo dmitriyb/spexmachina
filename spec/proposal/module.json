@@ -86,40 +86,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "e3d7f930488f",
-      "name": "Registration implementation",
-      "content": "impl_registration.md",
-      "describes": [
-        "24180f55c0b4"
-      ]
-    },
-    {
-      "id": "a8ae41cdd1ea",
-      "name": "History tracking implementation",
-      "content": "impl_history_tracking.md",
-      "describes": [
-        "97f73ced5a02"
-      ]
-    },
-    {
-      "id": "7267b0fc031c",
-      "name": "Template management",
-      "content": "impl_template_management.md",
-      "describes": [
-        "cc8adc823719"
-      ]
-    },
-    {
-      "id": "7c93ce1da4ca",
-      "name": "Proposal commands implementation",
-      "content": "impl_proposal_commands.md",
-      "describes": [
-        "21bc124a46c0"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "1d33b4c6c36e",

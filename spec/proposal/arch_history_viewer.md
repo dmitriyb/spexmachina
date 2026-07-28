@@ -1,6 +1,9 @@
 # HistoryViewer
 
-Shows proposal history — which proposals led to which spec changes and bead actions. Accepts parsed `[]BeadRecord` from its caller; performs no subprocess invocation. The caller (ProposalCommands) pipes `br list --json` from stdin, parses it into `BeadRecord`, and hands the slice to the viewer.
+Shows proposal history — which proposals led to which spec changes and bead actions — and so is
+where [[2e38135487be|Show proposal history]] is realised. It is handed bead records its caller has
+already read and parsed, and performs no subprocess invocation: the caller (ProposalCommands) takes
+`br list --json` on stdin, parses it, and passes the records to the viewer.
 
 ## Responsibilities
 
@@ -10,35 +13,28 @@ Shows proposal history — which proposals led to which spec changes and bead ac
 
 ## Interface
 
-```go
-type HistoryViewer struct {
-    SpecDir string // default "./spec"
-    Out     io.Writer
-}
+The viewer consumes four things and reaches for nothing else: the bead records its caller has
+already parsed, the spec root under which `proposals/` is resolved (`spec/` unless `--spec-dir` says
+otherwise), the destination the rendering is written to, and the choice between the two renderings —
+human-readable text by default, the JSON envelope described below when the caller asks for it. Each
+bead record carries the bead's id, its status, its labels, its title, and its creation and closing
+timestamps where the tracker supplied them; of those, only the labels decide which proposal a bead
+is grouped under.
 
-// ShowHistory groups the supplied beads by their spec_proposal label and renders.
-// beads is typically parsed from "br list --json" (or equivalent) piped on stdin.
-func (h *HistoryViewer) ShowHistory(beads []BeadRecord) error
+The viewer does NOT fetch beads itself. That responsibility is the caller's — the `ProposalCommands`
+handler for `spex log` reads stdin, decodes the bead JSON, and passes the records over.
 
-type BeadRecord struct {
-    ID            string
-    Status        string
-    Labels        []string
-    Title         string
-    CreatedAt     string
-    ClosedAt      string
-}
-```
-
-The viewer does NOT fetch beads itself. That responsibility is the caller's — the `ProposalCommands` cobra handler for `spex log` reads stdin, JSON-decodes into `[]BeadRecord`, and invokes `ShowHistory`.
-
-That split is declared, not just described: the api `spex log` names both ProposalCommands and HistoryViewer in its `provided_by` array. HistoryViewer is half of one external surface rather than a component that happens to be called by another — the parse belongs to the command, the rendering belongs here, and neither half is `spex log` on its own. The other two surfaces this module exposes, `spex register` and `spex template`, pair ProposalCommands with Registrar and TemplateProvider the same way.
+That split is a declared fact of the graph, not something a reader has to infer from the call chain: [[44a9d44c7eec|`spex log`]] is declared with two providers rather than one, ProposalCommands and HistoryViewer, which is the graph's way of saying that neither half is the command on its own. The parse belongs to the command, the rendering belongs here, and a change to either changes what a user typing `spex log` sees. The other two surfaces this module exposes, `spex register` and `spex template`, pair ProposalCommands with Registrar and TemplateProvider the same way.
 
 ## Why Accept Parsed Data
 
-The proposal-level requirement "No runtime subprocesses" (project req `58ea35f52b86`) forbids `exec.Command` inside the spex binary. The previous `CLIBeadLister` type did `br list --json` as a subprocess; it is retired. The viewer is a pure function over data it's given.
+Taking parsed data is a declared contract rather than a convenience: this component implements
+[[fd540b407fb4|Bead data via stdin]], and the proposal-level requirement "No runtime subprocesses"
+(project req `58ea35f52b86`) forbids the spex binary running a tracker at all. The previous
+`CLIBeadLister` ran `br list --json` as a subprocess; it is retired. The viewer is a pure function
+over data it's given.
 
-This also makes the viewer trivial to test: feed a fixture `[]BeadRecord`, assert the rendered output.
+This also makes the viewer trivial to test: feed it a fixture set of bead records, assert the rendered output.
 
 ## Output Format
 
@@ -53,6 +49,12 @@ This also makes the viewer trivial to test: feed a fixture `[]BeadRecord`, asser
   Closed:  spexmachina-old (closed)   apply: BeadCreator
   ...
 ```
+
+The sequence is not incidental. Proposal groups come out in ascending order of proposal stem, which
+reads as date order given the `YYYY-MM-DD-` prefix the registrar's naming convention puts first, and
+within a group the beads keep the order they arrived in. That ordering is settled before either
+rendering is chosen, so the JSON envelope below lists proposals in exactly the same sequence as the
+text above.
 
 ## Label Parsing
 

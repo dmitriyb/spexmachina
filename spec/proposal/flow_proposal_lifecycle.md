@@ -2,37 +2,48 @@
 
 ## Data Flow
 
+```dot
+digraph proposal_lifecycle {
+    "authored proposal"       [style=dashed];
+    "24180f55c0b4"            [label="Registrar\n24180f55"];
+    "spec/proposals/<ref>.md" [style=dashed];
+    "spec change"             [style=dashed];
+    "impact report"           [style=dashed];
+    "changeset.json"          [style=dashed];
+    "receipts.json"           [style=dashed];
+    "tracker beads"           [style=dashed];
+    ".bead-map.json"          [style=dashed];
+    "spec/.snapshot.json"     [style=dashed];
+    "97f73ced5a02"            [label="HistoryViewer\n97f73ced"];
+
+    "authored proposal"       -> "24180f55c0b4"            [label="spex register"];
+    "24180f55c0b4"            -> "spec/proposals/<ref>.md" [label="validate sections, copy"];
+    "spec/proposals/<ref>.md" -> "spec change"             [label="/spec"];
+    "spec change"             -> "impact report"           [label="spex validate, diff, impact"];
+    "impact report"           -> "changeset.json"          [label="spex emit --proposal <ref>"];
+    "changeset.json"          -> "tracker beads"           [label="scripts/apply-br.sh"];
+    "changeset.json"          -> "receipts.json"           [label="scripts/apply-br.sh"];
+    "receipts.json"           -> ".bead-map.json"          [label="spex ingest"];
+    "receipts.json"           -> "spec/.snapshot.json"     [label="spex ingest"];
+    "tracker beads"           -> "97f73ced5a02"            [label="br list --json | spex log"];
+}
 ```
-proposal file (authored by human or LLM)
-     │
-     ▼
-┌────────────┐
-│ Registrar   │── validate sections, copy to spec/proposals/
-└──────┬─────┘
-       │
-       ▼
-  spec/proposals/YYYY-MM-DD-name.md
-       │
-       ▼  (user runs /spec with the proposal)
-  spec changes (project.json, module.json, *.md)
-       │
-       ▼  (spex validate → spex diff → spex impact)
-  impact report
-       │
-       ▼  (spex emit --proposal <ref>)
-  changeset.json — proposal-epic create op first, then the ordered bead ops
-       │
-       ▼  (external adapter, e.g. scripts/apply-br.sh)
-  receipts.json — bead ids for every executed op
-       │
-       ▼  (spex ingest)
-  reconciled .bead-map.json + new snapshot
-       │
-       ▼  (user runs spex log)
-┌───────────────┐
-│ HistoryViewer  │── show proposal → spec → bead audit trail
-└───────────────┘
-```
+
+Only the two solid nodes are spec nodes: [[24180f55c0b4|Registrar]] opens the lifecycle and
+[[97f73ced5a02|HistoryViewer]] closes it. Everything dashed sits outside this module — the proposal
+a human or an LLM authored, the spec files `/spec` edits (`project.json`, `module.json`, `*.md`),
+the reports and receipts the middle of the pipeline writes, and the beads themselves, which live in
+whatever tracker the user runs. Two of those artifacts carry more than their name says:
+`changeset.json` leads with the proposal-epic create op and follows it with the ordered bead ops,
+and `receipts.json` carries a bead id for every op the adapter actually executed. One step leaves
+two marks rather than one: `spex ingest` reconciles `.bead-map.json`, and on a run the adapter
+reported complete it also rebaselines `spec/.snapshot.json` — the baseline the next `spex diff`
+measures against, so a partial run deliberately leaves the old one standing.
+
+The closing edge is a pipe, not a file read. HistoryViewer never opens `.bead-map.json` or the
+snapshot: the beads reach it as JSON on stdin, read and parsed by the command that fronts it, which
+is why the tracker sits on that edge and the two files `spex ingest` wrote sit off to the side of
+it.
 
 ## Key Insight
 
@@ -46,10 +57,15 @@ parented under that epic. That parentage is what HistoryViewer walks back.
 
 ## Traceability Chain
 
-```
-Conversation → Proposal → Spec Change → Merkle Diff → Impact Report
-            → Changeset → Receipts → Beads + Bead-Map
-```
+Each step is derived from the one before it, and each derivation is recorded:
+
+1. A conversation produces a proposal.
+2. The proposal drives a spec change.
+3. The spec change produces a merkle diff.
+4. The diff produces an impact report.
+5. The impact report produces a changeset.
+6. The changeset, executed, produces receipts.
+7. The receipts produce beads and their bead-map records.
 
 Any point in this chain can be traced forward or backward. The proposal is the
 anchor point that explains "why" a change was made; the changeset and receipts
