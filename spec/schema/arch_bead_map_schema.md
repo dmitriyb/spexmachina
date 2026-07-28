@@ -1,6 +1,6 @@
 # BeadMapSchema
 
-The `.bead-map.json` JSON Schema definition. Validates the mapping file structure that links spec nodes to beads.
+The `.bead-map.json` JSON Schema definition. It validates the file that links spec nodes to beads, and that file is the whole of [[f7ef8bef0ba1|what the mapping store may write down]]: an envelope, a record shape, and the enum of what a record may point at.
 
 ## Scope
 
@@ -9,13 +9,13 @@ Defines the JSON Schema for `.bead-map.json`, covering:
 - **Envelope**: `next_id` (integer >= 1), `records` (array)
 - **Record fields**: `id`, `spec_node_id`, `bead_id`, `bead_type`, `module`, `component`, `content_file`, `spec_hash` (all required), `node_type` and `bead_status` (optional)
 - **Mappable node types**: `node_type` is a closed enum — `proposal`, `component`, `data_flow`, `test_section` — naming what the record points at
-- **Format constraints**: `spec_node_id` validated by pattern `^[a-f0-9]{12}$` — the same identity hash format used by node IDs in `project.json` and `module.json`. The mapping store and the merkle tree use the same key format, so no rekeying is needed when impact analysis matches changed merkle nodes against existing mapping records.
+- **Format constraints**: `spec_node_id` is constrained to a non-empty string and no further — the schema puts no pattern on it, because a record standing in for a proposal carries the proposal reference there rather than a hash. On a record that points at a component, a data_flow or a test_section it holds that node's 12-character identity hash.
 
 ## Design Notes
 
 ### Single key format across the pipeline
 
-`spec_node_id` is the identity hash of the spec node the record points at. The merkle tree keys its leaves by the same identity hash. This means impact analysis can look up a changed merkle node directly in the mapping store with no key translation. Earlier versions of the schema used the format `<module>/<node_type>/<integer_id>` (e.g. `impact/component/2`) which required rekeying between merkle and mapping; that translation layer was deleted when identity hashes were introduced.
+On a record that points at a spec node, `spec_node_id` is that node's identity hash. The merkle tree keys its leaves by the same identity hash. This means impact analysis can look up a changed merkle node directly in the mapping store with no key translation. Earlier versions of the schema used the format `<module>/<node_type>/<integer_id>` (e.g. `impact/component/2`) which required rekeying between merkle and mapping; that translation layer was deleted when identity hashes were introduced.
 
 ### `node_type` is the closed set of things a record may point at
 

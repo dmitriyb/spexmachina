@@ -40,15 +40,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [
     { "id": 1, "name": "Alpha", "path": "alpha", "description": "First module." },
     { "id": 2, "name": "Beta", "path": "beta", "requires_module": [1] }
-  ],
-  "milestones": [
-    { "id": 1, "title": "M1", "description": "First milestone.", "groups": [1, 2] }
-  ],
-  "test_plan": {
-    "scenarios": [
-      { "id": 1, "name": "End-to-end flow", "description": "Cross-module test.", "content": "test_e2e.md", "modules": [1, 2] }
-    ]
-  }
+  ]
 }
 ```
 
@@ -94,7 +86,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:** `valid_project.json` (see Setup)
 **Expected:** Validation passes. Zero errors.
-**Verifies:** All optional fields (`description`, `version`, `requirements`, `milestones`, `test_plan`) are accepted when present and correctly typed.
+**Verifies:** All optional fields (`description`, `version`, `requirements`) are accepted when present and correctly typed.
 
 ### S3: Minimal module.json passes validation
 
@@ -278,32 +270,17 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```
 **Expected:** Validation fails. Error references `requirements/1/depends_on` — duplicate items violate `uniqueItems: true`.
 
-### S16: test_plan validates correctly in project.json
+### S16: Retired project-level node types are rejected
 
-**Input (valid test_plan with minimal scenario):**
+**Input (a project carrying the retired `milestones` array):**
 ```json
 {
   "name": "p",
   "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "scenarios": [{ "id": 1, "name": "Smoke test" }]
-  }
+  "milestones": []
 }
 ```
-**Expected:** Validation passes. Only `id` and `name` are required on test_scenario.
-
-**Input (test_plan with extra property):**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "strategy": "risk-based",
-    "scenarios": []
-  }
-}
-```
-**Expected:** Validation fails. `test_plan` has `additionalProperties: false`, so `strategy` is rejected.
+**Expected:** Validation fails with an unknown-property error at the root: `milestones` and `test_plan` were removed from the project schema along with their `$defs`, and root-level `additionalProperties: false` rejects either one. Same for `"test_plan": {}`. This fixture draws a second, independent error from its `"id": 1`, since a module id is an identity hash string — so the assertion is on the unknown-property error, not on the error count.
 
 ### S17: test_sections validates correctly in module.json
 
@@ -335,7 +312,6 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 - `len(proj.Modules) == len(proj2.Modules)`
 - `proj.Modules[1].RequiresModule` matches
 - `proj.Requirements[1].DependsOn` matches
-- `proj.Milestones[0].Groups` matches
 
 Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 - `mod.Components[0].Implements` matches
@@ -351,9 +327,7 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 {
   "name": "p",
   "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "requirements": [],
-  "milestones": [],
-  "test_plan": { "scenarios": [] }
+  "requirements": []
 }
 ```
 **Expected:** Validation passes. Empty arrays satisfy the schema — only `modules` has `minItems: 1`.
@@ -506,32 +480,6 @@ This is the boundary test for the `minimum: 1` constraint on all ID fields.
 }
 ```
 **Expected:** Validation fails. The project-level requirement definition does not include `preq_id` (it is only in the module-level definition), and `additionalProperties: false` rejects it. This verifies that the two requirement definitions are correctly separated.
-
-### E9: test_plan with empty scenarios object
-
-**Input:**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {}
-}
-```
-**Expected:** Validation passes. The `test_plan` object has no required properties — `scenarios` is optional.
-
-### E10: test_scenario modules array with duplicates
-
-**Input:**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "scenarios": [{ "id": 1, "name": "S", "modules": [1, 1] }]
-  }
-}
-```
-**Expected:** Validation fails. `modules` array on test_scenario has `uniqueItems: true`.
 
 ### S21: Sections array accepted in project.json
 
