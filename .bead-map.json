@@ -132,7 +132,7 @@
       "module": "merkle",
       "component": "SnapshotStore",
       "content_file": "spec/merkle/arch_snapshot_store.md",
-      "spec_hash": "80d65a496d273c3568f25c8fdc584964dfc7b0cbb2e6ff32aff1f4be1c767dbd"
+      "spec_hash": "91ff46401508612c2ee255f9f42405464615a640c12a81be2a1e3c0bda9fc81b"
     },
     {
       "id": 15,
@@ -225,7 +225,7 @@
       "module": "proposal",
       "component": "ProposalCommands",
       "content_file": "spec/proposal/arch_proposal_commands.md",
-      "spec_hash": "9b06070df876fb278ed1544b12311b9eeea39615179b34e4fc144ae42683f348"
+      "spec_hash": "c79665575d44fbde52acba00fecdffe4aa2a699d4bd9180d3499f85905d2258e"
     },
     {
       "id": 31,
@@ -529,7 +529,7 @@
       "module": "ingest",
       "component": "SnapshotSaver",
       "content_file": "spec/ingest/arch_snapshot_saver.md",
-      "spec_hash": "84d15bbdac3807198d5d2a00d4f09bb75c2aeba25eeee1769d6a6a3e258d5346"
+      "spec_hash": "54350c80957f583988fed52c4d99fc6c8ae3678066118aa2a5203cfe286490df"
     },
     {
       "id": 73,
@@ -551,7 +551,7 @@
       "module": "ingest",
       "component": "Consistency invariants",
       "content_file": "",
-      "spec_hash": "26a1a1c2f0c6fd8f1cd1a46713581f9fea09f0c6955c90904b545f993af7ce01"
+      "spec_hash": "e7a85ad0772ad54e91c0f2c9eece7e15a2d037a397f08f61d1d11b2b823921ce"
     },
     {
       "id": 76,

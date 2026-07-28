@@ -4,15 +4,17 @@
 
 ## Responsibilities
 
-- Serialize an ID-keyed merkle tree to a JSON snapshot file
+- Serialize an ID-keyed merkle tree to the snapshot file's canonical bytes
 - Deserialize a stored snapshot back into a tree
 - Manage snapshot file location within the spec directory
 
 ## Interface
 
-Two operations over one file.
+Three operations: one over bytes, two over a file.
 
-**Save** takes a finished tree, the path to write it to, and the timestamp to record in it. It creates the destination's parent directory if that is missing, then writes the whole tree as a single JSON document — two-space indented, with a trailing newline — so a snapshot change reviews as a readable git diff instead of one rewritten line. The timestamp is a parameter rather than a reading of the clock, so the same tree and the same timestamp always produce the same bytes.
+**Encode** takes a finished tree and the timestamp to record in it, and returns the snapshot's bytes — a single JSON document, two-space indented, with a trailing newline, so a snapshot change reviews as a readable git diff instead of one rewritten line. The timestamp is a parameter rather than a reading of the clock, so the same tree and the same timestamp always produce the same bytes. This is the only place a tree is flattened into the file's shape. Anything that persists a snapshot goes through it, whatever it then does with the bytes: a second implementation of that walk is how two writers of one format drift apart while both keep passing their own tests.
+
+**Save** is Encode plus the plainest write there is — it creates the destination's parent directory if that is missing and replaces the file. It offers no atomicity: a reader arriving mid-write can see a truncated file. That is why the one process that persists a snapshot in production does not use it; see "Read vs. write call sites".
 
 **Load** takes a path and returns the tree the file holds. Its behaviour when the file is absent is a contract in its own right and is stated under "Read vs. write call sites" below. Every other failure is an error rather than a fallback: an unreadable file, malformed JSON, a snapshot that records no root key, a root key with no entry in the node map, and a child key that a parent lists but no entry defines. That last one matters — a snapshot missing an entry its parent still names fails loudly instead of quietly loading as a smaller tree.
 
@@ -96,12 +98,20 @@ Reads and writes reach this component from different commands:
   string) rather than an error. This contract is what enables bootstrap
   without a pre-seeded snapshot — the first diff treats the spec as
   entirely added against the empty baseline.
-- `Save` is called only from `spex ingest`'s SnapshotSaver path. The
-  invariant that snapshot and `.bead-map.json` move together is enforced
-  by ingest, which atomically commits both files (mode: normal on complete
-  receipts; mode: refresh always). There is no other writer — no
-  standalone `spex hash` command, no other subcommand that persists the
-  tree.
+- `Encode` is called from `spex ingest`, by both of its writers: the
+  SnapshotSaver path on a complete-status normal run, and the refresh
+  pathway, which shares that path's temp-file-and-rename helper rather
+  than repeating it. The invariant that snapshot and `.bead-map.json` move
+  together is enforced by ingest, which atomically commits both files
+  (mode: normal on complete receipts; mode: refresh always), and `Save`'s
+  replace-in-place write cannot hold that invariant — which is why the
+  composition sits there rather than here.
+  There is no other writer — no standalone `spex hash` command, no other
+  subcommand that persists the tree.
+- `Save` therefore has no production caller. It stays for callers that
+  want a snapshot on disk without ingest's invariant, which today means
+  the test suites of this module and of `spex impact` seeding a baseline
+  to diff against.
 
 Keeping reads in `spex diff` and writes in `spex ingest` is what holds the
 snapshot+bead-map atomicity invariant in place.

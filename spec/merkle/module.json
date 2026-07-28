@@ -101,7 +101,7 @@
     {
       "id": "b2fcd9457a28",
       "name": "SnapshotStore",
-      "description": "Reads and writes snapshot files. Serializes the identity-hash-keyed tree to a JSON file for git storage. The flat map is keyed by identity hash (hash → {hash, type, ...}), not by file path or integer ID.",
+      "description": "Reads and writes snapshots. Encoding is one operation over bytes: it flattens the identity-hash-keyed tree into the canonical JSON document, and every writer of the snapshot file goes through it, so the format has a single implementation. A plain in-place write over that encoder is offered too, but it carries no atomicity and has no production caller — ingest pairs the encoder with its own temp-file-and-rename write. The flat map is keyed by identity hash (hash → {hash, type, ...}), not by file path or integer ID.",
       "content": "arch_snapshot_store.md",
       "implements": [
         "e99a846810df"

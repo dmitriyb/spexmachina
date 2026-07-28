@@ -75,7 +75,7 @@
     {
       "id": "f85bd2f94aeb",
       "name": "SnapshotSaver",
-      "description": "Writes spec/.snapshot.json iff receipts top-level status is complete. Uses atomic temp-file + rename. Reads the current merkle tree via the merkle module.",
+      "description": "Writes spec/.snapshot.json iff receipts top-level status is complete. Uses atomic temp-file + rename. Builds the current tree through the merkle module and takes the file's bytes from that module's encoder rather than serializing them here, so the on-disk format has one implementation and this writer cannot drift from it.",
       "content": "arch_snapshot_saver.md",
       "implements": [
         "cf47671793fa",

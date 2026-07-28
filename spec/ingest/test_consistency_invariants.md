@@ -48,6 +48,20 @@ Tests for the seven consistency invariants the ingest module enforces after appl
 
 - Receipts status complete. Expected: snapshot rewritten with current merkle tree.
 
+### One snapshot format across both writers
+
+**Given** a fixture spec tree, a fixed timestamp, and two destinations.
+**When** the saver's atomic write produces one file and the `merkle` module's own in-place `Save` produces the other.
+**Then** the two files are byte-identical.
+
+**Rationale**: two writers of one format is the shape this repository already
+got wrong once — the saver carried its own tree walk described as "mirroring"
+merkle's, nothing compared the two, and either could have drifted while both
+kept passing their own tests. The formats are one implementation now; this
+scenario is what makes a second one fail loudly instead of silently. The
+timestamp is fixed because `created_at` is the only field that would otherwise
+differ between two writes.
+
 ### Invariant 7: schema violation
 
 - After reconciliation, manually corrupt .bead-map.json (missing required field on a record). AssertInvariants.

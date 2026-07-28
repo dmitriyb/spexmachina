@@ -6,7 +6,7 @@
 
 - Accept the completeness gate: `complete` → write; `partial` → skip.
 - Compute the current merkle tree by invoking the `merkle` module against the spec directory.
-- Serialize the snapshot with canonical JSON encoding.
+- Ask the `merkle` module for the snapshot's canonical bytes rather than encoding them here.
 - Atomically write via temp file + rename.
 
 ## Interface
@@ -31,7 +31,7 @@ This is the "unfinished operations resurface through the idempotency path" mecha
 
 ## Atomic Write
 
-The snapshot is serialized in full, written to a temp file beside the destination, flushed, and only then renamed into place. Rename is atomic on POSIX filesystems for a same-device move, so a reader of `spec/.snapshot.json` sees either the previous snapshot or the new one and never a splice of the two. [[ffab5d1337ac|The destination is never opened for truncation and rewritten in place]].
+The snapshot is encoded in full by the `merkle` module, written to a temp file beside the destination, flushed, and only then renamed into place. Rename is atomic on POSIX filesystems for a same-device move, so a reader of `spec/.snapshot.json` sees either the previous snapshot or the new one and never a splice of the two. [[ffab5d1337ac|The destination is never opened for truncation and rewritten in place]].
 
 Flushing before the rename is what carries that guarantee across a crash: the bytes are on disk before the name points at them, so a crash immediately after the rename cannot leave a snapshot that is empty or half-written.
 
@@ -39,7 +39,7 @@ A write that fails part-way removes its own temp file, so a failed save leaves n
 
 ## Snapshot Format
 
-Inherited from the `merkle` module. The file records the root key, the root hash, the time it was written, and a flat map holding one entry per node in the tree — leaves, modules and the project root alike. Most keys are the node's identity hash; the exceptions are the project root, keyed `project`, and the envelope leaves, keyed `meta/project` and `meta/<module identity hash>`. Each entry carries that node's hash and what kind of node it is, plus its owning module and the keys of its children where those apply. See `spec/merkle/module.json` for the authoritative schema.
+Inherited from the `merkle` module, and not just in shape: the bytes are the ones merkle's encoder returns, so there is one implementation of this format and no second walk to keep in step. The file records the root key, the root hash, the time it was written, and a flat map holding one entry per node in the tree — leaves, modules and the project root alike. Most keys are the node's identity hash; the exceptions are the project root, keyed `project`, and the envelope leaves, keyed `meta/project` and `meta/<module identity hash>`. Each entry carries that node's hash and what kind of node it is, plus its owning module and the keys of its children where those apply. See `spec/merkle/module.json` for the authoritative schema.
 
 ## Non-Responsibilities
 

@@ -59,9 +59,9 @@ type refreshDirections struct {
 // component whose code is gone is a structural removal with no bead
 // work left to do.
 var refreshAbsorbable = map[string]refreshDirections{
-	"requirement":  {added: true, removed: true},
-	"api":          {added: true, removed: true},
-	"component":    {added: false, removed: true},
+	"requirement": {added: true, removed: true},
+	"api":         {added: true, removed: true},
+	"component":   {added: false, removed: true},
 }
 
 // RefreshRefusal is the typed error for the refresh gates: structural
