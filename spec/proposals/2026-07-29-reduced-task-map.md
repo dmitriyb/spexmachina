@@ -71,3 +71,15 @@ Outside `map`: `arch_reconciler.md` in `ingest`, `arch_idempotency_labeler.md` i
 **Data migration.** One pass rewriting `.bead-map.json` into `.task-map.json` with two fields per record. It is mechanical, reversible while the old file remains in git history, and it touches no external system — the contrast with elimination, which requires rewriting labels on 112 tasks in a tracker where all 168 lines are closed-task lines and therefore need reviewer or owner role.
 
 **Not in scope.** Deleting the `map` module, merging `impact` and `emit`, and collapsing `ingest` are the remaining ideas in the `dce73d6` draft. They are module supersession and legitimately produce bead lifecycle; they belong in a separate proposal after this one, and they become cheaper once the map is two fields.
+
+## Adjacent: the meta rule that inflates this proposal, and every description-only edit
+
+The completeness cost recorded above — the `module.json` edit "independently obliges every component in the module" — is not specific to this proposal. It is the standing price of touching any `module.json`, including a one-word correction to a component `description`.
+
+The cause is attribution, not the rule itself. In `merkle/tree_builder.go` a requirement leaf hashes its own JSON fields, so editing a requirement's description moves *that requirement's* leaf and the completeness checker can name it: only its implementors are obliged. A component, data_flow or test_section leaf hashes only its content file; its `description`, `name` and edges live nowhere but the module-wide `meta` leaf, which is a hash of the entire `module.json`. So when one component's description changes, the tree can report only that *something* in `module.json` moved, and the rule blames every component in the module because it has no way to tell which one.
+
+The fix is to give those three node types the treatment requirements already get: hash each leaf over its content file **and** its own `module.json` entry. The `meta` leaf then covers what its name claims — the module envelope: module name, module description, `requires_module`, and the set of node ids. A description edit becomes a change to one node, handled by the existing targeted rule. A node added or removed still moves `meta` and still stops the pipeline.
+
+This makes enforcement sharper, not weaker. Today an author who corrects one word is handed a wall of errors whose only practical exit is a blanket `--mode refresh`, which absorbs everything indiscriminately — the outcome the rule exists to prevent. Pointed at the single node they touched, the correct response is obvious and cheap. Carrying a separate content hash and metadata hash per node would go further and let `refresh` distinguish a rename from a rewritten contract, a line it cannot currently draw and one this proposal's removal of `spec_hash` leaves entirely to the snapshot.
+
+Out of scope here: it is a `merkle` change requiring its own snapshot rewrite, and belongs in its own proposal.
