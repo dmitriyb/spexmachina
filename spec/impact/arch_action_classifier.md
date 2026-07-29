@@ -17,7 +17,7 @@ A change with no existing bead is gated by its node type before the state transi
 | NodeType | Admitted by the gate? | Notes |
 |----------|-----------------------|-------|
 | `component` | yes (feature) | primary work unit |
-| `data_flow` | yes (task) | cross-component contract; the gate asks nothing further of it |
+| `data_flow` | yes | cross-component contract; the gate asks nothing further of it |
 | `test_section`, `len(describes) >= 2` | yes (task) | cross-component integration test, needs its own bead |
 | `test_section`, `len(describes) == 1` | no | bundled into the single described component's feature bead |
 | `api` | no | declared external surface; the components in its `provided_by` array carry the work |
@@ -70,7 +70,7 @@ An `Action` is a decision about *what happened to a spec node*, never an instruc
 
 | Concern | Owner |
 |---------|-------|
-| bead type (`epic` / `feature` / `task`) | the adapter, from the op's `spec_node_kind` |
+| bead type (`epic` / `feature` / `task`) | derived twice from the op's `spec_node_kind`: by the adapter for the tracker bead, and by ingest's Reconciler for the bead-map record's `bead_type`. The two tables disagree on three inputs: `data_flow` (adapter `task`, ingest `feature`), an empty `spec_node_kind` (adapter `feature` via its catch-all, ingest `""` via its own arm), and every other unnamed kind (adapter `feature`, ingest `task`) |
 | `spec_node_kind` on the op | ChangesetBuilder |
 | parent (the proposal epic) | Resolver |
 | dep refs resolved from a create's `DepSpecNodeIDs`, and whether each takes the `ref:op` / `ref:bead` / `ref:spec_node` shape | Resolver |

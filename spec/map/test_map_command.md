@@ -15,7 +15,7 @@
 ### spex map get — unknown record ID
 
 - **Input**: `spex map get 999`
-- **Expected**: Error message "mapping record not found: 999". Exit code 1.
+- **Expected**: Error message "map get: map: record not found: 999". Exit code 1. The test asserts only that an error is returned, not the message.
 
 ### spex map list — all records
 

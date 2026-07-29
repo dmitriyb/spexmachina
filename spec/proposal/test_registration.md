@@ -36,7 +36,7 @@ tmpdir/
 - File is copied to `spec/proposals/YYYY-MM-DD-<slug>.md` where YYYY-MM-DD is today's date.
 - The slug is derived from the H1 heading of the proposal (lowercased, spaces replaced with hyphens, non-alphanumeric characters stripped).
 - The copied file's content is byte-for-byte identical to the source.
-- File permissions on the copy are 0644.
+- File permissions on the copy are 0644 (`copyFile` opens with that mode; no test asserts it).
 - Function returns nil error.
 
 ### S2: Register a valid change proposal

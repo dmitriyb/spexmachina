@@ -66,14 +66,16 @@ An orphan carries `NodeType` alongside the record, preserved from the removed ch
 
 Call `ClassifyActions(nil, matches, unmatched, orphaned)` — the leading argument is the spec graph, unused by these fixtures. Assert the returned `[]Action` contains exactly six actions:
 
-| # | Type | BeadID | Module | Node | Reason |
-|---|------|--------|--------|------|--------|
-| 1 | obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
-| 2 | create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
-| 3 | obsolete | spex-003 | merkle | Hasher | Spec node modified: merkle/Hasher |
-| 4 | create | (empty) | merkle | Hasher | Spec node modified (new): merkle/Hasher |
-| 5 | create | (empty) | validator | CoupledSectionChecker | New spec node: validator/CoupledSectionChecker |
-| 6 | obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
+| Type | BeadID | Module | Node | Reason |
+|------|--------|--------|------|--------|
+| create | (empty) | merkle | Hasher | Spec node modified (new): merkle/Hasher |
+| create | (empty) | validator | CSCH_HASH | New spec node: validator/CSCH_HASH |
+| create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
+| obsolete | spex-003 | merkle | Hasher | Spec node modified: merkle/Hasher |
+| obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
+| obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
+
+The table is a set, not a sequence. `ClassifyActions` does sort by `(Type, Module, Node, BeadID)` (`impact/action_classifier.go:175-186`), so all three creates precede all three obsoletes — but the two `validator` creates order on their `Node` strings, and the added node's `Node` is its raw identity hash (nil graph, so `resolveNodeName` returns the key). Whether that hash sorts before or after `SchemaChecker` depends on its first character, so the relative order of rows 2 and 3 below is not reproducible. Assert the set.
 
 Modified nodes produce TWO actions (obsolete old + create new). Added nodes produce one create. Removed nodes produce one obsolete.
 
@@ -190,18 +192,18 @@ Assert only one action is generated: `"obsolete"` with BeadID `"spex-011"`. No c
 
 ### S6: Impact level appears in action metadata but does not change action type
 
-Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce the same action types (obsolete + create) regardless of impact level. Verify the reason string includes the impact level for traceability.
+Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce the same two actions (obsolete + create). The impact level reaches neither the action nor its reason — `Action` carries no impact field and both reason formats are module-plus-node — so the `Reason` strings are byte-identical across the three runs; the shipped test asserts the action types only.
 
 ### S7: ReportGenerator produces valid JSON with correct structure
 
-Call `GenerateReport(actions, &buf)` with the six actions from S1. Parse the output JSON and assert:
+Call `GenerateReport(actions, &buf)` with six actions and assert the grouping and counts below. Passed the actions `ClassifyActions` returns for the S1 fixture, each entry additionally carries `node_type`, `spec_node_id`, `spec_hash` on creates, `old_bead_id` on a create replacing an obsoleted bead, and `change_type` on obsoletes; all are `omitempty`. The shipped test (`impact/report_generator_test.go:36-68`) instead hand-builds six actions carrying only `type`, `bead_id`, `module`, `node` and `reason`, which is why the block below omits those five fields. It is not a transcript of that test — the test's node names are `SchemaChecker`, `Hash computation` and `OrphanDetector`, its bead ids `spexmachina-abc/def/ghi`. Read against the S1 fixture, the third create's `node` is the identity hash `CSCH_HASH`, which is how the block below spells it — a nil graph leaves `resolveNodeName` returning the key (`impact/action_classifier.go:337-340`), and the reason string is built from that same value.
 
 ```json
 {
   "creates": [
     {"type": "create", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified (new): validator/SchemaChecker"},
     {"type": "create", "module": "merkle", "node": "Hasher", "reason": "Spec node modified (new): merkle/Hasher"},
-    {"type": "create", "module": "validator", "node": "CoupledSectionChecker", "reason": "New spec node: validator/CoupledSectionChecker"}
+    {"type": "create", "module": "validator", "node": "CSCH_HASH", "reason": "New spec node: validator/CSCH_HASH"}
   ],
   "obsoletes": [
     {"type": "obsolete", "bead_id": "spex-001", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified: validator/SchemaChecker"},

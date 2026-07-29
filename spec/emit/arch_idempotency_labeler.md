@@ -92,8 +92,10 @@ the three branches would ever have fitted in the block.
 - A label is only assigned to a *new* create op. Close ops, label ops, and
   tag ops do not get `spex:<...>` assigned (they reference existing beads
   by `bead_id` or target spec_node_id).
-- Fresh-create cursor starts at `max(existing record ids) + 1` when the
-  store is loaded. There is no re-use of closed-record IDs.
+- Fresh-create cursor starts at the store's persisted `next_id` counter,
+  read once when the store is loaded. That counter is monotonic and never
+  recomputed from the records present, so deleting the highest record does
+  not lower it and there is no re-use of closed-record IDs.
 - Fresh and modify-pair labels are `spex:<n>` with `<n>` a positive decimal
   integer written without leading zeros, so one record id has exactly one
   spelling and a label comparison is a string comparison.

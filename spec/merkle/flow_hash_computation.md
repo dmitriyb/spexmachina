@@ -44,8 +44,8 @@ finished tree itself; no command outside `spex ingest` writes that file.
 On a fresh project there is no `spec/.snapshot.json`. The pipeline is:
 
 1. `spex validate` — the spec has to be valid before anything hashes it.
-2. `spex diff` — Hasher and TreeBuilder build the current tree; SnapshotStore finds no snapshot file
-   and yields the empty tree, so every leaf is reported as `added`.
+2. `spex diff` — Hasher and TreeBuilder build the current tree; the command finds no snapshot file,
+   never calls SnapshotStore at all, and every leaf is reported as `added`.
 3. `spex impact` — the "everything added" diff becomes bead actions.
 4. `spex emit` — those actions become a changeset.
 5. The adapter applies the changeset and writes receipts.
@@ -53,8 +53,8 @@ On a fresh project there is no `spec/.snapshot.json`. The pipeline is:
    `spec/.snapshot.json`, atomically with the bead-map records.
 
 The first `spex diff` invocation builds the current tree (Hasher → TreeBuilder)
-and compares against the empty-tree baseline that `SnapshotStore.Load` returns
-when the snapshot file is absent. The "everything added" diff feeds the
+and compares it against no snapshot at all, because the command skips the
+SnapshotStore load when the file is absent. The "everything added" diff feeds the
 standard impact → emit → adapter → ingest cycle. That ingest run's
 `SnapshotSaver` is what creates `spec/.snapshot.json`, alongside the first
 batch of bead-map records, so snapshot and bead-map are born consistent. It is
@@ -133,6 +133,6 @@ hash is the SHA-256 of the sorted concatenation of children hashes.
 
 When `spec/.snapshot.json` does not exist, `SnapshotStore.Load` returns the
 empty tree (root node with no children, root hash = SHA-256 of the empty
-string). Callers diff against this baseline to produce the "everything added"
-report on first-run bootstrap. This contract is what enables bootstrap without
-a pre-seeded snapshot.
+string). No production caller exercises that branch: both call sites stat the
+path first, `spex diff` skipping the load and `spex ingest --mode refresh`
+refusing the run. The contract is held for library callers and for tests.

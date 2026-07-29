@@ -15,8 +15,9 @@ component's implementation bead.
 
 ## Setup
 
-- Use `testdata/` fixtures: impact_report.json, bead_map.json, project.json,
-  and a minimal spec tree.
+- Use the in-code fixtures described under Fixtures below: `builderEnv`
+  in `emit/builder_test.go`, wrapping `fakeStore` and `fakeSpecGraph`
+  from `emit/resolver_test.go`.
 - Set `--git-head` to a fixed SHA string for byte-identical output assertions.
 
 ## Scenarios
@@ -25,8 +26,9 @@ component's implementation bead.
 
 - Build a changeset from a single-create impact report. Assert the output has
   `"version": 1` at the top, `git_head` set to the fixed SHA, and canonical
-  field order on every op (`op_id`, `type`, `target`, `spec_node_id`,
-  `idempotency`, `parent`, `deps`, `priority`, `title`, `body`).
+  field order on every op (`op_id`, `type`, `spec_node_kind`, `spec_node_id`,
+  `idempotency`, `parent`, `deps`, `priority`, `title`, `body`, `target`,
+  `labels`, `reason`).
 - Same inputs produce byte-identical output across two runs.
 
 ### Proposal epic parents every non-epic create

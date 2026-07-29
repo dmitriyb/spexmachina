@@ -35,7 +35,7 @@ No `spex` process is spawned. Each scenario assembles the command tree itself, h
 - Exit code is 0
 - Stdout contains a collated markdown document
 - Output includes project heading, project requirements, and per-module sections
-- Output contains inlined content from `arch_*.md`, `flow_*.md`, and `test_*.md` files
+- Output contains inlined content from `arch_*.md` and `flow_*.md` files; test_sections are not rendered in markdown
 - Stderr is empty
 
 ### S3: DOT format output

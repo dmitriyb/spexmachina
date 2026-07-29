@@ -1,6 +1,6 @@
 {
   "name": "emit",
-  "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding — that an external adapter consumes.",
+  "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding — that an external adapter consumes.",
   "requirements": [
     {
       "id": "aa2375420738",
@@ -42,7 +42,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotency label construction",
-      "description": "Each create op carries an idempotency.label field of the form spex:<record-id> where record-id is the next integer ID the ingest reconciler will assign. The adapter matches this label against the tracker before creating; a pre-existing match produces a was_existing=true skipped receipt rather than a duplicate bead. Record IDs come from the mapping store's monotonic counter."
+      "description": "Each create op carries an idempotency.label field. A fresh create's label is spex:<record-id>, taken from an in-memory cursor seeded once from the mapping store's counter and advanced per fresh create, so a run's second fresh create is one past the persisted counter, not equal to it; a modify-pair create reuses the record-id already bound to its old bead; a cleanup create's label is spex:cleanup-<spec_node_id> and allocates no record-id. The adapter matches this label against the tracker before creating; a pre-existing match produces a was_existing=true skipped receipt rather than a duplicate bead. Record IDs come from the mapping store's monotonic counter."
     },
     {
       "id": "22e63e959749",
@@ -107,7 +107,7 @@
     {
       "id": "6f4b6dd8928f",
       "name": "IdempotencyLabeler",
-      "description": "Assigns each create op its idempotency.label in the form spex:<record-id>. The record-id is the next integer from the mapping store's monotonic counter, reserved at emit time so ingest's later reconciliation uses the same value. Never reuses a record-id across runs.",
+      "description": "Assigns each create op its idempotency.label, branching on action class. A fresh create takes spex:<cursor> from the mapping store's monotonic counter and advances an in-memory cursor. A modify-pair create reuses the record-id already bound to its old bead, because ingest's modify-pair detection requires that match. A cleanup create takes spex:cleanup-<spec_node_id> and consumes no record-id. Emit never writes the persisted counter back; advancing it is ingest's job.",
       "content": "arch_idempotency_labeler.md",
       "implements": [
         "0d468e176aaf"

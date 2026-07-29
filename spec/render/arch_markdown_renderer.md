@@ -5,7 +5,7 @@ Generates a collated markdown document from the spec.
 ## Responsibilities
 
 - Produce a single markdown document with all spec content inlined
-- Structure: project overview → per-module (requirements → external surface → architecture → implementation → data flows)
+- Structure: project overview → per-module (requirements → external surface → architecture → data flows)
 - Write to stdout, or to whatever stream the caller supplies
 - Add nothing of its own around the markdown: no front matter, no metadata header, no wrapper — the first line of output is the project heading
 

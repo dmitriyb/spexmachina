@@ -132,7 +132,7 @@ Gating rules applied by ActionClassifier:
 |-----------|-----------------------|
 | module | yes, but no change ever carries this node type, so the entry is dead |
 | component | yes (feature) |
-| data_flow | yes (task) |
+| data_flow | yes |
 | test_section, len(describes) >= 2 | yes (task) |
 | test_section, len(describes) == 1 | no (bundled with that component's feature bead) |
 

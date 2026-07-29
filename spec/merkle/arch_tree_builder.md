@@ -127,7 +127,7 @@ reach past the merkle pipeline:
 - `spex impact` — the spec graph it loads carries a tree built the same way.
 
 There is no standalone tree-building CLI. The first `spex diff` on a fresh
-project builds the current tree and compares against the empty-tree
-baseline returned by `SnapshotStore.Load` when `spec/.snapshot.json` is
+project builds the current tree and compares it against no snapshot at
+all, because `spex diff` skips the load when `spec/.snapshot.json` is
 absent — this is what bootstraps the pipeline without a separate hash
 step. See `flow_hash_computation.md` for the full bootstrap flow.

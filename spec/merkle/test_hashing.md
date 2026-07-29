@@ -8,18 +8,24 @@ All scenarios operate against a temporary spec directory created in `t.TempDir()
 
 ```
 tmpdir/
-  project.json          (lists one module: "alpha", with a 12-char hex id)
+  project.json          (two project requirements and two modules, "Alpha"
+                         at path alpha and "Beta" at path beta, each with a
+                         12-char hex identity id)
   alpha/
-    module.json          (lists components, test_sections, data_flows —
-                          each carrying a 12-char hex identity `id` plus a
-                          content path; leaf keys are read from those ids)
-    arch_widget.md       ("# Widget\nHandles widgets.")
-    arch_gadget.md       ("# Gadget\nHandles gadgets.")
-    test_widget_logic.md ("# Widget Logic\nCoverage for the widget.")
-    flow_data_path.md    ("# Data Path\nData flows from A to B.")
+    module.json          (2 requirements, 2 components, 1 test_section —
+                          each carrying a 12-char hex identity `id`, and the
+                          components and test_section additionally a content
+                          path; requirement leaves hash their JSON fields.
+                          Leaf keys are read from those ids)
+    arch_comp1.md        ("# Comp1 architecture")
+    arch_comp2.md        ("# Comp2 architecture")
+    test_comp1.md        ("# Comp1 tests")
+  beta/
+    module.json          (1 component)
+    arch_beta.md         ("# Beta architecture")
 ```
 
-Helper function `writeFixture(t, root, relPath, content)` writes a file and returns its absolute path. A second helper `sha256Hex(content string) string` computes the expected SHA-256 hex digest of a given string for assertion comparisons.
+Helper function `writeFile(t, dir, name, content)` writes one file into a directory. Expected digests are computed inline with `sha256.Sum256` and `hex.EncodeToString`; where this document writes `sha256Hex(x)` it means that pair.
 
 ## Scenarios
 
@@ -34,10 +40,10 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 ### S2: HashFile streams content rather than buffering
 
-**Given** a file written with 10 MB of repeated content
+**Given** a file of ordinary size
 **When** `HashFile(path)` is called
 **Then** it returns a valid 64-character hex hash without error
-**And** the hash matches `sha256Hex` of the same 10 MB content
+**And** the hash matches `sha256Hex` of the same content. `HashFile` streams via `io.Copy` (`merkle/hasher.go:21`); no test exercises a large file.
 
 **Rationale**: Verifies the streaming implementation handles large files without memory issues.
 
@@ -62,7 +68,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 **Given** the full fixture directory described in Setup
 **When** `BuildTree(tmpdir)` is called
-**Then** the root node has type `"project"` and two children: the `meta/project` envelope leaf and the `alpha` module node (keyed by alpha's identity hash)
+**Then** the root node has type `"project"` and five children: the `meta/project` envelope leaf, one leaf per project requirement (two), and the `alpha` and `beta` module nodes (each keyed by its identity hash)
 **And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the test_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
 **And** there are no per-type `arch`/`flow`/`test` interior group nodes and no path-style keys anywhere in the tree
 
@@ -91,9 +97,9 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 **Given** a fixture with two modules `alpha` and `beta`, each with distinct content files
 **When** `BuildTree(tmpdir)` is called
-**Then** the root has children: `project.json`, `alpha`, `beta`
-**And** `alpha` and `beta` each have their own correct subtrees
-**And** the root hash equals `HashChildren` of `[project.json hash, alpha hash, beta hash]`
+**Then** the root has children: `meta/project`, one leaf per project requirement, `alpha` and `beta`
+**And** `alpha` and `beta` each have their own correct subtrees, and editing a leaf under `alpha` leaves `beta`'s module hash unchanged
+**And** the root hash equals `HashChildren` over all of those child hashes
 
 **Rationale**: Ensures the tree builder correctly handles the real-world case of multiple modules in a project, and that module hashes are combined in sorted order at the root level.
 
@@ -129,7 +135,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **When** `BuildTree(tmpdir)` is called
 **Then** the tree contains only files referenced by `module.json` content fields
 **And** `alpha/notes.txt` does not appear in the tree
-**And** the tree hashes are identical to a build without the extra file
+**And** the module node's child count is unchanged from a build without the extra file
 
 **Rationale**: Per `arch_tree_builder.md`, content files are discovered from `module.json`, not from directory listing. Extraneous files must be invisible to the merkle tree.
 

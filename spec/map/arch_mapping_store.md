@@ -95,7 +95,7 @@ verbatim. Nothing writes through that surface.
 
 ## File Location
 
-The mapping file is `.bead-map.json` in the repository root, not inside the spec directory. Every command that touches it — `diff`, `impact`, `emit`, `ingest` via `--map`, and `map get/list/context` via `--map-file` — defaults to that bare relative path, resolved against the working directory, and `scripts/apply-br.sh` reads the same default through `SPEX_MAPPING_FILE`. It is never derived from `--spec-dir`.
+The mapping file is `.bead-map.json` in the repository root, not inside the spec directory. Every command that touches it — `diff`, `impact`, `emit`, `ingest` via `--map`, and `map get/list/context` via `--map-file` — defaults to that bare relative path, and `scripts/apply-br.sh` reads the same default through `SPEX_MAPPING_FILE`. How a relative path resolves splits by command: `diff` and `map get/list/context` take it verbatim, against the working directory, while `impact`, `emit` and `ingest` resolve it against the spec directory's parent. The name is never derived from `--spec-dir`: no command appends `.bead-map.json` to the spec directory itself.
 
 That separation is deliberate. `spec/.snapshot.json` belongs to the spec tree; `.bead-map.json` does not. The file is committed to git but is NOT hashed into the merkle tree — it is metadata about the relationship between spec and beads, not spec content, and keeping it outside `--spec-dir` means pointing spex at a different spec directory does not silently point it at a different mapping store.
 

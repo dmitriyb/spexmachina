@@ -10,7 +10,7 @@ All scenarios use a temporary spec directory with a `project.json` and module di
 
 ```
 spec/
-  project.json    # has sections: [{ id: 1, name: "delivery", type: "coupled", ... }]
+  project.json    # has sections: [{ id: "000000000001", name: "delivery", type: "coupled", ... }]
   delivery/
     module.json   # name: "delivery"
     section.schema.json  # validates the delivery section content
@@ -36,14 +36,14 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 ### Preconditions
 
-- CoupledSectionChecker receives the parsed project struct and the spec directory path.
+- CoupledSectionChecker receives the spec directory path only (`CheckCoupledSections(specDir string)`) and parses `project.json` itself through the shared `loadSpec`; a project.json that will not parse ends the check with one load error.
 - The project schema already allows the `sections` array with `additionalProperties` on each section entry (envelope fields validated by schema, content fields are freeform).
 
 ## Scenarios
 
 ### S1: Valid coupled section passes all checks
 
-**Given** a project with one section (`id: 1, name: "delivery", type: "coupled"`) and a `delivery` module exists with a valid `section.schema.json` that accepts the section content.
+**Given** a project with one section (`id: "000000000001", name: "delivery", type: "coupled"`) and a `delivery` module exists with a valid `section.schema.json` that accepts the section content.
 
 **When** CoupledSectionChecker runs.
 
@@ -51,7 +51,7 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 ### S2: Section with non-coupled type is skipped
 
-**Given** a project with one section (`id: 1, name: "notes", type: "informational"`). No module named "notes" exists.
+**Given** a project with one section (`id: "000000000001", name: "notes", type: "informational"`). No module named "notes" exists.
 
 **When** CoupledSectionChecker runs.
 
@@ -59,7 +59,7 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 ### S3: Coupled section with no matching module fails
 
-**Given** a project with section (`id: 1, name: "delivery", type: "coupled"`) but no module named "delivery" in the modules array.
+**Given** a project with section (`id: "000000000001", name: "delivery", type: "coupled"`) but no module named "delivery" in the modules array.
 
 **When** CoupledSectionChecker runs.
 
@@ -71,7 +71,7 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 **When** CoupledSectionChecker runs.
 
-**Then:** Error reported: coupled module "delivery" is missing `section.schema.json` at expected path `spec/delivery/section.schema.json`.
+**Then:** Error reported: `coupled module "delivery" is missing section.schema.json at delivery/section.schema.json`. The path is relative to the spec directory; the spec directory itself is not part of the message.
 
 ### S5: Section content fails module schema validation
 
@@ -83,15 +83,15 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 ### S6: Duplicate section IDs fail
 
-**Given** a project with two sections both having `id: 1`.
+**Given** a project with two sections both having `id: "000000000001"`.
 
 **When** CoupledSectionChecker runs.
 
-**Then:** Error reported: duplicate section ID 1. Both section names are included in the error message.
+**Then:** Error reported: `duplicate section id 000000000001 (also at sections/0)`. The message carries the id and the index of the first section that claimed it; section names are not in it.
 
 ### S7: Section missing required envelope fields fails
 
-**Given** a project with a section entry that has `id: 1` and `type: "coupled"` but is missing the `name` field.
+**Given** a project with a section entry that has `id: "000000000001"` and `type: "coupled"` but is missing the `name` field.
 
 **When** CoupledSectionChecker runs.
 
@@ -149,7 +149,7 @@ The `section.schema.json` for the fixture accepts a simple structure:
 
 ### E4: Coupled section with empty content (only envelope fields)
 
-**Given** a section with `id: 1, name: "delivery", type: "coupled"` and no additional fields beyond the envelope. The `section.schema.json` requires a `versioning` object.
+**Given** a section with `id: "000000000001", name: "delivery", type: "coupled"` and no additional fields beyond the envelope. The `section.schema.json` requires a `versioning` object.
 
 **When** CoupledSectionChecker runs.
 

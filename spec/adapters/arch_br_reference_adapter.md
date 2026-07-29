@@ -22,7 +22,7 @@ scripts/apply-br.sh [<changeset.json>] [<receipts.json>]
 
 ## Dependencies
 
-- `br` — any version that supports `create`, `list --json`, `show <id> --json`, `update`, `close`. Minimum version is enforced by a `br --version` check at script start.
+- `br` — any version that supports `create`, `list --json`, `show <id> --format json`, `update`, `close`. No minimum version is enforced: the pre-flight only checks that `$BR_BIN --version` exits 0, discarding its output.
 - `jq` — 1.6+.
 - Bash 4.0+ (for associative arrays used by the substitution table).
 

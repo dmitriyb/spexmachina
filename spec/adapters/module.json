@@ -1,6 +1,6 @@
 {
   "name": "adapters",
-  "description": "Reference adapter scripts outside the spex binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br (beads_rust); authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex. Requirements in this module double as the contract any adapter must satisfy.",
+  "description": "The adapter contract, plus a reference adapter. The receipts wire-format constants live in a Go package compiled into spex; the adapters themselves are scripts outside the binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br (beads_rust); authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex. Requirements in this module double as the contract any adapter must satisfy.",
   "requirements": [
     {
       "id": "4277dbd90063",
@@ -28,7 +28,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotent create via label",
-      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing bead carrying the op's idempotency.label (format: spex:<record-id>). On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
+      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing open bead carrying the op's idempotency.label (spex:<record-id> on ordinary creates, spex:cleanup-<spec_node_id> on cleanup creates); the adapter treats the label as opaque and does not parse it. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
     },
     {
       "id": "7bad082a34b6",
@@ -42,7 +42,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Write receipts v1",
-      "description": "After processing each op (or after failing to process it), the adapter writes a per-op entry to receipts.json with op_id, status (ok|skipped|error), bead_id (if applicable), was_existing (for create ops), and an optional error or reason string. The top-level status field is complete if every op produced ok or intentional-skipped; partial if any op resulted in error or if the adapter exited before processing all ops."
+      "description": "For each op processed (or failed), the adapter records a per-op entry with op_id, status (ok|skipped|error), bead_id (if applicable), was_existing (for create ops), and an optional error or reason string. The entries are accumulated and receipts.json is written once, after the last op. The top-level status field is complete if every op produced ok or intentional-skipped, partial if any op resulted in error. An adapter that exits before the last op writes no receipts file at all; spex ingest then fails with ingest: read receipts: ... no such file or directory and exit 1, so an aborted adapter run must be re-run, not ingested."
     },
     {
       "id": "970260050e3e",
@@ -81,7 +81,7 @@
     {
       "id": "703128d3ebd6",
       "name": "Adapter flow",
-      "description": "changeset.json → parse → iterate ops in order → for each op: resolve refs, query tracker for idempotency, run subcommand, record receipt → receipts.json assembled in memory and written atomically once, after the last op, so a reader sees either the whole document or the path's previous contents; a run that dies mid-loop writes nothing and the caller reads the absent file as partial with unknown progress.",
+      "description": "changeset.json → parse → iterate ops in order → for each op: resolve refs, query tracker for idempotency, run subcommand, record receipt → receipts.json assembled in memory and written atomically once, after the last op, so a reader sees either the whole document or the path's previous contents; a run that dies mid-loop writes nothing, and spex ingest then fails with ingest: read receipts: ... no such file or directory and exit 1, so an aborted run must be re-run rather than ingested.",
       "content": "flow_adapter.md",
       "uses": [
         "7f2e76cecab3"

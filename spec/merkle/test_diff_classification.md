@@ -4,24 +4,24 @@ Integration and acceptance tests for the DiffEngine (component 4), ImpactClassif
 
 ## Setup
 
-Scenarios construct two in-memory merkle trees — a "snapshot" tree (representing the previous state) and a "current" tree (representing the working spec). Helper functions:
+This leaf covers three test files that fixture themselves differently, and the distinction matters when reading the scenarios below.
 
-- `makeTree(nodes map[string]NodeInfo) *Node` — builds a tree from a flat map of `key -> {hash, type, children}`, mirroring the snapshot format for easy construction.
-- `findChange(changes []Change, key string) *Change` — locates a change by key in the diff output for targeted assertions.
-- `findClassified(classified []ClassifiedChange, path string) *ClassifiedChange` — same for classified changes.
+- The **Diff** scenarios (S1–S5, E-cases) are backed by `merkle/diff_engine_test.go`, which writes a real spec directory with `setupSpecDir(t)` and produces both trees from it with `BuildTree`, so the keys under test are real identity hashes. `findChild(t, parent *Node, key string) *Node` locates a child by key; changes are located by inline loops over the returned slice.
+- The **Classify** scenarios (S7–S13, R1–R2) are backed by `merkle/impact_classifier_test.go`, which passes synthetic `[]Change` literals straight into `Classify` and builds no tree for them. That is why they can exercise a `data_flow` node type, which `setupSpecDir` does not declare. The one test in that file that does build trees is S14, the end-to-end `Diff`-then-`Classify` pairing (`merkle/impact_classifier_test.go:175`). R3–R5 are Diff scenarios, not Classify ones.
+- The **Completeness** scenarios (C1–C11) are backed by `merkle/completeness_checker_test.go`, whose `TestREQ8_C1`…`TestREQ8_C11` functions carry them one-for-one.
 
-Base fixture trees:
+The listing below is the abstract leaf shape the scenarios reason about, with placeholder keys standing in for identity hashes — not a transcript of `setupSpecDir`, which declares two project requirements, two alpha requirements, two alpha components, one alpha test_section and one beta component, and no data_flow.
 
 **Snapshot tree** (the "before" state):
 ```
-project.json             hash=pj1  type=leaf
-alpha/module.json        hash=am1  type=leaf
-alpha/arch_widget.md     hash=aw1  type=leaf
-alpha/test_logic.md      hash=al1  type=leaf
-alpha/flow_data.md       hash=af1  type=leaf
-beta/module.json         hash=bm1  type=leaf
-beta/arch_service.md     hash=bs1  type=leaf
-beta/test_handler.md     hash=bh1  type=leaf
+meta/project             hash=pj1  type=leaf  node_type=meta
+meta/<ALPHA_HASH>        hash=am1  type=leaf  node_type=meta
+COMP1_HASH               hash=aw1  type=leaf  node_type=component
+TEST1_HASH               hash=al1  type=leaf  node_type=test_section
+FLOW1_HASH               hash=af1  type=leaf  node_type=data_flow
+meta/<BETA_HASH>         hash=bm1  type=leaf  node_type=meta
+COMP2_HASH               hash=bs1  type=leaf  node_type=component
+TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ```
 
 **Current tree** is cloned from the snapshot and then selectively mutated per scenario.
@@ -38,38 +38,38 @@ beta/test_handler.md     hash=bh1  type=leaf
 
 ### S2: Single leaf modified
 
-**Given** the current tree has `alpha/test_logic.md` with `hash=al2` (changed from `al1`)
+**Given** the current tree has `TEST1_HASH` with `hash=al2` (changed from `al1`)
 **When** `Diff(current, snapshot)` is called
 **Then** the result contains exactly one change
-**And** that change has Key=`alpha/test_logic.md`, Type=`modified`, OldHash=`al1`, NewHash=`al2`
+**And** that change has Key=`TEST1_HASH`, Type=`modified`, OldHash=`al1`, NewHash=`al2`
 
 **Rationale**: The simplest mutation case. Validates that DiffEngine detects a hash difference for an existing leaf.
 
 ### S3: New leaf added
 
-**Given** the current tree has all snapshot nodes plus a new leaf `alpha/arch_gadget.md` with `hash=ag1`
+**Given** the current tree has all snapshot nodes plus a new component leaf `COMP3_HASH` with `hash=ag1`
 **When** `Diff(current, snapshot)` is called
-**Then** the result contains one change with Key=`alpha/arch_gadget.md`, Type=`added`, OldHash=`""`, NewHash=`ag1`
+**Then** the result contains one change with Key=`COMP3_HASH`, Type=`added`, OldHash=`""`, NewHash=`ag1`
 
 **Rationale**: Validates the set-difference logic: keys in current but not in snapshot are reported as added.
 
 ### S4: Leaf removed
 
-**Given** the current tree is the snapshot tree minus `beta/test_handler.md`
+**Given** the current tree is the snapshot tree minus `TEST2_HASH`
 **When** `Diff(current, snapshot)` is called
-**Then** the result contains one change with Key=`beta/test_handler.md`, Type=`removed`, OldHash=`bh1`, NewHash=`""`
+**Then** the result contains one change with Key=`TEST2_HASH`, Type=`removed`, OldHash=`bh1`, NewHash=`""`
 
 **Rationale**: Validates the reverse set-difference: keys in snapshot but not in current are reported as removed.
 
 ### S5: Multiple changes across modules
 
 **Given** the current tree has:
-- `alpha/test_logic.md` modified (hash changed)
-- `alpha/arch_new.md` added
-- `beta/arch_service.md` removed
+- `TEST1_HASH` modified (hash changed)
+- `COMP3_HASH` added
+- `COMP2_HASH` removed
 **When** `Diff(current, snapshot)` is called
 **Then** the result contains exactly 3 changes
-**And** changes are sorted by key: `alpha/arch_new.md`, `alpha/test_logic.md`, `beta/arch_service.md`
+**And** changes are sorted ascending by key, whatever hex order the three identity hashes fall into
 
 **Rationale**: Validates that DiffEngine handles mixed change types across multiple modules and returns results sorted by key for deterministic output (per `arch_diff_engine.md`).
 
@@ -85,40 +85,40 @@ beta/test_handler.md     hash=bh1  type=leaf
 
 ### S7: Classify impl_only change
 
-**Given** changes: `[{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}]`
-**When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`impl_only` and Module=`ALPHA_HASH`
+**Given** changes: `[{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames)` is called
+**Then** the result contains one ClassifiedChange with Impact=`impl_only` and Module=`"Alpha"`
 
 **Rationale**: Classification reads the node metadata (NodeType, Module) carried on each Change — never the filename or path. `test_section` is the one node type that reaches `impl_only` per `arch_impact_classifier.md`.
 
 ### S8: Classify data_flow as contract
 
-**Given** changes: `[{Key: FLOW1_HASH, Type: "modified", NodeType: "data_flow", Module: ALPHA_HASH}]`
-**When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`contract` and Module=`ALPHA_HASH`
+**Given** changes: `[{Key: FLOW1_HASH, Type: "modified", NodeType: "data_flow", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames)` is called
+**Then** the result contains one ClassifiedChange with Impact=`contract` and Module=`"Alpha"`
 
 **Rationale**: Per the data-flow-contract-layer proposal (and requirement `425146f32e96`), data_flow nodes are inter-component contracts: a changed flow can invalidate its consumers, so it ranks above `impl_only` while below `arch_impl`.
 
 ### S9: Classify arch_impl change
 
-**Given** changes: `[{Key: COMP1_HASH, Type: "modified", NodeType: "component", Module: BETA_HASH}]`
-**When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`arch_impl` and Module=`BETA_HASH`
+**Given** changes: `[{Key: COMP1_HASH, Type: "modified", NodeType: "component", Module: BETA_HASH}]` and `moduleNames = {BETA_HASH: "Beta"}`
+**When** `Classify(changes, moduleNames)` is called
+**Then** the result contains one ClassifiedChange with Impact=`arch_impl` and Module=`"Beta"`
 
 **Rationale**: `component` nodes are architecture contracts whose changes may affect dependent modules.
 
 ### S10: Classify structural change — module envelope
 
-**Given** changes: `[{Key: "meta/" + ALPHA_HASH, Type: "modified", NodeType: "meta", Module: ALPHA_HASH}]`
-**When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`ALPHA_HASH`
+**Given** changes: `[{Key: "meta/" + ALPHA_HASH, Type: "modified", NodeType: "meta", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames)` is called
+**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
 **Rationale**: A modified `meta/<module-hash>` envelope means module.json itself changed — the spec graph was altered (added/removed nodes, changed edges).
 
 ### S11: Classify structural change — project envelope
 
 **Given** changes: `[{Key: "meta/project", Type: "modified", NodeType: "meta", Module: ""}]`
-**When** `Classify(changes)` is called
+**When** `Classify(changes, nil)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`""` (project-level, no specific module)
 
 **Rationale**: `project.json` changes affect the entire project structure (modules added or removed).
@@ -128,8 +128,8 @@ beta/test_handler.md     hash=bh1  type=leaf
 **Given** changes within the same module alpha:
 - `{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}`
 - `{Key: COMP2_HASH, Type: "modified", NodeType: "component", Module: ALPHA_HASH}`
-**When** `Classify(changes)` is called
-**Then** both changes carry Module=`ALPHA_HASH`
+**When** `Classify(changes, moduleNames)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
+**Then** both changes carry Module=`"Alpha"`
 **And** the test_section change is classified `impl_only` and the component change `arch_impl` — one classification per change, no aggregation
 
 **Rationale**: The merkle module only classifies individual changes; per-module propagation belongs to the downstream Impact module. If a caller needs the module's max impact it computes it locally over the per-change results using the full order `structural > arch_impl > contract > impl_only`.
@@ -140,7 +140,7 @@ beta/test_handler.md     hash=bh1  type=leaf
 - `{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}`
 - `{Key: COMP2_HASH, Type: "modified", NodeType: "component", Module: ALPHA_HASH}`
 - `{Key: "meta/" + ALPHA_HASH, Type: "modified", NodeType: "meta", Module: ALPHA_HASH}`
-**When** `Classify(changes)` is called
+**When** `Classify(changes, moduleNames)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
 **Then** each change keeps its own level (`impl_only`, `arch_impl`, `structural` respectively)
 **And** a locally computed per-module max over those results is `structural`
 
@@ -152,7 +152,7 @@ beta/test_handler.md     hash=bh1  type=leaf
 - alpha's test_section leaf (`TEST1_HASH`) hash changed
 - beta's component leaf (`COMP1_HASH`) hash changed
 - a new module gamma appears, adding its `meta/<GAMMA_HASH>` envelope leaf
-**When** `Diff(current, snapshot)` is called, then `Classify(changes)` is called on the result
+**When** `Diff(current, snapshot)` is called, then `Classify(changes, ModuleNames(current))` is called on the result
 **Then** the test_section change is classified as `impl_only`
 **And** the component change is classified as `arch_impl`
 **And** gamma's envelope change is classified as `structural`
@@ -164,7 +164,7 @@ beta/test_handler.md     hash=bh1  type=leaf
 ### E1: Diff with identical trees returns empty, Classify with empty returns empty
 
 **Given** an empty changes slice
-**When** `Classify([]Change{})` is called
+**When** `Classify([]Change{}, nil)` is called — and, as `TestREQ5_Classify_EmptyChanges` also covers, `Classify(nil, nil)`
 **Then** the result is an empty slice
 
 **Rationale**: No changes means no impact. Classify must not panic or inject synthetic entries.
@@ -174,7 +174,7 @@ beta/test_handler.md     hash=bh1  type=leaf
 **Given** the snapshot has modules alpha and beta, current tree adds a new module gamma with its `meta/<GAMMA_HASH>` envelope leaf and a component leaf
 **When** `Diff` then `Classify` are called
 **Then** gamma's envelope change is classified as `structural`
-**And** gamma's component change is classified as `arch_impl` with Module=`GAMMA_HASH`
+**And** gamma's component change is classified as `arch_impl` with Module=`"gamma"`
 
 **Rationale**: A brand-new module means both structural changes (new module.json) and arch changes (new component files). The module-level aggregate should be `structural`.
 
@@ -185,20 +185,20 @@ beta/test_handler.md     hash=bh1  type=leaf
 **Then** all of beta's nodes appear as `removed` changes
 **And** the removal of beta's `meta/<BETA_HASH>` envelope leaf is classified as `structural`
 
-### E4: File renamed (appears as add + remove pair)
+### E4: Node renamed (appears as add + remove pair)
 
-**Given** the snapshot has `alpha/arch_widget.md`, current tree has `alpha/arch_component.md` (same content, different name)
+**Given** the snapshot has component `Comp1` keyed `COMP1_HASH`, and the current tree has the same content under the name `Component1`, keyed `COMP1B_HASH`
 **When** `Diff(current, snapshot)` is called
-**Then** it reports two changes: `alpha/arch_widget.md` removed and `alpha/arch_component.md` added
+**Then** it reports two changes: `COMP1_HASH` removed and `COMP1B_HASH` added, with equal `OldHash`/`NewHash` content digests
 **And** DiffEngine does not attempt rename detection (it compares keys, not content)
 
 **Rationale**: Rename detection is out of scope for the merkle module. The diff is purely key-and-hash based.
 
 ### E5: Deterministic ordering across runs
 
-**Given** a diff with changes across 5 modules
-**When** `Diff` is called 100 times with the same inputs
-**Then** the change list order is identical every time (sorted by key)
+**Given** a diff with changes across the two-module fixture
+**When** `Diff` is called twice with the same inputs
+**Then** both change lists are element-for-element identical and sorted ascending by key
 
 **Rationale**: Per `arch_diff_engine.md`, deterministic output ordering is a hard requirement. No randomness or map iteration order leakage.
 
@@ -208,16 +208,16 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 
 ### R1: Classify requirement change as structural
 
-**Given** changes: `[{Key: REQ2_HASH, Type: "modified", NodeType: "requirement", Module: ALPHA_HASH}]`
-**When** `Classify(changes)` is called
-**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`ALPHA_HASH`
+**Given** changes: `[{Key: REQ2_HASH, Type: "modified", NodeType: "requirement", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames)` is called
+**Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
 **Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (impact module) skips structural changes, so requirement leaf changes do not produce bead actions.
 
 ### R2: Classify project requirement change as structural
 
 **Given** changes: `[{Key: PROJ_REQ1_HASH, Type: "modified", NodeType: "requirement", Module: ""}]`
-**When** `Classify(changes)` is called
+**When** `Classify(changes, nil)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`""`
 
 ### R3: Requirement leaf added in diff

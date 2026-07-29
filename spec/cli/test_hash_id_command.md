@@ -54,7 +54,7 @@ Assert stdout equals `schema.IdentityHash("alpha", "<type>", "Foo")`.
 
 ### S8: Output matches hex pattern
 
-Run 9 different invocations with varying inputs.
+Run 8 different invocations with varying inputs.
 
 Assert every output line matches `^[a-f0-9]{12}$` — exactly 12 lowercase hex characters, no trailing newline junk.
 

@@ -88,7 +88,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Exit code is 0.
 - Stdout is valid JSON parseable by `jq` or `json.Unmarshal`.
-- JSON structure matches the HistoryViewer JSON output spec (array of proposal records with `proposal`, `type`, `date`, `beads` fields).
+- JSON structure matches the HistoryViewer envelope: `{"proposals": [{"filename", "title", "beads": [{"id", "status", "action", "summary"}]}]}`.
 
 #### S8: Log with empty proposals directory
 

@@ -10,17 +10,11 @@ These tests exercise the aggregation and orchestration layers. They use a tempor
 
 ```
 tmp/spec/
-  project.json                 # valid project with modules alpha and beta
+  project.json                 # one module: alpha
   alpha/
-    module.json                # configurable: can be made valid or invalid per scenario
-    arch_widget.md
-    flow_widget.md
-    test_widget.md
-  beta/
-    module.json
-    arch_encoder.md
-    flow_encoder.md
-    test_encoder.md
+    module.json                # 1 component Comp1, 1 test_section describing it
+    arch_comp1.md
+    test_comp1.md
 ```
 
 ### CLI Invocation Pattern
@@ -98,49 +92,49 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 #### V1: Valid spec exits 0
 
 **Given** a fully valid spec directory with no schema errors, no missing content, no cycles, no ID issues, no name mismatches, and full test coverage.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 0. Stdout contains JSON with `valid: true` and `error_count: 0`.
 
 #### V2: Schema error exits 1
 
 **Given** `project.json` is missing the `name` field.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1. Stdout JSON has `valid: false`, `error_count >= 1`, and at least one error with `check: "schema"`.
 
 #### V3: Content error exits 1
 
 **Given** a component references a content file that does not exist.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `"content"` check error in the output.
 
 #### V4: DAG cycle exits 1
 
 **Given** modules alpha and beta form a circular dependency.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `"dag"` check error.
 
 #### V6: ID duplication exits 1
 
 **Given** alpha has two requirements with the same ID.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with an `"id"` check error.
 
 #### V7: Name mismatch exits 1
 
 **Given** `project.json` name for alpha is `"alpha"` but `alpha/module.json` has `name: "Alpha"`.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `"name_consistency"` check error.
 
 #### V8: Multiple checker errors all reported
 
 **Given** a spec with a schema error in project.json, a missing content file in alpha, AND a cycle in the module dependency graph.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1. The output JSON contains errors from at least three different checkers (`schema`, `content`, `dag`). All checkers run regardless of earlier failures.
 
 #### V9: Checkers run in defined order
 
 **Given** a spec with errors in every checker.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** every checker has contributed to the output. The command runs them in the fixed order `flow_validation_pipeline.md` numbers — schema, content, link, id, id_derivation, dag, name_consistency, test_coverage, requirement_coverage, coupled_section — and the aggregated report is then sorted by path, so entries from different checkers interleave by location. Where one path collects several, assert the set and not the sequence: a `module.json` that will not parse reports once per checker, all ten at that one path, carrying the ten `check` values listed above. Do not assert the order of those ten — the sort compares `path` alone, and tied entries come back in whatever order it produced.
 
 #### V10: Default spec directory
@@ -149,10 +143,10 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **When** `spex validate` is executed with no arguments.
 **Then** it defaults to `spec/` and exit code is 0.
 
-#### V11: Explicit directory via --dir flag
+#### V11: Explicit directory via --spec-dir flag
 
 **Given** a valid spec at `/tmp/myspec/`.
-**When** `spex validate --dir /tmp/myspec/` is executed.
+**When** `spex validate --spec-dir /tmp/myspec/` is executed.
 **Then** it validates that directory and exits 0.
 
 #### V12: Non-existent directory
@@ -176,7 +170,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 #### V15: Test coverage error exits 1
 
 **Given** alpha has a component with no test_section coverage and no other errors.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `"test_coverage"` check error identifying the uncovered component.
 
 ---
@@ -192,7 +186,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 ### E2: project.json with zero modules
 
 **Given** `project.json` has `modules: []`.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 0. A project with no modules is structurally valid (no nodes to check). Schema validation determines whether empty modules is allowed.
 
 ### E3: Concurrent-safe error aggregation
@@ -204,7 +198,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 ### E4: Very large error count
 
 **Given** a spec with 500 validation errors across all checkers.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** all 500 errors appear in the JSON output. No truncation or "and N more..." unless explicitly designed.
 
 ### E5: Validate command resolves relative paths
@@ -222,5 +216,5 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 ### E7: Performance budget for full pipeline
 
 **Given** a spec with 100 modules, 10 requirements per module, 5 components per module and 5 test_sections per module — 2000 module-scoped nodes plus the 100 module declarations themselves.
-**When** `spex validate tmp/spec/` is executed.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** the full pipeline completes in under 1 second (requirement 7: fast validation). Each checker operates in linear or near-linear time relative to node count.

@@ -17,7 +17,9 @@ One call hands it the run's top-level status. It answers whether it wrote, or it
 
 ## Gate Logic
 
-Any status other than `complete` skips the write and reports that nothing was written. Nothing is read and no tree is built on that path — the previous `spec/.snapshot.json` is left byte-for-byte as it was. Only on `complete` is the current merkle tree computed and written.
+Any status other than `complete` skips the write and reports that nothing was written. Nothing is read and no tree is built on that path — the previous `spec/.snapshot.json` is left byte-for-byte as it was. Only on `complete` does this component compute and write the current merkle tree.
+
+That gate governs this write path, not the file. `spex ingest --mode refresh` reaches the same `spec/.snapshot.json` through [[f9033352c13f|RefreshHandler]], which never calls this component's status gate — though it does share the temp-file-plus-rename writer described under "Atomic Write" — and has a gate of its own: an empty changeset, an empty receipts file, and a pre-existing snapshot, after which it writes only if something drifted. A refresh over an already-current spec succeeds, reports `snapshot_saved` false, and leaves the file byte-identical. A reader tracing who moves the snapshot must count both paths.
 
 That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so a caller reading stdout can tell a saved snapshot from a skipped one without stat-ing the file.
 

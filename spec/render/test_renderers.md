@@ -31,7 +31,7 @@ Each renderer writes to an in-memory buffer so output can be inspected as a stri
 **Then** the output contains these sections in order:
 1. `# test-project` (project heading)
 2. Project description text
-3. `## Requirements` with subsections `### Functional` (FR1, FR2) and `### Non-functional` (NFR1)
+3. `## Requirements` with subsections `### Functional` (FR1, FR2) and `### Non-functional` (NFR3 — project non-functional numbering continues past the functional count)
 4. `## Module: alpha` with module description
 5. Alpha's requirements section
 6. `### Architecture` with component subsections for Parser and Builder
@@ -153,9 +153,8 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderDOT(spec, &buf)` is called.
 
 **Then:**
-- An edge exists from the beta module node to the alpha module node
-- This edge is labeled `"requires_module"` (or equivalent)
-- The edge crosses subgraph boundaries (source in cluster_beta, target in cluster_alpha)
+- The output carries the string `requires_module`, which is the label the module-dependency edge is emitted with
+- The endpoints are the two declared module hashes; D6 and D10 are what pin that every emitted endpoint is a bare declared hash
 
 #### D6: Node IDs are bare identity hashes, and are quoted
 
@@ -277,13 +276,13 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - `{"from": "module:alpha:flow:f1f1f1f1f1f1", "to": "module:alpha:comp:c1c1c1c1c1c1", "type": "uses"}`
 - `{"from": "module:alpha:flow:f1f1f1f1f1f1", "to": "module:alpha:comp:c2c2c2c2c2c2", "type": "uses"}`
 
-#### J7: Output is self-contained and parseable by jq
+#### J7: Output is self-contained and parseable
 
 **Given** any valid SpecGraph.
 
-**When** `RenderJSON(spec, &buf)` is called and the output is piped to `jq '.nodes[] | select(.type == "component")'`.
+**When** `RenderJSON(spec, &buf)` is called and the output is decoded generically.
 
-**Then:** jq produces valid JSON output containing only component nodes. This validates that the JSON is well-formed and follows the documented structure.
+**Then:** the output decodes without error into a top-level object of two array keys, so a downstream filter such as `jq '.nodes[] | select(.type == "component")'` can select component nodes from it. J1 carries this assertion; no scenario shells out to `jq`.
 
 #### J8: Node count matches spec contents
 
@@ -291,7 +290,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 **When** `RenderJSON(spec, &buf)` is called.
 
-**Then:** The nodes array has exactly 15 entries. No nodes are duplicated or omitted.
+**Then:** The nodes array has exactly 13 entries. No nodes are duplicated or omitted.
 
 #### J9: `--slim` emits nodes only, with four keys and nothing else
 
@@ -367,7 +366,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 - The node list is exactly, in this order: the 3 project requirements, the section, module alpha, its 2 requirements, its 2 components, its data_flow, module beta, its requirement, its component — 13 nodes, each matching id, type, name and module
 - Every ID is the declared one, copied verbatim
 - The project root is not among them: the full graph's `"id": "project"` node has no identity hash, so the slim view has no counterpart for it
-- The fixture guards itself: for each of the six checked nodes the declared ID differs from the identity hash its identity string would produce, so a renderer that recomputed IDs would fail this scenario rather than pass it by coincidence
+- The fixture guards itself: for each of the five checked nodes — the first project requirement, module alpha, one alpha requirement, one alpha component and the alpha data_flow — the declared ID differs from the identity hash its identity string would produce, so a renderer that recomputed IDs would fail this scenario rather than pass it by coincidence
 
 ## Edge Cases
 

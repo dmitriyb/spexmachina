@@ -132,7 +132,7 @@ A failure names the invariant that failed and the offending spec node or op, and
 
 ## Where a record's `node_type` comes from
 
-The `node_type` written onto a record is the kind of the spec node the op targets: the spec graph's metadata for `op.spec_node_id`, falling back to the op's own `spec_node_kind` when the graph has nothing to say (the `proposal_epic` case above, which maps to `proposal`). Reconciler does not choose the vocabulary; it copies it.
+The `node_type` written onto a record is the kind of the spec node the op targets, taken from the spec graph's metadata for `op.spec_node_id`. A `proposal_epic` op is the one exception and is answered before the graph is reached, with the fixed value `proposal`. Any other op whose `spec_node_id` the graph does not hold ends the run with an error rather than falling back to the op's own `spec_node_kind`. Reconciler does not choose the vocabulary; it copies it.
 
 Two independent gates keep that copied value inside the closed enum the bead-map schema declares. Emit refuses to order a create op for a kind it cannot tier, so an op for an unmappable node kind never exists to be reconciled; and the store's write path re-validates the entire candidate file against the bead-map schema before the atomic rename, which is invariant 7. The pair fails closed — a kind outside the enum is rejected at the write boundary, leaving `.bead-map.json` untouched, rather than persisting a record that no later run could resolve.
 

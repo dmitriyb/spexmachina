@@ -95,9 +95,11 @@ Reads and writes reach this component from different commands:
   diff against a freshly built tree and decide whether the drift is
   content-only. When `spec/.snapshot.json` does not exist, `Load` returns
   the empty tree (root with no children, root hash = SHA-256 of the empty
-  string) rather than an error. This contract is what enables bootstrap
-  without a pre-seeded snapshot — the first diff treats the spec as
-  entirely added against the empty baseline.
+  string) rather than an error. No production caller reaches that branch
+  today: `spex diff` stats the snapshot path itself and hands DiffEngine
+  no snapshot at all when the file is absent, and `spex ingest --mode
+  refresh` refuses before loading. Bootstrap is what `spex diff` does
+  with no snapshot, not what `Load` returns for a missing one.
 - `Encode` is called from `spex ingest`, by both of its writers: the
   SnapshotSaver path on a complete-status normal run, and the refresh
   pathway, which shares that path's temp-file-and-rename helper rather
@@ -110,8 +112,10 @@ Reads and writes reach this component from different commands:
   subcommand that persists the tree.
 - `Save` therefore has no production caller. It stays for callers that
   want a snapshot on disk without ingest's invariant, which today means
-  the test suites of this module and of `spex impact` seeding a baseline
-  to diff against.
+  the test suites of this module (16 calls), of `spex diff` (15) and of
+  `spex impact` (7) seeding a baseline to diff against, plus
+  `ingest/snapshot_format_test.go`, which pins that Save and the ingest
+  writer emit the same bytes.
 
 Keeping reads in `spex diff` and writes in `spex ingest` is what holds the
 snapshot+bead-map atomicity invariant in place.

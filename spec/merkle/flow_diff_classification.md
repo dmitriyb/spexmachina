@@ -21,8 +21,8 @@ digraph diff_classification {
 
 The three solid nodes are the components this flow is made of; everything dashed is a file or a
 stream. [[b2fcd9457a28|SnapshotStore]] contributes one of the two trees and nothing else — it reads
-the stored snapshot and hands it over, and where that file is absent it hands over the empty tree
-instead. [[cb262b280963|DiffEngine]] compares the two and emits one entry per leaf whose content hash
+the stored snapshot and hands it over; where that file is absent it is not invoked at all and
+DiffEngine is handed no second tree. [[cb262b280963|DiffEngine]] compares the two and emits one entry per leaf whose content hash
 moved, in ascending key order. [[f1a672216ce9|ImpactClassifier]] adds a level to each of those entries
 and replaces the owning module's identity hash with that module's name; it drops nothing and reorders
 nothing, so the list handed on is the diff's own list, one field longer and reporting the module by

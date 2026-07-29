@@ -73,7 +73,7 @@ spec/
 
 **Then:**
 - `SpecGraph.Project.Requirements` has length 3
-- Each requirement preserves `id`, `type`, `title`, `description`, and `depends_on`
+- Each requirement preserves `id`, `type`, `title` and `description`. No project requirement in the fixture declares `depends_on`, and no test in `render/` reads the field on any node — S5 asserts `implements`, `uses`, `describes`, data_flow `uses` and `preq_id` only
 
 ### S5: All module-level edge types preserved
 
@@ -140,7 +140,7 @@ spec/
 
 ### E5: Malformed JSON in module.json
 
-**Given** one module's `module.json` is valid but a second module's `module.json` contains a syntax error.
+**Given** a module whose `module.json` contains a syntax error.
 
 **When** `ReadSpec(specDir)` is called.
 
@@ -193,7 +193,7 @@ spec/
 - `SpecGraph.Project.Sections` has length 1
 - The section preserves `id`, `name`, `type`, and all freeform content fields
 - The freeform content (versioning, artifacts) is accessible as a generic structure, preserved as the raw JSON body rather than as typed fields
-- Only the section's own `id` is an identity hash. Nothing inside the freeform body is interpreted, which is why the artifact's `"id": 1` survives as the number it was written as while a section declaring `"id": 1` would not be read at all — the read fails naming `project.json` and the offending field
+- Only the section's own `id` is an identity hash. Nothing inside the freeform body is interpreted: the artifact's `"id": 1` reaches `Raw` untouched. A section declaring `"id": 1` is rejected by `json.Unmarshal` into `schema.Section.ID`, and `ReadSpec` wraps that as `render: parse <specDir>/project.json: …` — no scenario executes that negative case
 
 ### S8: Sections absent from project.json
 

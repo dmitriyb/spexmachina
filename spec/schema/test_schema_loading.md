@@ -293,13 +293,14 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 
 **Expected:** `err` is nil; `data` is non-empty; `data` is valid JSON.
 
-### BM2: BeadMapSchema() enforces the identity hash spec_node_id pattern
+### BM2: BeadMapSchema() accepts both identities spec_node_id carries
 
 **Steps:**
 1. Load the bead-map schema and compile a validator.
-2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (legal identity hash).
-3. Validate a record where `spec_node_id` is `"impact/component/3"` (legacy format).
+2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (identity hash).
+3. Validate a record where `spec_node_id` is `"2026-04-12-data-flow-contract-layer"` (proposal reference).
+4. Validate a record where `spec_node_id` is `""`.
 
-**Expected:** The first passes; the second fails with a pattern violation referencing `^[a-f0-9]{12}$`.
+**Expected:** The first two pass; the empty string fails on `minLength: 1`.
 
-**Verifies:** The schema enforces the new identity hash format. This is the regression guard that catches any code path which tries to write a legacy-format `spec_node_id` into the bead-map.
+**Verifies:** The field is a non-empty string with no pattern, because one array holds records keyed both ways.

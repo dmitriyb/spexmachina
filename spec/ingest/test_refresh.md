@@ -32,8 +32,8 @@ decide whether the run is safely a refresh.
 
 ### Refresh-only diff is accepted; spec_hash updates
 
-**Given** the fixture has been edited so that `alpha/impl_widget_logic.md`
-and `beta/test_handler.md` are modified relative to the snapshot, and no
+**Given** the fixture has been edited so that `beta/arch_handler.md`
+and `alpha/test_widget_logic.md` are modified relative to the snapshot, and no
 other content has changed
 **And** the pre-seeded `.bead-map.json` has records for those two nodes with
 `spec_hash` matching the snapshot (i.e., stale relative to current content)

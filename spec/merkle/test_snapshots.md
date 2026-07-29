@@ -4,7 +4,7 @@ Integration and acceptance tests for the SnapshotStore (component 3). Validates 
 
 ## Setup
 
-Scenarios use `t.TempDir()` to create an isolated working directory. A helper `buildFixtureTree(t)` constructs a known merkle tree in-memory in the flat identity-hash shape TreeBuilder produces (a module interior node whose children are the `meta/` envelope leaf plus one leaf per spec node, each keyed by its 12-char hex identity `id`):
+Scenarios use `t.TempDir()` to create an isolated working directory and build their tree with `setupSpecDir(t)` followed by `BuildTree`, so the fixture is exactly the flat identity-hash shape TreeBuilder produces (a module interior node whose children are the `meta/` envelope leaf plus one leaf per spec node, each keyed by its 12-char hex identity `id`). Sketched, that shape is:
 
 ```go
 alphaHash := "085966b6bfa1" // identity hash of module alpha
@@ -21,7 +21,7 @@ root := &Node{
 }
 ```
 
-The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so scenarios pass a fixed `createdAt` to pin byte-equality assertions.
+The snapshot file path is `<tmpdir>/.snapshot.json`; the production default is `<specDir>/.snapshot.json`. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so the byte-equality scenario passes a fixed `createdAt`; the rest pass `time.Now().UTC()` because they assert on decoded structure rather than bytes.
 
 ## Scenarios
 
@@ -80,7 +80,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** a second, different tree is saved to the same `snapshotPath`
 **When** `Load(snapshotPath)` is called
 **Then** the loaded tree matches the second (most recent) save
-**And** no trace of the first tree's hashes remains in the file
+**And** the loaded root hash is the second tree's, not the first's
 
 **Rationale**: Per `arch_snapshot_store.md`, only one snapshot exists at a time. Saves must fully replace the previous snapshot, not append or merge.
 

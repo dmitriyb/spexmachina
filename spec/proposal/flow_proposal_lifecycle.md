@@ -105,13 +105,15 @@ even a partial adapter run.
 
 ### HistoryViewer → stdout
 
-- ProposalLog:
-  - proposal: ProposalRecord
-  - epic_bead_id: string — bead_id of the proposal epic (empty for
-    pre-contract-layer proposals that used labels instead)
-  - created_beads: list of string — bead IDs created by this proposal
-  - obsoleted_beads: list of string — bead IDs obsoleted by this proposal
+- ProposalLog (`--json`):
+  - proposals: list, one entry per `spec_proposal:` stem, in ascending stem order
+    - filename: string — `<stem>.md`
+    - title: string — the proposal file's H1, or empty when the file is missing
+    - beads: list, in the order the input supplied them
+      - id: string — the tracker bead id
+      - status: string — the bead's status as the input reported it
+      - action: string — `created` or `closed`, derived from that status
+      - summary: string — the bead's title
 
-The `epic_bead_id` field is empty for historical proposals that ran before the
-per-proposal epic mechanism shipped; in that case HistoryViewer falls back to
-proposal-label lookups.
+Grouping reads the `spec_proposal:` label and nothing else. No epic bead id is
+read or emitted, and the proposal epic plays no part in this rendering.

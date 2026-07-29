@@ -18,8 +18,8 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 - Simulated br creates produce bead_ids: A=br-100, B=br-101, C=br-102.
 - Expected: br invocations:
   - `br create ... (for A, no deps flag)`
-  - `br create ... --deps depends:br-100 (for B, resolved from op-0001)`
-  - `br create ... --deps depends:br-101 (for C, resolved from op-0002)`
+  - `br create ... --deps blocked-by:br-100 (for B, resolved from op-0001)`
+  - `br create ... --deps blocked-by:br-101 (for C, resolved from op-0002)`
 
 ### Parent ref:op
 
@@ -33,7 +33,7 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 
 - op has deps: `[{ref:op,op_id:op-0003}, {ref:bead,bead_id:br-77}, {ref:spec_node,spec_node_id:abcdef123456}]`.
 - Simulated: op-0003 → br-200; spec_node abcdef123456 resolves via mapping store to br-88.
-- Expected: `br create ... --deps depends:br-200 --deps depends:br-77 --deps depends:br-88`.
+- Expected: `br create ... --deps blocked-by:br-200 --deps blocked-by:br-77 --deps blocked-by:br-88`.
 
 ### Ref to errored op degrades gracefully
 
@@ -47,16 +47,17 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 
 ### Forward ref before table has entry (programmer error)
 
-- If the changeset is malformed and op-0002 references op-0001 which hasn't been executed yet (or doesn't exist), adapter errors out at op-0002 with `"unknown op_id in ref: op-0001"`.
+- If the changeset is malformed and op-0002 references op-0001 which hasn't been executed yet (or doesn't exist), adapter errors out at op-0002 with `"dep ref: dependency op-0001 not yet resolved"`. No fixture under `scripts/testdata/substitution/` exercises this path.
 
 ## Helpers
 
 - Mock br: `scripts/testdata/mock_br.sh` — echoes a canned response, records invocations to a log file for inspection.
-- Sandbox: `scripts/testdata/sandbox/` — fixture helpers.
+- Fixture cases: `scripts/testdata/substitution/<case>/` — each holding `changeset.json`, `state_before.json` and `expected_receipts.json`, plus `expected_log.txt` where the case pins the br invocation sequence (all but `errored_dep`) and `mapping.json` where it resolves a `ref:spec_node` (`mixed_refs` only). `scripts/apply-br_test.sh:149` compares the log only when the file is present.
 
 ## Fixtures
 
-- `scripts/testdata/substitution/linear_chain.json`
-- `scripts/testdata/substitution/parent_ref.json`
-- `scripts/testdata/substitution/mixed_refs.json`
-- `scripts/testdata/substitution/errored_dep.json`
+- `scripts/testdata/substitution/linear_chain/`
+- `scripts/testdata/substitution/parent_ref/`
+- `scripts/testdata/substitution/mixed_refs/`
+- `scripts/testdata/substitution/errored_dep/`
+- `scripts/testdata/substitution/skipped_dep_resolves/`

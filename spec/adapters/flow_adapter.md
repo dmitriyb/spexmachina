@@ -13,9 +13,9 @@ Phase 2 is the only phase that can partially succeed, and the failures it checks
 The adapter forks:
 
 - `br list --json` once per create op (idempotency check). Could be optimized by caching a single initial listing, but the reference impl takes the simple path.
-- `br show <id> --json` once per close op (idempotency check).
+- `br show <id> --format json` once per close op (idempotency check).
 - `br create` once per non-existing create.
-- `br update` once per label-add on close.
+- `br update --add-label` once per label attached: one per entry of a create op's `labels`, one per label on a close, and one per label on a `label` or `tag` op.
 - `br close` once per non-existing close.
 
 For a changeset with N creates (M fresh) and K closes (J fresh), the adapter makes approximately `N + K + M + 2J` br invocations. On a 10-op changeset, ~10-20 invocations.

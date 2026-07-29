@@ -71,7 +71,7 @@ only what the reader put here — a node type the reader drops is invisible to a
 - MarkdownRenderer: a single UTF-8 document, project scope first and then one block per module.
 - DOTRenderer: a single `digraph` block. Node IDs are identity hashes and labels are node names, so a
   hand-written diagram and a generated one name the same node by the same string. Edge kinds
-  (`implements`, `uses`, `describes`, `provided_by`, `requires_module`, `preq_id`, `depends_on`,
+  (`implements`, `uses`, `provided_by`, `requires_module`, `preq_id`, `depends_on`,
   `coupled`) become DOT edge attributes.
 - JSONRenderer:
   - nodes: list of {id, type, name} plus description, content, module and group where the declaration

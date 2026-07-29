@@ -134,8 +134,8 @@ A failure at any step leaves the on-disk `.bead-map.json` untouched.
 ### adapter → receipt entry
 
 - `op_id`: string — pairs the receipt back to its op.
-- `status`: string enum — `ok` | `skipped` | `error`. Only `ok` (and `skipped`
-  with `was_existing`) advances mapping state.
+- `status`: string enum — `ok` | `skipped` | `error`. Only `ok` advances mapping
+  state; `skipped` and `error` are counted and change no record.
 - `bead_id`: string — the tracker id created, or the pre-existing one.
 - `was_existing`: boolean — true when the idempotency label already matched an
   open bead.

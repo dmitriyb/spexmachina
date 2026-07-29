@@ -20,14 +20,10 @@ tmpdir/
   project.json
   alpha/
     module.json
-    arch_widget.md
-    arch_gadget.md
-    test_widget_logic.md
-    flow_data_path.md
-  beta/
-    module.json
-    arch_service.md
-    test_handler.md
+    arch_comp1.md        (component Comp1)
+    test_comp1.md        (test_section Test1)
+    flow_flow1.md        (data_flow Flow1, in the variant that exercises
+                          the contract impact level)
 ```
 
 Tests invoke the command programmatically (calling the command's `Run` function
@@ -64,8 +60,9 @@ SnapshotStore, DiffEngine, and ImpactClassifier end-to-end.
 **When** `runDiff(tmpdir, "--json")` is called
 **Then** exit code is 0
 **And** stdout is valid JSON
-**And** the JSON is an object with at least a `changes` array (one entry per
-leaf), each entry carrying `id`, `type`, `impact`, and `module` fields
+**And** the JSON is an object with `changes`, `errors` and `summary` keys, the
+`changes` array carrying one entry per leaf with `path`, `type`, `impact`,
+`module` and `node_type` fields
 **And** the structure is suitable for piping to `spex impact` or `jq`
 
 **Rationale**: Validates the `--json` flag for machine-readable output, which
@@ -77,10 +74,10 @@ mixed.
 
 **Given** the fixture directory with a snapshot from a previous complete
 ingest run
-**When** `alpha/test_widget_logic.md` is modified (content appended)
+**When** `alpha/test_comp1.md` is modified (content appended)
 **And** `runDiff(tmpdir)` is called
 **Then** exit code is 0
-**And** stdout reports `alpha/test_widget_logic.md` (or its identity hash) as
+**And** stdout reports `alpha/test_comp1.md` (or its identity hash) as
 `modified` with impact `impl_only`
 **And** no other leaves are listed as changed
 **And** the surrounding interior hashes (`alpha`, root) update
@@ -94,9 +91,9 @@ ImpactClassifier labels it correctly.
 ### S4: `spex diff` after arch change
 
 **Given** the fixture directory with a snapshot
-**When** `alpha/arch_widget.md` is modified
+**When** `alpha/arch_comp1.md` is modified
 **And** `runDiff(tmpdir)` is called
-**Then** stdout reports `alpha/arch_widget.md` as `modified` with impact `arch_impl`
+**Then** stdout reports `alpha/arch_comp1.md` as `modified` with impact `arch_impl`
 
 **Rationale**: Architecture changes have a higher impact level. Validates the
 filename-pattern + node-metadata classification in ImpactClassifier wired
@@ -126,12 +123,13 @@ SnapshotStore.Load against a non-default path.
 ### S7: `spex diff` with multiple changes shows module-level aggregation
 
 **Given** the fixture directory with a snapshot
-**When** both `alpha/test_widget_logic.md` and `alpha/arch_widget.md` are modified
+**When** both `alpha/test_comp1.md` and `alpha/arch_comp1.md` are modified
 **And** `runDiff(tmpdir, "--json")` is called
 **Then** the JSON output lists both changes individually
-**And** both changes have `module` set to alpha's identity hash
-**And** the output includes a module-level summary showing alpha's aggregate
-impact as `arch_impl` (the higher of the two)
+**And** both changes have `module` set to alpha's module name
+**And** `summary.by_impact` counts one `impl_only` and one `arch_impl`; the
+command emits no per-module aggregate — a caller that wants alpha's max impact
+computes it over the `changes` array
 
 **Rationale**: Validates that DiffCommand wires through the module-level
 aggregation logic from ImpactClassifier, giving users both per-file and
@@ -144,7 +142,7 @@ per-module impact views.
 **And** the impact + emit + adapter + ingest cycle runs against that diff
 (simulated by writing a complete-status receipts file and invoking
 `spex ingest`, which causes SnapshotSaver to write the first snapshot)
-**And** `alpha/test_widget_logic.md` and `beta/arch_service.md` are modified
+**And** `alpha/test_comp1.md` and `alpha/arch_comp1.md` are modified
 **And** `runDiff(tmpdir)` is called again (compares against the
 ingest-written snapshot)
 **And** another simulated complete ingest runs
@@ -179,8 +177,8 @@ steady-state share the same component composition. There is no separate
 
 **Given** the working directory is the fixture spec root
 **When** `runDiff()` is called with no directory argument
-**Then** it uses the current working directory as the spec root
-**And** behaves identically to `runDiff(".")`
+**Then** it resolves `spec/` beneath the current working directory as the spec root
+**And** `spex diff` takes no positional directory argument — the directory comes from `--spec-dir`
 
 ### E4: `spex diff` output is pipeable
 

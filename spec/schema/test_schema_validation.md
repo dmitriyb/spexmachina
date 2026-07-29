@@ -158,7 +158,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [{ "id": "one", "name": "m", "path": "m/" }]
 }
 ```
-**Expected:** Validation fails. Error references `modules/0/id` with type mismatch (expected integer, got string).
+**Expected:** Validation fails. Error references `modules/0/id` — `"one"` does not match the identity-hash pattern `^[0-9a-f]{12}$`. An integer `id` fails the same way, on type: the field is a string.
 
 **Input (float ID in component):**
 ```json
@@ -228,7 +228,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "components": [{ "id": 0, "name": "C" }]
 }
 ```
-**Expected:** Validation fails. Error references `components/0/id` — value 0 is below `minimum: 1`.
+**Expected:** Validation fails. Error references `components/0/id` — `0` is not a string matching `^[a-f0-9]{12}$` (module.schema.json spells the class in that order; project.schema.json's `$defs/identityHash` spells it `^[0-9a-f]{12}$`).
 
 **Input (negative ID):**
 ```json
@@ -237,7 +237,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [{ "id": -1, "name": "m", "path": "m/" }]
 }
 ```
-**Expected:** Validation fails. Error references `modules/0/id` — value -1 is below `minimum: 1`.
+**Expected:** Validation fails. Error references `modules/0/id` — `-1` is not a string matching `^[0-9a-f]{12}$`; `project.schema.json` constrains module ids by pattern, not by numeric range.
 
 ### S14: Empty string for name fails (minLength: 1)
 
@@ -341,10 +341,10 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 ```
 **Expected:** Validation passes.
 
-### E2: Boundary ID value (minimum = 1)
+### E2: Boundary ID value (identity-hash length)
 
-**Input:** Any node with `"id": 1` — passes. Any node with `"id": 0` — fails.
-This is the boundary test for the `minimum: 1` constraint on all ID fields.
+**Input:** Any node with `"id": "aabbccddeeff"` — passes. Any node with `"id": "aabbccddeef"` (11 chars) — fails.
+This is the boundary test for the 12-hex-character identity pattern every ID field carries — `^[0-9a-f]{12}$` at `project.schema.json`'s `$defs/identityHash`, spelled `^[a-f0-9]{12}$` at each of the 12 pattern sites in `module.schema.json`.
 
 ### E3: Large ID values
 
