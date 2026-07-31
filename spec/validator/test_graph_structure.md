@@ -4,9 +4,11 @@ Integration and acceptance test scenarios for DAGChecker and IDValidator.
 
 ## Setup
 
-Each scenario reads one checked-in fixture directory under `validator/testdata/` (`dag_*` for DAGChecker, `id_*` for IDValidator), each already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by ten tests. Node ids in those fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
+IDValidator scenarios each read one checked-in fixture directory under `validator/testdata/id_*`, already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by ten tests. DAGChecker fixtures cover four shapes only — `dag_valid` (two acyclic modules, `core` and `api`), `dag_module_cycle` (a two-module cycle), `dag_req_cycle` and `dag_comp_cycle`; the remaining DAG scenarios have no dedicated fixture, and each carries a note below saying what covers it, if anything. Node ids in fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
 
-### Fixture Structure
+### Scenario Model
+
+The Givens below are written against a conceptual three-module baseline. It is scenario shorthand, not a description of any checked-in directory:
 
 ```
 tmp/spec/
@@ -51,11 +53,15 @@ tmp/spec/
 **When** `CheckDAG(specDir)` is called.
 **Then** one error whose `message` includes the full three-node cycle path.
 
+> No implementing test or fixture exists for the three-node shape. Fixture-tested cycles stop at two nodes (D2), and the in-memory unit cases cover self-loops and two-node cycles only.
+
 #### D4: Self-referential module dependency
 
 **Given** module `alpha` has `requires_module: [1]` (its own ID).
 **When** `CheckDAG(specDir)` is called.
 **Then** one error detecting the self-cycle `alpha -> alpha`.
+
+> Covered at the unit level only: the cycle detector is exercised on an in-memory self-loop (`a -> a`). No fixture realizes this Given end-to-end through `CheckDAG`.
 
 #### D5: Requirement dependency cycle within a module
 
@@ -75,11 +81,15 @@ tmp/spec/
 **When** `CheckDAG(specDir)` is called.
 **Then** at least two errors, one for the module graph cycle and one for the requirement graph cycle. Each error identifies which graph type it belongs to.
 
+> No implementing test: no fixture or unit case exercises two independent cycles in one run. The single-graph halves are covered separately by D2 and D5.
+
 #### D8: DAG check on module with no dependencies
 
 **Given** module `gamma` has an empty `requires_module` array and its requirements have no `depends_on`.
 **When** `CheckDAG(specDir)` is called.
 **Then** zero errors for gamma. Isolated nodes are valid DAG members.
+
+> No dedicated fixture; the property is exercised implicitly by D1, whose `dag_valid` fixture contains `core`, a module declaring no `requires_module`.
 
 ---
 

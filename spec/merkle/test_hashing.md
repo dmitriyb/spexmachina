@@ -69,7 +69,7 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 **Given** the full fixture directory described in Setup
 **When** `BuildTree(tmpdir)` is called
 **Then** the root node has type `"project"` and five children: the `meta/project` envelope leaf, one leaf per project requirement (two), and the `alpha` and `beta` module nodes (each keyed by its identity hash)
-**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the test_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
+**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two requirements, the two components, and the test_section), each keyed directly by its 12-char hex identity `id`
 **And** there are no per-type `arch`/`flow`/`test` interior group nodes and no path-style keys anywhere in the tree
 
 **Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
@@ -80,7 +80,7 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 **When** `BuildTree(tmpdir)` is called
 **Then** each leaf node's hash matches `HashFile` of its corresponding file
 **And** the `alpha` module interior hash equals `HashChildren` over the meta envelope leaf hash plus each spec-node leaf hash directly — no intermediate group hashes
-**And** the root hash equals `HashChildren` of `[project envelope leaf hash, alpha module hash]`
+**And** the root hash equals `HashChildren` over its five children's hashes — the project envelope leaf, the two project requirement leaves, and the `alpha` and `beta` module hashes
 
 **Rationale**: End-to-end verification that the bottom-up hash propagation produces a consistent merkle tree. This is the core correctness property of the entire module.
 
