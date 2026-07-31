@@ -13,6 +13,7 @@ func newHashIDCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hash-id",
 		Short: "Compute identity hash for a spec node",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parts, err := buildIdentityParts(module, nodeType, name)
 			if err != nil {

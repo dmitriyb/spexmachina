@@ -36,6 +36,7 @@ Inputs:
 
 Outputs:
   --out <file>      changeset JSON (default: stdout)`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if proposal == "" {
 				return validationErr(fmt.Errorf("emit: --proposal is required"))

@@ -212,15 +212,12 @@ func TestNFR4_S5_StdoutOnly(t *testing.T) {
 	}
 }
 
-// S7: Spec directory as positional argument
-func TestFR1_S7_PositionalArgument(t *testing.T) {
+// S7: Positional arguments are rejected — the spec directory comes from --spec-dir only
+func TestFR1_S7_PositionalArgumentRejected(t *testing.T) {
 	dir := setupRenderSpec(t)
-	out, _, err := runRenderSpex(t, "render", dir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-	if !strings.Contains(out, "# test-project") {
-		t.Fatal("positional arg should work")
+	_, _, err := runRenderSpex(t, "render", dir)
+	if err == nil {
+		t.Fatal("positional argument should be rejected, got no error")
 	}
 }
 

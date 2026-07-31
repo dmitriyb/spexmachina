@@ -27,9 +27,11 @@ receipts.json an adapter wrote after applying it, reconciles the bead
 mapping store, and writes spec/.snapshot.json when the run is complete.
 
 With --mode refresh (empty changeset + empty receipts), ingest instead
-absorbs content-only drift: every mapping record's spec_hash is aligned
-with current content and the snapshot is rewritten, atomically, with no
-bead lifecycle. Structural diffs (added/removed leaves) are refused.
+absorbs spec drift: every mapping record's spec_hash is aligned with
+current content and the snapshot is rewritten, atomically, with no bead
+lifecycle. Added/removed leaves are refused unless their node type is
+in the refresh absorbable set — requirement and api in both directions,
+component in the removed direction only.
 
 Inputs:
   --changeset <file>   changeset JSON (required)
@@ -43,6 +45,7 @@ Exit codes:
       missing pre-refresh snapshot, non-empty refresh artifacts)
   2 — invariant failure (mapping store unchanged on disk) or refresh
       refusal (added/removed entries, orphan record)`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			specDir, err := resolveSpecDir(cmd)
 			if err != nil {

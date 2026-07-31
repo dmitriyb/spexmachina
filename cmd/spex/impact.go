@@ -17,6 +17,7 @@ func newImpactCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "impact",
 		Short: "Compute impact of spec changes on beads",
+		Args:  cobra.NoArgs,
 		RunE:  runImpactE,
 	}
 	cmd.Flags().String("diff", "", "path to diff JSON file (default: stdin)")

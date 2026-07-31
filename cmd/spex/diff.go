@@ -15,6 +15,7 @@ func newDiffCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "diff",
 		Short: "Compute changes between snapshot and current spec",
+		Args:  cobra.NoArgs,
 		RunE:  runDiffE,
 	}
 	cmd.Flags().String("snapshot", "", "path to snapshot file (default: <dir>/.snapshot.json)")

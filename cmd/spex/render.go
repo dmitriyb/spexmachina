@@ -10,7 +10,7 @@ import (
 
 func newRenderCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "render [dir]",
+		Use:   "render",
 		Short: "Render spec as markdown, DOT, or JSON",
 		Long: `Render the spec directory in the specified format.
 
@@ -29,7 +29,7 @@ Examples:
   spex render --format dot | dot -Tpng > spec.png
   spex render --format json | jq '.nodes[] | select(.type == "component")'
   spex render --format json --slim | jq -r '.nodes[] | "\(.name)\t\(.id)"'`,
-		Args: cobra.MaximumNArgs(1),
+		Args: cobra.NoArgs,
 		RunE: runRenderE,
 	}
 	cmd.Flags().StringP("format", "f", "markdown", "output format: markdown, dot, json")
@@ -38,16 +38,9 @@ Examples:
 }
 
 func runRenderE(cmd *cobra.Command, args []string) error {
-	var specDir string
-	var err error
-
-	if len(args) > 0 {
-		specDir = args[0]
-	} else {
-		specDir, err = resolveSpecDir(cmd)
-		if err != nil {
-			return err
-		}
+	specDir, err := resolveSpecDir(cmd)
+	if err != nil {
+		return err
 	}
 
 	format, _ := cmd.Flags().GetString("format")

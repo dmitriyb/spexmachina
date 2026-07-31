@@ -10,7 +10,7 @@ All scenarios invoke the `spex render` CLI command against a temporary spec dire
 
 No `spex` process is spawned. Each scenario assembles the command tree itself, hands it the scenario's arguments and runs it in place, capturing what the command writes to stdout and collecting stderr in a separate buffer. That still exercises the CLI path — flag parsing, argument handling and the stdout/stderr split — but it observes a returned error where a spawned process would have an exit status. So where a scenario below says "exit code 0" the assertion made is that the command returned no error, and "exit code 1" is that it returned one; turning that error into an exit status is the CLI entry point's step, asserted where that step lives rather than here. Where a scenario instead describes a shell pipeline, what it pins is the shape of the output such a pipeline consumes.
 
-**Spec directory:** most scenarios point the command at the fixture with `--spec-dir`. S7 is the one that passes the directory positionally, which is the form that scenario exists to check.
+**Spec directory:** scenarios point the command at the fixture with `--spec-dir`. S7 passes a directory positionally and exists to check that this form is rejected.
 
 ## Scenarios
 
@@ -93,25 +93,24 @@ No `spex` process is spawned. Each scenario assembles the command tree itself, h
 - Output is valid SVG
 - This verifies the DOT output is syntactically correct
 
-### S7: Spec directory as positional argument
+### S7: Positional arguments are rejected
 
 **Given** a valid spec directory at `/tmp/test-spec`.
 
 **When** `spex render /tmp/test-spec` is executed.
 
 **Then:**
-- The command reads from the specified directory
-- Exit code is 0
-- Output is the rendered spec from that directory
+- Exit code is 1
+- The command does not render anything: the spec directory comes from `--spec-dir` only, and a positional argument is an error, never silently ignored
 
-### S8: Current directory as implicit spec root
+### S8: Current directory as spec root via the flag
 
 **Given** the working directory is a valid spec root (contains `project.json` and module subdirectories).
 
-**When** `spex render` is executed with no positional argument.
+**When** `spex render --spec-dir .` is executed.
 
 **Then:**
-- The command uses the current working directory as the spec root
+- The command uses the working directory as the spec root
 - Exit code is 0
 - Output is the rendered spec
 
@@ -246,7 +245,7 @@ There is no third outcome: the command either returns without error or returns o
 - Exit code is 0
 - Output describes the render command usage
 - Lists the available `--format` options (markdown, dot, json)
-- Documents the positional `[dir]` argument
+- Documents no positional argument — the usage line names the command and flags only
 
 ### E10: `--slim` on any format but json
 

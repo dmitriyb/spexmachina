@@ -13,10 +13,10 @@ CLI entry point for `spex render`. Generates human-readable or machine-readable 
 ## Interface
 
 ```
-spex render [dir] [--format markdown|dot|json] [--slim]
+spex render [--format markdown|dot|json] [--slim]
 ```
 
-The spec directory is the positional argument when one is given and the root command's `--spec-dir` otherwise. The format defaults to `markdown`. A rejected flag combination and a spec directory that will not read are the same outcome to a caller: the message goes to stderr, stdout stays empty, and the command exits 1.
+The spec directory comes from the root command's persistent `--spec-dir` flag; the subcommand declares no positional argument, and a stray one is a clean error rather than silently ignored. The format defaults to `markdown`. A rejected flag combination and a spec directory that will not read are the same outcome to a caller: the message goes to stderr, stdout stays empty, and the command exits 1.
 
 ## Declared surface
 

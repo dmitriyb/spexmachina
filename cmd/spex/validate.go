@@ -14,6 +14,7 @@ func newValidateCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "validate",
 		Short: "Validate spec directory structure",
+		Args:  cobra.NoArgs,
 		RunE:  runValidateE,
 	}
 }
