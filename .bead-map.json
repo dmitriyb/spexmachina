@@ -121,7 +121,7 @@
       "module": "merkle",
       "component": "TreeBuilder",
       "content_file": "spec/merkle/arch_tree_builder.md",
-      "spec_hash": "34443909a57e9c3d6c03424c7b477f321316782fa1739aa586d7dbc1f4a6037e"
+      "spec_hash": "554d5758afdbdad65063278c816ae1e6f68e381d8a80407845abb06ec5f548bb"
     },
     {
       "id": 14,
@@ -132,7 +132,7 @@
       "module": "merkle",
       "component": "SnapshotStore",
       "content_file": "spec/merkle/arch_snapshot_store.md",
-      "spec_hash": "91ff46401508612c2ee255f9f42405464615a640c12a81be2a1e3c0bda9fc81b"
+      "spec_hash": "2a5785acff8fe2d293acfee7d3dcef167939a0e41482c2ccba82e0619f053834"
     },
     {
       "id": 15,
@@ -143,7 +143,7 @@
       "module": "merkle",
       "component": "DiffEngine",
       "content_file": "spec/merkle/arch_diff_engine.md",
-      "spec_hash": "af3b057d4bc19e2aa237760010026cf0604ee3484999da883ed32329640fc490"
+      "spec_hash": "0b07789fa27ab5129f195314a5005d501f1572b314588d087b9adba9e067da33"
     },
     {
       "id": 16,
@@ -195,7 +195,7 @@
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "02fc9f9b2c08d8cc2281c4d43f92a7bb71b6493ed679d99dc36e5dd68605e374"
+      "spec_hash": "7eb71ad7f12807c2d39650c1ce279808469e1cb758706a1b7459331e5f55c9df"
     },
     {
       "id": 22,
@@ -235,7 +235,7 @@
       "module": "render",
       "component": "RenderCommand",
       "content_file": "spec/render/arch_render_command.md",
-      "spec_hash": "7add8ed5ff7f01c0415ccdcdd86f85fc4c71162fb4df3e534544698c0f5f47cf"
+      "spec_hash": "c1643e25514e50050bb949ba495cf307e39deda3e67eca52af8247ccf593e61e"
     },
     {
       "id": 32,
@@ -265,7 +265,7 @@
       "module": "map",
       "component": "MappingStore",
       "content_file": "spec/map/arch_mapping_store.md",
-      "spec_hash": "302bad1ddbed5c980b6f55d8722c21f23dabfd61184e8f82a3b10c08adc1ef95"
+      "spec_hash": "acf0eac90f8ddc48cc8bf6d9f904ed0b63c6a8bf429b5cf0f64da75fc9525aae"
     },
     {
       "id": 36,
@@ -336,7 +336,7 @@
       "module": "render",
       "component": "MarkdownRenderer",
       "content_file": "spec/render/arch_markdown_renderer.md",
-      "spec_hash": "218374181251ba73a5fd8fd59c3fadfadfcc271366cfc5e94397916b7757043a"
+      "spec_hash": "b389d0a58bdd9fb8300c17c6d3fcaa7375d948c3437a3cb1bae2478b6e4483d1"
     },
     {
       "id": 55,
@@ -356,7 +356,7 @@
       "module": "render",
       "component": "JSONRenderer",
       "content_file": "spec/render/arch_json_renderer.md",
-      "spec_hash": "2105f8e390b464634789efce6ccb093fa693359019eccf939dda534cbe187b42"
+      "spec_hash": "afe3346a8e12c08d15eb2656a594d62d68c1d95436154fd728206b24faa43832"
     },
     {
       "id": 57,
@@ -408,7 +408,7 @@
       "module": "adapters",
       "component": "Adapter flow",
       "content_file": "",
-      "spec_hash": "bcd4fafdba578491166b6f53e9ff1de4b5ca213adbe029deab04a2c8d36992c9"
+      "spec_hash": "39bbd77552f86c0c60a105bec2662f721d78424149036a437938e91406609706"
     },
     {
       "id": 62,
@@ -419,7 +419,7 @@
       "module": "adapters",
       "component": "BrReferenceAdapter",
       "content_file": "spec/adapters/arch_br_reference_adapter.md",
-      "spec_hash": "383308fec8603421e93b27b01dbcc278482745d692375b21343d4d7331dedff4"
+      "spec_hash": "6efe764d8c37b5a52457c7072e1d0f2a882e830e678e313fd24d53cca57d310c"
     },
     {
       "id": 63,
@@ -463,7 +463,7 @@
       "module": "emit",
       "component": "IdempotencyLabeler",
       "content_file": "spec/emit/arch_idempotency_labeler.md",
-      "spec_hash": "7639a6a949122ef7e4d0a6052ce55b789043bdd049b04cbe09ab54dcf7c02c70"
+      "spec_hash": "db6e047a53b2b17aa4726d2cc31784dfaeaba396225b9bdd03a2dc6e15d090b5"
     },
     {
       "id": 67,
@@ -518,7 +518,7 @@
       "module": "ingest",
       "component": "Reconciler",
       "content_file": "spec/ingest/arch_reconciler.md",
-      "spec_hash": "21d207c8081cf2dce7af6142ae049885925939ea4d9d86b7c0ec9d5275a3d8f5"
+      "spec_hash": "b77a609b26e322d35c478bdaf9f56f9ce7ddeeb6c6e86223104992654d5c7e3d"
     },
     {
       "id": 72,
@@ -529,7 +529,7 @@
       "module": "ingest",
       "component": "SnapshotSaver",
       "content_file": "spec/ingest/arch_snapshot_saver.md",
-      "spec_hash": "54350c80957f583988fed52c4d99fc6c8ae3678066118aa2a5203cfe286490df"
+      "spec_hash": "975cdbcc6cfea60f582f4adb8f322ba7e192afac7a4f7d5734cd8e6084ff6c1b"
     },
     {
       "id": 73,
@@ -551,7 +551,7 @@
       "module": "ingest",
       "component": "Consistency invariants",
       "content_file": "",
-      "spec_hash": "e7a85ad0772ad54e91c0f2c9eece7e15a2d037a397f08f61d1d11b2b823921ce"
+      "spec_hash": "5761708e149ffd8edbaa21e341edd99b1f7d1b80d8427f35aab2431ec83be9c7"
     },
     {
       "id": 76,
@@ -584,7 +584,7 @@
       "module": "impact",
       "component": "Classification and reporting tests",
       "content_file": "spec/impact/test_classification_reporting.md",
-      "spec_hash": "d3fa57a344a2806e43866c7851ff1052c24c45b90cf38e4212b05158787395b7"
+      "spec_hash": "dfea62b1561b632e50e7916c73b3424e1c32e78a8130e4742acceeb9cfbf307a"
     },
     {
       "id": 79,
@@ -606,7 +606,7 @@
       "module": "merkle",
       "component": "Hash computation flow",
       "content_file": "spec/merkle/flow_hash_computation.md",
-      "spec_hash": "85f031518fb0e62684c868098ce37a4af99d741fea138c3d0244fc119bd99ae2"
+      "spec_hash": "47999a3d833f26a06bfa16486ba97afc064455c5114797bf0a5b69c312dd46ee"
     },
     {
       "id": 81,
@@ -628,7 +628,7 @@
       "module": "emit",
       "component": "Changeset builder tests",
       "content_file": "spec/emit/test_changeset_builder.md",
-      "spec_hash": "35dab464bfcbc4b8dd55499e8c0e1f92932687f3f1af07830e45a1f0fbd5d31f"
+      "spec_hash": "a7a842626417c729a77a62c619b7e2939e0498bcff6d91c24b0e24385781daa3"
     }
   ]
 }
