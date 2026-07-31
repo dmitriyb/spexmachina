@@ -42,12 +42,20 @@ type refreshDirections struct {
 // refused in both directions.
 //
 // The list is deliberately written out rather than derived by negating
-// impact's bead-producing set. That negation also admits "meta", the
-// project.json / module.json envelope leaf, and refresh runs neither
-// `spex validate` nor the completeness checker: it would happily
-// baseline a project-requirement addition `spex diff` rejects with exit
-// 2 and a module-requirement removal `spex validate` rejects with exit
-// 1, hiding both from every downstream tool.
+// impact's bead-producing set. Relative to that negation, the only type
+// the explicit list excludes is "meta", the project.json / module.json
+// envelope leaf: absorbing an added or removed meta leaf would baseline
+// a whole module appearing or vanishing without any gate seeing it.
+//
+// The list does NOT protect against premature requirement absorption:
+// "requirement" is absorbable in both directions, and refresh runs
+// neither `spex validate` nor the completeness checker, so it will
+// baseline a requirement addition or removal that `spex diff` refuses
+// with exit 2. `spex validate` still reports uncovered requirements
+// afterwards (it reads the spec, not the snapshot); what a premature
+// refresh buries permanently is the diff-side completeness obligation.
+// Callers own the ordering: run the gates before refresh — refresh does
+// not run them for you.
 //
 // "component" is removal-only. A removed component's bead already
 // exists, and absorbing the node's disappearance is safe only because
