@@ -4,7 +4,7 @@ Integration and acceptance tests for the SnapshotStore (component 3). Validates 
 
 ## Setup
 
-Scenarios use `t.TempDir()` to create an isolated working directory. A helper `buildFixtureTree(t)` constructs a known merkle tree in-memory in the flat identity-hash shape TreeBuilder produces (a module interior node whose children are the `meta/` envelope leaf plus one leaf per spec node, each keyed by its 12-char hex identity `id`):
+Scenarios use `t.TempDir()` to create an isolated working directory and build their tree with `setupSpecDir(t)` followed by `BuildTree`, so the fixture is exactly the flat identity-hash shape TreeBuilder produces (a module interior node whose children are the `meta/` envelope leaf plus one leaf per spec node, each keyed by its 12-char hex identity `id`). Sketched, that shape is:
 
 ```go
 alphaHash := "085966b6bfa1" // identity hash of module alpha
@@ -15,13 +15,13 @@ root := &Node{
         {Key: alphaHash, Hash: "ccc...", Type: "module", Module: alphaHash, Children: []*Node{
             {Key: "meta/" + alphaHash, Hash: "ddd...", Type: "leaf", NodeType: "meta", Module: alphaHash},
             {Key: "1f00badc0de1", Hash: "eee...", Type: "leaf", NodeType: "component", Module: alphaHash},
-            {Key: "2f00badc0de2", Hash: "fff...", Type: "leaf", NodeType: "impl_section", Module: alphaHash},
+            {Key: "2f00badc0de2", Hash: "fff...", Type: "leaf", NodeType: "test_section", Module: alphaHash},
         }},
     },
 }
 ```
 
-The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so scenarios pass a fixed `createdAt` to pin byte-equality assertions.
+The snapshot file path is `<tmpdir>/.snapshot.json`; the production default is `<specDir>/.snapshot.json`. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so the byte-equality scenario passes a fixed `createdAt`; the rest pass `time.Now().UTC()` because they assert on decoded structure rather than bytes.
 
 ## Scenarios
 
@@ -34,7 +34,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** the JSON contains a `created_at` field carrying the supplied `createdAt` as an RFC 3339 timestamp
 **And** the JSON contains a `nodes` map
 
-**Rationale**: Validates the basic contract of `Save` — it must produce a well-formed JSON file conforming to the format defined in `impl_snapshot_format.md`.
+**Rationale**: Validates the basic contract of `Save` — it must produce a well-formed JSON file conforming to the format defined in `arch_snapshot_store.md`.
 
 ### S2: Save uses flat node map keyed by identity hash
 
@@ -44,7 +44,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** each node entry includes `hash` and `type` fields
 **And** interior nodes include a `children` array listing their child keys
 
-**Rationale**: Per `impl_snapshot_format.md`, the snapshot uses a flat map (not a nested tree) for O(1) lookup during diff, keyed by the same identity-hash keys the tree carries — never by file paths.
+**Rationale**: Per `arch_snapshot_store.md`, the snapshot uses a flat map (not a nested tree) for O(1) lookup during diff, keyed by the same identity-hash keys the tree carries — never by file paths.
 
 ### S3: Load round-trips the full tree
 
@@ -80,7 +80,7 @@ The snapshot file path is `<tmpdir>/spec/.snapshot.json` per the spec convention
 **And** a second, different tree is saved to the same `snapshotPath`
 **When** `Load(snapshotPath)` is called
 **Then** the loaded tree matches the second (most recent) save
-**And** no trace of the first tree's hashes remains in the file
+**And** the loaded root hash is the second tree's, not the first's
 
 **Rationale**: Per `arch_snapshot_store.md`, only one snapshot exists at a time. Saves must fully replace the previous snapshot, not append or merge.
 

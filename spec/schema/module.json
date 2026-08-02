@@ -7,14 +7,14 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define project schema",
-      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), module declarations with inter-module dependencies, and milestones. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), and module declarations with inter-module dependencies. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": "eed2cf85d5c3",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define module schema",
-      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), implementation sections (with content links), and data flows. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": "b7c3bccd7c64",
@@ -28,28 +28,21 @@
       "preq_id": "d5a8407d38e1",
       "type": "non_functional",
       "title": "Identity hash ID constraints",
-      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/\u003ctitle\u003e'; modules use 'module/\u003cname\u003e'; module requirements use '\u003cmodule\u003e/requirement/\u003ctitle\u003e'; components use '\u003cmodule\u003e/component/\u003cname\u003e'; impl_sections use '\u003cmodule\u003e/impl_section/\u003cname\u003e'; data_flows use '\u003cmodule\u003e/data_flow/\u003cname\u003e'; test_sections use '\u003cmodule\u003e/test_section/\u003cname\u003e'; milestones use 'milestone/\u003ctitle\u003e'; test_plan scenarios use 'test_plan/scenario/\u003cname\u003e'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
+      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/\u003ctitle\u003e'; modules use 'module/\u003cname\u003e'; module requirements use '\u003cmodule\u003e/requirement/\u003ctitle\u003e'; components use '\u003cmodule\u003e/component/\u003cname\u003e'; data_flows use '\u003cmodule\u003e/data_flow/\u003cname\u003e'; test_sections use '\u003cmodule\u003e/test_section/\u003cname\u003e'; apis use '\u003cmodule\u003e/api/\u003cname\u003e'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
     },
     {
       "id": "80debf6eb776",
       "preq_id": "92dfddf840b0",
       "type": "functional",
       "title": "Define test_sections in module schema",
-      "description": "Add test_sections array to module.json schema, parallel to impl_sections. Each test_section has id, name, content (path to test_*.md), and describes (component IDs)."
-    },
-    {
-      "id": "61f3238dfd74",
-      "preq_id": "92dfddf840b0",
-      "type": "functional",
-      "title": "Define test_plan in project schema",
-      "description": "Add test_plan object to project.json schema with a scenarios array. Each scenario has id, name, content (path to test_*.md), and modules (module IDs)."
+      "description": "Add a test_sections array to module.json schema. Each test_section has id, name, content (path to test_*.md), and describes (component IDs)."
     },
     {
       "id": "f7ef8bef0ba1",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Define bead-map schema",
-      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional bead_status). The spec_node_id field is validated against the identity hash pattern ^[a-f0-9]{12}$ — the same format used by node IDs in project.json and module.json — so the merkle tree key and the mapping store key are byte-identical and need no translation. The internal record `id` remains an integer, since it is used only for the spex:\u003cid\u003e bead label and is never referenced from the spec graph."
+      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional node_type drawn from a closed enum of proposal/component/data_flow/test_section, optional bead_status). The spec_node_id field is constrained to a non-empty string with no pattern: on a record pointing at a component, data_flow or test_section it carries that node's identity hash, which is the key the merkle tree files that node's leaf under, so the two sides need no translation, while a proposal epic record carries the proposal reference there instead. The internal record `id` remains an integer, since it is used only for the spex:\u003cid\u003e bead label and is never referenced from the spec graph."
     },
     {
       "id": "581178718888",
@@ -70,19 +63,18 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Identity hash algorithm",
-      "description": "Provide a deterministic identity hash function shared across the schema, validator, merkle, impact, apply, and map modules. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like; all other modules import it rather than reimplement it."
+      "description": "Provide a deterministic identity hash function that defines the ID format every module reads and writes. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like. The validator and the hash-id command call it to derive and check IDs; every other module treats the resulting 12-character hex string as an opaque key carried in the JSON id field, so it never recomputes and never reimplements the algorithm."
     }
   ],
   "components": [
     {
       "id": "79946d618829",
       "name": "ProjectSchema",
-      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and milestones.",
+      "description": "The project.json JSON Schema definition. Defines the structure for project metadata, requirements (including optional priority integer 0-4), module declarations, and the project-level sections array.",
       "content": "arch_project_schema.md",
       "implements": [
         "f471f2764ab8",
         "237fd8ffb610",
-        "61f3238dfd74",
         "581178718888",
         "20da31e277e5"
       ]
@@ -90,7 +82,7 @@
     {
       "id": "78883b84c32d",
       "name": "ModuleSchema",
-      "description": "The module.json JSON Schema definition. Defines the structure for module requirements (with preq_id required), components, impl_sections, test_sections, and data_flows.",
+      "description": "The module.json JSON Schema definition. Defines the structure for module requirements (with preq_id required), components, data_flows, test_sections, and the apis array of external surface entry points.",
       "content": "arch_module_schema.md",
       "implements": [
         "eed2cf85d5c3",
@@ -120,45 +112,6 @@
       "content": "arch_bead_map_schema.md",
       "implements": [
         "f7ef8bef0ba1"
-      ]
-    }
-  ],
-  "impl_sections": [
-    {
-      "id": "24e7959c1de3",
-      "name": "Schema definitions",
-      "content": "impl_schema_definitions.md",
-      "describes": [
-        "79946d618829",
-        "78883b84c32d",
-        "d125b5e775b4"
-      ]
-    },
-    {
-      "id": "4d5a480f8732",
-      "name": "Go embedding",
-      "content": "impl_go_embedding.md",
-      "describes": [
-        "ee88263d6555",
-        "d125b5e775b4"
-      ]
-    },
-    {
-      "id": "64f8ab47c257",
-      "name": "Test schema definitions",
-      "content": "impl_test_schema_definitions.md",
-      "describes": [
-        "79946d618829",
-        "78883b84c32d"
-      ]
-    },
-    {
-      "id": "5432c3784341",
-      "name": "Identity hash algorithm",
-      "content": "impl_identity_hash.md",
-      "describes": [
-        "79946d618829",
-        "78883b84c32d"
       ]
     }
   ],

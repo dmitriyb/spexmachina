@@ -1,40 +1,22 @@
 # ChangesetBuilder
 
-Composes `changeset.json` v1 from the impact report, the spec graph, the mapping store, and a caller-supplied git HEAD SHA. Delegates dep resolution to `Resolver`, ordering to `TopologicalSorter`, and idempotency label assignment to `IdempotencyLabeler`.
+Composes `changeset.json` v1 from the impact report, the spec graph, the mapping store, the proposal ref, and a caller-supplied git HEAD SHA. Those inputs are the whole of what it reads — [[aa2375420738|it opens no other file, starts no subprocess and asks no tracker anything]], so the same inputs always compose the same bytes. Dep resolution is delegated to [[f7775ac5f1f3|Resolver]], ordering to [[7249fd093b8a|TopologicalSorter]], and idempotency label assignment to [[6f4b6dd8928f|IdempotencyLabeler]].
 
 ## Responsibilities
 
 - Load impact report actions (create, obsolete/close) and classify them by spec node type tier (proposal epic / feature+data_flow task / multi-component test task).
-- **Detect cleanup actions** by `Action.Reason` prefix `"Code cleanup:"`. Cleanup actions get a distinct op shape — see "Cleanup op shape" below.
-- Resolve each create action's parent and deps via `Resolver` into the three ref shapes.
-- Order the create ops via `TopologicalSorter` so in-batch deps come before dependents.
-- **Assign idempotency labels via `IdempotencyLabeler.LabelFor(action)` — per-action lookup, NOT a flat `Reserve(N)` slice**. The Labeler branches on action class (modify-pair vs cleanup vs fresh) and returns the appropriate label format; see `arch_idempotency_labeler.md` for the rules.
-- Emit close ops with the obsolete labels (`spex:obsolete`, `commit:<git_head>`).
+- **Detect cleanup actions** by the `"Code cleanup:"` prefix on the action's reason. Cleanup actions get a distinct op shape — see "Cleanup op shape" below.
+- Resolve each create action's parent and deps via Resolver into the three ref shapes.
+- Order the create ops via TopologicalSorter so in-batch deps come before dependents.
+- **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** The label depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the three formats.
+- Emit close ops carrying the obsolete labels: `spex:obsolete`, and `commit:<git_head>` built from [[22e63e959749|the SHA the caller passed in]] — the builder never asks git for it.
 - Write the final v1 changeset with canonical field order and stable key ordering inside every nested object.
 
 ## Interface
 
-```go
-type Builder struct {
-    SpecGraph   *spec.Graph
-    MappingStore mapping.Store
-    GitHead     string
-    Proposal    string
-}
+The builder is set up once per run from four values that do not change while it runs — the spec graph, the mapping store, the git HEAD SHA and the proposal ref — and is then handed exactly one impact report. It answers with one v1 changeset or with an error, never with both.
 
-func (b *Builder) Build(report impact.Report) (changeset.Changeset, error)
-```
-
-`changeset.Changeset` is a plain value type mirroring the JSON schema:
-
-```go
-type Changeset struct {
-    Version int        `json:"version"`     // always 1
-    GitHead string     `json:"git_head"`
-    Proposal string    `json:"proposal"`
-    Ops     []Op       `json:"ops"`
-}
-```
+The document it answers with carries four top-level fields in this order: the schema version (always `1`), the git HEAD, the proposal ref, and the ordered op list.
 
 ## Op Kinds
 
@@ -48,6 +30,8 @@ Four op kinds flow through the builder:
 | `tag`    | proposal tagging on existing beads | add `spec_proposal:<ref>` label |
 
 The current proposal produces mostly create and close ops plus the initial proposal-epic create. Label and tag are reserved for future flows (e.g., cross-proposal tagging).
+
+Those four names are [[de8ba472d9f6|the whole vocabulary a changeset may use]], and the bar that requirement sets is that no tracker-specific flag or subcommand name appears in `changeset.json`; the adapter column above is a mapping the adapter owns, not something the changeset states. That is what lets one changeset drive an adapter for a different tracker unchanged.
 
 ### `spec_node_kind` vocabulary
 
@@ -63,35 +47,41 @@ Create ops carry `spec_node_kind` matching the underlying spec node category:
 
 The `cleanup` value is what tells the adapter and Reconciler that this op produces a bead with no mapping record (per CLAUDE.md "no map record" rule).
 
+The vocabulary is closed, and `api` is deliberately not in it. An api is a declared external surface, not a unit of work, and impact produces no action for one, so no action carrying an api ever reaches `Build()`.
+
+The closure is upstream, not here. On a conventional create the builder copies `Action.NodeType` into `spec_node_kind` verbatim — it overrides the value only for the cleanup shape below — so it validates nothing against the table above. An api action that did reach `Build()` would emit `"spec_node_kind": "api"`, a value outside the table, and the adapter's kind-to-bead-type mapping would fall through its default arm and file the surface as a `feature` bead. The guarantee is therefore ActionClassifier's, not the builder's: it holds because impact never emits an api action, not because emit would refuse one. A future kind added to the table has to be added there too.
+
+Declaring, describing or retiring a surface therefore produces an empty changeset unless a component leaf moved alongside it — which is the intended shape, because the work behind a surface belongs to the components its `provided_by` array names.
+
 ## Cleanup op shape
 
-Cleanup actions (those whose `Action.Reason` starts with `"Code cleanup:"`) are emitted with a distinct op shape rather than the conventional component/data_flow form. The discriminator is the same `isCleanup(a)` test pre-decouple `apply/bead_creator.go` used; emit lifts it from the implementation layer up into the changeset contract:
+Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emitted with a distinct op shape rather than the conventional component/data_flow form. That reason prefix is the same discriminator the retired apply path used; emit lifts it out of the implementation layer and into the changeset contract:
 
 | Field             | Cleanup op value                                                                            |
 |-------------------|---------------------------------------------------------------------------------------------|
 | `type`            | `"create"`                                                                                  |
-| `spec_node_kind`  | `"cleanup"` (NOT the underlying spec node's kind — adapter and Reconciler key off this)     |
-| `spec_node_id`    | `action.SpecNodeID` (identity hash of the now-removed spec node — for traceability)         |
-| `idempotency.label` | `"spex:cleanup-<action.SpecNodeID>"` per Labeler's cleanup branch                         |
+| `spec_node_kind`  | `"cleanup"` (NOT the underlying spec node's kind — adapter and reconciler key off this)     |
+| `spec_node_id`    | the identity hash of the now-removed spec node, for traceability                            |
+| `idempotency.label` | `"spex:cleanup-<spec_node_id>"` per the labeler's cleanup branch                          |
 | `parent`          | proposal-epic ref (same as other creates)                                                   |
-| `deps`            | `[{"ref":"bead","bead_id":"<action.OldBeadID>","type":"blocks"}]` lineage                   |
-| `priority`        | `3` (`emit.FallbackPriority`)                                                               |
-| `title`           | `action.Reason` verbatim (e.g. `"Code cleanup: m/X"`) — NOT `"<module>: <node>"`             |
-| `labels`          | `["spex:cleanup"]` — emit populates `Op.Labels` on cleanup creates so the adapter can apply the discriminator label via `--add-label` on `br create`. The `Labels` field already exists on `Op` (used on close ops); cleanup is the first create-class user. |
+| `deps`            | one `bead` ref to the removed node's old bead, edge type `blocks` — lineage                 |
+| `priority`        | `3`, the fallback                                                                           |
+| `title`           | the action's reason verbatim (e.g. `"Code cleanup: m/X"`) — NOT `"<module>: <node>"`         |
+| `labels`          | `["spex:cleanup"]` — a cleanup create is the only create-class op that carries labels, so the adapter can stamp the discriminator label on the bead as it creates it. Close ops carry labels too; conventional creates do not. |
 | `body`            | empty                                                                                       |
 
-Modify-pair create ops (those with `OldBeadID != ""` but NOT cleanup) keep the conventional shape; only `idempotency.label` changes, reused from the existing record's id rather than the cursor.
+Modify-pair creates — a create paired with the close of the bead it replaces, with no cleanup reason — keep the conventional shape, and only their `idempotency.label` differs: it is reused from the existing record's id rather than drawn from the cursor. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
 
 ## Op Shape
 
 ```json
 {
-  "op_id": "op-0001",
+  "op_id": "op-0004",
   "type": "create",
   "spec_node_kind": "component",
   "spec_node_id": "7f06f7d80e94",
   "idempotency": { "label": "spex:142" },
-  "parent": { "ref": "op", "op_id": "op-0000" },
+  "parent": { "ref": "op", "op_id": "op-0001" },
   "deps": [
     { "ref": "bead", "bead_id": "spexmachina-ab1" },
     { "ref": "op", "op_id": "op-0003" }
@@ -114,17 +104,40 @@ Close ops omit `deps`/`parent` and add `target` + `labels`:
 }
 ```
 
+## Title and body
+
+Every create op carries a title the adapter files as the bead's title without editing it:
+
+| Create for | Title |
+|------------|-------|
+| a component | `<module>: <component name>` |
+| a data_flow | `<module>: data_flow <flow name>` |
+| a multi-component test section | `<module>: test <test name>` |
+| the proposal epic | `Proposal: <proposal ref>` |
+
+A cleanup create is the one exception and takes its reason verbatim instead, per "Cleanup op shape" above.
+
+The body is the spec context a reader of the bead needs and nothing beyond it: the repo-relative path of the node's own content leaf, and the path of the `module.json` that declares it. A node with no content leaf on disk — the proposal epic — gets an empty body, and so does every cleanup create. The body is markdown; the adapter passes it through to the tracker's description field unchanged.
+
 ## Canonical Output
 
 - Field order inside every op is fixed (op_id, type, spec_node_kind, spec_node_id, idempotency, parent, deps, priority, title, body / target, labels, reason).
 - `ops` array preserves the order produced by TopologicalSorter — never re-sorted at write time.
+- Op ids are `op-<n>`, numbered from 1 in that order — the creates first, then one per close — and zero-padded to the digit width of the changeset's total op count. Nine ops number `op-1` through `op-9`; forty number `op-01` through `op-40`; a changeset reaching four digits numbers `op-0001` upward. The width is computed here, over creates and closes together — TopologicalSorter is handed the creates alone and so cannot compute it.
 - JSON is indented 2 spaces, LF-only newlines, no trailing whitespace.
+- Characters carrying an HTML meaning are written through as themselves: a title or body holding `<`, `>` or `&` appears as that character, not as a numeric escape.
+
+Together those five rules are [[240f59bf64f6|what makes two runs over identical inputs byte-identical]], which is what lets `changeset.json` be reviewed in a git diff rather than merely re-parsed.
 
 ## Error Handling
 
-- Any error from Resolver or TopologicalSorter aborts the build; no partial changeset is ever produced.
+- Any error from Resolver, TopologicalSorter or IdempotencyLabeler aborts the build; no partial changeset is ever produced.
 - Missing `git_head` is checked by EmitCommand before Builder runs.
 - An impact report with top-level errors is rejected upstream (EmitCommand); Builder assumes a clean report.
+
+Every error a sub-component raises reaches the caller carrying an
+`emit: build:` prefix, so the line `spex emit` prints on stderr names the
+build stage before it names the failure.
 
 ## Test surface
 

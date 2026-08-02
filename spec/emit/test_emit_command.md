@@ -35,7 +35,7 @@ End-to-end tests for the `spex emit` CLI subcommand — full process invocation 
 
 ### Malformed impact JSON surfaces a clear error
 
-- Impact input with syntax error. Expected: exit non-zero, stderr carries the JSON parse location. No changeset written.
+- Impact input with syntax error. Expected: exit non-zero, stderr carries the `decode impact:` context and the decoder's message. No changeset written.
 
 ### Impact report with diff errors refuses to proceed
 
@@ -55,7 +55,4 @@ End-to-end tests for the `spex emit` CLI subcommand — full process invocation 
 
 ## Fixtures
 
-- `cmd/spex/testdata/emit/impact.json`
-- `cmd/spex/testdata/emit/bead_map.json`
-- `cmd/spex/testdata/emit/expected_changeset.json`
-- `cmd/spex/testdata/emit/spec/` — minimal spec tree reachable from the above.
+In-code fixtures, no on-disk testdata: `setupEmitFixture` in `cmd/spex/emit_test.go` writes the spec tree and `.bead-map.json` into a `t.TempDir()` and returns the impact report as a string, which most scenarios pipe on stdin; the two `--impact` scenarios write it to a file first.

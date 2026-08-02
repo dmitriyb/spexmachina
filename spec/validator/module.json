@@ -1,6 +1,6 @@
 {
   "name": "validator",
-  "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
+  "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness.",
   "requirements": [
     {
       "id": "8599f07272ad",
@@ -27,28 +27,18 @@
       ]
     },
     {
-      "id": "a34f8aa47fad",
-      "preq_id": "d5a8407d38e1",
-      "type": "functional",
-      "title": "Orphan detection",
-      "description": "Every requirement is referenced by at least one component (implements). Every component is referenced by at least one impl_section (describes).",
-      "depends_on": [
-        "8599f07272ad"
-      ]
-    },
-    {
       "id": "707094f8868b",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "ID uniqueness",
-      "description": "All identity hash IDs are unique within their containing array (requirements, components, impl_sections, data_flows, test_sections, modules, milestones, sections, test_plan scenarios). Uniqueness is checked by string comparison against a set; collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
+      "description": "Every identity hash ID is unique within the array that contains it, in project.json and in each module.json — the apis array included. Uniqueness is checked by string comparison against a per-array set. Exactly one uniqueness rule is not per-array: an api name is the external surface string callers type, so two modules declaring the same name describe the same surface twice, and api names are therefore unique across every module.json in the project. A declared api or component name must also be recoverable — tokenizing it the way the removal-time corpus scan tokenizes prose must reproduce it exactly, in at most six words — because a name that is not its own tokenization is one no corpus phrase can ever match. Collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
       "id": "4b399b1c568f",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Cross-reference integrity",
-      "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, depends_on → requirements, requires_module → modules, groups → modules, preq_id → project requirements, modules (test_plan) → modules. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition.",
+      "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, provided_by → components, depends_on → requirements, requires_module → modules, preq_id → project requirements. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition.",
       "depends_on": [
         "707094f8868b"
       ]
@@ -79,14 +69,14 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Module name consistency",
-      "description": "Module names in project.json must match the corresponding module.json name field exactly. Lowercase convention enforced. Mismatches reported with both values and a suggested fix."
+      "description": "Module names in project.json must match the corresponding module.json name field exactly. Lowercase convention enforced. A mismatch is reported with both spellings, and carries the correction to make only when case is all that differs."
     },
     {
       "id": "530dc49d7135",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Test content path resolution",
-      "description": "All test content paths (test_*.md) in module.json test_sections and project.json test_plan scenarios resolve to existing markdown files.",
+      "description": "All test content paths (test_*.md) declared in module.json test_sections resolve to existing markdown files relative to the module directory. The project file declares no test nodes of its own, so every test path is reached through some module.",
       "depends_on": [
         "8599f07272ad"
       ]
@@ -117,7 +107,7 @@
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
       "title": "Validate sections and coupled modules",
-      "description": "Validate the sections array: unique IDs, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/\u003cmodule-path\u003e/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
+      "description": "Validate the sections array: unique IDs, unique names, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/\u003cmodule-path\u003e/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
     }
   ],
   "components": [
@@ -155,18 +145,9 @@
       ]
     },
     {
-      "id": "bbb1ae43d00d",
-      "name": "OrphanDetector",
-      "description": "Analyzes reference coverage to find requirements not implemented by any component and components not described by any impl_section.",
-      "content": "arch_orphan_detector.md",
-      "implements": [
-        "a34f8aa47fad"
-      ]
-    },
-    {
       "id": "00beeeda5ddd",
       "name": "IDValidator",
-      "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use string sets (map[string]bool) — no integer parsing or path decomposition.",
+      "description": "Checks identity-hash uniqueness within each array, validates all cross-reference targets exist as identity hashes elsewhere in the spec, enforces that every module requirement has a valid preq_id pointing at a project requirement, and checks that every project requirement has a priority field. Uniqueness and lookup use per-array sets of hash strings — no integer parsing or path decomposition.",
       "content": "arch_id_validator.md",
       "implements": [
         "707094f8868b",
@@ -196,7 +177,6 @@
         "651d5315eebf",
         "5dcca0dab9bd",
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd",
         "0f98ca780873",
         "88dd4060cb44",
@@ -245,107 +225,16 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "0d4a4c5bba70",
-      "name": "Schema validation implementation",
-      "content": "impl_schema_validation.md",
-      "describes": [
-        "651d5315eebf"
-      ]
-    },
-    {
-      "id": "28073fc9a227",
-      "name": "Content resolution implementation",
-      "content": "impl_content_resolution.md",
-      "describes": [
-        "5dcca0dab9bd"
-      ]
-    },
-    {
-      "id": "bffcf9735942",
-      "name": "Cycle detection algorithm",
-      "content": "impl_cycle_detection.md",
-      "describes": [
-        "c6c770a59d68"
-      ]
-    },
-    {
-      "id": "9843e4075916",
-      "name": "Orphan detection implementation",
-      "content": "impl_orphan_detection.md",
-      "describes": [
-        "bbb1ae43d00d"
-      ]
-    },
-    {
-      "id": "c4067e692e75",
-      "name": "ID and reference validation",
-      "content": "impl_id_validation.md",
-      "describes": [
-        "00beeeda5ddd"
-      ]
-    },
-    {
-      "id": "5e8c4edcace3",
-      "name": "Error aggregation and output",
-      "content": "impl_error_output.md",
-      "describes": [
-        "0f98ca780873"
-      ]
-    },
-    {
-      "id": "d11f203610f8",
-      "name": "Validate command implementation",
-      "content": "impl_validate_command.md",
-      "describes": [
-        "59235a75aa44"
-      ]
-    },
-    {
-      "id": "52f8fd5f7a16",
-      "name": "Name consistency check implementation",
-      "content": "impl_name_consistency.md",
-      "describes": [
-        "88dd4060cb44"
-      ]
-    },
-    {
-      "id": "d0ec7a65a5fe",
-      "name": "Test coverage check implementation",
-      "content": "impl_test_coverage.md",
-      "describes": [
-        "ed7a40b68995"
-      ]
-    },
-    {
-      "id": "9f6e88d4489a",
-      "name": "Requirement coverage check implementation",
-      "content": "impl_requirement_coverage.md",
-      "describes": [
-        "c7d0282b0e05"
-      ]
-    },
-    {
-      "id": "ad3347ae585c",
-      "name": "Coupled section validation implementation",
-      "content": "impl_coupled_section_validation.md",
-      "describes": [
-        "e36112523589"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "832e170fa3c0",
       "name": "Validation pipeline",
-      "description": "Spec directory flows through schema check, content check, DAG check, orphan check, and ID check. All errors are aggregated into a single structured report.",
+      "description": "Spec directory flows through ten checks in a fixed order: schema, content, link, id, id_derivation, dag, name_consistency, test_coverage, requirement_coverage, coupled_section. No check short-circuits on entries from an earlier one. ErrorReporter aggregates every entry into a single structured report, sorted by path.",
       "content": "flow_validation_pipeline.md",
       "uses": [
         "651d5315eebf",
         "5dcca0dab9bd",
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd",
         "0f98ca780873",
         "88dd4060cb44",
@@ -371,7 +260,6 @@
       "content": "test_graph_structure.md",
       "describes": [
         "c6c770a59d68",
-        "bbb1ae43d00d",
         "00beeeda5ddd"
       ]
     },
@@ -401,6 +289,17 @@
       "describes": [
         "e36112523589"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "528f91e5fb7d",
+      "name": "spex validate",
+      "description": "Validate spec directory structure",
+      "provided_by": [
+        "59235a75aa44"
+      ],
+      "group": "cli"
     }
   ]
 }

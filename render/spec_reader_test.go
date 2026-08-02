@@ -31,9 +31,6 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"modules": [
 			{"id": "111111111111", "name": "alpha", "path": "alpha", "description": "Alpha module"},
 			{"id": "222222222222", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["111111111111"]}
-		],
-		"milestones": [
-			{"id": "ccbbaa998877", "title": "MVP", "description": "First release", "groups": ["111111111111", "222222222222"]}
 		]
 	}`
 	writeFile(t, dir, "project.json", proj)
@@ -52,8 +49,8 @@ func setupMultiModuleSpec(t *testing.T) string {
 			{"id": "aabbccddeeff", "name": "Parser", "description": "Parses input into AST.", "content": "arch_parser.md", "implements": ["aabbccddeeff"], "uses": []},
 			{"id": "ffeeddccbbaa", "name": "Builder", "description": "Builds output from AST.", "content": "arch_builder.md", "implements": ["ffeeddccbbaa"], "uses": ["aabbccddeeff"]}
 		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Parsing Implementation", "content": "impl_parsing.md", "describes": ["aabbccddeeff"]}
+		"test_sections": [
+			{"id": "aabbccddeeff", "name": "Parsing tests", "content": "test_parsing.md", "describes": ["aabbccddeeff"]}
 		],
 		"data_flows": [
 			{"id": "aabbccddeeff", "name": "Build Pipeline", "description": "Parse then build.", "content": "flow_build_pipeline.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
@@ -62,7 +59,7 @@ func setupMultiModuleSpec(t *testing.T) string {
 	writeFile(t, alphaDir, "module.json", alphaMod)
 	writeFile(t, alphaDir, "arch_parser.md", "# Parser\n\nParses input into AST.\n")
 	writeFile(t, alphaDir, "arch_builder.md", "# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first.\n")
-	writeFile(t, alphaDir, "impl_parsing.md", "# Parsing Implementation\n\nUse recursive descent.\n")
+	writeFile(t, alphaDir, "test_parsing.md", "# Parsing tests\n\nCover recursive descent.\n")
 	writeFile(t, alphaDir, "flow_build_pipeline.md", "# Build Pipeline\n\nParse then build.\n")
 
 	// Beta module
@@ -77,13 +74,13 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"components": [
 			{"id": "aabbccddeeff", "name": "Consumer", "description": "Consumes built output.", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
 		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Consumption Implementation", "content": "impl_consumption.md", "describes": ["aabbccddeeff"]}
+		"test_sections": [
+			{"id": "aabbccddeeff", "name": "Consumption tests", "content": "test_consumption.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeFile(t, betaDir, "module.json", betaMod)
 	writeFile(t, betaDir, "arch_consumer.md", "# Consumer\n\nConsumes built output.\n")
-	writeFile(t, betaDir, "impl_consumption.md", "# Consumption Implementation\n\nConsume the output.\n")
+	writeFile(t, betaDir, "test_consumption.md", "# Consumption tests\n\nCover the output.\n")
 
 	return dir
 }
@@ -132,7 +129,7 @@ func TestFR1_S2_ContentMapPopulated(t *testing.T) {
 		t.Fatalf("want 4 content entries for alpha, got %d", len(alpha.Content))
 	}
 
-	for _, key := range []string{"arch_parser.md", "arch_builder.md", "impl_parsing.md", "flow_build_pipeline.md"} {
+	for _, key := range []string{"arch_parser.md", "arch_builder.md", "test_parsing.md", "flow_build_pipeline.md"} {
 		if _, ok := alpha.Content[key]; !ok {
 			t.Fatalf("missing content key %q", key)
 		}
@@ -172,8 +169,8 @@ func TestFR1_S3_MultiModule(t *testing.T) {
 	}
 }
 
-// S4: Project-level requirements and milestones preserved
-func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
+// S4: Project-level requirements preserved
+func TestFR1_S4_ProjectRequirements(t *testing.T) {
 	dir := setupMultiModuleSpec(t)
 
 	graph, err := ReadSpec(dir)
@@ -185,12 +182,6 @@ func TestFR1_S4_ProjectRequirementsAndMilestones(t *testing.T) {
 		t.Fatalf("want 3 project requirements, got %d", len(graph.Project.Requirements))
 	}
 
-	if len(graph.Project.Milestones) != 1 {
-		t.Fatalf("want 1 milestone, got %d", len(graph.Project.Milestones))
-	}
-	if len(graph.Project.Milestones[0].Groups) != 2 {
-		t.Fatalf("want 2 groups in milestone, got %d", len(graph.Project.Milestones[0].Groups))
-	}
 }
 
 // S5: All module-level edge types preserved
@@ -212,8 +203,8 @@ func TestFR1_S5_EdgeTypesPreserved(t *testing.T) {
 		t.Fatalf("Builder should use [aabbccddeeff], got %v", alpha.Components[1].Uses)
 	}
 	// Impl describes
-	if len(alpha.ImplSections[0].Describes) != 1 || alpha.ImplSections[0].Describes[0] != "aabbccddeeff" {
-		t.Fatalf("ImplSection should describe [aabbccddeeff], got %v", alpha.ImplSections[0].Describes)
+	if len(alpha.TestSections[0].Describes) != 1 || alpha.TestSections[0].Describes[0] != "aabbccddeeff" {
+		t.Fatalf("TestSection should describe [aabbccddeeff], got %v", alpha.TestSections[0].Describes)
 	}
 	// DataFlow uses
 	if len(alpha.DataFlows[0].Uses) != 2 {
@@ -457,7 +448,7 @@ func TestFR1_E8_ModuleWithNoContent(t *testing.T) {
 	writeFile(t, modDir, "module.json", `{
 		"name": "m",
 		"components": [{"id": "aabbccddeeff", "name": "C"}],
-		"impl_sections": [{"id": "aabbccddeeff", "name": "I"}]
+		"test_sections": [{"id": "aabbccddeeff", "name": "I"}]
 	}`)
 
 	graph, err := ReadSpec(dir)

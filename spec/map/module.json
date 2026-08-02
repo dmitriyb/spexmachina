@@ -1,6 +1,6 @@
 {
   "name": "map",
-  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs. Provides CRUD operations, context resolution, and CLI query interface.",
+  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
   "requirements": [
     {
       "id": "934d627f0e90",
@@ -14,7 +14,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Query mappings via CLI",
-      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context."
+      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context. All four invocations are declared as api nodes — the parent `spex map` and its three children — and each names MapCommand in provided_by alongside the worker it drives: MappingStore for get and list, ContextResolver for context. A declared name carries no argument placeholder: the api is `spex map get`, not `spex map get \u003crecord-id\u003e`, because the name must be the string a caller types and must survive corpus tokenization unchanged. Declaring the children alongside the parent is also what keeps the parent retirable — the removal-time name check discards hits that a longer live name already covers, so the mentions of `spex map` that belong to `spex map get`, `spex map list` or `spex map context` are never counted against the bare parent."
     },
     {
       "id": "4aee62bd3c15",
@@ -28,7 +28,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Resolve full spec context from record",
-      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), impl_sections whose describes array contains the component ID, test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
+      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
     }
   ],
   "components": [
@@ -58,7 +58,7 @@
     {
       "id": "6b79188dff4c",
       "name": "ContextResolver",
-      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: arch, impl_sections, test_sections, and data_flows. Looks up the component by matching `record.SpecNodeID` (an identity hash) against component IDs in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
+      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: the arch file, the test_sections and data_flows that name it, and the module file itself. Looks up the component by matching the record's spec_node_id (an identity hash) against the ids declared in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [
         "40a3d3155131"
@@ -68,45 +68,11 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "12e88095cc9d",
-      "name": "Mapping file format",
-      "content": "impl_mapping_format.md",
-      "describes": [
-        "205e67ca4aad"
-      ]
-    },
-    {
-      "id": "a19bedd79ef6",
-      "name": "CRUD operations",
-      "content": "impl_crud_operations.md",
-      "describes": [
-        "205e67ca4aad"
-      ]
-    },
-    {
-      "id": "5c84dc2bdfc3",
-      "name": "Map command implementation",
-      "content": "impl_map_command.md",
-      "describes": [
-        "08909d62930b"
-      ]
-    },
-    {
-      "id": "bb6031b762aa",
-      "name": "Context resolution implementation",
-      "content": "impl_context_resolution.md",
-      "describes": [
-        "6b79188dff4c"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "When Apply creates a bead, it calls MappingStore to create a mapping record. The record ID is stored as the bead label. Skills query mappings via MapCommand.",
+      "description": "How a record id travels from emit to the tracker and back. Emit reads MappingStore to stamp each create op with a spex:<record-id> idempotency label, the adapter applies that label to the bead it creates, and ingest materialises the mapping record at exactly that id from the changeset and the receipts. Skills query mappings via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",
@@ -138,6 +104,47 @@
       "describes": [
         "6b79188dff4c"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "1f1b7fdacbf3",
+      "name": "spex map",
+      "description": "Manage bead mapping records",
+      "provided_by": [
+        "08909d62930b"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "38ddf587012f",
+      "name": "spex map get",
+      "description": "Get a mapping record by ID",
+      "provided_by": [
+        "08909d62930b",
+        "205e67ca4aad"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "394ec2c8d669",
+      "name": "spex map list",
+      "description": "List all mapping records",
+      "provided_by": [
+        "08909d62930b",
+        "205e67ca4aad"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "3c8a43221ed2",
+      "name": "spex map context",
+      "description": "Resolve full spec context for a mapping record",
+      "provided_by": [
+        "08909d62930b",
+        "6b79188dff4c"
+      ],
+      "group": "cli"
     }
   ]
 }

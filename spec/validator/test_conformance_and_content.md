@@ -4,7 +4,7 @@ Integration and acceptance test scenarios for SchemaChecker (component 1) and Co
 
 ## Setup
 
-All scenarios operate on a temporary spec directory created per test. The fixture builder creates a valid baseline spec (a `project.json` referencing one module with a `module.json` and its content files), then each scenario introduces a specific mutation.
+Each scenario reads one checked-in fixture directory under `validator/testdata/`. A fixture is a complete spec — `project.json`, its module directories, its content files — already carrying the mutation or mutations the scenarios that read it name. Fixtures are shared where scenarios agree (`content_valid` serves S7, S14 and the test_section variant).
 
 ### Fixture Structure
 
@@ -12,17 +12,17 @@ All scenarios operate on a temporary spec directory created per test. The fixtur
 tmp/spec/
   project.json                  # valid project referencing module "alpha"
   alpha/
-    module.json                 # valid module with 1 requirement, 1 component, 1 impl_section, 1 test_section
+    module.json                 # valid module with 1 requirement, 1 component, 1 data_flow, 1 test_section
     arch_widget.md              # component content
-    impl_widget_logic.md        # impl_section content
+    flow_widget_data.md         # data_flow content
     test_widget_behavior.md     # test_section content
 ```
 
 ### Shared Assertions
 
-- Every scenario asserts the exact number of `ValidationError` values returned.
 - Every scenario asserts the `check` field is `"schema"` or `"content"` as appropriate.
-- Every scenario asserts the `path` field identifies the offending file and JSON location.
+- Scenarios whose fixture has a closed error set assert the exact count; the rest assert that a matching error is present among those returned.
+- `path` on a content error is the declaring node — `<module>/module.json:/<kind>s/<node name>/content` — and on a schema error is `<file>` or `<file>:<JSON pointer>`. Scenarios that assert it name the expected value.
 
 ---
 
@@ -72,53 +72,53 @@ tmp/spec/
 ### S7: All content paths resolve successfully
 
 **Given** the baseline fixture where every `content` field in `module.json` points to an existing `.md` file.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** it returns an empty error slice.
 
 ### S8: Missing component content file
 
 **Given** `alpha/module.json` references `arch_widget.md` but the file is deleted from disk.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** it returns one error with:
 - `check`: `"content"`
-- `path`: `"alpha/arch_widget.md"`
-- `message` containing `"not found"` or `"does not exist"`
+- `path`: `"alpha/module.json:/components/<component name>/content"` — the declaring node, not the missing file
+- `message`: `"content file not found: arch_widget.md"`
 
-### S9: Missing impl_section content file
+### S9: Missing data_flow content file
 
-**Given** `impl_widget_logic.md` is deleted.
-**When** `CheckContentPaths(specDir, project)` is called.
-**Then** one error referencing the impl_section's content path.
+**Given** `flow_widget_data.md` is deleted.
+**When** `CheckContentPaths(specDir)` is called.
+**Then** one error referencing the data_flow's content path.
 
 ### S10: Missing test_section content file (test_*.md)
 
 **Given** `alpha/module.json` has a `test_sections` entry with `"content": "test_widget_behavior.md"` and that file is deleted.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** one error referencing the test_section content path `"alpha/test_widget_behavior.md"`.
-**Rationale** Validates that ContentResolver was updated to walk `test_sections` (requirement 11).
+**Rationale** Validates that ContentResolver was updated to walk `test_sections` (requirement 10).
 
 ### S11: Content path with path traversal (`..`)
 
 **Given** `alpha/module.json` has a component with `"content": "../escape.md"`.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** one error flagging the path traversal as invalid, regardless of whether `../escape.md` exists.
 
 ### S12: Content path with absolute path
 
 **Given** `alpha/module.json` has a component with `"content": "/etc/passwd"`.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** one error flagging the absolute path as invalid.
 
 ### S13: Multiple missing content paths across sections
 
-**Given** `alpha/module.json` references three content files: one in `components`, one in `impl_sections`, and one in `test_sections`. All three files are missing.
-**When** `CheckContentPaths(specDir, project)` is called.
+**Given** `alpha/module.json` references three content files: one in `components`, one in `data_flows`, and one in `test_sections`. All three files are missing.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** exactly three errors, one per missing file, each with the correct `path` identifying which section referenced it.
 
 ### S14: Empty content field is not an error
 
 **Given** `alpha/module.json` has a component with `"content": ""`.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** zero errors for that component (empty content is optional per schema).
 
 ### S15: Schema and content checks run on multiple modules
@@ -152,17 +152,17 @@ tmp/spec/
 ### E4: Content file exists but is empty
 
 **Given** `arch_widget.md` exists but has zero bytes.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** zero content-resolution errors. ContentResolver only checks existence, not content.
 
 ### E5: data_flow content path also checked
 
 **Given** `alpha/module.json` has a `data_flows` entry with `"content": "flow_missing.md"` and that file does not exist.
-**When** `CheckContentPaths(specDir, project)` is called.
-**Then** one error referencing `"alpha/flow_missing.md"`. ContentResolver must walk `data_flows` content paths in addition to components, impl_sections, and test_sections.
+**When** `CheckContentPaths(specDir)` is called.
+**Then** one error referencing `"alpha/flow_missing.md"`. ContentResolver must walk `data_flows` content paths in addition to components and test_sections.
 
 ### E6: Unicode in content file names
 
 **Given** `alpha/module.json` has a component with `"content": "arch_widget_\u00fc.md"` and the file exists on disk with that name.
-**When** `CheckContentPaths(specDir, project)` is called.
+**When** `CheckContentPaths(specDir)` is called.
 **Then** zero errors. Path resolution handles UTF-8 file names correctly.

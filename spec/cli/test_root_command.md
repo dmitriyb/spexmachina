@@ -12,7 +12,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 1. No arguments prints help
 
 **Input**: `spex` (no args)
-**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (validate, merkle, impact, apply, proposal, render, version, completion).
+**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, impact, map, register, log, template, version, render, emit, ingest), plus cobra's own `completion` and `help`.
 
 ### 2. --help flag prints help
 
@@ -22,7 +22,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 3. Unknown subcommand suggests alternatives
 
 **Input**: `spex valdate` (typo)
-**Expected**: Exit 1. Stderr contains "unknown command" and "Did you mean" with "validate" as a suggestion.
+**Expected**: Exit 1. Stderr contains "unknown command". The "Did you mean" suggestion is cobra's and is not asserted by any test.
 
 ### 4. Global --spec-dir flag is inherited
 
@@ -32,7 +32,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 5. All subcommands registered
 
 **Input**: `spex --help`
-**Expected**: Output lists all expected subcommands. Verify by checking that each of `validate`, `merkle`, `impact`, `apply`, `proposal`, `render`, `version`, `completion` appears in the output.
+**Expected**: Output lists all expected subcommands. No test executes this against the real registration list in `cmd/spex/main.go` — `cli/root_test.go` substitutes dummy subcommands and asserts only that an "Available Commands:" block is printed.
 
 ### 6. Subcommand --help works
 

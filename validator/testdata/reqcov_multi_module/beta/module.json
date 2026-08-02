@@ -8,15 +8,6 @@
       "name": "CompB"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Impl B"
-    }
-  ],
   "name": "beta",
   "requirements": [
     {

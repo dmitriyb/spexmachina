@@ -13,6 +13,7 @@ func newHashIDCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "hash-id",
 		Short: "Compute identity hash for a spec node",
+		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			parts, err := buildIdentityParts(module, nodeType, name)
 			if err != nil {
@@ -24,7 +25,7 @@ func newHashIDCmd() *cobra.Command {
 	}
 
 	cmd.Flags().StringVar(&module, "module", "", "Module name (required for module-scoped node types)")
-	cmd.Flags().StringVar(&nodeType, "type", "", "Node type: requirement, component, impl_section, data_flow, test_section, module, milestone, scenario")
+	cmd.Flags().StringVar(&nodeType, "type", "", "Node type: requirement, component, data_flow, test_section, api, module")
 	cmd.Flags().StringVar(&name, "name", "", "Node name or title")
 	_ = cmd.MarkFlagRequired("type")
 	_ = cmd.MarkFlagRequired("name")
@@ -36,21 +37,17 @@ func buildIdentityParts(module, nodeType, name string) ([]string, error) {
 	switch nodeType {
 	case "module":
 		return []string{"module", name}, nil
-	case "milestone":
-		return []string{"milestone", name}, nil
-	case "scenario":
-		return []string{"test_plan", "scenario", name}, nil
 	case "requirement":
 		if module == "" {
 			return []string{"project", "requirement", name}, nil
 		}
 		return []string{module, "requirement", name}, nil
-	case "component", "impl_section", "data_flow", "test_section":
+	case "component", "data_flow", "test_section", "api":
 		if module == "" {
 			return nil, fmt.Errorf("hash-id: --module is required for type %q", nodeType)
 		}
 		return []string{module, nodeType, name}, nil
 	default:
-		return nil, fmt.Errorf("hash-id: unknown type %q; valid types: requirement, component, impl_section, data_flow, test_section, module, milestone, scenario", nodeType)
+		return nil, fmt.Errorf("hash-id: unknown type %q; valid types: requirement, component, data_flow, test_section, api, module", nodeType)
 	}
 }

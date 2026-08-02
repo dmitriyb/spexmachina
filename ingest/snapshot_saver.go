@@ -1,7 +1,6 @@
 package ingest
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -65,12 +64,10 @@ func (s *Saver) Save(status string) (bool, error) {
 // destination untouched; the temp file is best-effort cleaned up on
 // every failure path so a poisoned .tmp does not accumulate.
 func writeAtomic(path string, tree *merkle.Node, createdAt time.Time) error {
-	snap := buildSnapshot(tree, createdAt)
-	data, err := json.MarshalIndent(snap, "", "  ")
+	data, err := merkle.EncodeSnapshot(tree, createdAt)
 	if err != nil {
 		return err
 	}
-	data = append(data, '\n')
 
 	tmp := path + ".tmp"
 	f, err := os.Create(tmp)
@@ -100,35 +97,4 @@ func writeAtomic(path string, tree *merkle.Node, createdAt time.Time) error {
 	}
 	cleanup = false
 	return nil
-}
-
-// buildSnapshot mirrors merkle.Save's serialization shape so the file
-// stays compatible with merkle.Load and downstream diff tooling. The
-// flat-map representation is the canonical on-disk form per
-// snapshot_store.go.
-func buildSnapshot(tree *merkle.Node, createdAt time.Time) *merkle.Snapshot {
-	snap := &merkle.Snapshot{
-		RootHash:  tree.Hash,
-		RootKey:   tree.Key,
-		CreatedAt: createdAt,
-		Nodes:     map[string]*merkle.SnapshotNode{},
-	}
-	flatten(snap.Nodes, tree)
-	return snap
-}
-
-func flatten(nodes map[string]*merkle.SnapshotNode, n *merkle.Node) {
-	sn := &merkle.SnapshotNode{
-		Hash:     n.Hash,
-		Type:     n.Type,
-		NodeType: n.NodeType,
-		Module:   n.Module,
-	}
-	for _, child := range n.Children {
-		sn.Children = append(sn.Children, child.Key)
-	}
-	nodes[n.Key] = sn
-	for _, child := range n.Children {
-		flatten(nodes, child)
-	}
 }

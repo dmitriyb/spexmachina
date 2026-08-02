@@ -1,0 +1,35 @@
+{
+  "apis": [
+    {
+      "id": "0000000000a6",
+      "name": "spex parse"
+    }
+  ],
+  "components": [
+    {
+      "id": "0000000000a2",
+      "name": "Parser"
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "0000000000a4",
+      "name": "Ingest"
+    }
+  ],
+  "name": "core",
+  "requirements": [
+    {
+      "id": "0000000000a1",
+      "preq_id": "0000000000f1",
+      "title": "Feat A",
+      "type": "functional"
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "0000000000a5",
+      "name": "Parser tests"
+    }
+  ]
+}

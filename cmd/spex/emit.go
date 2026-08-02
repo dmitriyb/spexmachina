@@ -36,6 +36,7 @@ Inputs:
 
 Outputs:
   --out <file>      changeset JSON (default: stdout)`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if proposal == "" {
 				return validationErr(fmt.Errorf("emit: --proposal is required"))
@@ -250,9 +251,6 @@ func newEmitSpecGraph(specDir string) (*emitSpecGraph, error) {
 		for _, c := range ms.Components {
 			g.components[c.ID] = emit.Component{Implements: c.Implements}
 			addPath(c.ID, c.Content)
-		}
-		for _, s := range ms.ImplSections {
-			addPath(s.ID, s.Content)
 		}
 		for _, f := range ms.DataFlows {
 			addPath(f.ID, f.Content)

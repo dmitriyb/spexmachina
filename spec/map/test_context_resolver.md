@@ -2,18 +2,16 @@
 
 ## Setup
 
-All scenarios use a temporary spec directory with module.json files containing components, impl_sections, test_sections, and data_flows. Mapping records reference these components by identity hash.
+All scenarios use a temporary spec directory with module.json files containing components, test_sections, and data_flows. Mapping records reference these components by identity hash.
 
 **Fixture structure:**
 
 ```
 spec/
   alpha/
-    module.json       # 2 components, 2 impl_sections, 1 test_section, 1 data_flow
+    module.json       # 2 components, 1 test_section, 1 data_flow
     arch_parser.md
     arch_builder.md
-    impl_parsing.md
-    impl_building.md
     test_components.md
     flow_pipeline.md
 ```
@@ -21,8 +19,6 @@ spec/
 **Fixture module.json** (alpha):
 - Component `aabbccddeeff` (Parser): content "arch_parser.md"
 - Component `ffeeddccbbaa` (Builder): content "arch_builder.md"
-- impl_section `111111111111`: describes [`aabbccddeeff`], content "impl_parsing.md"
-- impl_section `222222222222`: describes [`ffeeddccbbaa`], content "impl_building.md"
 - test_section `333333333333`: describes [`aabbccddeeff`, `ffeeddccbbaa`], content "test_components.md"
 - data_flow `444444444444`: uses [`aabbccddeeff`, `ffeeddccbbaa`], content "flow_pipeline.md"
 
@@ -50,18 +46,17 @@ spec/
 
 **Then:**
 - `ContextResult.ArchFile` is `"spec/alpha/arch_parser.md"`
-- `ContextResult.ImplFiles` contains `"spec/alpha/impl_parsing.md"` (impl_section `111111111111` describes [`aabbccddeeff`])
 - `ContextResult.TestFiles` contains `"spec/alpha/test_components.md"` (test_section `333333333333` describes [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.FlowFiles` contains `"spec/alpha/flow_pipeline.md"` (data_flow `444444444444` uses [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.ModuleFile` is `"spec/alpha/module.json"`
 
-### S2: Component referenced by multiple impl_sections
+### S2: Component referenced by multiple test_sections
 
-**Given** a module where Parser (`aabbccddeeff`) is described by impl_sections `111111111111` and a third impl_section `333333333333`.
+**Given** a module where Parser (`aabbccddeeff`) is described by the fixture's test_section `333333333333` and by a second test_section `555555555555`, content "test_parser.md".
 
 **When** `ResolveContext(specDir, record)` is called.
 
-**Then:** `ContextResult.ImplFiles` contains both impl_section content paths in module declaration order.
+**Then:** `ContextResult.TestFiles` contains both test_section content paths in module declaration order.
 
 ### S3: Component with no data_flows
 
@@ -79,7 +74,6 @@ spec/
 
 **Then:**
 - `ArchFile` is the Builder's content file
-- `ImplFiles` contains `impl_building.md` path (impl_section `222222222222` describes [`ffeeddccbbaa`])
 - `TestFiles` contains `test_components.md` path (test_section `333333333333` describes [`aabbccddeeff`, `ffeeddccbbaa`] — shared)
 - `FlowFiles` contains `flow_pipeline.md` path (data_flow `444444444444` uses [`aabbccddeeff`, `ffeeddccbbaa`])
 
@@ -95,8 +89,8 @@ spec/
 
 ### E3: Component hash not found in any section
 
-**Given** a module where the identity hash in the record does not appear in any impl_section.describes, test_section.describes, or data_flow.uses.
+**Given** a module where the identity hash in the record does not appear in any test_section.describes or data_flow.uses.
 
 **When** `ResolveContext(specDir, record)` is called.
 
-**Then:** Returns a valid ContextResult with empty ImplFiles, TestFiles, and FlowFiles. ArchFile and ModuleFile are still populated. Not an error.
+**Then:** Returns a valid ContextResult with empty TestFiles and FlowFiles. ArchFile and ModuleFile are still populated. Not an error.

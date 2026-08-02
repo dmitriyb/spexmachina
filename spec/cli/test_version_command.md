@@ -41,5 +41,5 @@ Integration and acceptance tests for the VersionCommand component.
 
 ## Edge Cases
 
-- **Extra arguments**: `spex version foo` — should be ignored or produce a clean error (cobra default is to ignore extra args unless `Args: cobra.NoArgs` is set). If `NoArgs` is set, expect exit 1 with "unknown command" error.
-- **Version as flag**: `spex --version` — not supported (version is a subcommand, not a flag). Cobra prints help or "unknown flag" error.
+- **Extra arguments**: `spex version foo` — rejected, never silently ignored. Expect exit 1, nothing on stdout, and `unknown command "foo" for "spex version"` on stderr.
+- **Version as flag**: `spex --version` — not supported (version is a subcommand, not a flag). Expect exit 1, nothing on stdout, and `unknown flag: --version` on stderr.

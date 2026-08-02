@@ -11,14 +11,14 @@
       "name": "Parser"
     }
   ],
-  "impl_sections": [
+  "data_flows": [
     {
-      "content": "impl_setup.md",
-      "describes": [
-        "000000000001"
-      ],
+      "content": "flow_missing.md",
       "id": "000000000001",
-      "name": "Setup"
+      "name": "Ingest",
+      "uses": [
+        "000000000001"
+      ]
     }
   ],
   "name": "core"

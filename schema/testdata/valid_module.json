@@ -1,4 +1,15 @@
 {
+  "apis": [
+    {
+      "description": "Validate a spec directory.",
+      "group": "cli",
+      "id": "528f91e5fb7d",
+      "name": "spex validate",
+      "provided_by": [
+        "8a52d012caac"
+      ]
+    }
+  ],
   "components": [
     {
       "content": "arch_c1.md",
@@ -9,6 +20,7 @@
       "name": "C1"
     },
     {
+      "content": "arch_c2.md",
       "id": "8bb848f14941",
       "implements": [
         "72e08fd83c0a"
@@ -32,16 +44,6 @@
     }
   ],
   "description": "Full module fixture.",
-  "impl_sections": [
-    {
-      "content": "impl_c1.md",
-      "describes": [
-        "8a52d012caac"
-      ],
-      "id": "275282360e9a",
-      "name": "Impl1"
-    }
-  ],
   "name": "validator",
   "requirements": [
     {

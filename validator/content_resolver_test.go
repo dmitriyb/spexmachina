@@ -21,8 +21,8 @@ func TestREQ2_MissingContentFile(t *testing.T) {
 	if len(errs) == 0 {
 		t.Fatal("expected errors for missing content files, got none")
 	}
-	// arch_parser.md and impl_setup.md are missing
-	wantMissing := []string{"arch_parser.md", "impl_setup.md"}
+	// arch_parser.md and flow_missing.md are missing
+	wantMissing := []string{"arch_parser.md", "flow_missing.md"}
 	for _, want := range wantMissing {
 		found := false
 		for _, e := range errs {
@@ -132,12 +132,12 @@ func TestREQ11_MissingTestSectionContent(t *testing.T) {
 }
 
 func TestREQ11_MultiMissingAcrossSections(t *testing.T) {
-	// S13: component, impl_section, and test_section content all missing.
+	// S13: component, data_flow, and test_section content all missing.
 	errs := CheckContentPaths(filepath.Join("testdata", "content_multi_missing"))
 	if len(errs) != 3 {
-		t.Fatalf("expected exactly 3 errors (component + impl + test_section), got %d: %v", len(errs), errs)
+		t.Fatalf("expected exactly 3 errors (component + data_flow + test_section), got %d: %v", len(errs), errs)
 	}
-	wants := []string{"arch_widget.md", "impl_widget_logic.md", "test_widget_behavior.md"}
+	wants := []string{"arch_widget.md", "flow_widget_data.md", "test_widget_behavior.md"}
 	for _, want := range wants {
 		found := false
 		for _, e := range errs {

@@ -36,7 +36,7 @@ type depFixture struct {
 	CompC   string
 	// Matched-scenario components.
 	SCHK string // SchemaChecker (module validator)
-	HCMP string // Hash computation (module merkle, impl_section)
+	HUNK string // an unknown node type the gate must drop
 	NEW  string // new added component without a record
 	REG  string // proposal/Registrar
 }
@@ -65,7 +65,7 @@ func newDepFixture() depFixture {
 		CompC: schema.IdentityHash("modC", "component", "CompC"),
 
 		SCHK: schema.IdentityHash("validator", "component", "SchemaChecker"),
-		HCMP: schema.IdentityHash("merkle", "impl_section", "Hash computation"),
+		HUNK: schema.IdentityHash("merkle", "widget", "Hash computation"),
 		NEW:  schema.IdentityHash("validator", "component", "OrphanDetector"),
 		REG:  schema.IdentityHash("proposal", "component", "Registrar"),
 	}
@@ -88,12 +88,12 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 		},
 		{
 			Change: merkle.ClassifiedChange{
-				Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, OldHash: "ddd", NewHash: "eee", NodeType: "impl_section"},
+				Change: merkle.Change{Key: h.HUNK, Type: merkle.Modified, OldHash: "ddd", NewHash: "eee", NodeType: "widget"},
 				Impact: merkle.ImplOnly,
 				Module: "merkle",
 			},
 			Records: []mapping.Record{
-				{ID: 3, SpecNodeID: h.HCMP, BeadID: "spex-003", Module: "merkle", Component: "Hash computation", SpecHash: "ghi789"},
+				{ID: 3, SpecNodeID: h.HUNK, BeadID: "spex-003", Module: "merkle", Component: "Hash computation", SpecHash: "ghi789"},
 			},
 		},
 	}
@@ -383,19 +383,54 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 	}
 }
 
-// --- impl_section is always filtered; data_flow is not ---
+// --- an unrecognised node type is always filtered; data_flow is not ---
 
-func TestFR3_ClassifyActions_ImplSectionFiltered(t *testing.T) {
-	impl := schema.IdentityHash("render", "impl_section", "Section1")
+func TestFR3_ClassifyActions_UnknownNodeTypeFiltered(t *testing.T) {
+	impl := schema.IdentityHash("render", "widget", "Section1")
 	unmatched := []Unmatched{
 		{Change: merkle.ClassifiedChange{
-			Change: merkle.Change{Key: impl, Type: merkle.Added, NewHash: "aaa", NodeType: "impl_section"},
+			Change: merkle.Change{Key: impl, Type: merkle.Added, NewHash: "aaa", NodeType: "widget"},
 			Impact: merkle.ImplOnly, Module: "render",
 		}},
 	}
 	actions := ClassifyActions(nil, nil, unmatched, nil)
 	if len(actions) != 0 {
-		t.Errorf("want 0 actions for impl_section, got %d: %+v", len(actions), actions)
+		t.Errorf("want 0 actions for an unknown node type, got %d: %+v", len(actions), actions)
+	}
+}
+
+// --- api is always filtered ---
+
+// TestFR3_ClassifyActions_APIFiltered pins the absence of "api" from
+// beadProducingTypes. An api is a contract surface (merkle classifies it as
+// Contract, alongside data_flow) but it is deliberately not bead-producing:
+// the components named in its provided_by array carry the work, so a bead per
+// api would duplicate them. That invariant is expressed only by omission from
+// the beadProducingTypes map, so nothing but this test stops an "api": true
+// entry from being added there.
+func TestFR3_ClassifyActions_APIFiltered(t *testing.T) {
+	api := schema.IdentityHash("cli", "api", "spex diff")
+
+	tests := []struct {
+		name       string
+		changeType merkle.ChangeType
+	}{
+		{"added", merkle.Added},
+		{"modified", merkle.Modified},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			unmatched := []Unmatched{
+				{Change: merkle.ClassifiedChange{
+					Change: merkle.Change{Key: api, Type: tt.changeType, NewHash: "aaa", NodeType: "api"},
+					Impact: merkle.Contract, Module: "cli",
+				}},
+			}
+			actions := ClassifyActions(nil, nil, unmatched, nil)
+			if len(actions) != 0 {
+				t.Errorf("want 0 actions for api, got %d: %+v", len(actions), actions)
+			}
+		})
 	}
 }
 

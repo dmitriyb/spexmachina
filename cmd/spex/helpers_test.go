@@ -28,15 +28,11 @@ func setupTestSpec(t *testing.T) string {
 		t.Fatal(err)
 	}
 	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
-	impl1Hash := schema.IdentityHash("alpha", "impl_section", "Impl1")
 	test1Hash := schema.IdentityHash("alpha", "test_section", "Comp1 tests")
 	alphaMod := `{
 		"name": "alpha",
 		"components": [
 			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"}
-		],
-		"impl_sections": [
-			{"id": "` + impl1Hash + `", "name": "Impl1", "content": "impl_comp1.md"}
 		],
 		"test_sections": [
 			{"id": "` + test1Hash + `", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["` + comp1Hash + `"]}
@@ -44,7 +40,6 @@ func setupTestSpec(t *testing.T) string {
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
-	writeTestFile(t, alphaDir, "impl_comp1.md", "# Comp1 implementation\n")
 	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
 	return dir

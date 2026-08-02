@@ -1,23 +1,29 @@
 # DiffCommand
 
-CLI entry point for `spex diff`. Compares the current merkle tree against a stored snapshot, classifies impact, and runs change completeness validation.
+CLI entry point for [[d487fc9c4fa5|`spex diff`]]. It [[f223179a540a|compares the current merkle tree against the stored snapshot]], [[425146f32e96|classifies every change it finds by impact level]], and [[6f8284df92a2|checks that changed requirements brought their implementors' content along with them]]. It owns none of those three jobs: it parses the flags, wires the components that do own them into one pass, and turns what comes back into one report and one exit code.
 
 ## Responsibilities
 
-- Parse CLI flags: spec directory, snapshot path (optional, defaults to stored)
-- Wire SnapshotStore to load the previous snapshot
-- Wire DiffEngine to compare current vs stored trees
-- Wire ImpactClassifier to classify changes across four levels (`impl_only`, `contract`, `arch_impl`, `structural`)
-- Wire CompletenessChecker to validate that requirement changes are accompanied by component content changes
-- Output the diff report with changes and errors
+- Resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, defaults to `<spec-dir>/.snapshot.json`), bead-map path, output format
+- Build the current tree with TreeBuilder, and ask [[b2fcd9457a28|SnapshotStore]] for the previous one
+- Hand both trees to [[cb262b280963|DiffEngine]] and take back the list of changed leaves
+- Read the module identity hash → module name map off the tree TreeBuilder just built; without it the report would name each module by its identity hash instead
+- Hand that list and that map to [[f1a672216ce9|ImpactClassifier]] and take back the same list with a level on each entry (`impl_only`, `contract`, `arch_impl`, `structural`)
+- Hand the classified list to [[de3309dfbd3c|CompletenessChecker]] and collect the errors it reports
+- Run the removal-name sweep over the same classified list, and append what it finds to that error list, its disclosures to a separate notes list
+- Emit changes, errors and any notes together as one report, and let the errors decide the exit code
 
-The fourth impact level `contract` (new) appears on `data_flow` leaf changes. DiffCommand passes classified changes through unchanged; downstream consumers (impact module) are responsible for acting on the new level. Tests that assert impact strings must accept the expanded enum.
+The fourth impact level `contract` appears on `data_flow` and `api` leaf changes. DiffCommand passes classified changes through unchanged; downstream consumers (impact module) are responsible for acting on the level. Anything asserting impact strings must accept the full enum.
 
 ## Interface
 
 ```
-spex diff [dir] [--snapshot path] [--json]
+spex diff [--snapshot path] [--map path] [--json]
 ```
+
+The spec directory comes from the root command's persistent `--spec-dir`, not from a positional argument. `--snapshot` overrides where the previous snapshot is read from; left off, it is `<spec-dir>/.snapshot.json`.
+
+`--map` names the bead-map to read, defaulting to `.bead-map.json`. It is read and never written, and its absence is not an error — `spex diff` runs in trees that have never been ingested. It is a second identity-hash-to-name source for the removal checks: when a whole module is retired, the sweep first tries to recover the name from the spec corpus itself, and the module name the bead-map's component records still carry is what answers when that recovery comes up empty. `--json` selects the machine-readable report; without it the same content is printed as text.
 
 ## Output
 
@@ -38,15 +44,25 @@ JSON output includes both changes and errors. The `path` and `related` fields ca
 }
 ```
 
-CompletenessChecker findings are errors, not warnings. They live under the
-top-level `errors` array (never `warnings`) and the per-entry `type` is a
-specific error kind (e.g. `incomplete_change`, `orphan_implements`).
-Downstream pipeline steps (`spex impact`, `spex emit`) treat a non-empty
-`errors` array as a halt signal — the pipeline does not advance until
-errors clear.
+Two gates fill that array, and what either finds is an error, not a warning.
+Their findings live under the top-level `errors` array (never `warnings`) and
+the per-entry `type` says which gate raised it: `incomplete_change` from
+CompletenessChecker, and `surviving_name` from the removal-name sweep, raised
+when a node the diff reports as removed is still named somewhere in the spec
+corpus. Downstream pipeline steps (`spex impact`, `spex
+emit`) treat a non-empty `errors` array as a halt signal — the pipeline does
+not advance until errors clear.
+
+A run may also carry a `notes` array alongside those three keys. Notes are
+disclosures rather than violations — a removal that could not be checked, or
+hits discarded because a live node covers them — and the key is left out
+entirely when there are none, so a clean run emits exactly `changes`, `errors`
+and `summary`. Notes never gate anything: `errors` is the only array the exit
+code reads.
 
 Text output prints changes first, then errors (if any) under an `error(s):`
-heading and prefixes each line with `error:`. Both the text and the JSON
+heading with each line prefixed `error:`, then notes (if any) under a
+`note(s):` heading with each line prefixed `note:`. Both the text and the JSON
 representations call them errors, with no terminology drift between
 formats.
 

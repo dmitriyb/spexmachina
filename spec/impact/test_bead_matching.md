@@ -1,38 +1,41 @@
 # Bead Matching Tests
 
-Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (component 2). These tests verify that bead metadata is correctly read from the bead CLI and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
+Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (component 2). These tests verify that bead metadata is correctly read from the tracker listing the caller supplies as a file, never from a tracker command this binary runs, and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
 
 ## Setup
 
 All scenarios share a common fixture layout. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 
-- A set of mapping records linking identity hashes to bead IDs:
+- A bead-map document linking identity hashes to bead IDs. The mapping store schema-validates the file before parsing it, so the fixture is an object with `next_id` and `records`, and each record carries `bead_type`, `content_file` and `spec_hash` alongside the four fields the scenarios read. A bare array of records is refused with `map: schema validation …` and exit 1. `content_file` and `spec_hash` carry placeholders here, as the identity hashes do:
 
 ```json
-[
-  {"id": 1, "spec_node_id": "<SCHK_HASH>",  "bead_id": "spex-001", "module": "validator", "component": "SchemaChecker"},
-  {"id": 2, "spec_node_id": "<HASR_HASH>",  "bead_id": "spex-002", "module": "merkle",    "component": "Hasher"},
-  {"id": 3, "spec_node_id": "<HCMP_HASH>",  "bead_id": "spex-003", "module": "merkle",    "component": "Hash computation"}
-]
+{
+  "next_id": 4,
+  "records": [
+    {"id": 1, "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker",    "content_file": "<SCHK_FILE>", "spec_hash": "<SCHK_SPEC_SHA>"},
+    {"id": 2, "spec_node_id": "<HASR_HASH>", "bead_id": "spex-002", "bead_type": "task", "module": "merkle",    "component": "Hasher",           "content_file": "<HASR_FILE>", "spec_hash": "<HASR_SPEC_SHA>"},
+    {"id": 3, "spec_node_id": "<HTST_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hashing tests",    "content_file": "<HTST_FILE>", "spec_hash": "<HTST_SPEC_SHA>"}
+  ]
+}
 ```
 
 Where:
 - `SCHK_HASH = IdentityHash("validator", "component", "SchemaChecker")`
 - `HASR_HASH = IdentityHash("merkle", "component", "Hasher")`
-- `HCMP_HASH = IdentityHash("merkle", "impl_section", "Hash computation")`
+- `HTST_HASH = IdentityHash("merkle", "test_section", "Hashing tests")`
 
 - A merkle diff with classified changes (the `path` field is the same identity hash that appears in `spec_node_id`):
 
 ```json
 [
   {"path": "<SCHK_HASH>",  "type": "modified", "impact": "arch_impl", "module": "validator", "node_type": "component"},
-  {"path": "<HCMP_HASH>",  "type": "modified", "impact": "impl_only", "module": "merkle",    "node_type": "impl_section"},
+  {"path": "<HTST_HASH>",  "type": "modified", "impact": "impl_only", "module": "merkle",    "node_type": "test_section"},
   {"path": "<NEW_COMP>",   "type": "added",    "impact": "arch_impl", "module": "validator", "node_type": "component"},
   {"path": "<REMOVED>",    "type": "removed",  "impact": "arch_impl", "module": "merkle",    "node_type": "component"}
 ]
 ```
 
-The `node_type` field is now part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, ApplyCommand) read it from this field.
+The `node_type` field is now part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, and emit's ChangesetBuilder via the action's `NodeType`) read it from this field.
 
 ## Scenarios
 
@@ -42,13 +45,13 @@ Call the mapping store to list records. Assert the returned records contain the 
 
 ### S2: BeadReader returns empty slice when no records exist
 
-Empty mapping file. Assert an empty slice, not an error.
+A mapping file holding no records — a bead-map document whose `records` array is empty — and, separately, no file at the mapping path at all. Assert an empty slice rather than an error for each. A zero-byte file is a different case: it is not a bead-map document, and it is refused.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 
 Call `MatchNodes(changes, records)` with the fixture data. Expected:
 
-- **Matched (2 entries):** `SCHK_HASH` matches spex-001, `HCMP_HASH` matches spex-003
+- **Matched (2 entries):** `SCHK_HASH` matches spex-001, `HTST_HASH` matches spex-003
 - **Unmatched (1 entry):** `NEW_COMP` (added, no record)
 - **Orphaned:** none in this fixture (no removed node has a matching record)
 
@@ -58,7 +61,7 @@ Add a second record with `spec_node_id: SCHK_HASH`. Assert the match contains bo
 
 ### S5: NodeMatcher uses direct identity-hash comparison
 
-`SCHK_HASH` matches by exact string equality, not by parsing or rebuilding any path. Different identity hashes never match, even when they reference logically related nodes (e.g., a component and an impl_section in the same module). Two distinct spec nodes always have distinct identity hashes by construction.
+`SCHK_HASH` matches by exact string equality, not by parsing or rebuilding any path. Different identity hashes never match, even when they reference logically related nodes (e.g., a component and a test_section in the same module). Two distinct spec nodes always have distinct identity hashes by construction.
 
 ### S6: Structural changes produce zero matches
 

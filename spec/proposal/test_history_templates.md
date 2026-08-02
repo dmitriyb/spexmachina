@@ -6,7 +6,7 @@ Tests for the HistoryViewer (component 2) and TemplateProvider (component 3). Hi
 
 ### HistoryViewer setup
 
-Temporary directory with pre-populated proposals and a mock bead CLI:
+Temporary directory with pre-populated proposals. There is no mock bead CLI: `ShowHistory` takes parsed `[]BeadRecord` and starts no process (`proposal/history.go:71`).
 
 ```
 tmpdir/
@@ -17,22 +17,22 @@ tmpdir/
       2026-03-05-refactor-validator.md  # change proposal
 ```
 
-Mock `br list --json` output returns beads with `metadata.spec_proposal` fields:
+Bead records carry a `spec_proposal:<stem>` entry in their `labels` array:
 
 ```json
 [
-  {"id": "spexmachina-abc", "title": "ProjectSchema", "status": "done",
-   "metadata": {"spec_proposal": "2026-02-23-spex-machina.md", "module": "schema", "component": "ProjectSchema", "action": "created"}},
-  {"id": "spexmachina-def", "title": "SchemaChecker", "status": "done",
-   "metadata": {"spec_proposal": "2026-02-23-spex-machina.md", "module": "validator", "component": "SchemaChecker", "action": "created"}},
+  {"id": "spexmachina-abc", "title": "ProjectSchema", "status": "closed",
+   "labels": ["spec_proposal:2026-02-23-spex-machina"]},
+  {"id": "spexmachina-def", "title": "SchemaChecker", "status": "closed",
+   "labels": ["spec_proposal:2026-02-23-spex-machina"]},
   {"id": "spexmachina-ghi", "title": "CacheLayer", "status": "in_progress",
-   "metadata": {"spec_proposal": "2026-03-01-add-caching.md", "module": "merkle", "component": "CacheLayer", "action": "created"}},
-  {"id": "spexmachina-jkl", "title": "SnapshotStore", "status": "done",
-   "metadata": {"spec_proposal": "2026-03-01-add-caching.md", "module": "merkle", "component": "SnapshotStore", "action": "modified"}},
-  {"id": "spexmachina-mno", "title": "DagChecker", "status": "ready",
-   "metadata": {"spec_proposal": "2026-03-05-refactor-validator.md", "module": "validator", "component": "DagChecker", "action": "review"}},
-  {"id": "spexmachina-pqr", "title": "Unlinked task", "status": "ready",
-   "metadata": {}}
+   "labels": ["spec_proposal:2026-03-01-add-caching"]},
+  {"id": "spexmachina-jkl", "title": "SnapshotStore", "status": "closed",
+   "labels": ["spec_proposal:2026-03-01-add-caching"]},
+  {"id": "spexmachina-mno", "title": "DagChecker", "status": "open",
+   "labels": ["spec_proposal:2026-03-05-refactor-validator"]},
+  {"id": "spexmachina-pqr", "title": "Unlinked task", "status": "open",
+   "labels": []}
 ]
 ```
 
@@ -47,9 +47,9 @@ No filesystem setup needed. TemplateProvider writes to an `io.Writer` (a `bytes.
 #### S1: List all proposals in date order
 
 **Given** three proposals in `spec/proposals/` as described in setup.
-**When** `ShowHistory(ctx, "spec", &buf)` is called with default (human-readable) output.
+**When** `ShowHistory(beads)` is called on a viewer with `JSON: false`.
 **Then:**
-- Output lists proposals in filename order (which is chronological due to date prefix).
+- Output lists one entry per proposal named by a `spec_proposal:` label on those beads, in ascending stem order — chronological here because of the date prefix. A proposal with no labelled bead is not listed; the proposals directory is never scanned.
 - First entry: `2026-02-23-spex-machina.md`
 - Second entry: `2026-03-01-add-caching.md`
 - Third entry: `2026-03-05-refactor-validator.md`
@@ -57,88 +57,86 @@ No filesystem setup needed. TemplateProvider writes to an `io.Writer` (a `bytes.
 
 #### S2: Show linked bead actions per proposal
 
-**Given** the bead data from setup where two beads are tagged with `2026-02-23-spex-machina.md`.
-**When** `ShowHistory(ctx, "spec", &buf)` is called.
+**Given** the bead data from setup, where two beads carry `spec_proposal:2026-02-23-spex-machina`.
+**When** `ShowHistory(beads)` is called on a viewer with `JSON: false`.
 **Then** output for the first proposal includes:
 ```
 2026-02-23-spex-machina.md (project proposal)
-  Created: spexmachina-abc (schema: ProjectSchema)
-  Created: spexmachina-def (validator: SchemaChecker)
+  Closed: spexmachina-abc (closed)	ProjectSchema
+  Closed: spexmachina-def (closed)	SchemaChecker
 ```
-Each bead line shows the action (Created/Modified/Review), bead ID, module, and component.
+Each bead line is `"  %s: %s (%s)\t%s\n"` — action, bead ID, the bead's status in parentheses, then a tab and the bead's title as summary (`proposal/history.go:229-231`). Action is title-cased from `deriveAction`, which yields only `created` or `closed` (`:201-206`); there is no `Modified` or `Review`. Neither module nor component appears.
 
 #### S3: Proposal with no linked beads
 
-**Given** proposals directory contains `2026-03-08-future-idea.md` which has no matching beads in the `br list` output.
-**When** `ShowHistory(ctx, "spec", &buf)` is called.
+**Given** `2026-03-08-future-idea.md` exists under `spec/proposals/` and no supplied bead carries `spec_proposal:2026-03-08-future-idea`.
+**When** `ShowHistory(beads)` is called.
 **Then:**
-- The proposal appears in the listing.
-- It shows zero bead lines beneath it (just the proposal filename, no indented children).
+- The proposal does NOT appear: the listing is driven by beads' `spec_proposal:` labels, not by a scan of `spec/proposals/`.
 - No error is returned.
 
 #### S4: JSON output mode
 
 **Given** three proposals with linked beads as in setup.
 **When** `ShowHistory` is called with a JSON output flag.
-**Then** output is a valid JSON array:
+**Then** output is the envelope `{"proposals": [...]}`, each entry carrying `filename`, `title` and a `beads` array of `{id, status, action, summary}`:
 ```json
-[
-  {
-    "proposal": "2026-02-23-spex-machina.md",
-    "type": "project",
-    "date": "2026-02-23",
-    "beads": [
-      {"id": "spexmachina-abc", "action": "created", "module": "schema", "component": "ProjectSchema"},
-      {"id": "spexmachina-def", "action": "created", "module": "validator", "component": "SchemaChecker"}
-    ]
-  },
-  {
-    "proposal": "2026-03-01-add-caching.md",
-    "type": "change",
-    "date": "2026-03-01",
-    "beads": [
-      {"id": "spexmachina-ghi", "action": "created", "module": "merkle", "component": "CacheLayer"},
-      {"id": "spexmachina-jkl", "action": "modified", "module": "merkle", "component": "SnapshotStore"}
-    ]
-  },
-  {
-    "proposal": "2026-03-05-refactor-validator.md",
-    "type": "change",
-    "date": "2026-03-05",
-    "beads": [
-      {"id": "spexmachina-mno", "action": "review", "module": "validator", "component": "DagChecker"}
-    ]
-  }
-]
+{
+  "proposals": [
+    {
+      "filename": "2026-02-23-spex-machina.md",
+      "title": "Project Proposal: Spex Machina",
+      "beads": [
+        {"id": "spexmachina-abc", "status": "closed", "action": "closed", "summary": "ProjectSchema"},
+        {"id": "spexmachina-def", "status": "closed", "action": "closed", "summary": "SchemaChecker"}
+      ]
+    },
+    {
+      "filename": "2026-03-01-add-caching.md",
+      "title": "Change Proposal: Add caching",
+      "beads": [
+        {"id": "spexmachina-ghi", "status": "in_progress", "action": "created", "summary": "CacheLayer"},
+        {"id": "spexmachina-jkl", "status": "closed", "action": "closed", "summary": "SnapshotStore"}
+      ]
+    },
+    {
+      "filename": "2026-03-05-refactor-validator.md",
+      "title": "Change Proposal: Refactor validator",
+      "beads": [
+        {"id": "spexmachina-mno", "status": "open", "action": "created", "summary": "DagChecker"}
+      ]
+    }
+  ]
+}
 ```
 - JSON is parseable by `json.Unmarshal`.
-- Each proposal record includes `proposal`, `type`, `date`, and `beads` fields.
-- Beads without `spec_proposal` metadata (like `spexmachina-pqr`) do not appear in any proposal's bead list.
+- Each proposal record includes `filename`, `title` and `beads`; there is no `proposal`, `type` or `date` key, and a bead entry carries `id`, `status`, `action` and `summary`, not `module`/`component`.
+- `action` is derived from status and takes only two values — `closed` for a closed bead, `created` for anything else (`proposal/history.go:201-206`).
+- Groups come out in ascending stem order (`proposal/history.go:78`), and `title` is the proposal file's H1, empty when the file is missing.
+- Beads with no `spec_proposal:` label (like `spexmachina-pqr`) do not appear in any proposal's bead list.
 
-#### S5: Beads with no spec_proposal metadata are excluded
+#### S5: Beads with no spec_proposal label are excluded
 
-**Given** bead `spexmachina-pqr` has empty metadata (no `spec_proposal` field).
+**Given** bead `spexmachina-pqr` has an empty `labels` array (no `spec_proposal:` entry).
 **When** `ShowHistory` is called.
 **Then:**
 - `spexmachina-pqr` does not appear under any proposal.
-- No error is raised for beads without proposal metadata.
+- No error is raised for beads without a `spec_proposal:` label; `groupBeadsByProposal` skips them (`proposal/history.go:125-134`).
 
-#### S6: Empty proposals directory
+#### S6: No bead carries a spec_proposal label
 
-**Given** `spec/proposals/` exists but contains no `.md` files.
-**When** `ShowHistory(ctx, "spec", &buf)` is called.
+**Given** no supplied bead carries a `spec_proposal:` label.
+**When** `ShowHistory(beads)` is called.
 **Then:**
-- Output is empty (human-readable) or an empty JSON array `[]` (JSON mode).
+- Output is empty (human-readable) or `{"proposals": []}` (JSON mode).
 - Function returns nil error.
 
-#### S7: Bead CLI unavailable
+#### S7: No tracker subprocess is ever started
 
-**Given** the `br` binary is not on `$PATH` and no fallback is configured.
-**When** `ShowHistory(ctx, "spec", &buf)` is called.
+**Given** `$PATH` is emptied so any `exec.Command` would fail.
+**When** `ShowHistory(beads)` is called.
 **Then:**
-- Function returns an error wrapping the exec failure.
-- Error message indicates the bead CLI could not be executed.
-- Proposals are still listed (the filesystem scan succeeds), but bead linking fails.
+- Function returns nil and renders normally — `HistoryViewer` takes parsed `[]BeadRecord` and runs no external command.
 
 ### TemplateProvider Scenarios
 
@@ -207,7 +205,7 @@ Each bead line shows the action (Created/Modified/Review), bead ID, module, and 
 **Then:**
 - The file is still listed as a proposal.
 - The `date` field in JSON output is empty or derived from file modification time.
-- Bead matching still works using the full filename stem as the `spec_proposal` metadata value.
+- Bead matching still works using the full filename stem as the `spec_proposal:` label value; `firstProposalStem` also tolerates a trailing `.md` (`proposal/history.go:139-152`).
 
 ### E3: Bead CLI returns malformed JSON
 

@@ -2,43 +2,75 @@
 
 ## Data Flow
 
+```dot
+digraph proposal_lifecycle {
+    "authored proposal"       [style=dashed];
+    "24180f55c0b4"            [label="Registrar\n24180f55"];
+    "spec/proposals/<ref>.md" [style=dashed];
+    "spec change"             [style=dashed];
+    "impact report"           [style=dashed];
+    "changeset.json"          [style=dashed];
+    "receipts.json"           [style=dashed];
+    "tracker beads"           [style=dashed];
+    ".bead-map.json"          [style=dashed];
+    "spec/.snapshot.json"     [style=dashed];
+    "97f73ced5a02"            [label="HistoryViewer\n97f73ced"];
+
+    "authored proposal"       -> "24180f55c0b4"            [label="spex register"];
+    "24180f55c0b4"            -> "spec/proposals/<ref>.md" [label="validate sections, copy"];
+    "spec/proposals/<ref>.md" -> "spec change"             [label="/spec"];
+    "spec change"             -> "impact report"           [label="spex validate, diff, impact"];
+    "impact report"           -> "changeset.json"          [label="spex emit --proposal <ref>"];
+    "changeset.json"          -> "tracker beads"           [label="scripts/apply-br.sh"];
+    "changeset.json"          -> "receipts.json"           [label="scripts/apply-br.sh"];
+    "receipts.json"           -> ".bead-map.json"          [label="spex ingest"];
+    "receipts.json"           -> "spec/.snapshot.json"     [label="spex ingest"];
+    "tracker beads"           -> "97f73ced5a02"            [label="br list --json | spex log"];
+}
 ```
-proposal file (authored by human or LLM)
-     │
-     ▼
-┌────────────┐
-│ Registrar   │── validate sections, copy to spec/proposals/
-└──────┬─────┘
-       │
-       ▼
-  spec/proposals/YYYY-MM-DD-name.md
-       │
-       ▼  (user runs /spec with the proposal)
-  spec changes (project.json, module.json, *.md)
-       │
-       ▼  (user runs spex diff → spex impact)
-  impact report
-       │
-       ▼  (user runs spex apply with proposal ref)
-  bead actions + proposal tagging
-       │
-       ▼  (user runs spex log)
-┌───────────────┐
-│ HistoryViewer  │── show proposal → spec → bead audit trail
-└───────────────┘
-```
+
+Only the two solid nodes are spec nodes: [[24180f55c0b4|Registrar]] opens the lifecycle and
+[[97f73ced5a02|HistoryViewer]] closes it. Everything dashed sits outside this module — the proposal
+a human or an LLM authored, the spec files `/spec` edits (`project.json`, `module.json`, `*.md`),
+the reports and receipts the middle of the pipeline writes, and the beads themselves, which live in
+whatever tracker the user runs. Two of those artifacts carry more than their name says:
+`changeset.json` leads with the proposal-epic create op and follows it with the ordered bead ops,
+and `receipts.json` carries a bead id for every op the adapter actually executed. One step leaves
+two marks rather than one: `spex ingest` reconciles `.bead-map.json`, and on a run the adapter
+reported complete it also rebaselines `spec/.snapshot.json` — the baseline the next `spex diff`
+measures against, so a partial run deliberately leaves the old one standing.
+
+The closing edge is a pipe, not a file read. HistoryViewer never opens `.bead-map.json` or the
+snapshot: the beads reach it as JSON on stdin, read and parsed by the command that fronts it, which
+is why the tracker sits on that edge and the two files `spex ingest` wrote sit off to the side of
+it.
 
 ## Key Insight
 
-The proposal module is a bookend: registration happens before the spec change, history viewing happens after. The middle steps (spec authoring, diff, impact, apply) are handled by other modules. The proposal reference threads through the entire chain via bead metadata.
+The proposal module is a bookend: registration happens before the spec change,
+history viewing happens after. The middle steps — spec authoring, diff, impact,
+emit, adapter execution, ingest — are handled by other modules and by the
+adapter outside the binary. The proposal reference threads through the entire
+chain: `spex emit --proposal <ref>` stamps it on the changeset, the changeset's
+first op creates the proposal epic bead, and every other op in the batch is
+parented under that epic. That parentage is what HistoryViewer walks back.
 
 ## Traceability Chain
 
-```
-Conversation → Proposal → Spec Change → Merkle Diff → Impact Report → Bead Actions
-```
+Each step is derived from the one before it, and each derivation is recorded:
 
-Any point in this chain can be traced forward or backward. The proposal is the anchor point that explains "why" a change was made.
+1. A conversation produces a proposal.
+2. The proposal drives a spec change.
+3. The spec change produces a merkle diff.
+4. The diff produces an impact report.
+5. The impact report produces a changeset.
+6. The changeset, executed, produces receipts.
+7. The receipts produce beads and their bead-map records.
+
+Any point in this chain can be traced forward or backward. The proposal is the
+anchor point that explains "why" a change was made; the changeset and receipts
+are the durable record of "what was actually executed", so the trail survives
+even a partial adapter run.
 
 ## Data Shapes
 
@@ -63,19 +95,25 @@ Any point in this chain can be traced forward or backward. The proposal is the a
 ### Proposal reference (pipeline-wide contract)
 
 - string of the form `YYYY-MM-DD-name` (matches the filename stem)
-- Passed as a flag to `spex apply --proposal <ref>`
-- Used by BeadCreator as the proposal epic `--title` value
+- Passed as the required `--proposal <ref>` flag to `spex emit`, which copies it
+  into the changeset's top-level `proposal` field
+- Carried by the proposal-epic create op: `spec_node_kind = "proposal_epic"`,
+  `spec_node_id` = the reference itself (not an identity hash), title
+  `"Proposal: <ref>"`. Ingest materialises its mapping record with
+  `node_type = "proposal"` and no spec-graph lookup.
 - Used by HistoryViewer (`spex log`) to group beads under the proposal
 
 ### HistoryViewer → stdout
 
-- ProposalLog:
-  - proposal: ProposalRecord
-  - epic_bead_id: string — bead_id of the proposal epic (empty for
-    pre-contract-layer proposals that used labels instead)
-  - created_beads: list of string — bead IDs created by this proposal
-  - obsoleted_beads: list of string — bead IDs obsoleted by this proposal
+- ProposalLog (`--json`):
+  - proposals: list, one entry per `spec_proposal:` stem, in ascending stem order
+    - filename: string — `<stem>.md`
+    - title: string — the proposal file's H1, or empty when the file is missing
+    - beads: list, in the order the input supplied them
+      - id: string — the tracker bead id
+      - status: string — the bead's status as the input reported it
+      - action: string — `created` or `closed`, derived from that status
+      - summary: string — the bead's title
 
-The `epic_bead_id` field is empty for historical proposals that ran before the
-per-proposal epic mechanism shipped; in that case HistoryViewer falls back to
-proposal-label lookups.
+Grouping reads the `spec_proposal:` label and nothing else. No epic bead id is
+read or emitted, and the proposal epic plays no part in this rendering.

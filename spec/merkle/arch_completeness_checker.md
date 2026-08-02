@@ -1,14 +1,14 @@
 # CompletenessChecker
 
-Validates that requirement leaf changes in the diff are accompanied by
-corresponding component content leaf changes. Ensures that spec edits are
+[[6f8284df92a2|Validates that a changed requirement leaf brought its
+implementing components' content leaves with it]]. Ensures that spec edits are
 complete before the impact pipeline processes them.
 
 Findings from CompletenessChecker are **errors**, not warnings. They land in
 the top-level `errors` array of the diff JSON output and DiffCommand
-propagates them as a non-zero exit code. The terminology is consistent: the
-struct type is `DiffError`, the JSON field is `errors`, and any text-output
-rendering must label each line with `error:` (never `warning:`). The
+propagates them as a non-zero exit code. The terminology is consistent end to
+end: the JSON field is `errors`, and any text-output rendering must label each
+line with `error:` (never `warning:`). The
 distinction matters because downstream pipeline steps (`spex impact`, `spex
 emit`) refuse to consume a diff with a non-empty `errors` array — a "warning"
 label suggests advisory output that can be ignored, which is the opposite of
@@ -27,7 +27,7 @@ All checks operate on identity hashes. The diff change keys, the `implements` ar
 
 ### Modified requirement → implementing component content must change
 
-When a requirement leaf changed (a change whose `Key` is the requirement's identity hash and whose `NodeType` is `requirement`), resolve which components implement that requirement by scanning every component's `implements` array for that hash. For each such component, its content leaf must also appear as a change in the diff (looked up by the component's identity hash).
+When a requirement leaf changed (a change whose key is the requirement's identity hash and whose node type is `requirement`), resolve which components implement that requirement by scanning every component's `implements` array for that hash. For each such component, its content leaf must also appear as a change in the diff (looked up by the component's identity hash).
 
 For each component whose content leaf did NOT change, report an error:
 
@@ -52,16 +52,20 @@ When a requirement leaf is removed, check that no component in the current modul
 
 ### Project-level requirement changed → chain must propagate
 
-When a project-level requirement leaf changed, find all module requirements with `preq_id` equal to the project requirement's identity hash. If none exist, report an error. For each such module requirement, find all implementing components. For each component whose content leaf did NOT change, report an error. Same logic applies for added and removed project-level requirements.
+When a project-level requirement leaf changed, find all module requirements with `preq_id` equal to the project requirement's identity hash. If none exist, report an error. For each such module requirement, find all implementing components. For each component whose content leaf did NOT change, report an error. An added project-level requirement takes the same path. A removed one inverts it: nothing deriving is the clean outcome, and each module requirement that still names the removed hash as its `preq_id` is reported instead — the complaint names that module requirement, not a component.
 
 ### Component edges changed → component content must change
 
 When `meta/<module-hash>` is modified but no requirement leaves in that module changed, the meta change is due to non-requirement modifications (component edges, module description, etc.). For each component in the current module.json, check whether its content leaf also changed (lookup by the component's identity hash). For each component whose content leaf did NOT change, report an error.
 
+This is the widest obligation in the checker — one changed byte in a `module.json` obliges every component in that module — and the requirement-leaf condition is the only thing that narrows it: if any requirement in the same module also changed, the module is left to the per-requirement checks above and no whole-module sweep runs.
+
+The project envelope carries no such obligation at all. Only meta changes that name a module are collected here, and `meta/project` names none, so editing `project.json` without touching a requirement leaf produces nothing from this check. What stands over `project.json` is the project-level requirement chain above, not a sweep of every component in the corpus.
+
 ## Interface
 
-```go
-func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError
-```
+One call, over the classified changes and the path to the spec directory, returning the errors it found — and an empty result when every change is complete.
 
-Takes the classified changes and reads the current spec directory to resolve requirement-to-component edges. Returns errors for incomplete edits. Returns nil if all changes are complete.
+It runs over the classified list but reads none of the classification. What it takes from each entry is four of the fields [[cb262b280963|DiffEngine]] sets — the key, the kind of change, the node type and the owning module's identity hash — and none of what [[f1a672216ce9|ImpactClassifier]] adds: the impact level goes unread, and the human-readable module name is passed over in favour of the identity hash underneath it, because the hash is what `module.json` can be looked up by. The two hash fields DiffEngine also sets, the old and the new content hash, are never read here either: that a leaf changed is the whole of what this check needs from it.
+
+The spec it resolves against is the current one on disk, never the snapshot. The diff says what moved; `project.json` and the `module.json` files say who implements what. Two consequences follow from that split. A diff carrying no requirement leaf change and no module envelope change is answered without opening the spec at all. And a spec it cannot read yields no errors rather than a failure — an unreadable `project.json`, or a `module.json` that will not parse, is skipped and the changes touching it go unchecked, so this check reports nothing on a corpus that `spex validate` would already be rejecting.

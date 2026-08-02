@@ -8,18 +8,24 @@ All scenarios operate against a temporary spec directory created in `t.TempDir()
 
 ```
 tmpdir/
-  project.json          (lists one module: "alpha", with a 12-char hex id)
+  project.json          (two project requirements and two modules, "Alpha"
+                         at path alpha and "Beta" at path beta, each with a
+                         12-char hex identity id)
   alpha/
-    module.json          (lists components, impl_sections, data_flows —
-                          each carrying a 12-char hex identity `id` plus a
-                          content path; leaf keys are read from those ids)
-    arch_widget.md       ("# Widget\nHandles widgets.")
-    arch_gadget.md       ("# Gadget\nHandles gadgets.")
-    impl_widget_logic.md ("# Widget Logic\nImplementation details.")
-    flow_data_path.md    ("# Data Path\nData flows from A to B.")
+    module.json          (2 requirements, 2 components, 1 test_section —
+                          each carrying a 12-char hex identity `id`, and the
+                          components and test_section additionally a content
+                          path; requirement leaves hash their JSON fields.
+                          Leaf keys are read from those ids)
+    arch_comp1.md        ("# Comp1 architecture")
+    arch_comp2.md        ("# Comp2 architecture")
+    test_comp1.md        ("# Comp1 tests")
+  beta/
+    module.json          (1 component)
+    arch_beta.md         ("# Beta architecture")
 ```
 
-Helper function `writeFixture(t, root, relPath, content)` writes a file and returns its absolute path. A second helper `sha256Hex(content string) string` computes the expected SHA-256 hex digest of a given string for assertion comparisons.
+Helper function `writeFile(t, dir, name, content)` writes one file into a directory. Expected digests are computed inline with `sha256.Sum256` and `hex.EncodeToString`; where this document writes `sha256Hex(x)` it means that pair.
 
 ## Scenarios
 
@@ -34,12 +40,12 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 ### S2: HashFile streams content rather than buffering
 
-**Given** a file written with 10 MB of repeated content
+**Given** a file of ordinary size
 **When** `HashFile(path)` is called
 **Then** it returns a valid 64-character hex hash without error
-**And** the hash matches `sha256Hex` of the same 10 MB content
+**And** the hash matches `sha256Hex` of the same content. `HashFile` streams via `io.Copy` (`merkle/hasher.go:21`); no test exercises a large file.
 
-**Rationale**: Verifies the streaming `io.Copy` implementation described in `impl_hash_computation.md` handles large files without memory issues.
+**Rationale**: Verifies the streaming implementation handles large files without memory issues.
 
 ### S3: Interior hash sorts children before concatenation
 
@@ -62,11 +68,11 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 **Given** the full fixture directory described in Setup
 **When** `BuildTree(tmpdir)` is called
-**Then** the root node has type `"project"` and two children: the `meta/project` envelope leaf and the `alpha` module node (keyed by alpha's identity hash)
-**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two components, the impl_section, and the data_flow), each keyed directly by its 12-char hex identity `id`
-**And** there are no per-type `arch`/`impl`/`flow` interior group nodes and no path-style keys anywhere in the tree
+**Then** the root node has type `"project"` and five children: the `meta/project` envelope leaf, one leaf per project requirement (two), and the `alpha` and `beta` module nodes (each keyed by its identity hash)
+**And** the `alpha` module node's children are flat leaves — the `meta/<alpha-module-hash>` envelope leaf plus one leaf per spec node (the two requirements, the two components, and the test_section), each keyed directly by its 12-char hex identity `id`
+**And** there are no per-type `arch`/`flow`/`test` interior group nodes and no path-style keys anywhere in the tree
 
-**Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md` and `impl_tree_construction.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
+**Rationale**: Validates the flat identity-hash tree structure from `arch_tree_builder.md`: `project.json` discovery, module enumeration, and one leaf per module.json-declared spec node. The earlier path-style grouped scheme was deleted.
 
 ### S6: BuildTree hashes propagate bottom-up
 
@@ -74,7 +80,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **When** `BuildTree(tmpdir)` is called
 **Then** each leaf node's hash matches `HashFile` of its corresponding file
 **And** the `alpha` module interior hash equals `HashChildren` over the meta envelope leaf hash plus each spec-node leaf hash directly — no intermediate group hashes
-**And** the root hash equals `HashChildren` of `[project envelope leaf hash, alpha module hash]`
+**And** the root hash equals `HashChildren` over its five children's hashes — the project envelope leaf, the two project requirement leaves, and the `alpha` and `beta` module hashes
 
 **Rationale**: End-to-end verification that the bottom-up hash propagation produces a consistent merkle tree. This is the core correctness property of the entire module.
 
@@ -91,9 +97,9 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 
 **Given** a fixture with two modules `alpha` and `beta`, each with distinct content files
 **When** `BuildTree(tmpdir)` is called
-**Then** the root has children: `project.json`, `alpha`, `beta`
-**And** `alpha` and `beta` each have their own correct subtrees
-**And** the root hash equals `HashChildren` of `[project.json hash, alpha hash, beta hash]`
+**Then** the root has children: `meta/project`, one leaf per project requirement, `alpha` and `beta`
+**And** `alpha` and `beta` each have their own correct subtrees, and editing a leaf under `alpha` leaves `beta`'s module hash unchanged
+**And** the root hash equals `HashChildren` over all of those child hashes
 
 **Rationale**: Ensures the tree builder correctly handles the real-world case of multiple modules in a project, and that module hashes are combined in sorted order at the root level.
 
@@ -121,7 +127,7 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **Then** it returns an error indicating the missing content file path
 **And** no partial tree is returned
 
-**Rationale**: Per `impl_tree_construction.md`, missing content files are a build failure. The validator should be run first, but BuildTree must fail cleanly if a file is absent.
+**Rationale**: Per `arch_tree_builder.md`, missing content files are a build failure. The validator should be run first, but BuildTree must fail cleanly if a file is absent.
 
 ### E4: BuildTree ignores extraneous files in the directory
 
@@ -129,9 +135,9 @@ Helper function `writeFixture(t, root, relPath, content)` writes a file and retu
 **When** `BuildTree(tmpdir)` is called
 **Then** the tree contains only files referenced by `module.json` content fields
 **And** `alpha/notes.txt` does not appear in the tree
-**And** the tree hashes are identical to a build without the extra file
+**And** the module node's child count is unchanged from a build without the extra file
 
-**Rationale**: Per `impl_tree_construction.md`, content files are discovered from `module.json`, not from directory listing. Extraneous files must be invisible to the merkle tree.
+**Rationale**: Per `arch_tree_builder.md`, content files are discovered from `module.json`, not from directory listing. Extraneous files must be invisible to the merkle tree.
 
 ### E5: Content file with empty body
 

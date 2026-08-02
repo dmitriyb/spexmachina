@@ -2,6 +2,7 @@ package ingest
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -24,10 +25,12 @@ type refreshFixture struct {
 	mapPath  string
 	store    mapping.Store
 	// widgetID/handlerID are component spec_node_ids with bead-map
-	// records; implID is a record-less impl_section leaf.
+	// records; testID is a record-less test_section leaf and flowID a
+	// record-less data_flow leaf.
 	widgetID  string
 	handlerID string
-	implID    string
+	testID    string
+	flowID    string
 }
 
 var refreshClock = func() time.Time {
@@ -46,7 +49,8 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 		snapPath:  filepath.Join(specDir, ".snapshot.json"),
 		widgetID:  "aabbccddee01",
 		handlerID: "aabbccddee02",
-		implID:    "aabbccddee03",
+		testID:    "aabbccddee03",
+		flowID:    "aabbccddee04",
 	}
 
 	writeFile(t, specDir, "project.json", `{
@@ -65,12 +69,15 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 		"components": [
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
 		],
-		"impl_sections": [
-			{"id": "`+fx.implID+`", "name": "Widget logic", "content": "impl_widget_logic.md"}
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
+		],
+		"apis": [
+			{"id": "aabbccddee06", "name": "spex widget list", "group": "cli"}
 		]
 	}`)
 	writeFile(t, alphaDir, "arch_widget.md", "# Widget\n")
-	writeFile(t, alphaDir, "impl_widget_logic.md", "# Widget logic\n")
+	writeFile(t, alphaDir, "test_widget_logic.md", "# Widget logic\n")
 
 	betaDir := filepath.Join(specDir, "beta")
 	if err := os.MkdirAll(betaDir, 0755); err != nil {
@@ -80,9 +87,13 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 		"name": "beta",
 		"components": [
 			{"id": "`+fx.handlerID+`", "name": "Handler", "content": "arch_handler.md"}
+		],
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
 		]
 	}`)
 	writeFile(t, betaDir, "arch_handler.md", "# Handler\n")
+	writeFile(t, betaDir, "flow_handler.md", "# Handler pipeline\n")
 
 	// Snapshot the initial state — the diff baseline.
 	tree := buildFixtureTree(t, specDir)
@@ -139,6 +150,54 @@ func recordByID(t *testing.T, store mapping.Store, id int) mapping.Record {
 	return rec
 }
 
+// dropRecord deletes one record from the store, standing in for the
+// bead-map edit that accompanies retiring a spec node.
+func dropRecord(t *testing.T, store mapping.Store, id int) {
+	t.Helper()
+	records, err := store.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	nextID, err := store.NextRecordID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	kept := make([]mapping.Record, 0, len(records))
+	for _, rec := range records {
+		if rec.ID != id {
+			kept = append(kept, rec)
+		}
+	}
+	if len(kept) == len(records) {
+		t.Fatalf("record %d not present in the fixture", id)
+	}
+	if err := store.Replace(kept, nextID); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// assertSnapshotIsCurrent checks that the run rebaselined the snapshot
+// onto the spec as it stands — the whole point of absorbing a
+// structural change rather than refusing it.
+func assertSnapshotIsCurrent(t *testing.T, fx refreshFixture) {
+	t.Helper()
+	assertSnapshotMatchesSpec(t, fx.specDir, fx.snapPath)
+}
+
+// assertSnapshotMatchesSpec is assertSnapshotIsCurrent over a bare
+// (specDir, snapPath) pair, for fixtures that are not a refreshFixture.
+func assertSnapshotMatchesSpec(t *testing.T, specDir, snapPath string) {
+	t.Helper()
+	want := buildFixtureTree(t, specDir)
+	got, err := merkle.Load(snapPath)
+	if err != nil {
+		t.Fatalf("load rewritten snapshot: %v", err)
+	}
+	if got.Hash != want.Hash {
+		t.Errorf("snapshot root: want current %s, got %s", want.Hash, got.Hash)
+	}
+}
+
 // TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes covers the headline
 // scenario: content-only edits are absorbed — stale records' spec_hash
 // updates, untouched records stay byte-identical, and the snapshot is
@@ -147,9 +206,9 @@ func TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
 	// Drift two leaves: one with a record (Handler) and one without
-	// (the impl_section) — both are content-only modifications.
+	// (the test_section) — both are content-only modifications.
 	writeFile(t, filepath.Join(fx.specDir, "beta"), "arch_handler.md", "# Handler (revised)\n")
-	writeFile(t, filepath.Join(fx.specDir, "alpha"), "impl_widget_logic.md", "# Widget logic (clarified)\n")
+	writeFile(t, filepath.Join(fx.specDir, "alpha"), "test_widget_logic.md", "# Widget logic (clarified)\n")
 
 	widgetBefore := recordByID(t, fx.store, 1)
 
@@ -187,10 +246,13 @@ func TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes(t *testing.T) {
 	}
 }
 
-// TestRefresh_RefusesOnAddedEntries covers the structural gate: a new
-// content leaf in the diff refuses the run and leaves both files
+// TestREQ_e68653819f38_Refresh_RefusesAddedComponent covers the
+// structural gate on the side the type filter must never open: a
+// component is bead-producing, so an added one is a bead that was
+// never created. Absorbing it would baseline the node into the
+// snapshot and remove it from `spex diff` permanently. Both files stay
 // byte-identical.
-func TestRefresh_RefusesOnAddedEntries(t *testing.T) {
+func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	alphaDir := filepath.Join(fx.specDir, "alpha")
 	writeFile(t, alphaDir, "module.json", `{
@@ -199,8 +261,8 @@ func TestRefresh_RefusesOnAddedEntries(t *testing.T) {
 			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"},
 			{"id": "aabbccddee99", "name": "NewThing", "content": "arch_new_thing.md"}
 		],
-		"impl_sections": [
-			{"id": "`+fx.implID+`", "name": "Widget logic", "content": "impl_widget_logic.md"}
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
 		]
 	}`)
 	writeFile(t, alphaDir, "arch_new_thing.md", "# New thing\n")
@@ -227,14 +289,23 @@ func TestRefresh_RefusesOnAddedEntries(t *testing.T) {
 	}
 }
 
-// TestRefresh_RefusesOnRemovedEntries covers the other structural gate:
-// deleting a leaf refuses the run with the same use-the-normal-pipeline
-// error and no file changes.
-func TestRefresh_RefusesOnRemovedEntries(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow covers the other
+// structural gate: data_flow is not on the absorbable list, so deleting
+// one refuses the run with the use-the-normal-pipeline error and no
+// file changes. The Handler component stays in place so the removal is
+// the only diff entry.
+func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
 	fx := setupRefreshFixture(t)
-	writeFile(t, filepath.Join(fx.specDir, "beta"), "module.json", `{
-		"name": "beta"
+	betaDir := filepath.Join(fx.specDir, "beta")
+	writeFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"components": [
+			{"id": "`+fx.handlerID+`", "name": "Handler", "content": "arch_handler.md"}
+		]
 	}`)
+	if err := os.Remove(filepath.Join(betaDir, "flow_handler.md")); err != nil {
+		t.Fatal(err)
+	}
 
 	mapBefore := readBytes(t, fx.mapPath)
 	snapBefore := readBytes(t, fx.snapPath)
@@ -244,8 +315,188 @@ func TestRefresh_RefusesOnRemovedEntries(t *testing.T) {
 	if !errors.As(err, &refusal) || refusal.Kind != "removed_entries" {
 		t.Fatalf("want RefreshRefusal removed_entries, got %v", err)
 	}
-	if !strings.Contains(err.Error(), fx.handlerID) {
-		t.Errorf("refusal must name the removed entry %s: %v", fx.handlerID, err)
+	if !strings.Contains(err.Error(), fx.flowID) {
+		t.Errorf("refusal must name the removed entry %s: %v", fx.flowID, err)
+	}
+	if !strings.Contains(err.Error(), "normal pipeline") {
+		t.Errorf("refusal must point at the normal pipeline: %v", err)
+	}
+	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
+		t.Error("bead-map must be byte-identical after refusal")
+	}
+	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
+		t.Error("snapshot must be byte-identical after refusal")
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI covers the absorbable
+// side of the type filter: an api produces no bead, so removing one is
+// content migration and refresh rebaselines it. No bead-map record points
+// at an api, so the map is untouched.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	alphaDir := filepath.Join(fx.specDir, "alpha")
+	writeFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
+		],
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
+		]
+	}`)
+
+	mapBefore := readBytes(t, fx.mapPath)
+
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+	}
+	if summary.RecordsUpdated != 0 {
+		t.Errorf("records_updated: want 0 (no record names an api), got %d", summary.RecordsUpdated)
+	}
+	assertSnapshotIsCurrent(t, fx)
+	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
+		t.Error("bead-map must be unchanged: no record points at an api")
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbsAddedAPI covers the addition side
+// of the type filter: an api node produces no bead, so declaring one is
+// absorbed rather than refused.
+func TestREQ_e68653819f38_Refresh_AbsorbsAddedAPI(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	writeFile(t, filepath.Join(fx.specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
+		],
+		"test_sections": [
+			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
+		],
+		"apis": [
+			{"id": "aabbccddee05", "name": "spex widget", "group": "cli"}
+		]
+	}`)
+
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !summary.SnapshotSaved {
+		t.Errorf("want the added api rebaselined into the snapshot, got %+v", summary)
+	}
+	assertSnapshotIsCurrent(t, fx)
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithRetiredRecord
+// covers the reason component is on the absorbable list at all: a spec
+// component whose implementing code is gone is retired by deleting the
+// node and its bead-map record together, leaving no bead work for the
+// normal pipeline to do.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithRetiredRecord(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	betaDir := filepath.Join(fx.specDir, "beta")
+	writeFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+		]
+	}`)
+	if err := os.Remove(filepath.Join(betaDir, "arch_handler.md")); err != nil {
+		t.Fatal(err)
+	}
+	dropRecord(t, fx.store, 2)
+
+	widgetBefore := recordByID(t, fx.store, 1)
+
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+	}
+	assertSnapshotIsCurrent(t, fx)
+	if got := recordByID(t, fx.store, 1); got != widgetBefore {
+		t.Errorf("surviving records must be untouched: before %+v, after %+v", widgetBefore, got)
+	}
+	if _, err := fx.store.Get(2); err == nil {
+		t.Error("the retired component's record must not be resurrected")
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithSurvivingRecord
+// pins the boundary that makes absorbing component removals safe: the
+// type filter admits the removal, and the orphan gate then refuses it
+// because the bead-map record still points at the deleted node.
+func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithSurvivingRecord(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	betaDir := filepath.Join(fx.specDir, "beta")
+	writeFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+		]
+	}`)
+	if err := os.Remove(filepath.Join(betaDir, "arch_handler.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	mapBefore := readBytes(t, fx.mapPath)
+	snapBefore := readBytes(t, fx.snapPath)
+
+	_, err := fx.handler().Apply(fx.specDir)
+	var refusal *RefreshRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != "orphan_record" {
+		t.Fatalf("want RefreshRefusal orphan_record, got %v", err)
+	}
+	if !strings.Contains(err.Error(), fx.handlerID) || !strings.Contains(err.Error(), "br-handler") {
+		t.Errorf("refusal must name spec_node_id and bead_id: %v", err)
+	}
+	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
+		t.Error("bead-map must be byte-identical after refusal")
+	}
+	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
+		t.Error("snapshot must be byte-identical after refusal")
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta is the direct
+// guard on writing the allow-list as the complement of impact's
+// bead-producing set: "meta" is not bead-producing, so that negation
+// would silently baseline a whole new module — envelope leaf and all —
+// into the snapshot. Refresh runs neither `spex validate` nor the
+// completeness checker, so nothing downstream would ever surface it.
+func TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	writeFile(t, fx.specDir, "project.json", `{
+		"name": "refresh-fixture",
+		"modules": [
+			{"id": "aabbccddee10", "name": "alpha", "path": "alpha"},
+			{"id": "aabbccddee20", "name": "beta", "path": "beta"},
+			{"id": "aabbccddee30", "name": "gamma", "path": "gamma"}
+		]
+	}`)
+	gammaDir := filepath.Join(fx.specDir, "gamma")
+	if err := os.MkdirAll(gammaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, gammaDir, "module.json", `{"name": "gamma"}`)
+
+	mapBefore := readBytes(t, fx.mapPath)
+	snapBefore := readBytes(t, fx.snapPath)
+
+	_, err := fx.handler().Apply(fx.specDir)
+	var refusal *RefreshRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != "added_entries" {
+		t.Fatalf("want RefreshRefusal added_entries, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "meta/aabbccddee30") {
+		t.Errorf("refusal must name the added module envelope leaf: %v", err)
 	}
 	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
 		t.Error("bead-map must be byte-identical after refusal")
@@ -425,6 +676,268 @@ func TestRefresh_SnapshotWriteFailureRollsBackBeadMap(t *testing.T) {
 	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
 		t.Error("bead-map must be rolled back to its pre-refresh content")
 	}
+}
+
+// Identity-hash keys for the type-filter fixture's varying nodes. The
+// anchor component is in every state; each of the others is the single
+// node one matrix row toggles.
+const (
+	refreshTypeAlphaID      = "aabbccddee10"
+	refreshTypeAnchorID     = "aabbccddee11"
+	refreshTypeComponentID  = "aabbccddee51"
+	refreshTypeImplID       = "aabbccddee52"
+	refreshTypeAPIID        = "aabbccddee53"
+	refreshTypeFlowID       = "aabbccddee54"
+	refreshTypeTestID       = "aabbccddee55"
+	refreshTypeModuleReqID  = "aabbccddee56"
+	refreshTypeProjectReqID = "aabbccddee57"
+	refreshTypeGammaID      = "aabbccddee58"
+)
+
+// setContentFile writes a markdown leaf when its node is declared and
+// deletes it when it is not, so a node the spec no longer references
+// never leaves a stray file behind.
+func setContentFile(t *testing.T, dir, name, content string, present bool) {
+	t.Helper()
+	if present {
+		writeFile(t, dir, name, content)
+		return
+	}
+	if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("remove %s: %v", name, err)
+	}
+}
+
+// writeRefreshTypeSpec writes the type-filter fixture into specDir. Each
+// variant names exactly one node; present toggles whether that node is
+// declared. Writing the spec twice — once with present=false, once with
+// present=true — yields a diff carrying exactly one structural entry,
+// and the caller picks its direction by choosing which of the two states
+// it snapshots. The envelope leaves (project.json, module.json) also
+// differ between the states, but only ever as *modifications*, which the
+// structural gate does not inspect.
+func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
+	t.Helper()
+	on := func(v string) bool { return variant == v && present }
+
+	// "meta" is toggled by declaring a whole extra module: gamma holds no
+	// content nodes, so its envelope leaf is the only entry it adds.
+	gammaModule := ""
+	if on("meta") {
+		gammaModule = `,
+			{"id": "` + refreshTypeGammaID + `", "name": "gamma", "path": "gamma"}`
+	}
+	projectReqs := ""
+	if on("project_requirement") {
+		projectReqs = `,
+		"requirements": [
+			{"id": "` + refreshTypeProjectReqID + `", "type": "functional", "title": "Fixture project requirement"}
+		]`
+	}
+	writeFile(t, specDir, "project.json", `{
+		"name": "refresh-type-filter",
+		"modules": [
+			{"id": "`+refreshTypeAlphaID+`", "name": "alpha", "path": "alpha"}`+gammaModule+`
+		]`+projectReqs+`
+	}`)
+
+	alphaDir := filepath.Join(specDir, "alpha")
+	if err := os.MkdirAll(alphaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	components := `{"id": "` + refreshTypeAnchorID + `", "name": "Anchor", "content": "arch_anchor.md"}`
+	if on("component") {
+		components += `,{"id": "` + refreshTypeComponentID + `", "name": "Extra", "content": "arch_extra.md"}`
+	}
+	// Assembled as fragments rather than one literal because each optional
+	// section must vanish entirely — an empty array is a different leaf.
+	sections := []string{`"name": "alpha"`, `"components": [` + components + `]`}
+	if on("module_requirement") {
+		sections = append(sections, `"requirements": [{"id": "`+refreshTypeModuleReqID+`", "preq_id": "`+refreshTypeProjectReqID+`", "type": "functional", "title": "Fixture module requirement"}]`)
+	}
+	if on("project_api") {
+		sections = append(sections, `"apis": [{"id": "`+refreshTypeImplID+`", "name": "spex extra two", "group": "cli"}]`)
+	}
+	if on("api") {
+		sections = append(sections, `"apis": [{"id": "`+refreshTypeAPIID+`", "name": "spex extra", "group": "cli"}]`)
+	}
+	if on("data_flow") {
+		sections = append(sections, `"data_flows": [{"id": "`+refreshTypeFlowID+`", "name": "Extra flow", "content": "flow_extra.md"}]`)
+	}
+	if on("test_section") {
+		sections = append(sections, `"test_sections": [{"id": "`+refreshTypeTestID+`", "name": "Extra tests", "content": "test_extra.md"}]`)
+	}
+	writeFile(t, alphaDir, "module.json", "{"+strings.Join(sections, ",")+"}")
+
+	writeFile(t, alphaDir, "arch_anchor.md", "# Anchor\n")
+	setContentFile(t, alphaDir, "arch_extra.md", "# Extra component\n", on("component"))
+	setContentFile(t, alphaDir, "flow_extra.md", "# Extra flow\n", on("data_flow"))
+	setContentFile(t, alphaDir, "test_extra.md", "# Extra tests\n", on("test_section"))
+
+	gammaDir := filepath.Join(specDir, "gamma")
+	if on("meta") {
+		if err := os.MkdirAll(gammaDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, gammaDir, "module.json", `{"name": "gamma"}`)
+	} else if err := os.RemoveAll(gammaDir); err != nil {
+		t.Fatalf("remove gamma: %v", err)
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_TypeFilterMatrix pins refreshAbsorbable
+// cell by cell: for every node type a merkle diff can carry, in both
+// structural directions, refresh either absorbs the change or refuses it
+// with a specific RefreshRefusal.Kind. Any single-cell edit to the
+// allow-list — dropping an admitted direction, or admitting a refused
+// one — fails a row here.
+//
+// The bead-map is empty in every row so the orphan gate can never stand
+// in for the type filter: a refusal below is the type filter's own, and
+// an absorbed removal is not an artefact of a record that happened to
+// survive. (The orphan gate's own role in making component removals safe
+// is covered by RefusesRemovedComponentWithSurvivingRecord.)
+//
+// requirement is covered at both levels — a module requirement in alpha
+// and a project requirement in project.json — because tree_builder
+// reaches the two through different paths. Removing a component is
+// absorbed here where the existing removed-component tests only reach
+// the gate through a bead-map record.
+func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
+	cases := []struct {
+		name string
+		// variant is the node writeRefreshTypeSpec toggles; key is the
+		// diff-entry key a refusal must name.
+		variant string
+		key     string
+		// added true means the node appears after the snapshot was taken
+		// (an addition); false means it disappears (a removal).
+		added bool
+		// wantKind is "" when the change is absorbed, otherwise the
+		// RefreshRefusal.Kind the run must refuse with.
+		wantKind string
+	}{
+		{"module requirement added", "module_requirement", refreshTypeModuleReqID, true, ""},
+		{"module requirement removed", "module_requirement", refreshTypeModuleReqID, false, ""},
+		{"project requirement added", "project_requirement", refreshTypeProjectReqID, true, ""},
+		{"project requirement removed", "project_requirement", refreshTypeProjectReqID, false, ""},
+		{"api added", "api", refreshTypeAPIID, true, ""},
+		{"api removed", "api", refreshTypeAPIID, false, ""},
+		{"component added", "component", refreshTypeComponentID, true, "added_entries"},
+		{"component removed", "component", refreshTypeComponentID, false, ""},
+		{"meta added", "meta", "meta/" + refreshTypeGammaID, true, "added_entries"},
+		{"meta removed", "meta", "meta/" + refreshTypeGammaID, false, "removed_entries"},
+		{"data_flow added", "data_flow", refreshTypeFlowID, true, "added_entries"},
+		{"data_flow removed", "data_flow", refreshTypeFlowID, false, "removed_entries"},
+		{"test_section added", "test_section", refreshTypeTestID, true, "added_entries"},
+		{"test_section removed", "test_section", refreshTypeTestID, false, "removed_entries"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			specDir := t.TempDir()
+			// Baseline is the state without the node for an addition, the
+			// state with it for a removal.
+			writeRefreshTypeSpec(t, specDir, tc.variant, !tc.added)
+			snapPath := filepath.Join(specDir, ".snapshot.json")
+			if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+				t.Fatalf("seed snapshot: %v", err)
+			}
+			store, mapPath := newTestStore(t, nil, 1)
+
+			writeRefreshTypeSpec(t, specDir, tc.variant, tc.added)
+
+			mapBefore := readBytes(t, mapPath)
+			snapBefore := readBytes(t, snapPath)
+
+			h := &RefreshHandler{
+				Store:        store,
+				SnapshotPath: snapPath,
+				Changeset:    &emit.Changeset{Version: 1},
+				Receipts:     &adapters.Receipts{Version: 1, Status: adapters.StatusComplete},
+				Now:          refreshClock,
+			}
+			summary, err := h.Apply(specDir)
+
+			if tc.wantKind == "" {
+				if err != nil {
+					t.Fatalf("want the %s %s absorbed, got %v", tc.variant, directionWord(tc.added), err)
+				}
+				if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+					t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+				}
+				assertSnapshotMatchesSpec(t, specDir, snapPath)
+				return
+			}
+
+			var refusal *RefreshRefusal
+			if !errors.As(err, &refusal) {
+				t.Fatalf("want the %s %s refused with a RefreshRefusal, got err=%v summary=%+v",
+					tc.variant, directionWord(tc.added), err, summary)
+			}
+			if refusal.Kind != tc.wantKind {
+				t.Fatalf("refusal kind: want %q, got %q (%v)", tc.wantKind, refusal.Kind, err)
+			}
+			if !strings.Contains(err.Error(), tc.key) {
+				t.Errorf("refusal must name the %s entry %s: %v", tc.variant, tc.key, err)
+			}
+			if !strings.Contains(err.Error(), "normal pipeline") {
+				t.Errorf("refusal must point at the normal pipeline: %v", err)
+			}
+			if got := readBytes(t, mapPath); string(got) != string(mapBefore) {
+				t.Error("bead-map must be byte-identical after refusal")
+			}
+			if got := readBytes(t, snapPath); string(got) != string(snapBefore) {
+				t.Error("snapshot must be byte-identical after refusal")
+			}
+		})
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes guards
+// the allow-list's *domain*, which the matrix above cannot: a key naming
+// a node type no merkle diff can carry is dead configuration. It reads
+// as a deliberate decision about both directions of that type while the
+// gate never consults it, and it drops silently out of the matrix, which
+// can only cover types the tree builder actually emits.
+//
+// The reachable set is observed rather than asserted — it is whatever
+// node types the type-filter fixture's own variants produce — so growing
+// merkle's leaf vocabulary relaxes this guard automatically. "module" is
+// the live example: merkle labels interior module nodes with Type
+// "module" but leaves their NodeType empty, and Diff reports leaves
+// only, so refreshAbsorbable["module"] could never be looked up.
+func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T) {
+	variants := []string{
+		"module_requirement", "project_requirement",
+		"api", "component", "meta", "data_flow", "test_section",
+	}
+	reachable := map[string]bool{}
+	for _, variant := range variants {
+		specDir := t.TempDir()
+		writeRefreshTypeSpec(t, specDir, variant, false)
+		without := buildFixtureTree(t, specDir)
+		writeRefreshTypeSpec(t, specDir, variant, true)
+		for _, c := range merkle.Diff(buildFixtureTree(t, specDir), without) {
+			reachable[c.NodeType] = true
+		}
+	}
+
+	for nodeType := range refreshAbsorbable {
+		if !reachable[nodeType] {
+			t.Errorf("refreshAbsorbable names %q, a node type no merkle diff carries: "+
+				"the entry is unreachable, so its added/removed decision is never consulted", nodeType)
+		}
+	}
+}
+
+// directionWord renders a matrix row's direction for failure messages.
+func directionWord(added bool) string {
+	if added {
+		return "addition"
+	}
+	return "removal"
 }
 
 // TestRefreshRefusal_ErrorNamesKindEntriesAndHint pins the structured

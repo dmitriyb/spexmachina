@@ -1,6 +1,7 @@
 {
   "components": [
     {
+      "content": "arch_widget.md",
       "id": "000000000001",
       "implements": [
         "000000000001"
@@ -9,15 +10,6 @@
     }
   ],
   "description": "Core module spec.",
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Widget implementation"
-    }
-  ],
   "name": "core",
   "requirements": [
     {

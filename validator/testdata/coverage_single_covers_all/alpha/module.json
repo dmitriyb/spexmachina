@@ -22,29 +22,6 @@
       "name": "Formatter"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Parser impl"
-    },
-    {
-      "describes": [
-        "000000000002"
-      ],
-      "id": "000000000002",
-      "name": "Renderer impl"
-    },
-    {
-      "describes": [
-        "000000000003"
-      ],
-      "id": "000000000003",
-      "name": "Formatter impl"
-    }
-  ],
   "name": "alpha",
   "requirements": [
     {

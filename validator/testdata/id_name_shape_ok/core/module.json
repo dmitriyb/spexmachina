@@ -1,0 +1,15 @@
+{
+  "apis": [
+    {
+      "id": "0000000000a1",
+      "name": "spex render --format json --slim --bare"
+    }
+  ],
+  "components": [
+    {
+      "id": "0000000000c1",
+      "name": "Six word component name right here"
+    }
+  ],
+  "name": "core"
+}

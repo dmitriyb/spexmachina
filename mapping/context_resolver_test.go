@@ -23,7 +23,7 @@ func writeModuleJSON(t *testing.T, dir string, ms schema.ModuleSpec) {
 }
 
 // TestFR6_ResolveContext_MatchingSections covers S1 and S2: a component
-// referenced by multiple impl_sections, a single test_section, and one of
+// referenced by multiple test_sections and one of
 // two data_flows. Lookup is by direct identity-hash match on Describes/Uses.
 func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 	specDir := t.TempDir()
@@ -38,14 +38,10 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 			{ID: "aabbccddeeff", Name: "ActionClassifier", Content: "arch_action_classifier.md"},
 			{ID: "ffeeddccbbaa", Name: "ReportGenerator", Content: "arch_report_generator.md"},
 		},
-		ImplSections: []schema.ImplSection{
-			{ID: "111111111111", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
-			{ID: "222222222222", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
-			{ID: "333333333333", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
-		},
 		TestSections: []schema.TestSection{
 			{ID: "444444444444", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
 			{ID: "555555555555", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "333333333333", Name: "Shared tests", Content: "test_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 		DataFlows: []schema.DataFlow{
 			{ID: "666666666666", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
@@ -67,27 +63,17 @@ func TestFR6_ResolveContext_MatchingSections(t *testing.T) {
 		t.Fatalf("ResolveContext: %v", err)
 	}
 
-	wantImpl := []string{
-		filepath.Join(specDir, "impact", "impl_classification.md"),
-		filepath.Join(specDir, "impact", "impl_shared.md"),
-	}
-	if len(result.ImplFiles) != len(wantImpl) {
-		t.Fatalf("ImplFiles count = %d, want %d", len(result.ImplFiles), len(wantImpl))
-	}
-	for i, got := range result.ImplFiles {
-		if got != wantImpl[i] {
-			t.Errorf("ImplFiles[%d] = %q, want %q", i, got, wantImpl[i])
-		}
-	}
-
 	wantTest := []string{
 		filepath.Join(specDir, "impact", "test_classifier.md"),
+		filepath.Join(specDir, "impact", "test_shared.md"),
 	}
 	if len(result.TestFiles) != len(wantTest) {
 		t.Fatalf("TestFiles count = %d, want %d", len(result.TestFiles), len(wantTest))
 	}
-	if result.TestFiles[0] != wantTest[0] {
-		t.Errorf("TestFiles[0] = %q, want %q", result.TestFiles[0], wantTest[0])
+	for i, got := range result.TestFiles {
+		if got != wantTest[i] {
+			t.Errorf("TestFiles[%d] = %q, want %q", i, got, wantTest[i])
+		}
 	}
 
 	wantFlow := []string{
@@ -118,14 +104,10 @@ func TestFR6_ResolveContext_S4_SecondComponent(t *testing.T) {
 			{ID: "aabbccddeeff", Name: "ActionClassifier", Content: "arch_action_classifier.md"},
 			{ID: "ffeeddccbbaa", Name: "ReportGenerator", Content: "arch_report_generator.md"},
 		},
-		ImplSections: []schema.ImplSection{
-			{ID: "111111111111", Name: "Classification rules", Content: "impl_classification.md", Describes: []string{"aabbccddeeff"}},
-			{ID: "222222222222", Name: "Report format", Content: "impl_report_format.md", Describes: []string{"ffeeddccbbaa"}},
-			{ID: "333333333333", Name: "Shared helpers", Content: "impl_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
-		},
 		TestSections: []schema.TestSection{
 			{ID: "444444444444", Name: "Classifier tests", Content: "test_classifier.md", Describes: []string{"aabbccddeeff"}},
 			{ID: "555555555555", Name: "Report tests", Content: "test_report.md", Describes: []string{"ffeeddccbbaa"}},
+			{ID: "333333333333", Name: "Shared tests", Content: "test_shared.md", Describes: []string{"aabbccddeeff", "ffeeddccbbaa"}},
 		},
 		DataFlows: []schema.DataFlow{
 			{ID: "666666666666", Name: "Impact flow", Content: "flow_impact.md", Uses: []string{"aabbccddeeff", "ffeeddccbbaa"}},
@@ -151,21 +133,17 @@ func TestFR6_ResolveContext_S4_SecondComponent(t *testing.T) {
 		t.Errorf("ArchFile = %q, want ReportGenerator arch", result.ArchFile)
 	}
 
-	wantImpl := []string{
-		filepath.Join(specDir, "impact", "impl_report_format.md"),
-		filepath.Join(specDir, "impact", "impl_shared.md"),
+	wantTest := []string{
+		filepath.Join(specDir, "impact", "test_report.md"),
+		filepath.Join(specDir, "impact", "test_shared.md"),
 	}
-	if len(result.ImplFiles) != len(wantImpl) {
-		t.Fatalf("ImplFiles count = %d, want %d", len(result.ImplFiles), len(wantImpl))
+	if len(result.TestFiles) != len(wantTest) {
+		t.Fatalf("TestFiles count = %d, want %d", len(result.TestFiles), len(wantTest))
 	}
-	for i, got := range result.ImplFiles {
-		if got != wantImpl[i] {
-			t.Errorf("ImplFiles[%d] = %q, want %q", i, got, wantImpl[i])
+	for i, got := range result.TestFiles {
+		if got != wantTest[i] {
+			t.Errorf("TestFiles[%d] = %q, want %q", i, got, wantTest[i])
 		}
-	}
-
-	if len(result.TestFiles) != 1 || result.TestFiles[0] != filepath.Join(specDir, "impact", "test_report.md") {
-		t.Errorf("TestFiles = %v, want [test_report.md]", result.TestFiles)
 	}
 
 	wantFlow := []string{
@@ -183,7 +161,7 @@ func TestFR6_ResolveContext_S4_SecondComponent(t *testing.T) {
 }
 
 // TestFR6_ResolveContext_UnknownHash covers edge case E3: a record whose
-// identity hash is valid but appears in no impl_section, test_section, or
+// identity hash is valid but appears in no test_section or
 // data_flow returns an empty result — this is not an error. The validator
 // (not ResolveContext) is responsible for catching dangling references.
 func TestFR6_ResolveContext_UnknownHash(t *testing.T) {
@@ -198,8 +176,8 @@ func TestFR6_ResolveContext_UnknownHash(t *testing.T) {
 		Components: []schema.Component{
 			{ID: "aabbccddeeff", Name: "OnlyComponent", Content: "arch_only.md"},
 		},
-		ImplSections: []schema.ImplSection{
-			{ID: "111111111111", Name: "Only impl", Content: "impl_only.md", Describes: []string{"aabbccddeeff"}},
+		TestSections: []schema.TestSection{
+			{ID: "111111111111", Name: "Only tests", Content: "test_only.md", Describes: []string{"aabbccddeeff"}},
 		},
 	}
 	writeModuleJSON(t, modDir, ms)
@@ -222,9 +200,9 @@ func TestFR6_ResolveContext_UnknownHash(t *testing.T) {
 	if result.ModuleFile != filepath.Join(specDir, "map", "module.json") {
 		t.Errorf("ModuleFile = %q, want module.json path", result.ModuleFile)
 	}
-	if len(result.ImplFiles) != 0 || len(result.TestFiles) != 0 || len(result.FlowFiles) != 0 {
-		t.Errorf("all file lists should be empty for unknown hash; got impl=%v test=%v flow=%v",
-			result.ImplFiles, result.TestFiles, result.FlowFiles)
+	if len(result.TestFiles) != 0 || len(result.FlowFiles) != 0 {
+		t.Errorf("all file lists should be empty for unknown hash; got test=%v flow=%v",
+			result.TestFiles, result.FlowFiles)
 	}
 }
 
@@ -260,8 +238,8 @@ func TestFR6_ResolveContext_Deterministic(t *testing.T) {
 		Components: []schema.Component{
 			{ID: "aabbccddeeff", Name: "ProjectSchema", Content: "arch_project_schema.md"},
 		},
-		ImplSections: []schema.ImplSection{
-			{ID: "111111111111", Name: "Schema format", Content: "impl_format.md", Describes: []string{"aabbccddeeff"}},
+		TestSections: []schema.TestSection{
+			{ID: "111111111111", Name: "Schema tests", Content: "test_schema.md", Describes: []string{"aabbccddeeff"}},
 		},
 		DataFlows: []schema.DataFlow{
 			{ID: "222222222222", Name: "Load flow", Content: "flow_load.md", Uses: []string{"aabbccddeeff"}},

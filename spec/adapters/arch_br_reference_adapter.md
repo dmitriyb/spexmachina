@@ -6,11 +6,11 @@ Bash + jq script at `scripts/apply-br.sh`. Reads `changeset.json` on stdin (or `
 
 - Parse changeset v1.
 - For each op in order:
-  - Resolve ref fields (parent, deps, target) into concrete bead IDs via the substitution table + mapping store + literal passthrough.
-  - Check idempotency before create/close.
+  - Resolve every ref field (`parent`, `deps`, `target`) to a concrete bead id, per [[a2645b77b8bc|the three ref shapes]]: a `bead` ref passes through literally, an `op` ref is looked up in the substitution table, and a `spec_node` ref goes to the mapping store for the most recent bead recorded against that node.
+  - Check idempotency before create/close — for a create that check runs before any of the op's refs are resolved, for a close after the target ref is resolved.
   - Invoke the appropriate `br` subcommand with correct flags.
   - Write a receipt entry.
-- Emit a top-level status field: `complete` if no op errored, `partial` otherwise.
+- Emit a top-level status field: `complete` when every op ended `ok` or was intentionally skipped, `partial` as soon as one op ends `error`. A skip is not a failure — it means the adapter deliberately did nothing. If the adapter dies before the file is written at all, the caller must read the absence of `receipts.json` as `partial` with unknown progress.
 
 ## Interface
 
@@ -22,39 +22,78 @@ scripts/apply-br.sh [<changeset.json>] [<receipts.json>]
 
 ## Dependencies
 
-- `br` — any version that supports `create`, `list --json`, `show <id> --json`, `update`, `close`. Minimum version is enforced by a `br --version` check at script start.
+- `br` — any version that supports `create`, `list --json`, `show <id> --format json`, `update`, `close`. No minimum version is enforced: the pre-flight only checks that `$BR_BIN --version` exits 0, discarding its output.
 - `jq` — 1.6+.
 - Bash 4.0+ (for associative arrays used by the substitution table).
 
+## Changeset Preconditions
+
+[[4277dbd90063|Reading a changeset v1]] begins with the envelope, and only the envelope: the document must parse, `version` must be exactly `1`, `git_head` and `proposal` must both be present, and `ops` must be an array. Each condition below exits 1 with its reason on stderr and writes **no** `receipts.json` at all: the failure is at the changeset level, not at an op level, and receipts exist only for ops that were attempted. Nothing inside an op is inspected at this point — a missing `op_id`, an unknown `type` or an unresolvable ref surfaces only when the loop reaches that op, and becomes that op's `error` receipt rather than a refusal of the document. An op of the wrong *shape* is the exception, and it fails later and harder: see "The shape hole" below.
+
+| Condition | Reason on stderr |
+|---|---|
+| the input is not valid JSON | `changeset is not valid JSON` |
+| `version` absent | `changeset missing required field: version` |
+| `version` is anything but `1` | `unsupported changeset version: <v> (expected 1)` |
+| `git_head` absent | `changeset missing required field: git_head` |
+| `proposal` absent | `changeset missing required field: proposal` |
+| `ops` absent, or present and not an array | `changeset missing or malformed required field: ops` |
+
+`git_head` and `proposal` are required even though op processing never reads either one. The adapter checks that both are present and non-empty and then makes no further use of them: the `commit:<HEAD>` label on a close op reaches the adapter already assembled inside that op's own `labels` array, so nothing here builds a label out of `git_head`. Requiring the two fields is a check on the document's provenance, not an input to any `br` invocation — a changeset that omits either is refused before the first op runs, so no tracker state is ever produced by a run whose commit and proposal are unrecorded.
+
 ## Op Processing Loop
 
-```bash
-declare -A SUB_TABLE  # op_id → bead_id
-RECEIPTS=()
+Ops are dispatched on their `type` field, one at a time, in the order the changeset lists them. Order is contract, not convenience — a later op may reference the bead an earlier op produced.
 
-jq -c '.ops[]' "$CHANGESET" | while read -r op; do
-    op_id=$(jq -r '.op_id' <<< "$op")
-    op_type=$(jq -r '.type' <<< "$op")
+| `type` | Effect |
+|---|---|
+| `create` | Create a bead, subject to the create-idempotency check below. |
+| `close` | Close a bead, subject to the close-idempotency check below. |
+| `label` | Add the op's labels to the target bead. |
+| `tag` | Add the op's labels to the target bead; `br` draws no distinction between the two. |
+| anything else | No tracker call at all. The op gets an `error` receipt reading `unknown op type: <type>`. |
 
-    case "$op_type" in
-        create) process_create "$op" ;;
-        close)  process_close  "$op" ;;
-        label)  process_label  "$op" ;;
-        tag)    process_tag    "$op" ;;
-        *) fail_receipt "$op_id" "unknown op type $op_type" ;;
-    esac
-done
+**A bad op is recorded, not raised — for everything the adapter checks for.** In each case below it finishes that op with an `error` receipt and moves to the next, so `receipts.json` accounts for every op the changeset listed and the caller can see exactly how far the run got. The reason recorded is what went wrong:
 
-emit_receipts_json
-```
+| What went wrong | Reason recorded |
+|---|---|
+| the op carries no `op_id` or no `type` | `malformed op: missing op_id or type` |
+| an `op` ref names an op with no substitution-table entry and no error on record | `dependency <op_id> not yet resolved` — never reachable from a well-formed changeset, since emit orders ops so that every referenced op precedes its referent |
+| an `op` ref names an op that errored before reaching a bead | `dependency <op_id> errored; cannot resolve op ref` |
+| a `spec_node` ref finds no record in the mapping store | `spec_node_id <id> has no mapping record` — the store is stale and emit should be re-run |
+| the file `SPEX_MAPPING_FILE` names is not there | `mapping file unavailable for ref:spec_node lookup` — this row fires on non-existence and on nothing else; a mapping file that exists but will not parse, or that cannot be opened, falls through to the row above and is reported as a missing record |
+| a ref carries an unrecognised discriminator | `unknown ref kind: <kind>` |
+| a `br create`, `br update`, `br show` or `br close` invocation exits non-zero | the command that failed, followed by everything that invocation wrote on stdout and stderr |
+| the idempotency query before a create fails | the fixed string `br list failed during idempotency check`; that query's stderr is discarded rather than recorded |
+
+A ref that fails to resolve stops its op **before** the `br` call that would change tracker state, so a failed ref never leaves a half-built bead behind.
+
+### The shape hole
+
+Some ops whose JSON is the wrong *shape* rather than merely wrong escape all of that. The script runs under `set -euo pipefail`, and two reads reach an op with bare `jq` expressions before any of the checks above apply: the main loop's own `.ops[i]`, `.op_id` and `.type` reads that open every iteration, and the create path's `idempotency.label` read. Hand either a scalar where an object belongs and `jq` fails, `set -e` takes the script down, and the run ends with jq's exit code and **no `receipts.json` at all** — no entry for the offending op and none for the ops after it. Reproduced: a changeset whose first op carries `"idempotency": 5` exits 5 with `Cannot index number with string "label"` on stderr and writes nothing, while the same changeset with a well-formed `idempotency` object completes.
+
+That failure reaches the caller as the same signal a pre-flight refusal does — an absent receipts file — and is read the same way: `partial`, progress unknown. It is a gap in this reference implementation rather than in the contract; a production adapter guards those reads and turns each into an `error` receipt.
+
+Two nearby reads look like the same hole and are not. The create path's later `title`, `body`, `spec_node_kind` and `priority` reads run on an op the loop has already read `.op_id` and `.type` off, so any shape that would break them has already taken the script down an iteration's-worth of reads earlier. And ref resolution's `.ref` read, though equally unguarded, is made inside the resolver the call sites invoke, which runs on past the failed read to write its unknown-kind sentinel — and that write, not the failed read, is what the call site sees: the op ends with an `error` receipt like any other unresolvable ref, and the loop carries on. Reproduced: a changeset whose first op carries `"parent": 5` records `parent ref: unknown ref kind: missing` against that op, runs the next op, reaches phase 3, and exits 0 with a full `receipts.json`.
 
 ## Substitution Table
 
-A bash associative array keyed by op_id, populated after each successful create (and updated with `was_existing` lookups). See `impl_substitution_table.md`.
+The [[2f0a1f1152a0|substitution table]] maps a create op's `op_id` to the bead id that op reached. The entry is written the moment a create op reaches a bead — a fresh create, as soon as `br create` returns an id, or an idempotent re-match, which records the pre-existing bead id with `was_existing=true` — and nothing withdraws it afterwards. A create that reached its bead and then failed while applying the rest of its labels therefore ends with an `error` receipt *and* a table entry, and a later op whose `parent` or `deps` reference it resolves to that bead rather than failing. A create op that never reached a bead is absent from the table, and a reference to one of those fails by name at resolve time rather than pointing at nothing.
+
+The table is process-local and lives only for the length of the run; a crash loses it and nothing reloads it from disk. Nothing needs to: a re-run replays the same create ops, the idempotent re-matches repopulate the same op ids with the same bead ids, and same-run forward refs resolve exactly as they did the first time. Every same-run forward ref therefore either resolves or fails by name — there is no third outcome.
+
+## The only tracker caller
+
+The adapter is the sole participant in the pipeline that executes a bead CLI. `spex diff`, `impact`, `emit` and `ingest` read and write files only; every `br` invocation in the whole flow happens inside this script. That is what the boundary buys: the changeset names spec nodes, ops and refs, and the adapter is where those become `br create`, `br update`, `br close` and their flags.
+
+Two consequences follow, and both are contract rather than convention:
+
+- **Every tracker-specific decision belongs here.** Bead-type vocabulary, flag spelling, dep-edge syntax, the `--force` on close, the exit-code quirks — none of it may leak upward into emit. An adapter for a different tracker replaces this file and nothing else.
+- **Every non-tracker decision belongs upstream.** The adapter does not reorder ops, choose priorities, allocate record ids, or decide what work exists. It receives those already settled and executes them in file order. An adapter that started making structural decisions would make the run non-deterministic, since nothing upstream could reproduce it.
 
 ## Op Translation
 
-The adapter maps changeset op fields to `br` subcommand flags. Two mappings deserve explicit contract documentation because they differ from the obvious component-only path:
+The adapter maps changeset op fields to `br` subcommand flags. Three of those mappings are contract rather than incidental detail, because the obvious reading of the changeset gets each of them wrong:
 
 ### `spec_node_kind` → `br --type`
 
@@ -69,21 +108,25 @@ The adapter maps changeset op fields to `br` subcommand flags. Two mappings dese
 
 The `cleanup → task` mapping carries forward pre-decouple `apply/bead_creator.go::createCleanupBead`'s explicit `Type: "task"` choice; cleanup beads are bookkeeping/maintenance work, not features.
 
-### `op.Labels` → `br create --add-label`
+### `op.Labels` → `br update --add-label`
 
-The adapter MUST pass each entry of `op.Labels` as a `--add-label <label>` flag on `br create`, in the order they appear in the changeset. Currently the adapter applies `Labels` only on close ops (and on `update` for label/tag ops); cleanup creates are the first create-op consumer of this pre-existing field. Without this, the cleanup discriminator label `spex:cleanup` never reaches the tracker, breaking `/cleanup`'s lookup pattern.
+Each entry of `op.Labels` must reach the bead a create op produces, in the order the changeset lists them. `br create` has no `--add-label` flag — its `--labels` carries the idempotency label alone — so the adapter attaches them immediately after the create returns, one `br update --add-label <label>` per entry, and an update that exits non-zero ends the op with an `error` receipt naming the label it was applying. Cleanup creates are the first create-op consumer of this pre-existing field: without it the discriminator label `spex:cleanup` never reaches the tracker, and cleanup beads become indistinguishable from ordinary work in any tracker-side query. Close ops and `label`/`tag` ops apply their labels through the same `br update` call.
 
-The `idempotency.label` is applied separately (the adapter checks for an existing bead with that label before creating, then sets it on the new bead via the standard `--add-label` path or via a follow-up `br update` per the script's existing flow). This is independent of `op.Labels`; cleanup creates carry both `idempotency.label = "spex:cleanup-<spec_node_id>"` AND `Labels = ["spex:cleanup"]`, and both end up on the bead.
+The `idempotency.label` is applied separately and earlier: the adapter queries for an open bead carrying it, and on no match hands it to `br create` as `--labels <label>`, so it is on the bead from the moment the bead exists. This is independent of `op.Labels`; cleanup creates carry both `idempotency.label = "spex:cleanup-<spec_node_id>"` AND `Labels = ["spex:cleanup"]`, and both end up on the bead.
+
+### `op.deps` → `br create --deps`
+
+Each entry of an op's `deps` becomes its own `--deps <edge>:<bead-id>` flag, in the order the changeset lists them — never one flag carrying a joined list. `<edge>` is the dep ref's own `type` when it carries one and `blocked-by` otherwise, since the default reading of a dep is that this bead is blocked by that one. `parent` is a separate `--parent <bead-id>` flag and is never expressed as a dep edge.
 
 ## Idempotency
 
-Before `br create`, query `br list --json --label <op.idempotency.label>` for the op's idempotency label. **A match is a bead with the label AND `status == "open"`.** Closed beads carrying the same label are historical artifacts (a previous bead-lifecycle landed and `/review` closed it; the label persisted across close); they MUST NOT count as a match for create-idempotency. On a true match (open bead with the label), skip create, record `was_existing=true` with the existing bead_id.
+Before every `br create`, [[b8d894dff9b5|the create-idempotency check]] asks the tracker whether the op's bead already exists, by querying `br list --json --label <op.idempotency.label>`. **A match is a bead with the label AND `status == "open"`.** Closed beads carrying the same label are historical artifacts (a previous bead-lifecycle landed and the bead was closed; the label persisted across close); they MUST NOT count as a match for create-idempotency. On a true match (open bead with the label), skip create, record `was_existing=true` with the existing bead_id.
 
 The open-only filter mirrors pre-decouple `apply/bead_creator.go::FindExisting`, which iterated tracker results and returned only beads with `Status == "open"`. The filter matters specifically for modify-pair creates: per the modify-pair record-id-reuse rule (see `spec/emit/arch_idempotency_labeler.md`), the new create's `idempotency.label` deliberately equals the existing record's id. The OLD bead in the tracker (now closed) carries that same label as a historical marker. Without the open filter, the adapter would treat the closed historical bead as a match and skip the create — leaving the bead-map record pointing at the closed bead and the new arch contract unrepresented in the tracker. Reconciler invariant 3 (modified-pair records point to new bead_id) would then fail.
 
-The label format depends on the action class — emit produces `spex:<n>` for fresh and modify-pair creates, `spex:cleanup-<spec_node_id>` for cleanup creates; the adapter just looks up whatever label the op carries. The open-only filter applies uniformly across formats: a closed bead carrying ANY `spex:*` label is historical; only an open bead represents current state. Cleanup beads are unaffected because cleanup-bead labels (`spex:cleanup-<spec_node_id>`) are unique per removed-spec-node identity hash, only one bead ever carries them, and during the only window when re-runs occur (a failing /converge retry on the same proposal) the cleanup bead is open — `/cleanup` is a separate user workflow that doesn't run between failing pipeline attempts.
+The label format depends on the action class — emit produces `spex:<n>` for fresh and modify-pair creates, `spex:cleanup-<spec_node_id>` for cleanup creates; the adapter just looks up whatever label the op carries. The open-only filter applies uniformly across formats: a closed bead carrying ANY `spex:*` label is historical; only an open bead represents current state. Cleanup beads are unaffected because cleanup-bead labels (`spex:cleanup-<spec_node_id>`) are unique per removed-spec-node identity hash, only one bead ever carries them, and during the only window when re-runs occur (retrying a failed pipeline run against the same proposal) the cleanup bead is still open — actually doing the cleanup work and closing that bead is a separate user activity that does not happen between failing pipeline attempts.
 
-Before `br close`, query `br show <bead_id> --format json` ONCE and read both `labels` and `status` from the returned JSON. Branch on the combined state:
+Before every `br close`, [[7bad082a34b6|the close-idempotency check]] reads the target's current state with a single `br show <bead_id> --format json`, taking both `labels` and `status` from that one response. The three branches below are decided from that combined state, and nothing is re-queried between the decision and the action:
 
 | Pre-state                                  | Action                                                       | Receipt |
 |--------------------------------------------|--------------------------------------------------------------|---------|
@@ -97,13 +140,36 @@ The label-only branch matters because `br close` exits 3 on already-closed targe
 
 ## Receipt Atomicity
 
-Each op's receipt is appended to an in-memory array. After the last op, the full receipts.json is written atomically via temp file + mv (analogous to emit's --out).
+Each op's receipt is appended to an in-memory array. After the last op, the full receipts.json is written atomically via temp file + mv (analogous to emit's --out). A reader therefore sees either the complete v1 document or the pre-run content of that path — never a half-written file.
 
 If the adapter crashes mid-run, partial receipts are lost unless a caller runs it with `--checkpoint`. (The reference adapter does NOT implement checkpointing — it's a reference, not a crash-safe production adapter. Users building production adapters add checkpointing as an enhancement.)
 
+## Receipt Shape
+
+[[3486b44f4f64|Receipts v1]] is the adapter's only output artifact, and ingest's only input from it:
+
+```json
+{
+  "version": 1,
+  "status": "complete | partial",
+  "ops": [
+    {
+      "op_id": "op-0001",
+      "status": "ok | skipped | error",
+      "bead_id": "<the bead reached, or empty if none was>",
+      "was_existing": true,
+      "reason": "<present on skipped>",
+      "error": "<present on error>"
+    }
+  ]
+}
+```
+
+In a file that gets written, every op the changeset listed has exactly one entry, and the entries are in changeset order. A run that dies mid-loop writes no file at all rather than a short one — see "The shape hole" above. `reason` appears only on a `skipped` entry and `error` only on an `error` entry; an `ok` entry carries neither. An op too malformed to have an `op_id` still gets an entry, filed under a synthetic id derived from its position, so the two lists never drift out of alignment.
+
 ## Reference-Adapter Limitations
 
-Explicitly documented:
+[[7c2fea6b1963|The reference implementation's scope]] is deliberately bounded: this module's functional requirements are the contract any adapter must satisfy, and this script is one implementation of them rather than the definition. Anyone needing production hardening forks it. Explicitly documented:
 
 - Single-threaded sequential processing. Concurrent invocations will trample receipts.
 - No retry on transient `br` failures — user's responsibility to fix and re-run.
@@ -131,5 +197,6 @@ set -euo pipefail
 
 - `BR_BIN` env var — overrides `br` binary path (for tests with a mock).
 - `SPEX_MAPPING_FILE` env var — overrides `.bead-map.json` location (for tests with a synthetic mapping).
+- `SPEX_ADAPTER_DEBUG=1` — after each op, dump the substitution table to stderr, one `op_id → bead_id` line per entry. Stdout stays clean, so a debug run still pipes its receipts.
 
-Both default to sensible real-world values.
+Each defaults to the real-world value: the `br` on PATH, `.bead-map.json` in the working directory, and no debug output. The fixture runs against a stand-in `br` set both overrides — `BR_BIN` at a mock binary, `SPEX_MAPPING_FILE` at the fixture's own mapping file. [[970260050e3e|The integration test against a real `br`]] sets neither: gated on `br` being on PATH, it runs the script from a throwaway sandbox, where both defaults already resolve to what that test wants — the real `br`, and the `.bead-map.json` a case seeds inside the sandbox when it needs one. Both paths exercise the shipped script unmodified rather than a copy that has diverged.

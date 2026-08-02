@@ -4,13 +4,13 @@
 
 All scenarios invoke the `spex render` CLI command against a temporary spec directory containing a valid spec fixture. The fixture is the same multi-module spec described in the SpecReader and Renderer test setups:
 
-- `project.json` with 2 modules (alpha, beta), project-level requirements, and milestones
-- Module alpha: 2 components with content leaves, 1 impl_section, 1 data_flow
-- Module beta: 1 component with content leaf, 1 impl_section
+- `project.json` with 2 modules (alpha, beta) and project-level requirements
+- Module alpha: 2 components with content leaves, 1 test_section, 1 data_flow
+- Module beta: 1 component with content leaf, 1 test_section
 
-The command is executed as a subprocess using `os/exec` to test the full CLI path including flag parsing, argument handling, exit codes, and stdout/stderr behavior.
+No `spex` process is spawned. Each scenario assembles the command tree itself, hands it the scenario's arguments and runs it in place, capturing what the command writes to stdout and collecting stderr in a separate buffer. That still exercises the CLI path — flag parsing, argument handling and the stdout/stderr split — but it observes a returned error where a spawned process would have an exit status. So where a scenario below says "exit code 0" the assertion made is that the command returned no error, and "exit code 1" is that it returned one; turning that error into an exit status is the CLI entry point's step, asserted where that step lives rather than here. Where a scenario instead describes a shell pipeline, what it pins is the shape of the output such a pipeline consumes.
 
-**Binary path:** Tests build `spex` from source or use a pre-built binary. The spec directory is passed as a positional argument.
+**Spec directory:** scenarios point the command at the fixture with `--spec-dir`. S7 passes a directory positionally and exists to check that this form is rejected.
 
 ## Scenarios
 
@@ -18,31 +18,31 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir>` is executed with no `--format` flag.
+**When** `spex render --spec-dir <dir>` is executed with no `--format` flag.
 
 **Then:**
 - Exit code is 0
 - Stdout contains markdown output starting with `# ` (project heading)
-- Output matches the same content as `spex render <dir> --format markdown`
+- Output matches the same content as `spex render --spec-dir <dir> --format markdown`
 
 ### S2: Explicit markdown format
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format markdown` is executed.
+**When** `spex render --spec-dir <dir> --format markdown` is executed.
 
 **Then:**
 - Exit code is 0
 - Stdout contains a collated markdown document
 - Output includes project heading, project requirements, and per-module sections
-- Output contains inlined content from `arch_*.md`, `impl_*.md`, and `flow_*.md` files
+- Output contains inlined content from `arch_*.md` and `flow_*.md` files; test_sections are not rendered in markdown
 - Stderr is empty
 
 ### S3: DOT format output
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format dot` is executed.
+**When** `spex render --spec-dir <dir> --format dot` is executed.
 
 **Then:**
 - Exit code is 0
@@ -55,20 +55,20 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format json` is executed.
+**When** `spex render --spec-dir <dir> --format json` is executed.
 
 **Then:**
 - Exit code is 0
 - Stdout is valid JSON
 - Parsed JSON has top-level `"nodes"` and `"edges"` arrays
-- Nodes array contains project, module, requirement, component, impl_section, and data_flow entries
+- Nodes array contains project, module, requirement, component, data_flow and test_section entries
 - Stderr is empty
 
 ### S5: Output is written to stdout only (composable)
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format json` is executed.
+**When** `spex render --spec-dir <dir> --format json` is executed.
 
 **Then:**
 - All rendered content appears on stdout
@@ -79,39 +79,38 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format json | jq '.nodes | length'` is executed in a shell.
+**When** `spex render --spec-dir <dir> --format json | jq '.nodes | length'` is executed in a shell.
 
 **Then:**
 - The pipeline completes with exit code 0
 - Output is a single integer representing the total node count
 - This verifies the JSON output is well-formed and pipeable
 
-**When** `spex render <dir> --format dot | dot -Tsvg` is executed (if graphviz is available).
+**When** `spex render --spec-dir <dir> --format dot | dot -Tsvg` is executed (if graphviz is available).
 
 **Then:**
 - The pipeline completes with exit code 0
 - Output is valid SVG
 - This verifies the DOT output is syntactically correct
 
-### S7: Spec directory as positional argument
+### S7: Positional arguments are rejected
 
 **Given** a valid spec directory at `/tmp/test-spec`.
 
 **When** `spex render /tmp/test-spec` is executed.
 
 **Then:**
-- The command reads from the specified directory
-- Exit code is 0
-- Output is the rendered spec from that directory
+- Exit code is 1
+- The command does not render anything: the spec directory comes from `--spec-dir` only, and a positional argument is an error, never silently ignored
 
-### S8: Current directory as implicit spec root
+### S8: Current directory as spec root via the flag
 
 **Given** the working directory is a valid spec root (contains `project.json` and module subdirectories).
 
-**When** `spex render` is executed with no positional argument.
+**When** `spex render --spec-dir .` is executed.
 
 **Then:**
-- The command uses the current working directory as the spec root
+- The command uses the working directory as the spec root
 - Exit code is 0
 - Output is the rendered spec
 
@@ -119,7 +118,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format markdown` is executed twice.
+**When** `spex render --spec-dir <dir> --format markdown` is executed twice.
 
 **Then:**
 - Both invocations produce byte-identical output
@@ -129,12 +128,24 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format json` is executed twice.
+**When** `spex render --spec-dir <dir> --format json` is executed twice.
 
 **Then:**
 - Both invocations produce byte-identical JSON
 - Node ordering is deterministic (declaration order, not random map iteration)
 - Edge ordering is deterministic
+
+### S11: `--slim` reduces the JSON graph to nodes
+
+**Given** a valid spec directory.
+
+**When** `spex render --spec-dir <dir> --format json --slim` is executed.
+
+**Then:**
+- The command returns no error, and stdout is valid JSON
+- The document carries no `edges` key at all, and its `nodes` array is non-empty
+- No node carries a `content` or a `description` key
+- The output is strictly smaller than the same spec rendered with `--format json` alone, and none of the inlined content-leaf text appears in it
 
 ## Edge Cases
 
@@ -142,7 +153,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format xml` is executed.
+**When** `spex render --spec-dir <dir> --format xml` is executed.
 
 **Then:**
 - Exit code is 1 (non-zero)
@@ -154,7 +165,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** the path `/tmp/nonexistent-spec-dir` does not exist.
 
-**When** `spex render /tmp/nonexistent-spec-dir` is executed.
+**When** `spex render --spec-dir /tmp/nonexistent-spec-dir` is executed.
 
 **Then:**
 - Exit code is 1
@@ -165,7 +176,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a directory exists but contains no `project.json`.
 
-**When** `spex render <dir>` is executed.
+**When** `spex render --spec-dir <dir>` is executed.
 
 **Then:**
 - Exit code is 1
@@ -176,7 +187,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a spec where a component references `arch_missing.md` which does not exist on disk.
 
-**When** `spex render <dir>` is executed.
+**When** `spex render --spec-dir <dir>` is executed.
 
 **Then:**
 - Exit code is 1
@@ -187,7 +198,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a spec with 15 modules, each containing 8 components with content leaves averaging 2KB each.
 
-**When** `spex render <dir> --format json` is executed.
+**When** `spex render --spec-dir <dir> --format json` is executed.
 
 **Then:**
 - The command completes within 2 seconds
@@ -198,7 +209,7 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 
 **Given** a spec with a validation warning (e.g., a component with no `implements` edges).
 
-**When** `spex render <dir> --format markdown` is executed.
+**When** `spex render --spec-dir <dir> --format markdown` is executed.
 
 **Then:**
 - Any warnings or diagnostics go to stderr
@@ -213,13 +224,13 @@ The command is executed as a subprocess using `os/exec` to test the full CLI pat
 - 0: success, rendered output on stdout
 - 1: error (missing files, invalid format, parse failure), error details on stderr, nothing on stdout
 
-No other exit codes are used. The command never exits with code 2 or higher.
+There is no third outcome: the command either returns without error or returns one. Which exit status the entry point then gives an error is that step's contract, not this leaf's, per the premise above.
 
 ### E8: Empty flag value
 
 **Given** a valid spec directory.
 
-**When** `spex render <dir> --format ""` is executed.
+**When** `spex render --spec-dir <dir> --format ""` is executed.
 
 **Then:**
 - Exit code is 1
@@ -234,4 +245,15 @@ No other exit codes are used. The command never exits with code 2 or higher.
 - Exit code is 0
 - Output describes the render command usage
 - Lists the available `--format` options (markdown, dot, json)
-- Documents the positional `[dir]` argument
+- Documents no positional argument — the usage line names the command and flags only
+
+### E10: `--slim` on any format but json
+
+**Given** a valid spec directory.
+
+**When** `spex render --spec-dir <dir> --format markdown --slim` is executed, and again with `--format dot --slim`.
+
+**Then:**
+- Both invocations fail rather than silently ignoring the flag
+- The error message says `--slim requires --format json`
+- The spec directory both invocations are pointed at is a valid one, so the refusal is attributable to the flag combination alone and cannot be a read failure wearing the wrong message. That the check also runs before the directory is read is RenderCommand's contract, asserted there rather than here; this scenario does not exercise an unreadable spec

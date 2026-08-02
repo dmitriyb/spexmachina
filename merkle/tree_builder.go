@@ -18,7 +18,7 @@ type Node struct {
 	Key      string  `json:"key"`
 	Hash     string  `json:"hash"`
 	Type     string  `json:"type"`                // "leaf", "module", "project"
-	NodeType string  `json:"node_type,omitempty"`  // "component", "impl_section", "data_flow", "test_section", "meta", "requirement", "module"
+	NodeType string  `json:"node_type,omitempty"`  // "component", "data_flow", "test_section", "api", "meta", "requirement", "module"
 	Module   string  `json:"module,omitempty"`     // identity hash of parent module ("" for project-level nodes)
 	Children []*Node `json:"children,omitempty"`
 	moduleName string // unexported; module name for ModuleNames extraction
@@ -118,22 +118,19 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		children = append(children, node)
 	}
 
+	for _, api := range modSpec.APIs {
+		node, err := hashAPI(api, api.ID, moduleHash)
+		if err != nil {
+			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+		}
+		children = append(children, node)
+	}
+
 	for _, c := range modSpec.Components {
 		if c.Content == "" {
 			continue
 		}
 		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), c.ID, "component", moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, leaf)
-	}
-
-	for _, s := range modSpec.ImplSections {
-		if s.Content == "" {
-			continue
-		}
-		leaf, err := hashLeaf(filepath.Join(modDir, s.Content), s.ID, "impl_section", moduleHash)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -206,6 +203,39 @@ func hashModuleRequirement(req schema.ModuleRequirement, key string, module stri
 		Hash:     h,
 		Type:     "leaf",
 		NodeType: "requirement",
+		Module:   module,
+	}, nil
+}
+
+// hashAPI creates a leaf node for a module-level api by hashing its
+// deterministic JSON serialization. APIs have no content file, so — exactly as
+// for requirements — the JSON fields are the content. Fields are sorted by key
+// and zero-value fields are excluded (matching omitempty semantics).
+func hashAPI(api schema.API, key string, module string) (*Node, error) {
+	fields := map[string]interface{}{}
+	if api.Description != "" {
+		fields["description"] = api.Description
+	}
+	if api.Group != "" {
+		fields["group"] = api.Group
+	}
+	fields["id"] = api.ID
+	if api.Name != "" {
+		fields["name"] = api.Name
+	}
+	if len(api.ProvidedBy) > 0 {
+		fields["provided_by"] = api.ProvidedBy
+	}
+
+	data, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: hash api %s: %w", key, err)
+	}
+	return &Node{
+		Key:      key,
+		Hash:     HashBytes(data),
+		Type:     "leaf",
+		NodeType: "api",
 		Module:   module,
 	}, nil
 }

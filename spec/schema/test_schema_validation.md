@@ -40,15 +40,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [
     { "id": 1, "name": "Alpha", "path": "alpha", "description": "First module." },
     { "id": 2, "name": "Beta", "path": "beta", "requires_module": [1] }
-  ],
-  "milestones": [
-    { "id": 1, "title": "M1", "description": "First milestone.", "groups": [1, 2] }
-  ],
-  "test_plan": {
-    "scenarios": [
-      { "id": 1, "name": "End-to-end flow", "description": "Cross-module test.", "content": "test_e2e.md", "modules": [1, 2] }
-    ]
-  }
+  ]
 }
 ```
 
@@ -64,9 +56,6 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "components": [
     { "id": 1, "name": "C1", "content": "arch_c1.md", "implements": [1] },
     { "id": 2, "name": "C2", "uses": [1], "implements": [2] }
-  ],
-  "impl_sections": [
-    { "id": 1, "name": "Impl1", "content": "impl_c1.md", "describes": [1] }
   ],
   "data_flows": [
     { "id": 1, "name": "Flow1", "description": "Data flow.", "content": "flow_main.md", "uses": [1, 2] }
@@ -94,7 +83,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:** `valid_project.json` (see Setup)
 **Expected:** Validation passes. Zero errors.
-**Verifies:** All optional fields (`description`, `version`, `requirements`, `milestones`, `test_plan`) are accepted when present and correctly typed.
+**Verifies:** All optional fields (`description`, `version`, `requirements`) are accepted when present and correctly typed.
 
 ### S3: Minimal module.json passes validation
 
@@ -106,7 +95,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:** `valid_module.json` (see Setup)
 **Expected:** Validation passes. Zero errors.
-**Verifies:** All optional arrays (`requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`) are accepted.
+**Verifies:** All optional arrays (`requirements`, `components`, `data_flows`, `test_sections`, `apis`) are accepted.
 
 ### S5: Project missing required field "name" fails
 
@@ -169,7 +158,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [{ "id": "one", "name": "m", "path": "m/" }]
 }
 ```
-**Expected:** Validation fails. Error references `modules/0/id` with type mismatch (expected integer, got string).
+**Expected:** Validation fails. Error references `modules/0/id` — `"one"` does not match the identity-hash pattern `^[0-9a-f]{12}$`. An integer `id` fails the same way, on type: the field is a string.
 
 **Input (float ID in component):**
 ```json
@@ -239,7 +228,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "components": [{ "id": 0, "name": "C" }]
 }
 ```
-**Expected:** Validation fails. Error references `components/0/id` — value 0 is below `minimum: 1`.
+**Expected:** Validation fails. Error references `components/0/id` — `0` is not a string matching `^[a-f0-9]{12}$` (module.schema.json spells the class in that order; project.schema.json's `$defs/identityHash` spells it `^[0-9a-f]{12}$`).
 
 **Input (negative ID):**
 ```json
@@ -248,7 +237,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "modules": [{ "id": -1, "name": "m", "path": "m/" }]
 }
 ```
-**Expected:** Validation fails. Error references `modules/0/id` — value -1 is below `minimum: 1`.
+**Expected:** Validation fails. Error references `modules/0/id` — `-1` is not a string matching `^[0-9a-f]{12}$`; `project.schema.json` constrains module ids by pattern, not by numeric range.
 
 ### S14: Empty string for name fails (minLength: 1)
 
@@ -278,32 +267,17 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```
 **Expected:** Validation fails. Error references `requirements/1/depends_on` — duplicate items violate `uniqueItems: true`.
 
-### S16: test_plan validates correctly in project.json
+### S16: Retired project-level node types are rejected
 
-**Input (valid test_plan with minimal scenario):**
+**Input (a project carrying the retired `milestones` array):**
 ```json
 {
   "name": "p",
   "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "scenarios": [{ "id": 1, "name": "Smoke test" }]
-  }
+  "milestones": []
 }
 ```
-**Expected:** Validation passes. Only `id` and `name` are required on test_scenario.
-
-**Input (test_plan with extra property):**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "strategy": "risk-based",
-    "scenarios": []
-  }
-}
-```
-**Expected:** Validation fails. `test_plan` has `additionalProperties: false`, so `strategy` is rejected.
+**Expected:** Validation fails with an unknown-property error at the root: `milestones` and `test_plan` were removed from the project schema along with their `$defs`, and root-level `additionalProperties: false` rejects either one. Same for `"test_plan": {}`. This fixture draws a second, independent error from its `"id": 1`, since a module id is an identity hash string — so the assertion is on the unknown-property error, not on the error count.
 
 ### S17: test_sections validates correctly in module.json
 
@@ -335,11 +309,10 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 - `len(proj.Modules) == len(proj2.Modules)`
 - `proj.Modules[1].RequiresModule` matches
 - `proj.Requirements[1].DependsOn` matches
-- `proj.Milestones[0].Groups` matches
 
 Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 - `mod.Components[0].Implements` matches
-- `mod.ImplSections[0].Describes` matches
+- `mod.TestSections[0].Describes` matches
 - `mod.DataFlows[0].Uses` matches
 
 ## Edge Cases
@@ -351,9 +324,7 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 {
   "name": "p",
   "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "requirements": [],
-  "milestones": [],
-  "test_plan": { "scenarios": [] }
+  "requirements": []
 }
 ```
 **Expected:** Validation passes. Empty arrays satisfy the schema — only `modules` has `minItems: 1`.
@@ -364,17 +335,16 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
   "name": "m",
   "requirements": [],
   "components": [],
-  "impl_sections": [],
   "data_flows": [],
   "test_sections": []
 }
 ```
 **Expected:** Validation passes.
 
-### E2: Boundary ID value (minimum = 1)
+### E2: Boundary ID value (identity-hash length)
 
-**Input:** Any node with `"id": 1` — passes. Any node with `"id": 0` — fails.
-This is the boundary test for the `minimum: 1` constraint on all ID fields.
+**Input:** Any node with `"id": "aabbccddeeff"` — passes. Any node with `"id": "aabbccddeef"` (11 chars) — fails.
+This is the boundary test for the 12-hex-character identity pattern every ID field carries — `^[0-9a-f]{12}$` at `project.schema.json`'s `$defs/identityHash`, spelled `^[a-f0-9]{12}$` at each of the 12 pattern sites in `module.schema.json`.
 
 ### E3: Large ID values
 
@@ -506,32 +476,6 @@ This is the boundary test for the `minimum: 1` constraint on all ID fields.
 }
 ```
 **Expected:** Validation fails. The project-level requirement definition does not include `preq_id` (it is only in the module-level definition), and `additionalProperties: false` rejects it. This verifies that the two requirement definitions are correctly separated.
-
-### E9: test_plan with empty scenarios object
-
-**Input:**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {}
-}
-```
-**Expected:** Validation passes. The `test_plan` object has no required properties — `scenarios` is optional.
-
-### E10: test_scenario modules array with duplicates
-
-**Input:**
-```json
-{
-  "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
-  "test_plan": {
-    "scenarios": [{ "id": 1, "name": "S", "modules": [1, 1] }]
-  }
-}
-```
-**Expected:** Validation fails. `modules` array on test_scenario has `uniqueItems: true`.
 
 ### S21: Sections array accepted in project.json
 

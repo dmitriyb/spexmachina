@@ -32,21 +32,21 @@ Run `spex hash-id --module validator --type requirement --name "ID uniqueness"`.
 
 Assert stdout equals `schema.IdentityHash("validator", "requirement", "ID uniqueness")` and exit code is 0.
 
-### S5: Milestone hash
+### S5: Retired node types are rejected
 
-Run `spex hash-id --type milestone --name "Bootstrap"`.
+For each type in `[milestone, scenario]`:
 
-Assert stdout equals `schema.IdentityHash("milestone", "Bootstrap")` and exit code is 0.
+Run `spex hash-id --type <type> --name x`.
 
-### S6: Test plan scenario hash
+Assert exit code is non-zero and the error mentions an unknown type. Both types were deleted from the schema; a command that still minted ids for them would hand authors ids for nodes the schema rejects.
 
-Run `spex hash-id --type scenario --name "Cross-module mapping integration"`.
+### S6: (retired — absorbed into S5)
 
-Assert stdout equals `schema.IdentityHash("test_plan", "scenario", "Cross-module mapping integration")` and exit code is 0.
+S6 asserted that `--type scenario` produced `test_plan/scenario/<name>` and exited 0. The `scenario` node type no longer exists, so the assertion inverted and now runs as one of S5's two cases beside `milestone`; the test that carried S6 was deleted rather than rewritten. The number is left vacant instead of reused, because S7 through S9 name the tests that carry them and renumbering would break that correspondence.
 
 ### S7: All module-scoped types produce correct hashes
 
-For each type in `[component, impl_section, data_flow, test_section]`:
+For each type in `[component, data_flow, test_section, api]`:
 
 Run `spex hash-id --module alpha --type <type> --name Foo`.
 
@@ -54,7 +54,7 @@ Assert stdout equals `schema.IdentityHash("alpha", "<type>", "Foo")`.
 
 ### S8: Output matches hex pattern
 
-Run 10 different invocations with varying inputs.
+Run 8 different invocations with varying inputs.
 
 Assert every output line matches `^[a-f0-9]{12}$` — exactly 12 lowercase hex characters, no trailing newline junk.
 

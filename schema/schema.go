@@ -4,8 +4,8 @@
 // The JSON Schema files are embedded and accessible via [ProjectSchema] and
 // [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
 //
-// Node types: requirement, component, impl_section, data_flow, milestone, module, test_scenario.
-// Edge types: implements, uses, describes, described_in, depends_on, groups, requires_module, modules.
+// Node types: requirement, component, data_flow, api, module, test_section.
+// Edge types: implements, uses, describes, described_in, provided_by, depends_on, requires_module.
 package schema
 
 import (
@@ -69,8 +69,6 @@ type Project struct {
 	Version      string        `json:"version,omitempty"`
 	Requirements []Requirement `json:"requirements,omitempty"`
 	Modules      []Module      `json:"modules"`
-	Milestones   []Milestone   `json:"milestones,omitempty"`
-	TestPlan     *TestPlan     `json:"test_plan,omitempty"`
 	Sections     []Section     `json:"sections,omitempty"`
 }
 
@@ -128,30 +126,6 @@ type Requirement struct {
 	DependsOn   []string `json:"depends_on,omitempty"`
 }
 
-// Milestone represents a milestone in project.json.
-// IDs are 12-character hex identity hash strings.
-type Milestone struct {
-	ID          string   `json:"id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description,omitempty"`
-	Groups      []string `json:"groups,omitempty"`
-}
-
-// TestPlan represents the test_plan object in project.json.
-type TestPlan struct {
-	Scenarios []TestScenario `json:"scenarios,omitempty"`
-}
-
-// TestScenario represents a cross-module test scenario in a project's test_plan.
-// IDs are 12-character hex identity hash strings.
-type TestScenario struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Description string   `json:"description,omitempty"`
-	Content     string   `json:"content,omitempty"`
-	Modules     []string `json:"modules,omitempty"`
-}
-
 // ModuleSpec represents a module.json file.
 // All IDs are 12-character hex identity hash strings.
 type ModuleSpec struct {
@@ -159,9 +133,9 @@ type ModuleSpec struct {
 	Description  string              `json:"description,omitempty"`
 	Requirements []ModuleRequirement `json:"requirements,omitempty"`
 	Components   []Component         `json:"components,omitempty"`
-	ImplSections []ImplSection       `json:"impl_sections,omitempty"`
 	DataFlows    []DataFlow          `json:"data_flows,omitempty"`
 	TestSections []TestSection       `json:"test_sections,omitempty"`
+	APIs         []API               `json:"apis,omitempty"`
 }
 
 // ModuleRequirement represents a requirement in module.json.
@@ -194,12 +168,19 @@ type Component struct {
 	Uses        []string `json:"uses,omitempty"`
 }
 
-// ImplSection represents an implementation section in a module.
-type ImplSection struct {
-	ID        string   `json:"id"`
-	Name      string   `json:"name"`
-	Content   string   `json:"content,omitempty"`
-	Describes []string `json:"describes,omitempty"`
+// API represents an external surface entry point exposed by a module: a CLI
+// subcommand, an HTTP route, or a library entry point. Name is the exact
+// surface string as callers write it ("spex diff", "GET /v1/specs/{id}",
+// "schema.IdentityHash") — never a signature. APIs have no content file; like
+// project requirements they hash from their JSON fields alone. Group is
+// freeform and spex never branches on it; it exists so renderers can group a
+// project's surface. ProvidedBy is module-local.
+type API struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description,omitempty"`
+	ProvidedBy  []string `json:"provided_by,omitempty"`
+	Group       string   `json:"group,omitempty"`
 }
 
 // DataFlow represents a data flow in a module.

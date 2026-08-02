@@ -8,15 +8,6 @@
       "name": "Encoder"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Encoder impl"
-    }
-  ],
   "name": "beta",
   "requirements": [
     {

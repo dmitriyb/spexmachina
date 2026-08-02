@@ -84,7 +84,7 @@ func TestREQ3_Save_FlatNodeMap(t *testing.T) {
 		schema.IdentityHash("alpha", "requirement", "Alpha req 2"),
 		schema.IdentityHash("alpha", "component", "Comp1"),
 		schema.IdentityHash("alpha", "component", "Comp2"),
-		schema.IdentityHash("alpha", "impl_section", "Impl1"),
+		schema.IdentityHash("alpha", "test_section", "Test1"),
 		betaHash,
 		"meta/" + betaHash,
 		schema.IdentityHash("beta", "component", "BetaComp"),

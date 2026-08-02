@@ -69,7 +69,7 @@ func TestFR2_S4_FullModulePasses(t *testing.T) {
 
 func TestFR2_S8_ModuleMissingNameFails(t *testing.T) {
 	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"components": [{"id": "aabbccddeeff", "name": "C"}]}`)
+	err := validateModule(t, sch, `{"components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md"}]}`)
 	if err == nil {
 		t.Fatal("expected validation error for missing name, got nil")
 	}
@@ -124,7 +124,7 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 	}{
 		{
 			"integer ID in component",
-			`{"name": "m", "components": [{"id": 1, "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": 1, "name": "C", "content": "arch_c.md"}]}`,
 		},
 		{
 			"integer ID in requirement",
@@ -161,11 +161,11 @@ func TestFR2_S12_ExtraFieldsRejected(t *testing.T) {
 	}{
 		{
 			"extra field at component level",
-			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "status": "done"}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "status": "done"}]}`,
 		},
 		{
 			"extra field at test_section level",
-			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "T", "priority": "P1"}]}`,
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "T", "content": "test_t.md", "priority": "P1"}]}`,
 		},
 		{
 			"extra field at module root",
@@ -192,32 +192,32 @@ func TestNFR4_IDPatternValidation(t *testing.T) {
 	}{
 		{
 			"valid 12-char hex ID",
-			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md"}]}`,
 			false,
 		},
 		{
 			"too short ID",
-			`{"name": "m", "components": [{"id": "aabbcc", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "aabbcc", "name": "C", "content": "arch_c.md"}]}`,
 			true,
 		},
 		{
 			"too long ID",
-			`{"name": "m", "components": [{"id": "aabbccddeeff00", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff00", "name": "C", "content": "arch_c.md"}]}`,
 			true,
 		},
 		{
 			"uppercase hex rejected",
-			`{"name": "m", "components": [{"id": "AABBCCDDEEFF", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "AABBCCDDEEFF", "name": "C", "content": "arch_c.md"}]}`,
 			true,
 		},
 		{
 			"non-hex characters rejected",
-			`{"name": "m", "components": [{"id": "aabbccddeegg", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeegg", "name": "C", "content": "arch_c.md"}]}`,
 			true,
 		},
 		{
 			"empty string rejected",
-			`{"name": "m", "components": [{"id": "", "name": "C"}]}`,
+			`{"name": "m", "components": [{"id": "", "name": "C", "content": "arch_c.md"}]}`,
 			true,
 		},
 		{
@@ -242,22 +242,22 @@ func TestNFR4_IDPatternValidation(t *testing.T) {
 		},
 		{
 			"valid implements hashes",
-			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "implements": ["112233445566"]}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "implements": ["112233445566"]}]}`,
 			false,
 		},
 		{
 			"invalid implements item pattern",
-			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "implements": ["xyz"]}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "implements": ["xyz"]}]}`,
 			true,
 		},
 		{
 			"valid uses hashes",
-			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "uses": ["112233445566"]}]}`,
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "uses": ["112233445566"]}]}`,
 			false,
 		},
 		{
 			"valid describes hashes",
-			`{"name": "m", "impl_sections": [{"id": "aabbccddeeff", "name": "S", "describes": ["112233445566"]}]}`,
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "S", "content": "test_s.md", "describes": ["112233445566"]}]}`,
 			false,
 		},
 	}
@@ -279,6 +279,51 @@ func TestFR2_S14_EmptyStringNameFails(t *testing.T) {
 	err := validateModule(t, sch, `{"name": ""}`)
 	if err == nil {
 		t.Fatal("expected validation error for empty name, got nil")
+	}
+}
+
+func TestFR2_ContentRequiredOnContentBearingNodes(t *testing.T) {
+	sch := compileModuleSchema(t)
+
+	tests := []struct {
+		name string
+		doc  string
+	}{
+		{
+			"component missing content",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C"}]}`,
+		},
+		{
+			"component empty content",
+			`{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": ""}]}`,
+		},
+		{
+			"test_section missing content",
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "T"}]}`,
+		},
+		{
+			"test_section empty content",
+			`{"name": "m", "test_sections": [{"id": "aabbccddeeff", "name": "T", "content": ""}]}`,
+		},
+		{
+			"data_flow missing content",
+			`{"name": "m", "data_flows": [{"id": "aabbccddeeff", "name": "F"}]}`,
+		},
+		{
+			"data_flow empty content",
+			`{"name": "m", "data_flows": [{"id": "aabbccddeeff", "name": "F", "content": ""}]}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateModule(t, sch, tt.doc)
+			if err == nil {
+				t.Fatalf("expected validation error for %s, got nil", tt.name)
+			}
+			if !strings.Contains(err.Error(), "content") {
+				t.Fatalf("error should reference 'content', got: %v", err)
+			}
+		})
 	}
 }
 
@@ -314,7 +359,7 @@ func TestFR5_S17_TestSectionsValidation(t *testing.T) {
 	t.Run("test_section missing required name", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"test_sections": [{"id": "aabbccddeeff"}]
+			"test_sections": [{"id": "aabbccddeeff", "content": "test_t.md"}]
 		}`)
 		if err == nil {
 			t.Fatal("expected validation error for test_section missing name, got nil")
@@ -355,12 +400,12 @@ func TestFR2_S18_GoTypeRoundTrip(t *testing.T) {
 			t.Fatalf("implements[%d] mismatch: want %s, got %s", i, v, mod2.Components[0].Implements[i])
 		}
 	}
-	if len(mod.ImplSections[0].Describes) != len(mod2.ImplSections[0].Describes) {
+	if len(mod.TestSections[0].Describes) != len(mod2.TestSections[0].Describes) {
 		t.Fatalf("describes length mismatch")
 	}
-	for i, v := range mod.ImplSections[0].Describes {
-		if v != mod2.ImplSections[0].Describes[i] {
-			t.Fatalf("describes[%d] mismatch: want %s, got %s", i, v, mod2.ImplSections[0].Describes[i])
+	for i, v := range mod.TestSections[0].Describes {
+		if v != mod2.TestSections[0].Describes[i] {
+			t.Fatalf("describes[%d] mismatch: want %s, got %s", i, v, mod2.TestSections[0].Describes[i])
 		}
 	}
 	if len(mod.DataFlows[0].Uses) != len(mod2.DataFlows[0].Uses) {
@@ -409,7 +454,6 @@ func TestFR2_E1_EmptyOptionalArraysValid(t *testing.T) {
 		"name": "m",
 		"requirements": [],
 		"components": [],
-		"impl_sections": [],
 		"data_flows": [],
 		"test_sections": []
 	}`)
@@ -504,7 +548,7 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 
 	// Check properties keys
 	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "requirements", "components", "impl_sections", "data_flows", "test_sections"} {
+	for _, key := range []string{"name", "description", "requirements", "components", "data_flows", "test_sections"} {
 		if props[key] == nil {
 			t.Fatalf("module schema missing property %q", key)
 		}
@@ -512,7 +556,7 @@ func TestFR2_ModuleSchemaMetaProperties(t *testing.T) {
 
 	// Check $defs keys
 	defs := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+	for _, key := range []string{"requirement", "component", "data_flow", "test_section"} {
 		if defs[key] == nil {
 			t.Fatalf("module schema missing $def %q", key)
 		}
@@ -533,7 +577,7 @@ func TestNFR4_IDFieldsUseIdentityHashPattern(t *testing.T) {
 	wantPattern := "^[a-f0-9]{12}$"
 
 	// Check all $def ID fields use identity hash pattern
-	for _, defName := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+	for _, defName := range []string{"requirement", "component", "data_flow", "test_section"} {
 		def := defs[defName].(map[string]any)
 		props := def["properties"].(map[string]any)
 		idProp := props["id"].(map[string]any)

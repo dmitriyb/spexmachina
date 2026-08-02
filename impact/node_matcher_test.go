@@ -16,7 +16,7 @@ import (
 type fixtureHashes struct {
 	SCHK     string // validator/component/SchemaChecker
 	HASR     string // merkle/component/Hasher
-	HCMP     string // merkle/impl_section/Hash computation
+	HTST     string // merkle/test_section/Hashing tests
 	NEW      string // new (added) component without a record
 	REMOVED  string // removed component
 	VALIDMOD string // module/validator
@@ -27,7 +27,7 @@ func newFixture() fixtureHashes {
 	return fixtureHashes{
 		SCHK:     schema.IdentityHash("validator", "component", "SchemaChecker"),
 		HASR:     schema.IdentityHash("merkle", "component", "Hasher"),
-		HCMP:     schema.IdentityHash("merkle", "impl_section", "Hash computation"),
+		HTST:     schema.IdentityHash("merkle", "test_section", "Hashing tests"),
 		NEW:      schema.IdentityHash("validator", "component", "NewChecker"),
 		REMOVED:  schema.IdentityHash("merkle", "component", "LegacyHasher"),
 		VALIDMOD: schema.IdentityHash("module", "validator"),
@@ -40,7 +40,7 @@ func baseRecords(h fixtureHashes) []mapping.Record {
 	return []mapping.Record{
 		{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker"},
 		{ID: 2, SpecNodeID: h.HASR, BeadID: "spex-002", Module: "merkle", Component: "Hasher"},
-		{ID: 3, SpecNodeID: h.HCMP, BeadID: "spex-003", Module: "merkle", Component: "Hash computation"},
+		{ID: 3, SpecNodeID: h.HTST, BeadID: "spex-003", Module: "merkle", Component: "Hash computation"},
 	}
 }
 
@@ -55,7 +55,7 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 			Module: "validator",
 		},
 		{
-			Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD, OldHash: "ccc", NewHash: "ddd"},
+			Change: merkle.Change{Key: h.HTST, Type: merkle.Modified, NodeType: "test_section", Module: h.MERKLMOD, OldHash: "ccc", NewHash: "ddd"},
 			Impact: merkle.ImplOnly,
 			Module: "merkle",
 		},
@@ -84,8 +84,8 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 	if m, ok := matchedByKey[h.SCHK]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-001" {
 		t.Errorf("want SCHK → spex-001, got %+v", m)
 	}
-	if m, ok := matchedByKey[h.HCMP]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-003" {
-		t.Errorf("want HCMP → spex-003, got %+v", m)
+	if m, ok := matchedByKey[h.HTST]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-003" {
+		t.Errorf("want HTST → spex-003, got %+v", m)
 	}
 
 	if len(unmatched) != 1 || unmatched[0].Change.Key != h.NEW {
@@ -127,12 +127,12 @@ func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 // S5: NodeMatcher uses direct identity-hash comparison.
 //
 // Two distinct spec nodes always have distinct identity hashes. A record for
-// SchemaChecker (a component) must never match an impl_section change, even
-// when the impl_section lives in a logically related module.
+// SchemaChecker (a component) must never match a test_section change, even
+// when the test_section lives in a logically related module.
 func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 	h := newFixture()
-	if h.HASR == h.HCMP {
-		t.Fatalf("fixture precondition failed: component and impl_section hashes collided")
+	if h.HASR == h.HTST {
+		t.Fatalf("fixture precondition failed: component and test_section hashes collided")
 	}
 
 	records := []mapping.Record{
@@ -140,7 +140,7 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 	}
 	changes := []merkle.ClassifiedChange{
 		{
-			Change: merkle.Change{Key: h.HCMP, Type: merkle.Modified, NodeType: "impl_section", Module: h.MERKLMOD},
+			Change: merkle.Change{Key: h.HTST, Type: merkle.Modified, NodeType: "test_section", Module: h.MERKLMOD},
 			Impact: merkle.ImplOnly,
 			Module: "merkle",
 		},
@@ -149,10 +149,10 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 	matched, unmatched, _ := MatchNodes(changes, records)
 
 	if len(matched) != 0 {
-		t.Errorf("want 0 matched (HCMP != HASR by exact string equality), got %+v", matched)
+		t.Errorf("want 0 matched (HTST != HASR by exact string equality), got %+v", matched)
 	}
-	if len(unmatched) != 1 || unmatched[0].Change.Key != h.HCMP {
-		t.Errorf("want HCMP as unmatched, got %+v", unmatched)
+	if len(unmatched) != 1 || unmatched[0].Change.Key != h.HTST {
+		t.Errorf("want HTST as unmatched, got %+v", unmatched)
 	}
 }
 
@@ -331,7 +331,7 @@ func TestFR2_E2_RecordWithoutMatchingChange(t *testing.T) {
 	h := newFixture()
 	records := baseRecords(h) // three records
 	changes := []merkle.ClassifiedChange{
-		// Only SCHK is in the diff; HASR and HCMP records should be silent.
+		// Only SCHK is in the diff; HASR and HTST records should be silent.
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,

@@ -22,12 +22,12 @@ Tests for the seven consistency invariants the ingest module enforces after appl
 ### Invariant 2: close-on-removed leaves a record
 
 - Apply reconciler with a close op whose reason is "Spec node removed" and status ok. Then manually inject a leftover record for the removed spec_node_id. AssertInvariants.
-- Expected: error `"ingest: invariant 2: removed spec_node <id> still has mapping record"`.
+- Expected: error `"ingest: reconcile: invariant 2: removed bead <bead_id> still has mapping record"`.
 
 ### Invariant 3: modified node points to old bead_id
 
 - Apply close+create for a modified node. Manually set the record's bead_id to the old (pre-close) value. AssertInvariants.
-- Expected: error `"ingest: invariant 3: modified node <id> record points to old bead_id <old> not new <new>"`.
+- Expected: error `"ingest: reconcile: invariant 3: modified bead <old> record still points to old bead_id"`.
 
 ### Invariant 4: orphan record
 
@@ -48,10 +48,24 @@ Tests for the seven consistency invariants the ingest module enforces after appl
 
 - Receipts status complete. Expected: snapshot rewritten with current merkle tree.
 
+### One snapshot format across both writers
+
+**Given** a fixture spec tree, a fixed timestamp, and two destinations.
+**When** the saver's atomic write produces one file and the `merkle` module's own in-place `Save` produces the other.
+**Then** the two files are byte-identical.
+
+**Rationale**: two writers of one format is the shape this repository already
+got wrong once — the saver carried its own tree walk described as "mirroring"
+merkle's, nothing compared the two, and either could have drifted while both
+kept passing their own tests. The formats are one implementation now; this
+scenario is what makes a second one fail loudly instead of silently. The
+timestamp is fixed because `created_at` is the only field that would otherwise
+differ between two writes.
+
 ### Invariant 7: schema violation
 
 - After reconciliation, manually corrupt .bead-map.json (missing required field on a record). AssertInvariants.
-- Expected: schema validator error surfaced through AssertInvariants.
+- Expected: schema validator error surfaced through `Store.Replace`, which `Reconciler.Apply` calls after `assertInvariants` returns. `assertInvariants` itself does not schema-validate.
 
 ## Happy Path
 

@@ -10,7 +10,6 @@
     }
   ],
   "data_flows": [],
-  "impl_sections": [],
   "name": "core",
   "requirements": [
     {

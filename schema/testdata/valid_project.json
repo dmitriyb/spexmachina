@@ -1,16 +1,5 @@
 {
   "description": "The spec state machine.",
-  "milestones": [
-    {
-      "description": "Core schema and validation working.",
-      "groups": [
-        "000000000001",
-        "000000000002"
-      ],
-      "id": "000000000001",
-      "title": "Bootstrap"
-    }
-  ],
   "modules": [
     {
       "description": "JSON Schema definitions for project.json and module.json.",
@@ -62,19 +51,5 @@
       "type": "non_functional"
     }
   ],
-  "test_plan": {
-    "scenarios": [
-      {
-        "content": "test_e2e.md",
-        "description": "Cross-module test.",
-        "id": "000000000001",
-        "modules": [
-          "000000000001",
-          "000000000002"
-        ],
-        "name": "End-to-end flow"
-      }
-    ]
-  },
   "version": "0.1.0"
 }

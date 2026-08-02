@@ -4,7 +4,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 ## Setup
 
-- `testdata/` contains paired `changeset_*.json` + `receipts_*.json` + `expected_bead_map_*.json` fixtures.
+- In-code Go fixtures, no on-disk testdata: `newFakeSpecGraph`, `newTestStore` and `idem` in `ingest/reconciler_test.go` build each changeset/receipts pair.
 - Tests load an initial `.bead-map.json`, run reconciliation, assert the resulting file matches expected.
 
 ## Scenarios
@@ -84,6 +84,4 @@ After each successful create op, the mapping store's `next_record_id` counter ad
 
 ## Fixtures
 
-Under `ingest/testdata/reconciliation/`:
-
-- `changeset_*.json`, `receipts_*.json`, `initial_bead_map_*.json`, `expected_bead_map_*.json` — one triple per scenario above.
+In-code Go fixtures, no on-disk testdata. `ingest/reconciler_test.go` builds each scenario's `emit.Changeset` and `adapters.Receipts` as Go values, seeds the store with `newTestStore` (`:44`), supplies spec metadata with `newFakeSpecGraph` (`:20`), and labels ops with `idem` (`:56`).

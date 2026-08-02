@@ -10,31 +10,38 @@ Tests use a temporary directory containing:
 
 2. **A snapshot file** representing the previous state, so that `spex diff` can produce a meaningful diff. The snapshot is pre-computed with known hashes.
 
-3. **A diff file** (or piped stdin) containing the merkle diff output. The diff fixture represents:
-   - `validator/arch_schema_checker.md` modified (impact: arch_impl)
-   - `validator/arch_orphan_detector.md` added (impact: arch_impl)
-   - `merkle/impl_hash_computation.md` modified (impact: impl_only)
-   - `merkle/arch_diff_engine.md` removed (impact: arch_impl)
+3. **A diff file** (or piped stdin) containing the merkle diff output — a JSON object with a `changes` array and an `errors` array, which is the document `spex diff --json` writes. A bare array is not a diff document and does not parse. The diff fixture's changes represent:
+   - `validator/arch_schema_checker.md` modified (impact: arch_impl) — component SchemaChecker
+   - `validator/arch_coupled_section_checker.md` added (impact: arch_impl) — component CoupledSectionChecker
+   - `merkle/arch_hasher.md` modified (impact: arch_impl) — component Hasher
+   - `merkle/arch_diff_engine.md` removed (impact: arch_impl) — component DiffEngine
 
-4. **A mock bead CLI** — a shell script or test binary at a known path that outputs the fixture bead JSON when called with `list --json`. This avoids depending on a real `br` or `bd` installation.
+4. **A mapping file** at the path `--map` names, defaulting to `.bead-map.json` beside the spec directory. It is what ties a bead to a spec node; the bead itself never carries an identity hash. The mapping store schema-validates the file before parsing it, so the fixture is a bead-map document — an object with `next_id` and `records` — and each record also carries `bead_type`, `content_file` and `spec_hash`. A bare array of records is refused with `impact: read mapping records: map: schema validation …` and exit 1. Three records:
 
-```bash
-#!/bin/sh
-# mock_br: returns fixture bead data
-if [ "$1" = "list" ] && [ "$2" = "--json" ]; then
-  cat <<'BEADS'
-[
-  {"id":"spex-001","title":"Implement SchemaChecker","labels":["spec_module:validator","spec_component:SchemaChecker","spec_hash:abc123"]},
-  {"id":"spex-003","title":"Implement hash computation","labels":["spec_module:merkle","spec_impl_section:Hash computation","spec_hash:ghi789"]},
-  {"id":"spex-010","title":"Implement LegacyHasher","labels":["spec_module:merkle","spec_component:LegacyHasher","spec_hash:zzz000"]}
-]
-BEADS
-  exit 0
-fi
-exit 1
+```json
+{
+  "next_id": 11,
+  "records": [
+    {"id": 1,  "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker", "content_file": "spec/validator/arch_schema_checker.md", "spec_hash": "<SCHK_SPEC_SHA>"},
+    {"id": 3,  "spec_node_id": "<HASR_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hasher",        "content_file": "spec/merkle/arch_hasher.md",            "spec_hash": "<HASR_SPEC_SHA>"},
+    {"id": 10, "spec_node_id": "<DIFF_HASH>", "bead_id": "spex-010", "bead_type": "task", "module": "merkle",    "component": "DiffEngine",    "content_file": "spec/merkle/arch_diff_engine.md",       "spec_hash": "<DIFF_SPEC_SHA>"}
+  ]
+}
 ```
 
-The mock binary is placed on PATH or referenced via the `--bead-cli` flag.
+5. **A bead file** — the tracker listing, written to disk by the caller and handed over with `--beads`. There is no mock CLI and nothing on PATH: the command starts no process, so a fixture file is the whole harness. Either the wrapped envelope or a bare array is accepted:
+
+```json
+{
+  "issues": [
+    {"id": "spex-001", "status": "open",   "labels": ["spex:1"]},
+    {"id": "spex-003", "status": "open",   "labels": ["spex:3"]},
+    {"id": "spex-010", "status": "open",   "labels": ["spex:10"]}
+  ]
+}
+```
+
+The `spex:<n>` label carries a mapping record id and nothing else. Each bead's `status` is joined onto the record whose own `id` is that integer, and a bead with no `spex:` label is dropped without comment. The cleanup scenario uses a variant of this file in which `spex-010` reads `"status": "closed"`.
 
 ## Scenarios
 
@@ -42,22 +49,24 @@ The mock binary is placed on PATH or referenced via the `--bead-cli` flag.
 
 Run:
 ```
-spex impact --diff diff.json --bead-cli ./mock_br
+spex impact --diff diff.json --beads beads.json
 ```
 
-Capture stdout. Parse the output as JSON. Assert the report contains:
-- **creates**: 1 entry for `validator/OrphanDetector` (added node, no matching bead)
-- **closes**: 1 entry for bead `spex-010` / `merkle/LegacyHasher` (bead references a component in merkle, and `arch_diff_engine.md` was removed — but LegacyHasher is the orphaned bead whose spec node was removed)
-- **reviews**: 2 entries — `spex-001` for `validator/SchemaChecker` (modified) and `spex-003` for `merkle/Hash computation` (modified)
-- **summary**: `create_count: 1, close_count: 1, review_count: 2`
+Capture stdout. Parse the output as JSON. The report has exactly three top-level fields — `creates`, `obsoletes` and `summary`. There is no `closes` group and no `reviews` group; a spec change to a node that already has a bead obsoletes that bead and creates a fresh one. Assert:
 
-Assert exit code is 0.
+- **creates**: 3 entries, in this order — `merkle/Hasher` (reason `Spec node modified (new): merkle/Hasher`, `old_bead_id` `spex-003`), `validator/CoupledSectionChecker` (reason `New spec node: validator/CoupledSectionChecker`, no `old_bead_id`), `validator/SchemaChecker` (reason `Spec node modified (new): validator/SchemaChecker`, `old_bead_id` `spex-001`)
+- **obsoletes**: 3 entries, in this order — `spex-010` for `merkle/DiffEngine` (reason `Spec node removed: merkle/DiffEngine`, `change_type` `removed`), `spex-003` for `merkle/Hasher` and `spex-001` for `validator/SchemaChecker` (both reason `Spec node modified: <module>/<node>`, `change_type` `modified`)
+- **summary**: `create_count: 3, obsolete_count: 3`
+
+Both orderings are the sort the classifier applies to the whole action list before grouping — by action type, then module, then node name, then bead id — so they are fixed, not incidental.
+
+`spex-010` is open in this fixture, so the removed node yields an obsolete and no cleanup create. Assert exit code is 0.
 
 ### S2: Diff input from stdin (pipe)
 
 Run:
 ```
-cat diff.json | spex impact --bead-cli ./mock_br
+cat diff.json | spex impact --beads beads.json
 ```
 
 Assert the output is identical to S1. The command must accept diff input on stdin when `--diff` is not specified.
@@ -66,16 +75,16 @@ Assert the output is identical to S1. The command must accept diff input on stdi
 
 Run:
 ```
-cat diff.json | spex impact --diff - --bead-cli ./mock_br
+cat diff.json | spex impact --diff - --beads beads.json
 ```
 
 Assert the output is identical to S1. The `-` convention for stdin must be supported.
 
 ### S4: No changes — empty diff produces empty report
 
-Provide an empty diff (empty JSON array `[]`). Run:
+Provide a diff document whose `changes` array is empty (`{"changes": [], "errors": []}`). Run:
 ```
-spex impact --diff empty_diff.json --bead-cli ./mock_br
+spex impact --diff empty_diff.json --beads beads.json
 ```
 
 Assert stdout contains a valid JSON report with empty arrays and zero counts. Assert exit code is 0. An empty diff is not an error condition.
@@ -84,7 +93,7 @@ Assert stdout contains a valid JSON report with empty arrays and zero counts. As
 
 Run:
 ```
-spex impact --diff diff.json --bead-cli ./mock_br --json
+spex impact --diff diff.json --beads beads.json --json
 ```
 
 Assert the output is valid JSON. The `--json` flag should be the default behavior but must be accepted without error for explicitness and forward compatibility with potential non-JSON output formats.
@@ -94,7 +103,7 @@ Assert the output is valid JSON. The `--json` flag should be the default behavio
 This acceptance test validates the full pipeline integration:
 
 ```
-spex diff --snapshot snapshot.json --spec-dir ./spec | spex impact --bead-cli ./mock_br
+spex diff --snapshot snapshot.json --spec-dir ./spec | spex impact --beads beads.json
 ```
 
 Assert the composed pipeline produces a valid impact report. This tests that `spex diff` stdout format is exactly the format `spex impact` expects on stdin — no format adapter needed.
@@ -103,25 +112,35 @@ Assert the composed pipeline produces a valid impact report. This tests that `sp
 
 Run `spex impact` with valid inputs. Assert exit code 0.
 
-Run `spex impact --diff nonexistent_file.json --bead-cli ./mock_br`. Assert exit code 1 and stderr contains an error message about the missing file.
+Run `spex impact --diff nonexistent_file.json --beads beads.json`. Assert exit code 1 and stderr contains an error message about the missing file.
 
-### S8: Bead CLI binary selection via --bead-cli flag
+### S8: `--beads` drives the cleanup gate
 
-Run with `--bead-cli ./mock_br` (custom path). Assert the command uses the specified binary. Then run with `--bead-cli bd` to confirm it accepts alternative bead CLI names.
+Run S1's command against the variant bead file in which `spex-010` reads `"status": "closed"`:
 
-### S9: Default bead CLI is "br"
+```
+spex impact --diff diff.json --beads beads_closed.json
+```
 
-Run `spex impact --diff diff.json` without the `--bead-cli` flag, with a mock `br` binary on PATH. Assert the command invokes `br list --json`. This confirms the default value.
+Assert the removed node now yields two actions rather than one: the obsolete of `spex-010`, and a create for `merkle/DiffEngine` with reason `Code cleanup: merkle/DiffEngine` carrying `old_bead_id` `spex-010`. Summary becomes `create_count: 4, obsolete_count: 3`. This is the one observable difference the live status makes, and it is the reason a caller supplies the file at all.
+
+### S9: `--beads` omitted, and `--bead-cli` supplied, are both inert
+
+Run `spex impact --diff diff.json` with no `--beads` flag, against the same mapping file. Assert:
+- The command exits 0 and produces the S1 report — matching, classification and reporting all run without any bead file
+- No cleanup create appears for `merkle/DiffEngine`, whatever the tracker says about `spex-010`: the fixture records carry no `bead_status` of their own and nothing joined one onto them, so the removed-node gate reads no closed bead. It defaults closed in the safe direction — a missing input never invents work
+
+Then run the same command again with `--bead-cli br`, `--bead-cli bd` and `--bead-cli ./anything`. Assert the flag is accepted in every case and the output is byte-identical to the run without it. No process is started, nothing on PATH is consulted, and no `br list --json` is invoked — this binary never runs a tracker command. The flag survives only so that unmigrated pipelines still parse; it selects nothing.
 
 ### S10: Deterministic output across runs
 
-Run `spex impact --diff diff.json --bead-cli ./mock_br` five times. Capture stdout each time. Assert all five outputs are byte-for-byte identical. This validates the determinism requirement: same merkle diff + same bead state always produces the same impact report.
+Run `spex impact --diff diff.json --beads beads.json` five times. Capture stdout each time. Assert all five outputs are byte-for-byte identical. This validates the determinism requirement: same merkle diff + same bead state always produces the same impact report.
 
 ### S11: Report output is suitable for piping to spex emit
 
 Run:
 ```
-spex impact --diff diff.json --bead-cli ./mock_br > report.json
+spex impact --diff diff.json --beads beads.json > report.json
 ```
 
 Then verify `report.json` can be parsed as an `ImpactReport` struct and passed to `spex emit`. Specifically:
@@ -139,24 +158,29 @@ Generate a diff with 500 changed nodes across 20 modules. Provide a bead fixture
 
 ## Edge Cases
 
-### E1: Bead CLI not found
+### E1: `--beads` names a file that does not exist
 
-Run `spex impact --diff diff.json --bead-cli nonexistent_binary`. Assert:
+Run `spex impact --diff diff.json --beads nonexistent_file.json`. Assert:
 - Exit code is 1
-- stderr contains `"impact: read beads:"` error context
+- stderr contains `"impact: read beads:"` error context, wrapping the underlying file error
 - stdout is empty (no partial report)
 
-### E2: Bead CLI returns non-zero exit code
+An unreadable bead file is fatal, unlike an omitted one: a caller who asked for live status and did not get it is not silently given a report computed without it.
 
-Mock bead CLI exits with code 1 and writes `"database locked"` to stderr. Assert:
-- `spex impact` exits with code 1
-- stderr includes the bead CLI's error message in the wrapped error
+### E2: Bead file parses but names no spec-managed bead
 
-### E3: Bead CLI returns malformed JSON
+Provide a `--beads` file that is a valid JSON array in which no object carries a `spex:` label. Assert:
+- Exit code is 0 — an empty result is not an error
+- Every bead in the file is dropped, no mapping record gains a status, and the report matches the S9 run with `--beads` omitted
 
-Mock bead CLI outputs `{"broken":`. Assert:
+Provide a second file in which one object has no `id` at all. Assert exit code 1 and an error naming the offending index — a bead with no id is malformed input, not an unmanaged bead to skip.
+
+### E3: Bead file holds malformed JSON
+
+Provide a `--beads` file containing `{"broken":`. Assert:
 - Exit code is 1
-- Error message references JSON parsing
+- The error carries the `impact: read beads:` context and references JSON parsing
+- stdout is empty
 
 ### E4: Diff file contains malformed JSON
 
@@ -172,19 +196,21 @@ Provide a diff file that is completely empty (0 bytes, not `[]`). Assert:
 
 ### E6: Concurrent access safety
 
-If `spex impact` is run twice simultaneously against the same spec directory and bead CLI, both invocations must complete without corrupting each other's output. This is naturally satisfied because `spex impact` is read-only — it does not write to the spec directory or bead database. Assert both processes exit 0 and produce identical reports.
+If `spex impact` is run twice simultaneously against the same spec directory, mapping file and bead file, both invocations must complete without corrupting each other's output. This is naturally satisfied because `spex impact` is read-only over all three — it writes nothing but its report on stdout, and it starts no process that could write anything else. Assert both processes exit 0 and produce identical reports.
 
 ### E7: Spec directory with no modules
 
 Provide a diff referencing modules that do not exist in the spec tree. Assert that unmatched changes are reported (creates for added nodes) and no panics occur due to missing module.json files.
 
-### E8: Bead CLI returns beads with duplicate IDs
+### E8: Bead file carries two beads claiming the same record
 
-Mock bead CLI returns two beads with the same ID but different spec labels. Assert the command handles this gracefully — both entries are processed, and if they match different spec nodes, both matches appear in the report.
+Provide a `--beads` file holding two beads with different ids but the same `spex:3` label, one open and one closed. Assert the command exits 0 rather than reporting a conflict, and that record 3 ends up with the status of the bead that appeared **last** in the file — the join keeps one status per record id and later entries overwrite earlier ones. Order is preserved from the input, so the outcome is deterministic, not arbitrary.
+
+Also provide a bead carrying two `spex:` labels, `spex:3` and `spex:99`. Assert the first one that reads as a non-negative integer wins and the rest are ignored, and that a bead whose only `spex:` label has a non-numeric suffix is dropped from the result silently — exactly as a bead carrying no `spex:` label is.
 
 ### E9: Diff input contains errors — impact refuses to proceed
 
-Provide a diff JSON with a non-empty `errors` array. The `path` and `related` fields are identity hashes — `meta/<module-hash>` for the envelope leaf, and the component's identity hash for the implementing component:
+Provide a diff JSON with a non-empty `errors` array. The `path` and `related` fields are identity hashes — for a requirement-description complaint the `path` is the changed requirement's own hash, with the implementing component's hash in `related`. The `meta/<module-hash>` form belongs to the module-envelope complaint instead:
 
 ```json
 {
@@ -195,7 +221,7 @@ Provide a diff JSON with a non-empty `errors` array. The `path` and `related` fi
     {
       "type": "incomplete_change",
       "message": "Requirement 'Match changed nodes to beads' (impact) description changed but implementing component NodeMatcher content leaf unchanged",
-      "path": "meta/0011223344aa",
+      "path": "0011223344aa",
       "related": ["a1b2c3d4e5f6"]
     }
   ]

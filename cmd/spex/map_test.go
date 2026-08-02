@@ -30,14 +30,10 @@ func setupMapTestSpec(t *testing.T) (specDir string, mapFilePath string) {
 		"components": [
 			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"},
 			{"id": "ffeeddccbbaa", "name": "Comp2", "content": "arch_comp2.md", "uses": ["aabbccddeeff"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Impl1", "content": "impl_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")
 	writeTestFile(t, alphaDir, "arch_comp2.md", "# Comp2\n")
-	writeTestFile(t, alphaDir, "impl_comp1.md", "# Impl1\n")
 
 	mapPath := filepath.Join(dir, ".bead-map.json")
 	store := mapping.NewFileStore(mapPath)

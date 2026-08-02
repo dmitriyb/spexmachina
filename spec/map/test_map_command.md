@@ -10,12 +10,12 @@
 ### spex map get — valid record ID
 
 - **Input**: `spex map get 1`
-- **Expected**: JSON output with all fields: id, spec_node_id, bead_id, module, component, content_file, spec_hash. Exit code 0.
+- **Expected**: JSON output carrying the record's fields — id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash — with node_type and bead_status appearing as well on a record that sets them. Exit code 0.
 
 ### spex map get — unknown record ID
 
 - **Input**: `spex map get 999`
-- **Expected**: Error message "mapping record not found: 999". Exit code 1.
+- **Expected**: Error message "map get: map: record not found: 999". Exit code 1. The test asserts only that an error is returned, not the message.
 
 ### spex map list — all records
 
@@ -30,7 +30,7 @@
 ### spex map context — valid record ID
 
 - **Input**: `spex map context 1`
-- **Expected**: JSON output with record, arch_file, impl_files, test_files, flow_files, module_file. Exit code 0.
+- **Expected**: JSON output with record, arch_file, test_files, flow_files, module_file. Exit code 0.
 
 ### spex map context — unknown record ID
 

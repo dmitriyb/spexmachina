@@ -7,7 +7,7 @@
       "id": "d5a8407d38e1",
       "type": "functional",
       "title": "Validate spec structure",
-      "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references. Structured error output.",
+      "description": "Given a spec directory, confirm it is a valid DAG with no cycles and no broken references, that every declared content path resolves, and that coverage holds in both directions — every component described by a test_section, every requirement derived and implemented. Structured error output.",
       "priority": 1
     },
     {
@@ -24,7 +24,7 @@
       "id": "9120788210c9",
       "type": "functional",
       "title": "Map spec nodes to beads",
-      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, impl_section, module, spec_hash, proposal).",
+      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, module, spec_hash, proposal). Plan-relevant is a closed set of node types — component, data_flow and test_section, plus one epic per proposal — and a mapping record points at a node in that set, never at prose that elaborates one.",
       "priority": 1
     },
     {
@@ -42,7 +42,7 @@
       "id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply changes",
-      "description": "Execute bead actions via bead CLI (br or bd) with deterministic type assignment, parent hierarchy, lineage tracking, and priority propagation. Tag with proposal, save snapshot.",
+      "description": "Turn an impact report into applied tracker state through emit, an external adapter, and ingest. Emit composes a tool-agnostic changeset carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest reconciles the bead-map from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
       "depends_on": [
         "0a0f49f9be9b"
       ],
@@ -139,6 +139,13 @@
       "title": "No runtime subprocesses",
       "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
       "priority": 2
+    },
+    {
+      "id": "96c6c15ecc3e",
+      "type": "non_functional",
+      "title": "Declared stack",
+      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and .bead-map.json; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
+      "priority": 2
     }
   ],
   "modules": [
@@ -146,15 +153,16 @@
       "id": "f03774b40bd5",
       "name": "schema",
       "path": "schema",
-      "description": "JSON Schema definitions for project.json and module.json. The foundation that defines what a valid spec looks like."
+      "description": "JSON Schema definitions for project.json, module.json and .bead-map.json, plus the identity-hash function module-scoped node ids are derived from. The foundation that defines what a valid spec looks like."
     },
     {
       "id": "9ddd3d22e686",
       "name": "validator",
       "path": "validator",
-      "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, orphan detection, ID uniqueness.",
+      "description": "Spec directory validation: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness.",
       "requires_module": [
-        "f03774b40bd5"
+        "f03774b40bd5",
+        "085966b6bfa1"
       ]
     },
     {
@@ -180,7 +188,7 @@
       "id": "742ff18345ed",
       "name": "emit",
       "path": "emit",
-      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and caller-supplied git HEAD. Emits changeset.json \u2014 an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding \u2014 that an external adapter consumes.",
+      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json \u2014 an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding \u2014 that an external adapter consumes.",
       "requires_module": [
         "725a083f66a1",
         "fb20a21b62f1"
@@ -190,18 +198,19 @@
       "id": "1374b24a3086",
       "name": "ingest",
       "path": "ingest",
-      "description": "Records the outcome of an adapter run. Pure function over changeset.json and receipts.json. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via idempotency.",
+      "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, .bead-map.json and the spec directory. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
       "requires_module": [
         "742ff18345ed",
         "fb20a21b62f1",
-        "085966b6bfa1"
+        "085966b6bfa1",
+        "585284979da9"
       ]
     },
     {
       "id": "585284979da9",
       "name": "adapters",
       "path": "adapters",
-      "description": "Reference adapter scripts outside the spex binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br; authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex."
+      "description": "The adapter contract, plus a reference adapter. The receipts wire-format constants live in a Go package compiled into spex; the adapters themselves are scripts outside the binary. Each adapter consumes changeset.json, executes the tool-specific subcommands against a bead tracker, and writes receipts.json. The current reference adapter targets br (beads_rust); authors of adapters for other trackers (bd, GitHub Issues, Jira) consult the same changeset/receipts contracts without changes to spex. Requirements in this module double as the contract any adapter must satisfy."
     },
     {
       "id": "51016138121c",
@@ -222,118 +231,17 @@
       "id": "430f8b037415",
       "name": "cli",
       "path": "cli",
-      "description": "Cross-cutting CLI infrastructure. Provides the root command, version subcommand, and subcommand registration framework using cobra."
+      "description": "Cross-cutting CLI infrastructure. Provides the root command, the version and hash-id subcommands, and the subcommand registration framework using cobra."
     },
     {
       "id": "fb20a21b62f1",
       "name": "map",
       "path": "map",
-      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, deterministic preflight checking, and CLI query interface.",
+      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
       "requires_module": [
-        "f03774b40bd5"
-      ]
-    }
-  ],
-  "milestones": [
-    {
-      "id": "b7d589082283",
-      "title": "Bootstrap",
-      "description": "Core schema and validation working. Spec can be authored and validated.",
-      "groups": [
         "f03774b40bd5",
-        "9ddd3d22e686"
-      ]
-    },
-    {
-      "id": "2f3f6ec61342",
-      "title": "Change Tracking",
-      "description": "Merkle tree and impact analysis. Spec changes detected and mapped to beads.",
-      "groups": [
-        "085966b6bfa1",
-        "725a083f66a1"
-      ]
-    },
-    {
-      "id": "7d855b64740e",
-      "title": "Automation",
-      "description": "Full pipeline: spec change \u2192 impact \u2192 emit changeset \u2192 adapter \u2192 ingest (reconcile + snapshot). Bead actions execute via a user-owned adapter rather than spex subprocesses.",
-      "groups": [
-        "742ff18345ed",
-        "1374b24a3086",
-        "585284979da9"
-      ]
-    },
-    {
-      "id": "a0e561d715a6",
-      "title": "Lifecycle",
-      "description": "Proposal management and spec rendering for human consumption.",
-      "groups": [
-        "51016138121c",
-        "8f2beb43e606"
-      ]
-    },
-    {
-      "id": "2acc2c4270ac",
-      "title": "CLI Infrastructure",
-      "description": "Cobra-based CLI framework: subcommand registration, help, version, shell completions.",
-      "groups": [
-        "430f8b037415"
-      ]
-    },
-    {
-      "id": "61df84a34d4f",
-      "title": "Mapping Layer",
-      "description": "Spec-to-bead bridge via mapping file, deterministic preflight checking, and CLI query interface.",
-      "groups": [
-        "fb20a21b62f1"
+        "085966b6bfa1"
       ]
     }
-  ],
-  "test_plan": {
-    "scenarios": [
-      {
-        "id": "21305a37d0d5",
-        "name": "CLI subcommand registration and help",
-        "description": "All subcommands are registered on the root command and accessible via --help. Misspelled commands produce suggestions.",
-        "modules": [
-          "430f8b037415"
-        ]
-      },
-      {
-        "id": "90cba605889f",
-        "name": "Cross-module mapping integration",
-        "description": "Merkle ID-based diff feeds impact analysis, impact report drives emit with mapping record maintenance, skills query mappings via spex map CLI.",
-        "modules": [
-          "085966b6bfa1",
-          "725a083f66a1",
-          "742ff18345ed",
-          "1374b24a3086",
-          "fb20a21b62f1"
-        ]
-      },
-      {
-        "id": "ff5550d79a3a",
-        "name": "Coupled sections integration",
-        "description": "Sections array in project.json validated by schema, coupled module enforcement by validator, generic section rendering by render module.",
-        "modules": [
-          "f03774b40bd5",
-          "9ddd3d22e686",
-          "8f2beb43e606"
-        ]
-      },
-      {
-        "id": "ae8e80473159",
-        "name": "End-to-end pipeline consistency",
-        "description": "A full emit \u2192 adapter \u2192 ingest run against a real spec change leaves .bead-map.json consistent with the tracker state: every successful create has a mapping record pointing to the new bead_id, every successful close on a removed node has no record, and the merkle snapshot is saved only when top-level receipts status is complete. Partial runs leave the snapshot untouched so the next emit recomputes from the same baseline.",
-        "content": "test_end_to_end_pipeline.md",
-        "modules": [
-          "742ff18345ed",
-          "1374b24a3086",
-          "585284979da9",
-          "fb20a21b62f1",
-          "085966b6bfa1"
-        ]
-      }
-    ]
-  }
+  ]
 }

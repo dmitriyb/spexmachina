@@ -197,7 +197,7 @@ func TestFR4_ParseDiffJSON(t *testing.T) {
 	input := `{
 		"changes": [
 			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"},
-			{"path": "module/1/impl_section/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
+			{"path": "module/1/test_section/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
 			{"path": "module/1/component/2", "type": "removed", "impact": "arch_impl", "module": "alpha", "old_hash": "ddd"}
 		]
 	}`
@@ -393,10 +393,8 @@ func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 	alphaID := schema.IdentityHash("module", "alpha")
 	betaID := schema.IdentityHash("module", "beta")
 	alphaCompID := schema.IdentityHash("alpha", "component", "AlphaComp")
-	alphaImplID := schema.IdentityHash("alpha", "impl_section", "AlphaImpl")
 	alphaTestID := schema.IdentityHash("alpha", "test_section", "AlphaTest")
 	betaCompID := schema.IdentityHash("beta", "component", "BetaComp")
-	betaImplID := schema.IdentityHash("beta", "impl_section", "BetaImpl")
 	betaTestID := schema.IdentityHash("beta", "test_section", "BetaTest")
 
 	proj := `{
@@ -420,15 +418,11 @@ func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 		"components": [
 			{"id": "`+alphaCompID+`", "name": "AlphaComp", "content": "arch_alpha.md"}
 		],
-		"impl_sections": [
-			{"id": "`+alphaImplID+`", "name": "AlphaImpl", "content": "impl_alpha.md"}
-		],
 		"test_sections": [
 			{"id": "`+alphaTestID+`", "name": "AlphaTest", "content": "test_alpha.md", "describes": ["`+alphaCompID+`"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_alpha.md", "# Alpha comp\n")
-	writeTestFile(t, alphaDir, "impl_alpha.md", "# Alpha impl\n")
 	writeTestFile(t, alphaDir, "test_alpha.md", "# Alpha test\n")
 
 	betaDir := filepath.Join(specDir, "beta")
@@ -440,15 +434,11 @@ func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 		"components": [
 			{"id": "`+betaCompID+`", "name": "BetaComp", "content": "arch_beta.md"}
 		],
-		"impl_sections": [
-			{"id": "`+betaImplID+`", "name": "BetaImpl", "content": "impl_beta.md"}
-		],
 		"test_sections": [
 			{"id": "`+betaTestID+`", "name": "BetaTest", "content": "test_beta.md", "describes": ["`+betaCompID+`"]}
 		]
 	}`)
 	writeTestFile(t, betaDir, "arch_beta.md", "# Beta comp\n")
-	writeTestFile(t, betaDir, "impl_beta.md", "# Beta impl\n")
 	writeTestFile(t, betaDir, "test_beta.md", "# Beta test\n")
 
 	tree, err := merkle.BuildTree(specDir)
@@ -518,8 +508,6 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	modID := schema.IdentityHash("module", "mod")
 	baseID := schema.IdentityHash("mod", "component", "Base")
 	userID := schema.IdentityHash("mod", "component", "User")
-	baseImplID := schema.IdentityHash("mod", "impl_section", "BaseImpl")
-	userImplID := schema.IdentityHash("mod", "impl_section", "UserImpl")
 	baseTestID := schema.IdentityHash("mod", "test_section", "BaseTest")
 	userTestID := schema.IdentityHash("mod", "test_section", "UserTest")
 
@@ -545,10 +533,6 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 			{"id": "`+baseID+`", "name": "Base", "content": "arch_base.md"},
 			{"id": "`+userID+`", "name": "User", "content": "arch_user.md", "uses": ["`+baseID+`"]}
 		],
-		"impl_sections": [
-			{"id": "`+baseImplID+`", "name": "BaseImpl", "content": "impl_base.md"},
-			{"id": "`+userImplID+`", "name": "UserImpl", "content": "impl_user.md"}
-		],
 		"test_sections": [
 			{"id": "`+baseTestID+`", "name": "BaseTest", "content": "test_base.md", "describes": ["`+baseID+`"]},
 			{"id": "`+userTestID+`", "name": "UserTest", "content": "test_user.md", "describes": ["`+userID+`"]}
@@ -556,8 +540,6 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	}`)
 	writeTestFile(t, modDir, "arch_base.md", "# Base\n")
 	writeTestFile(t, modDir, "arch_user.md", "# User\n")
-	writeTestFile(t, modDir, "impl_base.md", "# Base impl\n")
-	writeTestFile(t, modDir, "impl_user.md", "# User impl\n")
 	writeTestFile(t, modDir, "test_base.md", "# Base test\n")
 	writeTestFile(t, modDir, "test_user.md", "# User test\n")
 
@@ -673,8 +655,6 @@ func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
 	modID := schema.IdentityHash("module", "alpha")
 	keepID := schema.IdentityHash("alpha", "component", "Keep")
 	dropID := schema.IdentityHash("alpha", "component", "Drop")
-	keepImplID := schema.IdentityHash("alpha", "impl_section", "KeepImpl")
-	dropImplID := schema.IdentityHash("alpha", "impl_section", "DropImpl")
 	keepTestID := schema.IdentityHash("alpha", "test_section", "KeepTest")
 	dropTestID := schema.IdentityHash("alpha", "test_section", "DropTest")
 
@@ -696,10 +676,6 @@ func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
 			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"},
 			{"id": "`+dropID+`", "name": "Drop", "content": "arch_drop.md"}
 		],
-		"impl_sections": [
-			{"id": "`+keepImplID+`", "name": "KeepImpl", "content": "impl_keep.md"},
-			{"id": "`+dropImplID+`", "name": "DropImpl", "content": "impl_drop.md"}
-		],
 		"test_sections": [
 			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]},
 			{"id": "`+dropTestID+`", "name": "DropTest", "content": "test_drop.md", "describes": ["`+dropID+`"]}
@@ -707,8 +683,6 @@ func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
 	}`)
 	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep\n")
 	writeTestFile(t, alphaDir, "arch_drop.md", "# Drop\n")
-	writeTestFile(t, alphaDir, "impl_keep.md", "# Keep impl\n")
-	writeTestFile(t, alphaDir, "impl_drop.md", "# Drop impl\n")
 	writeTestFile(t, alphaDir, "test_keep.md", "# Keep test\n")
 	writeTestFile(t, alphaDir, "test_drop.md", "# Drop test\n")
 
@@ -728,18 +702,12 @@ func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
 		"components": [
 			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"}
 		],
-		"impl_sections": [
-			{"id": "`+keepImplID+`", "name": "KeepImpl", "content": "impl_keep.md"}
-		],
 		"test_sections": [
 			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep CHANGED\n")
 	if err := os.Remove(filepath.Join(alphaDir, "arch_drop.md")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(alphaDir, "impl_drop.md")); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Remove(filepath.Join(alphaDir, "test_drop.md")); err != nil {

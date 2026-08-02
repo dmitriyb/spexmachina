@@ -27,8 +27,7 @@ func setupRenderSpec(t *testing.T) string {
 		"modules": [
 			{"id": "000000000001", "name": "alpha", "path": "alpha", "description": "Alpha module"},
 			{"id": "000000000002", "name": "beta", "path": "beta", "description": "Beta module", "requires_module": ["000000000001"]}
-		],
-		"milestones": [{"id": "000000000001", "title": "MVP", "groups": ["000000000001", "000000000002"]}]
+		]
 	}`
 	writeTestFile(t, dir, "project.json", proj)
 
@@ -45,9 +44,6 @@ func setupRenderSpec(t *testing.T) string {
 			{"id": "aabbccddeeff", "name": "Parser", "content": "arch_parser.md", "implements": ["aabbccddeeff"]},
 			{"id": "ffeeddccbbaa", "name": "Builder", "content": "arch_builder.md", "implements": ["ffeeddccbbaa"], "uses": ["aabbccddeeff"]}
 		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Parsing Impl", "content": "impl_parsing.md", "describes": ["aabbccddeeff"]}
-		],
 		"data_flows": [
 			{"id": "aabbccddeeff", "name": "Build Pipeline", "content": "flow_build.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
 		]
@@ -55,7 +51,6 @@ func setupRenderSpec(t *testing.T) string {
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_parser.md", "# Parser\n\nParses input.\n")
 	writeTestFile(t, alphaDir, "arch_builder.md", "# Builder\n\nBuilds output.\n")
-	writeTestFile(t, alphaDir, "impl_parsing.md", "# Parsing\n\nImpl details.\n")
 	writeTestFile(t, alphaDir, "flow_build.md", "# Build Pipeline\n\nData flow.\n")
 
 	betaDir := filepath.Join(dir, "beta")
@@ -68,14 +63,10 @@ func setupRenderSpec(t *testing.T) string {
 		],
 		"components": [
 			{"id": "aabbccddeeff", "name": "Consumer", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
-		],
-		"impl_sections": [
-			{"id": "aabbccddeeff", "name": "Consumption Impl", "content": "impl_consumption.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, betaDir, "module.json", betaMod)
 	writeTestFile(t, betaDir, "arch_consumer.md", "# Consumer\n\nConsumes output.\n")
-	writeTestFile(t, betaDir, "impl_consumption.md", "# Consumption\n\nConsume impl.\n")
 
 	return dir
 }
@@ -189,7 +180,7 @@ func TestFR3_S4_JSONFormat(t *testing.T) {
 		json.Unmarshal(raw, &n)
 		types[n.Type] = true
 	}
-	for _, typ := range []string{"project", "module", "requirement", "component", "impl_section", "data_flow"} {
+	for _, typ := range []string{"project", "module", "requirement", "component", "data_flow"} {
 		if !types[typ] {
 			t.Errorf("missing node type %q", typ)
 		}
@@ -221,15 +212,12 @@ func TestNFR4_S5_StdoutOnly(t *testing.T) {
 	}
 }
 
-// S7: Spec directory as positional argument
-func TestFR1_S7_PositionalArgument(t *testing.T) {
+// S7: Positional arguments are rejected — the spec directory comes from --spec-dir only
+func TestFR1_S7_PositionalArgumentRejected(t *testing.T) {
 	dir := setupRenderSpec(t)
-	out, _, err := runRenderSpex(t, "render", dir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-	if !strings.Contains(out, "# test-project") {
-		t.Fatal("positional arg should work")
+	_, _, err := runRenderSpex(t, "render", dir)
+	if err == nil {
+		t.Fatal("positional argument should be rejected, got no error")
 	}
 }
 
@@ -395,5 +383,61 @@ func TestFR1_E9_HelpFlag(t *testing.T) {
 	}
 	if !strings.Contains(helpOut, "format") {
 		t.Fatal("help should mention --format flag")
+	}
+}
+
+// S11: --format json --slim emits nodes only, compact, without content
+func TestFR3_S11_SlimJSONFlag(t *testing.T) {
+	dir := setupRenderSpec(t)
+	out, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", "json", "--slim")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var slim map[string]any
+	if err := json.Unmarshal([]byte(out), &slim); err != nil {
+		t.Fatalf("slim output is not valid JSON: %v\n%s", err, out)
+	}
+	if _, ok := slim["edges"]; ok {
+		t.Error("--slim must not emit edges")
+	}
+	nodes, ok := slim["nodes"].([]any)
+	if !ok || len(nodes) == 0 {
+		t.Fatalf("--slim should emit a non-empty nodes array, got: %s", out)
+	}
+	for _, n := range nodes {
+		obj := n.(map[string]any)
+		for _, banned := range []string{"content", "description"} {
+			if _, present := obj[banned]; present {
+				t.Errorf("--slim node still carries %q: %#v", banned, obj)
+			}
+		}
+	}
+
+	// The same spec rendered without --slim inlines content, so --slim must be
+	// substantially smaller.
+	full, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", "json")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if len(out) >= len(full) {
+		t.Errorf("--slim output (%d bytes) should be smaller than full JSON (%d bytes)", len(out), len(full))
+	}
+	if strings.Contains(out, "Parses input.") {
+		t.Errorf("--slim must not inline content leaves, got:\n%s", out)
+	}
+}
+
+// E10: --slim is rejected for non-JSON formats
+func TestFR3_E10_SlimRequiresJSON(t *testing.T) {
+	dir := setupRenderSpec(t)
+	for _, format := range []string{"markdown", "dot"} {
+		_, _, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", format, "--slim")
+		if err == nil {
+			t.Fatalf("--slim with --format %s should fail", format)
+		}
+		if !strings.Contains(err.Error(), "--slim requires --format json") {
+			t.Errorf("want a --slim/--format json error, got %v", err)
+		}
 	}
 }

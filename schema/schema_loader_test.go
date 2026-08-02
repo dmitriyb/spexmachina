@@ -40,11 +40,8 @@ func TestFR10_IH2_IdentityHashMatchesSchemaPattern(t *testing.T) {
 		{"schema", "component", "ProjectSchema"},
 		{"schema", "component", "ModuleSchema"},
 		{"schema", "component", "SchemaLoader"},
-		{"schema", "impl_section", "Schema definitions"},
 		{"schema", "data_flow", "ValidateSpec"},
 		{"schema", "test_section", "Schema validation tests"},
-		{"milestone", "Bootstrap"},
-		{"test_plan", "scenario", "End-to-end validation"},
 		{"validator", "component", "DAGChecker"},
 		{"merkle", "component", "TreeBuilder"},
 		{"impact", "component", "NodeMatcher"},
@@ -188,14 +185,14 @@ func TestFR3_S3_ProjectSchemaStructure(t *testing.T) {
 	}
 
 	props, _ := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "version", "requirements", "modules", "milestones", "test_plan"} {
+	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections"} {
 		if props[key] == nil {
 			t.Errorf("properties missing %q", key)
 		}
 	}
 
 	defs, _ := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "module", "milestone", "test_scenario"} {
+	for _, key := range []string{"requirement", "module", "section"} {
 		if defs[key] == nil {
 			t.Errorf("$defs missing %q", key)
 		}
@@ -239,14 +236,14 @@ func TestFR3_S4_ModuleSchemaStructure(t *testing.T) {
 	}
 
 	props, _ := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "requirements", "components", "impl_sections", "data_flows", "test_sections"} {
+	for _, key := range []string{"name", "description", "requirements", "components", "data_flows", "test_sections", "apis"} {
 		if props[key] == nil {
 			t.Errorf("properties missing %q", key)
 		}
 	}
 
 	defs, _ := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "component", "impl_section", "data_flow", "test_section"} {
+	for _, key := range []string{"requirement", "component", "data_flow", "test_section", "api"} {
 		if defs[key] == nil {
 			t.Errorf("$defs missing %q", key)
 		}
@@ -351,6 +348,152 @@ func TestFR3_S9_ModuleSchemaRejectsInvalid(t *testing.T) {
 	invalid := []byte(`{"components": [{"id": "aabbccddeeff", "name": "C"}]}`)
 	if err := validateJSON(t, sch, invalid); err == nil {
 		t.Fatal("expected validation error for missing name, got nil")
+	}
+}
+
+// TestFR2_APISchemaRejectsInvalid pins the shape constraints of $defs/api:
+// "required": ["id", "name"], "additionalProperties": false, and minLength on
+// name. Without it the whole api definition can be weakened to
+// "required": ["id"] plus "additionalProperties": true and no test notices.
+func TestFR2_APISchemaRejectsInvalid(t *testing.T) {
+	schData, err := ModuleSchema()
+	if err != nil {
+		t.Fatalf("ModuleSchema(): %v", err)
+	}
+	sch := compileSchema(t, schData)
+
+	tests := []struct {
+		name    string
+		doc     string
+		wantErr bool
+		wantRef string // substring the error must mention (empty = any error)
+	}{
+		{
+			"full api passes",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff", "description": "D", "provided_by": ["112233445566"], "group": "cli"}]}`,
+			false, "",
+		},
+		{
+			"minimal api passes",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff"}]}`,
+			false, "",
+		},
+		{
+			"api missing name",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff"}]}`,
+			true, "name",
+		},
+		{
+			"api missing id",
+			`{"name": "m", "apis": [{"name": "spex diff"}]}`,
+			true, "id",
+		},
+		{
+			"api with empty name",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": ""}]}`,
+			true, "",
+		},
+		{
+			"api with unknown property",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff", "status": "done"}]}`,
+			true, "",
+		},
+		{
+			"api with duplicate provided_by items",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff", "provided_by": ["112233445566", "112233445566"]}]}`,
+			true, "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateJSON(t, sch, []byte(tt.doc))
+			if !tt.wantErr {
+				if err != nil {
+					t.Fatalf("expected %s to validate, got: %v", tt.name, err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("expected validation error for %s, got nil", tt.name)
+			}
+			if tt.wantRef != "" && !strings.Contains(err.Error(), tt.wantRef) {
+				t.Fatalf("error should reference %q, got: %v", tt.wantRef, err)
+			}
+		})
+	}
+}
+
+// TestNFR4_APIIDPatternValidation pins the ^[a-f0-9]{12}$ pattern on api.id
+// and on every provided_by item, mirroring TestNFR4_IDPatternValidation for
+// the other module node types.
+func TestNFR4_APIIDPatternValidation(t *testing.T) {
+	schData, err := ModuleSchema()
+	if err != nil {
+		t.Fatalf("ModuleSchema(): %v", err)
+	}
+	sch := compileSchema(t, schData)
+
+	tests := []struct {
+		name    string
+		doc     string
+		wantErr bool
+	}{
+		{
+			"valid 12-char hex id",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff"}]}`,
+			false,
+		},
+		{
+			"too short id",
+			`{"name": "m", "apis": [{"id": "aabbcc", "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"too long id",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff00", "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"uppercase hex id rejected",
+			`{"name": "m", "apis": [{"id": "AABBCCDDEEFF", "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"non-hex characters rejected",
+			`{"name": "m", "apis": [{"id": "aabbccddeegg", "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"empty id rejected",
+			`{"name": "m", "apis": [{"id": "", "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"integer id rejected",
+			`{"name": "m", "apis": [{"id": 1, "name": "spex diff"}]}`,
+			true,
+		},
+		{
+			"valid provided_by hashes",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff", "provided_by": ["112233445566"]}]}`,
+			false,
+		},
+		{
+			"invalid provided_by item pattern",
+			`{"name": "m", "apis": [{"id": "aabbccddeeff", "name": "spex diff", "provided_by": ["xyz"]}]}`,
+			true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateJSON(t, sch, []byte(tt.doc))
+			if tt.wantErr && err == nil {
+				t.Fatal("expected validation error, got nil")
+			}
+			if !tt.wantErr && err != nil {
+				t.Fatalf("unexpected validation error: %v", err)
+			}
+		})
 	}
 }
 

@@ -7,6 +7,12 @@ import (
 )
 
 // RenderDOT generates a graphviz DOT graph from the spec graph.
+//
+// Node IDs are the bare 12-char identity hashes, exactly as `spex hash-id`
+// prints them, so hand-written diagrams can reference the same node names.
+// They are always quoted: a hash such as "8f2beb43e606" starts with a digit
+// and is not a legal bare DOT identifier. Cluster names keep the readable
+// module name — a cluster is not a node.
 func RenderDOT(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "digraph spec {\n")
 	fmt.Fprintf(w, "  rankdir=LR;\n")
@@ -15,18 +21,16 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 	// Project requirement nodes
 	for _, r := range spec.Project.Requirements {
-		nid := fmt.Sprintf("preq_%s", r.ID)
-		fmt.Fprintf(w, "  %s [label=%q, shape=box, fillcolor=lightblue, style=filled];\n",
-			nid, r.Title)
+		fmt.Fprintf(w, "  %q [label=%q, shape=box, fillcolor=lightblue, style=filled];\n",
+			r.ID, r.Title)
 	}
 	fmt.Fprintf(w, "\n")
 
 	// Project-level section nodes (emitted before module subgraphs so they
 	// remain at the project scope, not inside any cluster).
 	for _, s := range spec.Project.Sections {
-		nid := fmt.Sprintf("section_%s", sanitizeDOTID(s.Name))
-		fmt.Fprintf(w, "  %s [label=%q, shape=tab, fillcolor=mistyrose, style=filled];\n",
-			nid, s.Name)
+		fmt.Fprintf(w, "  %q [label=%q, shape=tab, fillcolor=mistyrose, style=filled];\n",
+			s.ID, s.Name)
 	}
 	if len(spec.Project.Sections) > 0 {
 		fmt.Fprintf(w, "\n")
@@ -34,41 +38,36 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 	// Module subgraphs
 	for _, mg := range spec.Modules {
-		modID := sanitizeDOTID(mg.Module.Name)
-		fmt.Fprintf(w, "  subgraph cluster_%s {\n", modID)
+		fmt.Fprintf(w, "  subgraph cluster_%s {\n", sanitizeDOTID(mg.Module.Name))
 		fmt.Fprintf(w, "    label=%q;\n", mg.Module.Name)
 		fmt.Fprintf(w, "    style=dashed;\n")
 
 		// Module node
-		fmt.Fprintf(w, "    %s [label=%q, shape=folder, fillcolor=lightgray, style=filled];\n",
-			modID, mg.Module.Name)
+		fmt.Fprintf(w, "    %q [label=%q, shape=folder, fillcolor=lightgray, style=filled];\n",
+			mg.Module.ID, mg.Module.Name)
 
 		// Requirements
 		for _, r := range mg.Spec.Requirements {
-			nid := fmt.Sprintf("%s_req_%s", modID, r.ID)
-			fmt.Fprintf(w, "    %s [label=%q, shape=box, fillcolor=lightgreen, style=filled];\n",
-				nid, r.Title)
+			fmt.Fprintf(w, "    %q [label=%q, shape=box, fillcolor=lightgreen, style=filled];\n",
+				r.ID, r.Title)
 		}
 
 		// Components
 		for _, c := range mg.Spec.Components {
-			nid := fmt.Sprintf("%s_comp_%s", modID, c.ID)
-			fmt.Fprintf(w, "    %s [label=%q, shape=component, fillcolor=lightyellow, style=filled];\n",
-				nid, c.Name)
-		}
-
-		// Impl sections
-		for _, s := range mg.Spec.ImplSections {
-			nid := fmt.Sprintf("%s_impl_%s", modID, s.ID)
-			fmt.Fprintf(w, "    %s [label=%q, shape=note, fillcolor=moccasin, style=filled];\n",
-				nid, s.Name)
+			fmt.Fprintf(w, "    %q [label=%q, shape=component, fillcolor=lightyellow, style=filled];\n",
+				c.ID, c.Name)
 		}
 
 		// Data flows
 		for _, f := range mg.Spec.DataFlows {
-			nid := fmt.Sprintf("%s_flow_%s", modID, f.ID)
-			fmt.Fprintf(w, "    %s [label=%q, shape=ellipse, fillcolor=plum1, style=filled];\n",
-				nid, f.Name)
+			fmt.Fprintf(w, "    %q [label=%q, shape=ellipse, fillcolor=plum1, style=filled];\n",
+				f.ID, f.Name)
+		}
+
+		// APIs
+		for _, a := range mg.Spec.APIs {
+			fmt.Fprintf(w, "    %q [label=%q, shape=cds, fillcolor=paleturquoise, style=filled];\n",
+				a.ID, a.Name)
 		}
 
 		fmt.Fprintf(w, "  }\n\n")
@@ -76,59 +75,47 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 
 	// Edges
 	for _, mg := range spec.Modules {
-		modID := sanitizeDOTID(mg.Module.Name)
-
-		// requires_module
+		// requires_module. requires_module already holds module identity
+		// hashes; the lookup only confirms the target module is declared.
 		for _, depID := range mg.Module.RequiresModule {
-			depMod := findModuleByID(spec, depID)
-			if depMod != "" {
-				fmt.Fprintf(w, "  %s -> %s [label=\"requires_module\"];\n",
-					modID, sanitizeDOTID(depMod))
+			if findModuleByID(spec, depID) == "" {
+				continue
 			}
+			fmt.Fprintf(w, "  %q -> %q [label=\"requires_module\"];\n", mg.Module.ID, depID)
 		}
 
 		// Component edges
 		for _, c := range mg.Spec.Components {
-			compID := fmt.Sprintf("%s_comp_%s", modID, c.ID)
-
 			for _, reqID := range c.Implements {
-				fmt.Fprintf(w, "  %s -> %s_req_%s [label=\"implements\", color=blue];\n",
-					compID, modID, reqID)
+				fmt.Fprintf(w, "  %q -> %q [label=\"implements\", color=blue];\n", c.ID, reqID)
 			}
 			for _, useID := range c.Uses {
-				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"uses\", style=dotted];\n",
-					compID, modID, useID)
-			}
-		}
-
-		// Impl section edges
-		for _, s := range mg.Spec.ImplSections {
-			implID := fmt.Sprintf("%s_impl_%s", modID, s.ID)
-			for _, compID := range s.Describes {
-				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"describes\", color=green];\n",
-					implID, modID, compID)
+				fmt.Fprintf(w, "  %q -> %q [label=\"uses\", style=dotted];\n", c.ID, useID)
 			}
 		}
 
 		// Data flow edges
 		for _, f := range mg.Spec.DataFlows {
-			flowID := fmt.Sprintf("%s_flow_%s", modID, f.ID)
 			for _, compID := range f.Uses {
-				fmt.Fprintf(w, "  %s -> %s_comp_%s [label=\"uses\", style=dotted];\n",
-					flowID, modID, compID)
+				fmt.Fprintf(w, "  %q -> %q [label=\"uses\", style=dotted];\n", f.ID, compID)
+			}
+		}
+
+		// API edges
+		for _, a := range mg.Spec.APIs {
+			for _, compID := range a.ProvidedBy {
+				fmt.Fprintf(w, "  %q -> %q [label=\"provided_by\", color=purple];\n", a.ID, compID)
 			}
 		}
 
 		// Requirement edges
 		for _, r := range mg.Spec.Requirements {
-			reqID := fmt.Sprintf("%s_req_%s", modID, r.ID)
 			if r.PreqID != "" {
-				fmt.Fprintf(w, "  %s -> preq_%s [label=\"preq_id\", style=dashed, color=blue];\n",
-					reqID, r.PreqID)
+				fmt.Fprintf(w, "  %q -> %q [label=\"preq_id\", style=dashed, color=blue];\n",
+					r.ID, r.PreqID)
 			}
 			for _, depID := range r.DependsOn {
-				fmt.Fprintf(w, "  %s -> %s_req_%s [label=\"depends_on\", style=dashed];\n",
-					reqID, modID, depID)
+				fmt.Fprintf(w, "  %q -> %q [label=\"depends_on\", style=dashed];\n", r.ID, depID)
 			}
 		}
 	}
@@ -140,21 +127,23 @@ func RenderDOT(spec *SpecGraph, w io.Writer) error {
 		if s.Type != "coupled" {
 			continue
 		}
-		if findModuleByName(spec, s.Name) == "" {
+		modID := findModuleIDByName(spec, s.Name)
+		if modID == "" {
 			continue
 		}
-		fmt.Fprintf(w, "  section_%s -> %s [label=\"coupled\", style=bold];\n",
-			sanitizeDOTID(s.Name), sanitizeDOTID(s.Name))
+		fmt.Fprintf(w, "  %q -> %q [label=\"coupled\", style=bold];\n", s.ID, modID)
 	}
 
 	fmt.Fprintf(w, "}\n")
 	return nil
 }
 
-func findModuleByName(spec *SpecGraph, name string) string {
+// findModuleIDByName returns the identity hash of the module with the given
+// name, or "" when no module matches.
+func findModuleIDByName(spec *SpecGraph, name string) string {
 	for _, mg := range spec.Modules {
 		if mg.Module.Name == name {
-			return mg.Module.Name
+			return mg.Module.ID
 		}
 	}
 	return ""

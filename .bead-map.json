@@ -9,7 +9,7 @@
       "module": "schema",
       "component": "ProjectSchema",
       "content_file": "spec/schema/arch_project_schema.md",
-      "spec_hash": "641d503c2bc179dc90fcfc994c9e3a81c645af2b87fe87cd4e83c96e46d43d47"
+      "spec_hash": "380e0d7bbe3bc1b8ef6e275d35ec02f744d0f0935080fe3abdb72479593cde49"
     },
     {
       "id": 2,
@@ -19,7 +19,7 @@
       "module": "schema",
       "component": "ModuleSchema",
       "content_file": "spec/schema/arch_module_schema.md",
-      "spec_hash": "22ebc74fc3461532206ab6ad41560c19f0bb3e8f5f88d080686a2650f737b0a4"
+      "spec_hash": "31be18fa5d8cdf669d7d0dfa6154f75fe1fd2cfd69cdded987522e0d3edc8a16"
     },
     {
       "id": 3,
@@ -29,7 +29,7 @@
       "module": "validator",
       "component": "SchemaChecker",
       "content_file": "spec/validator/arch_schema_checker.md",
-      "spec_hash": "bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3"
+      "spec_hash": "fb6737d3c2839532324876ff3a5db8fb9d1db14b485ac0bc41ce85eca4e6b453"
     },
     {
       "id": 4,
@@ -39,7 +39,7 @@
       "module": "validator",
       "component": "ContentResolver",
       "content_file": "spec/validator/arch_content_resolver.md",
-      "spec_hash": "938203a5f4e1fdf46e697083b636b155346333497530b3929dd974dbad7d6805"
+      "spec_hash": "dbe71963baeeb69fe10cc5fe52345b0978b04a463a2cd82da86e5118216d9784"
     },
     {
       "id": 5,
@@ -49,17 +49,7 @@
       "module": "validator",
       "component": "DAGChecker",
       "content_file": "spec/validator/arch_dag_checker.md",
-      "spec_hash": "2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9"
-    },
-    {
-      "id": 6,
-      "spec_node_id": "bbb1ae43d00d",
-      "bead_id": "spexmachina-wei",
-      "bead_type": "task",
-      "module": "validator",
-      "component": "OrphanDetector",
-      "content_file": "spec/validator/arch_orphan_detector.md",
-      "spec_hash": "1aa4d3311c1fc3d05db7d26cc185242f0c3bc789973bf86c997110d9f433f928"
+      "spec_hash": "ab0b57159dd6687ca1de5e453404ad6a0d69fb8ce12f6cf1d949eabe66e917d4"
     },
     {
       "id": 7,
@@ -69,7 +59,7 @@
       "module": "validator",
       "component": "IDValidator",
       "content_file": "spec/validator/arch_id_validator.md",
-      "spec_hash": "97cf6ef57c557e2afc006701e5bd541efe5892580950cf186829c13bf986f2d9"
+      "spec_hash": "e98eb0fba43ad0f336d1eaa2688d7252d34e8d1e956a9d9f0e50211c36a4c242"
     },
     {
       "id": 8,
@@ -79,7 +69,7 @@
       "module": "validator",
       "component": "ErrorReporter",
       "content_file": "spec/validator/arch_error_reporter.md",
-      "spec_hash": "628ace5b5e0d6377bf50588287cf0ed1b64201b30dc970370ec3d3a6c4b70c10"
+      "spec_hash": "9efc0053580e8d13a165f3dfa8aa26629d56fc234622ebf0d22f931829f1726a"
     },
     {
       "id": 9,
@@ -89,7 +79,7 @@
       "module": "validator",
       "component": "ValidateCommand",
       "content_file": "spec/validator/arch_validate_command.md",
-      "spec_hash": "8e5a6ebe08c92aaf678e6223e70a4527ae6ef8d00c498517308923d89cc318ed"
+      "spec_hash": "612080c0985a5f8a63d1bd9c8f27df643e9b4179c8e41c6118e148ff251056cd"
     },
     {
       "id": 10,
@@ -99,7 +89,7 @@
       "module": "validator",
       "component": "NameConsistencyChecker",
       "content_file": "spec/validator/arch_name_consistency_checker.md",
-      "spec_hash": "77d5810f55d05c3abad7828c9ee3325d6fd61bf50c6c84029beff915fa33d1a9"
+      "spec_hash": "727b3ff95668ce0dbbfe428cf397110a2afd402722ff904be28f72668b37b7ad"
     },
     {
       "id": 11,
@@ -109,7 +99,7 @@
       "module": "validator",
       "component": "TestCoverageChecker",
       "content_file": "spec/validator/arch_test_coverage_checker.md",
-      "spec_hash": "aef33f9286137e26281f1e8e017bdee5100375856280042ca6312c9001dd393b"
+      "spec_hash": "05d2a1f9229e5fad9ca735c45b2506fd27ce46f7618e509afb8f25b01f697b6c"
     },
     {
       "id": 12,
@@ -120,7 +110,7 @@
       "module": "merkle",
       "component": "Hasher",
       "content_file": "spec/merkle/arch_hasher.md",
-      "spec_hash": "1be4de06f76ef42c2e5ab9adb1dbb4da246a5cc1ca53a2f40502c08e7630bdc6"
+      "spec_hash": "ace16b28681d6cadbe2ddc4de993b9b1d9164acc6cb7288fb45c673f5122ea36"
     },
     {
       "id": 13,
@@ -131,7 +121,7 @@
       "module": "merkle",
       "component": "TreeBuilder",
       "content_file": "spec/merkle/arch_tree_builder.md",
-      "spec_hash": "c59e2fb0de2139aeeef69720b7d5ce5ebdb593aba378def653e0e9036fdbc35c"
+      "spec_hash": "554d5758afdbdad65063278c816ae1e6f68e381d8a80407845abb06ec5f548bb"
     },
     {
       "id": 14,
@@ -142,7 +132,7 @@
       "module": "merkle",
       "component": "SnapshotStore",
       "content_file": "spec/merkle/arch_snapshot_store.md",
-      "spec_hash": "f6f9b34196d3f7961764b2d5a7cb6ba6d29e7e47d551f21ad0ab47bba63c903c"
+      "spec_hash": "2a5785acff8fe2d293acfee7d3dcef167939a0e41482c2ccba82e0619f053834"
     },
     {
       "id": 15,
@@ -153,7 +143,7 @@
       "module": "merkle",
       "component": "DiffEngine",
       "content_file": "spec/merkle/arch_diff_engine.md",
-      "spec_hash": "7598f818f85ff3d399f4346e0a1feebe6782368ede60142756a8feb92d9d80a1"
+      "spec_hash": "0b07789fa27ab5129f195314a5005d501f1572b314588d087b9adba9e067da33"
     },
     {
       "id": 16,
@@ -164,7 +154,7 @@
       "module": "merkle",
       "component": "ImpactClassifier",
       "content_file": "spec/merkle/arch_impact_classifier.md",
-      "spec_hash": "27a7aaf1612e0e2af44d74acc3d92e12be320ee14003159be2173435059c39bc"
+      "spec_hash": "2ae510582a9fcd9291cec4ea84b2122474a4eec26e888554a4ec7e469b0e6d9a"
     },
     {
       "id": 18,
@@ -175,7 +165,7 @@
       "module": "merkle",
       "component": "DiffCommand",
       "content_file": "spec/merkle/arch_diff_command.md",
-      "spec_hash": "46a9234ca24dde1b4c529036bb4ac764e992cd19a1da57abcb9bef9a543a925d"
+      "spec_hash": "331434ac895dd12d233968f77765d3ff69d8dcb31f0720f3e86cc7c7136cca13"
     },
     {
       "id": 19,
@@ -185,7 +175,7 @@
       "module": "impact",
       "component": "BeadReader",
       "content_file": "spec/impact/arch_bead_reader.md",
-      "spec_hash": "978ce27893fdcd04acae96759a8927ab6cd49064add22da777c4daae87550b93"
+      "spec_hash": "1862fb77b7960526d8240974f27557d01a9ef7ad884b650e3bb0890d6e59a327"
     },
     {
       "id": 20,
@@ -195,7 +185,7 @@
       "module": "impact",
       "component": "NodeMatcher",
       "content_file": "spec/impact/arch_node_matcher.md",
-      "spec_hash": "b69ebfe5ceaa76c88e888b5242b58efdba6ff20259608bedb276d28bc406a15b"
+      "spec_hash": "f3cb3f20708a48fe5912f1d8bfaad0b92d02a9d68d19a12a91888b5858315902"
     },
     {
       "id": 21,
@@ -205,7 +195,7 @@
       "module": "impact",
       "component": "ActionClassifier",
       "content_file": "spec/impact/arch_action_classifier.md",
-      "spec_hash": "50ad50eb1b69b09982a13e4f0c1c92112795e6e06652de8f40bfa65802855020"
+      "spec_hash": "7eb71ad7f12807c2d39650c1ce279808469e1cb758706a1b7459331e5f55c9df"
     },
     {
       "id": 22,
@@ -215,7 +205,7 @@
       "module": "impact",
       "component": "ReportGenerator",
       "content_file": "spec/impact/arch_report_generator.md",
-      "spec_hash": "c89a355659ecd53236fa772cae480b212a25b01044c522e61dccbd03f506dc90"
+      "spec_hash": "92bc615512e500406c68bf4f520baf44ace9102823ce0d9a66a8a38fafa9b054"
     },
     {
       "id": 23,
@@ -225,7 +215,7 @@
       "module": "impact",
       "component": "ImpactCommand",
       "content_file": "spec/impact/arch_impact_command.md",
-      "spec_hash": "4ab9ea0baeb0ac48c48b9ca50f95f43350545646bf991b93989adc8c5206bd75"
+      "spec_hash": "9fbd0ad10882e94ef61bbd545e706464011aed4c9c9bb7473bf2cf3afd76b9b3"
     },
     {
       "id": 30,
@@ -235,7 +225,7 @@
       "module": "proposal",
       "component": "ProposalCommands",
       "content_file": "spec/proposal/arch_proposal_commands.md",
-      "spec_hash": "191e5a66efc57d1e62e6c0cd67ca5a8222381baed7b32875fdb76fc062bac139"
+      "spec_hash": "c79665575d44fbde52acba00fecdffe4aa2a699d4bd9180d3499f85905d2258e"
     },
     {
       "id": 31,
@@ -245,7 +235,7 @@
       "module": "render",
       "component": "RenderCommand",
       "content_file": "spec/render/arch_render_command.md",
-      "spec_hash": "06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a"
+      "spec_hash": "c1643e25514e50050bb949ba495cf307e39deda3e67eca52af8247ccf593e61e"
     },
     {
       "id": 32,
@@ -255,7 +245,7 @@
       "module": "cli",
       "component": "RootCommand",
       "content_file": "spec/cli/arch_root_command.md",
-      "spec_hash": "99e0160f486c344a40609a6fb36e71de118145283c5769ed5779367ba3a17417"
+      "spec_hash": "e0199a79c5a99acbb90c20018798bc1ae0be3737d60fb58cb89bfd0f8766aed6"
     },
     {
       "id": 33,
@@ -265,7 +255,7 @@
       "module": "cli",
       "component": "VersionCommand",
       "content_file": "spec/cli/arch_version_command.md",
-      "spec_hash": "ef2ea5ff511d960077ca5fe7380dd94c754b1a244fe9fce8bc5458b168fbd466"
+      "spec_hash": "18b842bd7841fbcdd4ee348bf0c8e7cb243f9c537dfb8446a328d97218203847"
     },
     {
       "id": 34,
@@ -275,7 +265,7 @@
       "module": "map",
       "component": "MappingStore",
       "content_file": "spec/map/arch_mapping_store.md",
-      "spec_hash": "f6ddecac54edd3c6713337c14539f9a70967ed9c8d8de02bbfa5b211394f5b1f"
+      "spec_hash": "acf0eac90f8ddc48cc8bf6d9f904ed0b63c6a8bf429b5cf0f64da75fc9525aae"
     },
     {
       "id": 36,
@@ -285,7 +275,7 @@
       "module": "map",
       "component": "MapCommand",
       "content_file": "spec/map/arch_map_command.md",
-      "spec_hash": "85d4ada8b66971ab0cde716da2c15c54df48ea854c59e3a69adaa56f04d5b4c4"
+      "spec_hash": "9d2074f2e77011fceb1c6b5944084a6bee35fc85f66973b416b357e107105926"
     },
     {
       "id": 48,
@@ -295,7 +285,7 @@
       "module": "schema",
       "component": "BeadMapSchema",
       "content_file": "spec/schema/arch_bead_map_schema.md",
-      "spec_hash": "05c5a5c7e58f55ccafaefc838edb4404d42a4747130ae2745d6d85f3a110c848"
+      "spec_hash": "16303b4a03869a0ce422fabd89a4258dde666532211252091af5d03f5a241357"
     },
     {
       "id": 50,
@@ -305,7 +295,7 @@
       "module": "map",
       "component": "ContextResolver",
       "content_file": "spec/map/arch_context_resolver.md",
-      "spec_hash": "d4a0d85dbafd9a9701b2cf13fdc75fd2ee77f7366565ad6085f7d9e631963a3a"
+      "spec_hash": "7d38899562c32cd9ac949b5037fcbff1f4104ebe8a4dff2e310a8af9cadd8da7"
     },
     {
       "id": 51,
@@ -315,7 +305,7 @@
       "module": "validator",
       "component": "RequirementCoverageChecker",
       "content_file": "spec/validator/arch_requirement_coverage_checker.md",
-      "spec_hash": "d993f758ee3e8b3fbbdfe4a0af95a7753838049f8ba7b0d896b517f5c4baa441"
+      "spec_hash": "2de40b68c408778b9c9632eac19656b1fa94a57b672872675264eb231c5ba4b1"
     },
     {
       "id": 52,
@@ -326,7 +316,7 @@
       "module": "merkle",
       "component": "CompletenessChecker",
       "content_file": "spec/merkle/arch_completeness_checker.md",
-      "spec_hash": "c4b99e33b4864509b451dde8728cd19cdf17185f19797376b1a4f860bab93013"
+      "spec_hash": "4bf533166ff6e237f510488ca53912cd41cbd5101709a29c1d8c397bf457a5d2"
     },
     {
       "id": 53,
@@ -336,7 +326,7 @@
       "module": "render",
       "component": "SpecReader",
       "content_file": "spec/render/arch_spec_reader.md",
-      "spec_hash": "716716ca18a2640ccacb4cc8bfd94cfd9ac3e2b6ac5d15f5d55e1c094dfc4e27"
+      "spec_hash": "a8de1e6a67e80873cb41008003ee2374ab9c2e539a323ea10b2024c325a76967"
     },
     {
       "id": 54,
@@ -346,7 +336,7 @@
       "module": "render",
       "component": "MarkdownRenderer",
       "content_file": "spec/render/arch_markdown_renderer.md",
-      "spec_hash": "fdff9690af13b3c6c78da5f1b76f7b8675ce3f37995ef264849a987db37f1fac"
+      "spec_hash": "b389d0a58bdd9fb8300c17c6d3fcaa7375d948c3437a3cb1bae2478b6e4483d1"
     },
     {
       "id": 55,
@@ -356,7 +346,7 @@
       "module": "render",
       "component": "DOTRenderer",
       "content_file": "spec/render/arch_dot_renderer.md",
-      "spec_hash": "a4255e119b9024ebd16318673bf50a4484c825fdf80e33207a3bd103514172ec"
+      "spec_hash": "e09bec8eb92a6a8b1e7e9651b016257f5138f7864eec08c24bde2c05a3898bad"
     },
     {
       "id": 56,
@@ -366,7 +356,7 @@
       "module": "render",
       "component": "JSONRenderer",
       "content_file": "spec/render/arch_json_renderer.md",
-      "spec_hash": "3ed9f5554a7811786b8fc34ee066f895728a6720500a0f786f9f94fc69ced5d3"
+      "spec_hash": "afe3346a8e12c08d15eb2656a594d62d68c1d95436154fd728206b24faa43832"
     },
     {
       "id": 57,
@@ -376,7 +366,7 @@
       "module": "validator",
       "component": "CoupledSectionChecker",
       "content_file": "spec/validator/arch_coupled_section_checker.md",
-      "spec_hash": "f5758484bdddd2f358553b75cbe807ea1058bed48f1bf39620e30916175c8eeb"
+      "spec_hash": "852707fb28fff25cffa60ae8e9bfd23bb723a0a0c01258906a7e964422f0be37"
     },
     {
       "id": 58,
@@ -386,7 +376,7 @@
       "module": "cli",
       "component": "HashIDCommand",
       "content_file": "spec/cli/arch_hash_id_command.md",
-      "spec_hash": "e4a2118becf605c8f91fc89c669449d8f9ad344239f13505a0cdaf27f17b446f"
+      "spec_hash": "5872c8797688790732fcc357b58b5207c76af55543fdebdd3d47fff29d127671"
     },
     {
       "id": 59,
@@ -396,7 +386,7 @@
       "module": "schema",
       "component": "SchemaLoader",
       "content_file": "spec/schema/arch_schema_loader.md",
-      "spec_hash": "dc0300f1939cf1881311534f068098a00d02065aa0247844a1405ff08e7facef"
+      "spec_hash": "9f187fe676bcd06651978587b5b950443798db55155d4cd14b7a6c49bc3eaaf4"
     },
     {
       "id": 60,
@@ -418,7 +408,7 @@
       "module": "adapters",
       "component": "Adapter flow",
       "content_file": "",
-      "spec_hash": "8c3422f0946f6625e58a344414eb45d9f1805a3931156b67c1060fa304b3a464"
+      "spec_hash": "39bbd77552f86c0c60a105bec2662f721d78424149036a437938e91406609706"
     },
     {
       "id": 62,
@@ -429,7 +419,7 @@
       "module": "adapters",
       "component": "BrReferenceAdapter",
       "content_file": "spec/adapters/arch_br_reference_adapter.md",
-      "spec_hash": "63e07c42f3e43962236ff7f23dec02a905749d27b951b6a517a7dbf4a3363e9c"
+      "spec_hash": "6efe764d8c37b5a52457c7072e1d0f2a882e830e678e313fd24d53cca57d310c"
     },
     {
       "id": 63,
@@ -440,7 +430,7 @@
       "module": "emit",
       "component": "ChangesetBuilder",
       "content_file": "spec/emit/arch_changeset_builder.md",
-      "spec_hash": "dbe7615f14e684a7a5285fe33d694ac7db9d1962aeb7fb7bff2f2a97a04579cd"
+      "spec_hash": "11af484909f7f5c2cd6c7d47373ec4e49ac37870d9f9d451d1203de5e78e4665"
     },
     {
       "id": 64,
@@ -451,7 +441,7 @@
       "module": "emit",
       "component": "Emit flow",
       "content_file": "",
-      "spec_hash": "4311bc13ee12df91fcad9d4e4068989639ed711ba2c735ad3e74bed0c98178f7"
+      "spec_hash": "d0bc188118e118bd4d0e8a55f5af1480d7fcb1f391f97191afdc046cedc9f8f5"
     },
     {
       "id": 65,
@@ -462,7 +452,7 @@
       "module": "emit",
       "component": "EmitCommand",
       "content_file": "spec/emit/arch_emit_command.md",
-      "spec_hash": "d50ede41f79073374538bccedb303a2b41a6030136093e351cd4c672d53b01ca"
+      "spec_hash": "c51d67e6ef34e8a8df318bea51591f6ea320fcf689f1bd499d7263eecf6c4d94"
     },
     {
       "id": 66,
@@ -473,7 +463,7 @@
       "module": "emit",
       "component": "IdempotencyLabeler",
       "content_file": "spec/emit/arch_idempotency_labeler.md",
-      "spec_hash": "fcfada9edd8fba384f68f21f03b695d5a07a748bf2ada0fc6613348b2be75d2f"
+      "spec_hash": "db6e047a53b2b17aa4726d2cc31784dfaeaba396225b9bdd03a2dc6e15d090b5"
     },
     {
       "id": 67,
@@ -484,7 +474,7 @@
       "module": "emit",
       "component": "Resolver",
       "content_file": "spec/emit/arch_resolver.md",
-      "spec_hash": "d13e44f64ad419c98add41e020ee6a09cc2f81b6bb6540f28fc0f922b93e8292"
+      "spec_hash": "cd2137070998a05afbf8e77aa9dd9bdf064561e8eb8720dea20c0946801104d6"
     },
     {
       "id": 68,
@@ -495,7 +485,7 @@
       "module": "emit",
       "component": "TopologicalSorter",
       "content_file": "spec/emit/arch_topological_sorter.md",
-      "spec_hash": "0589930e89e13b3d6bea1f76772616d3ecd00d7c5cd2c4ce9771dbdec0c32950"
+      "spec_hash": "e5b9e8b8a2a3f25ba822386f61dc9932531b6100d3c73c13408f5bbf7037fb99"
     },
     {
       "id": 69,
@@ -506,7 +496,7 @@
       "module": "ingest",
       "component": "Ingest flow",
       "content_file": "",
-      "spec_hash": "3bb13d2d59183ccaaeeb817d441984a58202204fcdc1b16cca6c25f35693b11a"
+      "spec_hash": "3495ab465afc05f058b30883f182c8bcf3a3b576cf5989de4c0f0b9df4044394"
     },
     {
       "id": 70,
@@ -517,7 +507,7 @@
       "module": "ingest",
       "component": "IngestCommand",
       "content_file": "spec/ingest/arch_ingest_command.md",
-      "spec_hash": "bc70aada68ea70508580042af559d6530753809aa2d330683bc1adf92149f7ef"
+      "spec_hash": "24801d9b422d04b33f0f4659752ce1a21d92eee31c1441c6a8eca95671fd6bdc"
     },
     {
       "id": 71,
@@ -528,7 +518,7 @@
       "module": "ingest",
       "component": "Reconciler",
       "content_file": "spec/ingest/arch_reconciler.md",
-      "spec_hash": "c8073a9d5d3169974bc159e3acd1a8a06346c409ec47b55c31578fa51e97659b"
+      "spec_hash": "b77a609b26e322d35c478bdaf9f56f9ce7ddeeb6c6e86223104992654d5c7e3d"
     },
     {
       "id": 72,
@@ -539,7 +529,7 @@
       "module": "ingest",
       "component": "SnapshotSaver",
       "content_file": "spec/ingest/arch_snapshot_saver.md",
-      "spec_hash": "e2287b7efbba867f4f9f1b407fb4c441e6a9d0381023afe18a28e8a47a498418"
+      "spec_hash": "975cdbcc6cfea60f582f4adb8f322ba7e192afac7a4f7d5734cd8e6084ff6c1b"
     },
     {
       "id": 73,
@@ -550,7 +540,7 @@
       "module": "proposal",
       "component": "HistoryViewer",
       "content_file": "spec/proposal/arch_history_viewer.md",
-      "spec_hash": "9270d2ba0935e030c0517455e8a22308767d5e17a543e9d24ec6dda386f64e87"
+      "spec_hash": "009460376fcc271ae8f35ffbcd183c88c5b533a617ee7afd58f64e49d03d1b49"
     },
     {
       "id": 75,
@@ -561,7 +551,7 @@
       "module": "ingest",
       "component": "Consistency invariants",
       "content_file": "",
-      "spec_hash": "26a1a1c2f0c6fd8f1cd1a46713581f9fea09f0c6955c90904b545f993af7ce01"
+      "spec_hash": "5761708e149ffd8edbaa21e341edd99b1f7d1b80d8427f35aab2431ec83be9c7"
     },
     {
       "id": 76,
@@ -594,7 +584,7 @@
       "module": "impact",
       "component": "Classification and reporting tests",
       "content_file": "spec/impact/test_classification_reporting.md",
-      "spec_hash": "1acc7093794d368a0866a111e7c3528d4cc3a8587752827958f8d66865b75ae0"
+      "spec_hash": "dfea62b1561b632e50e7916c73b3424e1c32e78a8130e4742acceeb9cfbf307a"
     },
     {
       "id": 79,
@@ -616,7 +606,7 @@
       "module": "merkle",
       "component": "Hash computation flow",
       "content_file": "spec/merkle/flow_hash_computation.md",
-      "spec_hash": "2ea591407ac017f4aaa0e1ced473b565c9e1c55bbeb277c4e02bc454700ad022"
+      "spec_hash": "47999a3d833f26a06bfa16486ba97afc064455c5114797bf0a5b69c312dd46ee"
     },
     {
       "id": 81,
@@ -627,7 +617,7 @@
       "module": "ingest",
       "component": "RefreshHandler",
       "content_file": "spec/ingest/arch_refresh.md",
-      "spec_hash": "5cf89ea3003b251167f066fdbfba84eb7487f842ae7a7acdfe45188562c860b1"
+      "spec_hash": "12ead02098c9c9c1e6565addf90f4ffd4214846d8a69ff9cacfd684cdeffaf91"
     },
     {
       "id": 82,
@@ -638,7 +628,7 @@
       "module": "emit",
       "component": "Changeset builder tests",
       "content_file": "spec/emit/test_changeset_builder.md",
-      "spec_hash": "35dab464bfcbc4b8dd55499e8c0e1f92932687f3f1af07830e45a1f0fbd5d31f"
+      "spec_hash": "a7a842626417c729a77a62c619b7e2939e0498bcff6d91c24b0e24385781daa3"
     }
   ]
 }

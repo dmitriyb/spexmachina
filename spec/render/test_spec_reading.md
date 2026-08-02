@@ -5,8 +5,8 @@
 All scenarios use an in-memory or temporary filesystem containing a valid spec directory structure. The minimal fixture includes:
 
 - `spec/project.json` with at least one module declaration
-- `spec/<module>/module.json` with requirements, components, impl_sections, data_flows, and test_sections
-- Content leaf files (`arch_*.md`, `impl_*.md`, `flow_*.md`, `test_*.md`) referenced by module.json
+- `spec/<module>/module.json` with requirements, components, data_flows, and test_sections
+- Content leaf files (`arch_*.md`, `flow_*.md`, `test_*.md`) referenced by module.json
 
 The fixture spec should have at least two modules with an inter-module dependency (`requires_module`) to exercise cross-module graph construction.
 
@@ -14,17 +14,17 @@ The fixture spec should have at least two modules with an inter-module dependenc
 
 ```
 spec/
-  project.json          # name, description, 2+ modules, requirements, milestones
+  project.json          # name, description, 2+ modules, requirements
   alpha/
-    module.json          # 2 requirements, 2 components, 1 impl_section, 1 data_flow
+    module.json          # 2 requirements, 2 components, 1 test_section, 1 data_flow
     arch_parser.md
     arch_builder.md
-    impl_parsing.md
+    test_parsing.md
     flow_build_pipeline.md
   beta/
-    module.json          # 1 requirement, 1 component (uses alpha), 1 impl_section
+    module.json          # 1 requirement, 1 component (uses alpha), 1 test_section
     arch_consumer.md
-    impl_consumption.md
+    test_consumption.md
 ```
 
 ## Scenarios
@@ -43,7 +43,7 @@ spec/
 
 ### S2: Content map populated with all markdown leaves
 
-**Given** a module with 2 components (`arch_parser.md`, `arch_builder.md`), 1 impl_section (`impl_parsing.md`), and 1 data_flow (`flow_build_pipeline.md`).
+**Given** a module with 2 components (`arch_parser.md`, `arch_builder.md`), 1 test_section (`test_parsing.md`), and 1 data_flow (`flow_build_pipeline.md`).
 
 **When** `ReadSpec(specDir)` is called.
 
@@ -55,33 +55,32 @@ spec/
 
 ### S3: Multi-module spec with cross-module dependency
 
-**Given** `project.json` declares modules `alpha` (id: 1) and `beta` (id: 2), where `beta` has `requires_module: [1]`.
+**Given** `project.json` declares modules `alpha` (`111111111111`) and `beta` (`222222222222`), where `beta` has `requires_module: ["111111111111"]`.
 
 **When** `ReadSpec(specDir)` is called.
 
 **Then:**
 - `SpecGraph.Modules` has length 2
 - Both modules are present with their full content maps populated
-- The `requires_module` relationship is preserved in the parsed `Module` struct (beta's module struct has `RequiresModule: [1]`)
+- The `requires_module` relationship is preserved in the parsed module (beta's `RequiresModule` is a one-element list holding alpha's declared hash, `"111111111111"` — the declared string, not a recomputed or renumbered id)
 - Module ordering in `SpecGraph.Modules` matches declaration order in `project.json`
 
-### S4: Project-level requirements and milestones preserved
+### S4: Project-level requirements preserved
 
-**Given** `project.json` has 3 requirements (2 functional, 1 non-functional) and 1 milestone grouping modules.
+**Given** `project.json` has 3 requirements (2 functional, 1 non-functional).
 
 **When** `ReadSpec(specDir)` is called.
 
 **Then:**
 - `SpecGraph.Project.Requirements` has length 3
-- Each requirement preserves `id`, `type`, `title`, `description`, and `depends_on`
-- `SpecGraph.Project.Milestones` has length 1 with correct `groups` references
+- Each requirement preserves `id`, `type`, `title` and `description`. No project requirement in the fixture declares `depends_on`, and no test in `render/` reads the field on any node — S5 asserts `implements`, `uses`, `describes`, data_flow `uses` and `preq_id` only
 
 ### S5: All module-level edge types preserved
 
 **Given** a module with:
 - Requirements with `preq_id` and `depends_on`
 - Components with `implements` and `uses`
-- Impl_sections with `describes`
+- Test_sections with `describes`
 - Data_flows with `uses`
 
 **When** `ReadSpec(specDir)` is called.
@@ -89,7 +88,7 @@ spec/
 **Then:**
 - Component `implements` arrays contain the correct requirement IDs
 - Component `uses` arrays contain the correct peer component IDs
-- Impl_section `describes` arrays contain the correct component IDs
+- Test_section `describes` arrays contain the correct component IDs
 - Data_flow `uses` arrays contain the correct component IDs
 - Requirement `preq_id` values trace to project-level requirement IDs
 
@@ -141,7 +140,7 @@ spec/
 
 ### E5: Malformed JSON in module.json
 
-**Given** one module's `module.json` is valid but a second module's `module.json` contains a syntax error.
+**Given** a module whose `module.json` contains a syntax error.
 
 **When** `ReadSpec(specDir)` is called.
 
@@ -165,7 +164,7 @@ spec/
 
 ### E8: Module with no content fields
 
-**Given** a module whose components, impl_sections, and data_flows all omit the `content` field (content is optional in the schema).
+**Given** a module whose components, test_sections, and data_flows all omit the `content` field (content is optional in the schema).
 
 **When** `ReadSpec(specDir)` is called.
 
@@ -178,7 +177,7 @@ spec/
 {
   "sections": [
     {
-      "id": 1,
+      "id": "section00001",
       "name": "delivery",
       "type": "coupled",
       "versioning": { "scheme": "semver", "source": "git-tag" },
@@ -193,7 +192,8 @@ spec/
 **Then:**
 - `SpecGraph.Project.Sections` has length 1
 - The section preserves `id`, `name`, `type`, and all freeform content fields
-- The freeform content (versioning, artifacts) is accessible as a generic structure (e.g., `map[string]interface{}` or `json.RawMessage`)
+- The freeform content (versioning, artifacts) is accessible as a generic structure, preserved as the raw JSON body rather than as typed fields
+- Only the section's own `id` is an identity hash. Nothing inside the freeform body is interpreted: the artifact's `"id": 1` reaches `Raw` untouched. A section declaring `"id": 1` is rejected by `json.Unmarshal` into `schema.Section.ID`, and `ReadSpec` wraps that as `render: parse <specDir>/project.json: …` — no scenario executes that negative case
 
 ### S8: Sections absent from project.json
 

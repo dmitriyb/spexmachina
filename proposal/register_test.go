@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestFR1_DetectType_Project(t *testing.T) {
@@ -225,6 +226,55 @@ func TestFR1_Register_Idempotency(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "already registered") {
 		t.Errorf("want 'already registered' error, got: %v", err)
+	}
+}
+
+// TestFR30_S6_Register_PreservesDatedFilename covers S6: a source already
+// following YYYY-MM-DD-<name>.md keeps its own name. Re-dating it would file
+// the proposal under a date it was not written on and break the
+// spec_proposal:<stem> label every bead filed against it already carries.
+func TestFR30_S6_Register_PreservesDatedFilename(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+
+	// The H1 slug is deliberately unrelated to the filename: if the registrar
+	// re-derived the name, the result would be today-caching-layer.md.
+	content := "# Change Proposal: Caching Layer\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
+	inputFile := filepath.Join(tmp, "2026-05-10-caching.md")
+	os.WriteFile(inputFile, []byte(content), 0644)
+
+	filename, err := Register(inputFile, specDir)
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	if filename != "2026-05-10-caching.md" {
+		t.Fatalf("want the original dated name preserved, got %q", filename)
+	}
+	if _, err := os.Stat(filepath.Join(specDir, "proposals", "2026-05-10-caching.md")); err != nil {
+		t.Fatalf("copy not written under the preserved name: %v", err)
+	}
+}
+
+// TestFR30_S7_Register_DatesAnUndatedFilename is S6's other side: a source
+// that does not follow the convention is renamed to today plus a slug from
+// its first heading.
+func TestFR30_S7_Register_DatesAnUndatedFilename(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+
+	content := "# Project Proposal: Add Caching Layer\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
+	inputFile := filepath.Join(tmp, "valid-project.md")
+	os.WriteFile(inputFile, []byte(content), 0644)
+
+	filename, err := Register(inputFile, specDir)
+	if err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	want := time.Now().Format("2006-01-02") + "-add-caching-layer.md"
+	if filename != want {
+		t.Fatalf("want %q, got %q", want, filename)
 	}
 }
 

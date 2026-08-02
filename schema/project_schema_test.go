@@ -197,8 +197,8 @@ func TestNFR4_S13_InvalidIDPatternProject(t *testing.T) {
 		doc  string
 	}{
 		{
-			"short id in milestone",
-			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "milestones": [{"id": "abc", "title": "M"}]}`,
+			"short id in requirement",
+			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "requirements": [{"id": "abc", "type": "functional", "title": "R"}]}`,
 		},
 		{
 			"non-hex id in module",
@@ -256,35 +256,32 @@ func TestFR1_S15_DependsOnDuplicatesFails(t *testing.T) {
 	}
 }
 
-func TestFR6_S16_TestPlanValidation(t *testing.T) {
+// TestFR6_S16_RetiredProjectKeysRejected pins the deletion of the two
+// vestigial project-level node types. The project schema sets
+// additionalProperties:false, so a spec that still declares either one is a
+// hard validation failure rather than a silently ignored field.
+func TestFR6_S16_RetiredProjectKeysRejected(t *testing.T) {
 	sch := compileProjectSchema(t)
 
-	t.Run("valid test_plan with minimal scenario", func(t *testing.T) {
-		err := validateProject(t, sch, `{
-			"name": "p",
-			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-			"test_plan": {
-				"scenarios": [{"id": "000000000001", "name": "Smoke test"}]
+	for _, tt := range []struct {
+		name string
+		doc  string
+	}{
+		{
+			"milestones",
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "milestones": []}`,
+		},
+		{
+			"test_plan",
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "test_plan": {"scenarios": []}}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := validateProject(t, sch, tt.doc); err == nil {
+				t.Fatalf("%q was retired but still validates", tt.name)
 			}
-		}`)
-		if err != nil {
-			t.Fatalf("valid test_plan should pass: %v", err)
-		}
-	})
-
-	t.Run("test_plan with extra property fails", func(t *testing.T) {
-		err := validateProject(t, sch, `{
-			"name": "p",
-			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-			"test_plan": {
-				"strategy": "risk-based",
-				"scenarios": []
-			}
-		}`)
-		if err == nil {
-			t.Fatal("expected validation error for extra property in test_plan, got nil")
-		}
-	})
+		})
+	}
 }
 
 func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
@@ -309,15 +306,28 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 	if len(proj.Modules) != len(proj2.Modules) {
 		t.Fatalf("modules length mismatch: want %d, got %d", len(proj.Modules), len(proj2.Modules))
 	}
-	if len(proj.Modules) > 1 {
-		if len(proj.Modules[1].RequiresModule) != len(proj2.Modules[1].RequiresModule) {
-			t.Fatal("requires_module length mismatch")
+	// requires_module is the project level's string-array field, and pinning it
+	// through the round-trip is the point of this block. Iterate rather than
+	// hard-code an index: the fixture's first module carries no requires_module,
+	// so an indexed check is one fixture edit away from silently asserting
+	// nothing. pinned counts elements actually compared and fails if the fixture
+	// stops exercising the field at all.
+	pinned := 0
+	for i := range proj.Modules {
+		if len(proj.Modules[i].RequiresModule) != len(proj2.Modules[i].RequiresModule) {
+			t.Fatalf("modules[%d].requires_module length mismatch: want %d, got %d",
+				i, len(proj.Modules[i].RequiresModule), len(proj2.Modules[i].RequiresModule))
 		}
-		for i, v := range proj.Modules[1].RequiresModule {
-			if v != proj2.Modules[1].RequiresModule[i] {
-				t.Fatalf("requires_module[%d] mismatch: want %s, got %s", i, v, proj2.Modules[1].RequiresModule[i])
+		for j, v := range proj.Modules[i].RequiresModule {
+			if v != proj2.Modules[i].RequiresModule[j] {
+				t.Fatalf("modules[%d].requires_module[%d] mismatch: want %s, got %s",
+					i, j, v, proj2.Modules[i].RequiresModule[j])
 			}
+			pinned++
 		}
+	}
+	if pinned == 0 {
+		t.Fatal("fixture carries no requires_module: the string-array round-trip assertion is vacuous")
 	}
 	if len(proj.Requirements) > 1 {
 		if len(proj.Requirements[1].DependsOn) != len(proj2.Requirements[1].DependsOn) {
@@ -332,16 +342,6 @@ func TestFR1_S18_GoTypeRoundTripProject(t *testing.T) {
 	if len(proj.Requirements) > 0 && proj.Requirements[0].Priority != nil {
 		if proj2.Requirements[0].Priority == nil || *proj.Requirements[0].Priority != *proj2.Requirements[0].Priority {
 			t.Fatal("priority mismatch")
-		}
-	}
-	if len(proj.Milestones) > 0 {
-		if len(proj.Milestones[0].Groups) != len(proj2.Milestones[0].Groups) {
-			t.Fatal("groups length mismatch")
-		}
-		for i, v := range proj.Milestones[0].Groups {
-			if v != proj2.Milestones[0].Groups[i] {
-				t.Fatalf("groups[%d] mismatch: want %s, got %s", i, v, proj2.Milestones[0].Groups[i])
-			}
 		}
 	}
 }
@@ -395,8 +395,7 @@ func TestFR1_E1_EmptyOptionalArraysValidProject(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [],
-		"milestones": [],
-		"test_plan": {"scenarios": []}
+		"sections": []
 	}`)
 	if err != nil {
 		t.Fatalf("empty optional arrays should pass: %v", err)
@@ -498,32 +497,6 @@ func TestFR1_E3_LargeIDValuePasses(t *testing.T) {
 	}
 }
 
-func TestFR6_E9_TestPlanEmptyScenariosObject(t *testing.T) {
-	sch := compileProjectSchema(t)
-	err := validateProject(t, sch, `{
-		"name": "p",
-		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-		"test_plan": {}
-	}`)
-	if err != nil {
-		t.Fatalf("empty test_plan object should pass: %v", err)
-	}
-}
-
-func TestFR6_E10_TestScenarioModulesDuplicatesFails(t *testing.T) {
-	sch := compileProjectSchema(t)
-	err := validateProject(t, sch, `{
-		"name": "p",
-		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-		"test_plan": {
-			"scenarios": [{"id": "000000000001", "name": "S", "modules": ["000000000001", "000000000001"]}]
-		}
-	}`)
-	if err == nil {
-		t.Fatal("expected validation error for duplicate modules in test_scenario, got nil")
-	}
-}
-
 func TestFR1_ProjectSchemaMetaProperties(t *testing.T) {
 	data, err := ProjectSchema()
 	if err != nil {
@@ -568,17 +541,27 @@ func TestFR1_ProjectSchemaMetaProperties(t *testing.T) {
 
 	// Check properties keys
 	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "version", "requirements", "modules", "milestones", "test_plan"} {
+	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections"} {
 		if props[key] == nil {
 			t.Fatalf("project schema missing property %q", key)
+		}
+	}
+	for _, key := range []string{"milestones", "test_plan"} {
+		if props[key] != nil {
+			t.Fatalf("project schema still declares retired property %q", key)
 		}
 	}
 
 	// Check $defs keys
 	defs := raw["$defs"].(map[string]any)
-	for _, key := range []string{"requirement", "module", "milestone", "test_scenario"} {
+	for _, key := range []string{"requirement", "module", "section"} {
 		if defs[key] == nil {
 			t.Fatalf("project schema missing $def %q", key)
+		}
+	}
+	for _, key := range []string{"milestone", "test_scenario"} {
+		if defs[key] != nil {
+			t.Fatalf("project schema still declares retired $def %q", key)
 		}
 	}
 }

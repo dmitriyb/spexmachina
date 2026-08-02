@@ -28,9 +28,16 @@ type SnapshotNode struct {
 	Children []string `json:"children,omitempty"`
 }
 
-// Save writes the merkle tree to a snapshot file as JSON.
-// The createdAt parameter controls the timestamp for deterministic output.
-func Save(tree *Node, path string, createdAt time.Time) error {
+// EncodeSnapshot flattens the tree into the canonical snapshot document
+// and returns its bytes: two-space indented JSON with a trailing newline.
+// createdAt is a parameter rather than a clock reading, so the same tree
+// and timestamp always produce the same bytes.
+//
+// Every writer of spec/.snapshot.json goes through here, whatever it then
+// does with the bytes. A second implementation of this walk is how two
+// writers of one format drift apart while both keep passing their own
+// tests — see arch_snapshot_store.md, "Read vs. write call sites".
+func EncodeSnapshot(tree *Node, createdAt time.Time) ([]byte, error) {
 	snap := &Snapshot{
 		RootHash:  tree.Hash,
 		RootKey:   tree.Key,
@@ -41,9 +48,20 @@ func Save(tree *Node, path string, createdAt time.Time) error {
 
 	data, err := json.MarshalIndent(snap, "", "  ")
 	if err != nil {
-		return fmt.Errorf("merkle: save snapshot: %w", err)
+		return nil, fmt.Errorf("merkle: encode snapshot: %w", err)
 	}
-	data = append(data, '\n')
+	return append(data, '\n'), nil
+}
+
+// Save writes the merkle tree to a snapshot file as JSON, replacing the
+// destination in place. It carries no atomicity guarantee, so it has no
+// production caller: ingest's SnapshotSaver pairs EncodeSnapshot with its
+// own temp-file-and-rename write instead.
+func Save(tree *Node, path string, createdAt time.Time) error {
+	data, err := EncodeSnapshot(tree, createdAt)
+	if err != nil {
+		return err
+	}
 
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("merkle: save snapshot %s: %w", path, err)

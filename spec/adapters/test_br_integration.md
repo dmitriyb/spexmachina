@@ -88,10 +88,10 @@ echo "ok"
 
 ## Fixtures
 
-- `scripts/testdata/integration/happy_path/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
-- `scripts/testdata/integration/partial_failure/` — same shape, with injected bad op.
-- `scripts/testdata/integration/rerun_idempotent/` — happy path + "run twice" harness.
-- `scripts/testdata/integration/all_ref_shapes/` — changeset with the mix.
+- `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh:172` runs `seed.sh` only when the case supplies one.
+- `scripts/testdata/integration/close_obsolete/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
+
+The partial-run, re-run-idempotency and three-ref-shape scenarios above have no integration fixture; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.
 
 ## Non-Responsibilities
 

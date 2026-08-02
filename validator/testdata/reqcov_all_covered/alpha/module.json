@@ -15,22 +15,6 @@
       "name": "CompB"
     }
   ],
-  "impl_sections": [
-    {
-      "describes": [
-        "000000000001"
-      ],
-      "id": "000000000001",
-      "name": "Impl A"
-    },
-    {
-      "describes": [
-        "000000000002"
-      ],
-      "id": "000000000002",
-      "name": "Impl B"
-    }
-  ],
   "name": "alpha",
   "requirements": [
     {

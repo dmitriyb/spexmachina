@@ -4,7 +4,7 @@ Integration and acceptance tests for ActionClassifier (component 3) and ReportGe
 
 ## Setup
 
-All scenarios build on the output of NodeMatcher. The fixture data represents a typical diff cycle:
+All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched record repeats that hash in `SpecNodeID` — the join NodeMatcher already made. The fixture data represents a typical diff cycle:
 
 **Matched entries (modified spec nodes with existing beads):**
 
@@ -12,68 +12,70 @@ All scenarios build on the output of NodeMatcher. The fixture data represents a 
 matches := []Match{
     {
         Change: ClassifiedChange{
-            Path:   "validator/arch_schema_checker.md",
-            Type:   "modified",
-            Impact: "arch_impl",
+            Change: Change{Key: SCHK_HASH, Type: Modified, NodeType: "component", OldHash: "aaa", NewHash: "bbb"},
+            Impact: ArchImpl,
             Module: "validator",
         },
-        Beads: []BeadSpec{
-            {ID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+        Records: []Record{
+            {ID: 1, SpecNodeID: SCHK_HASH, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
         },
     },
     {
         Change: ClassifiedChange{
-            Path:   "merkle/impl_hash_computation.md",
-            Type:   "modified",
-            Impact: "impl_only",
+            Change: Change{Key: HASR_HASH, Type: Modified, NodeType: "component", OldHash: "ddd", NewHash: "eee"},
+            Impact: ArchImpl,
             Module: "merkle",
         },
-        Beads: []BeadSpec{
-            {ID: "spex-003", Module: "merkle", ImplSection: "Hash computation", SpecHash: "ghi789"},
+        Records: []Record{
+            {ID: 3, SpecNodeID: HASR_HASH, BeadID: "spex-003", Module: "merkle", Component: "Hasher", SpecHash: "ghi789"},
         },
     },
 }
 ```
 
-**Unmatched entries (new spec nodes without beads):**
+**Unmatched entries (new spec nodes without records):**
 
 ```go
 unmatched := []Unmatched{
     {
         Change: ClassifiedChange{
-            Path:   "validator/arch_orphan_detector.md",
-            Type:   "added",
-            Impact: "arch_impl",
+            Change: Change{Key: CSCH_HASH, Type: Added, NodeType: "component", NewHash: "fff"},
+            Impact: ArchImpl,
             Module: "validator",
         },
     },
 }
 ```
 
-**Orphaned entries (beads referencing removed spec nodes):**
+**Orphaned entries (records whose spec node was removed):**
 
 ```go
 orphaned := []Orphaned{
     {
-        Bead: BeadSpec{ID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000"},
+        Record:   Record{ID: 10, SpecNodeID: LEGACY_HASH, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000"},
+        NodeType: "component",
     },
 }
 ```
+
+An orphan carries `NodeType` alongside the record, preserved from the removed change, because an identity hash does not embed the node type and ActionClassifier needs it downstream.
 
 ## Scenarios
 
 ### S1: ActionClassifier produces correct actions for each category
 
-Call `ClassifyActions(matches, unmatched, orphaned)`. Assert the returned `[]Action` contains exactly six actions:
+Call `ClassifyActions(nil, matches, unmatched, orphaned)` — the leading argument is the spec graph, unused by these fixtures. Assert the returned `[]Action` contains exactly six actions:
 
-| # | Type | BeadID | Module | Node | Reason |
-|---|------|--------|--------|------|--------|
-| 1 | obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
-| 2 | create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
-| 3 | obsolete | spex-003 | merkle | Hash computation | Spec node modified: merkle/Hash computation |
-| 4 | create | (empty) | merkle | Hash computation | Spec node modified (new): merkle/Hash computation |
-| 5 | create | (empty) | validator | OrphanDetector | New spec node: validator/OrphanDetector |
-| 6 | obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
+| Type | BeadID | Module | Node | Reason |
+|------|--------|--------|------|--------|
+| create | (empty) | merkle | Hasher | Spec node modified (new): merkle/Hasher |
+| create | (empty) | validator | CSCH_HASH | New spec node: validator/CSCH_HASH |
+| create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
+| obsolete | spex-003 | merkle | Hasher | Spec node modified: merkle/Hasher |
+| obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
+| obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
+
+The table is a set, not a sequence. `ClassifyActions` does sort by `(Type, Module, Node, BeadID)` (`impact/action_classifier.go:175-186`), so all three creates precede all three obsoletes — but the two `validator` creates order on their `Node` strings, and the added node's `Node` is its raw identity hash (nil graph, so `resolveNodeName` returns the key). Whether that hash sorts before or after `SchemaChecker` depends on its first character, so the relative order of rows 2 and 3 below is not reproducible. Assert the set.
 
 Modified nodes produce TWO actions (obsolete old + create new). Added nodes produce one create. Removed nodes produce one obsolete.
 
@@ -85,9 +87,8 @@ Provide a Match-like scenario where a spec node is modified but has no bead (thi
 unmatched := []Unmatched{
     {
         Change: ClassifiedChange{
-            Path:   "render/impl_markdown_rendering.md",
-            Type:   "modified",
-            Impact: "impl_only",
+            Change: Change{Key: MDRN_HASH, Type: Modified, NodeType: "component", OldHash: "aaa", NewHash: "bbb"},
+            Impact: ArchImpl,
             Module: "render",
         },
     },
@@ -104,13 +105,12 @@ Provide a Match entry where the change type is "added" but a bead already exists
 matches := []Match{
     {
         Change: ClassifiedChange{
-            Path:   "proposal/arch_registrar.md",
-            Type:   "added",
-            Impact: "arch_impl",
+            Change: Change{Key: REG_HASH, Type: Added, NodeType: "component", NewHash: "new111"},
+            Impact: ArchImpl,
             Module: "proposal",
         },
-        Beads: []BeadSpec{
-            {ID: "spex-020", Module: "proposal", Component: "Registrar", SpecHash: "old111"},
+        Records: []Record{
+            {ID: 20, SpecNodeID: REG_HASH, BeadID: "spex-020", Module: "proposal", Component: "Registrar", SpecHash: "old111"},
         },
     },
 }
@@ -126,9 +126,8 @@ Provide an Unmatched entry with type "removed":
 unmatched := []Unmatched{
     {
         Change: ClassifiedChange{
-            Path:   "schema/arch_deprecated_loader.md",
-            Type:   "removed",
-            Impact: "arch_impl",
+            Change: Change{Key: DEPR_HASH, Type: Removed, NodeType: "component", OldHash: "aaa"},
+            Impact: ArchImpl,
             Module: "schema",
         },
     },
@@ -145,20 +144,19 @@ Provide a Match entry with two beads:
 matches := []Match{
     {
         Change: ClassifiedChange{
-            Path:   "validator/arch_schema_checker.md",
-            Type:   "modified",
-            Impact: "arch_impl",
+            Change: Change{Key: SCHK_HASH, Type: Modified, NodeType: "component", OldHash: "a", NewHash: "b"},
+            Impact: ArchImpl,
             Module: "validator",
         },
-        Beads: []BeadSpec{
-            {ID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
-            {ID: "spex-005", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+        Records: []Record{
+            {ID: 1, SpecNodeID: SCHK_HASH, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+            {ID: 5, SpecNodeID: SCHK_HASH, BeadID: "spex-005", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
         },
     },
 }
 ```
 
-Assert four actions are generated: two obsolete actions (one for each old bead) and two create actions (new beads to replace them). Each old bead is independently obsoleted.
+Both records name the same spec node — the shape NodeMatcher produces when two beads were mapped to one node. Assert four actions are generated: two obsolete actions (one for each old bead) and two create actions (new beads to replace them). Each old bead is independently obsoleted.
 
 ### S5b: ActionClassifier handles removed node with closed bead (cleanup)
 
@@ -167,7 +165,8 @@ Provide an Orphaned entry where the bead status is "closed":
 ```go
 orphaned := []Orphaned{
     {
-        Bead: BeadSpec{ID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000", Status: "closed"},
+        Record:   Record{ID: 10, SpecNodeID: LEGACY_HASH, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000", BeadStatus: "closed"},
+        NodeType: "component",
     },
 }
 ```
@@ -183,7 +182,8 @@ Provide an Orphaned entry where the bead status is "open":
 ```go
 orphaned := []Orphaned{
     {
-        Bead: BeadSpec{ID: "spex-011", Module: "merkle", Component: "DraftHasher", SpecHash: "yyy000", Status: "open"},
+        Record:   Record{ID: 11, SpecNodeID: DRAFT_HASH, BeadID: "spex-011", Module: "merkle", Component: "DraftHasher", SpecHash: "yyy000", BeadStatus: "open"},
+        NodeType: "component",
     },
 }
 ```
@@ -192,22 +192,22 @@ Assert only one action is generated: `"obsolete"` with BeadID `"spex-011"`. No c
 
 ### S6: Impact level appears in action metadata but does not change action type
 
-Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce the same action types (obsolete + create) regardless of impact level. Verify the reason string includes the impact level for traceability.
+Classify the same matched change three times, varying only the impact level (`impl_only`, `arch_impl`, `structural`). Assert all three produce the same two actions (obsolete + create). The impact level reaches neither the action nor its reason — `Action` carries no impact field and both reason formats are module-plus-node — so the `Reason` strings are byte-identical across the three runs; the shipped test asserts the action types only.
 
 ### S7: ReportGenerator produces valid JSON with correct structure
 
-Call `GenerateReport(actions, &buf)` with the six actions from S1. Parse the output JSON and assert:
+Call `GenerateReport(actions, &buf)` with six actions and assert the grouping and counts below. Passed the actions `ClassifyActions` returns for the S1 fixture, each entry additionally carries `node_type`, `spec_node_id`, `spec_hash` on creates, `old_bead_id` on a create replacing an obsoleted bead, and `change_type` on obsoletes; all are `omitempty`. The shipped test (`impact/report_generator_test.go:36-68`) instead hand-builds six actions carrying only `type`, `bead_id`, `module`, `node` and `reason`, which is why the block below omits those five fields. It is not a transcript of that test — the test's node names are `SchemaChecker`, `Hash computation` and `OrphanDetector`, its bead ids `spexmachina-abc/def/ghi`. Read against the S1 fixture, the third create's `node` is the identity hash `CSCH_HASH`, which is how the block below spells it — a nil graph leaves `resolveNodeName` returning the key (`impact/action_classifier.go:337-340`), and the reason string is built from that same value.
 
 ```json
 {
   "creates": [
     {"type": "create", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified (new): validator/SchemaChecker"},
-    {"type": "create", "module": "merkle", "node": "Hash computation", "reason": "Spec node modified (new): merkle/Hash computation"},
-    {"type": "create", "module": "validator", "node": "OrphanDetector", "reason": "New spec node: validator/OrphanDetector"}
+    {"type": "create", "module": "merkle", "node": "Hasher", "reason": "Spec node modified (new): merkle/Hasher"},
+    {"type": "create", "module": "validator", "node": "CSCH_HASH", "reason": "New spec node: validator/CSCH_HASH"}
   ],
   "obsoletes": [
     {"type": "obsolete", "bead_id": "spex-001", "module": "validator", "node": "SchemaChecker", "reason": "Spec node modified: validator/SchemaChecker"},
-    {"type": "obsolete", "bead_id": "spex-003", "module": "merkle", "node": "Hash computation", "reason": "Spec node modified: merkle/Hash computation"},
+    {"type": "obsolete", "bead_id": "spex-003", "module": "merkle", "node": "Hasher", "reason": "Spec node modified: merkle/Hasher"},
     {"type": "obsolete", "bead_id": "spex-010", "module": "merkle", "node": "LegacyHasher", "reason": "Spec node removed: merkle/LegacyHasher"}
   ],
   "summary": {
@@ -237,7 +237,7 @@ Wire the two components together: pass NodeMatcher output through `ClassifyActio
 
 ### E1: Empty inputs produce empty report
 
-Call `ClassifyActions(nil, nil, nil)`. Assert the result is an empty `[]Action`. Pass the empty actions to `GenerateReport`. Assert the JSON output has empty arrays and zero counts:
+Call `ClassifyActions(nil, nil, nil, nil)`. Assert the result is an empty `[]Action`. Pass the empty actions to `GenerateReport`. Assert the JSON output has empty arrays and zero counts:
 
 ```json
 {
@@ -301,7 +301,7 @@ Given component X `uses: [Y]` and Y `uses: [Z]`.
 
 When a create action for X is classified:
 
-Then `DepSpecNodeIDs` contains only `id_Y`. Z is not included — component `uses` walks one hop only, matching PreflightChecker semantics.
+Then `DepSpecNodeIDs` contains only `id_Y`. Z is not included — component `uses` walks one hop only. Only `requires_module` is walked transitively; a component's direct `uses` edges are its declared collaborators, not its closure.
 
 ### D5: Mixed `uses` and `requires_module` are merged and deduplicated
 

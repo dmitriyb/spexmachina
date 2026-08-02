@@ -4,7 +4,7 @@ End-to-end tests for `spex ingest`.
 
 ## Setup
 
-- `cmd/spex/testdata/ingest/` holds paired fixtures: changeset, receipts, initial state, expected state.
+- In-code fixtures, no on-disk testdata: `cmd/spex/ingest_test.go` writes each changeset/receipts pair and the initial `.bead-map.json` into a `t.TempDir()`.
 - Tests invoke the binary via the standard harness.
 
 ## Scenarios
@@ -12,7 +12,7 @@ End-to-end tests for `spex ingest`.
 ### Happy path: complete run
 
 - `spex ingest --changeset testdata/full/changeset.json --receipts testdata/full/receipts.json`
-- Expected: exit 0; .bead-map.json matches expected; spec/.snapshot.json rewritten; stdout is a JSON summary (`{"ok": N, "skipped": M, "error": 0, "snapshot_saved": true}`).
+- Expected: exit 0; .bead-map.json matches expected; spec/.snapshot.json rewritten; stdout is a JSON summary (`{"ok": N, "skipped": M, "errors": 0, "records_added": …, "records_updated": …, "records_deleted": …, "snapshot_saved": true, "status": "complete"}`).
 
 ### Partial run: exit 0, snapshot untouched
 
@@ -53,13 +53,11 @@ End-to-end tests for `spex ingest`.
 - Run ingest; run ingest again with the same inputs.
 - Expected: second run exits 0; second run's summary matches first (same counts); .bead-map.json byte-identical; snapshot unchanged after second run.
 
-### Dry-run variant (if supported)
+### Unknown --mode value
 
-- `spex ingest --changeset x --receipts y --dry-run`: prints the planned changes (JSON) without writing anything.
-- Expected: exit 0; no file writes; stdout includes planned upserts and deletes.
+- `spex ingest --changeset <valid.json> --receipts <valid.json> --mode bogus`.
+- Expected: exit 1; stderr is `ingest: --mode must be normal or refresh, got "bogus"`. The mode check runs after both artifacts load, so unreadable paths surface their own error first. There is no `--dry-run` flag.
 
 ## Fixtures
 
-- `cmd/spex/testdata/ingest/full/` — happy path.
-- `cmd/spex/testdata/ingest/partial/` — partial receipts.
-- `cmd/spex/testdata/ingest/invariant_orphan/` — invariant violation.
+In-code fixtures, no on-disk testdata. `cmd/spex/ingest_test.go` writes each changeset/receipts pair and the initial `.bead-map.json` into a `t.TempDir()` per scenario: the happy path at `:146`, the partial run at `:196`, and the invariant violation at `:383`.

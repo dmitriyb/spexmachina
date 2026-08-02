@@ -9,16 +9,16 @@ These tests verify that the embedding works correctly, that the loaded schemas a
 ### Build Preconditions
 
 - The `schema` package compiles successfully (`go build ./schema/...`).
-- The `go:embed` directive references `project.schema.json` and `module.schema.json`, both of which exist in the `schema/` directory at build time.
+- The `go:embed` directive references `project.schema.json`, `module.schema.json` and `bead-map.schema.json`, all of which exist in the `schema/` directory at build time.
 - No external file system access is needed at runtime — schemas are baked into the binary.
 
 ### Test Fixtures
 
 The following fixture files live in `schema/testdata/`:
 
-- `valid_project.json` — a full project.json with all optional fields populated (requirements, modules with dependencies, milestones, test_plan with scenarios).
+- `valid_project.json` — a full project.json with the optional fields populated (`description`, `version`, requirements carrying `priority` and `depends_on`, modules with inter-module dependencies).
 - `minimal_project.json` — the smallest valid project.json (`name` + one module).
-- `valid_module.json` — a full module.json with all optional arrays populated (requirements with preq_id, components with implements/uses, impl_sections, data_flows, test_sections).
+- `valid_module.json` — a full module.json with the optional arrays populated (requirements with preq_id, components with implements/uses, data_flows, test_sections, apis).
 - `minimal_module.json` — the smallest valid module.json (just `name`).
 
 ### Dependencies
@@ -58,10 +58,10 @@ The following fixture files live in `schema/testdata/`:
 - `type` field equals `"object"`.
 - `required` array contains `"name"` and `"modules"`.
 - `additionalProperties` is `false`.
-- `properties` object contains keys: `name`, `description`, `version`, `requirements`, `modules`, `milestones`, `test_plan`.
-- `$defs` object contains keys: `requirement`, `module`, `milestone`, `test_scenario`.
+- `properties` object contains keys: `name`, `description`, `version`, `requirements`, `modules`, `sections`.
+- `$defs` object contains keys: `identityHash`, `requirement`, `module`, `section` — and nothing else.
 
-**Verifies:** The embedded file is the actual project schema (not a stale copy or wrong file) and includes the `test_plan`/`test_scenario` additions.
+**Verifies:** The embedded file is the actual project schema (not a stale copy or wrong file) and carries the `sections` array. The `$defs` assertion is exhaustive on purpose: it is what catches a retired node type (`milestone`, `test_scenario`) coming back through a stale embed.
 
 ### S4: ModuleSchema() returns valid JSON Schema document
 
@@ -73,10 +73,10 @@ The following fixture files live in `schema/testdata/`:
 - `type` field equals `"object"`.
 - `required` array contains `"name"`.
 - `additionalProperties` is `false`.
-- `properties` object contains keys: `name`, `description`, `requirements`, `components`, `impl_sections`, `data_flows`, `test_sections`.
-- `$defs` object contains keys: `requirement`, `component`, `impl_section`, `data_flow`, `test_section`.
+- `properties` object contains keys: `name`, `description`, `requirements`, `components`, `data_flows`, `test_sections`, `apis`.
+- `$defs` object contains keys: `requirement`, `component`, `data_flow`, `test_section`, `api`.
 
-**Verifies:** The embedded file is the actual module schema and includes the `test_sections`/`test_section` additions.
+**Verifies:** The embedded file is the actual module schema and includes the `test_sections`/`test_section` and `apis`/`api` additions.
 
 ### S5: Both schemas are independently loadable
 
@@ -219,7 +219,7 @@ The current API uses fixed function names (`ProjectSchema`, `ModuleSchema`) rath
 **Call:** `data, err := schemaFS.ReadFile("nonexistent.schema.json")`
 **Expected:** `err` is non-nil (file not found in embed FS). `data` is nil or empty.
 
-**Verifies:** The embed FS only contains the two expected schema files and does not silently serve other content.
+**Verifies:** The embed FS only contains the three expected schema files and does not silently serve other content.
 
 ### E6: Schema files reference correct $defs internally
 
@@ -293,13 +293,14 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 
 **Expected:** `err` is nil; `data` is non-empty; `data` is valid JSON.
 
-### BM2: BeadMapSchema() enforces the identity hash spec_node_id pattern
+### BM2: BeadMapSchema() accepts both identities spec_node_id carries
 
 **Steps:**
 1. Load the bead-map schema and compile a validator.
-2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (legal identity hash).
-3. Validate a record where `spec_node_id` is `"impact/component/3"` (legacy format).
+2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (identity hash).
+3. Validate a record where `spec_node_id` is `"2026-04-12-data-flow-contract-layer"` (proposal reference).
+4. Validate a record where `spec_node_id` is `""`.
 
-**Expected:** The first passes; the second fails with a pattern violation referencing `^[a-f0-9]{12}$`.
+**Expected:** The first two pass; the empty string fails on `minLength: 1`.
 
-**Verifies:** The schema enforces the new identity hash format. This is the regression guard that catches any code path which tries to write a legacy-format `spec_node_id` into the bead-map.
+**Verifies:** The field is a non-empty string with no pattern, because one array holds records keyed both ways.

@@ -35,7 +35,7 @@
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "title": "Bead data via stdin",
-      "description": "spex log reads tracker bead data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed []BeadRecord slice from its caller \u2014 no subprocess invocation inside the proposal module."
+      "description": "spex log reads tracker bead data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed []BeadRecord slice from its caller \u2014 no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which \u2014 ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
     }
   ],
   "components": [
@@ -86,40 +86,6 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "e3d7f930488f",
-      "name": "Registration implementation",
-      "content": "impl_registration.md",
-      "describes": [
-        "24180f55c0b4"
-      ]
-    },
-    {
-      "id": "a8ae41cdd1ea",
-      "name": "History tracking implementation",
-      "content": "impl_history_tracking.md",
-      "describes": [
-        "97f73ced5a02"
-      ]
-    },
-    {
-      "id": "7267b0fc031c",
-      "name": "Template management",
-      "content": "impl_template_management.md",
-      "describes": [
-        "cc8adc823719"
-      ]
-    },
-    {
-      "id": "7c93ce1da4ca",
-      "name": "Proposal commands implementation",
-      "content": "impl_proposal_commands.md",
-      "describes": [
-        "21bc124a46c0"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "1d33b4c6c36e",
@@ -157,6 +123,38 @@
       "describes": [
         "21bc124a46c0"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "ac3c6ca0b337",
+      "name": "spex register",
+      "description": "Register a proposal into spec/proposals/",
+      "provided_by": [
+        "21bc124a46c0",
+        "24180f55c0b4"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "44a9d44c7eec",
+      "name": "spex log",
+      "description": "Show proposal history and linked bead actions (reads bead JSON on stdin)",
+      "provided_by": [
+        "21bc124a46c0",
+        "97f73ced5a02"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "2fcadf69c5c3",
+      "name": "spex template",
+      "description": "Output a proposal template to stdout",
+      "provided_by": [
+        "21bc124a46c0",
+        "cc8adc823719"
+      ],
+      "group": "cli"
     }
   ]
 }

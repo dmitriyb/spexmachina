@@ -17,6 +17,7 @@ func newImpactCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "impact",
 		Short: "Compute impact of spec changes on beads",
+		Args:  cobra.NoArgs,
 		RunE:  runImpactE,
 	}
 	cmd.Flags().String("diff", "", "path to diff JSON file (default: stdin)")
@@ -210,11 +211,6 @@ type moduleJSON struct {
 		Name    string `json:"name"`
 		Content string `json:"content"`
 	} `json:"components"`
-	ImplSections []struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	} `json:"impl_sections"`
 }
 
 // projectJSON is the subset of project.json we need for module name→path mapping.
@@ -261,12 +257,6 @@ func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]Conten
 			if c.Content != "" && c.ID != "" {
 				nm[c.ID] = c.Name
 				cm[c.ID] = filepath.Join("spec", m.Path, c.Content)
-			}
-		}
-		for _, s := range mod.ImplSections {
-			if s.Content != "" && s.ID != "" {
-				nm[s.ID] = s.Name
-				cm[s.ID] = filepath.Join("spec", m.Path, s.Content)
 			}
 		}
 

@@ -1,13 +1,13 @@
 {
   "name": "emit",
-  "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of label/create/close/tag operations with forward-reference encoding — that an external adapter consumes.",
+  "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding — that an external adapter consumes.",
   "requirements": [
     {
       "id": "aa2375420738",
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "title": "Pure function over inputs",
-      "description": "spex emit reads the impact report (stdin or --impact), .bead-map.json, the spec directory, and the --git-head SHA; writes changeset.json to stdout. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output."
+      "description": "spex emit reads the impact report (stdin or --impact), .bead-map.json, the spec directory, and the --git-head SHA; writes changeset.json to stdout. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output. The invocation itself is a declared external surface — the api `spex emit`, provided by EmitCommand — and the declared name is the bare invocation, so the flags listed here sit behind it: adding, renaming or dropping one moves no name and is invisible to the diff. Nothing that reaches this function can carry an api node either, because an api produces no impact action, so no changeset op ever names one."
     },
     {
       "id": "f379c06c6a53",
@@ -42,7 +42,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotency label construction",
-      "description": "Each create op carries an idempotency.label field of the form spex:<record-id> where record-id is the next integer ID the ingest reconciler will assign. The adapter matches this label against the tracker before creating; a pre-existing match produces a was_existing=true skipped receipt rather than a duplicate bead. Record IDs come from the mapping store's monotonic counter."
+      "description": "Each create op carries an idempotency.label field. A fresh create's label is spex:<record-id>, taken from an in-memory cursor seeded once from the mapping store's counter and advanced per fresh create, so a run's second fresh create is one past the persisted counter, not equal to it; a modify-pair create reuses the record-id already bound to its old bead; a cleanup create's label is spex:cleanup-<spec_node_id> and allocates no record-id. The adapter matches this label against the tracker before creating; a pre-existing match produces a was_existing=true skipped receipt rather than a duplicate bead. Record IDs come from the mapping store's monotonic counter."
     },
     {
       "id": "22e63e959749",
@@ -107,7 +107,7 @@
     {
       "id": "6f4b6dd8928f",
       "name": "IdempotencyLabeler",
-      "description": "Assigns each create op its idempotency.label in the form spex:<record-id>. The record-id is the next integer from the mapping store's monotonic counter, reserved at emit time so ingest's later reconciliation uses the same value. Never reuses a record-id across runs.",
+      "description": "Assigns each create op its idempotency.label, branching on action class. A fresh create takes spex:<cursor> from the mapping store's monotonic counter and advances an in-memory cursor. A modify-pair create reuses the record-id already bound to its old bead, because ingest's modify-pair detection requires that match. A cleanup create takes spex:cleanup-<spec_node_id> and consumes no record-id. Emit never writes the persisted counter back; advancing it is ingest's job.",
       "content": "arch_idempotency_labeler.md",
       "implements": [
         "0d468e176aaf"
@@ -126,53 +126,11 @@
       ]
     }
   ],
-  "impl_sections": [
-    {
-      "id": "bb860a396d40",
-      "name": "Changeset building",
-      "content": "impl_changeset_building.md",
-      "describes": [
-        "7f06f7d80e94"
-      ]
-    },
-    {
-      "id": "f78cf15a5fdb",
-      "name": "Reference resolution",
-      "content": "impl_reference_resolution.md",
-      "describes": [
-        "f7775ac5f1f3"
-      ]
-    },
-    {
-      "id": "5f984d123929",
-      "name": "Topological sorting",
-      "content": "impl_topological_sorting.md",
-      "describes": [
-        "7249fd093b8a"
-      ]
-    },
-    {
-      "id": "cb9cd590dd6c",
-      "name": "Idempotency labeling",
-      "content": "impl_idempotency_labeling.md",
-      "describes": [
-        "6f4b6dd8928f"
-      ]
-    },
-    {
-      "id": "0e215d0ee35d",
-      "name": "Emit command implementation",
-      "content": "impl_emit_command.md",
-      "describes": [
-        "cbe835d38c3e"
-      ]
-    }
-  ],
   "data_flows": [
     {
       "id": "dbe8d1e707d5",
       "name": "Emit flow",
-      "description": "Impact report + .bead-map.json + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v1.",
+      "description": "Emit's place in the run and its internals. Position: emit is the fourth of six stages — spex validate gates, spex diff and spex impact --beads produce the impact report, emit turns it into changeset.json, the adapter executes that and writes receipts.json, and spex ingest reconciles the pair; every hand-off from diff onwards goes through a file, so each stage can be re-run from the artifact its predecessor wrote, and a partial run leaves the snapshot untouched so the next diff recomputes from the same baseline. Internals: impact report + .bead-map.json + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v1.",
       "content": "flow_emit.md",
       "uses": [
         "7f06f7d80e94",
@@ -202,6 +160,17 @@
       "describes": [
         "cbe835d38c3e"
       ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "7cccc4a96101",
+      "name": "spex emit",
+      "description": "Emit a tool-agnostic changeset from an impact report",
+      "provided_by": [
+        "cbe835d38c3e"
+      ],
+      "group": "cli"
     }
   ]
 }
