@@ -66,11 +66,10 @@ Tell the user which mode was detected and why before proceeding.
 | data flow | `module.json` → `data_flows` | `flow_*.md`, **required** | yes |
 | test section | `module.json` → `test_sections` | `test_*.md`, **required** | only when `describes` has ≥ 2 entries |
 
-**Node types that no longer exist:** `impl_sections`, `milestones` and `test_plan` (with its `scenarios`). Impl sections are gone from `module.schema.json`, from `bin/spex hash-id` and from the corpus — every fact one used to carry belongs in the component's `arch_*.md` or nowhere; see "Deciding what belongs in an arch leaf". Milestones and the test plan are gone from `project.json`. `project.schema.json` declares `additionalProperties: false`, so writing either one back is a hard schema failure:
+**Node types that no longer exist:** `impl_sections`, `milestones` and `test_plan` (with its `scenarios`). Impl sections are gone from `module.schema.json`, from `bin/spex hash-id` and from the corpus — every fact one used to carry belongs in the component's `arch_*.md` or nowhere; see "Deciding what belongs in an arch leaf". Milestones and the test plan are gone from `project.json`. `project.schema.json` declares `additionalProperties: false`, so writing either one back is a hard schema failure — one JSON error entry with `check: "schema"`, `path: "project.json"`, and a combined message:
 
 ```
-[schema] project.json :: additional properties 'test_plan' not allowed :: /additionalProperties
-[schema] project.json :: additional properties 'milestones' not allowed :: /additionalProperties
+additional properties 'milestones', 'test_plan' not allowed
 ```
 
 and `bin/spex hash-id --type milestone` / `--type scenario` exit 1. Milestones were superseded by proposal epics; scenarios by test sections whose `describes` spans two or more components.
@@ -83,8 +82,7 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 
 - **Required**: `name`, `modules` (at least one)
 - **Optional**: `description`, `version`, `requirements`, `sections`
-- Requirements: `id` (identity hash), `type` (`functional` | `non_functional`), `title` — required by schema; **`priority` (integer 0–4) is required by the validator**, which is the one mandatory field the schema calls optional. Omitting it yields
-  `[id] project.json:/requirements/<id> :: project requirement <id> missing priority`.
+- Requirements: `id` (identity hash), `type` (`functional` | `non_functional`), `title` — required by schema; **`priority` (integer 0–4) is required by the validator**, which is the one mandatory field the schema calls optional. Omitting it yields an error entry with `check: "id"`, `path: "project.json:/requirements/<id>"` and message `project requirement <id> missing priority`.
   `description` and `depends_on` are optional.
 - Modules: `id`, `name`, `path` required; `description`, `requires_module` optional. **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g. `"impact"`, not `"Impact"`).
 - `sections`: project-level typed envelopes (`id`, `name`, `type`). A section of type `coupled` must name an existing module and validate against that module's `section.schema.json`. This project declares none; do not add one unless a proposal asks for it.
@@ -105,7 +103,7 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 
 An `api` is one entry point exactly as callers write it: `spex diff`, `GET /v1/specs/{id}`, `schema.IdentityHash`. **Never a signature.**
 
-**No `module.json` in this corpus declares an `apis` array yet** — the external surface is being declared module by module — so the block below is a worked example of the shape, not a quotation of a file. Were `spec/merkle/module.json` to declare the `spex diff` entry point, whose component is `DiffCommand` (`c8b958ec310d`), it would read:
+**The external surface is fully declared: 9 of the 11 modules carry an `apis` array, 15 api names in total, covering every CLI subcommand** (`schema` and `adapters` own no entry point and correctly declare none). Before adding an api, check it does not already exist in another module — names are globally unique and the identity belongs to the module owning the entry point. The block below is a quotation of `spec/merkle/module.json`, declaring `spex diff` whose component is `DiffCommand` (`c8b958ec310d`):
 
 ```json
 "apis": [
@@ -115,7 +113,7 @@ An `api` is one entry point exactly as callers write it: `spex diff`, `GET /v1/s
 ]
 ```
 
-`d487fc9c4fa5` is `bin/spex hash-id --type api --module merkle --name "spex diff"`. Note that the api would be declared in the module that owns the entry point, not in `cli`: `provided_by` cannot reach across modules.
+`d487fc9c4fa5` is `bin/spex hash-id --type api --module merkle --name "spex diff"`. Note that the api is declared in the module that owns the entry point, not in `cli`: `provided_by` cannot reach across modules.
 
 - Identity is `<module>/api/<name>` — `bin/spex hash-id --type api --module <mod> --name "<name>"`.
 - **No content file.** An api hashes from its JSON fields alone, exactly as a project requirement does. It is still a merkle leaf, so it is a valid link target.
@@ -248,7 +246,7 @@ link target 8615746fb371 is a module node; module nodes are not linkable
 link target deadbeefdead does not resolve to any spec node
 ```
 
-Nothing forces a mention to be a link. Link when a reader would otherwise have to guess which node you mean.
+Nothing forces an arbitrary mention to be a link — but **touched leaves owe their declared edges**, and `scripts/link-check.sh` enforces it: a component leaf that is `added` or `modified` in the diff must carry one link for every id in its `uses`, its `implements`, and every api whose `provided_by` names it; a touched data-flow leaf owes its `uses`. A link inside a fenced block, an HTML comment, a 4-space-indented block or a whole-link code span does **not** satisfy the obligation — the obligation scanner skips all four even where the validator's resolver scans them, so the safe form is the link in running prose with backticks inside the display half. Place each link in the sentence that discusses the target, replacing or wrapping the existing mention: `scripts/link-spread.sh` fails a leaf that appends links without changing a line of prose (`LINK_APPENDED`), grows a `## References`-style heading, or writes link-only lines. Run both scripts before calling a leaf done — `/spec-review` runs them regardless. Beyond the obligation, link when a reader would otherwise have to guess which node you mean.
 
 ## Interface Mapping
 
@@ -304,7 +302,7 @@ When you keep pseudocode, name the requirement it belongs to in the surrounding 
 
 ### The ladder — judging existing implementation prose
 
-Use this when folding an `impl_*.md` into an arch leaf, and as the standing test for whether a paragraph belongs in an arch leaf at all. The unit of judgement is a `##` section, and every section gets exactly one recorded verdict; judging whole leaves does not reproduce between runs.
+This is the standing test for whether a paragraph belongs in an arch leaf at all (the impl-leaf folding it was built for is complete — no `impl_*.md` exists in the corpus). The unit of judgement is a `##` section, and every section gets exactly one recorded verdict; judging whole leaves does not reproduce between runs.
 
 **Preamble, once per component:**
 
@@ -471,7 +469,7 @@ The bare text output reports these as **errors**, not warnings — `N error(s):`
 Two entry types appear in `errors`:
 
 - **`incomplete_change`** — a structural change whose consequences were not written down. The eight shapes:
-  - `module X meta changed but component Y content leaf unchanged` — `module.json` changed (a node added, removed, or a `describes`/`uses` array reshaped) but Y's leaf was not touched. Fix by editing `arch_<Y>.md` to say what changed about Y's call sites, test surface or relationships. Real edits, not cosmetic. If several components are flagged, every one needs an edit; the rule is intentionally strict.
+  - `module X meta changed but component Y content leaf unchanged` — `module.json` changed (a node added, removed, or a `describes`/`uses` array reshaped) but Y's leaf was not touched. Fix by editing `arch_<Y>.md` to say what changed about Y's call sites, test surface or relationships. Real edits, not cosmetic. If several components are flagged, every one needs an edit; the rule is intentionally strict. **One exemption:** when a module requirement in the same module also changed, the whole-module obligation is skipped and only the finer-grained requirement rules below apply (`merkle/completeness_checker.go:126`) — so a `module.json` edit that includes a requirement change does not oblige every component, only the requirement's implementors.
   - `requirement R (…) added but not implemented by any component`
   - `requirement R (…) added but component C content leaf unchanged`
   - `requirement R (…) description changed but component C content leaf unchanged`
