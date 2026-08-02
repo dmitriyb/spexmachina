@@ -4,9 +4,11 @@ bin/
 # bv (beads viewer) local config and caches
 .bv/
 
-# br (beads) local files
+# br (beads) local files — the sqlite db and its sidecars are rebuilt from
+# the committed issues.jsonl and must never be tracked
 .beads/.br_history
 .beads/.br_recovery
+.beads/beads.db*
 
 # /converge pipeline run artifacts (diff.json, changeset.json, receipts.json, log)
 .spex/
