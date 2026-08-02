@@ -15,12 +15,12 @@ fi
 
 ### Full happy path
 
-- Seed br sandbox: create a fake proposal epic and a handful of feature beads (analogues of existing mapping records).
+- Seed br sandbox: create a fake proposal epic and a handful of feature beads (analogues of existing journal pairings).
 - Run `scripts/apply-br.sh` with a changeset containing 2 new creates, 1 close (removed), 1 modified close+create pair.
 - Assertions:
   - All 5 ops land as receipts.
   - `br list --json` output matches expected beads (count, statuses, labels).
-  - `spex:<record-id>` labels present on new beads.
+  - `spex:<spec_node_id>` labels present on new beads.
   - `spex:obsolete` + `commit:<HEAD>` labels present on the closed beads.
   - Receipts top-level status: complete.
 
@@ -41,9 +41,9 @@ fi
   - Second run's receipts all show `was_existing=true` on creates, `status=skipped` with reason "already obsoleted" on closes.
   - br state after second run is byte-identical to state after first run.
 
-### All three ref shapes
+### Both ref shapes
 
-- Changeset mixing ref:op (new-to-new), ref:bead (existing open), ref:spec_node (new with no mapping record — should fallback to mapping-store lookup at adapter time, which finds a bead).
+- Changeset mixing ref:op (new-to-new) and ref:bead (existing open) — the two shapes v2 admits; a dep emit could not resolve never reaches the adapter.
 - Assertions: each new bead's `--deps depends:<>` is correct per the ref resolution.
 
 ## Harness

@@ -42,7 +42,7 @@
       "id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply changes",
-      "description": "Turn an impact report into applied tracker state through emit, an external adapter, and ingest. Emit composes a tool-agnostic changeset carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest reconciles the bead-map from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
+      "description": "Turn an impact report into applied tracker state through emit, an external adapter, and ingest. Emit composes a tool-agnostic changeset carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label read off the op's own spec node identity. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest appends the run's change events and task receipts to the task journal from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
       "depends_on": [
         "0a0f49f9be9b"
       ],
@@ -137,14 +137,14 @@
       "id": "58ea35f52b86",
       "type": "non_functional",
       "title": "No runtime subprocesses",
-      "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
+      "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts — outside the spex binary — bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
       "priority": 2
     },
     {
       "id": "96c6c15ecc3e",
       "type": "non_functional",
       "title": "Declared stack",
-      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and .bead-map.json; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
+      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today — github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the journal lines of spec/.history.jsonl; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
       "priority": 2
     }
   ],
@@ -153,7 +153,7 @@
       "id": "f03774b40bd5",
       "name": "schema",
       "path": "schema",
-      "description": "JSON Schema definitions for project.json, module.json and .bead-map.json, plus the identity-hash function module-scoped node ids are derived from. The foundation that defines what a valid spec looks like."
+      "description": "JSON Schema definitions for project.json, module.json and the task journal, plus the identity-hash function module-scoped node ids are derived from. The foundation that defines what a valid spec looks like."
     },
     {
       "id": "9ddd3d22e686",
@@ -188,7 +188,7 @@
       "id": "742ff18345ed",
       "name": "emit",
       "path": "emit",
-      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, .bead-map.json, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json \u2014 an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding \u2014 that an external adapter consumes.",
+      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, the task journal, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding — that an external adapter consumes.",
       "requires_module": [
         "725a083f66a1",
         "fb20a21b62f1"
@@ -198,7 +198,7 @@
       "id": "1374b24a3086",
       "name": "ingest",
       "path": "ingest",
-      "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, .bead-map.json and the spec directory. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
+      "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
       "requires_module": [
         "742ff18345ed",
         "fb20a21b62f1",
@@ -237,7 +237,7 @@
       "id": "fb20a21b62f1",
       "name": "map",
       "path": "map",
-      "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
+      "description": "Spec-to-bead correlation layer. Owns access to the task journal (spec/.history.jsonl) that links spec node identity hashes to task ids. Provides journal folds, context resolution, and the CLI query interface.",
       "requires_module": [
         "f03774b40bd5",
         "085966b6bfa1"

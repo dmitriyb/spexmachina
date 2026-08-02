@@ -1,69 +1,69 @@
 {
   "name": "ingest",
-  "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, .bead-map.json and the spec directory. Reconciles .bead-map.json (insert/update/delete mapping records) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
+  "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events to spec/.history.jsonl (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
   "requirements": [
     {
       "id": "539030e8c5a4",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Reconcile per-op receipts",
-      "description": "For every ok create receipt other than a cleanup create: insert or update the mapping record with the bead_id from the receipt and the spec_node_id from the matching create op. A cleanup create has no mapping record by design and is skipped. For every ok close receipt on a removed node: delete the mapping record. For every ok close+create pair on a modified node: update the record to point to the new bead_id. Receipts with status=error leave records unchanged."
+      "description": "For every ok receipt, append journal events. A create receipt appends the change event — node identity, leaf hashes, git_head from the changeset — and a task_created receipt pairing it to the tracker id; cleanup creates pair with the prior removed event, epic creates pair with the proposal slug. An ok close on a removed node appends the removed event and a task_closed receipt. A modified node's close+create pair appends the modified event plus both receipts; the old pairing stays in the journal as lineage. Receipts with status=error append nothing."
     },
     {
       "id": "16dbbee94e88",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Partial receipts tolerance",
-      "description": "When top-level receipts status is partial (adapter stopped mid-run), ingest reconciles all ok-status ops and leaves skipped/error ops untouched. The partial state is internally consistent: successful creates have records, failed ones do not. The next spex emit recomputes against the unchanged snapshot baseline and resurfaces the unfinished work."
+      "description": "When top-level receipts status is partial (adapter stopped mid-run), ingest appends events for all ok-status ops and leaves skipped/error ops untouched. The partial state is internally consistent: successful creates have journal pairings, failed ones do not. The next spex emit recomputes against the unchanged snapshot baseline and resurfaces the unfinished work."
     },
     {
       "id": "cf47671793fa",
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Snapshot save gated on complete status",
-      "description": "In normal mode spec/.snapshot.json is overwritten only when receipts.json top-level status is complete; partial status leaves the snapshot untouched. This makes the next emit comparison pick up unfinished ops through the idempotency path. Refresh mode has its own gate: it requires both an empty changeset and an empty receipts file, and writes the snapshot only when the refresh succeeds and something actually drifted — a refresh over an already-current spec succeeds with snapshot_saved false and leaves the file untouched."
+      "description": "In normal mode spec/.snapshot.json is overwritten only when receipts.json top-level status is complete; partial status leaves the snapshot untouched. This makes the next emit comparison pick up unfinished ops through the idempotency path. Refresh mode has its own gate: it requires both an empty changeset and an empty receipts file, and writes the snapshot only when the refresh succeeds and something actually drifted — a refresh over an already-current spec succeeds with snapshot_saved false, appends nothing to the journal, and leaves both files untouched."
     },
     {
       "id": "ee28b5d190ae",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Mapping consistency invariants",
-      "description": "After ingest runs, the mapping store satisfies: (1) every ok create op has a record with its bead_id; (2) every ok close on a removed node has no record; (3) every modified node's close+create pair has a record pointing to the new bead_id; (4) no orphan records (spec_node_id with no live spec node in the post-apply tree); (5) no duplicate records (same spec_node_id twice); (6) snapshot saved iff complete; (7) .bead-map.json passes the bead-map schema. Ingest asserts these invariants and returns a structured error if any fails."
+      "description": "After ingest runs, the journal satisfies: (1) every ok create has exactly one task_created receipt paired to exactly one referent — a change event, a prior removed event for cleanups, or a proposal slug for epics; (2) no receipt references an event id the journal does not contain; (3) re-running the same changeset+receipts pair appends nothing, because event ids derive from git_head and op_id; (4) the snapshot is saved iff receipts are complete, so journal and snapshot describe the same point-in-time state; (5) every appended line validates against the journal-line schema before the write. The retired store invariants — one record per node, modify rebinds the record — are void by construction over an append-only log: lineage replaces them. Ingest asserts these invariants and returns a structured error if any fails."
     },
     {
       "id": "ffab5d1337ac",
       "preq_id": "8efae3d1ad18",
       "type": "functional",
       "title": "Atomic file replacement",
-      "description": "Writes to .bead-map.json and spec/.snapshot.json go through a temp-file + rename pattern so a crash mid-write leaves the pre-write file intact. Never truncate in place."
+      "description": "Writes to spec/.history.jsonl and spec/.snapshot.json go through a temp-file + rename pattern so a crash mid-write leaves the pre-write file intact. Never truncate in place. The journal append is a whole-file rewrite under the same guarantee — append-only is the format's semantics, not an I/O primitive."
     },
     {
       "id": "20589ccf7072",
       "preq_id": "58ea35f52b86",
       "type": "non_functional",
       "title": "No runtime subprocess",
-      "description": "spex ingest invokes no external subprocesses. Inputs are local files (changeset.json, receipts.json); outputs are local files (.bead-map.json, spec/.snapshot.json). No tracker calls, no git calls. The invocation is declared as the api `spex ingest`, provided by IngestCommand, and the declared name is the bare invocation: `--mode refresh` selects a pathway behind that single surface rather than standing up a second one, so both modes are bound by the guarantee above and neither can drift away from it in the graph."
+      "description": "spex ingest invokes no external subprocesses. Inputs are local files (changeset.json, receipts.json); outputs are local files (spec/.history.jsonl, spec/.snapshot.json). No tracker calls, no git calls. The invocation is declared as the api `spex ingest`, provided by IngestCommand, and the declared name is the bare invocation: `--mode refresh` selects a pathway behind that single surface rather than standing up a second one, so both modes are bound by the guarantee above and neither can drift away from it in the graph."
     },
     {
       "id": "fd6f08ef34fa",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Re-run idempotency",
-      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. A second run against already-reconciled receipts is a no-op: record targets already match, deletes already happened, snapshot already written. No duplication, no unexpected obsoletion."
+      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id), so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Adapter-side idempotency rests on the spex:<spec_node_id> labels; journal-side idempotency rests on the derived event ids. No duplication, no unexpected obsoletion."
     },
     {
       "id": "e68653819f38",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Refresh mode for impl_only drift",
-      "description": "Refresh mode is a parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering bead lifecycle. Content modifications are never gated, whatever leaf they land on. Structural additions and removals are absorbed only for an explicitly declared allow-list: requirements and apis in either direction, and component removals but not component additions. The first two produce no bead in either direction, so baselining one costs nothing. Components do produce beads, and a component removal is absorbable only because the orphan refusal described below still blocks the run while the bead-map holds a record for the removed node — that record must be retired first. An added component is a bead that was never created, so it is refused. Every other structural entry is refused — data_flow and test_section in either direction, because both produce beads, and the module and envelope node types, because baselining one would hide from every downstream tool a change that spex diff or spex validate rejects. RefreshHandler's absorbable table is the authoritative list; it is written out rather than derived by negation. Activation is the --mode refresh flag on spex ingest and nothing else. The pathway accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf, and updates each bead-map record's spec_hash to match current content (other fields untouched; records for proposal epics are skipped). A run is also refused if any bead-map record points to a spec node that no longer exists — that signals structural drift requiring the normal pipeline. After a successful refresh the bead-map and the snapshot move under one atomic commit boundary, preserving the snapshot+bead-map atomicity invariant. Same spec state plus same snapshot input always produces the same refresh output (no-op on second run, which rewrites neither file)."
+      "description": "Refresh mode is a parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering bead lifecycle. Content modifications are never gated, whatever leaf they land on. Structural additions and removals are absorbed only for an explicitly declared allow-list: requirements and apis in either direction, and component removals but not component additions. The first two produce no bead in either direction, so baselining one costs nothing. Components do produce beads, and a component removal is absorbable only while the journal fold holds no live task pairing for the removed node — retire the pairing first through the normal pipeline. An added component is a bead that was never created, so it is refused. Every other structural entry is refused — data_flow and test_section in either direction, because both produce beads, and the module and envelope node types, because baselining one would hide from every downstream tool a change that spex diff or spex validate rejects. RefreshHandler's absorbable table is the authoritative list; it is written out rather than derived by negation. Activation is the --mode refresh flag on spex ingest and nothing else. The pathway accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf off the rebuilt merkle tree, appends one change event per absorbed drift entry, and closes with a refresh receipt naming those events — stamped with --git-head when given and its recorded absence otherwise. After a successful refresh the journal and the snapshot move under one atomic commit boundary. Same spec state plus same snapshot input always produces the same refresh output: a second run rewrites neither file and appends nothing."
     }
   ],
   "components": [
     {
       "id": "2b5158af774b",
       "name": "Reconciler",
-      "description": "Consumes the changeset+receipts pair and applies per-op state transitions to the mapping store. Handles create (insert/update), close-on-removed (delete), close+create pairs (update to new bead_id). Asserts invariants 1 through 5 before returning; invariant 6 is SnapshotSaver's write gate and invariant 7 is the schema validation mapping.Store.Replace runs before it commits.",
+      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, a prior removed event (cleanups) or a proposal slug (epics), task_closed for closes. Asserts the journal invariants before the append commits, and the append is idempotent by derived event id, so re-processing a batch changes nothing.",
       "content": "arch_reconciler.md",
       "implements": [
         "539030e8c5a4",
@@ -99,7 +99,7 @@
     {
       "id": "f9033352c13f",
       "name": "RefreshHandler",
-      "description": "Refresh-mode ingest pathway. Consumes an empty changeset plus an empty receipts file, rebuilds the merkle tree over the current spec directory and reads each content leaf's hash off that tree rather than introducing a hashing step of its own, and updates each bead-map record's spec_hash to the current content hash (other record fields untouched; proposal-epic records are passed over). An added or removed diff entry refuses the run unless its node type is absorbable in that direction — requirement and api leaves in either direction, component on removal but not on addition; modified entries never reach that gate. Refuses if any bead-map record points to a spec node that no longer exists. After a successful refresh, saves the new snapshot atomically using the same write path the SnapshotSaver uses for complete-status runs, preserving the snapshot+bead-map atomicity invariant. Separated from Reconciler so the bead-lifecycle rules and the drift-absorption rules live in distinct components with distinct test surfaces.",
+      "description": "Refresh-mode ingest pathway. Consumes an empty changeset plus an empty receipts file, rebuilds the merkle tree over the current spec directory and reads each content leaf's hash off that tree rather than introducing a hashing step of its own, appends one change event per absorbed drift entry, and closes with a refresh receipt naming them. An added or removed diff entry refuses the run unless its node type is absorbable in that direction — requirement and api leaves in either direction, component on removal but not on addition; modified entries never reach that gate. Refuses while the journal fold still holds a live task pairing for a removed node. After a successful refresh, saves the new snapshot atomically using the same write path the SnapshotSaver uses for complete-status runs, preserving the snapshot+journal atomicity invariant. Separated from Reconciler so the bead-lifecycle rules and the drift-absorption rules live in distinct components with distinct test surfaces.",
       "content": "arch_refresh.md",
       "implements": [
         "e68653819f38"
@@ -110,7 +110,7 @@
     {
       "id": "6fd1f0cbb76c",
       "name": "Ingest flow",
-      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes spec/.snapshot.json iff status=complete); mode: refresh routes through RefreshHandler (re-hash every content leaf off a freshly built merkle tree, update bead-map spec_hash for changed records, save snapshot atomically, refuse on an added or removed entry outside the absorbable set). Both pathways write atomically.",
+      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes spec/.snapshot.json iff status=complete); mode: refresh routes through RefreshHandler (re-hash every content leaf off a freshly built merkle tree, append one change event per absorbed drift entry plus a refresh receipt naming them, save snapshot atomically, refuse on an added or removed entry outside the absorbable set). Both pathways write atomically.",
       "content": "flow_ingest.md",
       "uses": [
         "2b5158af774b",

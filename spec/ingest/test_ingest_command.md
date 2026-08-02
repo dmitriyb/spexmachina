@@ -4,20 +4,25 @@ End-to-end tests for `spex ingest`.
 
 ## Setup
 
-- In-code fixtures, no on-disk testdata: `cmd/spex/ingest_test.go` writes each changeset/receipts pair and the initial `.bead-map.json` into a `t.TempDir()`.
+- In-code fixtures, no on-disk testdata: `cmd/spex/ingest_test.go` writes each changeset/receipts
+  pair and the initial `spec/.history.jsonl` into a `t.TempDir()`.
 - Tests invoke the binary via the standard harness.
 
 ## Scenarios
 
 ### Happy path: complete run
 
-- `spex ingest --changeset testdata/full/changeset.json --receipts testdata/full/receipts.json`
-- Expected: exit 0; .bead-map.json matches expected; spec/.snapshot.json rewritten; stdout is a JSON summary (`{"ok": N, "skipped": M, "errors": 0, "records_added": …, "records_updated": …, "records_deleted": …, "snapshot_saved": true, "status": "complete"}`).
+- `spex ingest --changeset changeset.json --receipts receipts.json`
+- Expected: exit 0; the journal gains the batch's change events and receipts; spec/.snapshot.json
+  rewritten; stdout is a JSON summary (`{"ok": N, "skipped": M, "errors": 0,
+  "events_appended": …, "receipts_appended": …, "snapshot_saved": true, "status": "complete"}`).
 
 ### Partial run: exit 0, snapshot untouched
 
 - `spex ingest --changeset partial/changeset.json --receipts partial/receipts.json`
-- Expected: exit 0; stdout summary has `snapshot_saved: false`; snapshot file unchanged on disk.
+- Expected: exit 0; stdout summary has `snapshot_saved: false`; snapshot file unchanged on disk;
+  the ok ops' events are appended (the journal may legitimately run ahead of the snapshot until
+  the completing re-run).
 
 ### Missing --changeset flag
 
@@ -45,19 +50,25 @@ End-to-end tests for `spex ingest`.
 
 ### Invariant failure short-circuits
 
-- Run with a deliberately-crafted pair that produces an orphan record after reconciliation. Inject via fixture that adds a stale record upstream.
-- Expected: exit 2; stderr names the invariant and the offending spec_node_id. Mapping file on disk is UNCHANGED (atomic write means partial reconciliation doesn't land).
+- Run with a deliberately-crafted pair whose ok create pairs with no referent (no change event, no
+  prior removed event, no proposal stem).
+- Expected: exit 2; stderr names the invariant and the offending op. The journal on disk is
+  UNCHANGED (the append is a whole-file write-and-rename; a refused batch lands nothing).
 
 ### Re-run idempotency
 
 - Run ingest; run ingest again with the same inputs.
-- Expected: second run exits 0; second run's summary matches first (same counts); .bead-map.json byte-identical; snapshot unchanged after second run.
+- Expected: second run exits 0 with the same summary counts; `spec/.history.jsonl` byte-identical
+  after the second run; snapshot unchanged.
 
 ### Unknown --mode value
 
 - `spex ingest --changeset <valid.json> --receipts <valid.json> --mode bogus`.
-- Expected: exit 1; stderr is `ingest: --mode must be normal or refresh, got "bogus"`. The mode check runs after both artifacts load, so unreadable paths surface their own error first. There is no `--dry-run` flag.
+- Expected: exit 1; stderr is `ingest: --mode must be normal or refresh, got "bogus"`. The mode
+  check runs after both artifacts load, so unreadable paths surface their own error first. There
+  is no `--dry-run` flag.
 
 ## Fixtures
 
-In-code fixtures, no on-disk testdata. `cmd/spex/ingest_test.go` writes each changeset/receipts pair and the initial `.bead-map.json` into a `t.TempDir()` per scenario: the happy path at `:146`, the partial run at `:196`, and the invariant violation at `:383`.
+In-code fixtures, no on-disk testdata. `cmd/spex/ingest_test.go` writes each changeset/receipts
+pair and the initial journal into a `t.TempDir()` per scenario.

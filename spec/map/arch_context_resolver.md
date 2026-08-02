@@ -1,60 +1,90 @@
 # ContextResolver
 
-Given a [[205e67ca4aad|mapping record]], resolves all spec files needed to implement or review the
-mapped component. That resolution is what it means to hold
-[[40a3d3155131|the full spec context of a record]]: the record names a module, an identity hash and
-an arch path, the module file follows from the module name, and the test and flow paths are
-discovered by scanning that module's declarations for the hash.
+Given one key — a node's identity hash or a task id — resolves all spec files needed to implement
+or review that node. That resolution is what it means to hold
+[[40a3d3155131|the full spec context of a record]]: for a live node, the spec graph alone answers;
+for a removed node, the [[205e67ca4aad|journal fold]] carries the biography that outlives the node.
+No mapping record exists to be handed in — the key is the whole of the input.
 
 ## Responsibilities
 
-- Read the module.json for the record's module
-- Find test_sections whose `describes` array contains the component ID
-- Find data_flows whose `uses` array contains the component ID
-- Return all resolved file paths as a structured result
+- Resolve a task id to its node's identity hash through the journal fold; a 12-hex key skips this
+  step and is the hash
+- For a live node: locate the declaring module.json, read the component's declared `content` for
+  the arch file, and discover test and flow paths by scanning declarations for the hash
+- For a removed node: return the journal's biography — name, node type, module, removing proposal,
+  last task, and the `git_head` refs bracketing its final change
+- Return all of it as one structured result
 
 ## Interface
 
-Resolution takes two things — a spec directory and one mapping record — and produces one result: the
-record handed back unchanged, the arch file, the test files, the flow files, and the module file.
-[[3c8a43221ed2|`spex map context`]] prints that result, so the keys a caller
-parses (`record`, `arch_file`, `test_files`, `flow_files`, `module_file`) are the result under
-another name.
+Resolution takes a spec directory and one key, and produces one result. For a live node the keys a
+caller parses are `arch_file`, `test_files`, `flow_files`, `module_file`; for a removed node they
+are `name`, `node_type`, `module`, `proposal`, `task_id`, `before_head`, `after_head`.
+[[3c8a43221ed2|`spex map context`]] prints that result, so those keys are the result under another
+name. The removed-node shape is what makes a `spex:cleanup-<hash>` label a working reference
+instead of a dead end: the hash resolves to enough context to run `git show` on the retired leaf.
 
 ## Algorithm
 
-1. Treat the record's `spec_node_id` as the component's identity hash directly — no parsing, no path decomposition
-2. Read `<spec dir>/<record module>/module.json`
-3. Scan `test_sections`: if `describes` contains the identity hash, prepend `<spec dir>/<module>/` to the section's `content` field
-4. Scan `data_flows`: if `uses` contains the identity hash, same path resolution
-5. The arch file is the record's `content_file`, returned exactly as the record stores it
-6. The module file is `<spec dir>/<record module>/module.json`
+1. If the key is not a 12-hex hash, fold the journal and map the task id to its node's hash; an
+   unknown task id is a not-found error
+2. Scan every `module.json` named by `project.json` for a component, data flow or test section
+   declaring that hash — the module is *discovered*, never stored
+3. If found live: the arch file is the component's declared `content` under its module directory;
+   scan `test_sections` for `describes` containing the hash and `data_flows` for `uses` containing
+   it, prepending `<spec dir>/<module>/` to each `content`; the module file is that module's
+   `module.json`
+4. If declared nowhere live: consult the journal for the hash's latest `removed` event and return
+   the biography. The leaf path comes off the event's `path` field; `after_head` is the removing
+   event's `git_head`, and `before_head` is the `git_head` of the node's latest prior change
+   event, absent when the journal holds none (a backfilled node with no recorded prior change).
+   A hash with no journal history either is a not-found error that names the key and says it is
+   unknown to both spec and journal
 
 ## Error Handling
 
-- A module.json that cannot be read, or cannot be parsed as JSON, is an error, and the error names the path that was tried. The usual cause is a record whose `module` no longer exists under that name.
-- An identity hash the module declares nowhere is not an error. The result still carries the arch file and the module file; the discovered lists simply come back with nothing in them, because a component may legitimately have no flows and no tests.
+- A module.json that cannot be read or parsed is an error naming the path that was tried
+- A live hash that no test_section describes and no data_flow uses is not an error — the lists come
+  back empty, because a component may legitimately have no flows and no tests
+- Not-found distinguishes its two cases: unknown everywhere, versus removed-and-remembered (which
+  is a successful resolution, not an error)
 
 ## Design Notes
 
 ### Pure function
 
-Resolution takes a spec directory and a record, reads files, and returns a result. No side effects, no state. This makes it testable and deterministic.
+Resolution takes a spec directory (which contains the journal), reads files, and returns a result.
+No side effects, no state, no tracker contact. This makes it testable and deterministic.
 
 ### Why a separate component?
 
-Context resolution is reusable beyond the CLI — skills, review tooling and any future consumer need the same "give me everything about this component" capability. Keeping it out of MapCommand makes it callable as a library function.
+Context resolution is reusable beyond the CLI — skills, review tooling and any future consumer need
+the same "give me everything about this node" capability. Keeping it out of MapCommand makes it
+callable as a library function.
 
-### The result's shape follows the module, not the record
+### Everything is derived; nothing is cached
 
-The record contributes an identity hash, a module and an arch path; every other path in the result is *discovered*, by scanning the module for declarations that name that hash. So the key set of the result is a function of which kinds of section `module.json` declares, not of anything stored on the record — one key per kind of section that can name a component, plus the arch leaf and the module file.
+The retired record-based resolver read `module` and `content_file` off a stored record — and was
+measurably wrong in five cases where the cache had gone stale while derivation stayed correct. This
+resolver stores nothing: the module is found by scanning for the declaring `module.json`, the arch
+path is the component's own `content` field, and the discovered lists are functions of the module's
+declarations. The one thing derivation cannot recover — the identity of a node that no longer
+exists — is exactly what the journal keeps, which is the division of labor: spec for the present,
+journal for the past, nothing in between to drift.
 
-The practical consequence is that retiring a kind of section is a change to this component and to nothing downstream of it. One arm of the scan goes away and one key leaves the result; no record is touched, because no record ever pointed at a section — they point at components, and a component's arch leaf is the thing a record's `content_file` names. A resolver that had instead stored resolved section paths on the record would have needed a bead-map migration for the same change.
+### The result's shape follows the module, not any record
 
-### Resolution reads the spec graph, not the tracker
+Every path in a live result is a function of which kinds of section `module.json` declares — one
+key per kind that can name a component, plus the arch leaf and the module file. Retiring a kind of
+section is therefore a change to this component and nothing downstream: one arm of the scan goes
+away and one key leaves the result. No stored artifact needs migrating, because nothing stores
+resolved paths.
 
-A record and a spec directory are the whole of the input. Resolution never reads a bead, a changeset or a receipt.
+### Resolution reads the spec graph and the journal, not the tracker
 
-The record contributes exactly three things: `module`, which locates the module directory and is authoritative for the `module.json` path; `spec_node_id`, matched against `describes` and `uses` arrays in that module.json; and `content_file`, returned as `arch_file`. `module` is the load-bearing one — every path in the result except `arch_file` is joined under `<spec dir>/<module>/`, so a wrong module on the record misdirects the whole resolution rather than degrading it. Everything else in the result is derived from the spec graph on disk. The record's `bead_id`, `bead_type` and `spec_hash` are echoed back for the caller's benefit and are never consulted during resolution.
-
-That is why the result is stable against tracker churn: a bead can be closed, replaced by a modify-pair, or re-created under a new id, and `spex map context` returns the same files — because the record id survives the pair and the identity hash survives the rename. A resolver that consulted bead state would return different context depending on when it was asked, and the skills that consume it would lose the determinism they rely on.
+A bead can be closed, replaced by a modify-pair, or re-created under a new task id, and
+`spex map context` returns the same files — the identity hash survives everything except a rename,
+and a rename is a new node by definition. A resolver that consulted tracker state would return
+different context depending on when it was asked, and the skills that consume it would lose the
+determinism they rely on.

@@ -1,41 +1,41 @@
 {
   "name": "map",
-  "description": "Spec-to-bead correlation layer. Owns the mapping file (.bead-map.json) that links spec node IDs to bead IDs with typed metadata. Provides CRUD operations, context resolution, and CLI query interface.",
+  "description": "Spec-to-task correlation layer. Owns access to the task journal (spec/.history.jsonl), the append-only event log that links spec node identity hashes to tracker task ids. Provides journal reads and folds, context resolution, and the CLI query interface.",
   "requirements": [
     {
       "id": "934d627f0e90",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Store mapping records",
-      "description": "Read/write .bead-map.json. Each record links a spec node ID to a bead ID with structured metadata: module name, component/section name, content file path, spec hash at time of mapping, and bead type."
+      "description": "Read the task journal (spec/.history.jsonl), one JSON object per line, append-only. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). Current linkage is a fold, never a stored cache: the latest task-bearing event per node. No metadata is denormalized; names and modules are read from the event that carried them."
     },
     {
       "id": "27c046dde129",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Query mappings via CLI",
-      "description": "spex map get \u003crecord-id\u003e returns structured JSON with module, component, content path, and metadata. spex map list shows all mappings. spex map context \u003crecord-id\u003e resolves full spec context. All four invocations are declared as api nodes — the parent `spex map` and its three children — and each names MapCommand in provided_by alongside the worker it drives: MappingStore for get and list, ContextResolver for context. A declared name carries no argument placeholder: the api is `spex map get`, not `spex map get \u003crecord-id\u003e`, because the name must be the string a caller types and must survive corpus tokenization unchanged. Declaring the children alongside the parent is also what keeps the parent retirable — the removal-time name check discards hits that a longer live name already covers, so the mentions of `spex map` that belong to `spex map get`, `spex map list` or `spex map context` are never counted against the bare parent."
+      "description": "spex map get returns structured JSON for one node — keyed by identity hash or task id; there is no integer record id. spex map list shows the folded current linkage. spex map context resolves full spec context for a node, live or removed. All four invocations are declared as api nodes — the parent `spex map` and its three children — and each names MapCommand in provided_by alongside the worker it drives: MappingStore for get and list, ContextResolver for context. A declared name carries no argument placeholder: the api is `spex map get`, not `spex map get <key>`, because the name must be the string a caller types and must survive corpus tokenization unchanged. Declaring the children alongside the parent is also what keeps the parent retirable — the removal-time name check discards hits that a longer live name already covers, so the mentions of `spex map` that belong to `spex map get`, `spex map list` or `spex map context` are never counted against the bare parent."
     },
     {
       "id": "4aee62bd3c15",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Validate mapping file against schema",
-      "description": "MappingStore validates .bead-map.json against the bead-map JSON Schema on load. Invalid files produce a clear error before any CRUD operation."
+      "description": "MappingStore validates each journal line against the journal-line JSON Schema on read. A malformed line is a clear error from the map query surface, naming the line number. Gating commands are exempt by design: they treat an unreadable journal as absent and degrade detection, never fail — the journal is not load-bearing for the pipeline."
     },
     {
       "id": "40a3d3155131",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Resolve full spec context from record",
-      "description": "Given a record ID, deterministically resolve all spec files needed to implement the component: architecture file (from record content_file), test_sections whose describes array contains the component ID, and data_flows whose uses array contains the component ID. Returns a single JSON blob with all file paths."
+      "description": "Given an identity hash or a task id, deterministically resolve all spec files needed to implement the node. A live node resolves from the spec alone: the arch file from the component's declared content, test_sections whose describes array contains the component ID, data_flows whose uses array contains it, and the module file — all derived, nothing read from a cache. A removed node resolves from the journal: its name, node_type, module, the proposal that removed it, and the git_head refs bracketing its last change. Returns a single JSON blob."
     }
   ],
   "components": [
     {
       "id": "205e67ca4aad",
       "name": "MappingStore",
-      "description": "Read/write .bead-map.json. CRUD operations on mapping records. Each record links a spec node identity hash to a bead ID with structured metadata including bead_type field. The `spec_node_id` field is the same 12-char hex identity hash that the merkle tree uses as a key, so impact and apply look up records by that hash with no translation. Supports record updates for obsolete+create flows.",
+      "description": "Read access to the task journal: parse, scan and fold spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store never writes: ingest is the journal's only writer.",
       "content": "arch_mapping_store.md",
       "implements": [
         "934d627f0e90",
@@ -58,7 +58,7 @@
     {
       "id": "6b79188dff4c",
       "name": "ContextResolver",
-      "description": "Given a mapping record, reads the module.json and resolves all spec files for the component: the arch file, the test_sections and data_flows that name it, and the module file itself. Looks up the component by matching the record's spec_node_id (an identity hash) against the ids declared in module.json — no integer parsing from the spec_node_id, no path decomposition. Pure function over spec directory — deterministic and cacheable.",
+      "description": "Given an identity hash or a task id, resolves all spec files for the node. A live node resolves from the spec alone by matching the hash against ids declared in module.json — the arch file, the test_sections and data_flows that name it, and the module file itself; nothing is read from a cache. A removed node resolves from the journal: name, node_type, module, removing proposal, and the git_head refs bracketing its last change. Pure function over spec directory plus journal — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [
         "40a3d3155131"
@@ -72,7 +72,7 @@
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "How a record id travels from emit to the tracker and back. Emit reads MappingStore to stamp each create op with a spex:<record-id> idempotency label, the adapter applies that label to the bead it creates, and ingest materialises the mapping record at exactly that id from the changeset and the receipts. Skills query mappings via MapCommand.",
+      "description": "How a task pairs with the event that spawned it. Emit stamps each create op with a spex:<spec_node_id> idempotency label taken from the changeset op itself, the adapter applies that label to the task it creates, and ingest appends the change event and its task_created receipt to the journal at baselining. Skills query the resulting linkage via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",
@@ -110,7 +110,7 @@
     {
       "id": "1f1b7fdacbf3",
       "name": "spex map",
-      "description": "Manage bead mapping records",
+      "description": "Query the task journal",
       "provided_by": [
         "08909d62930b"
       ],
@@ -119,7 +119,7 @@
     {
       "id": "38ddf587012f",
       "name": "spex map get",
-      "description": "Get a mapping record by ID",
+      "description": "Get one node's journal linkage by identity hash or task id",
       "provided_by": [
         "08909d62930b",
         "205e67ca4aad"
@@ -129,7 +129,7 @@
     {
       "id": "394ec2c8d669",
       "name": "spex map list",
-      "description": "List all mapping records",
+      "description": "List the folded node-to-task linkage",
       "provided_by": [
         "08909d62930b",
         "205e67ca4aad"
@@ -139,7 +139,7 @@
     {
       "id": "3c8a43221ed2",
       "name": "spex map context",
-      "description": "Resolve full spec context for a mapping record",
+      "description": "Resolve full spec context for a spec node, live or removed",
       "provided_by": [
         "08909d62930b",
         "6b79188dff4c"

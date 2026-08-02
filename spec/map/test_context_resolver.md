@@ -2,12 +2,15 @@
 
 ## Setup
 
-All scenarios use a temporary spec directory with module.json files containing components, test_sections, and data_flows. Mapping records reference these components by identity hash.
+All scenarios use a temporary spec directory with module.json files containing components,
+test_sections, and data_flows, plus a `spec/.history.jsonl` journal for the removed-node cases.
+Resolution is keyed by identity hash or task id — there are no mapping records.
 
 **Fixture structure:**
 
 ```
 spec/
+  .history.jsonl
   alpha/
     module.json       # 2 components, 1 test_section, 1 data_flow
     arch_parser.md
@@ -22,75 +25,79 @@ spec/
 - test_section `333333333333`: describes [`aabbccddeeff`, `ffeeddccbbaa`], content "test_components.md"
 - data_flow `444444444444`: uses [`aabbccddeeff`, `ffeeddccbbaa`], content "flow_pipeline.md"
 
-**Fixture record:**
-```json
-{
-  "id": 1,
-  "spec_node_id": "aabbccddeeff",
-  "bead_id": "abc-123",
-  "bead_type": "feature",
-  "module": "alpha",
-  "component": "Parser",
-  "content_file": "spec/alpha/arch_parser.md",
-  "spec_hash": "deadbeef"
-}
-```
+**Fixture journal:** an `added` event for each component with a `task_created` receipt
+(Parser → task `abc-123`), and for the removed-node cases a node `999999999999` (Widget,
+component, module alpha) with `added`, `task_created` (task `abc-777`), then `removed`
+(proposal `2026-08-01-task-journal`, git_head `cafe1234`).
 
 ## Scenarios
 
-### S1: Resolve context for component with full coverage
+### S1: Resolve context for a live component by identity hash
 
-**Given** the fixture record for Parser (`aabbccddeeff`) and the fixture module.
+**Given** the fixture spec and journal.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
 
 **Then:**
-- `ContextResult.ArchFile` is `"spec/alpha/arch_parser.md"`
+- `ContextResult.ArchFile` is `"spec/alpha/arch_parser.md"` — derived from the component's declared `content`, not from any stored path
 - `ContextResult.TestFiles` contains `"spec/alpha/test_components.md"` (test_section `333333333333` describes [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.FlowFiles` contains `"spec/alpha/flow_pipeline.md"` (data_flow `444444444444` uses [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.ModuleFile` is `"spec/alpha/module.json"`
 
-### S2: Component referenced by multiple test_sections
+### S2: Resolve by task id reaches the same node
 
-**Given** a module where Parser (`aabbccddeeff`) is described by the fixture's test_section `333333333333` and by a second test_section `555555555555`, content "test_parser.md".
+**Given** the fixture journal pairing Parser with task `abc-123`.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext(specDir, "abc-123")` is called.
+
+**Then:** the result is identical to S1 — the task id resolves through the journal fold to the identity hash, then the spec derivation runs unchanged.
+
+### S3: Component referenced by multiple test_sections
+
+**Given** a module where Parser is described by test_section `333333333333` and by a second test_section `555555555555`, content "test_parser.md".
+
+**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
 
 **Then:** `ContextResult.TestFiles` contains both test_section content paths in module declaration order.
 
-### S3: Component with no data_flows
+### S4: Component with no data_flows
 
 **Given** a module where no data_flow's `uses` array contains the component's identity hash.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
 
 **Then:** `ContextResult.FlowFiles` is empty (nil or zero-length). No error — this is valid.
 
-### S4: Resolve context for Builder (`ffeeddccbbaa`)
+### S5: Removed node resolves from the journal
 
-**Given** a record for Builder (`ffeeddccbbaa`) and the fixture module.
+**Given** the fixture journal's removed node `999999999999`.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext(specDir, "999999999999")` is called.
 
-**Then:**
-- `ArchFile` is the Builder's content file
-- `TestFiles` contains `test_components.md` path (test_section `333333333333` describes [`aabbccddeeff`, `ffeeddccbbaa`] — shared)
-- `FlowFiles` contains `flow_pipeline.md` path (data_flow `444444444444` uses [`aabbccddeeff`, `ffeeddccbbaa`])
+**Then:** the result carries no spec file paths and instead reports: name `Widget`, node_type `component`, module `alpha`, the removing proposal `2026-08-01-task-journal`, the last task `abc-777`, and the `git_head` refs bracketing its final change — everything needed to run `git show`/`git diff` for the retired leaf. Not an error.
 
 ## Edge Cases
 
 ### E1: Missing module.json
 
-**Given** a record referencing module "deleted" but `spec/deleted/module.json` does not exist.
+**Given** a live journal entry whose module directory has no `module.json` on disk.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext` is called with that node's hash.
 
-**Then:** Returns an error indicating the module.json is missing. Error includes the expected path.
+**Then:** returns an error naming the expected `module.json` path.
+
+### E2: Key known to neither spec nor journal
+
+**Given** a hash that appears in no module.json and no journal event.
+
+**When** `ResolveContext(specDir, "deadbeefdead")` is called.
+
+**Then:** returns a not-found error naming the key. The error distinguishes "unknown everywhere" from S5's removed-but-remembered case.
 
 ### E3: Component hash not found in any section
 
-**Given** a module where the identity hash in the record does not appear in any test_section.describes or data_flow.uses.
+**Given** a live component whose identity hash appears in no test_section.describes and no data_flow.uses.
 
-**When** `ResolveContext(specDir, record)` is called.
+**When** `ResolveContext` is called.
 
-**Then:** Returns a valid ContextResult with empty TestFiles and FlowFiles. ArchFile and ModuleFile are still populated. Not an error.
+**Then:** returns a valid ContextResult with empty TestFiles and FlowFiles. ArchFile and ModuleFile are still populated. Not an error.

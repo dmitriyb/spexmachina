@@ -2,54 +2,66 @@
 
 ## Setup
 
-- Create a temporary spec directory with project.json, two modules, and a populated `.bead-map.json` with several records
+- Create a temporary spec directory with project.json, two modules, and a populated
+  `spec/.history.jsonl`: change events for several live nodes with `task_created` receipts,
+  one removed node with its full biography, and one epic receipt keyed by proposal slug
 - Build the `spex` binary with `go build`
 
 ## Scenarios
 
-### spex map get — valid record ID
+### spex map get — by identity hash
 
-- **Input**: `spex map get 1`
-- **Expected**: JSON output carrying the record's fields — id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash — with node_type and bead_status appearing as well on a record that sets them. Exit code 0.
+- **Input**: `spex map get <12-hex identity hash of a live node>`
+- **Expected**: JSON output carrying the node's folded linkage — identity hash, current task id, name, node_type, module, and the sourcing event's git_head and proposal. Exit code 0.
 
-### spex map get — unknown record ID
+### spex map get — by task id
 
-- **Input**: `spex map get 999`
-- **Expected**: Error message "map get: map: record not found: 999". Exit code 1. The test asserts only that an error is returned, not the message.
+- **Input**: `spex map get <task id>` for the same node
+- **Expected**: identical output to the identity-hash form — the two key shapes are distinguished by pattern (12-hex vs anything else), never by a flag.
 
-### spex map list — all records
+### spex map get — unknown key
+
+- **Input**: `spex map get deadbeefdead` (no such node in journal or spec)
+- **Expected**: error naming the key, exit code 1. The test asserts an error is returned, not its exact message.
+
+### spex map list — folded linkage
 
 - **Input**: `spex map list`
-- **Expected**: JSON array of all mapping records. Sorted by ID. Exit code 0.
+- **Expected**: JSON array of the fold — one entry per node with a task-bearing event, in journal order. Exit code 0.
 
-### spex map list — empty mapping file
+### spex map context — live node
 
-- **Input**: `spex map list` with no records in `.bead-map.json`
-- **Expected**: Empty JSON array `[]`. Exit code 0.
+- **Input**: `spex map context <identity hash of a live component>`
+- **Expected**: JSON output with arch_file, test_files, flow_files, module_file — every path derived from the spec, none from the journal. Exit code 0.
 
-### spex map context — valid record ID
+### spex map context — removed node
 
-- **Input**: `spex map context 1`
-- **Expected**: JSON output with record, arch_file, test_files, flow_files, module_file. Exit code 0.
-
-### spex map context — unknown record ID
-
-- **Input**: `spex map context 999`
-- **Expected**: Error message. Exit code 1.
+- **Input**: `spex map context <identity hash of the removed node>`
+- **Expected**: JSON output with the node's name, node_type, module, the proposal that removed it, and the before/after git_head refs of its last change — the material an agent needs to run `git diff` for the change and `git show` for the final leaf. Exit code 0.
 
 ### Output format consistency
 
-- **Input**: Run `spex map get 1` and pipe through `jq .`
-- **Expected**: Valid JSON. Fields match the mapping record schema.
+- **Input**: run `spex map get <hash>` and pipe through `jq .`
+- **Expected**: valid JSON conforming to the journal-line-derived output schema.
 
 ## Edge Cases
 
-### No mapping file exists
+### No journal exists
 
-- **Input**: `spex map list` in a spec directory with no `.bead-map.json`
-- **Expected**: Empty JSON array `[]`. Exit code 0. File is NOT created by read-only commands.
+- **Input**: `spex map list` in a spec directory with no `spec/.history.jsonl`
+- **Expected**: empty JSON array `[]`, exit code 0. The file is NOT created by read-only commands.
+
+### Integer keys are gone
+
+- **Input**: `spex map get 1`
+- **Expected**: treated as a task-id lookup and not found (unless a task literally named `1` exists) — there is no integer record id and no fallback parse. Exit code 1.
+
+### Malformed journal line
+
+- **Input**: `spex map list` over a journal whose third line is invalid JSON
+- **Expected**: `map: journal line 3: …` on stderr, exit code 1 — the query surface fails loudly where gating commands would degrade to absent.
 
 ### Concurrent CLI invocations
 
-- **Input**: Two parallel `spex map get` calls for different record IDs
-- **Expected**: Both return correct results. No file locking errors.
+- **Input**: two parallel `spex map get` calls for different keys
+- **Expected**: both return correct results; reads take no lock — the journal is append-only and readers never write.

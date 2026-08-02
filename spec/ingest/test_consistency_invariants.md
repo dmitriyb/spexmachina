@@ -1,82 +1,101 @@
 # Consistency invariants
 
-Tests for the seven consistency invariants the ingest module enforces after applying receipts. The per-invariant scenarios construct a state that SHOULD violate an invariant and assert that reconciliation rejects it with a specific error; the invariant-6 scenarios assert the snapshot gate behaves on both partial and complete runs; and the Happy Path scenario asserts the positive integrated property that a clean complete run leaves `.bead-map.json` AND the snapshot both updated and schema-valid.
+Tests for the five journal invariants the ingest module enforces at baselining. The per-invariant
+scenarios construct a state that SHOULD violate an invariant and assert that reconciliation rejects
+it with a specific error; the snapshot-gate scenarios assert the gate behaves on both partial and
+complete runs; and the Happy Path scenario asserts the positive integrated property that a clean
+complete run leaves `spec/.history.jsonl` AND the snapshot both updated and schema-valid.
 
-## The Seven Invariants
+## The Five Invariants
 
-1. Every ok create op has a mapping record with its bead_id.
-2. Every ok close on a removed node has NO mapping record.
-3. Every modified node's close+create pair has a record pointing to the new bead_id.
-4. No orphan records (record whose spec_node_id doesn't exist in the post-apply spec tree).
-5. No duplicate records (same spec_node_id twice).
-6. Snapshot saved iff receipts top-level status is complete.
-7. `.bead-map.json` passes the bead-map schema.
+1. Every ok create pairs exactly one `task_created` receipt with exactly one referent — a change
+   event, a prior `removed` event (cleanup creates), or a proposal slug (epic creates).
+2. No receipt references an event id the journal does not contain.
+3. Re-running the same changeset+receipts pair appends nothing — event ids derive from
+   `(git_head, op_id)`.
+4. The snapshot is saved iff receipts top-level status is complete, so journal and snapshot
+   describe the same point-in-time state.
+5. Every appended line validates against the journal-line schema before the write.
+
+The retired store invariants — one record per node, modify rebinds the record, no leftover record
+after a removal — are void by construction over an append-only log: lineage replaces them, and the
+scenarios below include one that proves the replacement holds.
 
 ## Scenarios
 
-### Invariant 1: ok create missing record (negative test via injected bug)
+### Invariant 1: ok create with no referent (negative test via injected bug)
 
-- Simulate a reconciler bug by bypassing the create path and running AssertInvariants with an ok create op whose spec_node_id has no record.
-- Expected: error `"ingest: invariant 1: ok create op <op_id> has no mapping record for spec_node <id>"`.
+- Construct a receipts batch whose ok create op matches no change event, no prior removed event,
+  and carries no proposal stem.
+- Expected: structured error naming the op; nothing appended.
 
-### Invariant 2: close-on-removed leaves a record
+### Invariant 1: double pairing refused
 
-- Apply reconciler with a close op whose reason is "Spec node removed" and status ok. Then manually inject a leftover record for the removed spec_node_id. AssertInvariants.
-- Expected: error `"ingest: reconcile: invariant 2: removed bead <bead_id> still has mapping record"`.
+- Construct a batch where two `task_created` receipts would pair with the same change event.
+- Expected: error naming the event id; nothing appended.
 
-### Invariant 3: modified node points to old bead_id
+### Invariant 2: dangling receipt reference
 
-- Apply close+create for a modified node. Manually set the record's bead_id to the old (pre-close) value. AssertInvariants.
-- Expected: error `"ingest: reconcile: invariant 3: modified bead <old> record still points to old bead_id"`.
+- Inject a receipt whose `for` names an eid absent from both the existing journal and the batch
+  being appended.
+- Expected: error `"ingest: receipt references unknown event <eid>"`; nothing appended.
 
-### Invariant 4: orphan record
+### Invariant 3: re-run appends nothing
 
-- Initial map has a record for spec_node `orphan1` that doesn't exist in the spec tree after the reconcile. (Simulates a bug where a node was deleted without generating a close op.)
-- Expected: error `"ingest: invariant 4: orphan record for spec_node <id>"` OR a warning if the contract is to merely flag orphans. The current implementation promotes to error to match CLAUDE.md's "Do not leave orphans" guidance.
+- Run a complete reconcile; capture the journal byte-for-byte. Run the identical
+  changeset+receipts again.
+- Expected: journal unchanged, run reports success. Assert via content equality, not just line
+  count.
 
-### Invariant 5: duplicate spec_node_id
+### Invariant 4: partial → snapshot not saved
 
-- Inject two records with the same spec_node_id.
-- Expected: error `"ingest: invariant 5: duplicate records for spec_node <id>"`.
+- Receipts top-level status is partial. Reconciler appends events for the ok ops.
+- Expected: spec/.snapshot.json is unchanged on disk (assert via content equality against the
+  pre-run baseline); the journal carries the ok ops' events — the two artifacts may legitimately
+  diverge only in this direction and only until the completing re-run.
 
-### Invariant 6: partial → snapshot not saved
+### Invariant 4: complete → snapshot saved
 
-- Receipts top-level status is partial. Reconciler runs successfully. AssertInvariants.
-- Expected: spec/.snapshot.json is unchanged on disk (assert via mtime or content equality against the pre-run baseline).
-
-### Invariant 6: complete → snapshot saved
-
-- Receipts status complete. Expected: snapshot rewritten with current merkle tree.
+- Receipts status complete. Expected: snapshot rewritten with the current merkle tree in the same
+  baselining step as the journal append.
 
 ### One snapshot format across both writers
 
 **Given** a fixture spec tree, a fixed timestamp, and two destinations.
-**When** the saver's atomic write produces one file and the `merkle` module's own in-place `Save` produces the other.
+**When** the saver's atomic write produces one file and the `merkle` module's own in-place `Save`
+produces the other.
 **Then** the two files are byte-identical.
 
-**Rationale**: two writers of one format is the shape this repository already
-got wrong once — the saver carried its own tree walk described as "mirroring"
-merkle's, nothing compared the two, and either could have drifted while both
-kept passing their own tests. The formats are one implementation now; this
-scenario is what makes a second one fail loudly instead of silently. The
-timestamp is fixed because `created_at` is the only field that would otherwise
-differ between two writes.
+**Rationale**: two writers of one format is the shape this repository already got wrong once — the
+saver carried its own tree walk described as "mirroring" merkle's, nothing compared the two, and
+either could have drifted while both kept passing their own tests. The formats are one
+implementation now; this scenario is what makes a second one fail loudly instead of silently. The
+timestamp is fixed because `created_at` is the only field that would otherwise differ between two
+writes.
 
-### Invariant 7: schema violation
+### Invariant 5: schema-invalid line refused
 
-- After reconciliation, manually corrupt .bead-map.json (missing required field on a record). AssertInvariants.
-- Expected: schema validator error surfaced through `Store.Replace`, which `Reconciler.Apply` calls after `assertInvariants` returns. `assertInvariants` itself does not schema-validate.
+- Construct a batch that would append a change event missing its `node` field.
+- Expected: the journal-line schema validation fails before the write; error names the violated
+  constraint; the on-disk journal is untouched.
+
+### Lineage replaces the rebind invariant
+
+- Run a modified-node close+create pair to completion.
+- Expected: the journal holds both pairings — old task closed, new task created — and the fold
+  answers with the new task only. No assertion anywhere demands the old line be gone; asserting
+  its presence IS the test.
 
 ## Happy Path
 
-- Full complete run with 5 ok creates, 3 ok closes (2 modified, 1 removed), 1 modified pair. AssertInvariants returns nil. .bead-map.json and snapshot both updated and schema-valid.
+- Full complete run with 5 ok creates and 3 ok closes — 2 of the creates paired with 2 of the closes as modify pairs, the third close a removal.
+  All invariants pass. `spec/.history.jsonl` gains exactly the expected events and receipts,
+  the snapshot is rewritten, and every appended line validates against the journal-line schema.
 
 ## Fixtures
 
-In-memory Go harness, no on-disk testdata. The shipped tests reuse the
-package's shared helpers — `newFakeSpecGraph` and `newTestStore` from
-`reconciler_test.go`, `setupSpecDir` from `snapshot_saver_test.go`, and
-the `idem` label helper — plus the local `runWithSnapshot` in
-`ingest/consistency_invariants_test.go`, which drives `Reconciler.Apply`
-then `Saver.Save` in the order IngestCommand wires them. Per-invariant
-violation states are built inline from those helpers.
+In-memory Go harness, no on-disk testdata. The shipped tests reuse the package's shared helpers —
+the fake spec graph and journal seeder from `reconciler_test.go`, `setupSpecDir` from
+`snapshot_saver_test.go` — plus a local runner that drives `Reconciler.Apply` then `Saver.Save` in
+the order IngestCommand wires them. Per-invariant violation states are built inline from those
+helpers.

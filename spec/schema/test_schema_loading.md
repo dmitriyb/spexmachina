@@ -1,6 +1,6 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader (component 3). The SchemaLoader is the Go package (`schema/schema.go`) that embeds `project.schema.json`, `module.schema.json`, and `bead-map.schema.json` via `go:embed` and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like.
+Integration and acceptance tests for SchemaLoader (component 3). The SchemaLoader is the Go package (`schema/schema.go`) that embeds `project.schema.json`, `module.schema.json`, and the journal-line schema `bead-map.schema.json` via `go:embed` and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like.
 
 These tests verify that the embedding works correctly, that the loaded schemas are structurally sound, that they can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
@@ -296,11 +296,11 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 ### BM2: BeadMapSchema() accepts both identities spec_node_id carries
 
 **Steps:**
-1. Load the bead-map schema and compile a validator.
-2. Validate a record where `spec_node_id` is `"a1b2c3d4e5f6"` (identity hash).
-3. Validate a record where `spec_node_id` is `"2026-04-12-data-flow-contract-layer"` (proposal reference).
-4. Validate a record where `spec_node_id` is `""`.
+1. Load the journal-line schema and compile a validator.
+2. Validate a change event whose `node` is `"a1b2c3d4e5f6"` (identity hash) — passes.
+3. Validate an epic receipt whose `proposal` is `"2026-04-12-data-flow-contract-layer"` — passes.
+4. Validate a change event whose `node` is `""` — fails the pattern.
 
-**Expected:** The first two pass; the empty string fails on `minLength: 1`.
+**Expected:** The first two pass; the empty string fails the identity-hash pattern.
 
-**Verifies:** The field is a non-empty string with no pattern, because one array holds records keyed both ways.
+**Verifies:** node keys and proposal slugs live in different fields with different constraints — the pattern lives where the hash lives, and slugs never share its field.

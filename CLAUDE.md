@@ -12,14 +12,14 @@ The pipeline is `spex validate → diff → impact → emit → <adapter> → in
 
 | Module | Purpose | Depends On |
 |--------|---------|------------|
-| Schema | JSON Schema for project.json + module.json + bead-map | — |
+| Schema | JSON Schema for project.json + module.json + the journal line format | — |
 | Validator | Spec directory validation (DAG, refs, coverage) | Schema |
 | Merkle | Hash tree, snapshots, diff, impact classification | Schema |
 | Impact | Map merkle diff to bead actions | Merkle |
 | Emit | Compose a tool-agnostic changeset from an impact report | Impact, Mapping |
 | Adapters | Contract for external adapters (`scripts/apply-br.sh` is the reference) that apply a changeset and write receipts | Emit |
-| Ingest | Reconcile the bead-map + save the snapshot from changeset+receipts; `--mode refresh` absorbs content-only drift | Emit, Adapters, Merkle |
-| Mapping | `.bead-map.json` store linking spec nodes to beads (`spex map context`) | Schema |
+| Ingest | Append journal events + save the snapshot from changeset+receipts; `--mode refresh` absorbs no-bead-work drift | Emit, Adapters, Merkle |
+| Mapping | Task journal (`spec/.history.jsonl`) linking spec nodes to tasks (`spex map context`) | Schema |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |
 
@@ -46,9 +46,9 @@ The pipeline is `spex validate → diff → impact → emit → <adapter> → in
 
 This project uses `br` (beads_rust) for issue tracking. Do NOT use markdown TODOs.
 
-Your task's spec context is provided on input, and the spec files are the source of truth — beads do not duplicate spec content. `design`, `acceptance_criteria` and `notes` are absent from bead data entirely; `description` is empty except on a legacy tail of older beads that still carries prose copied from the spec — read the spec, not the copy. To reach *another* bead's context mid-work, `br` is the entrypoint: `br show <id> --json` to inspect the bead and find its `spex:<record_id>` label, then `bin/spex map context <record_id>` for its full spec (`arch_file`, `test_files`, `flow_files`, `module_file`).
+Your task's spec context is provided on input, and the spec files are the source of truth — beads do not duplicate spec content. `design`, `acceptance_criteria` and `notes` are absent from bead data entirely; `description` is empty except on a legacy tail of older beads that still carries prose copied from the spec — read the spec, not the copy. To reach *another* bead's context mid-work, `br` is the entrypoint: `br show <id> --json` to inspect the bead and find its `spex:<spec_node_id>` label, then `bin/spex map context <spec_node_id>` for its full spec (`arch_file`, `test_files`, `flow_files`, `module_file`); a bead id works as the key too.
 
-- Cleanup beads (label `spex:cleanup`) have no map record by design.
+- Cleanup beads (label `spex:cleanup`) resolve through the journal: their `spex:cleanup-<hash>` hash names a removed node whose biography `spex map context` still answers.
 - `br` reads a local sqlite db rebuilt from `.beads/issues.jsonl`; pass `--no-db` to any `br` command to read JSONL-only (always fresh). `br list` hides rows by default (open-only, `--limit 50`) — use `br ready`, `br show`, or `br list --all --limit 0`.
 
 ## Organizational Constraints

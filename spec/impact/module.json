@@ -7,14 +7,14 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Read bead metadata",
-      "description": "Parse bead metadata from input JSON (sourced via --beads flag or stdin). Extract the mapping record ID from the simplified bead label (spex:<record-id>) and the bead's live status. Pure function over []byte or io.Reader \u2014 no subprocess invocation, no live tracker calls."
+      "description": "Parse bead metadata from input JSON (sourced via --beads flag or stdin). Extract the spec node identity hash from the bead label (spex:<spec_node_id>) and the bead's live status; labels in the legacy integer form and the spex:cleanup-<hash> form are recognised and passed over. Pure function over []byte or io.Reader — no subprocess invocation, no live tracker calls."
     },
     {
       "id": "d165e2fe215e",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Match changed nodes to beads",
-      "description": "Correlate changed spec nodes (from merkle diff) with existing beads using spec metadata fields.",
+      "description": "Correlate changed spec nodes (from merkle diff) with existing tasks: the diff's node keys and the parsed bead labels are the same identity hashes, joined directly, with the journal fold supplying the pairing for nodes whose beads predate the label-form change.",
       "depends_on": [
         "5179e5a95653"
       ]
@@ -24,7 +24,7 @@
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Classify actions",
-      "description": "Determine action for each affected bead: create (added or modified spec nodes) or obsolete (modified or removed spec nodes with existing beads). Modified nodes trigger both obsolete and create. A change with no existing bead is gated by node type before the transition table runs, and api is absent from the bead-producing set: merkle classifies an api change as contract-level (alongside data_flow) so it is not skipped upstream as structural, but the components named in the api's provided_by array already carry the work, so a bead per api would duplicate them. An added or modified api is dropped by that gate; the matched and orphaned paths apply no node-type gate, but they walk bead-map records rather than changes, and an api never acquires a record because no create is ever produced for one. An added, modified or removed api therefore yields zero actions.",
+      "description": "Determine action for each affected bead: create (added or modified spec nodes) or obsolete (modified or removed spec nodes with existing beads). Modified nodes trigger both obsolete and create. A change with no existing bead is gated by node type before the transition table runs, and api is absent from the bead-producing set: merkle classifies an api change as contract-level (alongside data_flow) so it is not skipped upstream as structural, but the components named in the api's provided_by array already carry the work, so a bead per api would duplicate them. An added or modified api is dropped by that gate; the matched and orphaned paths apply no node-type gate, but they walk journal pairings rather than changes, and an api never acquires a pairing because no create is ever produced for one. An added, modified or removed api therefore yields zero actions.",
       "depends_on": [
         "d165e2fe215e"
       ]
@@ -51,7 +51,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Classify cleanup actions for removed nodes",
-      "description": "When a removed spec node has a closed bead (code shipped to main), classify as obsolete + cleanup create. When the bead is open or in_progress (no code shipped), classify as obsolete only.",
+      "description": "When a removed spec node has a closed task (code shipped to main), classify as obsolete + cleanup create. When the task is open or in_progress (no code shipped), classify as obsolete only. The removed node's name, kind and module — needed to phrase the cleanup — are read from the journal's removed events, the only place they survive the node's removal.",
       "depends_on": [
         "06a081811e38"
       ]
@@ -61,7 +61,7 @@
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Validate diff input",
-      "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed \u2014 print errors to stderr and exit non-zero.",
+      "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed — print errors to stderr and exit non-zero.",
       "depends_on": [
         "d165e2fe215e"
       ]
@@ -82,7 +82,7 @@
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Emit DepSpecNodeIDs per create action",
-      "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here \u2014 it moves to the emit module, whose Resolver classifies each spec_node_id into ref:op / ref:bead / ref:spec_node at emit time. Retires the prior impact-time resolution which pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
+      "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here — it moves to the emit module, whose Resolver classifies each spec_node_id into ref:op or ref:bead at emit time. Retires the prior impact-time resolution which pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
       "depends_on": [
         "06a081811e38"
       ]
@@ -92,14 +92,14 @@
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Accept bead state via --beads file input",
-      "description": "ImpactCommand accepts an optional --beads <file> flag. The file contains the JSON array produced by 'br list --json' (or any tracker whose output conforms to the same shape). BeadReader parses the file contents into []BeadSpec. Impact enriches each mapping record with its live bead_status before ActionClassifier runs, so the cleanup-bead gate fires correctly for removed nodes with closed beads. No subprocess invocation \u2014 the caller pipes tracker output as a data artifact."
+      "description": "ImpactCommand accepts an optional --beads <file> flag. The file contains the JSON array produced by 'br list --json' (or any tracker whose output conforms to the same shape). BeadReader parses the file contents into []BeadSpec. Impact enriches each journal pairing with its live bead_status before ActionClassifier runs, so the cleanup-bead gate fires correctly for removed nodes with closed tasks. No subprocess invocation — the caller pipes tracker output as a data artifact."
     }
   ],
   "components": [
     {
       "id": "bec96486c6b2",
       "name": "BeadReader",
-      "description": "Parses bead metadata from input JSON (produced by 'br list --json' or any compatible tracker output). Pure function: takes []byte / io.Reader, returns []BeadSpec. Extracts the mapping record ID from the spex:<record-id> label and the bead's live status. No subprocess invocation.",
+      "description": "Parses bead metadata from input JSON (produced by 'br list --json' or any compatible tracker output). Pure function: takes []byte / io.Reader, returns []BeadSpec. Extracts the spec node identity hash from the spex:<spec_node_id> label and the bead's live status; legacy spex:<int> labels parse as inert history. No subprocess invocation.",
       "content": "arch_bead_reader.md",
       "implements": [
         "5179e5a95653",
@@ -110,7 +110,7 @@
     {
       "id": "06035e7f0c39",
       "name": "NodeMatcher",
-      "description": "Matches changed spec nodes to beads using spec node IDs from the ID-based merkle diff. Correlates by matching spec node IDs against mapping record IDs, not by parsing paths or label conventions. Skips structural-level changes (module.json, project.json, requirement leaves) but forwards contract-level changes (data_flow leaves) to the action classifier so a dedicated data_flow task bead is produced.",
+      "description": "Matches changed spec nodes to tasks using spec node IDs from the ID-based merkle diff. Correlates by joining the diff's node keys against the identity hashes parsed from bead labels and against the journal fold — never by parsing paths or label conventions. Skips structural-level changes (module.json, project.json, requirement leaves) but forwards contract-level changes (data_flow leaves) to the action classifier so a dedicated data_flow task bead is produced.",
       "content": "arch_node_matcher.md",
       "implements": [
         "d165e2fe215e",
@@ -123,7 +123,7 @@
     {
       "id": "76d72cbe00f3",
       "name": "ActionClassifier",
-      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using the simplified state transition table: added\u2192create, modified\u2192obsolete+create, removed\u2192obsolete. For removed nodes with closed beads (live status from BeadReader), also creates a cleanup bead. For create actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges \u2014 the list of spec_node_ids the created bead will depend on. Bead-ID resolution is NOT performed here; it moves to emit. Gates bead creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length \u2014 if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
+      "description": "Determines the action (create/obsolete) for each matched or unmatched spec node using the simplified state transition table: added→create, modified→obsolete+create, removed→obsolete. For removed nodes with closed tasks (live status from BeadReader), also creates a cleanup bead, phrasing it from the journal's removed event — the surviving record of the node's name, kind and module. For create actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges — the list of spec_node_ids the created bead will depend on. Bead-ID resolution is NOT performed here; it moves to emit. Gates bead creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
       "content": "arch_action_classifier.md",
       "implements": [
         "06a081811e38",
@@ -139,7 +139,7 @@
     {
       "id": "60d4747021ec",
       "name": "ReportGenerator",
-      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepSpecNodeIDs field \u2014 identity hashes of spec nodes the created bead depends on, to be resolved to bead refs by emit.",
+      "description": "Produces the structured JSON impact report from classified actions. Reports two action types: create and obsolete. Create actions include the DepSpecNodeIDs field — identity hashes of spec nodes the created bead depends on, to be resolved to bead refs by emit.",
       "content": "arch_report_generator.md",
       "implements": [
         "cc987600950e"
@@ -151,7 +151,7 @@
     {
       "id": "5d6813710879",
       "name": "ImpactCommand",
-      "description": "CLI entry point for spex impact. Reads merkle diff from stdin, validates diff input for errors, accepts optional --beads <file> flag carrying tracker list output (parsed via BeadReader), enriches mapping records with live bead_status, wires NodeMatcher + ActionClassifier + ReportGenerator, outputs the impact report as JSON.",
+      "description": "CLI entry point for spex impact. Reads merkle diff from stdin, validates diff input for errors, accepts optional --beads <file> flag carrying tracker list output (parsed via BeadReader), folds the task journal at <spec-dir>/.history.jsonl, enriches each pairing with live bead_status, wires NodeMatcher + ActionClassifier + ReportGenerator, outputs the impact report as JSON.",
       "content": "arch_impact_command.md",
       "implements": [
         "cc987600950e",
@@ -170,7 +170,7 @@
     {
       "id": "855e53793fdf",
       "name": "Impact analysis flow",
-      "description": "Merkle diff + bead metadata \u2192 matched pairs \u2192 classified actions (create/obsolete) \u2192 impact report.",
+      "description": "Merkle diff + bead metadata → matched pairs → classified actions (create/obsolete) → impact report.",
       "content": "flow_impact_analysis.md",
       "uses": [
         "bec96486c6b2",

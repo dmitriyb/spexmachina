@@ -32,7 +32,7 @@ The command maps `--type` onto the identity string the schema defines for that n
 | `api` | yes | `<module>/api/<name>` |
 | `module` | no | `module/<name>` |
 
-For `--type api` the `--name` is the exact external surface string a caller types — `spex map get`, not `spex map get <record-id>` and not a Go signature. An api's id cannot be authored any other way: the validator recomputes `IdentityHash(<module>, "api", <name>)` for every declared api and rejects a mismatch, so hand-writing the hex is a guaranteed error rather than a shortcut.
+For `--type api` the `--name` is the exact external surface string a caller types — `spex map get`, not `spex map get <key>` and not a Go signature. An api's id cannot be authored any other way: the validator recomputes `IdentityHash(<module>, "api", <name>)` for every declared api and rejects a mismatch, so hand-writing the hex is a guaranteed error rather than a shortcut.
 
 ## Examples
 

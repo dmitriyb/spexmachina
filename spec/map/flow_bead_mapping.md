@@ -2,11 +2,11 @@
 
 ## Data Flow
 
-Mapping records are never written by a bead-creating command inside `spex`.
-They are written by `spex ingest` after an external adapter has executed a
-changeset against the tracker. The record id travels ahead of the record: emit
-allocates it as an op's idempotency label, the adapter applies that label to the
-bead it creates, and ingest materialises the record at exactly that id.
+Journal events are never written by a task-creating command inside `spex`. They are appended by
+`spex ingest` after an external adapter has executed a changeset against the tracker. The node's
+identity hash travels ahead of the pairing: emit stamps it on the op as the idempotency label, the
+adapter applies that label to the task it creates, and ingest appends the change event and its
+receipt to the journal at baselining.
 
 ```dot
 digraph bead_mapping {
@@ -17,161 +17,134 @@ digraph bead_mapping {
     "scripts/apply-br.sh" [style=dashed];
     "receipts.json"       [style=dashed];
     "spex ingest"         [style=dashed];
-    ".bead-map.json"      [style=dashed];
+    ".history.jsonl"      [style=dashed];
     "205e67ca4aad"        [label="MappingStore\n205e67ca"];
     "08909d62930b"        [label="MapCommand\n08909d62"];
 
     "spex diff"           -> "spex impact"         [label="diff report"];
     "spex impact"         -> "spex emit"           [label="impact report"];
-    "205e67ca4aad"        -> "spex emit"           [label="record lookup + next_id, read only"];
-    "spex emit"           -> "changeset.json"      [label="idempotency.label = spex:<record-id>"];
+    "205e67ca4aad"        -> "spex emit"           [label="fold lookup, read only"];
+    "spex emit"           -> "changeset.json"      [label="idempotency.label = spex:<spec_node_id>"];
     "changeset.json"      -> "scripts/apply-br.sh";
-    "scripts/apply-br.sh" -> "receipts.json"       [label="br create --labels spex:<record-id>"];
+    "scripts/apply-br.sh" -> "receipts.json"       [label="br create --labels spex:<spec_node_id>"];
     "receipts.json"       -> "spex ingest"         [label="paired to its op by op_id"];
-    "spex ingest"         -> "205e67ca4aad"        [label="insert/update/delete at the labelled id"];
-    "205e67ca4aad"        -> ".bead-map.json"      [label="atomic write, next_id advanced"];
+    "spex ingest"         -> ".history.jsonl"      [label="append change events + receipts"];
+    "205e67ca4aad"        -> ".history.jsonl"      [label="parse and fold, read only"];
     "08909d62930b"        -> "205e67ca4aad"        [label="spex map get / list / context"];
 }
 ```
 
-[[205e67ca4aad|MappingStore]] appears at both ends of that graph on purpose, and the two edges are
-not the same kind of thing. Emit's IdempotencyLabeler only *reads* it — so the ids a changeset hands out are reserved rather
-than spent; ingest is the only thing that writes records back, and the persisted counter advances
-there or not at all.
-Everything between the two is the label doing the travelling: `spex` itself never invokes a bead
-CLI, so every tracker mutation happens inside the adapter and every mapping mutation happens inside
-ingest. Skills read the settled result through [[08909d62930b|MapCommand]] (`spex map get` / `list`
-/ `context`), which is a third kind of edge again — a query face that never writes.
+[[205e67ca4aad|MappingStore]] reads the journal from two directions on purpose and writes from
+neither. Emit's parent-resolution fold reads it before the changeset exists; the map query surface
+reads it after ingest has appended. `spex ingest` is the sole writer, and everything between emit
+and ingest is the label doing the travelling: `spex` itself never invokes a tracker CLI, so every
+tracker mutation happens inside the adapter and every journal mutation happens inside ingest.
+Skills read the settled result through [[08909d62930b|MapCommand]] (`spex map get` / `list` /
+`context`), a query face that never writes.
 
 ## Lifecycle
 
 ### Create (new spec node)
 
-1. `spex impact` classifies the added or modified node as a **create** action.
-2. `spex emit` asks IdempotencyLabeler for the op's label. A fresh create takes
-   `spex:<cursor>` and advances the in-memory cursor; the persisted `next_id`
-   counter is **not** touched by emit.
-3. The adapter runs `br create --labels spex:<record-id> --type <bead_type> …`
-   and records the new bead id in its receipt. The record-id label is applied at
-   create time, not by a follow-up update.
-4. `spex ingest` inserts a MappingStore record at `id = parse(idempotency.label)`
-   with `spec_node_id` from the op, `bead_id` from the receipt, and the
-   remaining metadata resolved from the spec graph.
-5. The store's `next_id` counter advances as part of that commit — on any clean
-   reconcile, partial or complete, since the ids handed out are spent either
-   way. Only the snapshot is gated on completeness: SnapshotSaver writes it only
-   when the adapter reported `status = complete` (every op ok or intentionally
-   skipped), and skips it on `partial`.
+1. `spex impact` classifies the added node as a **create** action.
+2. `spex emit` labels the op `spex:<spec_node_id>` — the hash comes off the op itself; nothing is
+   read, reserved or counted.
+3. The adapter runs `br create --labels spex:<spec_node_id> --type <bead_type> …` and records the
+   new task id in its receipt. The label is applied at create time, not by a follow-up update.
+4. `spex ingest` appends the change event (`added`, with the op's node identity, leaf hashes and
+   the changeset's `git_head`) and a `task_created` receipt pairing the event to the task id.
+5. The snapshot is written in the same baselining step, only when the adapter reported
+   `status = complete`; the journal append and the snapshot describe the same point-in-time state.
 
-If the adapter reports `was_existing = true` (an open bead already carried the
-label), what ingest does depends on the store. If a record already sits at that
-id carrying the same bead, the op is a strict no-op — nothing is reconciled,
-because the store is already in the target state. If a record sits there
-carrying a *different* bead, ingest errors. If there is no record at that id at
-all, ingest inserts one: that is the recovery path for an adapter that created
-the bead last run and died before writing its receipt.
+If the adapter reports `was_existing = true` (an open task already carried the label), ingest
+appends no duplicate: the event id derives from `(git_head, op_id)`, so re-processing the same op
+finds its event already present and skips it. That same derivation is the recovery path for an
+adapter that created the task last run and died before writing its receipt — the re-run's receipt
+pairs with the already-present event.
 
 ### Update (modified spec node)
 
-1. `spex impact` classifies a modified node as **obsolete + create**: the old
-   bead is closed, a fresh bead replaces it.
-2. `spex emit` gives the create op the **same** record-id label as the old
-   bead's existing record, found by looking the obsoleted bead's id up in the
-   store. The cursor does not advance.
-3. The adapter closes the old bead and creates the new one.
-4. `spex ingest` sees the close op with reason `"Spec node modified: …"` and
-   defers; the paired create op then rebinds that record's `bead_id` to the new
-   bead and refreshes `spec_hash`.
+1. `spex impact` classifies a modified node as **obsolete + create**: the old task is closed, a
+   fresh task replaces it.
+2. `spex emit` gives the create op the same `spex:<spec_node_id>` label — the node's hash has not
+   changed, so idempotency needs no lookup and no cursor.
+3. The adapter closes the old task and creates the new one.
+4. `spex ingest` appends the `modified` change event, a `task_closed` receipt for the old task and
+   a `task_created` receipt for the new one. Nothing is rebound: the old pairing stays in the
+   journal as lineage, and the fold — latest task-bearing event per node — now answers with the
+   new task.
 
-Record-id preservation is what makes this an update rather than delete+insert.
-The record id is the persistent identity; only `bead_id` and `spec_hash` change.
+Lineage is what makes this an update rather than an overwrite: every task the node has ever had
+remains one journal-history read away — MappingStore's event-history interface, keyed by the same identity hash throughout.
 
 ### Delete (removed spec node)
 
 1. `spex impact` classifies a removed node as **obsolete**.
 2. `spex emit` produces a close op with reason `"Spec node removed: …"`.
-3. The adapter closes the bead.
-4. `spex ingest` deletes the mapping record by `bead_id` match.
+3. The adapter closes the task.
+4. `spex ingest` appends the `removed` change event and the `task_closed` receipt. No record is
+   deleted, because none exists: the node's biography — name, type, module, removing proposal —
+   is now carried by exactly the event just appended, which is what keeps the node resolvable
+   after the spec forgets it.
 
-If the removed node's bead was already closed, impact additionally classifies a
-**cleanup** create. Cleanup beads carry `spec_node_kind = "cleanup"` and the
-label `spex:cleanup-<spec_node_id>`; ingest deliberately creates **no** mapping
-record for them and the counter does not advance.
+If the removed node's task was already closed, impact additionally classifies a **cleanup**
+create. Cleanup tasks carry the label `spex:cleanup-<spec_node_id>`; the hash in that label
+resolves against the journal's `removed` event from day one, so a cleanup task is born with
+working context instead of a dangling reference.
+
+### Proposal epics
+
+An epic create is synthesized by emit, not born from a diff entry. Its receipt therefore carries
+`proposal: <slug>` in place of `for`, its label is `spex:<slug>`, and the fold lists it keyed by
+the slug — slug-shaped ids are already the epic convention.
 
 ## Invariants
 
-Enforced by `Reconciler.AssertInvariants` before the store is committed, and
-re-checked on every subsequent run:
+Enforced by the Reconciler before the baselining commit, and re-checked on every subsequent run:
 
-- Every ok create has exactly one mapping record — cleanup creates excepted, as
-  they have no record by construction.
-- Every ok close-on-removed leaves no record behind.
-- Every modified-pair record points at the new bead id, not the closed one.
-- No orphan records: each record's `spec_node_id` resolves in the spec graph.
-  Records with `node_type == "proposal"` are exempt — their `spec_node_id` is a
-  proposal reference, not an identity hash.
-- No duplicate records for one `spec_node_id` — records whose `node_type` is `proposal` are exempt
-  here too, as they are in the orphan check above.
-- The snapshot is saved only when receipts are complete, so the bead-map and the
-  snapshot always describe the same point-in-time spec state.
-- `.bead-map.json` re-validates against the bead-map JSON Schema after every
-  reconcile.
+- Every ok create pairs exactly one `task_created` receipt with exactly one change event — cleanup
+  creates excepted, as their referent is a prior `removed` event, and epic creates excepted, as
+  their referent is a proposal slug.
+- Every `task_created` references an existing event or names a proposal — a receipt referencing
+  nothing is refused before it is appended.
+- Re-running ingest on the same changeset+receipts pair appends nothing: event ids derive from
+  `(git_head, op_id)` and receipts pair by the same key.
+- The snapshot is saved only when receipts are complete, so the journal and the snapshot always
+  describe the same point-in-time spec state.
+- Every appended line validates against the journal-line schema before the write happens.
 
-A failure at any step leaves the on-disk `.bead-map.json` untouched.
+A failure at any step leaves the on-disk journal untouched — the append is a whole-file
+write-and-rename, so a refused batch changes nothing.
 
 ## Data Shapes
 
-### emit → changeset op (the record-id carrier)
+### emit → changeset op (the label carrier)
 
-- `idempotency.label`: string — `spex:<record-id>` for fresh and modify-pair
-  creates, `spex:cleanup-<spec_node_id>` for cleanup creates. This is the only
-  channel by which a record id reaches the tracker and returns to ingest.
-- `spec_node_kind`: string enum — `proposal_epic` | `component` | `data_flow` |
-  `test_section` | `cleanup`. Ingest branches its transition on this value.
-- `spec_node_id`: string — 12-char hex identity hash, or the proposal reference
-  on `proposal_epic` ops.
+- `idempotency.label`: string — `spex:<spec_node_id>` for fresh and modify-pair creates,
+  `spex:cleanup-<spec_node_id>` for cleanup creates, `spex:<proposal-slug>` for epic creates. This
+  is the only channel by which a node's identity reaches the tracker.
+- `spec_node_kind`: string enum — `proposal_epic` | `component` | `data_flow` | `test_section` |
+  `cleanup`. Ingest branches its event construction on this value.
+- `spec_node_id`: string — 12-char hex identity hash, or the proposal reference on `proposal_epic`
+  ops.
 
 ### adapter → receipt entry
 
-- `op_id`: string — pairs the receipt back to its op.
-- `status`: string enum — `ok` | `skipped` | `error`. Only `ok` advances mapping
-  state; `skipped` and `error` are counted and change no record.
+- `op_id`: string — pairs the receipt back to its op, and (with `git_head`) derives the event id.
+- `status`: string enum — `ok` | `skipped` | `error`. Only `ok` produces journal receipts;
+  `skipped` and `error` are counted and append nothing.
 - `bead_id`: string — the tracker id created, or the pre-existing one.
-- `was_existing`: boolean — true when the idempotency label already matched an
-  open bead.
+- `was_existing`: boolean — true when the idempotency label already matched an open task.
 
-### MappingStore → on-disk format (.bead-map.json)
+### journal line shapes (spec/.history.jsonl)
 
-- MapFile:
-  - next_id: integer — monotonic counter for new record IDs, advanced by ingest
-  - records: list of MapRecord
+- Change event: `event` (`added`|`removed`|`modified`), `eid`, `node`, `name`, `node_type`,
+  `module`, `before`, `after`, `git_head`, `proposal`.
+- Task receipt: `event` (`task_created`|`task_closed`), `for` (an `eid`) or `proposal` (a slug,
+  epics only), `task_id`.
+- Refresh receipt: `event` (`refresh`), `git_head` (or recorded absence), `absorbed` (a list of
+  `eid`s).
 
-- MapRecord:
-  - id: integer — record ID; the value carried in the `spex:<id>` bead label
-  - spec_node_id: string — 12-char hex identity hash, OR a proposal reference
-    when node_type = `proposal`
-  - bead_id: string — bead ID from the tracker (e.g., `spexmachina-abc`)
-  - bead_type: string — `epic` | `feature` | `task`
-  - node_type: string, optional — `proposal` | `component` | `data_flow` |
-    `test_section`
-  - module: string — module **name** containing the spec node (empty for
-    proposal epic records)
-  - component: string — component or section name; the proposal reference on
-    proposal epic records
-  - content_file: string — path to the spec content markdown (empty for
-    proposal epic records)
-  - spec_hash: string — 64-char hex content hash (empty for proposal epic
-    records)
-  - bead_status: string, optional — live tracker status when a caller has
-    populated it
-
-### MappingStore query interface (CLI `spex map get`)
-
-There is no envelope on this boundary: what crosses it is the record itself. `spex map get` prints
-one MapRecord, `spex map list` prints every MapRecord as one JSON array in id order, and neither
-wraps the payload in a status object or reports back which identifiers matched nothing. A record
-that is not there is a non-zero exit and a line on stderr, never a field in the payload.
-
-No field renames, additions, or removals of these shapes without updating every
-consumer: emit's IdempotencyLabeler and ChangesetBuilder, the reference adapter
-`scripts/apply-br.sh`, ingest's Reconciler, and the `spex map` CLI command.
+No field renames, additions, or removals of these shapes without updating every consumer: emit's
+IdempotencyLabeler and Resolver, the reference adapter `scripts/apply-br.sh`, ingest's Reconciler,
+and the `spex map` CLI surface.

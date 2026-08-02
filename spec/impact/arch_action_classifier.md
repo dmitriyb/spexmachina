@@ -26,13 +26,13 @@ A change with no existing bead is gated by its node type before the state transi
 
 The `module` row admits a node type that never arrives. A diff reports leaves and nothing else, and the node types a leaf is ever given are `meta`, `requirement`, `api`, `component`, `data_flow` and `test_section`; a module is an interior node of the merkle tree, so it is never diffed as a leaf and no change reaches this gate carrying `module`. The row is therefore unreachable rather than wrong, and no `module` action is ever produced. It is listed all the same, because the gate does admit it: a table that quietly left it out would disagree with the gate it documents, and with the flow leaf, whose shorter gating table carries the same `module` row for the same reason.
 
-The node-type half of that table is consulted on one path only — the unmatched changes NodeMatcher hands over, those with no `.bead-map.json` record. The matched and orphaned paths walk records rather than changes, and a record exists only where a create once ran, so a type the gate has always rejected can never have acquired one and there is nothing there for a gate to reject. The two halves hold each other up: with no record only the unmatched path is reachable, the unmatched path drops the change, and so no record is ever written.
+The node-type half of that table is consulted on one path only — the unmatched changes NodeMatcher hands over, those with no journal pairing. The matched and orphaned paths walk pairings rather than changes, and a pairing exists only where a create once ran, so a type the gate has always rejected can never have acquired one and there is nothing there for a gate to reject. The two halves hold each other up: with no pairing only the unmatched path is reachable, the unmatched path drops the change, and so no pairing is ever appended.
 
-The `describes`-length check is the exception, because a test_section *can* hold a record and later drop to one component. It is applied on the matched path too, and there it means "obsolete the old bead, create no replacement" — the section's coverage folds back into the described component's feature bead. A one-component section earns no bead of its own because its content is read as part of that component's feature bead's work, so a separate bead would be a redundant hand-off; a section describing two or more components can be bundled into no single component bead.
+The `describes`-length check is the exception, because a test_section *can* hold a pairing and later drop to one component. It is applied on the matched path too, and there it means "obsolete the old bead, create no replacement" — the section's coverage folds back into the described component's feature bead. A one-component section earns no bead of its own because its content is read as part of that component's feature bead's work, so a separate bead would be a redundant hand-off; a section describing two or more components can be bundled into no single component bead.
 
 `api` is the one row in this table that has to be here rather than upstream. Merkle classifies an api change as `contract` — the same level as `data_flow`, because an api is a contract — so the `structural` skip that removes `meta` and `requirement` never sees it, and the change arrives at this gate. It is filtered by omission from the bead-producing set: an api names a surface, and every unit of work behind that surface is a component the api's `provided_by` array already points at. A bead per api would duplicate those components' beads and then obsolete-and-recreate them whenever the surface's description changed.
 
-An added, modified or removed api therefore yields zero actions, and the reason is the reachability argument above rather than the gate alone: an added or modified api arrives unmatched and the gate drops it, a removed one has no record to orphan, and neither ever leaves a record behind for the ungated paths to pick up on a later run. That invariant lives only in the absence of an `api` entry in the bead-producing set, so it is pinned by a dedicated test rather than by the shape of the code. The test covers the added and modified cases on the unmatched path — the two where the gate is what makes the difference; a removed api reaches the same gate but would yield nothing even past it.
+An added, modified or removed api therefore yields zero actions, and the reason is the reachability argument above rather than the gate alone: an added or modified api arrives unmatched and the gate drops it, a removed one has no pairing to orphan, and neither ever leaves a pairing behind for the ungated paths to pick up on a later run. That invariant lives only in the absence of an `api` entry in the bead-producing set, so it is pinned by a dedicated test rather than by the shape of the code. The test covers the added and modified cases on the unmatched path — the two where the gate is what makes the difference; a removed api reaches the same gate but would yield nothing even past it.
 
 ## State Transition Table
 
@@ -60,7 +60,7 @@ The output is a set (deduplicated) of identity hashes. No bead lookup, no status
 
 ## Why DepSpecNodeIDs, Not DepBeadIDs
 
-Prior to this proposal, ActionClassifier resolved deps to bead IDs at impact time by querying the mapping store. When a dep was being obsoleted+recreated in the same batch, the resolver picked up the OLD (soon-closed) bead ID, leading to the broken-dep-graph bug (commit `21defea`). The fix is to defer resolution to emit time where the three-shape ref scheme (ref:op / ref:bead / ref:spec_node) can distinguish same-run work from upstream deps.
+Prior to this proposal, ActionClassifier resolved deps to bead IDs at impact time by querying the mapping store. When a dep was being obsoleted+recreated in the same batch, the resolver picked up the OLD (soon-closed) bead ID, leading to the broken-dep-graph bug (commit `21defea`). The fix is to defer resolution to emit time where the ref scheme (ref:op / ref:bead) can distinguish same-run work from upstream deps.
 
 ActionClassifier now emits spec_node_ids — identity hashes that stay stable across batches. Emit's Resolver classifies each at emit time with full knowledge of the current batch's op_ids.
 
@@ -70,18 +70,18 @@ An `Action` is a decision about *what happened to a spec node*, never an instruc
 
 | Concern | Owner |
 |---------|-------|
-| bead type (`epic` / `feature` / `task`) | derived twice from the op's `spec_node_kind`: by the adapter for the tracker bead, and by ingest's Reconciler for the bead-map record's `bead_type`. The two tables disagree on three inputs: `data_flow` (adapter `task`, ingest `feature`), an empty `spec_node_kind` (adapter `feature` via its catch-all, ingest `""` via its own arm), and every other unnamed kind (adapter `feature`, ingest `task`) |
+| bead type (`epic` / `feature` / `task`) | derived once, by the adapter from the op's `spec_node_kind` for the tracker bead. Ingest derives none: the journal stores the node's `node_type` from the spec graph and never a bead type, so the retired two-table disagreement (adapter and Reconciler classifying `data_flow` and unnamed kinds differently) is gone with the record that stored the result |
 | `spec_node_kind` on the op | ChangesetBuilder |
 | parent (the proposal epic) | Resolver |
-| dep refs resolved from a create's `DepSpecNodeIDs`, and whether each takes the `ref:op` / `ref:bead` / `ref:spec_node` shape | Resolver |
+| dep refs resolved from a create's `DepSpecNodeIDs`, and whether each takes the `ref:op` or `ref:bead` shape | Resolver |
 | the extra `ref:bead` lineage dep on a modify pair's create op, derived from that create's old bead id | ChangesetBuilder, appending it after Resolver has returned |
-| the idempotency label, and the record id looked back up from the create's old bead id so a modify pair reuses one record | IdempotencyLabeler |
+| the idempotency label — a pure function of the op's own spec_node_id, identical across a modify pair by construction | IdempotencyLabeler |
 | priority, via the `implements → preq_id → priority` chain | Resolver |
 | op ordering and `op_id` assignment | TopologicalSorter |
 
 The node-type gate above is the one apparent exception, and it is not one: it decides whether a node produces an action *at all*, which is a property of the spec graph, not of the tracker. The action's node type is carried forward as data so emit can make the type decision — ActionClassifier does not make it.
 
-Holding this line is what lets impact be re-run against a changed tracker state without re-deciding anything structural, and what lets emit be a pure function of `(impact report, bead-map, spec dir, git HEAD)`.
+Holding this line is what lets impact be re-run against a changed tracker state without re-deciding anything structural, and what lets emit be a pure function of `(impact report, journal, spec dir, git HEAD)`.
 
 ## Interface
 
@@ -94,7 +94,7 @@ One call, over the three lists [[06035e7f0c39|NodeMatcher]] returned together wi
 | module | the affected module's name, carried alongside the identity hash so output a person reads is legible |
 | node | the affected spec node's name |
 | node type | the affected spec node's type — the value the gate above is applied to on the unmatched path |
-| spec node id | the identity hash of the affected node — the lookup key into the mapping store |
+| spec node id | the identity hash of the affected node — the join key into the journal fold |
 | spec hash | the node's current merkle content hash, on a create |
 | old bead id | on a create that replaces an obsoleted bead, the id of the bead it replaces; a modified or unexpectedly-matched-added node produces exactly such a pair |
 | dep spec node ids | identity hashes this action's bead is to depend on, left for emit to resolve into refs |

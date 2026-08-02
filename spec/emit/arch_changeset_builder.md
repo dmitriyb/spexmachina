@@ -1,6 +1,6 @@
 # ChangesetBuilder
 
-Composes `changeset.json` v1 from the impact report, the spec graph, the mapping store, the proposal ref, and a caller-supplied git HEAD SHA. Those inputs are the whole of what it reads — [[aa2375420738|it opens no other file, starts no subprocess and asks no tracker anything]], so the same inputs always compose the same bytes. Dep resolution is delegated to [[f7775ac5f1f3|Resolver]], ordering to [[7249fd093b8a|TopologicalSorter]], and idempotency label assignment to [[6f4b6dd8928f|IdempotencyLabeler]].
+Composes `changeset.json` v2 from the impact report, the spec graph, the task journal's fold, the proposal ref, and a caller-supplied git HEAD SHA. Those inputs are the whole of what it reads — [[aa2375420738|it opens no other file, starts no subprocess and asks no tracker anything]], so the same inputs always compose the same bytes. Dep resolution is delegated to [[f7775ac5f1f3|Resolver]], ordering to [[7249fd093b8a|TopologicalSorter]], and idempotency label assignment to [[6f4b6dd8928f|IdempotencyLabeler]].
 
 ## Responsibilities
 
@@ -10,13 +10,13 @@ Composes `changeset.json` v1 from the impact report, the spec graph, the mapping
 - Order the create ops via TopologicalSorter so in-batch deps come before dependents.
 - **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** The label depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the three formats.
 - Emit close ops carrying the obsolete labels: `spex:obsolete`, and `commit:<git_head>` built from [[22e63e959749|the SHA the caller passed in]] — the builder never asks git for it.
-- Write the final v1 changeset with canonical field order and stable key ordering inside every nested object.
+- Write the final v2 changeset with canonical field order and stable key ordering inside every nested object.
 
 ## Interface
 
-The builder is set up once per run from four values that do not change while it runs — the spec graph, the mapping store, the git HEAD SHA and the proposal ref — and is then handed exactly one impact report. It answers with one v1 changeset or with an error, never with both.
+The builder is set up once per run from four values that do not change while it runs — the spec graph, the journal fold, the git HEAD SHA and the proposal ref — and is then handed exactly one impact report. It answers with one v2 changeset or with an error, never with both.
 
-The document it answers with carries four top-level fields in this order: the schema version (always `1`), the git HEAD, the proposal ref, and the ordered op list.
+The document it answers with carries four top-level fields in this order: the schema version (always `2`), the git HEAD, the proposal ref, and the ordered op list.
 
 ## Op Kinds
 
@@ -45,7 +45,7 @@ Create ops carry `spec_node_kind` matching the underlying spec node category:
 | `test_section`  | New or replacement test_section leaf with `describes >= 2` | `task` |
 | `cleanup`       | Code-cleanup bead for a removed spec node — see "Cleanup op shape" below | `task` |
 
-The `cleanup` value is what tells the adapter and Reconciler that this op produces a bead with no mapping record (per CLAUDE.md "no map record" rule).
+The `cleanup` value is what tells the adapter and Reconciler that this op's receipt pairs with the prior removed event in the journal rather than with a fresh change event.
 
 The vocabulary is closed, and `api` is deliberately not in it. An api is a declared external surface, not a unit of work, and impact produces no action for one, so no action carrying an api ever reaches `Build()`.
 
@@ -70,7 +70,7 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `labels`          | `["spex:cleanup"]` — a cleanup create is the only create-class op that carries labels, so the adapter can stamp the discriminator label on the bead as it creates it. Close ops carry labels too; conventional creates do not. |
 | `body`            | empty                                                                                       |
 
-Modify-pair creates — a create paired with the close of the bead it replaces, with no cleanup reason — keep the conventional shape, and only their `idempotency.label` differs: it is reused from the existing record's id rather than drawn from the cursor. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
+Modify-pair creates — a create paired with the close of the bead it replaces, with no cleanup reason — keep the conventional shape, and their `idempotency.label` is identical to the original create's by construction — the node's identity hash does not change across the pair, so no lookup and no reuse rule is needed. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
 
 ## Op Shape
 

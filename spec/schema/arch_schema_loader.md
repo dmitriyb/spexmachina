@@ -5,7 +5,7 @@ The `spex` binary's own copy of the three JSON Schema documents, and the one fun
 ## Responsibilities
 
 - Carry [[79946d618829|ProjectSchema]], [[78883b84c32d|ModuleSchema]] and [[d125b5e775b4|BeadMapSchema]] inside the binary — [[b7c3bccd7c64|the schemas travel with the executable]], so validation needs no file beside it and no network.
-- Hand each document back exactly as it was committed under `schema/`, unparsed. Compiling one is the caller's work — the validator for the project and module schemas, the mapping store for the bead-map schema — and leaving it there is what keeps this side of the boundary free of a JSON Schema library.
+- Hand each document back exactly as it was committed under `schema/`, unparsed. Compiling one is the caller's work — the validator for the project and module schemas, the mapping store for the journal-line schema — and leaving it there is what keeps this side of the boundary free of a JSON Schema library.
 - Compute identity hashes for the callers that derive an ID rather than carry one.
 
 ## Interface
@@ -45,7 +45,7 @@ Embedding schemas in the binary eliminates external file dependencies. The `spex
 
 IDs are hashes rather than counters because a counter is order-dependent: two branches that each append a node both take the next integer, and the merge quietly points two different nodes at one key. Two branches that add different nodes write different identity strings and so get different hashes, and two branches that add the same node to the same module get the same hash — which is the right answer, since they are describing one thing. Nothing has to be coordinated between branches for that to hold.
 
-Callers divide into two kinds, and the split is deliberate. The validator and the `hash-id` command **derive** IDs: they reconstruct an identity string from a node's position and check it against the stored `id`, so they call `IdentityHash` directly. Every other module **carries** IDs: it reads the 12-character hex string out of the JSON `id` field and treats it as an opaque key — a merkle tree key, a `spec_node_id` in the bead-map, a `spec_node_id` on a changeset op — without ever recomputing it.
+Callers divide into two kinds, and the split is deliberate. The validator and the `hash-id` command **derive** IDs: they reconstruct an identity string from a node's position and check it against the stored `id`, so they call `IdentityHash` directly. Every other module **carries** IDs: it reads the 12-character hex string out of the JSON `id` field and treats it as an opaque key — a merkle tree key, a `node` on a journal event, a `spec_node_id` on a changeset op — without ever recomputing it.
 
 That is what makes the tree rename-stable. A module that recomputed an ID from a name or a path would silently re-key a node the moment either changed; a module that carries the stored value cannot. Only one place in the codebase needs to change if the truncation length, hash function, or join separator ever changes, and nothing downstream can drift from it because nothing downstream computes it.
 

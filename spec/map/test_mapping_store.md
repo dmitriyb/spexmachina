@@ -3,83 +3,73 @@
 ## Setup
 
 - Create a temporary directory with a valid spec structure (project.json + one module)
-- Leave `.bead-map.json` absent, or write the bead-map document `{"next_id": 1, "records": []}`. A
-  zero-byte file is neither, and the store refuses it before any operation runs
-- Construct a MappingStore instance pointing at the temp directory
+- Write `spec/.history.jsonl` line by line as each scenario requires: change events
+  (`added`/`removed`/`modified` with `eid`, `node`, `name`, `node_type`, `module`, `before`,
+  `after`, `git_head`, `proposal`) and receipt events (`task_created`/`task_closed` with `for`
+  and `task_id`, or `proposal` in place of `for` for epic tasks)
+- Construct a MappingStore instance pointing at the temp directory. The store only reads;
+  no scenario writes through it
 
 ## Scenarios
 
-### Create mapping record
+### Parse a well-formed journal
 
-- **Input**: spec_node_id="a1b2c3d4e5f6" (the identity hash of schema/component/ProjectSchema), bead_id="abc-123", bead_type="feature", module="schema", component="ProjectSchema", content_file="spec/schema/arch_project_schema.md", spec_hash="e3b0c44..."
-- **Expected**: Record is written to `.bead-map.json` with a sequential integer record `id` (the internal auto-increment, used for the `spex:<id>` bead label). The record's `spec_node_id` round-trips as the supplied identity hash. File is valid JSON. Record contains all supplied fields including `bead_type`.
+- **Input**: a journal with two change events and one `task_created` receipt referencing the first
+- **Expected**: the store returns three parsed events in file order; every field round-trips
 
-### Read mapping record by ID
+### Fold yields the latest task-bearing event per node
 
-- **Input**: Create a record, then read it back by its integer record `id`
-- **Expected**: Returned record matches all fields that were written, including the identity-hash `spec_node_id`
+- **Input**: node X with `added` + `task_created` (task A), then `modified` + `task_created` (task B); node Y with `added` and no receipt
+- **Expected**: the fold maps X → task B (not A — lineage, latest wins) and contains no entry for Y (no task-bearing event)
 
-### Update mapping record
+### Lookup by identity hash
 
-- **Input**: Create a record, then update its spec_hash field
-- **Expected**: Record's spec_hash is updated. Other fields are unchanged. The record ID is unchanged.
+- **Input**: the fold above, queried with X's identity hash
+- **Expected**: returns X's linkage — current task id, the event that carried it, and the event's name/node_type/module
 
-### Delete mapping record
+### Lookup by task id
 
-- **Input**: Create a record, then delete it by ID
-- **Expected**: Record is removed from `.bead-map.json`. File is valid JSON. Reading by the deleted ID returns not-found.
+- **Input**: the fold above, queried with task B's id
+- **Expected**: returns the same linkage as the identity-hash lookup — the two keys are interchangeable ways to reach one node
 
-### List all mapping records
+### Removed node retains its biography
 
-- **Input**: Create three records for different spec nodes
-- **Expected**: List returns all three records. Order is deterministic (sorted by ID).
+- **Input**: node Z with `added`, `task_created`, then `removed`
+- **Expected**: the fold marks Z removed; a lookup still returns its name, node_type, module and the removing event's `proposal` and `git_head` — the journal is the only surviving name record for Z
 
-### Lookup by bead ID
+### Epic receipts fold without a change event
 
-- **Input**: Create a record with bead_id="abc-123", then look up by bead_id
-- **Expected**: Returns the record matching that bead ID
+- **Input**: a `task_created` receipt carrying `proposal: "2026-04-18-decouple-spex-from-br"` and no `for`
+- **Expected**: the fold lists the epic task keyed by the proposal slug; no change event is required or invented
 
-### Lookup by spec node ID
+### Deterministic order
 
-- **Input**: Create a record with spec_node_id="impact/component/3", then look up by spec_node_id
-- **Expected**: Returns the record matching that spec node ID
-
-### Concurrent-safe file access
-
-- **Input**: Two goroutines simultaneously call Create
-- **Expected**: Both records are written correctly. No data corruption. File is valid JSON after both operations complete.
+- **Input**: the same journal parsed twice
+- **Expected**: identical fold output both times; list output ordered by file position — the journal's order is the order
 
 ## Edge Cases
 
-### Empty mapping file
+### Missing journal file
 
-- Load from a file containing `{"next_id": 1, "records": []}`. A bare `[]` will not do: the store
-  schema-validates the file first and refuses it with `map: schema validation …` and exit 1
-- All operations work on the empty list
+- MappingStore is constructed where `spec/.history.jsonl` does not exist
+- **Expected**: parse returns an empty event list, the fold is empty, and no error is raised — absence is a first-class state, not a failure
 
-### Missing mapping file
+### Empty journal file
 
-- MappingStore is constructed with a path where `.bead-map.json` does not exist
-- First write creates the file
-- Read before any write returns an empty list
+- A zero-byte `spec/.history.jsonl`
+- **Expected**: same as missing — empty fold, no error
 
-### Duplicate bead ID
+### Malformed line
 
-- Attempt to create two records with the same bead_id
-- Expected: error — each bead maps to exactly one spec node
+- A journal whose third line is not valid JSON
+- **Expected**: the map query surface reports `map: journal line 3: …` and exits 1. The store's parse API distinguishes this error so gating callers can degrade to absent instead of failing — the journal is never load-bearing for the pipeline
 
-### Multiple beads per spec node
+### Line that is valid JSON but violates the journal-line schema
 
-- Attempt to create two records with the same spec_node_id but different bead_ids
-- Expected: error — with the obsolete+create model, the mapping file is current state only (one record per active spec node). The old record is updated with the new bead_id, not duplicated.
-- Exception: a create whose `node_type` is `proposal` skips this check — a second proposal record with the same spec_node_id and a different bead_id is created rather than refused.
+- `{"event":"task_created"}` with neither `for` nor `proposal`, or a change event missing `node`
+- **Expected**: same surfacing as the malformed line, naming the line number and the violated constraint
 
-### bead_type field is preserved
+### Receipt referencing an unknown event id
 
-- Create a record with bead_type="feature", read it back
-- Expected: bead_type field is present and matches "feature"
-
-### Update bead_id and spec_hash on existing record
-
-- Create a record, then update its bead_id and spec_hash (used when obsolete+create replaces a bead)
-- Expected: Record's bead_id and spec_hash are updated. Other fields (spec_node_id, module, component, content_file, bead_type) are unchanged.
+- A `task_created` whose `for` names an `eid` no change event carries
+- **Expected**: reported by the fold as a dangling receipt; the rest of the journal folds normally — one bad pairing does not poison the file

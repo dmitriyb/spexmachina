@@ -15,7 +15,7 @@ Spex Machina owns the structural half. The LLM focuses on what it's good at.
 ```
 spec change → spex validate → spex diff → spex impact → spex emit → adapter → spex ingest
                   │                            │            │           │           │
-                  │                            │            │           │           └─ reconciles bead-map,
+                  │                            │            │           │           └─ appends journal,
                   │                            │            │           │              writes snapshot
                   │                            │            │           └─ executes bead actions
                   │                            │            │              against the tracker
@@ -27,7 +27,7 @@ spec change → spex validate → spex diff → spex impact → spex emit → ad
 The merkle tree is built on demand inside `spex diff` (read) and persisted by
 `spex ingest`'s SnapshotSaver (write); there is no separate `spex hash` step.
 The first diff on a fresh project treats the missing snapshot as the empty
-tree, so the bootstrap cycle produces the initial bead-map and snapshot
+tree, so the bootstrap cycle produces the initial journal and snapshot
 together.
 
 Every change starts with a **proposal** — a traceable document committed to git that captures *why* the change is being made.
@@ -56,14 +56,14 @@ The JSON is machine-readable for graph operations. The markdown is human-readabl
 
 | Module | What it does |
 |--------|-------------|
-| **Schema** | JSON Schema definitions for project.json, module.json and the bead-map |
+| **Schema** | JSON Schema definitions for project.json, module.json and the journal line format |
 | **Validator** | Validates spec structure: JSON schema conformance, content path resolution, DAG acyclicity, ID uniqueness |
 | **Merkle** | Hash tree over the spec, snapshots, diff, impact classification |
 | **Impact** | Maps changed spec nodes to affected beads tasks |
 | **Emit** | Composes `changeset.json` — an ordered, tool-agnostic list of bead operations — from the impact report |
 | **Adapters** | Reference adapter scripts outside the binary; each executes a changeset against a tracker and writes `receipts.json` |
-| **Ingest** | Reconciles the bead-map from changeset + receipts and saves the new snapshot |
-| **Map** | Owns `.bead-map.json`, linking spec node IDs to bead IDs; CRUD, context resolution, CLI queries |
+| **Ingest** | Appends journal events from changeset + receipts and saves the new snapshot |
+| **Map** | Reads the task journal (`spec/.history.jsonl`), linking spec node IDs to task IDs; folds, context resolution, CLI queries |
 | **Proposal** | Proposal lifecycle: registration, validation, history |
 | **Render** | Generates markdown, graphviz DOT, or JSON from the spec |
 | **CLI** | Root command, version subcommand, and the subcommand registration framework |

@@ -103,7 +103,7 @@ Reads and writes reach this component from different commands:
 - `Encode` is called from `spex ingest`, by both of its writers: the
   SnapshotSaver path on a complete-status normal run, and the refresh
   pathway, which shares that path's temp-file-and-rename helper rather
-  than repeating it. The invariant that snapshot and `.bead-map.json` move
+  than repeating it. The invariant that snapshot and the task journal move
   together is enforced by ingest, which atomically commits both files
   (mode: normal on complete receipts; mode: refresh always), and `Save`'s
   replace-in-place write cannot hold that invariant — which is why the
@@ -118,4 +118,4 @@ Reads and writes reach this component from different commands:
   writer emit the same bytes.
 
 Keeping reads in `spex diff` and writes in `spex ingest` is what holds the
-snapshot+bead-map atomicity invariant in place.
+snapshot+journal atomicity invariant in place.

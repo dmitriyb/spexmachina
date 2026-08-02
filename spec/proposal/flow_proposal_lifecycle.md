@@ -12,7 +12,7 @@ digraph proposal_lifecycle {
     "changeset.json"          [style=dashed];
     "receipts.json"           [style=dashed];
     "tracker beads"           [style=dashed];
-    ".bead-map.json"          [style=dashed];
+    "spec/.history.jsonl"     [style=dashed];
     "spec/.snapshot.json"     [style=dashed];
     "97f73ced5a02"            [label="HistoryViewer\n97f73ced"];
 
@@ -23,7 +23,7 @@ digraph proposal_lifecycle {
     "impact report"           -> "changeset.json"          [label="spex emit --proposal <ref>"];
     "changeset.json"          -> "tracker beads"           [label="scripts/apply-br.sh"];
     "changeset.json"          -> "receipts.json"           [label="scripts/apply-br.sh"];
-    "receipts.json"           -> ".bead-map.json"          [label="spex ingest"];
+    "receipts.json"           -> "spec/.history.jsonl"     [label="spex ingest"];
     "receipts.json"           -> "spec/.snapshot.json"     [label="spex ingest"];
     "tracker beads"           -> "97f73ced5a02"            [label="br list --json | spex log"];
 }
@@ -36,11 +36,11 @@ the reports and receipts the middle of the pipeline writes, and the beads themse
 whatever tracker the user runs. Two of those artifacts carry more than their name says:
 `changeset.json` leads with the proposal-epic create op and follows it with the ordered bead ops,
 and `receipts.json` carries a bead id for every op the adapter actually executed. One step leaves
-two marks rather than one: `spex ingest` reconciles `.bead-map.json`, and on a run the adapter
+two marks rather than one: `spex ingest` appends to the task journal, and on a run the adapter
 reported complete it also rebaselines `spec/.snapshot.json` — the baseline the next `spex diff`
 measures against, so a partial run deliberately leaves the old one standing.
 
-The closing edge is a pipe, not a file read. HistoryViewer never opens `.bead-map.json` or the
+The closing edge is a pipe, not a file read. HistoryViewer never opens the journal or the
 snapshot: the beads reach it as JSON on stdin, read and parsed by the command that fronts it, which
 is why the tracker sits on that edge and the two files `spex ingest` wrote sit off to the side of
 it.
