@@ -8,7 +8,7 @@ SnapshotSaver path) — there is
 no standalone `spex hash` command. This is intentional: a separate hash step
 either produces a snapshot that matches the current spec (so the next `spex
 diff` reports no changes and the pipeline stalls) or it desynchronises the
-snapshot from `.bead-map.json` (breaking the snapshot+bead-map atomicity
+snapshot from the task journal (breaking the snapshot+journal atomicity
 invariant). Building the tree on demand inside `diff` and only persisting it
 through `ingest` keeps both invariants intact.
 
@@ -49,15 +49,15 @@ On a fresh project there is no `spec/.snapshot.json`. The pipeline is:
 3. `spex impact` — the "everything added" diff becomes bead actions.
 4. `spex emit` — those actions become a changeset.
 5. The adapter applies the changeset and writes receipts.
-6. `spex ingest` — the Reconciler writes `.bead-map.json` and the SnapshotSaver writes the *first*
-   `spec/.snapshot.json`, atomically with the bead-map records.
+6. `spex ingest` — the Reconciler appends the first journal events and the SnapshotSaver writes the *first*
+   `spec/.snapshot.json`, in the same baselining step.
 
 The first `spex diff` invocation builds the current tree (Hasher → TreeBuilder)
 and compares it against no snapshot at all, because the command skips the
 SnapshotStore load when the file is absent. The "everything added" diff feeds the
 standard impact → emit → adapter → ingest cycle. That ingest run's
 `SnapshotSaver` is what creates `spec/.snapshot.json`, alongside the first
-batch of bead-map records, so snapshot and bead-map are born consistent. It is
+batch of journal pairings, so snapshot and journal are born consistent. It is
 also the only thing that can create it: `spex ingest` is the only command that
 writes the file at all, and its one other write path, `--mode refresh`, refuses
 to start without a pre-existing snapshot — so refresh can never be what

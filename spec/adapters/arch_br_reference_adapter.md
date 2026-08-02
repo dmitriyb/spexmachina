@@ -4,9 +4,9 @@ Bash + jq script at `scripts/apply-br.sh`. Reads `changeset.json` on stdin (or `
 
 ## Responsibilities
 
-- Parse changeset v1.
+- Parse changeset v2.
 - For each op in order:
-  - Resolve every ref field (`parent`, `deps`, `target`) to a concrete bead id, per [[a2645b77b8bc|the three ref shapes]]: a `bead` ref passes through literally, an `op` ref is looked up in the substitution table, and a `spec_node` ref goes to the mapping store for the most recent bead recorded against that node.
+  - Resolve every ref field (`parent`, `deps`, `target`) to a concrete bead id, per [[a2645b77b8bc|the ref shapes]]: a `bead` ref passes through literally and an `op` ref is looked up in the substitution table. Changeset v2 carries no third shape — emit resolves node references before the adapter ever runs, so the adapter reads no spex-owned file.
   - Check idempotency before create/close — for a create that check runs before any of the op's refs are resolved, for a close after the target ref is resolved.
   - Invoke the appropriate `br` subcommand with correct flags.
   - Write a receipt entry.
@@ -28,13 +28,13 @@ scripts/apply-br.sh [<changeset.json>] [<receipts.json>]
 
 ## Changeset Preconditions
 
-[[4277dbd90063|Reading a changeset v1]] begins with the envelope, and only the envelope: the document must parse, `version` must be exactly `1`, `git_head` and `proposal` must both be present, and `ops` must be an array. Each condition below exits 1 with its reason on stderr and writes **no** `receipts.json` at all: the failure is at the changeset level, not at an op level, and receipts exist only for ops that were attempted. Nothing inside an op is inspected at this point — a missing `op_id`, an unknown `type` or an unresolvable ref surfaces only when the loop reaches that op, and becomes that op's `error` receipt rather than a refusal of the document. An op of the wrong *shape* is the exception, and it fails later and harder: see "The shape hole" below.
+[[4277dbd90063|Reading a changeset v2]] begins with the envelope, and only the envelope: the document must parse, `version` must be exactly `2`, `git_head` and `proposal` must both be present, and `ops` must be an array. Each condition below exits 1 with its reason on stderr and writes **no** `receipts.json` at all: the failure is at the changeset level, not at an op level, and receipts exist only for ops that were attempted. Nothing inside an op is inspected at this point — a missing `op_id`, an unknown `type` or an unresolvable ref surfaces only when the loop reaches that op, and becomes that op's `error` receipt rather than a refusal of the document. An op of the wrong *shape* is the exception, and it fails later and harder: see "The shape hole" below.
 
 | Condition | Reason on stderr |
 |---|---|
 | the input is not valid JSON | `changeset is not valid JSON` |
 | `version` absent | `changeset missing required field: version` |
-| `version` is anything but `1` | `unsupported changeset version: <v> (expected 1)` |
+| `version` is anything but `2` | `unsupported changeset version: <v> (expected 2)` |
 | `git_head` absent | `changeset missing required field: git_head` |
 | `proposal` absent | `changeset missing required field: proposal` |
 | `ops` absent, or present and not an array | `changeset missing or malformed required field: ops` |
@@ -60,8 +60,6 @@ Ops are dispatched on their `type` field, one at a time, in the order the change
 | the op carries no `op_id` or no `type` | `malformed op: missing op_id or type` |
 | an `op` ref names an op with no substitution-table entry and no error on record | `dependency <op_id> not yet resolved` — never reachable from a well-formed changeset, since emit orders ops so that every referenced op precedes its referent |
 | an `op` ref names an op that errored before reaching a bead | `dependency <op_id> errored; cannot resolve op ref` |
-| a `spec_node` ref finds no record in the mapping store | `spec_node_id <id> has no mapping record` — the store is stale and emit should be re-run |
-| the file `SPEX_MAPPING_FILE` names is not there | `mapping file unavailable for ref:spec_node lookup` — this row fires on non-existence and on nothing else; a mapping file that exists but will not parse, or that cannot be opened, falls through to the row above and is reported as a missing record |
 | a ref carries an unrecognised discriminator | `unknown ref kind: <kind>` |
 | a `br create`, `br update`, `br show` or `br close` invocation exits non-zero | the command that failed, followed by everything that invocation wrote on stdout and stderr |
 | the idempotency query before a create fails | the fixed string `br list failed during idempotency check`; that query's stderr is discarded rather than recorded |
@@ -122,9 +120,9 @@ Each entry of an op's `deps` becomes its own `--deps <edge>:<bead-id>` flag, in 
 
 Before every `br create`, [[b8d894dff9b5|the create-idempotency check]] asks the tracker whether the op's bead already exists, by querying `br list --json --label <op.idempotency.label>`. **A match is a bead with the label AND `status == "open"`.** Closed beads carrying the same label are historical artifacts (a previous bead-lifecycle landed and the bead was closed; the label persisted across close); they MUST NOT count as a match for create-idempotency. On a true match (open bead with the label), skip create, record `was_existing=true` with the existing bead_id.
 
-The open-only filter mirrors pre-decouple `apply/bead_creator.go::FindExisting`, which iterated tracker results and returned only beads with `Status == "open"`. The filter matters specifically for modify-pair creates: per the modify-pair record-id-reuse rule (see `spec/emit/arch_idempotency_labeler.md`), the new create's `idempotency.label` deliberately equals the existing record's id. The OLD bead in the tracker (now closed) carries that same label as a historical marker. Without the open filter, the adapter would treat the closed historical bead as a match and skip the create — leaving the bead-map record pointing at the closed bead and the new arch contract unrepresented in the tracker. Reconciler invariant 3 (modified-pair records point to new bead_id) would then fail.
+The open-only filter mirrors pre-decouple `apply/bead_creator.go::FindExisting`, which iterated tracker results and returned only beads with `Status == "open"`. The filter matters specifically for modify-pair creates: the new create's `idempotency.label` equals the old create's by construction — both are the node's own identity hash (see `spec/emit/arch_idempotency_labeler.md`). The OLD bead in the tracker (now closed) carries that same label as a historical marker. Without the open filter, the adapter would treat the closed historical bead as a match and skip the create — leaving the node's fold entry closed and the new arch contract unrepresented in the tracker.
 
-The label format depends on the action class — emit produces `spex:<n>` for fresh and modify-pair creates, `spex:cleanup-<spec_node_id>` for cleanup creates; the adapter just looks up whatever label the op carries. The open-only filter applies uniformly across formats: a closed bead carrying ANY `spex:*` label is historical; only an open bead represents current state. Cleanup beads are unaffected because cleanup-bead labels (`spex:cleanup-<spec_node_id>`) are unique per removed-spec-node identity hash, only one bead ever carries them, and during the only window when re-runs occur (retrying a failed pipeline run against the same proposal) the cleanup bead is still open — actually doing the cleanup work and closing that bead is a separate user activity that does not happen between failing pipeline attempts.
+The label format depends on the action class — emit produces `spex:<spec_node_id>` for fresh and modify-pair creates, `spex:cleanup-<spec_node_id>` for cleanup creates, `spex:<proposal-slug>` for epic creates; the adapter just looks up whatever label the op carries. The open-only filter applies uniformly across formats: a closed bead carrying ANY `spex:*` label is historical; only an open bead represents current state. Cleanup beads are unaffected because cleanup-bead labels (`spex:cleanup-<spec_node_id>`) are unique per removed-spec-node identity hash, only one bead ever carries them, and during the only window when re-runs occur (retrying a failed pipeline run against the same proposal) the cleanup bead is still open — actually doing the cleanup work and closing that bead is a separate user activity that does not happen between failing pipeline attempts.
 
 Before every `br close`, [[7bad082a34b6|the close-idempotency check]] reads the target's current state with a single `br show <bead_id> --format json`, taking both `labels` and `status` from that one response. The three branches below are decided from that combined state, and nothing is re-queried between the decision and the action:
 
@@ -196,7 +194,6 @@ set -euo pipefail
 ## Test Hooks
 
 - `BR_BIN` env var — overrides `br` binary path (for tests with a mock).
-- `SPEX_MAPPING_FILE` env var — overrides `.bead-map.json` location (for tests with a synthetic mapping).
 - `SPEX_ADAPTER_DEBUG=1` — after each op, dump the substitution table to stderr, one `op_id → bead_id` line per entry. Stdout stays clean, so a debug run still pipes its receipts.
 
-Each defaults to the real-world value: the `br` on PATH, `.bead-map.json` in the working directory, and no debug output. The fixture runs against a stand-in `br` set both overrides — `BR_BIN` at a mock binary, `SPEX_MAPPING_FILE` at the fixture's own mapping file. [[970260050e3e|The integration test against a real `br`]] sets neither: gated on `br` being on PATH, it runs the script from a throwaway sandbox, where both defaults already resolve to what that test wants — the real `br`, and the `.bead-map.json` a case seeds inside the sandbox when it needs one. Both paths exercise the shipped script unmodified rather than a copy that has diverged.
+Each defaults to the real-world value: the `br` on PATH and no debug output. The retired `SPEX_MAPPING_FILE` override is gone with the mapping lookup it served — the adapter reads no spex-owned file in v2. The fixture runs against a stand-in `br` via `BR_BIN` at a mock binary. [[970260050e3e|The integration test against a real `br`]] sets nothing: gated on `br` being on PATH, it runs the script from a throwaway sandbox where the default already resolves to the real `br`. Both paths exercise the shipped script unmodified rather than a copy that has diverged.

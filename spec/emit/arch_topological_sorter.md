@@ -16,7 +16,7 @@ Kahn's algorithm with deterministic tiebreak:
 1. Build a DAG over the create ops in the current batch. Node = op; edge A → B if B declares a dep on A's spec_node_id AND A is in the same batch.
 2. Partition nodes by type tier. Process tiers in order (epic → features/flows → test tasks); within a tier run Kahn. The DAG is rebuilt per tier, so a dep pointing outside the tier — or outside the batch — is invisible to the sort and is left for Resolver to classify.
 3. Kahn with priority queue: at each step, among nodes with zero remaining incoming edges, pick the one with the smallest `spec_node_id` lex order (tiebreak). This makes the output deterministic across runs.
-4. Emit the ops in that order. The `op_id` each one carries in the changeset is stamped downstream by ChangesetBuilder, in this order and numbered from 1.
+4. Emit the ops in that order. The `op_id` each one carries in the changeset is stamped downstream by ChangesetBuilder, in this order and numbered from 1. Those op_ids now outlive the changeset: ingest derives each journal event's id from `(git_head, op_id)`, so the sorter's deterministic ordering is also what pins journal event identity — a reordering bug here would mint new event ids for old work and break ingest's append-nothing re-runs.
 
 ## Why order is emit's to decide
 

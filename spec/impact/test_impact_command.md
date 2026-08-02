@@ -16,17 +16,15 @@ Tests use a temporary directory containing:
    - `merkle/arch_hasher.md` modified (impact: arch_impl) — component Hasher
    - `merkle/arch_diff_engine.md` removed (impact: arch_impl) — component DiffEngine
 
-4. **A mapping file** at the path `--map` names, defaulting to `.bead-map.json` beside the spec directory. It is what ties a bead to a spec node; the bead itself never carries an identity hash. The mapping store schema-validates the file before parsing it, so the fixture is a bead-map document — an object with `next_id` and `records` — and each record also carries `bead_type`, `content_file` and `spec_hash`. A bare array of records is refused with `impact: read mapping records: map: schema validation …` and exit 1. Three records:
+4. **A journal** at `<spec-dir>/.history.jsonl`. It is what ties a task to a spec node — the task's own label carries the same hash, and the two sources must agree. The store validates each line against the journal-line schema on read; a malformed line is refused with `impact: read journal: map: journal line <n>: …` and exit 1. Three pairings:
 
 ```json
-{
-  "next_id": 11,
-  "records": [
-    {"id": 1,  "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker", "content_file": "spec/validator/arch_schema_checker.md", "spec_hash": "<SCHK_SPEC_SHA>"},
-    {"id": 3,  "spec_node_id": "<HASR_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hasher",        "content_file": "spec/merkle/arch_hasher.md",            "spec_hash": "<HASR_SPEC_SHA>"},
-    {"id": 10, "spec_node_id": "<DIFF_HASH>", "bead_id": "spex-010", "bead_type": "task", "module": "merkle",    "component": "DiffEngine",    "content_file": "spec/merkle/arch_diff_engine.md",       "spec_hash": "<DIFF_SPEC_SHA>"}
-  ]
-}
+{"event":"added","eid":"<E1>","node":"<SCHK_HASH>","name":"SchemaChecker","node_type":"component","module":"validator","before":null,"after":"<SCHK_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E1>","task_id":"spex-001"}
+{"event":"added","eid":"<E2>","node":"<HASR_HASH>","name":"Hasher","node_type":"component","module":"merkle","before":null,"after":"<HASR_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E2>","task_id":"spex-003"}
+{"event":"added","eid":"<E3>","node":"<DIFF_HASH>","name":"DiffEngine","node_type":"component","module":"merkle","before":null,"after":"<DIFF_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E3>","task_id":"spex-010"}
 ```
 
 5. **A bead file** — the tracker listing, written to disk by the caller and handed over with `--beads`. There is no mock CLI and nothing on PATH: the command starts no process, so a fixture file is the whole harness. Either the wrapped envelope or a bare array is accepted:
@@ -34,14 +32,14 @@ Tests use a temporary directory containing:
 ```json
 {
   "issues": [
-    {"id": "spex-001", "status": "open",   "labels": ["spex:1"]},
-    {"id": "spex-003", "status": "open",   "labels": ["spex:3"]},
-    {"id": "spex-010", "status": "open",   "labels": ["spex:10"]}
+    {"id": "spex-001", "status": "open",   "labels": ["spex:<SCHK_HASH>"]},
+    {"id": "spex-003", "status": "open",   "labels": ["spex:<HASR_HASH>"]},
+    {"id": "spex-010", "status": "open",   "labels": ["spex:<DIFF_HASH>"]}
   ]
 }
 ```
 
-The `spex:<n>` label carries a mapping record id and nothing else. Each bead's `status` is joined onto the record whose own `id` is that integer, and a bead with no `spex:` label is dropped without comment. The cleanup scenario uses a variant of this file in which `spex-010` reads `"status": "closed"`.
+The `spex:<spec_node_id>` label carries the node's identity hash and nothing else. Each bead's `status` is joined onto the fold's pairing whose node key is that hash, and a bead with no live-form `spex:` label is dropped without comment. The cleanup scenario uses a variant of this file in which `spex-010` reads `"status": "closed"`.
 
 ## Scenarios
 
@@ -126,9 +124,9 @@ Assert the removed node now yields two actions rather than one: the obsolete of 
 
 ### S9: `--beads` omitted, and `--bead-cli` supplied, are both inert
 
-Run `spex impact --diff diff.json` with no `--beads` flag, against the same mapping file. Assert:
+Run `spex impact --diff diff.json` with no `--beads` flag, against the same journal. Assert:
 - The command exits 0 and produces the S1 report — matching, classification and reporting all run without any bead file
-- No cleanup create appears for `merkle/DiffEngine`, whatever the tracker says about `spex-010`: the fixture records carry no `bead_status` of their own and nothing joined one onto them, so the removed-node gate reads no closed bead. It defaults closed in the safe direction — a missing input never invents work
+- No cleanup create appears for `merkle/DiffEngine`, whatever the tracker says about `spex-010`: the fixture pairings carry no `bead_status` of their own and nothing joined one onto them, so the removed-node gate reads no closed bead. It defaults closed in the safe direction — a missing input never invents work
 
 Then run the same command again with `--bead-cli br`, `--bead-cli bd` and `--bead-cli ./anything`. Assert the flag is accepted in every case and the output is byte-identical to the run without it. No process is started, nothing on PATH is consulted, and no `br list --json` is invoked — this binary never runs a tracker command. The flag survives only so that unmigrated pipelines still parse; it selects nothing.
 
@@ -171,7 +169,7 @@ An unreadable bead file is fatal, unlike an omitted one: a caller who asked for 
 
 Provide a `--beads` file that is a valid JSON array in which no object carries a `spex:` label. Assert:
 - Exit code is 0 — an empty result is not an error
-- Every bead in the file is dropped, no mapping record gains a status, and the report matches the S9 run with `--beads` omitted
+- Every bead in the file is dropped, no pairing gains a status, and the report matches the S9 run with `--beads` omitted
 
 Provide a second file in which one object has no `id` at all. Assert exit code 1 and an error naming the offending index — a bead with no id is malformed input, not an unmanaged bead to skip.
 
@@ -196,17 +194,17 @@ Provide a diff file that is completely empty (0 bytes, not `[]`). Assert:
 
 ### E6: Concurrent access safety
 
-If `spex impact` is run twice simultaneously against the same spec directory, mapping file and bead file, both invocations must complete without corrupting each other's output. This is naturally satisfied because `spex impact` is read-only over all three — it writes nothing but its report on stdout, and it starts no process that could write anything else. Assert both processes exit 0 and produce identical reports.
+If `spex impact` is run twice simultaneously against the same spec directory, journal and bead file, both invocations must complete without corrupting each other's output. This is naturally satisfied because `spex impact` is read-only over all three — it writes nothing but its report on stdout, and it starts no process that could write anything else. Assert both processes exit 0 and produce identical reports.
 
 ### E7: Spec directory with no modules
 
 Provide a diff referencing modules that do not exist in the spec tree. Assert that unmatched changes are reported (creates for added nodes) and no panics occur due to missing module.json files.
 
-### E8: Bead file carries two beads claiming the same record
+### E8: Bead file carries two beads claiming the same node
 
-Provide a `--beads` file holding two beads with different ids but the same `spex:3` label, one open and one closed. Assert the command exits 0 rather than reporting a conflict, and that record 3 ends up with the status of the bead that appeared **last** in the file — the join keeps one status per record id and later entries overwrite earlier ones. Order is preserved from the input, so the outcome is deterministic, not arbitrary.
+Provide a `--beads` file holding two beads with different ids but the same `spex:<HASR_HASH>` label, one open and one closed. Assert the command exits 0 rather than reporting a conflict, and that the pairing for `<HASR_HASH>` ends up with the status of the bead that appeared **last** in the file — the join keeps one status per node key and later entries overwrite earlier ones. Order is preserved from the input, so the outcome is deterministic, not arbitrary.
 
-Also provide a bead carrying two `spex:` labels, `spex:3` and `spex:99`. Assert the first one that reads as a non-negative integer wins and the rest are ignored, and that a bead whose only `spex:` label has a non-numeric suffix is dropped from the result silently — exactly as a bead carrying no `spex:` label is.
+Also provide a bead carrying two live-form `spex:` labels, `spex:<SCHK_HASH>` and `spex:<HASR_HASH>`. Assert the first one that reads as a 12-hex hash or a dated slug wins and the rest are ignored, and that a bead whose only `spex:` labels are inert forms (`spex:42`, `spex:obsolete`, bare `spex:cleanup`) is dropped from the result silently — exactly as a bead carrying no `spex:` label is.
 
 ### E9: Diff input contains errors — impact refuses to proceed
 

@@ -49,7 +49,7 @@ requirement, meta) as `added`
 validate` on a fresh project. `SnapshotStore.Load` returns the empty tree when
 the snapshot file is absent (per the contract in `flow_hash_computation.md`),
 so the diff reports the entire spec as new. This drives the first
-impact → emit → adapter → ingest cycle that creates the initial bead-map and
+impact → emit → adapter → ingest cycle that creates the initial journal and
 writes the first snapshot. Replaces what an earlier draft of the pipeline
 attempted with a separate `spex hash` step. Exercises Hasher, TreeBuilder,
 SnapshotStore, DiffEngine, and ImpactClassifier end-to-end.
@@ -107,7 +107,7 @@ through DiffCommand.
 **Then** stdout reports the change as `modified` with impact `structural`
 
 **Rationale**: Structural changes are the highest impact level and trigger the
-most downstream work (new beads, updated mappings).
+most downstream work (new beads, new journal pairings).
 
 ### S6: `spex diff --snapshot <path>` uses explicit snapshot
 

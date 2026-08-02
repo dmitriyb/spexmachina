@@ -174,11 +174,11 @@ cannot be recovered from its hash after removal
 This covers module requirements, components, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
 
 > **Legacy project requirement hashes — never recompute them.**
-> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and every `.bead-map.json` record keyed off it, and destroys the lineage of every bead already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
+> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every bead already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
 
 Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
 
-The only integer ID in the system is the `.bead-map.json` record's internal `id` field, used for the `spex:<id>` bead label and never referenced from the spec graph.
+There are no integer IDs in the system: bead labels carry the node's own identity hash (`spex:<spec_node_id>`), and the task journal (`spec/.history.jsonl`) keys its events the same way.
 
 ### Declarable names — component and api
 

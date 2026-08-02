@@ -1,123 +1,119 @@
 # Bead Map Schema Tests
 
-Integration and acceptance tests for BeadMapSchema (component 4). These tests verify that the `.bead-map.json` JSON Schema correctly accepts valid mapping files, rejects invalid ones, and enforces all field constraints.
+Integration and acceptance tests for BeadMapSchema (component 4). These tests verify that the
+journal-line JSON Schema correctly accepts valid lines of `spec/.history.jsonl`, rejects invalid
+ones, and enforces all field constraints — one self-contained object at a time, because the
+journal has no envelope.
 
 ## Setup
 
-The JSON Schema validator is initialized with the bead-map schema loaded from `BeadMapSchema()`.
+The JSON Schema validator is initialized with the journal-line schema loaded from
+`BeadMapSchema()`.
 
-**Fixture: valid minimal .bead-map.json:**
+**Fixture: valid change event:**
+
 ```json
-{
-  "next_id": 1,
-  "records": []
-}
+{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}
 ```
 
-**Fixture: valid full .bead-map.json:**
+**Fixture: valid task receipt:**
+
 ```json
-{
-  "next_id": 3,
-  "records": [
-    {
-      "id": 1,
-      "spec_node_id": "79946d618829",
-      "bead_id": "abc-123",
-      "bead_type": "feature",
-      "module": "schema",
-      "component": "ProjectSchema",
-      "content_file": "spec/schema/arch_project_schema.md",
-      "spec_hash": "a1b2c3d4"
-    },
-    {
-      "id": 2,
-      "spec_node_id": "651d5315eebf",
-      "bead_id": "def-456",
-      "bead_type": "task",
-      "module": "validator",
-      "component": "SchemaChecker",
-      "content_file": "spec/validator/arch_schema_checker.md",
-      "spec_hash": "e5f6g7h8",
-      "bead_status": "closed"
-    }
-  ]
-}
+{"event":"task_created","for":"9f2c41a0b7d3","task_id":"spexmachina-abc"}
+```
+
+**Fixture: valid epic receipt:**
+
+```json
+{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-0lk"}
+```
+
+**Fixture: valid refresh receipt:**
+
+```json
+{"event":"refresh","git_head":"cafe1234","absorbed":["9f2c41a0b7d3"]}
 ```
 
 ## Scenarios
 
-### S1: Minimal .bead-map.json passes validation
+### S1: Each fixture line passes validation
 
-**Input:** `{ "next_id": 1, "records": [] }`
-**Expected:** Validation passes. Empty records array is valid.
+**Input:** the four fixtures above, validated one line at a time.
+**Expected:** all pass. Every fixture is a complete, self-contained object.
 
-### S2: Full .bead-map.json passes validation
+### S2: Unknown event value fails
 
-**Input:** The full fixture above.
-**Expected:** Validation passes. All required and optional fields are correctly typed.
+**Input:** the change-event fixture with `"event": "renamed"`.
+**Expected:** validation fails naming the enum constraint — the admitted values are exactly
+`added`, `removed`, `modified`, `task_created`, `task_closed`, `refresh`.
 
-### S3: Missing next_id fails
+### S3: Change event missing `node` fails
 
-**Input:** `{ "records": [] }`
-**Expected:** Validation fails. Missing required `next_id`.
+**Input:** the change-event fixture without its `node` field.
+**Expected:** validation fails; `node` is required on change events.
 
-### S4: Missing records fails
+### S4: `node` must match the identity-hash pattern
 
-**Input:** `{ "next_id": 1 }`
-**Expected:** Validation fails. Missing required `records`.
+**Input:** a change event with `"node": "not-a-hash"`, and another with `"node": "A1B2C3D4E5F6"`
+(uppercase).
+**Expected:** both fail — `node` is constrained to `^[a-f0-9]{12}$`. Slug-shaped references
+belong only in a receipt's `proposal` field.
 
-### S5: Record missing required field fails
+### S5: `before`/`after` admit null but not absence
 
-**Input:** Record with `id` but missing `spec_node_id`:
-```json
-{
-  "next_id": 1,
-  "records": [{ "id": 1, "bead_id": "x", "bead_type": "task", "module": "m", "component": "C", "content_file": "f.md", "spec_hash": "h" }]
-}
-```
-**Expected:** Validation fails. Error references `records/0`, missing `spec_node_id`.
+**Input:** an `added` event with `"before": null` (passes), and one omitting `before` entirely.
+**Expected:** the null form passes — absence-of-a-hash is a stated value, not a missing field;
+omitting the key fails.
 
-### S6: Empty spec_node_id fails
+### S6: Task receipt requires exactly one referent
 
-**Input:** Record with `spec_node_id: ""`.
-**Expected:** Validation fails on `minLength`. That is the only constraint the schema puts on the field — there is no pattern.
+**Input:** a `task_created` with both `for` and `proposal`; another with neither.
+**Expected:** both fail. A receipt answers either a change event or a proposal slug — one, and
+only one.
 
-### S7: spec_node_id accepts both identities it has to carry
+### S7: `node_type` is a closed enum
 
-**Input:** Records with:
-- `"79946d618829"` — a 12-character identity hash, what a component, data_flow or test_section record carries
-- `"2026-07-25-declarative-spec-contracts"` — a proposal reference, what a proposal epic record carries
+**Input:** a change event with `"node_type": "impl_section"`, and another with
+`"node_type": "requirement"`.
+**Expected:** the first fails — the enum admits exactly `component`, `data_flow`,
+`test_section`, `requirement`, `api`; retired kinds have no entry. The second passes: refresh
+absorption puts requirement and api events on the record.
 
-**Expected:** Both pass. One array holds records keyed two different ways, so the field is typed as a non-empty string and the shape is left to whoever writes the record.
+### S8: Refresh receipt shape
 
-### S8: next_id below minimum fails
+**Input:** the refresh fixture; a variant with `"absorbed": []`; a variant omitting `absorbed`.
+**Expected:** the first two pass (an empty absorbed list is legal in the schema even though
+ingest never writes one — the no-drift run appends nothing at all); the third fails.
 
-**Input:** `{ "next_id": 0, "records": [] }`
-**Expected:** Validation fails. `next_id` must be >= 1.
+### S8b: Optional `path` on change events
 
-### S9: bead_status is optional
+**Input:** the change-event fixture with `"path": "impact/arch_action_classifier.md"`, and the
+same fixture without the key.
+**Expected:** both pass — the path is present when the node has a content leaf and absent when it
+does not (requirement and api events).
 
-**Input:** A valid record without `bead_status`.
-**Expected:** Validation passes. `bead_status` is not in the required array.
+### S9: No integer ids anywhere
 
-### S10: Extra fields rejected
-
-**Input:** Record with an extra field `"priority": "high"`.
-**Expected:** Validation fails. `additionalProperties: false` on record objects rejects unknown fields.
+**Input:** a line shaped like a retired bead-map record (`{"id": 42, "spec_node_id": "..."}`).
+**Expected:** validation fails — the format has no `id`, no `next_id`, no `records` envelope.
+This is the regression guard against the retired format creeping back through a stale embed.
 
 ## Edge Cases
 
-### E1: Empty string for required string fields
+### E1: Extra properties rejected
 
-**Input:** Record with `bead_id: ""`.
-**Expected:** Validation fails. `minLength: 1` is set on `spec_node_id`, `bead_id`, `bead_type` and `component`; the remaining string fields carry no minimum and accept the empty string, which is how a proposal epic record leaves `module`, `content_file` and `spec_hash` blank.
+A change event carrying an undeclared field (`"color": "red"`) fails —
+`additionalProperties: false` on every line shape, so drift in the writer surfaces at the write
+boundary rather than accumulating silently.
 
-### E2: node_type outside the enum fails
+### E2: Empty object
 
-**Input:** Record with `node_type: "requirement"`.
-**Expected:** Validation fails. The enum is `proposal`, `component`, `data_flow`, `test_section` and nothing else — this is the one place the schema names which spec node types a record may stand for.
+`{}` fails: `event` is required, and every shape hangs off its value.
 
-### E3: node_type absent passes
+### E3: The schema file itself is embedded
 
-**Input:** A record with no `node_type` at all.
-**Expected:** Validation passes. The property is optional, so a record can omit it; it is present only where a proposal epic has to be told apart from a node record.
+`BeadMapSchema()` returns a compilable JSON Schema document — the embed is validated by
+compiling it, which catches a truncated or stale `bead-map.schema.json` at test time rather than
+on first use.

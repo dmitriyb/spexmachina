@@ -7,7 +7,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Read changeset v1",
-      "description": "The adapter parses changeset.json v1 and refuses earlier or later versions with a clear error. It reads ops in the order given and processes them sequentially — order matters because later ops may forward-reference earlier op results."
+      "description": "The adapter parses changeset.json v2 and refuses earlier or later versions with a clear error. It reads ops in the order given and processes them sequentially — order matters because later ops may forward-reference earlier op results."
     },
     {
       "id": "2f0a1f1152a0",
@@ -21,14 +21,14 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Resolve three ref shapes",
-      "description": "For each ref field in parent and deps: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} resolves as-is; {\"ref\":\"op\",\"op_id\":\"<id>\"} resolves via the substitution table; {\"ref\":\"spec_node\",\"spec_node_id\":\"<id>\"} resolves via a live lookup to the spex mapping store (.bead-map.json) for the most recent bead_id associated with that spec_node_id."
+      "description": "For each ref field in parent and deps: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} resolves as-is; {\"ref\":\"op\",\"op_id\":\"<id>\"} resolves via the substitution table. Changeset v2 carries no third shape — emit resolves spec-node references in-process before the adapter runs, so the adapter reads no spex-owned file. The title's count is identity-bearing legacy; two shapes is the contract."
     },
     {
       "id": "b8d894dff9b5",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotent create via label",
-      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing open bead carrying the op's idempotency.label (spex:<record-id> on ordinary creates, spex:cleanup-<spec_node_id> on cleanup creates); the adapter treats the label as opaque and does not parse it. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
+      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing open bead carrying the op's idempotency.label (spex:<spec_node_id> on ordinary creates, spex:cleanup-<spec_node_id> on cleanup creates, spex:<proposal-slug> on epic creates); the adapter treats the label as opaque and does not parse it. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
     },
     {
       "id": "7bad082a34b6",
@@ -49,7 +49,7 @@
       "preq_id": "92dfddf840b0",
       "type": "functional",
       "title": "Integration test against real br",
-      "description": "A shell-based integration test (scripts/apply-br_test.sh) exercises the full adapter against a real br sandbox. It validates: changeset parsing, all three ref shapes resolving correctly, idempotency on re-run, receipt output matches the v1 schema, and partial-receipt handling when a synthetic failure is injected mid-run. The test is gated on br being present on PATH and is excluded from the Go test suite."
+      "description": "A shell-based integration test (scripts/apply-br_test.sh) exercises the full adapter against a real br sandbox. It validates: changeset parsing, both ref shapes resolving correctly, idempotency on re-run, receipt output matches the v1 receipts schema, and partial-receipt handling when a synthetic failure is injected mid-run. The test is gated on br being present on PATH and is excluded from the Go test suite."
     },
     {
       "id": "7c2fea6b1963",

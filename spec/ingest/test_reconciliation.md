@@ -4,84 +4,106 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 ## Setup
 
-- In-code Go fixtures, no on-disk testdata: `newFakeSpecGraph`, `newTestStore` and `idem` in `ingest/reconciler_test.go` build each changeset/receipts pair.
-- Tests load an initial `.bead-map.json`, run reconciliation, assert the resulting file matches expected.
+- In-code Go fixtures, no on-disk testdata: helpers in `ingest/reconciler_test.go` build each
+  changeset/receipts pair and seed a temporary journal.
+- Tests write an initial `spec/.history.jsonl`, run reconciliation, and assert the appended lines
+  match expected — by parsing, never by byte comparison, since field order inside a line is the
+  encoder's business.
 
 ## Scenarios
 
-### Ok create → record inserted
+### Ok create → event and receipt appended
 
-- Changeset: one create op, spec_node_id `abc123def456`, idempotency label `spex:42`.
+- Changeset: one create op, spec_node_id `abc123def456`, idempotency label `spex:abc123def456`,
+  git_head `cafe1234`.
 - Receipts: corresponding op receipt with `status: "ok"`, `bead_id: "br-new"`, `was_existing: false`.
-- Expected: `.bead-map.json` gains record `{id: 42, spec_node_id: "abc123def456", bead_id: "br-new", ...}`.
+- Expected: the journal gains an `added` change event for node `abc123def456` (eid derived from
+  `(cafe1234, <op_id>)`) and a `task_created` receipt with `for` naming that eid and
+  `task_id: "br-new"`.
 
-### Ok close on removed → record deleted
+### Ok close on removed → removed event and task_closed appended
 
-- Initial map has record for spec_node `xyz` → bead `br-old`.
+- Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0001`.
 - Changeset: one close op targeting bead `br-old`, `reason` starting with "Spec node removed".
 - Receipts: op receipt `status: "ok"`.
-- Expected: record for `xyz` is gone.
+- Expected: a `removed` change event for `beadbead0001` carrying its name, node_type and module — the
+  biography that outlives the node — plus a `task_closed` receipt for `br-old`. The earlier
+  pairing lines remain untouched: nothing is ever deleted.
 
-### Modified node: close+create → record updated
+### Modified node: close+create → lineage extended, not rebound
 
-- Initial map has record `{id: 10, spec_node_id: "mod1", bead_id: "br-old"}`.
-- Changeset: close op for `br-old`, then create op for `mod1` with label `spex:10` (reused — same record-id).
+- Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0002`.
+- Changeset: close op for `br-old`, then create op for `beadbead0002` with label `spex:beadbead0002`.
 - Receipts: both ok; create's `bead_id: "br-new"`, `was_existing: false`.
-- Expected: record with id 10 points to `br-new`, spec_node_id unchanged.
+- Expected: a `modified` change event for `beadbead0002`, a `task_closed` for `br-old`, a `task_created`
+  for `br-new`. The fold now answers `beadbead0002 → br-new`; the `br-old` pairing remains as lineage.
 
 ### Was_existing=true → idempotent no-op
 
-- Changeset: create op for spec_node `A`, label `spex:7`.
-- Initial map has record `{id: 7, spec_node_id: "A", bead_id: "br-7"}`.
+- Initial journal already holds the change event and `task_created` for node `A`, task `br-7`.
+- Changeset: the same create op re-emitted (same git_head, same op_id).
 - Receipts: create op `status: "ok"`, `bead_id: "br-7"`, `was_existing: true`.
-- Expected: record unchanged (same bead_id, same spec_hash, etc.). No error.
+- Expected: nothing appended — the derived eid already exists, and the receipt pairs with it.
+  No error.
 
-### Error status → op skipped, no mapping change
+### Error status → op skipped, nothing appended
 
 - Changeset: one create op.
 - Receipts: that op with `status: "error"`, `bead_id: ""`.
-- Expected: no record inserted; no error from reconciler (the adapter's failure is the user's problem, ingest records truth).
+- Expected: no event, no receipt; no error from the reconciler (the adapter's failure is the
+  user's problem, ingest records truth — and the truth is that nothing happened).
 
 ### Skipped status → op no-op
 
 - Changeset: create op.
-- Receipts: op with `status: "skipped"` (adapter chose not to run it; typical for a label-add op in an edge case).
-- Expected: no mapping change.
+- Receipts: op with `status: "skipped"`.
+- Expected: nothing appended.
 
-### Mixed ops: careful ordering
+### Mixed ops: one batch, ordered append
 
-- Changeset: [close br-A (modified lineage), create for spec_node X with label `spex:5` replacing A, close br-B (removed), create for new spec_node Y].
+- Changeset: [close br-A (modified lineage), create for node X replacing A, close br-B (removed),
+  create for new node Y].
 - Receipts: all ok.
-- Expected final map: record for X has bead_id from the new-create receipt; no record for B's spec_node; new record for Y.
+- Expected: the journal gains, in op order, the modified event for X with its two receipts, the
+  removed event for B's node with its task_closed, and the added event for Y with its
+  task_created. The fold answers X → new task, no live entry for B's node, Y → its task.
 
-### Proposal-epic create → record materialised without spec-graph lookup
+### Proposal-epic create → receipt keyed by slug, no spec-graph lookup
 
-- Changeset: one create op with `spec_node_kind: "proposal_epic"`, `spec_node_id: "2026-04-29-decouple-contract-gaps"` (the proposal stem), `idempotency.label: "spex:77"`, `title: "Proposal: 2026-04-29-decouple-contract-gaps"`.
+- Changeset: one create op with `spec_node_kind: "proposal_epic"`,
+  `spec_node_id: "2026-04-29-decouple-contract-gaps"` (the proposal stem),
+  `idempotency.label: "spex:2026-04-29-decouple-contract-gaps"`.
 - Receipts: `status: "ok"`, `bead_id: "br-epic"`, `was_existing: false`.
 - Spec graph: empty (the proposal stem is NOT a spec-graph node by design).
-- Expected: record `{id: 77, spec_node_id: "2026-04-29-decouple-contract-gaps", bead_id: "br-epic", bead_type: "epic", node_type: "proposal", component: "2026-04-29-decouple-contract-gaps", module: "", content_file: "", spec_hash: ""}`. The reconciler MUST NOT call `SpecGraph.NodeMetadata` for this op — that lookup would fail because the proposal stem is not in the identity-hash keyspace; the bug it prevents is the "spec graph: no node <stem>" error that aborts ingest with exit 2.
+- Expected: a `task_created` receipt carrying `proposal: "2026-04-29-decouple-contract-gaps"` and
+  no `for` — no change event is invented for it. The reconciler MUST NOT resolve the stem against
+  the spec graph; that lookup would fail because the stem is not in the identity-hash keyspace.
 
-### Cleanup create → no mapping record
+### Cleanup create → receipt pairs with the prior removed event
 
-- Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"` (the identity hash of the now-removed spec node), `idempotency.label: "spex:cleanup-abc123def456"`, `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
+- Initial journal: a `removed` event for node `abc123def456` (eid `E1`).
+- Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"`,
+  `idempotency.label: "spex:cleanup-abc123def456"`.
 - Receipts: `status: "ok"`, `bead_id: "br-cleanup"`, `was_existing: false`.
-- Initial counter: 50.
-- Expected: `.bead-map.json` UNCHANGED — no record materialised for the cleanup bead. The counter stays at 50 (the cleanup label uses the spec-node-id form, not the cursor; no allocation happened). `RecordsAdded` in the summary is 0; `OkCreates` is 1 (the op was processed successfully — it just didn't produce a record by design). Invariant 1 ("every ok create has a record") MUST be amended to exempt cleanup creates and MUST NOT fire on this op.
+- Expected: a `task_created` receipt with `for: "E1"` and `task_id: "br-cleanup"` — the cleanup
+  task is born pointing at the removal it answers. No new change event.
 
-### Invariant exemptions: proposal and cleanup records vs. invariant 4 (orphans)
+### Receipt referencing nothing → refused before append
 
-- Initial map: `{id: 60, spec_node_id: "2026-04-18-decouple-spex-from-br", node_type: "proposal", ...}` (a pre-existing proposal-epic record; its spec_node_id is a proposal stem, NOT in `SpecGraph`).
-- Changeset: any benign change (e.g., a no-op).
-- Expected: `Reconciler.Apply` does NOT report invariant 4 (orphan) for this record. The check short-circuits on `record.NodeType == "proposal"` because proposal stems will never resolve through `SpecGraph.HasNode`. Without this exemption every run would falsely flag the proposal record as orphan and abort.
-- Cleanup records (per the Cleanup-create scenario above) do NOT exist by construction, so invariant 4 trivially passes for them — the exemption is built into the fact that no record was materialised.
+- Changeset/receipts constructed so an ok create's op matches no change event and no prior removed
+  event, and carries no proposal stem.
+- Expected: structured error naming the op; the journal file is byte-identical to its pre-run
+  state — a refused batch appends nothing.
 
-## Counter Advance
+## Idempotent Append
 
-After each successful create op, the mapping store's `next_record_id` counter advances to max(existing + 1).
-
-- Initial counter 100. Three ok creates with labels `spex:100`, `spex:101`, `spex:102`. Expected counter after ingest: 103.
-- Two creates ok, one error. Counter: 102 (only committed labels count).
+Re-running `Reconciler.Apply` with the same changeset+receipts pair over the already-appended
+journal appends zero lines and reports success. Event ids derive from `(git_head, op_id)`; receipt
+pairing keys the same way. This replaces the retired counter-advance semantics — there is no
+counter, and nothing is spent by a re-run.
 
 ## Fixtures
 
-In-code Go fixtures, no on-disk testdata. `ingest/reconciler_test.go` builds each scenario's `emit.Changeset` and `adapters.Receipts` as Go values, seeds the store with `newTestStore` (`:44`), supplies spec metadata with `newFakeSpecGraph` (`:20`), and labels ops with `idem` (`:56`).
+In-code Go fixtures, no on-disk testdata. `ingest/reconciler_test.go` builds each scenario's
+`emit.Changeset` and `adapters.Receipts` as Go values, seeds the journal with a test helper, and
+supplies spec metadata with a fake spec graph.

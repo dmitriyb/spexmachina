@@ -12,7 +12,7 @@ Builds the merkle tree from the parsed spec graph. [[3ada6b800cc5|Each node's ke
 
 ## Tree Structure
 
-Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also what the mapping store uses as `spec_node_id` — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
+Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also the task journal's node key and the bead labels' payload — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
 
 Every entry in the tree is one of the following, and its key, level and hash source are fixed by which one it is:
 
@@ -90,7 +90,7 @@ hash from a deterministic serialization of their JSON fields.
 
 ## Why this keying scheme
 
-Earlier versions used path-style keys like `module/3/component/2` built from integer module and node IDs. Two problems followed: (1) integer collisions on parallel branches forced manual coordination, and (2) the mapping store used a different format (`<module-name>/<node_type>/<id>`), so the impact command had to translate between the two via `buildMerkleIndex` and `deriveSpecNodeID`. Both translations are deleted now: the merkle tree and the bead-map use the same identity hashes as keys, so impact looks up changed merkle nodes directly in the mapping store with no rewriting.
+Earlier versions used path-style keys like `module/3/component/2` built from integer module and node IDs. Two problems followed: (1) integer collisions on parallel branches forced manual coordination, and (2) the mapping store used a different format (`<module-name>/<node_type>/<id>`), so the impact command had to translate between the two via `buildMerkleIndex` and `deriveSpecNodeID`. Both translations are deleted now: the merkle tree and the task journal use the same identity hashes as keys, so impact looks up changed merkle nodes directly in the journal fold with no rewriting.
 
 ## Requirement Leaf Hashing
 
@@ -120,7 +120,8 @@ reach past the merkle pipeline:
 - `spex ingest` SnapshotSaver — builds the current tree to write out the
   fresh snapshot.
 - `spex ingest --mode refresh` — RefreshHandler builds its own tree for the
-  structural gate and for the content hashes it writes into the bead-map.
+  structural gate and for the content hashes it writes into the journal's
+  change events.
 - `spex validate` — the link check builds a tree to collect the leaf keys an
   inline spec link has to resolve against, which is why a module node is not a
   link target and a component with no content file is not one either.

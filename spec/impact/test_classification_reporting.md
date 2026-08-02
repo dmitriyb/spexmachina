@@ -4,7 +4,7 @@ Integration and acceptance tests for ActionClassifier (component 3) and ReportGe
 
 ## Setup
 
-All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched record repeats that hash in `SpecNodeID` — the join NodeMatcher already made. The fixture data represents a typical diff cycle:
+All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched pairing repeats that hash as its node key — the join NodeMatcher already made. The fixture data represents a typical diff cycle:
 
 **Matched entries (modified spec nodes with existing beads):**
 
@@ -33,7 +33,7 @@ matches := []Match{
 }
 ```
 
-**Unmatched entries (new spec nodes without records):**
+**Unmatched entries (new spec nodes without pairings):**
 
 ```go
 unmatched := []Unmatched{
@@ -47,7 +47,7 @@ unmatched := []Unmatched{
 }
 ```
 
-**Orphaned entries (records whose spec node was removed):**
+**Orphaned entries (pairings whose spec node was removed):**
 
 ```go
 orphaned := []Orphaned{
@@ -58,7 +58,7 @@ orphaned := []Orphaned{
 }
 ```
 
-An orphan carries `NodeType` alongside the record, preserved from the removed change, because an identity hash does not embed the node type and ActionClassifier needs it downstream.
+An orphan carries `NodeType` alongside the pairing, preserved from the removed change, because an identity hash does not embed the node type and ActionClassifier needs it downstream.
 
 ## Scenarios
 
@@ -156,7 +156,7 @@ matches := []Match{
 }
 ```
 
-Both records name the same spec node — the shape NodeMatcher produces when two beads were mapped to one node. Assert four actions are generated: two obsolete actions (one for each old bead) and two create actions (new beads to replace them). Each old bead is independently obsoleted.
+Both pairings name the same spec node — the shape NodeMatcher produces when a node's lineage carries two beads. Assert four actions are generated: two obsolete actions (one for each old bead) and two create actions (new beads to replace them). Each old bead is independently obsoleted.
 
 ### S5b: ActionClassifier handles removed node with closed bead (cleanup)
 
@@ -269,7 +269,7 @@ Write the report output to a buffer, then unmarshal it back into an `ImpactRepor
 
 ## Dependency Collection Scenarios
 
-These scenarios test the spec-graph dependency collection that runs alongside action classification. For each create action with `node_type=component`, ActionClassifier walks the spec graph and records identity hashes of spec nodes the new bead will depend on in `DepSpecNodeIDs`. No mapping-store lookup and no bead-status filtering happens here — emit's Resolver classifies each identity hash into a `ref:op` / `ref:bead` / `ref:spec_node` at emit time. This defers bead-ID resolution to the point where the current batch's op IDs are known, fixing the broken-dep-graph bug where an obsoleted-in-the-same-batch bead was picked up as a dependency.
+These scenarios test the spec-graph dependency collection that runs alongside action classification. For each create action with `node_type=component`, ActionClassifier walks the spec graph and records identity hashes of spec nodes the new bead will depend on in `DepSpecNodeIDs`. No journal lookup and no bead-status filtering happens here — emit's Resolver classifies each identity hash into a `ref:op` or `ref:bead` at emit time. This defers bead-ID resolution to the point where the current batch's op IDs are known, fixing the broken-dep-graph bug where an obsoleted-in-the-same-batch bead was picked up as a dependency.
 
 ### D1: Component `uses` edge collects the sibling's identity hash
 
@@ -281,7 +281,7 @@ Then X's `DepSpecNodeIDs` contains `id_Y`. A self-reference (X's own identity ha
 
 ### D2: Bead status is irrelevant to collection
 
-Given a create action for component X whose `uses: [Y]`, and the mapping records for Y show a closed bead.
+Given a create action for component X whose `uses: [Y]`, and the journal fold shows Y's task closed.
 
 When `ClassifyActions` runs:
 
@@ -349,7 +349,7 @@ Given data_flow F exists in the spec graph with `uses: [X]`, but F is not in the
 
 When `ClassifyActions` runs:
 
-Then X's `DepSpecNodeIDs` does NOT contain `id_F`. Pre-existing data_flow dependencies are emit's concern — it resolves them to `ref:bead` or `ref:spec_node` from the mapping store. Only same-batch flows need the add-on.
+Then X's `DepSpecNodeIDs` does NOT contain `id_F`. Pre-existing data_flow dependencies are emit's concern — it resolves them to `ref:bead` from the journal fold. Only same-batch flows need the add-on.
 
 ### D11: Non-component creates do not walk `uses` / `requires_module`
 

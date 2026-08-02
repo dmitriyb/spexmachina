@@ -1,127 +1,124 @@
 # MappingStore
 
-Owns the `.bead-map.json` file — the single source of truth for spec-to-bead correlation. Owning it
-is the whole of [[934d627f0e90|storing mapping records]]: one record for each spec node that has
-reached the tracker, pinning that node's identity hash to a bead id and to the metadata a later
-reader needs to find the node again.
+Read access to the task journal — `spec/.history.jsonl`, the append-only event log that is the
+single source of truth for spec-to-task correlation. Parsing, scanning and folding it is the whole
+of [[934d627f0e90|storing mapping records]]: the journal remembers every structural event a
+baselining absorbed and every task the tracker minted for one, and the store turns that log into
+answers.
 
 ## Responsibilities
 
-- CRUD operations on mapping records
-- Ensure uniqueness — one bead to one record, and one spec node to one record. A create naming an
-  already-mapped `spec_node_id` is refused; records whose `node_type` is `proposal` are the
-  exception
-- Provide lookup by record ID, bead ID, or spec node ID — by record id for a caller holding a
-  `spex:<id>` label, by bead id for the modify-pair path recovering the record behind an obsoleted
-  bead, and by spec node id for emit, resolving a dependency on a spec node to the open bead already
-  tracking it
-- [[4aee62bd3c15|Check the file against the bead-map schema]] on the way in, before any record is
-  handed back or written
-- Atomic file writes to prevent corruption
+- Parse the journal into typed events, in file order — change events (`added`, `removed`,
+  `modified`) and receipt events (`task_created`, `task_closed`, `refresh`)
+- Compute the fold: the latest task-bearing event per node, which is the current node-to-task
+  linkage every consumer derives on demand — there is no materialized map file to maintain or
+  drift
+- Provide lookup by identity hash or by task id — the two keys are interchangeable ways to reach
+  one node, distinguished by shape (12-hex is a node, anything else is a task)
+- Answer for removed nodes: a node's biography survives its removal, so name, node type, module,
+  the removing proposal and the bracketing `git_head` refs stay resolvable forever
+- [[4aee62bd3c15|Check each line against the journal-line schema]] on the way in, naming the line
+  number on violation
 
-The schema check is neither advisory nor deferred: a `.bead-map.json` that fails it is refused with
-an error naming the file, and whichever operation triggered the read never runs. The same check runs
-against a whole-store replacement before it is written.
+The store never writes. `ingest` is the journal's only writer — it appends at baselining with the
+same atomic write-and-rename the snapshot uses — and the one-shot backfill that seeded the journal
+from the retired bead-map's git history ran once and is history itself. Append-only describes the
+format's semantics, not an I/O contract.
 
-Every write goes to a temporary file in the same directory and is renamed into place, so a crash
-part-way through leaves the previous file intact rather than a truncated one. Callers sharing one
-opened store serialise their read-modify-write cycles against each other. The lock belongs to the
-opened store, not to the file or to the process: a second store opened on the same path is on the
-same footing as a second process, where the rename is the whole of the guarantee and the worst case
-is one caller's write being lost rather than a corrupt file.
+The schema check has two audiences with different stakes. The map query surface fails loudly: a
+malformed line is an error naming the file and line, and the query never runs. Gating callers — the
+diff removal sweep — treat the same condition as journal-absent and degrade detection instead of
+failing, because the journal is never load-bearing for the pipeline: it can weaken a sweep to
+`unverifiable` notes, it cannot block a gate or fake a pass.
 
-## Record Format
+## Event Format
 
-The file is one JSON object: a `next_id` counter and a `records` array, written sorted by record id.
-
-Each mapping record contains:
+One JSON object per line. Change events record what a baselining absorbed:
 
 ```json
-{
-  "id": 42,
-  "spec_node_id": "a1b2c3d4e5f6",
-  "bead_id": "abc-123",
-  "bead_type": "feature",
-  "module": "impact",
-  "component": "ActionClassifier",
-  "content_file": "spec/impact/arch_action_classifier.md",
-  "spec_hash": "e3b0c44..."
-}
+{"event": "removed", "eid": "9f2c41a0b7d3", "node": "a1b2c3d4e5f6", "name": "ActionClassifier",
+ "node_type": "component", "module": "impact", "before": "e3b0c44298fc", "after": null,
+ "path": "impact/arch_action_classifier.md", "git_head": "cafe1234", "proposal": "2026-08-02-merge-impact-emit"}
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | int | Auto-incrementing record ID, unique within the mapping file. Used as the bead label `spex:<id>`. Stays integer because it is internal to the bead-map and never referenced from the spec graph. |
-| `spec_node_id` | string | Identity hash of the spec node — 12-char lowercase hex, identical to the merkle tree key for the same node. On a record whose `node_type` is `proposal` it holds the proposal reference instead; the bead-map schema requires only a non-empty string here. |
-| `bead_id` | string | Bead ID from `br` or `bd` |
-| `bead_type` | string | Bead issue type (`epic`, `feature`, or `task`) — determined by spec node type. Carried as a separate field because identity hashes do not embed type information. |
-| `node_type` | string | The kind of spec node the record points at: `component`, `data_flow`, `test_section`, or `proposal`. Optional — it is present on records that need to distinguish a proposal epic from a spec-graph node, and the bead-map schema constrains it to that closed set. |
-| `module` | string | Module name (human-readable, for context-resolver output and debug) |
-| `component` | string | Component or section name (human-readable) |
-| `content_file` | string | Path to the spec content markdown file |
-| `spec_hash` | string | Merkle content hash of the spec node at time of mapping |
+Receipt events record what the tracker did:
 
-`spec_node_id` is the bead-map's primary key into the spec graph. It is identical, byte for byte, to the merkle tree key for the same node, so the impact command can look up changed merkle nodes in the bead-map with no translation step.
+```json
+{"event": "task_created", "for": "9f2c41a0b7d3", "task_id": "spexmachina-abc"}
+{"event": "task_created", "proposal": "2026-04-18-decouple-spex-from-br", "task_id": "spexmachina-0lk"}
+{"event": "refresh", "git_head": "cafe1234", "absorbed": ["9f2c41a0b7d3"]}
+```
 
-A record points at a whole node, never at a part of one. The values `node_type` may take are exactly the kinds of node that can own a bead: a section of a component's contract is content belonging to that component's leaf and reaches the tracker inside the component's bead, so it never acquires a record, an identity in this file, or a `spex:<id>` label of its own. That is what makes the mapping store indifferent to how a component's contract is laid out across files — the store keys on the component, and a change to which files carry that contract is a content change to the component's leaf, not a change to the set of records.
+| Field | On | Description |
+|-------|----|-------------|
+| `event` | all | `added`, `removed`, `modified`, `task_created`, `task_closed`, `refresh` |
+| `eid` | change | Event id — deterministic so ingest re-runs append nothing new. Op-born events derive it from `(git_head, op_id)`; refresh-born events, which have no op, derive it from `(node, before, after)` |
+| `node` | change | Identity hash of the spec node — byte-identical to the merkle tree key, so every pipeline stage joins on it with no translation |
+| `name`, `node_type`, `module` | change | The node's declared identity at event time — the journal is the only record of these once the node is removed |
+| `before`, `after` | change | Leaf hashes bracketing the change; `null` marks absence (an add has no before, a removal no after) |
+| `git_head` | change, refresh | The commit the changeset carried; refresh records its own when given `--git-head` and its absence otherwise |
+| `path` | change, optional | The node's content-leaf path relative to the spec directory, present when the node has one — what makes `git show <head>:<path>` runnable for a removed node. Requirement and api events carry none |
+| `proposal` | change, epic receipts | The proposal that drove the change; on a `task_created` with no `for`, the slug identifies a proposal-epic task |
+| `for` | receipts | The `eid` of the change event this receipt answers. A modify pair's `task_closed` and `task_created` both reference the pair's `modified` event; a removal's `task_closed` references the `removed` event |
+| `task_id` | receipts | The tracker's id, applied by the adapter, reported in receipts |
 
-An update in place touches `bead_id` and `spec_hash` and nothing else. That is the modify-pair
-rebind: the record id survives and the bead behind it changes. Every remaining field is settled when
-the record is created, and an update that would leave two records naming the same bead is refused,
-exactly as a create naming an already-mapped bead is.
+A pointer discipline holds throughout: the journal stores identity, names, hashes and commit refs —
+never leaf content. Showing a change is `git diff <before-head> <after-head> -- <leaf>`, derived
+from the refs, so the journal cannot drift from the bytes git already owns.
 
 ## Interface
 
-Every request the store answers is a request about records — never about beads, and never about the
-tracker, which it does not contact. A caller can
+Every request the store answers is a request about events and folds — never about the tracker,
+which it does not contact. A caller can
 
-- add a record, and is told the id it was given;
-- fetch the one record with a given record id, the one with a given bead id, or every record sharing
-  a spec node id;
-- fetch the proposal-epic record for a proposal reference — the highest-id one whose `bead_status`
-  is not `closed` — which is how emit recognises a re-run whose epic bead already exists. That
-  exclusion has nothing to act on in a file as things stand: no command writes `bead_status`, the
-  committed `.bead-map.json` carries it on no record, and a re-run therefore finds the latest epic
-  whatever the tracker says about it;
-- update a record, delete a record, or ask for all of them in id order;
-- read the record id the next addition would take, **without** spending it, which is how emit
-  reserves `spex:<id>` labels while remaining a pure function of its inputs;
-- replace the whole store — every record and the counter together — in one write, which is how
-  ingest commits a reconciled working copy once its invariants hold.
+- parse the journal and receive every event in file order;
+- ask for the fold and receive one entry per task-bearing node — hash, current task id, and the
+  sourcing event;
+- resolve one key, hash or task id, to its fold entry — including removed nodes, whose entries
+  carry the biography instead of a live task;
+- ask for a node's full event history, oldest first, which is how lineage questions ("which tasks
+  has this node had?") are answered without any stored back-pointers.
 
-Two of those reads are exposed on the command line unchanged: [[38ddf587012f|`spex map get`]] hands
-back one record and [[394ec2c8d669|`spex map list`]] hands back all of them, each as JSON and each
-verbatim. Nothing writes through that surface.
+Two of those reads are exposed on the command line unchanged in name: [[38ddf587012f|`spex map get`]]
+hands back one fold entry and [[394ec2c8d669|`spex map list`]] hands back the whole fold, each as
+JSON. Nothing writes through that surface.
 
 ## File Location
 
-The mapping file is `.bead-map.json` in the repository root, not inside the spec directory. Every command that touches it — `diff`, `impact`, `emit`, `ingest` via `--map`, and `map get/list/context` via `--map-file` — defaults to that bare relative path, and `scripts/apply-br.sh` reads the same default through `SPEX_MAPPING_FILE`. How a relative path resolves splits by command: `diff` and `map get/list/context` take it verbatim, against the working directory, while `impact`, `emit` and `ingest` resolve it against the spec directory's parent. The name is never derived from `--spec-dir`: no command appends `.bead-map.json` to the spec directory itself.
-
-That separation is deliberate. `spec/.snapshot.json` belongs to the spec tree; `.bead-map.json` does not. The file is committed to git but is NOT hashed into the merkle tree — it is metadata about the relationship between spec and beads, not spec content, and keeping it outside `--spec-dir` means pointing spex at a different spec directory does not silently point it at a different mapping store.
+The journal is `spec/.history.jsonl`, beside `spec/.snapshot.json` — spec history belongs to the
+spec tree, so pointing spex at a different `--spec-dir` points it at that spec's own history. Like
+the snapshot it is committed to git and is NOT hashed into the merkle tree — the tree hashes only
+the content files module.json declares — so appends move no hash and trigger no diff. The removal
+sweep's corpus scan skips dot-prefixed files, which is load-bearing: the journal's own `removed`
+events carry exactly the names the sweep hunts, and must never count as survivors. The retired `--map`/`--map-file`
+flags are gone with the file they pointed at; the journal's location is a function of `--spec-dir`
+alone.
 
 ## Design Rationale
 
-### Why a separate file?
+### Why an event log instead of a record file?
 
-Embedding mapping data in module.json would make spec content depend on bead state, breaking the separation of concerns. The mapping file is maintained by `spex ingest`, which reconciles it from a changeset and the adapter's receipts — never by spec authoring, and never by the tracker directly. Emit only reads the store (record lookup and the `next_id` counter); ingest is the sole writer.
+The retired `.bead-map.json` stored one record per node — current state only, nine denormalized
+fields, an integer counter minting `spex:<int>` labels. Three failures were structural: a task for
+a *removed* node had no record by design, so cleanup labels resolved to nothing; several tasks
+sharing one node across its modify lineage collided on one record; and the validator's removal
+sweep depended on a tracker-side artifact for retired names. An event log answers all three because
+a task pairs with the *change* that spawned it, not with the node's current state — and beads
+already work this way (`issues.jsonl` is append-only; current state is a projection). The fold is
+that projection.
 
-### Why not bead labels?
+### Why no integer ids?
 
-Bead labels are limited in capacity and format. Complex metadata in labels couples spex to the bead CLI's label format. The mapping file gives spex full control over the data structure.
+The label is `spex:<spec_node_id>` — the changeset op already carries the node's identity hash, so
+idempotency needs no counter, no reservation read, and no coordination. Event ids exist only for
+ingest re-run idempotency and derive from the op (`git_head`, `op_id`) or, for refresh-born
+events, from the drift itself (`node`, `before`, `after`); nothing outside the journal ever
+references them. Legacy `spex:<int>` labels on closed tasks are inert history: the backfill seeded
+the journal with every int-to-node pairing that ever existed, so nothing old became unresolvable.
 
-### Why auto-incrementing record IDs?
+### Why is the store read-only?
 
-The record `id` field is what gets stored in the bead label (`spex:42`). Integer record IDs are compact, predictable, and easy to type, and they are assigned by MappingStore so the caller never has to coordinate. This is distinct from the spec graph's identity hashes: the record `id` is internal to the bead-map and is not referenced from any spec node, so it does not need to be content-addressable. The `spec_node_id` field on the same record holds the identity hash, which is the actual link into the spec graph.
-
-The counter is stored rather than recomputed from the highest id present. Deleting record 5 while the
-counter reads 6 still hands out 6 next, so an id is never reused — which matters because ids leave
-this file. A `spex:5` label survives on a closed bead, and reissuing 5 would silently point that
-label at an unrelated spec node.
-
-### Why a flat, sorted array?
-
-Records sit in one flat array rather than nested per module. Flat means no field is privileged as a
-lookup key: the same scan answers a query by record id, bead id or spec node id, and the file's
-shape does not have to move when the spec graph's does. Sorting by record id means git sees what
-actually happened — an append when a record is added, one changed entry when a record is rebound —
-instead of a reshuffle on every write.
+One writer means append atomicity is the writer's problem exactly once. `ingest` already owns
+baselining — snapshot write, receipt processing — so it owns the journal append in the same
+transaction-shaped step, and every other consumer reads a file that is either the pre-baselining
+or the post-baselining state, never a torn intermediate.

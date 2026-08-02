@@ -42,7 +42,7 @@ The second reason is that the name would be unremovable. The removal-time name c
 |------|-----------|------|---------|-------------|
 | `--spec-dir` | `-s` | string | `spec/` | Path to the spec directory |
 
-Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word.
+Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word. Since the per-child `--map`/`--map-file` flags were retired with the bead-map, `--spec-dir` is the single locator for every piece of pipeline state — the spec tree, `spec/.snapshot.json`, and the task journal `spec/.history.jsonl` all resolve from it and from nothing else.
 
 ## Dependency Boundary
 

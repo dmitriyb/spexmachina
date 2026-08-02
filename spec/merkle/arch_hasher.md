@@ -65,11 +65,11 @@ only the snapshot pipeline:
 
 - `spex diff` — builds the current tree to compare against the loaded snapshot.
 - `spex ingest` SnapshotSaver — rebuilds the tree from the current spec to
-  persist a fresh snapshot atomically with the bead-map writes, on complete
+  persist a fresh snapshot alongside the journal appends, on complete
   receipts.
 - `spex ingest --mode refresh` — RefreshHandler builds its own tree, both to
   gate the run against the previous snapshot and to read off it the content
-  hashes it writes into the bead-map.
+  hashes it writes into the journal's change events.
 - `spex validate` — the link check builds a tree to collect the leaf keys an
   inline spec link has to resolve against.
 - `spex impact` — the spec graph it loads carries a tree built the same way.
@@ -77,6 +77,6 @@ only the snapshot pipeline:
 There is no standalone `spex hash` command. A separate CLI step that built
 and persisted the tree on demand would either write a snapshot matching
 current content (stalling the next `spex diff`) or desync the snapshot from
-`.bead-map.json` (breaking the snapshot+bead-map atomicity invariant). Both
+the journal (breaking the snapshot+journal atomicity invariant). Both
 fail modes are avoided by keeping snapshot reads inside `spex diff` and
 `spex ingest --mode refresh`, and every snapshot write inside `spex ingest`.

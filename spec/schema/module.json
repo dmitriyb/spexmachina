@@ -28,7 +28,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "non_functional",
       "title": "Identity hash ID constraints",
-      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/\u003ctitle\u003e'; modules use 'module/\u003cname\u003e'; module requirements use '\u003cmodule\u003e/requirement/\u003ctitle\u003e'; components use '\u003cmodule\u003e/component/\u003cname\u003e'; data_flows use '\u003cmodule\u003e/data_flow/\u003cname\u003e'; test_sections use '\u003cmodule\u003e/test_section/\u003cname\u003e'; apis use '\u003cmodule\u003e/api/\u003cname\u003e'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
+      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/<title>'; modules use 'module/<name>'; module requirements use '<module>/requirement/<title>'; components use '<module>/component/<name>'; data_flows use '<module>/data_flow/<name>'; test_sections use '<module>/test_section/<name>'; apis use '<module>/api/<name>'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
     },
     {
       "id": "80debf6eb776",
@@ -42,7 +42,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Define bead-map schema",
-      "description": "JSON Schema for .bead-map.json covering the envelope (next_id, records array) and record fields (id, spec_node_id, bead_id, bead_type, module, component, content_file, spec_hash, optional node_type drawn from a closed enum of proposal/component/data_flow/test_section, optional bead_status). The spec_node_id field is constrained to a non-empty string with no pattern: on a record pointing at a component, data_flow or test_section it carries that node's identity hash, which is the key the merkle tree files that node's leaf under, so the two sides need no translation, while a proposal epic record carries the proposal reference there instead. The internal record `id` remains an integer, since it is used only for the spex:\u003cid\u003e bead label and is never referenced from the spec graph."
+      "description": "JSON Schema for the task journal's line format (spec/.history.jsonl): change events (event drawn from added/removed/modified, eid, node, name, node_type, module, before/after leaf hashes admitting null, git_head, proposal) and receipt events (task_created/task_closed with task_id and either a for referencing an eid or a proposal slug for epics; refresh with git_head and an absorbed list of eids). The node field is constrained to the 12-hex identity hash pattern — the same key the merkle tree files that node's leaf under, so the two sides need no translation — while an epic receipt's proposal field carries the slug-shaped reference instead. Each line validates independently; there is no envelope, no counter, and no integer id anywhere in the format."
     },
     {
       "id": "581178718888",
@@ -93,7 +93,7 @@
     {
       "id": "ee88263d6555",
       "name": "SchemaLoader",
-      "description": "Go package that embeds JSON Schema files and exposes them for programmatic use by the validator and other modules. Also exposes the IdentityHash utility function used to compute deterministic 12-character hex node IDs from identity strings.",
+      "description": "Go package that embeds JSON Schema files — project, module, and the journal-line schema — and exposes them for programmatic use by the validator and other modules. Also exposes the IdentityHash utility function used to compute deterministic 12-character hex node IDs from identity strings.",
       "content": "arch_schema_loader.md",
       "implements": [
         "b7c3bccd7c64",
@@ -108,7 +108,7 @@
     {
       "id": "d125b5e775b4",
       "name": "BeadMapSchema",
-      "description": "The .bead-map.json JSON Schema definition. Defines the structure for the mapping envelope (next_id, records) and individual mapping records including bead_type field.",
+      "description": "The journal-line JSON Schema definition for spec/.history.jsonl. Defines the change-event and receipt-event shapes the task journal admits, one self-contained object per line.",
       "content": "arch_bead_map_schema.md",
       "implements": [
         "f7ef8bef0ba1"

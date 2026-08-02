@@ -31,9 +31,9 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 
 ### Mixed refs in one op's deps
 
-- op has deps: `[{ref:op,op_id:op-0003}, {ref:bead,bead_id:br-77}, {ref:spec_node,spec_node_id:abcdef123456}]`.
-- Simulated: op-0003 → br-200; spec_node abcdef123456 resolves via mapping store to br-88.
-- Expected: `br create ... --deps blocked-by:br-200 --deps blocked-by:br-77 --deps blocked-by:br-88`.
+- op has deps: `[{ref:op,op_id:op-0003}, {ref:bead,bead_id:br-77}]` — the two shapes v2 admits.
+- Simulated: op-0003 → br-200.
+- Expected: `br create ... --deps blocked-by:br-200 --deps blocked-by:br-77`.
 
 ### Ref to errored op degrades gracefully
 
@@ -52,7 +52,7 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 ## Helpers
 
 - Mock br: `scripts/testdata/mock_br.sh` — echoes a canned response, records invocations to a log file for inspection.
-- Fixture cases: `scripts/testdata/substitution/<case>/` — each holding `changeset.json`, `state_before.json` and `expected_receipts.json`, plus `expected_log.txt` where the case pins the br invocation sequence (all but `errored_dep`) and `mapping.json` where it resolves a `ref:spec_node` (`mixed_refs` only). `scripts/apply-br_test.sh:149` compares the log only when the file is present.
+- Fixture cases: `scripts/testdata/substitution/<case>/` — each holding `changeset.json`, `state_before.json` and `expected_receipts.json`, plus `expected_log.txt` where the case pins the br invocation sequence (all but `errored_dep`). `scripts/apply-br_test.sh` compares the log only when the file is present.
 
 ## Fixtures
 

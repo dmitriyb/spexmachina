@@ -6,17 +6,15 @@ Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (c
 
 All scenarios share a common fixture layout. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 
-- A bead-map document linking identity hashes to bead IDs. The mapping store schema-validates the file before parsing it, so the fixture is an object with `next_id` and `records`, and each record carries `bead_type`, `content_file` and `spec_hash` alongside the four fields the scenarios read. A bare array of records is refused with `map: schema validation …` and exit 1. `content_file` and `spec_hash` carry placeholders here, as the identity hashes do:
+- A journal fixture pairing identity hashes with task IDs. The store validates each line against the journal-line schema on read; a malformed line is refused naming its number. The fixture seeds one `added` change event plus one `task_created` receipt per node:
 
 ```json
-{
-  "next_id": 4,
-  "records": [
-    {"id": 1, "spec_node_id": "<SCHK_HASH>", "bead_id": "spex-001", "bead_type": "task", "module": "validator", "component": "SchemaChecker",    "content_file": "<SCHK_FILE>", "spec_hash": "<SCHK_SPEC_SHA>"},
-    {"id": 2, "spec_node_id": "<HASR_HASH>", "bead_id": "spex-002", "bead_type": "task", "module": "merkle",    "component": "Hasher",           "content_file": "<HASR_FILE>", "spec_hash": "<HASR_SPEC_SHA>"},
-    {"id": 3, "spec_node_id": "<HTST_HASH>", "bead_id": "spex-003", "bead_type": "task", "module": "merkle",    "component": "Hashing tests",    "content_file": "<HTST_FILE>", "spec_hash": "<HTST_SPEC_SHA>"}
-  ]
-}
+{"event":"added","eid":"<E1>","node":"<SCHK_HASH>","name":"SchemaChecker","node_type":"component","module":"validator","before":null,"after":"<SCHK_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E1>","task_id":"spex-001"}
+{"event":"added","eid":"<E2>","node":"<HASR_HASH>","name":"Hasher","node_type":"component","module":"merkle","before":null,"after":"<HASR_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E2>","task_id":"spex-002"}
+{"event":"added","eid":"<E3>","node":"<HTST_HASH>","name":"Hashing tests","node_type":"test_section","module":"merkle","before":null,"after":"<HTST_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
+{"event":"task_created","for":"<E3>","task_id":"spex-003"}
 ```
 
 Where:
@@ -39,25 +37,25 @@ The `node_type` field is now part of the change record because identity hashes d
 
 ## Scenarios
 
-### S1: BeadReader extracts mapping records correctly
+### S1: BeadReader extracts pairings correctly
 
-Call the mapping store to list records. Assert the returned records contain the expected fields (spec_node_id, bead_id, module, component) and that every `spec_node_id` matches the identity hash pattern `^[a-f0-9]{12}$`.
+Fold the journal and list the pairings. Assert each carries the expected fields (node, task_id, module, name) and that every node key matches the identity hash pattern `^[a-f0-9]{12}$`.
 
-### S2: BeadReader returns empty slice when no records exist
+### S2: BeadReader returns empty slice when no pairings exist
 
-A mapping file holding no records — a bead-map document whose `records` array is empty — and, separately, no file at the mapping path at all. Assert an empty slice rather than an error for each. A zero-byte file is a different case: it is not a bead-map document, and it is refused.
+A journal holding only change events with no receipts — and, separately, no journal file at all, and a zero-byte one. Assert an empty fold rather than an error for each of the three: absence and emptiness are first-class states for an append-only log.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 
-Call `MatchNodes(changes, records)` with the fixture data. Expected:
+Call `MatchNodes(changes, pairings)` with the fixture data. Expected:
 
 - **Matched (2 entries):** `SCHK_HASH` matches spex-001, `HTST_HASH` matches spex-003
-- **Unmatched (1 entry):** `NEW_COMP` (added, no record)
-- **Orphaned:** none in this fixture (no removed node has a matching record)
+- **Unmatched (1 entry):** `NEW_COMP` (added, no pairing)
+- **Orphaned:** none in this fixture (no removed node has a matching pairing)
 
 ### S4: NodeMatcher handles multiple beads per spec node
 
-Add a second record with `spec_node_id: SCHK_HASH`. Assert the match contains both records.
+Append a modify pair for `SCHK_HASH` (second `task_created` after a `task_closed`). Assert the match carries the node's current pairing, with the lineage reachable through the journal history.
 
 ### S5: NodeMatcher uses direct identity-hash comparison
 
@@ -76,7 +74,7 @@ Assert that structural changes produce zero matches, zero unmatched, zero orphan
 
 ### S7: Deterministic matching — identical inputs produce identical output
 
-Run `MatchNodes` twice with the same inputs (shuffling record order between runs). Assert output is identical in content and order.
+Run `MatchNodes` twice with the same inputs (shuffling pairing order between runs). Assert output is identical in content and order.
 
 ### S8: Structural changes coexist with leaf-level changes
 
@@ -92,20 +90,20 @@ Diff contains both structural and leaf-level changes:
 
 Assert that only the leaf-level change (`SCHK_HASH`) produces a match. The two structural changes are skipped. Total matches: 1.
 
-### S9: No rekeying — records and changes share one format
+### S9: No rekeying — pairings and changes share one format
 
-Confirm that no helper exists to rewrite `record.SpecNodeID` into a different shape before matching, and no helper exists to rewrite `change.Key` into a different shape before lookup. The `index[change.Key]` lookup is performed against the raw `record.SpecNodeID` strings as they appear on disk. This is a regression guard for the deleted `buildMerkleIndex` function — re-introducing it would mean the dual-format problem has crept back in.
+Confirm that no helper exists to rewrite a pairing's node key into a different shape before matching, and no helper exists to rewrite `change.Key` into a different shape before lookup. The `index[change.Key]` lookup is performed against the raw node keys as they appear in the journal. This is a regression guard for the deleted `buildMerkleIndex` function — re-introducing it would mean the dual-format problem has crept back in.
 
 ## Edge Cases
 
-### E1: Change for a node whose module has no mapping records
+### E1: Change for a node whose module has no pairings
 
-A change with an identity hash that does not appear in any record. Assert it appears as unmatched (not a panic).
+A change with an identity hash that does not appear in any pairing. Assert it appears as unmatched (not a panic).
 
 ### E2: Record for a node that has no changes
 
-A record exists for an identity hash that does not appear in the diff. Assert this record does not appear in any output list.
+A pairing exists for an identity hash that does not appear in the diff. Assert this pairing does not appear in any output list.
 
-### E3: Removed change with no matching record
+### E3: Removed change with no matching pairing
 
-A removed change for a spec node that has no mapping record. Assert no orphan is created (removed + no record = no action).
+A removed change for a spec node that has no pairing. Assert no orphan is created (removed + no pairing = no action).

@@ -2,7 +2,7 @@
 
 `changeset.json` arrives on stdin or as `$1`, `receipts.json` leaves on stdout or as `$2`, and in between [[7f2e76cecab3|the reference adapter]] runs three phases:
 
-1. **Pre-flight.** Parse the changeset as v1, confirm `br` answers `--version`, and start with an empty substitution table. A failure in this phase exits 1 and writes no receipts at all.
+1. **Pre-flight.** Parse the changeset as v2, confirm `br` answers `--version`, and start with an empty substitution table. A failure in this phase exits 1 and writes no receipts at all.
 2. **Iterate the ops, in the order the changeset lists them.** A create op asks the idempotency question before it resolves anything — `br list --json --label <op.idempotency.label>` — and a match ends the op there with a `skipped` receipt, so its `parent` and `deps` refs are never resolved at all; a create carrying an unresolvable `deps` ref therefore returns `skipped`, not `error`, when its label already matches an open bead. Only on the no-match path does it resolve those refs and call `br create`. A close op runs the two the other way round: it resolves `target` first, then reads that bead's current state with `br show` and branches on it. A `label` or `tag` op resolves `target` and calls `br update`, with no idempotency query at all. Every op ends by appending its receipt entry, and a create op additionally records the bead it reached in the substitution table, so a later op can name it by `op_id`; close and label ops never write to the table.
 3. **Emit `receipts.json`.** Determine the top-level status from the entries collected, assemble the v1 wrapper around them, and write it in one atomic step.
 

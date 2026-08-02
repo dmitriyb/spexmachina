@@ -24,15 +24,15 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Create: label mismatch surfaces as new create
 
-- Changeset label `spex:200`. Sandbox has a bead with label `spex:100` (different record-id).
-- Expected: `br create` invoked (no match on 200); new bead; receipt `was_existing=false`.
+- Changeset label `spex:<hash-A>`. Sandbox has a bead with label `spex:<hash-B>` (a different node's hash).
+- Expected: `br create` invoked; new bead; receipt `was_existing=false`.
 
 ### Create: cleanup-bead production
 
 - Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cleanup-abc123def456"`, `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
 - br sandbox empty.
 - Expected: idempotency check via `br list --json --label spex:cleanup-abc123def456` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:cleanup-abc123def456 --type task --json --priority 3 --deps blocks:spexmachina-old`, then `br update <new> --add-label spex:cleanup`. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains both `spex:cleanup` and `spex:cleanup-abc123def456`.
-- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` is what marks a bead as carrying no mapping record — the exception CLAUDE.md states for cleanup beads, and what any tracker-side query for cleanup work keys off; the unique label `spex:cleanup-<spec_node_id>` provides re-run idempotency that pre-decouple lacked. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
+- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` is what marks a bead as cleanup bookkeeping — its journal receipt pairs with the removal event it answers rather than a fresh change event, and any tracker-side query for cleanup work keys off it; the unique label `spex:cleanup-<spec_node_id>` provides re-run idempotency that pre-decouple lacked. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
 
 ### Create: cleanup-bead re-run is idempotent
 

@@ -61,7 +61,7 @@ it is the only place two whole classes of error appear:
 - **exit 1** — the tree did not build (a missing or unreadable content file, malformed JSON).
   **stdout is empty**; the reason is on stderr. Nothing else is reported until that is fixed.
 
-`spex diff` reads `.bead-map.json` (`--map`) as a second hash→name source for the removal check. It
+`spex diff` reads the task journal (`spec/.history.jsonl`) as a second hash→name source for the removal check. It
 never writes anything.
 
 ## Step 3: What the gates already cover — do not re-derive any of it
@@ -95,7 +95,7 @@ Three facts that change how the report reads:
 - `id_derivation` exempts project-level requirement ids only. 15 project requirements in
   `spec/project.json` predate the convention and do **not** reproduce under `spex hash-id`. They are
   exempt, not correct. **Never propose "fixing" one** — it would rewrite the snapshot and every
-  bead-map record keyed off it. Every module-scoped id derives and is enforced.
+  journal event keyed off it. Every module-scoped id derives and is enforced.
 - **Name declarability** is new and its message is long. An `api` or `component` `name` is rejected
   unless corpus tokenization reproduces it exactly, in at least one and at most six whitespace-
   separated words. `spex validate [--json]`, `Validator (core)`, `Widget.` and `Bob's` all fail. The

@@ -25,9 +25,9 @@ That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so 
 
 ## Why the Gate
 
-- A partial run means some ops succeeded and some didn't. The mapping store reflects the partial state (records for ok creates, no records for error creates).
+- A partial run means some ops succeeded and some didn't. The journal reflects the partial state (pairings for ok creates, nothing for error creates).
 - If we wrote the snapshot on partial, the next `spex emit` would diff against the new (partial) baseline and miss the ops that still need to run.
-- Leaving the snapshot untouched means the next emit diffs the spec against the ORIGINAL baseline. The resulting impact report re-includes the failed ops. Emit re-reserves labels for those ops (counter didn't advance past them since ingest didn't commit their records). Adapter re-runs. Ingest reconciles. If the second run is complete, snapshot gets saved.
+- Leaving the snapshot untouched means the next emit diffs the spec against the ORIGINAL baseline. The resulting impact report re-includes the failed ops, whose labels are the same `spex:<spec_node_id>` values by construction. Adapter re-runs. Ingest reconciles — appending nothing for the ops that already landed. If the second run is complete, snapshot gets saved.
 
 This is the "unfinished operations resurface through the idempotency path" mechanism described in the proposal.
 
@@ -46,5 +46,5 @@ Inherited from the `merkle` module, and not just in shape: the bytes are the one
 ## Non-Responsibilities
 
 - Does NOT decide which ops to reconcile — that's `Reconciler`'s job.
-- Does NOT touch `.bead-map.json` — separate concern.
+- Does NOT touch the journal `spec/.history.jsonl` — separate concern, appended by Reconciler and RefreshHandler.
 - Does NOT clean up stale `.tmp` files from prior crashes — startup-time cleanup is a separate operational concern (not tracked here).

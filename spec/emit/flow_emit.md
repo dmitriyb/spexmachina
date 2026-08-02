@@ -8,7 +8,7 @@ produce, and the changeset it writes is a contract the adapter executes and
 `spex ingest` reconciles. Every hand-off from `spex diff` onwards goes through a
 file, so each of those stages can be re-run from the artifact its predecessor
 wrote. `spex validate` is the exception — it is a gate, not a producer, and
-`spex diff` reads only `--snapshot`, `--map` and `--spec-dir` — so restarting at
+`spex diff` reads only `--snapshot`, `--spec-dir` and the journal beside the snapshot — so restarting at
 `diff` means re-reading the spec directory, not a validate artifact.
 
 ```dot
@@ -23,7 +23,7 @@ digraph emit_position {
     "scripts/apply-br.sh" [style=dashed];
     "receipts.json"       [style=dashed];
     "spex ingest"         [style=dashed];
-    ".bead-map.json"      [style=dashed];
+    "spec/.history.jsonl" [style=dashed];
     "spec/.snapshot.json" [style=dashed];
 
     "spec change"         -> "spex validate"       [label="gate"];
@@ -35,7 +35,7 @@ digraph emit_position {
     "changeset.json"      -> "scripts/apply-br.sh" [label="stdin or $1"];
     "scripts/apply-br.sh" -> "receipts.json"       [label="writes"];
     "receipts.json"       -> "spex ingest";
-    "spex ingest"         -> ".bead-map.json"      [label="reconciles"];
+    "spex ingest"         -> "spec/.history.jsonl" [label="appends events + receipts"];
     "spex ingest"         -> "spec/.snapshot.json" [label="iff status == complete"];
 }
 ```
@@ -55,7 +55,7 @@ One invocation, `spex emit --proposal <ref> --git-head <sha> [--impact <file>]`,
 runs six steps in this order and writes one file:
 
 1. **Load the inputs.** [[cbe835d38c3e|EmitCommand]] reads the impact report
-   from stdin or `--impact`, opens the bead mapping store, loads the spec
+   from stdin or `--impact`, folds the task journal, loads the spec
    directory, and takes the git HEAD SHA from `--git-head` rather than asking
    git for it.
 2. **Partition the create actions by tier.** Tier 0 is the proposal epic, tier 1
@@ -66,23 +66,23 @@ runs six steps in this order and writes one file:
    map the later steps need, are assigned from that order by ChangesetBuilder
    once the close ops have been counted.
 4. **Label them.** [[6f4b6dd8928f|IdempotencyLabeler]] answers with one label
-   per create action: a fresh create takes `spex:<cursor>` and moves the cursor
-   on, a cleanup takes `spex:cleanup-<spec_node_id>`, and a modify-pair reuses
-   the record id already bound to the bead it replaces.
+   per create action, each a pure function of the op: fresh and modify-pair
+   creates take `spex:<spec_node_id>`, a cleanup takes
+   `spex:cleanup-<spec_node_id>`, and an epic takes `spex:<proposal-slug>`.
 5. **Resolve the references.** [[f7775ac5f1f3|Resolver]] writes each dep as
-   `ref:op`, `ref:bead` or `ref:spec_node`, points every non-epic create's
+   `ref:op` or `ref:bead` — an unresolvable dep is an emit error, not a
+   deferred shape — points every non-epic create's
    parent at the proposal epic, and walks implements → preq_id → priority for
    the op's priority number.
 6. **Compose and write.** [[7f06f7d80e94|ChangesetBuilder]] assembles the create
    ops, appends one close op per obsoleted bead carrying the `spex:obsolete` and
-   `commit:<HEAD>` labels, and writes `changeset.json` v1 in canonical field
+   `commit:<HEAD>` labels, and writes `changeset.json` v2 in canonical field
    order to stdout or to `--out`.
 
 Steps 3 and 4 come before step 5 for a reason: a dep can only be written as
-`ref:op` once the op it points at has an op_id, and a label can only be reused
-once the action it belongs to is known. Ordering settles for the batch as a
-whole before the first ref is written; labelling runs per action, each create's
-label drawn immediately before that same create's refs.
+`ref:op` once the op it points at has an op_id. Ordering settles for the batch
+as a whole before the first ref is written; labelling runs per action, each
+create's label read off that same create's own identity.
 
 ## Data Shapes
 
@@ -93,24 +93,24 @@ to consume is each create action's `dep_spec_node_ids` list: impact names the
 spec nodes a new bead should depend on, and emit — not impact — decides how each
 of those names is written into the changeset.
 
-### Mapping store reads (input)
+### Journal reads (input)
 
-Emit reads the mapping store here and writes nothing back to it:
+Emit folds the task journal here and writes nothing back to it:
 
-- the records held for a spec node, for the `ref:bead` classification;
-- the proposal's epic record, for parent resolution on a re-run;
-- the record bound to the bead a modify-pair create replaces, whose id becomes
-  that create's label;
-- the next record id, which seeds the fresh-create cursor.
+- the fold's pairing for a spec node, for the `ref:bead` classification and the
+  closed-dep drop;
+- the fold's epic entry for the proposal slug, for parent resolution on a
+  re-run.
 
-The counter behind that last read is never written back here — ingest advances
-it once the adapter's receipts say a bead was actually made.
+Nothing else is read: labels come off the ops themselves, and appending to the
+journal is ingest's job once the adapter's receipts say a task was actually
+made.
 
 ### changeset.json (output)
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "git_head": "deadbeef...",
   "proposal": "2026-04-18-decouple-spex-from-br",
   "ops": [
@@ -119,7 +119,7 @@ it once the adapter's receipts say a bead was actually made.
       "type": "create",
       "spec_node_kind": "proposal_epic",
       "spec_node_id": "2026-04-18-decouple-spex-from-br",
-      "idempotency": { "label": "spex:142" },
+      "idempotency": { "label": "spex:2026-04-18-decouple-spex-from-br" },
       "priority": 3,
       "title": "Proposal: 2026-04-18-decouple-spex-from-br"
     },
@@ -128,7 +128,7 @@ it once the adapter's receipts say a bead was actually made.
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "7f06f7d80e94",
-      "idempotency": { "label": "spex:143" },
+      "idempotency": { "label": "spex:7f06f7d80e94" },
       "parent": { "ref": "op", "op_id": "op-1" },
       "priority": 1,
       "title": "emit: ChangesetBuilder",
@@ -145,7 +145,8 @@ carries one.
 
 ## Error Paths
 
-- Impact report has `errors` → abort before loading mapping store. Exit 1.
+- Impact report has `errors` → abort before folding the journal. Exit 1.
 - Cycle in in-batch deps → abort after sort. Exit 2.
+- Dep neither in-batch nor in the fold → abort naming the spec_node_id. Exit 2.
 - Missing project requirement in priority chain → default priority `3`, silently. No error, no warning, and nothing in the changeset marks the op.
 - `--git-head` missing or malformed → pre-flight rejection before any processing. Exit 1.

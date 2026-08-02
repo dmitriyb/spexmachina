@@ -38,7 +38,7 @@ One call, over the classified actions and the stream to write them to. It splits
 
 The document is indented two spaces, so that a diff of one report against another is readable by the person reviewing it.
 
-The `dep_spec_node_ids` field on a create action carries identity hashes — the values a spec author wrote in each depended-on node's `id` field — and never bead ids. Nothing here consults the mapping store, so no dependency has been resolved to a bead by the time the report is written; that is deliberately left to emit. The field is omitted when the create collected no spec-graph dependencies. Downstream, `spex emit` turns each hash into one of the changeset's dep refs, which the adapter turns into `--deps` flags on the tracker CLI.
+The `dep_spec_node_ids` field on a create action carries identity hashes — the values a spec author wrote in each depended-on node's `id` field — and never bead ids. Nothing here consults the journal, so no dependency has been resolved to a bead by the time the report is written; that is deliberately left to emit. The field is omitted when the create collected no spec-graph dependencies. Downstream, `spex emit` turns each hash into one of the changeset's dep refs, which the adapter turns into `--deps` flags on the tracker CLI.
 
 When nothing changed, both arrays come out empty and both counts zero. That is a valid report rather than an error condition, and `spex emit` treats it as a no-op — the changeset it produces is empty, or carries the proposal epic and nothing else.
 

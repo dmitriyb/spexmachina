@@ -4,7 +4,7 @@ End-to-end tests for the `spex emit` CLI subcommand — full process invocation 
 
 ## Setup
 
-- Use `testdata/pipeline/` with a synthetic spec tree, `.bead-map.json`, and impact_report.json.
+- Use a synthetic spec tree with a seeded `spec/.history.jsonl` journal and impact_report.json.
 - Invoke `spex emit` via the test binary harness (same pattern as `cmd/spex/impact_test.go`).
 
 ## Scenarios
@@ -12,7 +12,7 @@ End-to-end tests for the `spex emit` CLI subcommand — full process invocation 
 ### Happy path: stdin impact, stdout changeset
 
 - `echo "$IMPACT" | spex emit --proposal 2026-04-18-decouple-spex-from-br --git-head deadbeef`
-- Expected: exit 0, stdout is canonical `changeset.json` v1.
+- Expected: exit 0, stdout is canonical `changeset.json` v2 — every dep resolved to ref:op or ref:bead, no ref:spec_node anywhere in the output.
 
 ### --impact flag reads file
 
@@ -55,4 +55,4 @@ End-to-end tests for the `spex emit` CLI subcommand — full process invocation 
 
 ## Fixtures
 
-In-code fixtures, no on-disk testdata: `setupEmitFixture` in `cmd/spex/emit_test.go` writes the spec tree and `.bead-map.json` into a `t.TempDir()` and returns the impact report as a string, which most scenarios pipe on stdin; the two `--impact` scenarios write it to a file first.
+In-code fixtures, no on-disk testdata: `setupEmitFixture` in `cmd/spex/emit_test.go` writes the spec tree and a seeded `spec/.history.jsonl` into a `t.TempDir()` and returns the impact report as a string, which most scenarios pipe on stdin; the two `--impact` scenarios write it to a file first.

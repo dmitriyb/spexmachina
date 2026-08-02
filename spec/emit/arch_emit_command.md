@@ -1,6 +1,6 @@
 # EmitCommand
 
-CLI entry point for `spex emit`. Reads the impact report (stdin or `--impact`), loads the mapping store and spec graph, wires the builder components, writes `changeset.json` to stdout or `--out`.
+CLI entry point for `spex emit`. Reads the impact report (stdin or `--impact`), folds the task journal and loads the spec graph, wires the builder components, writes `changeset.json` to stdout or `--out`.
 
 ## Usage
 
@@ -16,9 +16,8 @@ Flags:
 | `--git-head` | yes | Git HEAD SHA. Threaded into changeset.json as `git_head`; used by the adapter for `commit:<HEAD>` labels on obsoleted beads. |
 | `--impact`   | no (stdin default) | Path to impact report JSON. If omitted, reads from stdin. |
 | `--out`      | no (stdout default) | Path to write changeset.json. If omitted, writes to stdout. |
-| `--map`      | no (`.bead-map.json`) | Path to the bead mapping store. A relative path resolves against the spec directory's parent, so the default finds the repository's own `.bead-map.json`. |
 
-The root's persistent `--spec-dir` is read too: it is what the spec graph is loaded from and what a relative `--map` is resolved against.
+The root's persistent `--spec-dir` is read too: it is what the spec graph is loaded from and where the task journal (`<spec-dir>/.history.jsonl`) lives. The retired `--map` flag went with the file it pointed at.
 
 ## Declared surface
 
@@ -32,12 +31,12 @@ Before running the builder:
 
 1. Require `--proposal`, and require `--git-head` to match `^[0-9a-f]{7,40}$`.
 2. Parse the impact report JSON; reject if `errors` array is non-empty (consistent with impact's own gate). The gate is re-applied here rather than trusted upstream, so a stale report piped in from an earlier run cannot slip past.
-3. Open the bead mapping store at the resolved `--map` path.
+3. Parse and fold the task journal at `<spec-dir>/.history.jsonl` — an absent journal folds empty.
 4. Load the spec graph rooted at the spec directory's `project.json`.
 
 ## Wiring
 
-EmitCommand assembles the run and then gets out of the way. It gathers five things — the impact report from stdin or `--impact`, the mapping store at the resolved `--map` path, the spec graph rooted at the spec directory, the `--git-head` SHA and the `--proposal` ref — and hands all five to [[7f06f7d80e94|ChangesetBuilder]], which owns everything from there.
+EmitCommand assembles the run and then gets out of the way. It gathers five things — the impact report from stdin or `--impact`, the journal fold, the spec graph rooted at the spec directory, the `--git-head` SHA and the `--proposal` ref — and hands all five to [[7f06f7d80e94|ChangesetBuilder]], which owns everything from there.
 
 The three subordinate components — Resolver, TopologicalSorter and IdempotencyLabeler — are reached only through the builder. EmitCommand neither builds nor calls them, which is why this module's `uses` graph runs command → builder → the three rather than command → all four: there is exactly one place a change to the composition has to be made.
 
@@ -60,10 +59,10 @@ Failure modes never write a partial changeset.
 ## Non-Responsibilities
 
 - Does not run the adapter.
-- Does not update `.bead-map.json` or save a snapshot — those belong to ingest.
+- Does not append to the journal or save a snapshot — those belong to ingest.
 - Does not invoke git — `--git-head` is caller-supplied.
 
-Those three absences are one property: [[aa2375420738|emit is a pure function of the files and flags it is handed]]. It starts no subprocess, opens no connection and asks no tracker anything, so the same impact report, mapping store, spec directory, proposal ref and SHA produce the same bytes on every machine and at every hour.
+Those three absences are one property: [[aa2375420738|emit is a pure function of the files and flags it is handed]]. It starts no subprocess, opens no connection and asks no tracker anything, so the same impact report, journal, spec directory, proposal ref and SHA produce the same bytes on every machine and at every hour.
 
 ## Test surface
 

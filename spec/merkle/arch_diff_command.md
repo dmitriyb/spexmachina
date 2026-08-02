@@ -4,7 +4,7 @@ CLI entry point for [[d487fc9c4fa5|`spex diff`]]. It [[f223179a540a|compares the
 
 ## Responsibilities
 
-- Resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, defaults to `<spec-dir>/.snapshot.json`), bead-map path, output format
+- Resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, defaults to `<spec-dir>/.snapshot.json`), output format
 - Build the current tree with TreeBuilder, and ask [[b2fcd9457a28|SnapshotStore]] for the previous one
 - Hand both trees to [[cb262b280963|DiffEngine]] and take back the list of changed leaves
 - Read the module identity hash → module name map off the tree TreeBuilder just built; without it the report would name each module by its identity hash instead
@@ -18,16 +18,16 @@ The fourth impact level `contract` appears on `data_flow` and `api` leaf changes
 ## Interface
 
 ```
-spex diff [--snapshot path] [--map path] [--json]
+spex diff [--snapshot path] [--json]
 ```
 
 The spec directory comes from the root command's persistent `--spec-dir`, not from a positional argument. `--snapshot` overrides where the previous snapshot is read from; left off, it is `<spec-dir>/.snapshot.json`.
 
-`--map` names the bead-map to read, defaulting to `.bead-map.json`. It is read and never written, and its absence is not an error — `spex diff` runs in trees that have never been ingested. It is a second identity-hash-to-name source for the removal checks: when a whole module is retired, the sweep first tries to recover the name from the spec corpus itself, and the module name the bead-map's component records still carry is what answers when that recovery comes up empty. `--json` selects the machine-readable report; without it the same content is printed as text.
+The task journal at `<spec-dir>/.history.jsonl` is read and never written, and its absence is not an error — `spex diff` runs in trees that have never been ingested. It is the second identity-hash-to-name source for the removal checks: when a whole module is retired, the sweep first tries to recover the name from the spec corpus itself, and the name a journal event still carries is what answers when that recovery comes up empty. A malformed journal degrades this to `unverifiable` notes rather than failing the run — a deliberately gentler contract than the retired bead-map's hard error on a corrupt file, because the journal can strengthen detection but never block a gate. The corpus sweep skips dot-prefixed files, which is load-bearing here: the journal's own `removed` events carry exactly the names the sweep hunts, and must never count as survivors. The retired `--map` flag is gone with the file it pointed at. `--json` selects the machine-readable report; without it the same content is printed as text.
 
 ## Output
 
-JSON output includes both changes and errors. The `path` and `related` fields carry identity hashes (the same values used as merkle keys and bead-map `spec_node_id`s):
+JSON output includes both changes and errors. The `path` and `related` fields carry identity hashes (the same values used as merkle keys and journal node keys):
 
 ```json
 {
