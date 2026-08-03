@@ -65,7 +65,7 @@ Each step is derived from the one before it, and each derivation is recorded:
 4. The diff produces an impact report.
 5. The impact report produces a changeset.
 6. The changeset, executed, produces receipts.
-7. The receipts produce beads and their bead-map records.
+7. The receipts produce beads and their journal events.
 
 Any point in this chain can be traced forward or backward. The proposal is the
 anchor point that explains "why" a change was made; the changeset and receipts
