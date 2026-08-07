@@ -13,14 +13,11 @@
 #
 # Test hooks (env vars):
 #   BR_BIN              override the br binary path (default: br on PATH).
-#   SPEX_MAPPING_FILE   override .bead-map.json path for ref:spec_node lookup
-#                       (default: .bead-map.json in CWD).
 #   SPEX_ADAPTER_DEBUG  set to 1 to dump SUB_TABLE to stderr after each op.
 
 set -euo pipefail
 
 BR_BIN="${BR_BIN:-br}"
-SPEX_MAPPING_FILE="${SPEX_MAPPING_FILE:-.bead-map.json}"
 
 # ---- Pre-flight ------------------------------------------------------------
 
@@ -69,8 +66,8 @@ if [[ -z "$VERSION" ]]; then
     echo "error: changeset missing required field: version" >&2
     exit 1
 fi
-if [[ "$VERSION" != "1" ]]; then
-    echo "error: unsupported changeset version: $VERSION (expected 1)" >&2
+if [[ "$VERSION" != "2" ]]; then
+    echo "error: unsupported changeset version: $VERSION (expected 2)" >&2
     exit 1
 fi
 
@@ -134,12 +131,12 @@ append_receipt_error() {
 }
 
 # resolve_ref echoes the resolved bead_id (or sentinel) for a ref JSON object.
-# Sentinels:
+# Changeset v2 admits exactly two ref shapes — emit resolves spec-node
+# references in-process before the adapter ever runs, so the adapter reads
+# no spex-owned file. Sentinels:
 #   __UNRESOLVED_OP__<op_id>     ref:op pointed at an op_id with no SUB_TABLE entry.
 #   __ERRORED_OP__<op_id>        ref:op pointed at an op that errored earlier.
 #   __UNKNOWN_REF__<kind>        unknown ref kind discriminator.
-#   __NO_MAPPING__<spec_node_id> ref:spec_node had no record in the mapping store.
-#   __MAPPING_UNAVAILABLE__      SPEX_MAPPING_FILE missing while a ref:spec_node was used.
 resolve_ref() {
     local ref_json="$1"
     local kind
@@ -159,24 +156,6 @@ resolve_ref() {
                 echo "__UNRESOLVED_OP__$op_id"
             fi
             ;;
-        spec_node)
-            local snid
-            snid=$(jq -r '.spec_node_id' <<< "$ref_json")
-            if [[ ! -f "$SPEX_MAPPING_FILE" ]]; then
-                echo "__MAPPING_UNAVAILABLE__"
-                return
-            fi
-            local hit
-            hit=$(jq -r --arg snid "$snid" \
-                '(.records // []) | map(select(.spec_node_id == $snid)) |
-                 sort_by(.id // 0) | last | (.bead_id // empty)' \
-                "$SPEX_MAPPING_FILE")
-            if [[ -z "$hit" || "$hit" == "null" ]]; then
-                echo "__NO_MAPPING__$snid"
-            else
-                echo "$hit"
-            fi
-            ;;
         "")
             echo "__UNKNOWN_REF__missing"
             ;;
@@ -193,8 +172,6 @@ ref_error_for() {
     case "$val" in
         __UNRESOLVED_OP__*)    echo "dependency ${val#__UNRESOLVED_OP__} not yet resolved" ;;
         __ERRORED_OP__*)       echo "dependency ${val#__ERRORED_OP__} errored; cannot resolve op ref" ;;
-        __NO_MAPPING__*)       echo "spec_node_id ${val#__NO_MAPPING__} has no mapping record" ;;
-        __MAPPING_UNAVAILABLE__) echo "mapping file unavailable for ref:spec_node lookup" ;;
         __UNKNOWN_REF__*)      echo "unknown ref kind: ${val#__UNKNOWN_REF__}" ;;
         *)                     echo "" ;;
     esac
