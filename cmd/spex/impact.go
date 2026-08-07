@@ -101,7 +101,7 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 	// Changes and records both key on identity hashes; NodeMatcher joins them
 	// directly without any path-format translation. DepSpecNodeIDs is filled
 	// inline by ClassifyActions — bead-ID resolution is deferred to emit.
-	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
+	matches, unmatched, orphaned := impact.MatchNodes(changes, pairingsFromRecords(records))
 	actions := impact.ClassifyActions(specGraph, matches, unmatched, orphaned)
 
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
@@ -152,6 +152,32 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 		}
 	}
 	return changes, raw.Errors, nil
+}
+
+// pairingsFromRecords adapts the legacy .bead-map.json's []mapping.Record
+// into impact.Pairing, NodeMatcher's own input shape. ImpactCommand still
+// reads bead state from .bead-map.json here rather than folding
+// spec/.history.jsonl directly — that migration belongs to this command's
+// own bead.
+// TODO(bead:spexmachina-y0wc.26): fold the task journal via
+// mapping.MappingStore instead of mapping.NewFileStore and drop this
+// adapter once ImpactCommand migrates onto it.
+func pairingsFromRecords(records []mapping.Record) []impact.Pairing {
+	if records == nil {
+		return nil
+	}
+	out := make([]impact.Pairing, len(records))
+	for i, r := range records {
+		out[i] = impact.Pairing{
+			SpecNodeID: r.SpecNodeID,
+			TaskID:     r.BeadID,
+			NodeType:   r.NodeType,
+			Module:     r.Module,
+			Name:       r.Component,
+			BeadStatus: r.BeadStatus,
+		}
+	}
+	return out
 }
 
 // enrichRecordsWithBeadStatus populates each mapping record's BeadStatus

@@ -4,7 +4,6 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -35,19 +34,20 @@ func newFixture() fixtureHashes {
 	}
 }
 
-// baseRecords are the mapping records shared by S3–S5 scenarios.
-func baseRecords(h fixtureHashes) []mapping.Record {
-	return []mapping.Record{
-		{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker"},
-		{ID: 2, SpecNodeID: h.HASR, BeadID: "spex-002", Module: "merkle", Component: "Hasher"},
-		{ID: 3, SpecNodeID: h.HTST, BeadID: "spex-003", Module: "merkle", Component: "Hash computation"},
+// basePairings are the journal-fold pairings shared by S3–S5 scenarios: one
+// entry per node, matching the fixture's `added` + `task_created` pairs.
+func basePairings(h fixtureHashes) []Pairing {
+	return []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+		{SpecNodeID: h.HASR, TaskID: "spex-002", NodeType: "component", Module: "merkle", Name: "Hasher"},
+		{SpecNodeID: h.HTST, TaskID: "spex-003", NodeType: "test_section", Module: "merkle", Name: "Hashing tests"},
 	}
 }
 
 // S3: NodeMatcher produces correct matched, unmatched, and orphaned lists.
 func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 	h := newFixture()
-	records := baseRecords(h)
+	pairings := basePairings(h)
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD, OldHash: "aaa", NewHash: "bbb"},
@@ -71,7 +71,7 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, orphaned := MatchNodes(changes, records)
+	matched, unmatched, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 2 {
 		t.Fatalf("want 2 matched, got %d (%+v)", len(matched), matched)
@@ -92,16 +92,20 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 		t.Errorf("want 1 unmatched (NEW), got %+v", unmatched)
 	}
 	if len(orphaned) != 0 {
-		t.Errorf("want 0 orphaned (no removed node has a matching record), got %+v", orphaned)
+		t.Errorf("want 0 orphaned (no removed node has a matching pairing), got %+v", orphaned)
 	}
 }
 
-// S4: NodeMatcher handles multiple beads per spec node.
+// S4: NodeMatcher handles multiple beads per spec node — across a node's
+// lineage, not simultaneously. The fold answers with one current pairing per
+// node (latest task-bearing event wins): after a task_closed followed by a
+// second task_created, MatchNodes sees just that current pairing. The prior
+// task remains reachable through the journal history, not through matching.
 func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 	h := newFixture()
-	records := append(baseRecords(h),
-		mapping.Record{ID: 4, SpecNodeID: h.SCHK, BeadID: "spex-001-followup", Module: "validator", Component: "SchemaChecker"},
-	)
+	pairings := []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-001-followup", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+	}
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
@@ -110,23 +114,22 @@ func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 		},
 	}
 
-	matched, _, _ := MatchNodes(changes, records)
+	matched, _, _ := MatchNodes(changes, pairings)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match, got %d", len(matched))
 	}
-	if len(matched[0].Records) != 2 {
-		t.Fatalf("want 2 records for SCHK, got %d", len(matched[0].Records))
+	if len(matched[0].Records) != 1 {
+		t.Fatalf("want 1 current record for SCHK, got %d", len(matched[0].Records))
 	}
-	// Records are sorted deterministically by BeadID.
-	if matched[0].Records[0].BeadID != "spex-001" || matched[0].Records[1].BeadID != "spex-001-followup" {
-		t.Errorf("records not sorted by BeadID: %+v", matched[0].Records)
+	if matched[0].Records[0].BeadID != "spex-001-followup" {
+		t.Errorf("want current pairing spex-001-followup, got %+v", matched[0].Records[0])
 	}
 }
 
 // S5: NodeMatcher uses direct identity-hash comparison.
 //
-// Two distinct spec nodes always have distinct identity hashes. A record for
+// Two distinct spec nodes always have distinct identity hashes. A pairing for
 // SchemaChecker (a component) must never match a test_section change, even
 // when the test_section lives in a logically related module.
 func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
@@ -135,8 +138,8 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 		t.Fatalf("fixture precondition failed: component and test_section hashes collided")
 	}
 
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: h.HASR, BeadID: "hasr-bead", Module: "merkle", Component: "Hasher"},
+	pairings := []Pairing{
+		{SpecNodeID: h.HASR, TaskID: "hasr-bead", NodeType: "component", Module: "merkle", Name: "Hasher"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -146,7 +149,7 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, _ := MatchNodes(changes, records)
+	matched, unmatched, _ := MatchNodes(changes, pairings)
 
 	if len(matched) != 0 {
 		t.Errorf("want 0 matched (HTST != HASR by exact string equality), got %+v", matched)
@@ -159,7 +162,7 @@ func TestFR2_S5_DirectIdentityHashComparison(t *testing.T) {
 // S6: Structural changes produce zero matches, zero unmatched, zero orphans.
 func TestFR2_S6_StructuralChangesSkipped(t *testing.T) {
 	h := newFixture()
-	records := baseRecords(h)
+	pairings := basePairings(h)
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Key: "meta/project", Type: merkle.Modified, NodeType: "meta", Module: ""},
@@ -173,7 +176,7 @@ func TestFR2_S6_StructuralChangesSkipped(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, orphaned := MatchNodes(changes, records)
+	matched, unmatched, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 0 {
 		t.Errorf("want 0 matches for structural changes, got %d", len(matched))
@@ -187,7 +190,7 @@ func TestFR2_S6_StructuralChangesSkipped(t *testing.T) {
 }
 
 // S7: Deterministic matching — identical inputs produce identical output,
-// including when the record slice is shuffled between runs.
+// including when the pairing slice is shuffled between runs.
 func TestNFR5_S7_DeterministicOutput(t *testing.T) {
 	h := newFixture()
 	changes := []merkle.ClassifiedChange{
@@ -203,8 +206,8 @@ func TestNFR5_S7_DeterministicOutput(t *testing.T) {
 		},
 	}
 
-	orderA := baseRecords(h)
-	orderB := []mapping.Record{orderA[2], orderA[0], orderA[1]}
+	orderA := basePairings(h)
+	orderB := []Pairing{orderA[2], orderA[0], orderA[1]}
 
 	matchedA, unmatchedA, orphanedA := MatchNodes(changes, orderA)
 	matchedB, unmatchedB, orphanedB := MatchNodes(changes, orderB)
@@ -231,8 +234,8 @@ func TestNFR5_S7_DeterministicOutput(t *testing.T) {
 // produce matches.
 func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 	h := newFixture()
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker"},
+	pairings := []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -252,7 +255,7 @@ func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, orphaned := MatchNodes(changes, records)
+	matched, unmatched, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match (leaf only), got %d", len(matched))
@@ -268,9 +271,9 @@ func TestFR2_S8_StructuralCoexistsWithLeafChanges(t *testing.T) {
 	}
 }
 
-// S9: No rekeying — records and changes share one format.
+// S9: No rekeying — pairings and changes share one format.
 //
-// Regression guard for the deleted buildMerkleIndex helper. A record with a
+// Regression guard for the deleted buildMerkleIndex helper. A pairing with a
 // SpecNodeID that looks like the old merkle-key format ("module/1/component/1")
 // must not match a change with an identity-hash key, and vice versa. The match
 // happens on raw string equality only.
@@ -279,9 +282,9 @@ func TestFR2_S9_NoRekeying(t *testing.T) {
 	oldMerkleKey := "module/1/component/1"
 	oldBeadMapKey := "validator/component/SchemaChecker"
 
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: oldMerkleKey, BeadID: "legacy-merkle-bead", Module: "validator"},
-		{ID: 2, SpecNodeID: oldBeadMapKey, BeadID: "legacy-beadmap-bead", Module: "validator"},
+	pairings := []Pairing{
+		{SpecNodeID: oldMerkleKey, TaskID: "legacy-merkle-bead", Module: "validator"},
+		{SpecNodeID: oldBeadMapKey, TaskID: "legacy-beadmap-bead", Module: "validator"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -291,7 +294,7 @@ func TestFR2_S9_NoRekeying(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, _ := MatchNodes(changes, records)
+	matched, unmatched, _ := MatchNodes(changes, pairings)
 
 	if len(matched) != 0 {
 		t.Errorf("want 0 matches (no key rewriting), got %+v", matched)
@@ -301,7 +304,7 @@ func TestFR2_S9_NoRekeying(t *testing.T) {
 	}
 }
 
-// E1: Change for a node whose module has no mapping records — appears as
+// E1: Change for a node whose module has no mapping pairings — appears as
 // unmatched (not a panic).
 func TestFR2_E1_NoRecordsForModule(t *testing.T) {
 	h := newFixture()
@@ -316,7 +319,7 @@ func TestFR2_E1_NoRecordsForModule(t *testing.T) {
 	matched, unmatched, orphaned := MatchNodes(changes, nil)
 
 	if len(matched) != 0 {
-		t.Errorf("want 0 matched for empty records, got %d", len(matched))
+		t.Errorf("want 0 matched for empty pairings, got %d", len(matched))
 	}
 	if len(unmatched) != 1 || unmatched[0].Change.Key != h.SCHK {
 		t.Errorf("want SCHK as unmatched, got %+v", unmatched)
@@ -326,12 +329,12 @@ func TestFR2_E1_NoRecordsForModule(t *testing.T) {
 	}
 }
 
-// E2: Record for a node that has no changes — does not appear in any output list.
+// E2: Pairing for a node that has no changes — does not appear in any output list.
 func TestFR2_E2_RecordWithoutMatchingChange(t *testing.T) {
 	h := newFixture()
-	records := baseRecords(h) // three records
+	pairings := basePairings(h) // three pairings
 	changes := []merkle.ClassifiedChange{
-		// Only SCHK is in the diff; HASR and HTST records should be silent.
+		// Only SCHK is in the diff; HASR and HTST pairings should be silent.
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
 			Impact: merkle.ArchImpl,
@@ -339,7 +342,7 @@ func TestFR2_E2_RecordWithoutMatchingChange(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, orphaned := MatchNodes(changes, records)
+	matched, unmatched, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 matched, got %d", len(matched))
@@ -348,11 +351,11 @@ func TestFR2_E2_RecordWithoutMatchingChange(t *testing.T) {
 		t.Errorf("want 0 unmatched, got %d", len(unmatched))
 	}
 	if len(orphaned) != 0 {
-		t.Errorf("want 0 orphaned (untouched records are silent), got %+v", orphaned)
+		t.Errorf("want 0 orphaned (untouched pairings are silent), got %+v", orphaned)
 	}
 }
 
-// E3: Removed change with no matching record — no orphan is created.
+// E3: Removed change with no matching pairing — no orphan is created.
 func TestFR2_E3_RemovedChangeNoRecord(t *testing.T) {
 	h := newFixture()
 	changes := []merkle.ClassifiedChange{
@@ -369,18 +372,18 @@ func TestFR2_E3_RemovedChangeNoRecord(t *testing.T) {
 		t.Errorf("want 0 matched, got %d", len(matched))
 	}
 	if len(unmatched) != 0 {
-		t.Errorf("want 0 unmatched (removed with no record is silent), got %d", len(unmatched))
+		t.Errorf("want 0 unmatched (removed with no pairing is silent), got %d", len(unmatched))
 	}
 	if len(orphaned) != 0 {
-		t.Errorf("want 0 orphaned (no record references this), got %d", len(orphaned))
+		t.Errorf("want 0 orphaned (no pairing references this), got %d", len(orphaned))
 	}
 }
 
-// Orphaned record from a removed change — record is reported as orphaned.
+// Orphaned pairing from a removed change — pairing is reported as orphaned.
 func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 	h := newFixture()
-	records := []mapping.Record{
-		{ID: 2, SpecNodeID: h.HASR, BeadID: "spex-002", Module: "merkle", Component: "Hasher"},
+	pairings := []Pairing{
+		{SpecNodeID: h.HASR, TaskID: "spex-002", NodeType: "component", Module: "merkle", Name: "Hasher"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -390,7 +393,7 @@ func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 		},
 	}
 
-	matched, _, orphaned := MatchNodes(changes, records)
+	matched, _, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 0 {
 		t.Errorf("want 0 matches for removed change, got %d", len(matched))
@@ -399,16 +402,16 @@ func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 		t.Fatalf("want 1 orphaned, got %d", len(orphaned))
 	}
 	if orphaned[0].Record.BeadID != "spex-002" {
-		t.Errorf("want orphaned record with bead spex-002, got %s", orphaned[0].Record.BeadID)
+		t.Errorf("want orphaned pairing with bead spex-002, got %s", orphaned[0].Record.BeadID)
 	}
 }
 
-// When a record is matched by a non-removed change, a removed change against
-// the same record must not produce an orphan.
+// When a pairing is matched by a non-removed change, a removed change against
+// the same pairing must not produce an orphan.
 func TestFR2_OrphanNotCreatedIfRecordAlsoMatchesNonRemoved(t *testing.T) {
 	h := newFixture()
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator"},
+	pairings := []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -423,13 +426,13 @@ func TestFR2_OrphanNotCreatedIfRecordAlsoMatchesNonRemoved(t *testing.T) {
 		},
 	}
 
-	matched, _, orphaned := MatchNodes(changes, records)
+	matched, _, orphaned := MatchNodes(changes, pairings)
 
 	if len(matched) != 1 {
 		t.Errorf("want 1 match, got %d", len(matched))
 	}
 	if len(orphaned) != 0 {
-		t.Errorf("want 0 orphaned (record also matched non-removed), got %d", len(orphaned))
+		t.Errorf("want 0 orphaned (pairing also matched non-removed), got %d", len(orphaned))
 	}
 }
 
@@ -438,8 +441,8 @@ func TestFR2_DataFlowChangeMatchesByIdentityHash(t *testing.T) {
 	flowHash := schema.IdentityHash("impact", "data_flow", "Impact analysis flow")
 	modHash := schema.IdentityHash("module", "impact")
 
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: flowHash, BeadID: "flow-bead", Module: "impact"},
+	pairings := []Pairing{
+		{SpecNodeID: flowHash, TaskID: "flow-bead", NodeType: "data_flow", Module: "impact"},
 	}
 	changes := []merkle.ClassifiedChange{
 		{
@@ -449,7 +452,7 @@ func TestFR2_DataFlowChangeMatchesByIdentityHash(t *testing.T) {
 		},
 	}
 
-	matched, unmatched, _ := MatchNodes(changes, records)
+	matched, unmatched, _ := MatchNodes(changes, pairings)
 
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match for data_flow, got %d", len(matched))
@@ -469,7 +472,7 @@ func TestNFR5_EmptyInputs(t *testing.T) {
 			len(matched), len(unmatched), len(orphaned))
 	}
 
-	matched, unmatched, orphaned = MatchNodes([]merkle.ClassifiedChange{}, []mapping.Record{})
+	matched, unmatched, orphaned = MatchNodes([]merkle.ClassifiedChange{}, []Pairing{})
 	if len(matched) != 0 || len(unmatched) != 0 || len(orphaned) != 0 {
 		t.Errorf("want all empty for empty inputs, got %d matched, %d unmatched, %d orphaned",
 			len(matched), len(unmatched), len(orphaned))
