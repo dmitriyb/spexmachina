@@ -81,16 +81,22 @@ even a partial adapter run.
   `Impact expectation`
 - Optional H2 sections: any — treated as freeform
 
-### Registrar → HistoryViewer shared index
+### Registrar → HistoryViewer coupling
 
-- ProposalRecord:
-  - path: string — relative path under spec/proposals/
-  - date: string, ISO-8601 date (YYYY-MM-DD, extracted from filename prefix)
-  - slug: string — filename portion after the date prefix, `.md` stripped
-    (used as the proposal reference throughout the rest of the pipeline)
-  - title: string — from the H1 heading
-  - registered_at: string, ISO-8601 UTC timestamp (optional; set on
-    `spex register`)
+Registrar and HistoryViewer share no record type and no index file — they are
+coupled only by a filesystem naming convention on the proposal's stem
+(`YYYY-MM-DD-name`, `.md` stripped):
+
+- Registrar (`spex register`) copies the proposal to
+  `spec/proposals/<stem>.md`. `<stem>` is the source filename if it already
+  matches the dated convention, otherwise today's date plus a slug of the H1
+  heading. Nothing else is recorded — no timestamp, no title, no path —
+  anywhere.
+- HistoryViewer (`spex log`) never reads anything Registrar wrote beyond that
+  file: it groups beads by the `spec_proposal:<stem>` label already on each
+  bead, then re-opens `spec/proposals/<stem>.md` at render time to read the
+  title from the H1 heading. A stem with no matching file is still rendered,
+  annotated "proposal file missing".
 
 ### Proposal reference (pipeline-wide contract)
 
