@@ -81,10 +81,10 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 	for _, m := range matched {
 		matchedByKey[m.Change.Key] = m
 	}
-	if m, ok := matchedByKey[h.SCHK]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-001" {
+	if m, ok := matchedByKey[h.SCHK]; !ok || len(m.Records) != 1 || m.Records[0].TaskID != "spex-001" {
 		t.Errorf("want SCHK → spex-001, got %+v", m)
 	}
-	if m, ok := matchedByKey[h.HTST]; !ok || len(m.Records) != 1 || m.Records[0].BeadID != "spex-003" {
+	if m, ok := matchedByKey[h.HTST]; !ok || len(m.Records) != 1 || m.Records[0].TaskID != "spex-003" {
 		t.Errorf("want HTST → spex-003, got %+v", m)
 	}
 
@@ -121,7 +121,7 @@ func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 	if len(matched[0].Records) != 1 {
 		t.Fatalf("want 1 current record for SCHK, got %d", len(matched[0].Records))
 	}
-	if matched[0].Records[0].BeadID != "spex-001-followup" {
+	if matched[0].Records[0].TaskID != "spex-001-followup" {
 		t.Errorf("want current pairing spex-001-followup, got %+v", matched[0].Records[0])
 	}
 }
@@ -154,7 +154,7 @@ func TestNFR5_MultiplePairingsPerNodeSortedByBeadID(t *testing.T) {
 	if len(matched[0].Records) != 2 {
 		t.Fatalf("want both pairings carried, got %d: %+v", len(matched[0].Records), matched[0].Records)
 	}
-	if matched[0].Records[0].BeadID != "spex-001" || matched[0].Records[1].BeadID != "spex-001-followup" {
+	if matched[0].Records[0].TaskID != "spex-001" || matched[0].Records[1].TaskID != "spex-001-followup" {
 		t.Errorf("want records sorted by bead id (spex-001, spex-001-followup), got %+v", matched[0].Records)
 	}
 }
@@ -433,8 +433,8 @@ func TestFR2_OrphanedRecordFromRemovedChange(t *testing.T) {
 	if len(orphaned) != 1 {
 		t.Fatalf("want 1 orphaned, got %d", len(orphaned))
 	}
-	if orphaned[0].Record.BeadID != "spex-002" {
-		t.Errorf("want orphaned pairing with bead spex-002, got %s", orphaned[0].Record.BeadID)
+	if orphaned[0].Record.TaskID != "spex-002" {
+		t.Errorf("want orphaned pairing with bead spex-002, got %s", orphaned[0].Record.TaskID)
 	}
 }
 
@@ -489,8 +489,8 @@ func TestFR2_DataFlowChangeMatchesByIdentityHash(t *testing.T) {
 	if len(matched) != 1 {
 		t.Fatalf("want 1 match for data_flow, got %d", len(matched))
 	}
-	if matched[0].Records[0].BeadID != "flow-bead" {
-		t.Errorf("want bead flow-bead, got %s", matched[0].Records[0].BeadID)
+	if matched[0].Records[0].TaskID != "flow-bead" {
+		t.Errorf("want bead flow-bead, got %s", matched[0].Records[0].TaskID)
 	}
 	if len(unmatched) != 0 {
 		t.Errorf("want 0 unmatched, got %d", len(unmatched))

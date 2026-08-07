@@ -82,8 +82,8 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "validator",
 			},
-			Records: []mapping.Record{
-				{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+			Records: []Pairing{
+				{SpecNodeID: h.SCHK, TaskID: "spex-001", Module: "validator", Name: "SchemaChecker"},
 			},
 		},
 		{
@@ -92,8 +92,8 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 				Impact: merkle.ImplOnly,
 				Module: "merkle",
 			},
-			Records: []mapping.Record{
-				{ID: 3, SpecNodeID: h.HUNK, BeadID: "spex-003", Module: "merkle", Component: "Hash computation", SpecHash: "ghi789"},
+			Records: []Pairing{
+				{SpecNodeID: h.HUNK, TaskID: "spex-003", Module: "merkle", Name: "Hash computation"},
 			},
 		},
 	}
@@ -108,7 +108,7 @@ func TestFR3_S1_ClassifyActions_FullScenario(t *testing.T) {
 	}
 	orphaned := []Orphaned{
 		{
-			Record:   mapping.Record{ID: 10, SpecNodeID: h.LEGACY, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000"},
+			Record:   Pairing{SpecNodeID: h.LEGACY, TaskID: "spex-010", Module: "merkle", Name: "LegacyHasher"},
 			NodeType: "component",
 		},
 	}
@@ -192,8 +192,8 @@ func TestFR3_S3_ClassifyActions_AddedWithExistingBead(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "proposal",
 			},
-			Records: []mapping.Record{
-				{ID: 20, SpecNodeID: h.REG, BeadID: "spex-020", Module: "proposal", Component: "Registrar", SpecHash: "old111"},
+			Records: []Pairing{
+				{SpecNodeID: h.REG, TaskID: "spex-020", Module: "proposal", Name: "Registrar"},
 			},
 		},
 	}
@@ -248,9 +248,9 @@ func TestFR3_S5_ClassifyActions_MultipleBeadsPerNode(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "validator",
 			},
-			Records: []mapping.Record{
-				{ID: 1, SpecNodeID: h.SCHK, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
-				{ID: 5, SpecNodeID: h.SCHK, BeadID: "spex-005", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+			Records: []Pairing{
+				{SpecNodeID: h.SCHK, TaskID: "spex-001", Module: "validator", Name: "SchemaChecker"},
+				{SpecNodeID: h.SCHK, TaskID: "spex-005", Module: "validator", Name: "SchemaChecker"},
 			},
 		},
 	}
@@ -285,7 +285,7 @@ func TestFR6_S5b_ClassifyActions_RemovedClosedBead(t *testing.T) {
 	h := newDepFixture()
 	orphaned := []Orphaned{
 		{
-			Record:   mapping.Record{ID: 10, SpecNodeID: h.LEGACY, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000", BeadStatus: "closed"},
+			Record:   Pairing{SpecNodeID: h.LEGACY, TaskID: "spex-010", Module: "merkle", Name: "LegacyHasher", BeadStatus: "closed"},
 			NodeType: "component",
 		},
 	}
@@ -324,7 +324,7 @@ func TestFR6_S5c_ClassifyActions_RemovedOpenBead(t *testing.T) {
 	draft := schema.IdentityHash("merkle", "component", "DraftHasher")
 	orphaned := []Orphaned{
 		{
-			Record:   mapping.Record{ID: 11, SpecNodeID: draft, BeadID: "spex-011", Module: "merkle", Component: "DraftHasher", SpecHash: "yyy000", BeadStatus: "open"},
+			Record:   Pairing{SpecNodeID: draft, TaskID: "spex-011", Module: "merkle", Name: "DraftHasher", BeadStatus: "open"},
 			NodeType: "component",
 		},
 	}
@@ -356,8 +356,8 @@ func TestFR3_S6_ClassifyActions_ImpactLevelDoesNotChangeType(t *testing.T) {
 						Impact: level,
 						Module: "alpha",
 					},
-					Records: []mapping.Record{
-						{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
+					Records: []Pairing{
+						{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Comp1"},
 					},
 				},
 			}
@@ -456,7 +456,7 @@ func TestFR3_E5_ClassifyActions_DuplicatesPreserved(t *testing.T) {
 	matches := []Match{
 		{
 			Change:  change,
-			Records: []mapping.Record{{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp1"}},
+			Records: []Pairing{{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Comp1"}},
 		},
 	}
 	unmatched := []Unmatched{{Change: change}}
@@ -482,7 +482,7 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "beta",
 			},
-			Records: []mapping.Record{{ID: 1, SpecNodeID: betaHash, BeadID: "bead-2", Module: "beta", Component: "Comp2"}},
+			Records: []Pairing{{SpecNodeID: betaHash, TaskID: "bead-2", Module: "beta", Name: "Comp2"}},
 		},
 	}
 	unmatched := []Unmatched{
@@ -495,7 +495,7 @@ func TestNFR5_ClassifyActions_DeterministicSort(t *testing.T) {
 		},
 	}
 	orphaned := []Orphaned{
-		{Record: mapping.Record{ID: 2, SpecNodeID: alphaOld, BeadID: "bead-old", Module: "alpha", Component: "OldComp"}, NodeType: "component"},
+		{Record: Pairing{SpecNodeID: alphaOld, TaskID: "bead-old", Module: "alpha", Name: "OldComp"}, NodeType: "component"},
 	}
 
 	for i := 0; i < 5; i++ {
@@ -521,8 +521,8 @@ func TestFR3_ClassifyActions_OldBeadIDOnCreate(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
-			Records: []mapping.Record{
-				{ID: 1, SpecNodeID: hash, BeadID: "bead-old", Module: "alpha", Component: "Comp"},
+			Records: []Pairing{
+				{SpecNodeID: hash, TaskID: "bead-old", Module: "alpha", Name: "Comp"},
 			},
 		},
 	}
@@ -555,8 +555,8 @@ func TestFR3_ClassifyActions_NodeTypePropagated(t *testing.T) {
 				Impact: merkle.ArchImpl,
 				Module: "alpha",
 			},
-			Records: []mapping.Record{
-				{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp"},
+			Records: []Pairing{
+				{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Comp"},
 			},
 		},
 	}
@@ -575,7 +575,7 @@ func TestFR3_ClassifyActions_NodeTypePropagated(t *testing.T) {
 func TestFR3_ClassifyActions_SpecNodeIDFromOrphan(t *testing.T) {
 	hash := schema.IdentityHash("alpha", "component", "Gone")
 	orphaned := []Orphaned{
-		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Gone"}, NodeType: "component"},
+		{Record: Pairing{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Gone"}, NodeType: "component"},
 	}
 
 	actions := ClassifyActions(nil, nil, nil, orphaned)
@@ -595,7 +595,7 @@ func TestFR3_ClassifyActions_SpecNodeIDFromOrphan(t *testing.T) {
 func TestFR6_ClassifyActions_OrphanedNoStatusDefaultObsolete(t *testing.T) {
 	hash := schema.IdentityHash("alpha", "component", "Comp")
 	orphaned := []Orphaned{
-		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp"}, NodeType: "component"},
+		{Record: Pairing{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Comp"}, NodeType: "component"},
 	}
 
 	actions := ClassifyActions(nil, nil, nil, orphaned)
@@ -613,7 +613,7 @@ func TestFR6_ClassifyActions_OrphanedNoStatusDefaultObsolete(t *testing.T) {
 func TestFR6_ClassifyActions_OrphanedInProgressBead(t *testing.T) {
 	hash := schema.IdentityHash("alpha", "component", "Comp")
 	orphaned := []Orphaned{
-		{Record: mapping.Record{ID: 1, SpecNodeID: hash, BeadID: "bead-1", Module: "alpha", Component: "Comp", BeadStatus: "in_progress"}, NodeType: "component"},
+		{Record: Pairing{SpecNodeID: hash, TaskID: "bead-1", Module: "alpha", Name: "Comp", BeadStatus: "in_progress"}, NodeType: "component"},
 	}
 
 	actions := ClassifyActions(nil, nil, nil, orphaned)
@@ -688,8 +688,8 @@ func TestDepSpecNodeIDs_IgnoresBeadStatus(t *testing.T) {
 				Change: merkle.Change{Key: h.AC, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "component"},
 				Module: "impact",
 			},
-			Records: []mapping.Record{
-				{ID: 2, SpecNodeID: h.AC, BeadID: "spex-ac", Module: "impact", Component: "ActionClassifier", BeadStatus: "open"},
+			Records: []Pairing{
+				{SpecNodeID: h.AC, TaskID: "spex-ac", Module: "impact", Name: "ActionClassifier", BeadStatus: "open"},
 			},
 		},
 	}
@@ -1085,7 +1085,7 @@ func TestDepSpecNodeIDs_ObsoleteCarriesNoDeps(t *testing.T) {
 	}
 	orphaned := []Orphaned{
 		{
-			Record:   mapping.Record{ID: 1, SpecNodeID: h.AC, BeadID: "spex-ac", Module: "impact", Component: "ActionClassifier"},
+			Record:   Pairing{SpecNodeID: h.AC, TaskID: "spex-ac", Module: "impact", Name: "ActionClassifier"},
 			NodeType: "component",
 		},
 	}
@@ -1141,8 +1141,8 @@ func TestFR8_ClassifyActions_DataFlowModifiedMatched(t *testing.T) {
 				Change: merkle.Change{Key: flow, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "data_flow"},
 				Impact: merkle.Contract, Module: "merkle",
 			},
-			Records: []mapping.Record{
-				{ID: 99, SpecNodeID: flow, BeadID: "spex-flow", BeadType: "task", Module: "merkle", Component: "HashFlow"},
+			Records: []Pairing{
+				{SpecNodeID: flow, TaskID: "spex-flow", Module: "merkle", Name: "HashFlow"},
 			},
 		},
 	}
@@ -1283,8 +1283,8 @@ func TestFR8_ClassifyActions_TestSectionCoupledMatchedObsoleteOnly(t *testing.T)
 				Change: merkle.Change{Key: testID, Type: merkle.Modified, OldHash: "a", NewHash: "b", NodeType: "test_section"},
 				Impact: merkle.ImplOnly, Module: "impact",
 			},
-			Records: []mapping.Record{
-				{ID: 77, SpecNodeID: testID, BeadID: "spex-test", BeadType: "task", Module: "impact", Component: "MatcherTests"},
+			Records: []Pairing{
+				{SpecNodeID: testID, TaskID: "spex-test", Module: "impact", Name: "MatcherTests"},
 			},
 		},
 	}

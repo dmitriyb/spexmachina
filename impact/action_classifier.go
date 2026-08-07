@@ -73,7 +73,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 				// Obsolete the old bead.
 				actions = append(actions, Action{
 					Type:       "obsolete",
-					BeadID:     r.BeadID,
+					BeadID:     r.TaskID,
 					Module:     m.Change.Module,
 					Node:       node,
 					NodeType:   nodeType,
@@ -92,7 +92,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 					NodeType:   nodeType,
 					SpecNodeID: specNodeID,
 					SpecHash:   newHash,
-					OldBeadID:  r.BeadID,
+					OldBeadID:  r.TaskID,
 					Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", m.Change.Module, node),
 				})
 			}
@@ -144,7 +144,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 		// Always obsolete the orphaned bead.
 		actions = append(actions, Action{
 			Type:       "obsolete",
-			BeadID:     o.Record.BeadID,
+			BeadID:     o.Record.TaskID,
 			Module:     o.Record.Module,
 			Node:       node,
 			NodeType:   o.NodeType,
@@ -164,7 +164,7 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 				Node:       node,
 				NodeType:   o.NodeType,
 				SpecNodeID: o.Record.SpecNodeID,
-				OldBeadID:  o.Record.BeadID,
+				OldBeadID:  o.Record.TaskID,
 				Reason:     fmt.Sprintf("Code cleanup: %s/%s", o.Record.Module, node),
 			})
 		}
@@ -365,10 +365,10 @@ func resolveNodeName(graph mapping.SpecGraph, module, nodeType, specNodeID strin
 	return specNodeID
 }
 
-// nodeName returns a human-readable name for the spec node from a mapping record.
-func nodeName(r mapping.Record) string {
-	if r.Component != "" {
-		return r.Component
+// nodeName returns a human-readable name for the spec node from a pairing.
+func nodeName(r Pairing) string {
+	if r.Name != "" {
+		return r.Name
 	}
 	return r.SpecNodeID
 }

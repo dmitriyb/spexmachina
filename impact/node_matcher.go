@@ -3,7 +3,6 @@ package impact
 import (
 	"sort"
 
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
@@ -25,11 +24,8 @@ type Pairing struct {
 
 // Match pairs a classified change with every pairing that stores its spec node's identity hash.
 type Match struct {
-	Change merkle.ClassifiedChange
-	// Records is shaped as mapping.Record, the form ActionClassifier
-	// (spexmachina-y0wc.24) still consumes until its own migration onto the
-	// journal lands; recordsFromPairings bridges Pairing to it below.
-	Records []mapping.Record
+	Change  merkle.ClassifiedChange
+	Records []Pairing
 }
 
 // Unmatched represents a changed spec node with no corresponding pairing.
@@ -41,7 +37,7 @@ type Unmatched struct {
 // NodeType is preserved from the originating removed change because identity
 // hashes do not embed the node type and ActionClassifier needs it downstream.
 type Orphaned struct {
-	Record   mapping.Record
+	Record   Pairing
 	NodeType string
 }
 
@@ -73,17 +69,16 @@ func MatchNodes(changes []merkle.ClassifiedChange, pairings []Pairing) ([]Match,
 		found := index[c.Key]
 
 		if len(found) > 0 {
-			records := recordsFromPairings(found)
-
 			if c.Type == merkle.Removed {
-				for i, p := range found {
+				for _, p := range found {
 					if !matched[p.TaskID] {
-						orphanCandidates[p.TaskID] = Orphaned{Record: records[i], NodeType: c.NodeType}
+						orphanCandidates[p.TaskID] = Orphaned{Record: p, NodeType: c.NodeType}
 					}
 				}
 			} else {
+				records := append([]Pairing(nil), found...)
 				sort.Slice(records, func(i, j int) bool {
-					return records[i].BeadID < records[j].BeadID
+					return records[i].TaskID < records[j].TaskID
 				})
 				matches = append(matches, Match{Change: c, Records: records})
 				for _, p := range found {
@@ -102,26 +97,8 @@ func MatchNodes(changes []merkle.ClassifiedChange, pairings []Pairing) ([]Match,
 		orphaned = append(orphaned, o)
 	}
 	sort.Slice(orphaned, func(i, j int) bool {
-		return orphaned[i].Record.BeadID < orphaned[j].Record.BeadID
+		return orphaned[i].Record.TaskID < orphaned[j].Record.TaskID
 	})
 
 	return matches, unmatched, orphaned
-}
-
-// recordsFromPairings bridges Pairing to the mapping.Record shape
-// ActionClassifier still consumes. Every field is a straight rename — no
-// rekeying of the identity hash itself.
-func recordsFromPairings(pairings []Pairing) []mapping.Record {
-	out := make([]mapping.Record, len(pairings))
-	for i, p := range pairings {
-		out[i] = mapping.Record{
-			SpecNodeID: p.SpecNodeID,
-			BeadID:     p.TaskID,
-			NodeType:   p.NodeType,
-			Module:     p.Module,
-			Component:  p.Name,
-			BeadStatus: p.BeadStatus,
-		}
-	}
-	return out
 }
