@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -75,6 +77,21 @@ func TestFR_MapGet_UnknownKey(t *testing.T) {
 	_, err := runSpex(t, "map", "get", "--spec-dir", dir, "deadbeefdead")
 	if err == nil {
 		t.Fatal("want error for unknown key, got nil")
+	}
+}
+
+func TestFR_MapGet_IntegerKeyGone(t *testing.T) {
+	dir := t.TempDir()
+	writeTestJournal(t, dir, []string{
+		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"ActionClassifier","node_type":"component","module":"impact","before":null,"after":"h1","git_head":"cafe1234","proposal":"prop1"}`,
+		`{"event":"task_created","for":"e1","task_id":"spexmachina-abc"}`,
+	})
+
+	// "1" is not 12-hex-shaped, so it is tried as a task id — and none
+	// exists — rather than falling back to any integer record-id parse.
+	_, err := runSpex(t, "map", "get", "--spec-dir", dir, "1")
+	if err == nil {
+		t.Fatal("want error for integer-shaped key, got nil")
 	}
 }
 
@@ -256,6 +273,77 @@ func TestFR_MapContext_UnknownKey(t *testing.T) {
 	_, err := runSpex(t, "map", "context", "--spec-dir", specDir, "deadbeefdead")
 	if err == nil {
 		t.Fatal("want error for unknown key, got nil")
+	}
+}
+
+// buildSpexBinary compiles the spex CLI to a fresh subdirectory of the
+// repo's gitignored bin/ dir (not the process temp dir, which may be
+// mounted noexec) and returns the binary path. True subprocesses, each
+// with their own stdout, are required to exercise concurrent CLI
+// invocations: the RunE handlers encode straight to the process-global
+// os.Stdout, which in-process concurrent goroutines would race on.
+func buildSpexBinary(t *testing.T) string {
+	t.Helper()
+	binRoot := filepath.Join("..", "..", "bin")
+	if err := os.MkdirAll(binRoot, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", binRoot, err)
+	}
+	binDir, err := os.MkdirTemp(binRoot, "spex-test-")
+	if err != nil {
+		t.Fatalf("mkdir temp bin dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(binDir) })
+
+	binPath := filepath.Join(binDir, "spex")
+	build := exec.Command("go", "build", "-o", binPath, ".")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build spex binary: %v\n%s", err, out)
+	}
+	return binPath
+}
+
+func TestFR_MapCommand_ConcurrentInvocations(t *testing.T) {
+	dir := t.TempDir()
+	writeTestJournal(t, dir, []string{
+		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"Comp1","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
+		`{"event":"task_created","for":"e1","task_id":"task-1"}`,
+		`{"event":"added","eid":"e2","node":"0f1e2d3c4b5a","name":"Comp2","node_type":"component","module":"m","before":null,"after":"h2","git_head":"g2","proposal":"p1"}`,
+		`{"event":"task_created","for":"e2","task_id":"task-2"}`,
+	})
+
+	binPath := buildSpexBinary(t)
+	wantTask := map[string]string{"a1b2c3d4e5f6": "task-1", "0f1e2d3c4b5a": "task-2"}
+	keys := []string{"a1b2c3d4e5f6", "0f1e2d3c4b5a"}
+
+	var wg sync.WaitGroup
+	outs := make([]string, len(keys))
+	errs := make([]error, len(keys))
+	for i, key := range keys {
+		wg.Add(1)
+		go func(i int, key string) {
+			defer wg.Done()
+			out, err := exec.Command(binPath, "map", "get", "--spec-dir", dir, key).Output()
+			outs[i] = string(out)
+			errs[i] = err
+		}(i, key)
+	}
+	wg.Wait()
+
+	for i, key := range keys {
+		if errs[i] != nil {
+			t.Fatalf("key %s: want no error, got %v", key, errs[i])
+		}
+		var got map[string]any
+		if err := json.Unmarshal([]byte(outs[i]), &got); err != nil {
+			t.Fatalf("key %s: output should be valid JSON: %v\noutput: %s", key, err, outs[i])
+		}
+		if got["node"] != key {
+			t.Errorf("key %s: want node %v, got %v", key, key, got["node"])
+		}
+		if got["task_id"] != wantTask[key] {
+			t.Errorf("key %s: want task_id %s, got %v", key, wantTask[key], got["task_id"])
+		}
 	}
 }
 
