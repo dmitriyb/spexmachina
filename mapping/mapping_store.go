@@ -71,6 +71,11 @@ var (
 	beadMapOnce      sync.Once
 )
 
+// TODO(bead:spexmachina-y0wc.19): schema.BeadMapSchema() now validates one
+// line of the journal (spec/.history.jsonl), not the .bead-map.json envelope
+// this store reads and writes — every schema-validating call below rejects
+// its own file until MappingStore migrates to the journal.
+//
 // getBeadMapSchema compiles the embedded bead-map JSON Schema once and caches it.
 func getBeadMapSchema() (*jsonschema.Schema, error) {
 	beadMapOnce.Do(func() {

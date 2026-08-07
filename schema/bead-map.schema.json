@@ -1,74 +1,117 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spexmachina.dev/schema/bead-map.json",
-  "title": "Spex Machina Bead Map",
-  "description": "Schema for .bead-map.json. Links spec node IDs to bead IDs with structured metadata.",
-  "type": "object",
-  "required": ["next_id", "records"],
-  "additionalProperties": false,
-  "properties": {
-    "next_id": {
-      "type": "integer",
-      "minimum": 1,
-      "description": "Next auto-increment ID for new records."
-    },
-    "records": {
-      "type": "array",
-      "description": "Mapping records linking spec nodes to beads.",
-      "items": { "$ref": "#/$defs/record" }
-    }
-  },
+  "title": "Spex Machina Task Journal Line",
+  "description": "Schema for one line of spec/.history.jsonl, the task journal linking spec nodes to tasks. Each line is a self-contained object: a change event, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
+  "oneOf": [
+    { "$ref": "#/$defs/changeEvent" },
+    { "$ref": "#/$defs/taskReceipt" },
+    { "$ref": "#/$defs/refreshReceipt" }
+  ],
   "$defs": {
-    "record": {
+    "changeEvent": {
       "type": "object",
-      "required": ["id", "spec_node_id", "bead_id", "bead_type", "module", "component", "content_file", "spec_hash"],
+      "description": "Records what a baselining absorbed for one spec node.",
+      "required": ["event", "eid", "node", "name", "node_type", "module", "before", "after", "git_head", "proposal"],
       "additionalProperties": false,
       "properties": {
-        "id": {
-          "type": "integer",
-          "minimum": 1,
-          "description": "Unique record ID, auto-assigned by MappingStore."
+        "event": {
+          "type": "string",
+          "enum": ["added", "removed", "modified"]
         },
-        "spec_node_id": {
+        "eid": {
           "type": "string",
           "minLength": 1,
-          "description": "Identity of the spec node. For component/data_flow/test_section records this is the 12-char hex identity hash. For proposal epic records it is the proposal reference."
+          "description": "The event's own id, deriving from (git_head, op_id)."
         },
-        "bead_id": {
+        "node": {
           "type": "string",
-          "minLength": 1,
-          "description": "Bead ID from the issue tracker."
+          "pattern": "^[a-f0-9]{12}$",
+          "description": "The changed node's identity hash — the same key the merkle tree files that node's leaf under."
         },
-        "bead_type": {
-          "type": "string",
-          "minLength": 1,
-          "description": "Bead issue type (e.g. epic, feature, task)."
+        "name": {
+          "type": "string"
         },
         "node_type": {
           "type": "string",
-          "enum": ["proposal", "component", "data_flow", "test_section"],
-          "description": "Spec node type. Optional; present on records that distinguish proposal epics from component/data_flow/test_section records."
+          "enum": ["component", "data_flow", "test_section", "requirement", "api"],
+          "description": "The task-owning kinds (component, data_flow, test_section) plus the refresh-absorbable kinds (requirement, api). A kind that never owns a task of its own has no entry."
         },
         "module": {
-          "type": "string",
-          "description": "Module name containing the spec node. Empty for proposal epic records."
+          "type": "string"
         },
-        "component": {
+        "before": {
+          "type": ["string", "null"],
+          "description": "The content leaf's hash before the change, or null — an add has no before."
+        },
+        "after": {
+          "type": ["string", "null"],
+          "description": "The content leaf's hash after the change, or null — a removal has no after."
+        },
+        "git_head": {
+          "type": "string"
+        },
+        "proposal": {
+          "type": "string",
+          "description": "The proposal slug that produced this event."
+        },
+        "path": {
+          "type": "string",
+          "description": "The node's content-leaf path. Present when the node has one; absent for requirement and api events."
+        }
+      }
+    },
+    "taskReceipt": {
+      "type": "object",
+      "description": "Records what the tracker did in response to a change event or a proposal epic.",
+      "required": ["event", "task_id"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["task_created", "task_closed"]
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "for": {
           "type": "string",
           "minLength": 1,
-          "description": "Component or section name within the module; for proposal epics this is the proposal reference."
+          "description": "The eid of the change event this receipt answers."
         },
-        "content_file": {
+        "proposal": {
           "type": "string",
-          "description": "Relative path to the spec content markdown file. Empty for proposal epic records."
+          "minLength": 1,
+          "description": "The proposal slug this epic receipt answers."
+        }
+      },
+      "oneOf": [
+        { "required": ["for"], "not": { "required": ["proposal"] } },
+        { "required": ["proposal"], "not": { "required": ["for"] } }
+      ]
+    },
+    "refreshReceipt": {
+      "type": "object",
+      "description": "Records a refresh run absorbing no-bead-work drift.",
+      "required": ["event", "git_head", "absorbed"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["refresh"]
         },
-        "spec_hash": {
-          "type": "string",
-          "description": "SHA-256 hash of the spec content at time of mapping. Empty for proposal epic records."
+        "git_head": {
+          "type": ["string", "null"],
+          "description": "The git head the refresh ran at, admitting recorded absence."
         },
-        "bead_status": {
-          "type": "string",
-          "description": "Bead status populated at runtime by preflight/apply operations."
+        "absorbed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The eids of the change events this refresh absorbed. Empty when the refresh absorbed nothing, though a no-drift run appends nothing at all."
         }
       }
     }

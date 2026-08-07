@@ -29,7 +29,8 @@ func ModuleSchema() ([]byte, error) {
 	return schemaFS.ReadFile("module.schema.json")
 }
 
-// BeadMapSchema returns the raw JSON Schema bytes for .bead-map.json.
+// BeadMapSchema returns the raw JSON Schema bytes for one line of
+// spec/.history.jsonl, the task journal linking spec nodes to tasks.
 func BeadMapSchema() ([]byte, error) {
 	return schemaFS.ReadFile("bead-map.schema.json")
 }
@@ -43,7 +44,11 @@ func IdentityHash(parts ...string) string {
 	return hex.EncodeToString(sum[:6])
 }
 
-// BeadMap represents a .bead-map.json file.
+// BeadMap represents a .bead-map.json file in the retired envelope format.
+// BeadMapSchema no longer validates this shape — it now validates one line
+// of spec/.history.jsonl at a time — so these types no longer round-trip
+// through it. They remain for the current .bead-map.json readers/writers
+// that have not yet migrated to the journal.
 type BeadMap struct {
 	NextID  int             `json:"next_id"`
 	Records []BeadMapRecord `json:"records"`
@@ -51,15 +56,15 @@ type BeadMap struct {
 
 // BeadMapRecord represents a single mapping record linking a spec node to a bead.
 type BeadMapRecord struct {
-	ID         int    `json:"id"`
-	SpecNodeID string `json:"spec_node_id"`
-	BeadID     string `json:"bead_id"`
-	BeadType   string `json:"bead_type"`
-	Module     string `json:"module"`
-	Component  string `json:"component"`
+	ID          int    `json:"id"`
+	SpecNodeID  string `json:"spec_node_id"`
+	BeadID      string `json:"bead_id"`
+	BeadType    string `json:"bead_type"`
+	Module      string `json:"module"`
+	Component   string `json:"component"`
 	ContentFile string `json:"content_file"`
-	SpecHash   string `json:"spec_hash"`
-	BeadStatus string `json:"bead_status,omitempty"`
+	SpecHash    string `json:"spec_hash"`
+	BeadStatus  string `json:"bead_status,omitempty"`
 }
 
 // Project represents a project.json file.
