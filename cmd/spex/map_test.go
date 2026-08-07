@@ -155,11 +155,10 @@ func TestFR_MapList_MalformedLine(t *testing.T) {
 	}
 }
 
-// setupMapContextTestSpec creates a spec directory with a populated
-// .bead-map.json — spex map context still resolves through the retired
-// mapping.Store/Record until ContextResolver migrates onto MappingStore
-// (spexmachina-y0wc.20).
-func setupMapContextTestSpec(t *testing.T) (specDir string, mapFilePath string) {
+// setupMapContextTestSpec creates a spec directory with project.json, one
+// module declaring a live component, and a journal pairing that component
+// with a task plus recording one removed node's biography.
+func setupMapContextTestSpec(t *testing.T) (specDir string) {
 	t.Helper()
 	dir := t.TempDir()
 
@@ -179,33 +178,30 @@ func setupMapContextTestSpec(t *testing.T) (specDir string, mapFilePath string) 
 		"components": [
 			{"id": "aabbccddeeff", "name": "Comp1", "content": "arch_comp1.md"},
 			{"id": "ffeeddccbbaa", "name": "Comp2", "content": "arch_comp2.md", "uses": ["aabbccddeeff"]}
+		],
+		"test_sections": [
+			{"id": "333333333333", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["aabbccddeeff"]}
 		]
 	}`)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1\n")
 	writeTestFile(t, alphaDir, "arch_comp2.md", "# Comp2\n")
+	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
 
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	store := mapping.NewFileStore(mapPath)
-	if _, err := store.Create(mapping.Record{
-		SpecNodeID:  "aabbccddeeff",
-		BeadID:      "test-abc",
-		BeadType:    "task",
-		Module:      "alpha",
-		Component:   "Comp1",
-		ContentFile: "spec/alpha/arch_comp1.md",
-		SpecHash:    "hash1",
-		BeadStatus:  "closed",
-	}); err != nil {
-		t.Fatalf("create record: %v", err)
-	}
+	writeTestJournal(t, dir, []string{
+		`{"event":"added","eid":"e1","node":"aabbccddeeff","name":"Comp1","node_type":"component","module":"alpha","before":null,"after":"h1","git_head":"cafe1234","proposal":"prop1"}`,
+		`{"event":"task_created","for":"e1","task_id":"test-abc"}`,
+		`{"event":"added","eid":"e2","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":null,"after":"h2","git_head":"babe0000","proposal":"prop2"}`,
+		`{"event":"task_created","for":"e2","task_id":"test-def"}`,
+		`{"event":"removed","eid":"e3","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":"h2","after":null,"git_head":"cafe5678","proposal":"prop3"}`,
+	})
 
-	return dir, mapPath
+	return dir
 }
 
-func TestFR_MapContext_ValidRecord(t *testing.T) {
-	specDir, mapFile := setupMapContextTestSpec(t)
+func TestFR_MapContext_LiveNode(t *testing.T) {
+	specDir := setupMapContextTestSpec(t)
 
-	out, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "1")
+	out, err := runSpex(t, "map", "context", "--spec-dir", specDir, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
 	}
@@ -214,8 +210,8 @@ func TestFR_MapContext_ValidRecord(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &result); err != nil {
 		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
 	}
-	if result.Record.ID != 1 {
-		t.Errorf("want record ID 1, got %d", result.Record.ID)
+	if result.Removed {
+		t.Fatal("want live result, got Removed=true")
 	}
 	if result.ArchFile == "" {
 		t.Error("want non-empty arch_file")
@@ -223,23 +219,43 @@ func TestFR_MapContext_ValidRecord(t *testing.T) {
 	if result.ModuleFile == "" {
 		t.Error("want non-empty module_file")
 	}
-}
-
-func TestFR_MapContext_UnknownRecord(t *testing.T) {
-	specDir, mapFile := setupMapContextTestSpec(t)
-
-	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "--spec-dir", specDir, "999")
-	if err == nil {
-		t.Fatal("want error for unknown record, got nil")
+	if len(result.TestFiles) == 0 {
+		t.Error("want non-empty test_files")
 	}
 }
 
-func TestFR_MapContext_InvalidID(t *testing.T) {
-	_, mapFile := setupMapContextTestSpec(t)
+func TestFR_MapContext_RemovedNode(t *testing.T) {
+	specDir := setupMapContextTestSpec(t)
 
-	_, err := runSpex(t, "map", "context", "--map-file", mapFile, "notanumber")
+	out, err := runSpex(t, "map", "context", "--spec-dir", specDir, "dddddddddddd")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result mapping.ContextResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
+	}
+	if !result.Removed {
+		t.Fatal("want removed result, got Removed=false")
+	}
+	if result.Name != "Retired" || result.NodeType != "component" || result.Module != "alpha" {
+		t.Errorf("want biography fields, got %+v", result)
+	}
+	if result.Proposal != "prop3" {
+		t.Errorf("want removing proposal prop3, got %q", result.Proposal)
+	}
+	if result.AfterHead != "cafe5678" || result.BeforeHead != "babe0000" {
+		t.Errorf("want git_head refs bracketing the final change, got before=%q after=%q", result.BeforeHead, result.AfterHead)
+	}
+}
+
+func TestFR_MapContext_UnknownKey(t *testing.T) {
+	specDir := setupMapContextTestSpec(t)
+
+	_, err := runSpex(t, "map", "context", "--spec-dir", specDir, "deadbeefdead")
 	if err == nil {
-		t.Fatal("want error for invalid ID, got nil")
+		t.Fatal("want error for unknown key, got nil")
 	}
 }
 
