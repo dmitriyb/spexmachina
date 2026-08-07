@@ -1060,36 +1060,21 @@ func setupRetiredModuleSpec(t *testing.T) string {
 	return dir
 }
 
-// TestFR8_DiffCommand_BeadMapRecoversRetiredModule is the wiring for the
-// --map flag, and the hole it closes. The surviving mention of Retiree is
-// identical in both runs; only the hash → name source differs. Without a map
-// the sweep can prove nothing about a module whose name was swept out of the
-// prose, and discloses that; with the map ingest already wrote, the same run
-// recovers "alpha", reports the survivor and halts the pipeline. The sweep's
-// reach must not depend on how thoroughly the module name itself was swept.
-func TestFR8_DiffCommand_BeadMapRecoversRetiredModule(t *testing.T) {
-	specDir := setupRetiredModuleSpec(t)
+// TestFR8_DiffCommand_JournalRecoversRetiredModule is the wiring for the task
+// journal at <spec-dir>/.history.jsonl, and the hole it closes now that the
+// retired --map flag is gone. The surviving mention of Retiree is identical
+// in both runs; only the hash → name source differs. Without a journal the
+// sweep can prove nothing about a module whose name was swept out of the
+// prose, and discloses that; with the journal ingest already wrote, the same
+// run recovers "alpha", reports the survivor and halts the pipeline. The
+// sweep's reach must not depend on how thoroughly the module name itself was
+// swept.
+func TestFR8_DiffCommand_JournalRecoversRetiredModule(t *testing.T) {
 	retireeHash := schema.IdentityHash("alpha", "component", "Retiree")
 
-	mapPath := filepath.Join(t.TempDir(), ".bead-map.json")
-	writeTestFile(t, filepath.Dir(mapPath), ".bead-map.json", `{
-		"next_id": 2,
-		"records": [
-			{
-				"id": 1,
-				"spec_node_id": "`+retireeHash+`",
-				"bead_id": "test-retiree",
-				"bead_type": "task",
-				"module": "alpha",
-				"component": "Retiree",
-				"content_file": "spec/alpha/arch_retiree.md",
-				"spec_hash": "deadbeef"
-			}
-		]
-	}`)
-
-	t.Run("no map: unverifiable, disclosed but not gating", func(t *testing.T) {
-		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir, "--map", filepath.Join(specDir, "absent.json"))
+	t.Run("no journal: unverifiable, disclosed but not gating", func(t *testing.T) {
+		specDir := setupRetiredModuleSpec(t)
+		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
 		if exitCode != 0 {
 			t.Fatalf("an unverifiable removal is not a violation, got exit %d\noutput: %s", exitCode, out)
 		}
@@ -1105,8 +1090,12 @@ func TestFR8_DiffCommand_BeadMapRecoversRetiredModule(t *testing.T) {
 		}
 	})
 
-	t.Run("bead map: the same survivor is reported", func(t *testing.T) {
-		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir, "--map", mapPath)
+	t.Run("journal: the same survivor is reported", func(t *testing.T) {
+		specDir := setupRetiredModuleSpec(t)
+		writeTestFile(t, specDir, ".history.jsonl",
+			`{"event":"removed","eid":"e1","node":"`+retireeHash+`","name":"Retiree","node_type":"component","module":"alpha","before":"deadbeef","after":null,"git_head":"headsha1","proposal":"test-removal"}`+"\n")
+
+		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
 		if exitCode != 2 {
 			t.Fatalf("want exit 2 once the module name is recovered, got %d\noutput: %s", exitCode, out)
 		}
@@ -1133,4 +1122,29 @@ func TestFR8_DiffCommand_BeadMapRecoversRetiredModule(t *testing.T) {
 			t.Fatalf("want the surviving site as the path, got %q", found.Path)
 		}
 	})
+}
+
+// TestFR8_DiffCommand_MalformedJournalDegradesGently pins the "gentler than
+// the retired bead-map's hard error" contract from arch_diff_command.md: a
+// spec/.history.jsonl that fails to parse must not fail the diff run. It
+// degrades the removal sweep's journal source exactly as an absent journal
+// does, leaving the unverifiable-module note as the disclosure.
+func TestFR8_DiffCommand_MalformedJournalDegradesGently(t *testing.T) {
+	specDir := setupRetiredModuleSpec(t)
+	writeTestFile(t, specDir, ".history.jsonl", "{not valid json\n")
+
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 0 {
+		t.Fatalf("a malformed journal must not fail the run, got exit %d\noutput: %s", exitCode, out)
+	}
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if len(result.Errors) != 0 {
+		t.Fatalf("want no errors when the journal cannot be parsed, got: %+v", result.Errors)
+	}
+	if len(result.Notes) != 1 || result.Notes[0].Type != "unverifiable_module" {
+		t.Fatalf("want exactly one unverifiable_module note, got: %+v", result.Notes)
+	}
 }
