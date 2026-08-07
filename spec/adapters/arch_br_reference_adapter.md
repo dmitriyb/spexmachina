@@ -181,7 +181,7 @@ The script begins with:
 ```
 #!/usr/bin/env bash
 #
-# apply-br.sh — Reference adapter consuming spex changeset.json v1 and invoking br.
+# apply-br.sh — Reference adapter consuming spex changeset.json v2 and invoking br.
 #
 # REFERENCE IMPLEMENTATION. Vet before production use. See spec/adapters/ for the
 # adapter contract that any implementation (this one or your own) must satisfy.
