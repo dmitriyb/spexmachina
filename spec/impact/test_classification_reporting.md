@@ -16,8 +16,8 @@ matches := []Match{
             Impact: ArchImpl,
             Module: "validator",
         },
-        Records: []Record{
-            {ID: 1, SpecNodeID: SCHK_HASH, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+        Records: []Pairing{
+            {SpecNodeID: SCHK_HASH, TaskID: "spex-001", Module: "validator", Name: "SchemaChecker"},
         },
     },
     {
@@ -26,8 +26,8 @@ matches := []Match{
             Impact: ArchImpl,
             Module: "merkle",
         },
-        Records: []Record{
-            {ID: 3, SpecNodeID: HASR_HASH, BeadID: "spex-003", Module: "merkle", Component: "Hasher", SpecHash: "ghi789"},
+        Records: []Pairing{
+            {SpecNodeID: HASR_HASH, TaskID: "spex-003", Module: "merkle", Name: "Hasher"},
         },
     },
 }
@@ -52,7 +52,7 @@ unmatched := []Unmatched{
 ```go
 orphaned := []Orphaned{
     {
-        Record:   Record{ID: 10, SpecNodeID: LEGACY_HASH, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000"},
+        Record:   Pairing{SpecNodeID: LEGACY_HASH, TaskID: "spex-010", Module: "merkle", Name: "LegacyHasher"},
         NodeType: "component",
     },
 }
@@ -109,8 +109,8 @@ matches := []Match{
             Impact: ArchImpl,
             Module: "proposal",
         },
-        Records: []Record{
-            {ID: 20, SpecNodeID: REG_HASH, BeadID: "spex-020", Module: "proposal", Component: "Registrar", SpecHash: "old111"},
+        Records: []Pairing{
+            {SpecNodeID: REG_HASH, TaskID: "spex-020", Module: "proposal", Name: "Registrar"},
         },
     },
 }
@@ -148,9 +148,9 @@ matches := []Match{
             Impact: ArchImpl,
             Module: "validator",
         },
-        Records: []Record{
-            {ID: 1, SpecNodeID: SCHK_HASH, BeadID: "spex-001", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
-            {ID: 5, SpecNodeID: SCHK_HASH, BeadID: "spex-005", Module: "validator", Component: "SchemaChecker", SpecHash: "abc123"},
+        Records: []Pairing{
+            {SpecNodeID: SCHK_HASH, TaskID: "spex-001", Module: "validator", Name: "SchemaChecker"},
+            {SpecNodeID: SCHK_HASH, TaskID: "spex-005", Module: "validator", Name: "SchemaChecker"},
         },
     },
 }
@@ -165,7 +165,7 @@ Provide an Orphaned entry where the bead status is "closed":
 ```go
 orphaned := []Orphaned{
     {
-        Record:   Record{ID: 10, SpecNodeID: LEGACY_HASH, BeadID: "spex-010", Module: "merkle", Component: "LegacyHasher", SpecHash: "zzz000", BeadStatus: "closed"},
+        Record:   Pairing{SpecNodeID: LEGACY_HASH, TaskID: "spex-010", Module: "merkle", Name: "LegacyHasher", BeadStatus: "closed"},
         NodeType: "component",
     },
 }
@@ -182,7 +182,7 @@ Provide an Orphaned entry where the bead status is "open":
 ```go
 orphaned := []Orphaned{
     {
-        Record:   Record{ID: 11, SpecNodeID: DRAFT_HASH, BeadID: "spex-011", Module: "merkle", Component: "DraftHasher", SpecHash: "yyy000", BeadStatus: "open"},
+        Record:   Pairing{SpecNodeID: DRAFT_HASH, TaskID: "spex-011", Module: "merkle", Name: "DraftHasher", BeadStatus: "open"},
         NodeType: "component",
     },
 }
@@ -196,7 +196,7 @@ Classify the same matched change three times, varying only the impact level (`im
 
 ### S7: ReportGenerator produces valid JSON with correct structure
 
-Call `GenerateReport(actions, &buf)` with six actions and assert the grouping and counts below. Passed the actions `ClassifyActions` returns for the S1 fixture, each entry additionally carries `node_type`, `spec_node_id`, `spec_hash` on creates, `old_bead_id` on a create replacing an obsoleted bead, and `change_type` on obsoletes; all are `omitempty`. The shipped test (`impact/report_generator_test.go:36-68`) instead hand-builds six actions carrying only `type`, `bead_id`, `module`, `node` and `reason`, which is why the block below omits those five fields. It is not a transcript of that test — the test's node names are `SchemaChecker`, `Hash computation` and `OrphanDetector`, its bead ids `spexmachina-abc/def/ghi`. Read against the S1 fixture, the third create's `node` is the identity hash `CSCH_HASH`, which is how the block below spells it — a nil graph leaves `resolveNodeName` returning the key (`impact/action_classifier.go:337-340`), and the reason string is built from that same value.
+Call `GenerateReport(actions, &buf)` with six actions and assert the grouping and counts below. Passed the actions `ClassifyActions` returns for the S1 fixture, each entry additionally carries `node_type`, `spec_node_id`, `spec_hash` on creates, `old_bead_id` on a create replacing an obsoleted bead, and `change_type` on obsoletes; all are `omitempty`. The shipped test (`impact/report_generator_test.go:32-64`) instead hand-builds six actions carrying only `type`, `bead_id`, `module`, `node` and `reason`, which is why the block below omits those five fields. It is not a transcript of that test — the test's node names are `SchemaChecker`, `Hash computation` and `OrphanDetector`, its bead ids `spexmachina-abc/def/ghi`. Read against the S1 fixture, the third create's `node` is the identity hash `CSCH_HASH`, which is how the block below spells it — a nil graph leaves `resolveNodeName` returning the key (`impact/action_classifier.go:337-340`), and the reason string is built from that same value.
 
 ```json
 {
