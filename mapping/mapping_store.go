@@ -2,6 +2,7 @@ package mapping
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +11,11 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/dmitriyb/spexmachina/schema"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
+
+//go:embed bead-map-envelope.schema.json
+var envelopeSchemaFS embed.FS
 
 // ErrNotFound is returned when a record lookup finds no match.
 var ErrNotFound = errors.New("record not found")
@@ -71,10 +74,14 @@ var (
 	beadMapOnce      sync.Once
 )
 
-// getBeadMapSchema compiles the embedded bead-map JSON Schema once and caches it.
+// getBeadMapSchema compiles the embedded .bead-map.json envelope schema once
+// and caches it. This schema is local to mapping (schema.BeadMapSchema now
+// validates one line of the journal, spec/.history.jsonl, not this envelope)
+// and goes away with MappingStore's migration onto the journal
+// (spexmachina-y0wc.19).
 func getBeadMapSchema() (*jsonschema.Schema, error) {
 	beadMapOnce.Do(func() {
-		raw, err := schema.BeadMapSchema()
+		raw, err := envelopeSchemaFS.ReadFile("bead-map-envelope.schema.json")
 		if err != nil {
 			beadMapSchemaErr = fmt.Errorf("map: load bead-map schema: %w", err)
 			return
@@ -85,11 +92,11 @@ func getBeadMapSchema() (*jsonschema.Schema, error) {
 			return
 		}
 		c := jsonschema.NewCompiler()
-		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
+		if err := c.AddResource("bead-map-envelope.schema.json", doc); err != nil {
 			beadMapSchemaErr = fmt.Errorf("map: add bead-map schema: %w", err)
 			return
 		}
-		beadMapSchema, beadMapSchemaErr = c.Compile("bead-map.schema.json")
+		beadMapSchema, beadMapSchemaErr = c.Compile("bead-map-envelope.schema.json")
 	})
 	return beadMapSchema, beadMapSchemaErr
 }

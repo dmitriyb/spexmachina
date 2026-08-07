@@ -10,7 +10,7 @@ import (
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-// compileBeadMapSchema compiles the embedded bead-map schema for validation.
+// compileBeadMapSchema compiles the embedded journal-line schema for validation.
 func compileBeadMapSchema(t *testing.T) *jsonschema.Schema {
 	t.Helper()
 	data, err := BeadMapSchema()
@@ -32,8 +32,8 @@ func compileBeadMapSchema(t *testing.T) *jsonschema.Schema {
 	return sch
 }
 
-// validateBeadMap validates a JSON document against the bead-map schema.
-func validateBeadMap(t *testing.T, sch *jsonschema.Schema, doc string) error {
+// validateLine validates one journal line document against the schema.
+func validateLine(t *testing.T, sch *jsonschema.Schema, doc string) error {
 	t.Helper()
 	var v any
 	if err := json.Unmarshal([]byte(doc), &v); err != nil {
@@ -42,7 +42,244 @@ func validateBeadMap(t *testing.T, sch *jsonschema.Schema, doc string) error {
 	return sch.Validate(v)
 }
 
-// --- Schema Loading Tests ---
+// Fixtures, verbatim from test_bead_map_schema.md.
+const (
+	fixtureChangeEvent = `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+
+	fixtureTaskReceipt = `{"event":"task_created","for":"9f2c41a0b7d3","task_id":"spexmachina-abc"}`
+
+	fixtureEpicReceipt = `{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-0lk"}`
+
+	fixtureRefreshReceipt = `{"event":"refresh","git_head":"cafe1234","absorbed":["9f2c41a0b7d3"]}`
+)
+
+// --- S1: Each fixture line passes validation ---
+
+func TestFR7_S1_FixturesPass(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	fixtures := []struct {
+		name string
+		doc  string
+	}{
+		{"change event", fixtureChangeEvent},
+		{"task receipt", fixtureTaskReceipt},
+		{"epic receipt", fixtureEpicReceipt},
+		{"refresh receipt", fixtureRefreshReceipt},
+	}
+	for _, f := range fixtures {
+		t.Run(f.name, func(t *testing.T) {
+			if err := validateLine(t, sch, f.doc); err != nil {
+				t.Fatalf("%s should pass validation: %v", f.name, err)
+			}
+		})
+	}
+}
+
+// --- S2: Unknown event value fails ---
+
+func TestFR7_S2_UnknownEventFails(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+	doc := `{"event":"renamed","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	err := validateLine(t, sch, doc)
+	if err == nil {
+		t.Fatal("expected validation error for unknown event value")
+	}
+}
+
+// --- S3: Change event missing node fails ---
+
+func TestFR7_S3_ChangeEventMissingNodeFails(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+	doc := `{"event":"added","eid":"9f2c41a0b7d3","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	err := validateLine(t, sch, doc)
+	if err == nil {
+		t.Fatal("expected validation error for missing node")
+	}
+}
+
+// --- S4: node must match the identity-hash pattern ---
+
+func TestFR7_S4_NodePattern(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	changeEventWithNode := func(node string) string {
+		return `{"event":"added","eid":"9f2c41a0b7d3","node":"` + node + `","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	}
+
+	t.Run("not a hash", func(t *testing.T) {
+		if err := validateLine(t, sch, changeEventWithNode("not-a-hash")); err == nil {
+			t.Fatal("expected validation error for non-hash node")
+		}
+	})
+	t.Run("uppercase", func(t *testing.T) {
+		if err := validateLine(t, sch, changeEventWithNode("A1B2C3D4E5F6")); err == nil {
+			t.Fatal("expected validation error for uppercase node")
+		}
+	})
+}
+
+// --- S5: before/after admit null but not absence ---
+
+func TestFR7_S5_BeforeAfterNullVsAbsent(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("null before passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureChangeEvent); err != nil {
+			t.Fatalf("null before should pass: %v", err)
+		}
+	})
+
+	t.Run("omitted before fails", func(t *testing.T) {
+		doc := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for omitted before")
+		}
+	})
+}
+
+// --- S6: Task receipt requires exactly one referent ---
+
+func TestFR7_S6_TaskReceiptExactlyOneReferent(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("both for and proposal fails", func(t *testing.T) {
+		doc := `{"event":"task_created","for":"9f2c41a0b7d3","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-abc"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error when both for and proposal are present")
+		}
+	})
+
+	t.Run("neither for nor proposal fails", func(t *testing.T) {
+		doc := `{"event":"task_created","task_id":"spexmachina-abc"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error when neither for nor proposal is present")
+		}
+	})
+}
+
+// --- S7: node_type is a closed enum ---
+
+func TestFR7_S7_NodeTypeClosedEnum(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	changeEventWithNodeType := func(nodeType string) string {
+		return `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"` + nodeType + `","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	}
+
+	t.Run("retired kind rejected", func(t *testing.T) {
+		if err := validateLine(t, sch, changeEventWithNodeType("impl_section")); err == nil {
+			t.Fatal("expected validation error for retired node_type impl_section")
+		}
+	})
+
+	t.Run("requirement admitted", func(t *testing.T) {
+		if err := validateLine(t, sch, changeEventWithNodeType("requirement")); err != nil {
+			t.Fatalf("node_type requirement should pass: %v", err)
+		}
+	})
+}
+
+// --- S8: Refresh receipt shape ---
+
+func TestFR7_S8_RefreshReceiptShape(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("fixture passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureRefreshReceipt); err != nil {
+			t.Fatalf("refresh fixture should pass: %v", err)
+		}
+	})
+
+	t.Run("empty absorbed passes", func(t *testing.T) {
+		doc := `{"event":"refresh","git_head":"cafe1234","absorbed":[]}`
+		if err := validateLine(t, sch, doc); err != nil {
+			t.Fatalf("empty absorbed should pass: %v", err)
+		}
+	})
+
+	t.Run("omitted absorbed fails", func(t *testing.T) {
+		doc := `{"event":"refresh","git_head":"cafe1234"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for omitted absorbed")
+		}
+	})
+}
+
+// --- S8b: Optional path on change events ---
+
+func TestFR7_S8b_OptionalPath(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("with path passes", func(t *testing.T) {
+		doc := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal","path":"impact/arch_action_classifier.md"}`
+		if err := validateLine(t, sch, doc); err != nil {
+			t.Fatalf("change event with path should pass: %v", err)
+		}
+	})
+
+	t.Run("without path passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureChangeEvent); err != nil {
+			t.Fatalf("change event without path should pass: %v", err)
+		}
+	})
+}
+
+// --- S9: No integer ids anywhere ---
+
+func TestFR7_S9_NoIntegerIDs(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+	doc := `{"id": 42, "spec_node_id": "a1b2c3d4e5f6"}`
+	if err := validateLine(t, sch, doc); err == nil {
+		t.Fatal("expected validation error for retired bead-map record shape")
+	}
+}
+
+// --- E1: Extra properties rejected ---
+
+func TestFR7_E1_ExtraPropertiesRejected(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+	doc := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal","color":"red"}`
+	if err := validateLine(t, sch, doc); err == nil {
+		t.Fatal("expected validation error for undeclared field")
+	}
+}
+
+// --- E2: Empty object ---
+
+func TestFR7_E2_EmptyObjectFails(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+	if err := validateLine(t, sch, `{}`); err == nil {
+		t.Fatal("expected validation error for empty object")
+	}
+}
+
+// --- E3: The schema file itself is embedded ---
+
+func TestFR7_E3_SchemaCompiles(t *testing.T) {
+	// BeadMapSchema() returns a compilable JSON Schema document — the embed
+	// is validated by compiling it, which catches a truncated or stale
+	// bead-map.schema.json at test time rather than on first use.
+	compileBeadMapSchema(t)
+}
+
+// --- Loading / idempotency ---
 
 func TestFR7_BeadMapSchemaLoadsValidJSON(t *testing.T) {
 	data, err := BeadMapSchema()
@@ -57,560 +294,6 @@ func TestFR7_BeadMapSchemaLoadsValidJSON(t *testing.T) {
 		t.Fatalf("BeadMapSchema() is not valid JSON: %v", err)
 	}
 }
-
-func TestFR7_BeadMapSchemaMetaProperties(t *testing.T) {
-	data, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	tests := []struct {
-		name  string
-		check func() bool
-	}{
-		{"$schema is 2020-12", func() bool { return raw["$schema"] == "https://json-schema.org/draft/2020-12/schema" }},
-		{"$id is correct", func() bool { return raw["$id"] == "https://spexmachina.dev/schema/bead-map.json" }},
-		{"title is correct", func() bool { return raw["title"] == "Spex Machina Bead Map" }},
-		{"type is object", func() bool { return raw["type"] == "object" }},
-		{"additionalProperties is false", func() bool { return raw["additionalProperties"] == false }},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if !tt.check() {
-				t.Fatal("check failed")
-			}
-		})
-	}
-
-	// Check required array
-	req := raw["required"].([]any)
-	reqSet := make(map[string]bool)
-	for _, v := range req {
-		reqSet[v.(string)] = true
-	}
-	for _, key := range []string{"next_id", "records"} {
-		if !reqSet[key] {
-			t.Fatalf("required array should contain %q", key)
-		}
-	}
-
-	// Check properties keys
-	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"next_id", "records"} {
-		if props[key] == nil {
-			t.Fatalf("bead-map schema missing property %q", key)
-		}
-	}
-
-	// Check $defs
-	defs := raw["$defs"].(map[string]any)
-	if defs["record"] == nil {
-		t.Fatal("bead-map schema missing $def 'record'")
-	}
-}
-
-func TestFR7_BeadMapSchemaRecordDefinesAllFields(t *testing.T) {
-	data, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	defs := raw["$defs"].(map[string]any)
-	recordDef := defs["record"].(map[string]any)
-	recordProps := recordDef["properties"].(map[string]any)
-
-	// All required fields from requirement 7
-	for _, key := range []string{"id", "spec_node_id", "bead_id", "bead_type", "module", "component", "content_file", "spec_hash"} {
-		if recordProps[key] == nil {
-			t.Fatalf("bead-map record missing required property %q", key)
-		}
-	}
-
-	// Optional field
-	if recordProps["bead_status"] == nil {
-		t.Fatal("bead-map record missing optional property 'bead_status'")
-	}
-
-	// Verify required array matches
-	reqArr := recordDef["required"].([]any)
-	reqSet := make(map[string]bool)
-	for _, v := range reqArr {
-		reqSet[v.(string)] = true
-	}
-	for _, key := range []string{"id", "spec_node_id", "bead_id", "bead_type", "module", "component", "content_file", "spec_hash"} {
-		if !reqSet[key] {
-			t.Fatalf("record required array should contain %q", key)
-		}
-	}
-	if reqSet["bead_status"] {
-		t.Fatal("bead_status should not be in required array")
-	}
-}
-
-func TestFR7_BeadMapSchemaSpecNodeIDIsNonEmpty(t *testing.T) {
-	// Historically spec_node_id was restricted to a 12-char hex pattern.
-	// With proposal epic records it now also carries human-readable proposal
-	// references, so the schema only enforces a non-empty string here.
-	data, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	defs := raw["$defs"].(map[string]any)
-	recordDef := defs["record"].(map[string]any)
-	recordProps := recordDef["properties"].(map[string]any)
-	specNodeDef := recordProps["spec_node_id"].(map[string]any)
-
-	if _, hasPattern := specNodeDef["pattern"]; hasPattern {
-		t.Fatalf("spec_node_id pattern was relaxed for proposal epic records; did not expect a pattern constraint")
-	}
-	minLen, ok := specNodeDef["minLength"].(float64)
-	if !ok {
-		t.Fatalf("spec_node_id should have minLength; got %v", specNodeDef["minLength"])
-	}
-	if int(minLen) != 1 {
-		t.Fatalf("spec_node_id minLength: want 1, got %d", int(minLen))
-	}
-}
-
-func TestFR7_BeadMapSchemaRejectsAdditionalPropertiesAtAllLevels(t *testing.T) {
-	data, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	// Top level
-	if raw["additionalProperties"] != false {
-		t.Fatal("top-level additionalProperties should be false")
-	}
-
-	// Record level
-	defs := raw["$defs"].(map[string]any)
-	recordDef := defs["record"].(map[string]any)
-	if recordDef["additionalProperties"] != false {
-		t.Fatal("record additionalProperties should be false")
-	}
-}
-
-// --- Validation Tests ---
-
-func TestFR7_MinimalBeadMapPasses(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-	data := readTestdata(t, "minimal_bead_map.json")
-	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := sch.Validate(v); err != nil {
-		t.Fatalf("minimal bead-map should pass validation: %v", err)
-	}
-}
-
-func TestFR7_FullBeadMapPasses(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-	data := readTestdata(t, "valid_bead_map.json")
-	var v any
-	if err := json.Unmarshal(data, &v); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if err := sch.Validate(v); err != nil {
-		t.Fatalf("full bead-map should pass validation: %v", err)
-	}
-}
-
-func TestFR7_MissingRequiredFields(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	tests := []struct {
-		name    string
-		doc     string
-		wantErr string
-	}{
-		{
-			"missing next_id",
-			`{"records": []}`,
-			"next_id",
-		},
-		{
-			"missing records",
-			`{"next_id": 1}`,
-			"records",
-		},
-		{
-			"record missing id",
-			`{"next_id": 1, "records": [{"spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"id",
-		},
-		{
-			"record missing spec_node_id",
-			`{"next_id": 1, "records": [{"id": 1, "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"spec_node_id",
-		},
-		{
-			"record missing bead_id",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"bead_id",
-		},
-		{
-			"record missing bead_type",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"bead_type",
-		},
-		{
-			"record missing module",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"module",
-		},
-		{
-			"record missing component",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "content_file": "f.md", "spec_hash": "h"}]}`,
-			"component",
-		},
-		{
-			"record missing content_file",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "spec_hash": "h"}]}`,
-			"content_file",
-		},
-		{
-			"record missing spec_hash",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md"}]}`,
-			"spec_hash",
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateBeadMap(t, sch, tt.doc)
-			if err == nil {
-				t.Fatalf("expected validation error for missing %s, got nil", tt.wantErr)
-			}
-			if !strings.Contains(err.Error(), tt.wantErr) {
-				t.Fatalf("error should reference %q, got: %v", tt.wantErr, err)
-			}
-		})
-	}
-}
-
-func TestFR7_SpecNodeIDNonEmptyValidation(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	validRecord := func(specNodeID string) string {
-		return `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "` + specNodeID + `", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`
-	}
-
-	t.Run("valid values", func(t *testing.T) {
-		valid := []string{
-			"a1b2c3d4e5f6",                       // typical identity hash
-			"2026-04-12-data-flow-contract-layer", // proposal reference used on epic records
-			"123456789012",                       // numeric hex
-		}
-		for _, id := range valid {
-			t.Run(id, func(t *testing.T) {
-				err := validateBeadMap(t, sch, validRecord(id))
-				if err != nil {
-					t.Fatalf("spec_node_id %q should pass: %v", id, err)
-				}
-			})
-		}
-	})
-
-	t.Run("empty rejected", func(t *testing.T) {
-		err := validateBeadMap(t, sch, validRecord(""))
-		if err == nil {
-			t.Fatal("empty spec_node_id should fail minLength validation")
-		}
-	})
-}
-
-func TestFR7_NextIDMinimum(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	t.Run("next_id 1 passes", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": []}`)
-		if err != nil {
-			t.Fatalf("next_id=1 should pass: %v", err)
-		}
-	})
-
-	t.Run("next_id 0 fails", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 0, "records": []}`)
-		if err == nil {
-			t.Fatal("next_id=0 should fail")
-		}
-	})
-
-	t.Run("negative next_id fails", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": -1, "records": []}`)
-		if err == nil {
-			t.Fatal("negative next_id should fail")
-		}
-	})
-}
-
-func TestFR7_RecordIDMinimum(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	t.Run("record id 0 fails", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 0, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
-		if err == nil {
-			t.Fatal("record id=0 should fail")
-		}
-	})
-}
-
-func TestFR7_EmptyStringFieldsFail(t *testing.T) {
-	// module, content_file, and spec_hash are allowed to be empty on proposal
-	// epic records, so they are not asserted here.
-	sch := compileBeadMapSchema(t)
-
-	fields := []struct {
-		name string
-		doc  string
-	}{
-		{
-			"empty bead_id",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-		},
-		{
-			"empty bead_type",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`,
-		},
-		{
-			"empty component",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "", "content_file": "f.md", "spec_hash": "h"}]}`,
-		},
-	}
-	for _, tt := range fields {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateBeadMap(t, sch, tt.doc)
-			if err == nil {
-				t.Fatalf("expected validation error for %s, got nil", tt.name)
-			}
-		})
-	}
-}
-
-func TestFR7_ExtraFieldsRejected(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	tests := []struct {
-		name string
-		doc  string
-	}{
-		{
-			"extra field at top level",
-			`{"next_id": 1, "records": [], "version": "1.0"}`,
-		},
-		{
-			"extra field at record level",
-			`{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "priority": 1}]}`,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateBeadMap(t, sch, tt.doc)
-			if err == nil {
-				t.Fatalf("expected validation error for extra field in %s, got nil", tt.name)
-			}
-		})
-	}
-}
-
-func TestFR7_BeadStatusOptional(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	t.Run("without bead_status passes", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h"}]}`)
-		if err != nil {
-			t.Fatalf("record without bead_status should pass: %v", err)
-		}
-	})
-
-	t.Run("with bead_status passes", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1, "records": [{"id": 1, "spec_node_id": "a1b2c3d4e5f6", "bead_id": "abc", "bead_type": "task", "module": "m", "component": "c", "content_file": "f.md", "spec_hash": "h", "bead_status": "closed"}]}`)
-		if err != nil {
-			t.Fatalf("record with bead_status should pass: %v", err)
-		}
-	})
-}
-
-func TestFR7_WrongTopLevelType(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	tests := []struct {
-		name string
-		doc  string
-	}{
-		{"array", `[]`},
-		{"string", `"just a string"`},
-		{"number", `42`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			var v any
-			if err := json.Unmarshal([]byte(tt.doc), &v); err != nil {
-				t.Fatalf("unmarshal: %v", err)
-			}
-			if err := sch.Validate(v); err == nil {
-				t.Fatalf("expected validation error for %s top-level type, got nil", tt.name)
-			}
-		})
-	}
-}
-
-func TestFR7_NextIDWrongType(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	tests := []struct {
-		name string
-		doc  string
-	}{
-		{"string next_id", `{"next_id": "one", "records": []}`},
-		{"float next_id", `{"next_id": 1.5, "records": []}`},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateBeadMap(t, sch, tt.doc)
-			if err == nil {
-				t.Fatalf("expected validation error for %s, got nil", tt.name)
-			}
-		})
-	}
-}
-
-func TestFR7_NullFieldFails(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-	err := validateBeadMap(t, sch, `{"next_id": 1, "records": null}`)
-	if err == nil {
-		t.Fatal("expected validation error for null records, got nil")
-	}
-}
-
-// --- Go Type Tests ---
-
-func TestFR7_BeadMapRoundTrip(t *testing.T) {
-	data := readTestdata(t, "valid_bead_map.json")
-	var bm BeadMap
-	if err := json.Unmarshal(data, &bm); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-
-	if bm.NextID < 1 {
-		t.Fatalf("NextID should be >= 1, got %d", bm.NextID)
-	}
-	if len(bm.Records) != 2 {
-		t.Fatalf("expected 2 records, got %d", len(bm.Records))
-	}
-	if bm.Records[0].BeadType != "task" {
-		t.Fatalf("expected bead_type 'task', got %q", bm.Records[0].BeadType)
-	}
-	if bm.Records[1].BeadStatus != "closed" {
-		t.Fatalf("expected bead_status 'closed', got %q", bm.Records[1].BeadStatus)
-	}
-
-	// Round-trip
-	out, err := json.Marshal(&bm)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var bm2 BeadMap
-	if err := json.Unmarshal(out, &bm2); err != nil {
-		t.Fatalf("unmarshal round-trip: %v", err)
-	}
-
-	if bm.NextID != bm2.NextID {
-		t.Fatalf("round-trip NextID mismatch: want %d, got %d", bm.NextID, bm2.NextID)
-	}
-	if len(bm.Records) != len(bm2.Records) {
-		t.Fatalf("round-trip records length mismatch: want %d, got %d", len(bm.Records), len(bm2.Records))
-	}
-	for i, r := range bm.Records {
-		r2 := bm2.Records[i]
-		if r.ID != r2.ID {
-			t.Fatalf("record[%d] ID mismatch: want %d, got %d", i, r.ID, r2.ID)
-		}
-		if r.SpecNodeID != r2.SpecNodeID {
-			t.Fatalf("record[%d] SpecNodeID mismatch: want %q, got %q", i, r.SpecNodeID, r2.SpecNodeID)
-		}
-		if r.BeadID != r2.BeadID {
-			t.Fatalf("record[%d] BeadID mismatch: want %q, got %q", i, r.BeadID, r2.BeadID)
-		}
-		if r.BeadType != r2.BeadType {
-			t.Fatalf("record[%d] BeadType mismatch: want %q, got %q", i, r.BeadType, r2.BeadType)
-		}
-		if r.Module != r2.Module {
-			t.Fatalf("record[%d] Module mismatch: want %q, got %q", i, r.Module, r2.Module)
-		}
-		if r.Component != r2.Component {
-			t.Fatalf("record[%d] Component mismatch: want %q, got %q", i, r.Component, r2.Component)
-		}
-		if r.ContentFile != r2.ContentFile {
-			t.Fatalf("record[%d] ContentFile mismatch: want %q, got %q", i, r.ContentFile, r2.ContentFile)
-		}
-		if r.SpecHash != r2.SpecHash {
-			t.Fatalf("record[%d] SpecHash mismatch: want %q, got %q", i, r.SpecHash, r2.SpecHash)
-		}
-		if r.BeadStatus != r2.BeadStatus {
-			t.Fatalf("record[%d] BeadStatus mismatch: want %q, got %q", i, r.BeadStatus, r2.BeadStatus)
-		}
-	}
-}
-
-func TestFR7_BeadMapMinimalRoundTrip(t *testing.T) {
-	data := readTestdata(t, "minimal_bead_map.json")
-	var bm BeadMap
-	if err := json.Unmarshal(data, &bm); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if bm.NextID != 1 {
-		t.Fatalf("expected NextID=1, got %d", bm.NextID)
-	}
-	if len(bm.Records) != 0 {
-		t.Fatalf("expected 0 records, got %d", len(bm.Records))
-	}
-}
-
-func TestFR7_BeadMapOmitsEmptyBeadStatus(t *testing.T) {
-	bm := BeadMap{
-		NextID: 1,
-		Records: []BeadMapRecord{
-			{
-				ID:          1,
-				SpecNodeID:  "a1b2c3d4e5f6",
-				BeadID:      "abc",
-				BeadType:    "task",
-				Module:      "m",
-				Component:   "c",
-				ContentFile: "f.md",
-				SpecHash:    "h",
-			},
-		},
-	}
-	out, err := json.Marshal(&bm)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	if strings.Contains(string(out), "bead_status") {
-		t.Fatal("empty bead_status should be omitted from JSON output")
-	}
-}
-
-// --- Idempotency and Concurrency ---
 
 func TestFR7_BeadMapSchemaIdempotent(t *testing.T) {
 	data1, err := BeadMapSchema()
@@ -662,28 +345,6 @@ func TestFR7_BeadMapSchemaNonTrivialSize(t *testing.T) {
 	}
 }
 
-func TestFR7_BeadMapSchemaValidatesFixture(t *testing.T) {
-	sch := compileBeadMapSchema(t)
-
-	t.Run("valid fixture passes", func(t *testing.T) {
-		data := readTestdata(t, "valid_bead_map.json")
-		var v any
-		if err := json.Unmarshal(data, &v); err != nil {
-			t.Fatalf("unmarshal: %v", err)
-		}
-		if err := sch.Validate(v); err != nil {
-			t.Fatalf("valid fixture should pass validation: %v", err)
-		}
-	})
-
-	t.Run("invalid document rejected", func(t *testing.T) {
-		err := validateBeadMap(t, sch, `{"next_id": 1}`)
-		if err == nil {
-			t.Fatal("expected validation error for missing records, got nil")
-		}
-	})
-}
-
 func TestFR7_BeadMapSchemaSelfContainedRefs(t *testing.T) {
 	data, err := BeadMapSchema()
 	if err != nil {
@@ -694,18 +355,20 @@ func TestFR7_BeadMapSchemaSelfContainedRefs(t *testing.T) {
 		t.Fatalf("unmarshal: %v", err)
 	}
 
-	// Check records.items.$ref points to #/$defs/record
-	props := raw["properties"].(map[string]any)
-	records := props["records"].(map[string]any)
-	items := records["items"].(map[string]any)
-	ref := items["$ref"].(string)
-	if ref != "#/$defs/record" {
-		t.Fatalf("records $ref should be #/$defs/record, got %q", ref)
+	oneOf, ok := raw["oneOf"].([]any)
+	if !ok || len(oneOf) != 3 {
+		t.Fatalf("top-level oneOf should list 3 line shapes, got %v", raw["oneOf"])
 	}
-
-	// Verify $defs/record exists
-	defs := raw["$defs"].(map[string]any)
-	if defs["record"] == nil {
-		t.Fatal("$defs/record missing")
+	for _, entry := range oneOf {
+		m := entry.(map[string]any)
+		ref, _ := m["$ref"].(string)
+		if !strings.HasPrefix(ref, "#/$defs/") {
+			t.Fatalf("oneOf entry $ref should point into #/$defs/, got %q", ref)
+		}
+		defName := strings.TrimPrefix(ref, "#/$defs/")
+		defs := raw["$defs"].(map[string]any)
+		if defs[defName] == nil {
+			t.Fatalf("$defs/%s missing", defName)
+		}
 	}
 }

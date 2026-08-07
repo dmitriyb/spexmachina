@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -677,34 +676,41 @@ func TestFR7_BM1_BeadMapSchemaLoads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BeadMapSchema(): %v", err)
 	}
+	if len(data) == 0 {
+		t.Fatal("BeadMapSchema() returned empty bytes")
+	}
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		t.Fatalf("not valid JSON: %v", err)
 	}
 }
 
-func TestFR7_BM2_BeadMapAcceptsIdentityHashAndProposalRef(t *testing.T) {
+func TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries(t *testing.T) {
 	schData, err := BeadMapSchema()
 	if err != nil {
 		t.Fatalf("BeadMapSchema(): %v", err)
 	}
 	sch := compileSchema(t, schData)
 
-	// Identity-hash spec_node_id (component/data_flow/test_section records).
-	identity := fmt.Sprintf(`{"next_id":2,"records":[{"id":1,"spec_node_id":"a1b2c3d4e5f6","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"%s"}]}`, strings.Repeat("a", 64))
-	if err := validateJSON(t, sch, []byte(identity)); err != nil {
-		t.Fatalf("identity hash spec_node_id should pass: %v", err)
+	// A change event's node is the identity hash.
+	changeEvent := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	if err := validateJSON(t, sch, []byte(changeEvent)); err != nil {
+		t.Fatalf("change event with identity-hash node should pass: %v", err)
 	}
 
-	// Proposal reference spec_node_id (proposal epic records).
-	proposal := `{"next_id":2,"records":[{"id":1,"spec_node_id":"2026-04-12-data-flow-contract-layer","bead_id":"test-epic","bead_type":"epic","node_type":"proposal","module":"","component":"2026-04-12-data-flow-contract-layer","content_file":"","spec_hash":""}]}`
-	if err := validateJSON(t, sch, []byte(proposal)); err != nil {
-		t.Fatalf("proposal epic record should pass: %v", err)
+	// An epic receipt's proposal is the slug-shaped reference.
+	epicReceipt := `{"event":"task_created","proposal":"2026-04-12-data-flow-contract-layer","task_id":"spexmachina-epic"}`
+	if err := validateJSON(t, sch, []byte(epicReceipt)); err != nil {
+		t.Fatalf("epic receipt with proposal slug should pass: %v", err)
 	}
 
-	// Empty spec_node_id is always rejected.
-	empty := `{"next_id":2,"records":[{"id":1,"spec_node_id":"","bead_id":"test-abc","bead_type":"task","module":"schema","component":"Foo","content_file":"arch_foo.md","spec_hash":"abc"}]}`
-	if err := validateJSON(t, sch, []byte(empty)); err == nil {
-		t.Fatal("empty spec_node_id should fail validation")
+	// An empty node always fails the identity-hash pattern.
+	emptyNode := `{"event":"added","eid":"9f2c41a0b7d3","node":"","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	if err := validateJSON(t, sch, []byte(emptyNode)); err == nil {
+		t.Fatal("empty node should fail validation")
 	}
 }
