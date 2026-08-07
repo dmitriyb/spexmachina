@@ -130,7 +130,7 @@
     {
       "id": "dbe8d1e707d5",
       "name": "Emit flow",
-      "description": "Emit's place in the run and its internals. Position: emit is the fourth of six stages — spex validate gates, spex diff and spex impact --beads produce the impact report, emit turns it into changeset.json, the adapter executes that and writes receipts.json, and spex ingest reconciles the pair; every hand-off from diff onwards goes through a file, so each stage can be re-run from the artifact its predecessor wrote, and a partial run leaves the snapshot untouched so the next diff recomputes from the same baseline. Internals: impact report + the task journal fold + spec graph + git HEAD → Resolver classifies each create's refs → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → ChangesetBuilder composes and writes changeset.json v2.",
+      "description": "Emit's place in the run and its internals. Position: emit is the fourth of six stages — spex validate gates, spex diff and spex impact --beads produce the impact report, emit turns it into changeset.json, the adapter executes that and writes receipts.json, and spex ingest reconciles the pair; every hand-off from diff onwards goes through a file, so each stage can be re-run from the artifact its predecessor wrote, and a partial run leaves the snapshot untouched so the next diff recomputes from the same baseline. Internals: impact report + the task journal fold + spec graph + git HEAD → TopologicalSorter orders ops → IdempotencyLabeler assigns labels → Resolver classifies each create's refs → ChangesetBuilder composes and writes changeset.json v2.",
       "content": "flow_emit.md",
       "uses": [
         "7f06f7d80e94",
