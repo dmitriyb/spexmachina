@@ -11,7 +11,6 @@ import (
 
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/impact"
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/spf13/cobra"
 )
@@ -50,30 +49,22 @@ Outputs:
 				return validationErr(err)
 			}
 
-			report, err := readImpactReport(impactPath, cmd.InOrStdin())
-			if err != nil {
+			if _, err := readImpactReport(impactPath, cmd.InOrStdin()); err != nil {
 				return validationErr(err)
 			}
 
-			store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
-
-			specGraph, err := newEmitSpecGraph(specDir)
-			if err != nil {
+			if _, err := newEmitSpecGraph(specDir); err != nil {
 				return validationErr(fmt.Errorf("emit: load spec graph: %w", err))
 			}
 
-			builder := &emit.Builder{
-				SpecGraph:    specGraph,
-				MappingStore: store,
-				GitHead:      gitHead,
-				Proposal:     proposal,
-			}
-			cs, err := builder.Build(report)
-			if err != nil {
-				return builderErr(err)
-			}
-
-			return writeChangeset(cs, outPath, cmd.OutOrStdout())
+			// TODO(bead:spexmachina-y0wc.31): wiring emit.Builder here read
+			// mapping.NewFileStore, retired by spexmachina-y0wc.19's
+			// migration of MappingStore onto the journal
+			// (spec/.history.jsonl) — emit.Builder.Build itself is gutted
+			// pending re-derivation (see emit/builder.go). Re-wire against
+			// mapping.NewMappingStore per spec/emit/arch_emit_command.md.
+			_ = mapPath
+			return builderErr(fmt.Errorf("emit: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.31)"))
 		},
 	}
 

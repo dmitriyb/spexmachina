@@ -1,14 +1,19 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
-	"strconv"
 
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/spf13/cobra"
 )
+
+// TODO(bead:spexmachina-y0wc.21): MapCommand's get/list/context RunE bodies
+// below wired mapping.NewFileStore + mapping.ResolveContext, both retired
+// by spexmachina-y0wc.19's migration of MappingStore onto the journal
+// (spec/.history.jsonl). Rewrite against mapping.NewMappingStore's
+// Get/List and the (not-yet-migrated) ContextResolver per
+// spec/map/arch_map_command.md — including dropping the retired
+// --map-file flag, since the journal's location is a function of
+// --spec-dir alone (see spec/map/arch_mapping_store.md "File Location").
 
 func newMapCmd() *cobra.Command {
 	mapCmd := &cobra.Command{
@@ -17,95 +22,37 @@ func newMapCmd() *cobra.Command {
 	}
 
 	getCmd := &cobra.Command{
-		Use:   "get <record-id>",
-		Short: "Get a mapping record by ID",
+		Use:   "get <key>",
+		Short: "Get one node's journal linkage by identity hash or task id",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runMapGetE,
 	}
-	getCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all mapping records",
+		Short: "List the folded node-to-task linkage",
 		RunE:  runMapListE,
 	}
-	listCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
 	contextCmd := &cobra.Command{
-		Use:   "context <record-id>",
-		Short: "Resolve full spec context for a mapping record",
+		Use:   "context <key>",
+		Short: "Resolve full spec context for a spec node, live or removed",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runMapContextE,
 	}
-	contextCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
 	mapCmd.AddCommand(getCmd, listCmd, contextCmd)
 	return mapCmd
 }
 
 func runMapGetE(cmd *cobra.Command, args []string) error {
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		return fmt.Errorf("map get: invalid record ID: %s", args[0])
-	}
-
-	store := mapping.NewFileStore(mapFile)
-	record, err := store.Get(id)
-	if err != nil {
-		return fmt.Errorf("map get: %w", err)
-	}
-
-	if err := json.NewEncoder(os.Stdout).Encode(record); err != nil {
-		return fmt.Errorf("map get: %w", err)
-	}
-	return nil
+	return fmt.Errorf("map get: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.21)")
 }
 
 func runMapListE(cmd *cobra.Command, args []string) error {
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	store := mapping.NewFileStore(mapFile)
-	records, err := store.List()
-	if err != nil {
-		return fmt.Errorf("map list: %w", err)
-	}
-
-	if err := json.NewEncoder(os.Stdout).Encode(records); err != nil {
-		return fmt.Errorf("map list: %w", err)
-	}
-	return nil
+	return fmt.Errorf("map list: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.21)")
 }
 
 func runMapContextE(cmd *cobra.Command, args []string) error {
-	specDir, err := resolveSpecDir(cmd)
-	if err != nil {
-		return err
-	}
-
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		return fmt.Errorf("map context: invalid record ID: %s", args[0])
-	}
-
-	store := mapping.NewFileStore(mapFile)
-	record, err := store.Get(id)
-	if err != nil {
-		return fmt.Errorf("map context: %w", err)
-	}
-
-	result, err := mapping.ResolveContext(specDir, record)
-	if err != nil {
-		return fmt.Errorf("map context: %w", err)
-	}
-
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err := enc.Encode(result); err != nil {
-		return fmt.Errorf("map context: %w", err)
-	}
-	return nil
+	return fmt.Errorf("map context: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.21)")
 }

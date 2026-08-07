@@ -10,7 +10,6 @@ import (
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/ingest"
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/spf13/cobra"
@@ -63,47 +62,23 @@ Exit codes:
 			if err := preflightPair(cs, rc); err != nil {
 				return ingestInputErr(err)
 			}
-
-			store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
-
-			if mode == "refresh" {
-				return runRefreshMode(cmd, store, specDir, cs, rc)
-			}
-			if mode != "normal" {
+			if mode != "normal" && mode != "refresh" {
 				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
 			}
-
-			graph, err := newIngestSpecGraph(specDir)
-			if err != nil {
+			if _, err := newIngestSpecGraph(specDir); err != nil {
 				return ingestInputErr(fmt.Errorf("ingest: load spec graph: %w", err))
 			}
 
-			reconciler := &ingest.Reconciler{MappingStore: store, SpecGraph: graph}
-			sum, err := reconciler.Apply(cs, rc)
-			if err != nil {
-				return ingestInvariantErr(err)
-			}
-
-			saver := &ingest.Saver{SpecDir: specDir}
-			wrote, err := saver.Save(rc.Status)
-			if err != nil {
-				return ingestInputErr(fmt.Errorf("ingest: snapshot: %w", err))
-			}
-
-			final := ingest.Summary{
-				Ok:             sum.OkCreates + sum.OkCloses,
-				Skipped:        sum.Skipped,
-				Errors:         sum.Errors,
-				RecordsAdded:   sum.RecordsAdded,
-				RecordsUpdated: sum.RecordsUpdated,
-				RecordsDeleted: sum.RecordsDeleted,
-				SnapshotSaved:  wrote,
-				Status:         rc.Status,
-			}
-			enc := json.NewEncoder(cmd.OutOrStdout())
-			enc.SetIndent("", "  ")
-			enc.SetEscapeHTML(false)
-			return enc.Encode(final)
+			// TODO(bead:spexmachina-y0wc.35): wiring mapping.NewFileStore,
+			// ingest.Reconciler and ingest.RefreshHandler here read/wrote
+			// mapping.Store/.bead-map.json, all retired or gutted by
+			// spexmachina-y0wc.19's migration of MappingStore onto the
+			// journal (spec/.history.jsonl) — ingest should now append
+			// journal events/receipts instead of reconciling a record
+			// store. Re-wire against mapping.NewMappingStore per
+			// spec/ingest/arch_ingest_command.md.
+			_, _ = resolveMapPath(mapPath, specDir), mode
+			return ingestInvariantErr(fmt.Errorf("ingest: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.35)"))
 		},
 	}
 
@@ -116,30 +91,11 @@ Exit codes:
 	return cmd
 }
 
-// runRefreshMode dispatches to the RefreshHandler pathway. Refusals
-// (structural diff entries, orphan records) map to the invariant exit
-// code 2; pre-flight failures (missing snapshot, non-empty artifacts)
-// and IO errors map to input-error exit code 1, per arch_ingest_command.md.
-func runRefreshMode(cmd *cobra.Command, store mapping.Store, specDir string, cs emit.Changeset, rc adapters.Receipts) error {
-	h := &ingest.RefreshHandler{
-		Store:     store,
-		Changeset: &cs,
-		Receipts:  &rc,
-	}
-	sum, err := h.Apply(specDir)
-	if err != nil {
-		var refusal *ingest.RefreshRefusal
-		if errors.As(err, &refusal) {
-			return ingestInvariantErr(err)
-		}
-		return ingestInputErr(err)
-	}
-
-	enc := json.NewEncoder(cmd.OutOrStdout())
-	enc.SetIndent("", "  ")
-	enc.SetEscapeHTML(false)
-	return enc.Encode(sum)
-}
+// TODO(bead:spexmachina-y0wc.35): runRefreshMode dispatched to
+// ingest.RefreshHandler, whose Store field/Apply method are gutted pending
+// re-derivation (see ingest/refresh.go) after spexmachina-y0wc.19's
+// migration of MappingStore onto the journal. Re-wire against
+// mapping.NewMappingStore per spec/ingest/arch_ingest_command.md.
 
 func loadChangeset(path string) (emit.Changeset, error) {
 	data, err := os.ReadFile(path)
