@@ -1,0 +1,825 @@
+package mapping
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+)
+
+func testStore(t *testing.T) Store {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), ".bead-map.json")
+	return NewFileStore(path)
+}
+
+func testRecord() Record {
+	return Record{
+		SpecNodeID:  "79946d618829",
+		BeadID:      "abc-123",
+		BeadType:    "task",
+		Module:      "schema",
+		Component:   "ProjectSchema",
+		ContentFile: "spec/schema/arch_project_schema.md",
+		SpecHash:    "e3b0c44",
+	}
+}
+
+func TestFR1_Create_AssignsSequentialID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	id1, err := s.Create(r1)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if id1 != 1 {
+		t.Fatalf("first ID: want 1, got %d", id1)
+	}
+
+	r2 := Record{
+		SpecNodeID:  "78883b84c32d",
+		BeadID:      "abc-456",
+		BeadType:    "task",
+		Module:      "schema",
+		Component:   "ModuleSchema",
+		ContentFile: "spec/schema/arch_module_schema.md",
+		SpecHash:    "d4e5f6",
+	}
+	id2, err := s.Create(r2)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if id2 != 2 {
+		t.Fatalf("second ID: want 2, got %d", id2)
+	}
+}
+
+func TestFR1_Create_WritesValidJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+	s := NewFileStore(path)
+
+	r := testRecord()
+	_, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+
+	var mf mapFile
+	if err := json.Unmarshal(data, &mf); err != nil {
+		t.Fatalf("parse file: %v", err)
+	}
+
+	if mf.NextID != 2 {
+		t.Fatalf("next_id: want 2, got %d", mf.NextID)
+	}
+	if len(mf.Records) != 1 {
+		t.Fatalf("records count: want 1, got %d", len(mf.Records))
+	}
+	if mf.Records[0].BeadID != "abc-123" {
+		t.Fatalf("bead_id: want abc-123, got %s", mf.Records[0].BeadID)
+	}
+}
+
+func TestFR1_Get_ByID(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+
+	if got.ID != id {
+		t.Fatalf("ID: want %d, got %d", id, got.ID)
+	}
+	if got.BeadID != r.BeadID {
+		t.Fatalf("BeadID: want %s, got %s", r.BeadID, got.BeadID)
+	}
+	if got.SpecNodeID != r.SpecNodeID {
+		t.Fatalf("SpecNodeID: want %s, got %s", r.SpecNodeID, got.SpecNodeID)
+	}
+	if got.Module != r.Module {
+		t.Fatalf("Module: want %s, got %s", r.Module, got.Module)
+	}
+	if got.Component != r.Component {
+		t.Fatalf("Component: want %s, got %s", r.Component, got.Component)
+	}
+	if got.ContentFile != r.ContentFile {
+		t.Fatalf("ContentFile: want %s, got %s", r.ContentFile, got.ContentFile)
+	}
+	if got.SpecHash != r.SpecHash {
+		t.Fatalf("SpecHash: want %s, got %s", r.SpecHash, got.SpecHash)
+	}
+}
+
+func TestFR1_Get_NotFound(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.Get(999)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestFR1_GetByBead(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.GetByBead("abc-123")
+	if err != nil {
+		t.Fatalf("GetByBead: %v", err)
+	}
+	if got.ID != id {
+		t.Fatalf("ID: want %d, got %d", id, got.ID)
+	}
+}
+
+func TestFR1_GetByBead_NotFound(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.GetByBead("nonexistent")
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestFR1_GetBySpecNode(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.GetBySpecNode("79946d618829")
+	if err != nil {
+		t.Fatalf("GetBySpecNode: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("count: want 1, got %d", len(got))
+	}
+	if got[0].ID != id {
+		t.Fatalf("ID: want %d, got %d", id, got[0].ID)
+	}
+}
+
+func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
+	s := testStore(t)
+
+	_, err := s.GetBySpecNode("nonexistent/node/1")
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestGetByProposalEpic_ReturnsLatestOpen(t *testing.T) {
+	s := testStore(t)
+
+	// Two epic records for the same proposal; the older is closed (a prior
+	// run), the newer is open (current run). Resolver should see the latest.
+	if _, err := s.Create(Record{
+		SpecNodeID: "2026-04-foo",
+		BeadID:     "epic-1",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "2026-04-foo",
+		BeadStatus: "closed",
+	}); err != nil {
+		t.Fatalf("Create closed epic: %v", err)
+	}
+	if _, err := s.Create(Record{
+		SpecNodeID: "2026-04-foo",
+		BeadID:     "epic-2",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "2026-04-foo",
+		BeadStatus: "open",
+	}); err != nil {
+		t.Fatalf("Create open epic: %v", err)
+	}
+
+	got, err := s.GetByProposalEpic("2026-04-foo")
+	if err != nil {
+		t.Fatalf("GetByProposalEpic: %v", err)
+	}
+	if got.BeadID != "epic-2" {
+		t.Errorf("want epic-2 (latest open), got %s", got.BeadID)
+	}
+}
+
+func TestGetByProposalEpic_NotFound(t *testing.T) {
+	s := testStore(t)
+	_, err := s.GetByProposalEpic("nonexistent")
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestGetByProposalEpic_AllClosedReturnsNotFound(t *testing.T) {
+	s := testStore(t)
+	if _, err := s.Create(Record{
+		SpecNodeID: "P1",
+		BeadID:     "epic-old",
+		BeadType:   "epic",
+		NodeType:   "proposal",
+		Module:     "proposal",
+		Component:  "P1",
+		BeadStatus: "closed",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err := s.GetByProposalEpic("P1")
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("all-closed proposal must yield ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestGetByProposalEpic_IgnoresNonProposalRecords(t *testing.T) {
+	s := testStore(t)
+	// A non-proposal record sharing the SpecNodeID should not match.
+	if _, err := s.Create(Record{
+		SpecNodeID: "shared-id",
+		BeadID:     "feature-bead",
+		BeadType:   "feature",
+		NodeType:   "component",
+		Module:     "m",
+		Component:  "C",
+		BeadStatus: "open",
+	}); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	_, err := s.GetByProposalEpic("shared-id")
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("non-proposal record must not match, got: %v", err)
+	}
+}
+
+func TestFR1_BeadTypePreserved(t *testing.T) {
+	s := testStore(t)
+
+	r := Record{
+		SpecNodeID:  "76d72cbe00f3",
+		BeadID:      "feat-001",
+		BeadType:    "feature",
+		Module:      "impact",
+		Component:   "ActionClassifier",
+		ContentFile: "spec/impact/arch_action_classifier.md",
+		SpecHash:    "abc123",
+	}
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	got, err := s.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BeadType != "feature" {
+		t.Fatalf("BeadType: want feature, got %s", got.BeadType)
+	}
+}
+
+func TestFR1_Update_SpecHash(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = s.Update(id, map[string]string{"spec_hash": "new-hash"})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := s.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.SpecHash != "new-hash" {
+		t.Fatalf("SpecHash: want new-hash, got %s", got.SpecHash)
+	}
+	if got.BeadID != r.BeadID {
+		t.Fatalf("BeadID changed: want %s, got %s", r.BeadID, got.BeadID)
+	}
+}
+
+func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = s.Update(id, map[string]string{
+		"bead_id":   "replaced-bead",
+		"spec_hash": "updated-hash",
+	})
+	if err != nil {
+		t.Fatalf("Update: %v", err)
+	}
+
+	got, err := s.Get(id)
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if got.BeadID != "replaced-bead" {
+		t.Fatalf("BeadID: want replaced-bead, got %s", got.BeadID)
+	}
+	if got.SpecHash != "updated-hash" {
+		t.Fatalf("SpecHash: want updated-hash, got %s", got.SpecHash)
+	}
+	// Immutable fields must be unchanged
+	if got.SpecNodeID != r.SpecNodeID {
+		t.Fatalf("SpecNodeID changed: want %s, got %s", r.SpecNodeID, got.SpecNodeID)
+	}
+	if got.Module != r.Module {
+		t.Fatalf("Module changed: want %s, got %s", r.Module, got.Module)
+	}
+	if got.Component != r.Component {
+		t.Fatalf("Component changed: want %s, got %s", r.Component, got.Component)
+	}
+	if got.ContentFile != r.ContentFile {
+		t.Fatalf("ContentFile changed: want %s, got %s", r.ContentFile, got.ContentFile)
+	}
+	if got.BeadType != r.BeadType {
+		t.Fatalf("BeadType changed: want %s, got %s", r.BeadType, got.BeadType)
+	}
+}
+
+func TestFR1_Update_DuplicateBeadID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	_, err := s.Create(r1)
+	if err != nil {
+		t.Fatalf("Create r1: %v", err)
+	}
+
+	r2 := testRecord()
+	r2.SpecNodeID = "08909d62930b"
+	r2.BeadID = "other-bead"
+	id2, err := s.Create(r2)
+	if err != nil {
+		t.Fatalf("Create r2: %v", err)
+	}
+
+	// Updating r2's bead_id to r1's bead_id must fail.
+	err = s.Update(id2, map[string]string{"bead_id": r1.BeadID})
+	if err == nil {
+		t.Fatal("want duplicate bead_id error, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate bead_id") {
+		t.Fatalf("want duplicate bead_id error, got: %v", err)
+	}
+}
+
+func TestFR1_Update_NotFound(t *testing.T) {
+	s := testStore(t)
+
+	err := s.Update(999, map[string]string{"spec_hash": "x"})
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestFR1_Delete(t *testing.T) {
+	s := testStore(t)
+
+	r := testRecord()
+	id, err := s.Create(r)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = s.Delete(id)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	_, err = s.Get(id)
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound after delete, got: %v", err)
+	}
+}
+
+func TestFR1_Delete_NotFound(t *testing.T) {
+	s := testStore(t)
+
+	err := s.Delete(999)
+	if err == nil {
+		t.Fatal("want error, got nil")
+	}
+	if !errors.Is(err, ErrRecordNotFound) {
+		t.Fatalf("want ErrRecordNotFound, got: %v", err)
+	}
+}
+
+func TestFR1_Delete_IDsNeverReused(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	id1, err := s.Create(r1)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	err = s.Delete(id1)
+	if err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	r2 := Record{
+		SpecNodeID:  "78883b84c32d",
+		BeadID:      "abc-456",
+		BeadType:    "task",
+		Module:      "schema",
+		Component:   "ModuleSchema",
+		ContentFile: "spec/schema/arch_module_schema.md",
+		SpecHash:    "d4e5f6",
+	}
+	id2, err := s.Create(r2)
+	if err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	if id2 <= id1 {
+		t.Fatalf("new ID %d should be greater than deleted ID %d", id2, id1)
+	}
+}
+
+func TestFR1_List_Sorted(t *testing.T) {
+	s := testStore(t)
+
+	records := []Record{
+		{SpecNodeID: "aabbccddeeff", BeadID: "b1", BeadType: "task", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
+		{SpecNodeID: "112233445566", BeadID: "b2", BeadType: "task", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
+		{SpecNodeID: "ffeeddccbbaa", BeadID: "b3", BeadType: "task", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
+	}
+	for _, r := range records {
+		if _, err := s.Create(r); err != nil {
+			t.Fatalf("Create: %v", err)
+		}
+	}
+
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 3 {
+		t.Fatalf("count: want 3, got %d", len(list))
+	}
+	for i := 1; i < len(list); i++ {
+		if list[i].ID <= list[i-1].ID {
+			t.Fatalf("records not sorted: ID %d after %d", list[i].ID, list[i-1].ID)
+		}
+	}
+}
+
+func TestFR1_List_Empty(t *testing.T) {
+	s := testStore(t)
+
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("want empty list, got %d records", len(list))
+	}
+}
+
+func TestFR1_DuplicateBeadID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	if _, err := s.Create(r1); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	r2 := Record{
+		SpecNodeID:  "aabbccddeeff",
+		BeadID:      "abc-123", // same bead ID
+		BeadType:    "task",
+		Module:      "different",
+		Component:   "Other",
+		ContentFile: "f",
+		SpecHash:    "h",
+	}
+	_, err := s.Create(r2)
+	if err == nil {
+		t.Fatal("want error for duplicate bead_id, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate bead_id") {
+		t.Fatalf("error should mention duplicate bead_id, got: %v", err)
+	}
+}
+
+func TestFR1_DuplicateSpecNodeID(t *testing.T) {
+	s := testStore(t)
+
+	r1 := testRecord()
+	if _, err := s.Create(r1); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	r2 := Record{
+		SpecNodeID:  "79946d618829", // same spec node ID, different bead
+		BeadID:      "different-bead",
+		BeadType:    "task",
+		Module:      "schema",
+		Component:   "ProjectSchema",
+		ContentFile: "f",
+		SpecHash:    "h",
+	}
+	_, err := s.Create(r2)
+	if err == nil {
+		t.Fatal("want error for duplicate spec_node_id, got nil")
+	}
+	if !strings.Contains(err.Error(), "duplicate spec_node_id") {
+		t.Fatalf("error should mention duplicate spec_node_id, got: %v", err)
+	}
+}
+
+func TestFR1_MissingFile_CreatedOnFirstWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+	s := NewFileStore(path)
+
+	// List before any write returns empty
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("want empty list, got %d", len(list))
+	}
+
+	// First write creates the file
+	r := testRecord()
+	if _, err := s.Create(r); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("file should exist after create: %v", err)
+	}
+}
+
+func TestFR5_InvalidSchema_RejectsExtraField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	// Write a bead-map with an extra field on a record
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "79946d618829",
+			"bead_id": "abc-123",
+			"bead_type": "task",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44",
+			"extra_field": "should fail"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for extra field, got nil")
+	}
+	if !strings.Contains(err.Error(), "schema") {
+		t.Fatalf("error should mention schema validation, got: %v", err)
+	}
+}
+
+func TestFR5_InvalidSchema_BadSpecNodeIDPattern(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "INVALID FORMAT",
+			"bead_id": "abc-123",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for bad spec_node_id, got nil")
+	}
+}
+
+func TestFR5_InvalidSchema_MissingRequiredField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	// Record missing required "module" field
+	invalid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "79946d618829",
+			"bead_id": "abc-123",
+			"bead_type": "task",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for missing required field, got nil")
+	}
+}
+
+func TestFR5_InvalidSchema_EnvelopeExtraField(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	invalid := `{
+		"next_id": 1,
+		"records": [],
+		"version": "1.0"
+	}`
+	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	_, err := s.List()
+	if err == nil {
+		t.Fatal("want schema validation error for envelope extra field, got nil")
+	}
+}
+
+func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	valid := `{
+		"next_id": 2,
+		"records": [{
+			"id": 1,
+			"spec_node_id": "79946d618829",
+			"bead_id": "abc-123",
+			"bead_type": "task",
+			"module": "schema",
+			"component": "ProjectSchema",
+			"content_file": "spec/schema/arch_project_schema.md",
+			"spec_hash": "e3b0c44",
+			"bead_status": "closed"
+		}]
+	}`
+	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List should succeed with optional bead_status: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("want 1 record, got %d", len(list))
+	}
+}
+
+func TestFR5_ValidSchema_EmptyRecords(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+
+	valid := `{"next_id": 1, "records": []}`
+	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := NewFileStore(path)
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List should succeed with empty records: %v", err)
+	}
+	if len(list) != 0 {
+		t.Fatalf("want 0 records, got %d", len(list))
+	}
+}
+
+func TestFR1_ConcurrentCreate(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".bead-map.json")
+	s := NewFileStore(path)
+
+	var wg sync.WaitGroup
+	errs := make([]error, 10)
+	ids := make([]int, 10)
+
+	for i := range 10 {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			r := Record{
+				SpecNodeID:  fmt.Sprintf("aabbccddee%02x", idx),
+				BeadID:      fmt.Sprintf("bead-%d", idx),
+				BeadType:    "task",
+				Module:      "mod",
+				Component:   fmt.Sprintf("Comp%d", idx),
+				ContentFile: "f",
+				SpecHash:    "h",
+			}
+			ids[idx], errs[idx] = s.Create(r)
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("goroutine %d: Create failed: %v", i, err)
+		}
+	}
+
+	// Verify file is valid JSON
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read file: %v", err)
+	}
+	var mf mapFile
+	if err := json.Unmarshal(data, &mf); err != nil {
+		t.Fatalf("invalid JSON after concurrent writes: %v", err)
+	}
+	if len(mf.Records) != 10 {
+		t.Fatalf("records: want 10, got %d", len(mf.Records))
+	}
+
+	// All IDs should be unique
+	seen := make(map[int]bool)
+	for _, id := range ids {
+		if seen[id] {
+			t.Fatalf("duplicate ID: %d", id)
+		}
+		seen[id] = true
+	}
+}

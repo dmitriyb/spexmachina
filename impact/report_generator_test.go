@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
@@ -26,6 +27,9 @@ func mkChange(path, typ, oldHash, newHash, nodeType, module string) merkle.Class
 		Module: module,
 	}
 }
+
+// Ensure mapping import is used (referenced in S10 test).
+var _ = mapping.Record{}
 
 // --- S7: ReportGenerator produces valid JSON with correct structure ---
 
@@ -306,11 +310,43 @@ func TestFR4_D11_GenerateReportOmitsEmptyDepSpecNodeIDs(t *testing.T) {
 	}
 }
 
-// TODO(bead:spexmachina-y0wc.24): TestFR4_S10_FullPipeline drove
-// ClassifyActions through Match/Unmatched (NodeMatcher, mapping.Record),
-// both retired by spexmachina-y0wc.19's migration of MappingStore onto the
-// journal. Rewrite this full-pipeline case once ActionClassifier is
-// re-derived per spec/impact/test_classification_reporting.md.
+// --- S10: Full pipeline - ClassifyActions into GenerateReport ---
+
+func TestFR4_S10_FullPipeline(t *testing.T) {
+	actions := ClassifyActions(
+		nil,
+		[]Match{
+			{
+				Change: mkChange("module/1/component/1", "modified", "a", "b", "component", "alpha"),
+				Records: []mapping.Record{
+					{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
+				},
+			},
+		},
+		[]Unmatched{
+			{Change: mkChange("module/1/component/5", "added", "", "c", "component", "alpha")},
+		},
+		nil,
+	)
+
+	var buf bytes.Buffer
+	if err := GenerateReport(actions, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ImpactReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+
+	// 2 creates (1 from modified match + 1 from added unmatched), 1 obsolete
+	if report.Summary.CreateCount != 2 {
+		t.Errorf("want 2 creates, got %d", report.Summary.CreateCount)
+	}
+	if report.Summary.ObsoleteCount != 1 {
+		t.Errorf("want 1 obsolete, got %d", report.Summary.ObsoleteCount)
+	}
+}
 
 // --- Preserved action fields ---
 

@@ -233,7 +233,7 @@ func fold(events []Event) Fold {
 				dangling = append(dangling, DanglingReceipt{Receipt: ev})
 				continue
 			}
-			entries[change.Node] = FoldEntry{Key: change.Node, TaskID: ev.TaskID, Source: change}
+			entries[change.Node] = FoldEntry{Key: change.Node, TaskID: ev.TaskID, Removed: change.Event == "removed", Source: change}
 		}
 	}
 

@@ -53,7 +53,7 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	_, diffErrors, err := parseDiffJSON(diffData)
+	changes, diffErrors, err := parseDiffJSON(diffData)
 	if err != nil {
 		return fmt.Errorf("impact: %w", err)
 	}
@@ -65,32 +65,49 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: diff contains %d error(s), refusing to proceed", len(diffErrors))
 	}
 
+	// Resolve map path relative to spec dir if not absolute.
+	mapFlag, _ := cmd.Flags().GetString("map")
+	mapPath := mapFlag
+	if !filepath.IsAbs(mapPath) {
+		mapPath = filepath.Join(filepath.Dir(specDir), mapPath)
+	}
+
+	store := mapping.NewFileStore(mapPath)
+	records, err := store.List()
+	if err != nil {
+		return fmt.Errorf("impact: read mapping records: %w", err)
+	}
+
 	beadsFlag, _ := cmd.Flags().GetString("beads")
 	if beadsFlag != "" {
 		beadsData, err := os.ReadFile(beadsFlag)
 		if err != nil {
 			return fmt.Errorf("impact: read beads: %w", err)
 		}
-		if _, err := impact.ReadBeadsBytes(beadsData); err != nil {
+		beads, err := impact.ReadBeadsBytes(beadsData)
+		if err != nil {
 			return fmt.Errorf("impact: %w", err)
 		}
+		records = enrichRecordsWithBeadStatus(beads, records)
 	}
 
 	// Spec graph is used for test_section describes-length gating inside
 	// ClassifyActions and for dependency resolution on create actions.
-	if _, err := mapping.NewSpecGraph(specDir); err != nil {
+	specGraph, err := mapping.NewSpecGraph(specDir)
+	if err != nil {
 		return fmt.Errorf("impact: load spec graph: %w", err)
 	}
 
-	// TODO(bead:spexmachina-y0wc.26): wiring mapping.NewFileStore +
-	// impact.MatchNodes/ClassifyActions here read mapping.Record, retired
-	// by spexmachina-y0wc.19's migration of MappingStore onto the journal
-	// (spec/.history.jsonl) — NodeMatcher/ActionClassifier need re-deriving
-	// against live tracker beads (BeadReader) rather than a mapping-store
-	// record slice; see impact/node_matcher.go and
-	// impact/action_classifier.go. Re-wire per
-	// spec/impact/arch_impact_command.md.
-	return fmt.Errorf("impact: not yet migrated onto the journal-backed MappingStore (spexmachina-y0wc.26)")
+	// Changes and records both key on identity hashes; NodeMatcher joins them
+	// directly without any path-format translation. DepSpecNodeIDs is filled
+	// inline by ClassifyActions — bead-ID resolution is deferred to emit.
+	matches, unmatched, orphaned := impact.MatchNodes(changes, records)
+	actions := impact.ClassifyActions(specGraph, matches, unmatched, orphaned)
+
+	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
+		return fmt.Errorf("impact: %w", err)
+	}
+	return nil
 }
 
 // parseDiffJSON converts the JSON output of `spex diff --json` into
@@ -137,31 +154,27 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 	return changes, raw.Errors, nil
 }
 
-// TODO(bead:spexmachina-y0wc.26): enrichRecordsWithBeadStatus matched
-// tracker beads onto mapping.Record by integer record id, retired by
-// spexmachina-y0wc.19's migration of MappingStore onto the journal.
-// Re-derive bead-status enrichment against the journal fold per
-// spec/impact/arch_impact_command.md.
-//
-// Original implementation, preserved for reference:
-//
-// func enrichRecordsWithBeadStatus(beads []impact.BeadSpec, records []mapping.Record) []mapping.Record {
-// 	if len(records) == 0 {
-// 		return records
-// 	}
-// 	statusByRecordID := make(map[int]string, len(beads))
-// 	for _, b := range beads {
-// 		statusByRecordID[b.RecordID] = b.Status
-// 	}
-// 	out := make([]mapping.Record, len(records))
-// 	for i, r := range records {
-// 		if status, ok := statusByRecordID[r.ID]; ok {
-// 			r.BeadStatus = status
-// 		}
-// 		out[i] = r
-// 	}
-// 	return out
-// }
+// enrichRecordsWithBeadStatus populates each mapping record's BeadStatus
+// field by matching on record ID. Records without a matching bead are
+// returned unchanged so the cleanup-bead gate at action_classifier.go
+// defaults closed (no cleanup actions emitted) for safety.
+func enrichRecordsWithBeadStatus(beads []impact.BeadSpec, records []mapping.Record) []mapping.Record {
+	if len(records) == 0 {
+		return records
+	}
+	statusByRecordID := make(map[int]string, len(beads))
+	for _, b := range beads {
+		statusByRecordID[b.RecordID] = b.Status
+	}
+	out := make([]mapping.Record, len(records))
+	for i, r := range records {
+		if status, ok := statusByRecordID[r.ID]; ok {
+			r.BeadStatus = status
+		}
+		out[i] = r
+	}
+	return out
+}
 
 func parseChangeType(s string) (merkle.ChangeType, error) {
 	switch s {

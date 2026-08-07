@@ -1,7 +1,11 @@
 package impact
 
 import (
+	"fmt"
+	"sort"
+
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/merkle"
 )
 
 // Action represents a classified impact action for a spec node.
@@ -30,187 +34,159 @@ var beadProducingTypes = map[string]bool{
 	"test_section": true,
 }
 
-// TODO(bead:spexmachina-y0wc.24): ClassifyActions took its old-bead
-// correlation from Match/Unmatched/Orphaned (NodeMatcher, mapping.Record),
-// both retired by spexmachina-y0wc.19's migration of MappingStore onto the
-// journal. Re-derive the state-transition table against the journal-era
-// NodeMatcher output per spec/impact/arch_action_classifier.md and
-// re-enable this file. Action, beadProducingTypes above, and the
-// graph-walking helpers below are kept live since they carry no
-// mapping.Record dependency and ReportGenerator (spexmachina-y0wc.25)
-// already depends on Action.
+// ClassifyActions applies the state transition table to NodeMatcher output.
+// Modified or unexpectedly-matched-added nodes produce obsolete+create pairs;
+// unmatched added/modified nodes produce a single create; orphans produce an
+// obsolete (plus a cleanup create for closed beads).
 //
-// Original implementation, preserved for reference:
+// For each create action, DepSpecNodeIDs is populated with identity hashes
+// from: the component's direct `uses` edges, the transitive `requires_module`
+// closure (with cycle detection), and data_flow add-ons (components appearing
+// in a same-batch data_flow's `uses` array gain the data_flow's identity hash).
+// Bead-ID resolution is NOT performed — emit's Resolver classifies each
+// spec_node_id into ref:op / ref:bead / ref:spec_node at emit time.
 //
-// import (
-// 	"fmt"
-// 	"sort"
+// The graph argument drives both the test_section describes-length gate and
+// the DepSpecNodeIDs collection. When the graph is nil or a module lookup
+// fails, test_section changes default to producing actions (safer fallback)
+// and DepSpecNodeIDs is left empty for affected creates.
 //
-// 	"github.com/dmitriyb/spexmachina/mapping"
-// 	"github.com/dmitriyb/spexmachina/merkle"
-// )
-//
-// // ClassifyActions applies the state transition table to NodeMatcher output.
-// // Modified or unexpectedly-matched-added nodes produce obsolete+create pairs;
-// // unmatched added/modified nodes produce a single create; orphans produce an
-// // obsolete (plus a cleanup create for closed beads).
-// //
-// // For each create action, DepSpecNodeIDs is populated with identity hashes
-// // from: the component's direct `uses` edges, the transitive `requires_module`
-// // closure (with cycle detection), and data_flow add-ons (components appearing
-// // in a same-batch data_flow's `uses` array gain the data_flow's identity hash).
-// // Bead-ID resolution is NOT performed — emit's Resolver classifies each
-// // spec_node_id into ref:op / ref:bead / ref:spec_node at emit time.
-// //
-// // The graph argument drives both the test_section describes-length gate and
-// // the DepSpecNodeIDs collection. When the graph is nil or a module lookup
-// // fails, test_section changes default to producing actions (safer fallback)
-// // and DepSpecNodeIDs is left empty for affected creates.
-// //
-// // Results are sorted deterministically by (Type, Module, Node, BeadID).
-// func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmatched, orphaned []Orphaned) []Action {
-// 	var actions []Action
-//
-// 	for _, m := range matches {
-// 		nodeType := m.Change.NodeType
-// 		newHash := m.Change.NewHash
-// 		specNodeID := m.Change.Key
-//
-// 		switch m.Change.Type {
-// 		case merkle.Added, merkle.Modified:
-// 			// test_section with describes==1 is coupled to its single
-// 			// component's feature bead. Obsolete the old bead (it exists,
-// 			// since this is the matched branch) but do not create a new one —
-// 			// the component bead will own the test going forward.
-// 			coupled := nodeType == "test_section" && !testSectionProducesBead(graph, m.Change.Module, specNodeID)
-//
-// 			for _, r := range m.Records {
-// 				node := nodeName(r)
-// 				// Obsolete the old bead.
-// 				actions = append(actions, Action{
-// 					Type:       "obsolete",
-// 					BeadID:     r.BeadID,
-// 					Module:     m.Change.Module,
-// 					Node:       node,
-// 					NodeType:   nodeType,
-// 					SpecNodeID: r.SpecNodeID,
-// 					ChangeType: "modified",
-// 					Reason:     fmt.Sprintf("Spec node modified: %s/%s", m.Change.Module, node),
-// 				})
-// 				if coupled {
-// 					continue
-// 				}
-// 				// Create a new replacement bead.
-// 				actions = append(actions, Action{
-// 					Type:       "create",
-// 					Module:     m.Change.Module,
-// 					Node:       node,
-// 					NodeType:   nodeType,
-// 					SpecNodeID: specNodeID,
-// 					SpecHash:   newHash,
-// 					OldBeadID:  r.BeadID,
-// 					Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", m.Change.Module, node),
-// 				})
-// 			}
-// 		}
-// 	}
-//
-// 	for _, u := range unmatched {
-// 		nodeType := u.Change.NodeType
-// 		node := resolveNodeName(graph, u.Change.Module, nodeType, u.Change.Key)
-//
-// 		// Only bead-trackable node types produce actions.
-// 		if !beadProducingTypes[nodeType] {
-// 			continue
-// 		}
-// 		// test_section gate: bundle single-describes sections into the
-// 		// component feature bead.
-// 		if nodeType == "test_section" && !testSectionProducesBead(graph, u.Change.Module, u.Change.Key) {
-// 			continue
-// 		}
-//
-// 		switch u.Change.Type {
-// 		case merkle.Added:
-// 			actions = append(actions, Action{
-// 				Type:       "create",
-// 				Module:     u.Change.Module,
-// 				Node:       node,
-// 				NodeType:   nodeType,
-// 				SpecNodeID: u.Change.Key,
-// 				SpecHash:   u.Change.NewHash,
-// 				Reason:     fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
-// 			})
-// 		case merkle.Modified:
-// 			actions = append(actions, Action{
-// 				Type:       "create",
-// 				Module:     u.Change.Module,
-// 				Node:       node,
-// 				NodeType:   nodeType,
-// 				SpecNodeID: u.Change.Key,
-// 				SpecHash:   u.Change.NewHash,
-// 				Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", u.Change.Module, node),
-// 			})
-// 		}
-// 		// Removed + no record = no action.
-// 	}
-//
-// 	for _, o := range orphaned {
-// 		node := nodeName(o.Record)
-//
-// 		// Always obsolete the orphaned bead.
-// 		actions = append(actions, Action{
-// 			Type:       "obsolete",
-// 			BeadID:     o.Record.BeadID,
-// 			Module:     o.Record.Module,
-// 			Node:       node,
-// 			NodeType:   o.NodeType,
-// 			SpecNodeID: o.Record.SpecNodeID,
-// 			ChangeType: "removed",
-// 			Reason:     fmt.Sprintf("Spec node removed: %s/%s", o.Record.Module, node),
-// 		})
-//
-// 		// If the bead is closed, code has shipped — create a cleanup bead.
-// 		// OldBeadID carries the obsoleted bead so the downstream emitter
-// 		// records --deps blocks:<old-bead-id>, giving the cleanup bead a
-// 		// structural pointer back to what needs removing.
-// 		if o.Record.BeadStatus == "closed" {
-// 			actions = append(actions, Action{
-// 				Type:       "create",
-// 				Module:     o.Record.Module,
-// 				Node:       node,
-// 				NodeType:   o.NodeType,
-// 				SpecNodeID: o.Record.SpecNodeID,
-// 				OldBeadID:  o.Record.BeadID,
-// 				Reason:     fmt.Sprintf("Code cleanup: %s/%s", o.Record.Module, node),
-// 			})
-// 		}
-// 	}
-//
-// 	attachDepSpecNodeIDs(graph, actions)
-//
-// 	sort.Slice(actions, func(i, j int) bool {
-// 		if actions[i].Type != actions[j].Type {
-// 			return actions[i].Type < actions[j].Type
-// 		}
-// 		if actions[i].Module != actions[j].Module {
-// 			return actions[i].Module < actions[j].Module
-// 		}
-// 		if actions[i].Node != actions[j].Node {
-// 			return actions[i].Node < actions[j].Node
-// 		}
-// 		return actions[i].BeadID < actions[j].BeadID
-// 	})
-//
-// 	return actions
-// }
-//
-// // nodeName returns a human-readable name for the spec node from a mapping record.
-// func nodeName(r mapping.Record) string {
-// 	if r.Component != "" {
-// 		return r.Component
-// 	}
-// 	return r.SpecNodeID
-// }
+// Results are sorted deterministically by (Type, Module, Node, BeadID).
+func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmatched, orphaned []Orphaned) []Action {
+	var actions []Action
+
+	for _, m := range matches {
+		nodeType := m.Change.NodeType
+		newHash := m.Change.NewHash
+		specNodeID := m.Change.Key
+
+		switch m.Change.Type {
+		case merkle.Added, merkle.Modified:
+			// test_section with describes==1 is coupled to its single
+			// component's feature bead. Obsolete the old bead (it exists,
+			// since this is the matched branch) but do not create a new one —
+			// the component bead will own the test going forward.
+			coupled := nodeType == "test_section" && !testSectionProducesBead(graph, m.Change.Module, specNodeID)
+
+			for _, r := range m.Records {
+				node := nodeName(r)
+				// Obsolete the old bead.
+				actions = append(actions, Action{
+					Type:       "obsolete",
+					BeadID:     r.BeadID,
+					Module:     m.Change.Module,
+					Node:       node,
+					NodeType:   nodeType,
+					SpecNodeID: r.SpecNodeID,
+					ChangeType: "modified",
+					Reason:     fmt.Sprintf("Spec node modified: %s/%s", m.Change.Module, node),
+				})
+				if coupled {
+					continue
+				}
+				// Create a new replacement bead.
+				actions = append(actions, Action{
+					Type:       "create",
+					Module:     m.Change.Module,
+					Node:       node,
+					NodeType:   nodeType,
+					SpecNodeID: specNodeID,
+					SpecHash:   newHash,
+					OldBeadID:  r.BeadID,
+					Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", m.Change.Module, node),
+				})
+			}
+		}
+	}
+
+	for _, u := range unmatched {
+		nodeType := u.Change.NodeType
+		node := resolveNodeName(graph, u.Change.Module, nodeType, u.Change.Key)
+
+		// Only bead-trackable node types produce actions.
+		if !beadProducingTypes[nodeType] {
+			continue
+		}
+		// test_section gate: bundle single-describes sections into the
+		// component feature bead.
+		if nodeType == "test_section" && !testSectionProducesBead(graph, u.Change.Module, u.Change.Key) {
+			continue
+		}
+
+		switch u.Change.Type {
+		case merkle.Added:
+			actions = append(actions, Action{
+				Type:       "create",
+				Module:     u.Change.Module,
+				Node:       node,
+				NodeType:   nodeType,
+				SpecNodeID: u.Change.Key,
+				SpecHash:   u.Change.NewHash,
+				Reason:     fmt.Sprintf("New spec node: %s/%s", u.Change.Module, node),
+			})
+		case merkle.Modified:
+			actions = append(actions, Action{
+				Type:       "create",
+				Module:     u.Change.Module,
+				Node:       node,
+				NodeType:   nodeType,
+				SpecNodeID: u.Change.Key,
+				SpecHash:   u.Change.NewHash,
+				Reason:     fmt.Sprintf("Spec node modified (new): %s/%s", u.Change.Module, node),
+			})
+		}
+		// Removed + no record = no action.
+	}
+
+	for _, o := range orphaned {
+		node := nodeName(o.Record)
+
+		// Always obsolete the orphaned bead.
+		actions = append(actions, Action{
+			Type:       "obsolete",
+			BeadID:     o.Record.BeadID,
+			Module:     o.Record.Module,
+			Node:       node,
+			NodeType:   o.NodeType,
+			SpecNodeID: o.Record.SpecNodeID,
+			ChangeType: "removed",
+			Reason:     fmt.Sprintf("Spec node removed: %s/%s", o.Record.Module, node),
+		})
+
+		// If the bead is closed, code has shipped — create a cleanup bead.
+		// OldBeadID carries the obsoleted bead so the downstream emitter
+		// records --deps blocks:<old-bead-id>, giving the cleanup bead a
+		// structural pointer back to what needs removing.
+		if o.Record.BeadStatus == "closed" {
+			actions = append(actions, Action{
+				Type:       "create",
+				Module:     o.Record.Module,
+				Node:       node,
+				NodeType:   o.NodeType,
+				SpecNodeID: o.Record.SpecNodeID,
+				OldBeadID:  o.Record.BeadID,
+				Reason:     fmt.Sprintf("Code cleanup: %s/%s", o.Record.Module, node),
+			})
+		}
+	}
+
+	attachDepSpecNodeIDs(graph, actions)
+
+	sort.Slice(actions, func(i, j int) bool {
+		if actions[i].Type != actions[j].Type {
+			return actions[i].Type < actions[j].Type
+		}
+		if actions[i].Module != actions[j].Module {
+			return actions[i].Module < actions[j].Module
+		}
+		if actions[i].Node != actions[j].Node {
+			return actions[i].Node < actions[j].Node
+		}
+		return actions[i].BeadID < actions[j].BeadID
+	})
+
+	return actions
+}
 
 // attachDepSpecNodeIDs populates DepSpecNodeIDs on create actions by walking
 // the spec graph. Three sources contribute identity hashes:
@@ -387,4 +363,12 @@ func resolveNodeName(graph mapping.SpecGraph, module, nodeType, specNodeID strin
 		}
 	}
 	return specNodeID
+}
+
+// nodeName returns a human-readable name for the spec node from a mapping record.
+func nodeName(r mapping.Record) string {
+	if r.Component != "" {
+		return r.Component
+	}
+	return r.SpecNodeID
 }

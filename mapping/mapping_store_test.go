@@ -208,6 +208,33 @@ func TestREQ_934d627f0e90_RemovedNodeRetainsBiography(t *testing.T) {
 	}
 }
 
+func TestREQ_934d627f0e90_RemovedNodeWithCleanupTaskStaysRemoved(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("removed", "e1", "dddddddddddd", "CompY", "component", "modD", "h1", "", "g1-removed", "remove-prop"),
+		taskClosedLine("e1", "task-Y"),
+		taskCreatedLine("e1", "", "br-cleanup"),
+	})
+
+	store := NewMappingStore(dir)
+	entry, err := store.Get("dddddddddddd")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if !entry.Removed {
+		t.Fatal("want Removed=true even after a cleanup task_created adopts the node's task id")
+	}
+	if entry.TaskID != "br-cleanup" {
+		t.Fatalf("want TaskID=br-cleanup, got %q", entry.TaskID)
+	}
+	if entry.Source.Name != "CompY" || entry.Source.NodeType != "component" || entry.Source.Module != "modD" {
+		t.Fatalf("biography name/node_type/module: got %+v", entry.Source)
+	}
+	if entry.Source.Proposal != "remove-prop" {
+		t.Fatalf("biography proposal: want remove-prop, got %s", entry.Source.Proposal)
+	}
+}
+
 // --- Epic receipts fold without a change event ---
 
 func TestREQ_934d627f0e90_EpicReceiptFoldsWithoutChangeEvent(t *testing.T) {
