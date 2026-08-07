@@ -2,6 +2,7 @@ package mapping
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,7 +47,10 @@ func ResolveContext(specDir, key string) (ContextResult, error) {
 	if !nodeHashPattern.MatchString(key) {
 		entry, err := store.Get(key)
 		if err != nil {
-			return ContextResult{}, fmt.Errorf("context: %w: task %s", ErrNotFound, key)
+			if errors.Is(err, ErrNotFound) {
+				return ContextResult{}, fmt.Errorf("context: %w: task %s", ErrNotFound, key)
+			}
+			return ContextResult{}, fmt.Errorf("context: %w", err)
 		}
 		hash = entry.Key
 	}
@@ -73,37 +77,47 @@ func ResolveContext(specDir, key string) (ContextResult, error) {
 		}
 
 		for _, c := range ms.Components {
-			if c.ID != hash {
-				continue
+			if c.ID == hash {
+				return liveResult(specDir, mod.Path, modPath, hash, c.Content, ms), nil
 			}
-			return liveResult(specDir, mod.Path, modPath, c, ms), nil
+		}
+		for _, df := range ms.DataFlows {
+			if df.ID == hash {
+				return liveResult(specDir, mod.Path, modPath, hash, df.Content, ms), nil
+			}
+		}
+		for _, sec := range ms.TestSections {
+			if sec.ID == hash {
+				return liveResult(specDir, mod.Path, modPath, hash, sec.Content, ms), nil
+			}
 		}
 	}
 
 	return removedResult(store, hash)
 }
 
-// liveResult builds the live shape for component c, declared by module ms
-// at mod.Path (relative to specDir), whose module.json lives at modPath.
-func liveResult(specDir, modRelPath, modPath string, c schema.Component, ms schema.ModuleSpec) ContextResult {
+// liveResult builds the live shape for the node identified by hash, whose
+// own declared content is content, declared by module ms at mod.Path
+// (relative to specDir), whose module.json lives at modPath.
+func liveResult(specDir, modRelPath, modPath, hash, content string, ms schema.ModuleSpec) ContextResult {
 	modDir := filepath.Join(specDir, modRelPath)
 
 	var testFiles []string
 	for _, sec := range ms.TestSections {
-		if slices.Contains(sec.Describes, c.ID) {
+		if slices.Contains(sec.Describes, hash) {
 			testFiles = append(testFiles, filepath.Join(modDir, sec.Content))
 		}
 	}
 
 	var flowFiles []string
 	for _, df := range ms.DataFlows {
-		if slices.Contains(df.Uses, c.ID) {
+		if slices.Contains(df.Uses, hash) {
 			flowFiles = append(flowFiles, filepath.Join(modDir, df.Content))
 		}
 	}
 
 	return ContextResult{
-		ArchFile:   filepath.Join(modDir, c.Content),
+		ArchFile:   filepath.Join(modDir, content),
 		TestFiles:  testFiles,
 		FlowFiles:  flowFiles,
 		ModuleFile: modPath,
@@ -119,7 +133,7 @@ func liveResult(specDir, modRelPath, modPath string, c schema.Component, ms sche
 func removedResult(store *MappingStore, hash string) (ContextResult, error) {
 	history, err := store.History(hash)
 	if err != nil {
-		return ContextResult{}, err
+		return ContextResult{}, fmt.Errorf("context: %w", err)
 	}
 
 	var changeEvents []Event

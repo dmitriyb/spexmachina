@@ -214,6 +214,58 @@ func TestREQ_40a3d3155131_S5_RemovedNodeResolvesFromJournal(t *testing.T) {
 	}
 }
 
+// --- S6: live data_flow by identity hash ---
+
+func TestREQ_40a3d3155131_S6_ResolveLiveDataFlowByHash(t *testing.T) {
+	specDir := buildContextFixture(t)
+
+	result, err := ResolveContext(specDir, "444444444444")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+	if result.Removed {
+		t.Fatalf("want live result, got Removed=true: %+v", result)
+	}
+
+	wantArch := filepath.Join(specDir, "alpha", "flow_pipeline.md")
+	if result.ArchFile != wantArch {
+		t.Errorf("ArchFile = %q, want %q", result.ArchFile, wantArch)
+	}
+	if len(result.TestFiles) != 0 || len(result.FlowFiles) != 0 {
+		t.Errorf("TestFiles/FlowFiles should be empty for a data_flow node, got test=%v flow=%v", result.TestFiles, result.FlowFiles)
+	}
+	wantModule := filepath.Join(specDir, "alpha", "module.json")
+	if result.ModuleFile != wantModule {
+		t.Errorf("ModuleFile = %q, want %q", result.ModuleFile, wantModule)
+	}
+}
+
+// --- S7: live test_section by identity hash ---
+
+func TestREQ_40a3d3155131_S7_ResolveLiveTestSectionByHash(t *testing.T) {
+	specDir := buildContextFixture(t)
+
+	result, err := ResolveContext(specDir, "333333333333")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+	if result.Removed {
+		t.Fatalf("want live result, got Removed=true: %+v", result)
+	}
+
+	wantArch := filepath.Join(specDir, "alpha", "test_components.md")
+	if result.ArchFile != wantArch {
+		t.Errorf("ArchFile = %q, want %q", result.ArchFile, wantArch)
+	}
+	if len(result.TestFiles) != 0 || len(result.FlowFiles) != 0 {
+		t.Errorf("TestFiles/FlowFiles should be empty for a test_section node, got test=%v flow=%v", result.TestFiles, result.FlowFiles)
+	}
+	wantModule := filepath.Join(specDir, "alpha", "module.json")
+	if result.ModuleFile != wantModule {
+		t.Errorf("ModuleFile = %q, want %q", result.ModuleFile, wantModule)
+	}
+}
+
 // --- E1: missing module.json ---
 
 func TestREQ_40a3d3155131_E1_MissingModuleJSON(t *testing.T) {
@@ -281,6 +333,48 @@ func TestREQ_40a3d3155131_E3_ComponentInNoSection(t *testing.T) {
 	wantModule := filepath.Join(specDir, "alpha", "module.json")
 	if result.ModuleFile != wantModule {
 		t.Errorf("ModuleFile = %q, want %q", result.ModuleFile, wantModule)
+	}
+}
+
+// --- E4: malformed journal propagates as a parse error for a task-id lookup ---
+
+func TestREQ_40a3d3155131_E4_MalformedJournalPropagatesForTaskIDLookup(t *testing.T) {
+	specDir := buildContextFixture(t)
+	writeJournal(t, specDir, []string{`{"event":"added","eid":"e1"invalid}`})
+
+	_, err := ResolveContext(specDir, "abc-123")
+	if err == nil {
+		t.Fatal("want error for malformed journal, got nil")
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Errorf("error = %v, want a parse error, not ErrNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "journal line 1") {
+		t.Errorf("error = %q, want naming the malformed journal line", err.Error())
+	}
+	if !strings.Contains(err.Error(), "context:") {
+		t.Errorf("error = %q, want the context: prefix", err.Error())
+	}
+}
+
+// --- E5: malformed journal propagates as a parse error for a removed-node lookup ---
+
+func TestREQ_40a3d3155131_E5_MalformedJournalPropagatesForRemovedLookup(t *testing.T) {
+	specDir := buildContextFixture(t)
+	writeJournal(t, specDir, []string{`{"event":"added","eid":"e1"invalid}`})
+
+	_, err := ResolveContext(specDir, "deadbeefdead")
+	if err == nil {
+		t.Fatal("want error for malformed journal, got nil")
+	}
+	if errors.Is(err, ErrNotFound) {
+		t.Errorf("error = %v, want a parse error, not ErrNotFound", err)
+	}
+	if !strings.Contains(err.Error(), "journal line 1") {
+		t.Errorf("error = %q, want naming the malformed journal line", err.Error())
+	}
+	if !strings.Contains(err.Error(), "context:") {
+		t.Errorf("error = %q, want the context: prefix", err.Error())
 	}
 }
 
