@@ -83,7 +83,7 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	// Notes are the sweep's disclosures, not violations: a removal it could
 	// not check, or hits it discarded because a live node covers them. They
 	// never gate the exit code — a suppressed hit is a correct answer, and
-	// after the bead-map fallback an unverifiable one is a state no author
+	// after the journal fallback an unverifiable one is a state no author
 	// action can clear (see unverifiableModuleNote) — but every one of them
 	// is a place where "no errors" means less than it looks, so they are
 	// printed rather than dropped.

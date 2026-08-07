@@ -314,10 +314,11 @@ type journalRemovedEvent struct {
 // is nowhere in the remaining prose is still recoverable — from data
 // `spex ingest` wrote itself, at the moment the node was removed.
 //
-// Nothing here needs re-proving the way a hand-editable file would: a change
-// event's node field IS the node's identity hash, computed once by ingest
-// from the very module/node_type/name triple the event carries, so a node
-// found by that key already carries a proven module name.
+// A well-formed journal line's node field IS the node's identity hash,
+// computed once by ingest from the very module/node_type/name triple the
+// event carries. But the journal is not schema-checked on read, so moduleName
+// still re-derives that hash from the event's own fields before trusting its
+// module name — the same proof a hand-editable file would need.
 type journalNames struct {
 	// modules maps IdentityHash("module", name) to name, built from every
 	// removed event's module field — including events for other nodes in
@@ -375,8 +376,9 @@ func loadJournalNames(specDir string) *journalNames {
 // keys — reproduces it. The second is for a module whose declared id was
 // hand-written and so derives from nothing (CheckIDDerivation exempts module
 // ids): a removed event for one of the group's own keys is indexed under
-// that exact key, so finding it proves the module name just as well, with no
-// further verification needed.
+// that exact key, but the journal is not schema-checked on read, so the
+// event's own module/node_type/name triple must re-derive that same key
+// before its module name is trusted.
 func (j *journalNames) moduleName(g nameTargetGroup) (string, bool) {
 	if j == nil {
 		return "", false
@@ -385,7 +387,11 @@ func (j *journalNames) moduleName(g nameTargetGroup) (string, bool) {
 		return name, true
 	}
 	for _, key := range g.sortedKeys() {
-		if ev, ok := j.nodes[key]; ok {
+		ev, ok := j.nodes[key]
+		if !ok || ev.Module == "" {
+			continue
+		}
+		if schema.IdentityHash(ev.Module, ev.NodeType, ev.Name) == key {
 			return ev.Module, true
 		}
 	}

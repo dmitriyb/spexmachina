@@ -59,6 +59,22 @@ func (f *removalFixture) withEmptyJournal() *removalFixture {
 	return f
 }
 
+// withJournalRawEvent adds a journal `removed` event exactly as given,
+// without deriving Node from the other fields the way withJournalRemoved
+// does. loadJournalNames does not schema-check what it reads, so a test can
+// use this to write a line whose node hash does not actually derive from its
+// own module/node_type/name triple — the shape a corrupt or hand-edited
+// journal could contain even though `spex ingest` never writes one.
+func (f *removalFixture) withJournalRawEvent(ev journalRemovedEvent) *removalFixture {
+	f.hasJournal = true
+	line, err := json.Marshal(ev)
+	if err != nil {
+		panic(err)
+	}
+	f.journalLines = append(f.journalLines, string(line))
+	return f
+}
+
 // journalFilePath is where build writes the task journal. walkCorpus skips
 // dot-files, so keeping it inside the fixture dir does not put it in the
 // corpus.
@@ -517,6 +533,35 @@ func TestREQ_6f8284df92a2_JournalProvesModuleFromNodeEvent(t *testing.T) {
 	if report.Survivors[0].Module != "validator" {
 		t.Fatalf("want the module name proved from the event, got %+v", report.Survivors[0])
 	}
+}
+
+// TestREQ_6f8284df92a2_StaleJournalEventNotTrusted pins the fix for a review
+// blocker: loadJournalNames does not schema-check what it reads, so a node
+// found under its key must still be rejected if the event's own
+// module/node_type/name triple does not re-derive that key — otherwise a
+// journal line naming a module that never declared the node (or with an
+// empty module) resolves a false module name, and the group is treated as
+// resolved instead of reported unverifiable.
+func TestREQ_6f8284df92a2_StaleJournalEventNotTrusted(t *testing.T) {
+	change := removedChange("validator", "component", "OrphanDetector")
+	change.Module = "000000000001" // hand-written module id: derives from nothing
+
+	dir := newRemovalFixture().
+		withJournalRawEvent(journalRemovedEvent{
+			Event:    "removed",
+			Node:     schema.IdentityHash("validator", "component", "OrphanDetector"),
+			Name:     "OrphanDetector",
+			NodeType: "component",
+			Module:   "ghost", // does not derive the node hash above
+		}).
+		withFile("other/leaf.md", "OrphanDetector is still named.\n").
+		build(t, "other")
+
+	report := mustReport(t, dir, change)
+	if len(report.Survivors) != 0 {
+		t.Fatalf("a stale event must not resolve a survivor, got %+v", report.Survivors)
+	}
+	wantOneNote(t, report.Notes, NoteUnverifiableModule, "could not be checked")
 }
 
 // TestREQ_6f8284df92a2_EmptyJournalStillNotes: the fallback is a second
