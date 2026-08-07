@@ -101,8 +101,10 @@ Three lists, not one:
 
 NodeMatcher forwards `impl_only`, `contract`, and `arch_impl` changes to the
 ActionClassifier. It skips `structural` (module.json, project.json, requirement
-leaves). Contract-level changes (data_flow) are forwarded — not skipped — so
-that a dedicated data_flow task bead is produced.
+leaves). Contract-level changes are forwarded — not skipped — but the two node
+types merkle classifies as contract-level fare differently past the gate: a
+data_flow gets a dedicated task bead, while an api yields none (see the gating
+table below).
 
 ### ActionClassifier → ReportGenerator
 
@@ -136,6 +138,7 @@ Gating rules applied by ActionClassifier:
 | module | yes, but no change ever carries this node type, so the entry is dead |
 | component | yes (feature) |
 | data_flow | yes |
+| api | no — declared external surface; the components in its `provided_by` array carry the work |
 | test_section, len(describes) >= 2 | yes (task) |
 | test_section, len(describes) == 1 | no (bundled with that component's feature bead) |
 
