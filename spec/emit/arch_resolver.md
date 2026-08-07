@@ -10,9 +10,9 @@ A dep a create action names is written as one of the shapes below, or dropped �
 dep spec_node_id, first match wins:
 
 1. **`ref:op`** — another create op in the same batch targets this spec_node_id.
-2. **`ref:bead`** — the journal fold pairs this spec_node_id with a task that is not closed. The
-   fold's latest-wins rule means the newest re-implementation supersedes earlier ones by
-   construction.
+2. **`ref:bead`** — the task journal's fold already pairs this spec_node_id with a task that is
+   not closed. The fold's latest-wins rule means the newest re-implementation supersedes earlier
+   ones by construction.
 
 That ordering is a precedence, not a search order: a dep that is both in the batch and open in
 the fold is written `ref:op`, because the in-batch op is the authoritative latest work and the
