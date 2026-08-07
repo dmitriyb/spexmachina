@@ -43,8 +43,10 @@ disk or a stream.
 1. **Pre-flight.** Parse both files, check the changeset carries version 2 and the receipts
    version 1, and confirm the two name exactly the same set of op ids.
 2. **Reconcile.** [[2b5158af774b|Reconciler]] constructs the batch's journal lines in memory —
-   change events and task receipts, with event ids derived from `(git_head, op_id)` — asserts the
-   journal invariants, drops lines already present, and only then commits the append atomically.
+   change events and task receipts, with event ids derived from `(git_head, op_id)` — dropping any
+   line whose eid the journal already contains as it builds them. Only once the batch is complete
+   does it assert the journal invariants over what remains, and only then commits the append
+   atomically.
 3. **Save the snapshot.** [[f85bd2f94aeb|SnapshotSaver]] is handed the receipts' top-level
    status. Anything but `complete` and it writes nothing and reports that it wrote nothing; on
    `complete` it builds the current merkle tree and writes `spec/.snapshot.json` atomically.
