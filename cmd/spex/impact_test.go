@@ -605,13 +605,32 @@ func writeEmptyBeadsFile(t *testing.T) string {
 }
 
 // TestEnrichRecordsWithBeadStatus verifies the helper copies live bead
-// statuses onto mapping records.
-//
-// TODO(bead:spexmachina-y0wc.26): fix after spexmachina-y0wc.22 changed
-// impact.BeadSpec.RecordID (int) to SpecNodeID (string) — rewrite this
-// fixture against SpecNodeID once enrichRecordsWithBeadStatus joins on it.
+// statuses onto mapping records by joining on SpecNodeID. The third record
+// has no matching bead and must keep its empty BeadStatus — the cleanup
+// gate at action_classifier.go defaults closed for safety.
 func TestEnrichRecordsWithBeadStatus(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-y0wc.26): BeadSpec no longer carries RecordID; rewrite against SpecNodeID")
+	beads := []impact.BeadSpec{
+		{ID: "bead-1", Status: "closed", SpecNodeID: "aaaaaaaaaaaa", Labels: []string{"spex:aaaaaaaaaaaa"}},
+		{ID: "bead-2", Status: "open", SpecNodeID: "bbbbbbbbbbbb", Labels: []string{"spex:bbbbbbbbbbbb"}},
+	}
+	records := []mapping.Record{
+		{ID: 10, BeadID: "bead-1", SpecNodeID: "aaaaaaaaaaaa"},
+		{ID: 11, BeadID: "bead-2", SpecNodeID: "bbbbbbbbbbbb"},
+		{ID: 12, BeadID: "bead-3", SpecNodeID: "cccccccccccc"},
+	}
+
+	out := enrichRecordsWithBeadStatus(beads, records)
+
+	want := map[string]string{
+		"aaaaaaaaaaaa": "closed",
+		"bbbbbbbbbbbb": "open",
+		"cccccccccccc": "",
+	}
+	for _, r := range out {
+		if r.BeadStatus != want[r.SpecNodeID] {
+			t.Errorf("record %s: want BeadStatus %q, got %q", r.SpecNodeID, want[r.SpecNodeID], r.BeadStatus)
+		}
+	}
 }
 
 // TestEnrichRecordsWithBeadStatus_EmptyInput verifies zero-record input is
@@ -629,13 +648,6 @@ func TestEnrichRecordsWithBeadStatus_EmptyInput(t *testing.T) {
 // BeadStatus stays empty and only the obsolete action is emitted (the cleanup
 // gate at action_classifier.go defaults closed for safety).
 func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
-	// TODO(bead:spexmachina-y0wc.26): fix after spexmachina-y0wc.22 changed
-	// BeadReader's spex: label grammar — legacy "spex:1"/"spex:2" labels
-	// are now inert (only a 12-hex identity hash or a dated proposal slug
-	// parses), and enrichRecordsWithBeadStatus is a no-op pending its own
-	// migration off int-keyed mapping.Record. This fixture needs real
-	// identity-hash labels once ImpactCommand joins on SpecNodeID.
-	t.Skip("TODO(bead:spexmachina-y0wc.26): needs identity-hash beads fixture and SpecNodeID-based enrichment")
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
 
@@ -716,12 +728,11 @@ func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
 	})
 
 	// Tracker output: bead-drop is closed, so the obsolete must be paired
-	// with a cleanup create. Record IDs (1, 2) come from FileStore.Create
-	// allocating sequentially in setupMappingFile.
+	// with a cleanup create.
 	beadsFile := filepath.Join(t.TempDir(), "beads.json")
 	if err := os.WriteFile(beadsFile, []byte(`{"issues":[
-		{"id":"bead-keep","status":"open","labels":["spex:1"]},
-		{"id":"bead-drop","status":"closed","labels":["spex:2"]}
+		{"id":"bead-keep","status":"open","labels":["spex:`+keepID+`"]},
+		{"id":"bead-drop","status":"closed","labels":["spex:`+dropID+`"]}
 	]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}

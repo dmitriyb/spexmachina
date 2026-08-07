@@ -4,9 +4,23 @@ Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (c
 
 ## Setup
 
-All scenarios share a common fixture layout. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
+Scenarios split by what they exercise. S1 and S2 exercise BeadReader alone, against the shape it actually consumes: a tracker listing (`arch_bead_reader.md`'s "Input Shape"), not the task journal — BeadReader starts no process and contacts no tracker, and never touches `.history.jsonl`. S3 onward exercise NodeMatcher against journal-derived pairings, since folding the journal into pairings is `mapping.MappingStore`'s job (see `spec/map/test_mapping_store.md`), not BeadReader's.
 
-- A journal fixture pairing identity hashes with task IDs. The store validates each line against the journal-line schema on read; a malformed line is refused naming its number. The fixture seeds one `added` change event plus one `task_created` receipt per node:
+Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
+
+- A tracker listing (the shape BeadReader's `--beads` input takes) pairing identity hashes with bead ids, for S1/S2:
+
+```json
+{
+  "issues": [
+    {"id": "spex-001", "status": "open",        "labels": ["spex:<SCHK_HASH>", "commit:deadbeef"]},
+    {"id": "spex-002", "status": "in_progress", "labels": ["spex:<HASR_HASH>"]},
+    {"id": "spex-003", "status": "open",        "labels": ["spex:<HTST_HASH>"]}
+  ]
+}
+```
+
+- A journal fixture pairing identity hashes with task IDs, for S3 onward. The store validates each line against the journal-line schema on read; a malformed line is refused naming its number. The fixture seeds one `added` change event plus one `task_created` receipt per node:
 
 ```json
 {"event":"added","eid":"<E1>","node":"<SCHK_HASH>","name":"SchemaChecker","node_type":"component","module":"validator","before":null,"after":"<SCHK_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
@@ -39,11 +53,11 @@ The `node_type` field is now part of the change record because identity hashes d
 
 ### S1: BeadReader extracts pairings correctly
 
-Fold the journal and list the pairings. Assert each carries the expected fields (node, task_id, module, name) and that every node key matches the identity hash pattern `^[a-f0-9]{12}$`.
+Parse the tracker listing above. Assert each entry carries the four fields the interface promises (`ID`, `SpecNodeID`, `Status`, `Labels`), that `SpecNodeID` reads back the identity hash out of the bead's `spex:<spec_node_id>` label, and that every `SpecNodeID` matches the identity hash pattern `^[a-f0-9]{12}$`.
 
 ### S2: BeadReader returns empty slice when no pairings exist
 
-A journal holding only change events with no receipts — and, separately, no journal file at all, and a zero-byte one. Assert an empty fold rather than an error for each of the three: absence and emptiness are first-class states for an append-only log.
+A tracker listing whose beads carry no `spex:` label — and, separately, an empty `issues` array, and an empty bare array. Assert an empty slice rather than an error for each of the three: absence and emptiness are both first-class states, not error conditions.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 
