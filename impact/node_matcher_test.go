@@ -103,9 +103,8 @@ func TestFR2_S3_MatchedUnmatchedOrphaned(t *testing.T) {
 // task remains reachable through the journal history, not through matching.
 func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 	h := newFixture()
-	pairings := []Pairing{
-		{SpecNodeID: h.SCHK, TaskID: "spex-001-followup", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
-	}
+	pairings := basePairings(h)
+	pairings[0].TaskID = "spex-001-followup" // SCHK's current pairing after task_closed + task_created
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
@@ -124,6 +123,39 @@ func TestFR2_S4_MultipleBeadsPerNode(t *testing.T) {
 	}
 	if matched[0].Records[0].BeadID != "spex-001-followup" {
 		t.Errorf("want current pairing spex-001-followup, got %+v", matched[0].Records[0])
+	}
+}
+
+// arch_node_matcher.md (755ded242c8a): MatchNodes returns every pairing that
+// stores a matched node's identity hash, not just the first, and orders them
+// by bead id. The fold never hands MatchNodes two simultaneous pairings for
+// one node (S4 covers its single-current-pairing behavior); this guards the
+// arch contract independently of that, by supplying two pairings on one
+// SpecNodeID in reverse bead-id order and asserting both come back sorted.
+func TestNFR5_MultiplePairingsPerNodeSortedByBeadID(t *testing.T) {
+	h := newFixture()
+	pairings := []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-001-followup", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+	}
+	changes := []merkle.ClassifiedChange{
+		{
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Impact: merkle.ArchImpl,
+			Module: "validator",
+		},
+	}
+
+	matched, _, _ := MatchNodes(changes, pairings)
+
+	if len(matched) != 1 {
+		t.Fatalf("want 1 match, got %d", len(matched))
+	}
+	if len(matched[0].Records) != 2 {
+		t.Fatalf("want both pairings carried, got %d: %+v", len(matched[0].Records), matched[0].Records)
+	}
+	if matched[0].Records[0].BeadID != "spex-001" || matched[0].Records[1].BeadID != "spex-001-followup" {
+		t.Errorf("want records sorted by bead id (spex-001, spex-001-followup), got %+v", matched[0].Records)
 	}
 }
 
