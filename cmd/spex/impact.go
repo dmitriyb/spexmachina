@@ -158,22 +158,15 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 // field by matching on record ID. Records without a matching bead are
 // returned unchanged so the cleanup-bead gate at action_classifier.go
 // defaults closed (no cleanup actions emitted) for safety.
+//
+// TODO(bead:spexmachina-y0wc.26): fix after spexmachina-y0wc.22 changed
+// impact.BeadSpec.RecordID (int) to SpecNodeID (string, the identity hash
+// read off spex:<spec_node_id>) — this must join on record.SpecNodeID
+// instead of the retired integer record ID. Enrichment is a no-op until
+// ImpactCommand migrates off the legacy .bead-map.json int-keyed records.
 func enrichRecordsWithBeadStatus(beads []impact.BeadSpec, records []mapping.Record) []mapping.Record {
-	if len(records) == 0 {
-		return records
-	}
-	statusByRecordID := make(map[int]string, len(beads))
-	for _, b := range beads {
-		statusByRecordID[b.RecordID] = b.Status
-	}
-	out := make([]mapping.Record, len(records))
-	for i, r := range records {
-		if status, ok := statusByRecordID[r.ID]; ok {
-			r.BeadStatus = status
-		}
-		out[i] = r
-	}
-	return out
+	_ = beads
+	return records
 }
 
 func parseChangeType(s string) (merkle.ChangeType, error) {

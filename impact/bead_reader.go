@@ -5,16 +5,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"strconv"
+	"regexp"
 	"strings"
 )
 
 // BeadSpec holds the spec-related metadata extracted from a tracker bead.
+// It carries exactly the four things arch_bead_reader.md's Interface
+// section names: the tracker's own bead id, the spec node identity read out
+// of the bead's label, its live status, and its full label list.
 type BeadSpec struct {
-	ID       string   // tracker bead ID, e.g. "spexmachina-abc"
-	RecordID int      // integer parsed from the "spex:<n>" label
-	Status   string   // live status: open | in_progress | closed | blocked | deferred
-	Labels   []string // all labels, retained for downstream filters
+	ID         string   // tracker bead ID, e.g. "spexmachina-abc"
+	SpecNodeID string   // identity hash or proposal slug from the spex:<spec_node_id> label
+	Status     string   // live status, exactly as the input reported it
+	Labels     []string // all labels, retained for downstream filters
 }
 
 // NodeMap maps node identifiers to their canonical spec node names.
@@ -32,6 +35,15 @@ type wrappedInput struct {
 	Issues []trackerBead `json:"issues"`
 }
 
+// identityHashPattern matches a spec node identity hash: 12 lowercase hex
+// characters, the same shape the merkle tree and the task journal key on.
+var identityHashPattern = regexp.MustCompile(`^[a-f0-9]{12}$`)
+
+// proposalSlugPattern matches the dated-stem convention a proposal's own
+// spec node id follows, e.g. "2026-04-18-decouple-spex-from-br". Only the
+// date prefix is anchored; the rest of the slug is free text.
+var proposalSlugPattern = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}-`)
+
 // ReadBeads decodes tracker list output from r into []BeadSpec. It is a pure
 // parser: it performs no subprocess invocation and makes no live tracker
 // calls. Callers feed it the bytes of `br list --json` (or any tracker whose
@@ -41,7 +53,8 @@ type wrappedInput struct {
 //   - wrapped: {"issues": [...]}
 //   - bare array: [...]
 //
-// Only beads carrying a spex:<n> label are returned; others are silently
+// Only beads carrying a spex:<spec_node_id> label whose suffix reads as an
+// identity hash or a proposal slug are returned; others are silently
 // dropped. An empty valid array returns an empty slice, not an error.
 func ReadBeads(r io.Reader) ([]BeadSpec, error) {
 	data, err := io.ReadAll(r)
@@ -64,15 +77,15 @@ func ReadBeadsBytes(data []byte) ([]BeadSpec, error) {
 		if b.ID == "" {
 			return nil, fmt.Errorf("impact: read beads: missing bead id at index %d", i)
 		}
-		recID, ok := extractRecordID(b.Labels)
+		nodeID, ok := extractSpecNodeID(b.Labels)
 		if !ok {
 			continue
 		}
 		out = append(out, BeadSpec{
-			ID:       b.ID,
-			RecordID: recID,
-			Status:   b.Status,
-			Labels:   b.Labels,
+			ID:         b.ID,
+			SpecNodeID: nodeID,
+			Status:     b.Status,
+			Labels:     b.Labels,
 		})
 	}
 	return out, nil
@@ -93,17 +106,22 @@ func decodeBeads(data []byte) ([]trackerBead, error) {
 	return beads, nil
 }
 
-// extractRecordID returns the integer from the first well-formed spex:<n>
-// label. Non-numeric spex: values are skipped, matching defensive intent —
-// validator-level rules should prevent them, but the reader does not error.
-func extractRecordID(labels []string) (int, bool) {
+// extractSpecNodeID returns the spec node id carried by the first
+// spex:<...> label whose suffix reads as an identity hash or a proposal
+// slug. Labels in the legacy integer form, the spex:cleanup-<hash> form,
+// and inert markers like spex:obsolete or bare spex:cleanup match neither
+// grammar and are passed over as inert. If a bead carries more than one
+// live-form label, the rest are ignored — validator-level rules should
+// prevent that, but extraction is defensive rather than reliant on them.
+func extractSpecNodeID(labels []string) (string, bool) {
 	for _, lbl := range labels {
-		if !strings.HasPrefix(lbl, "spex:") {
+		suffix, ok := strings.CutPrefix(lbl, "spex:")
+		if !ok {
 			continue
 		}
-		if n, err := strconv.Atoi(strings.TrimPrefix(lbl, "spex:")); err == nil && n >= 0 {
-			return n, true
+		if identityHashPattern.MatchString(suffix) || proposalSlugPattern.MatchString(suffix) {
+			return suffix, true
 		}
 	}
-	return 0, false
+	return "", false
 }
