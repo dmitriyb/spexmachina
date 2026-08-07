@@ -105,9 +105,9 @@ type RemovedNameReport struct {
 // missed.
 //
 // This is also the only mechanism that can work for api nodes at all. APIs
-// produce no beads, so they never appear in .bead-map.json, the one other
+// produce no tasks, so they never appear in the task journal, the one other
 // place that records a hash → name pairing. It is not, however, the only
-// mechanism for components: see beadMapNames.
+// mechanism for components: see journalNames.
 //
 // # Longest-match-first
 //
@@ -133,16 +133,18 @@ type RemovedNameReport struct {
 // hashed as IdentityHash("module", phrase) against the module hash. That
 // source has a perverse property on its own — it works only while the module
 // name still survives in prose, so the sweep's reach was inversely coupled to
-// how thoroughly the removal was swept. The bead map closes it: every
-// component bead record carries its module and component names against the
-// spec node id, so beadMapNames can prove the module name from data the tool
-// already ships, whether or not a single mention remains. Only when both
-// sources come up empty is the group reported as a NoteUnverifiableModule note
-// rather than skipped in silence.
+// how thoroughly the removal was swept. The task journal at
+// `<spec-dir>/.history.jsonl` closes it: every removed change event carries
+// the module and component names of the node it describes, so journalNames
+// can prove the module name from data `spex ingest` already wrote, whether or
+// not a single mention remains. Only when both sources come up empty is the
+// group reported as a NoteUnverifiableModule note rather than skipped in
+// silence.
 //
-// beadMapPath may be empty, and the file may be absent: either way the sweep
-// falls back to the corpus alone.
-func CheckRemovedNames(specDir, beadMapPath string, changes []merkle.ClassifiedChange) (RemovedNameReport, error) {
+// The journal may be absent — `spex diff` runs in trees that have never been
+// ingested — and a malformed journal degrades the same way: either way the
+// sweep falls back to the corpus alone, never failing the run over it.
+func CheckRemovedNames(specDir string, changes []merkle.ClassifiedChange) (RemovedNameReport, error) {
 	var report RemovedNameReport
 
 	targets := removedNameTargets(changes)
@@ -185,17 +187,14 @@ func CheckRemovedNames(specDir, beadMapPath string, changes []merkle.ClassifiedC
 		if err != nil {
 			return report, err
 		}
-		beadMap, err := loadBeadMapNames(beadMapPath)
-		if err != nil {
-			return report, err
-		}
+		journal := loadJournalNames(specDir)
 		for _, g := range orphans {
 			name, ok := recovered[g.module]
 			if !ok {
-				name, ok = beadMap.moduleName(g)
+				name, ok = journal.moduleName(g)
 			}
 			if !ok {
-				report.Notes = append(report.Notes, unverifiableModuleNote(g, beadMap))
+				report.Notes = append(report.Notes, unverifiableModuleNote(g))
 				continue
 			}
 			g.module = name
@@ -291,135 +290,129 @@ func removedNameTargets(changes []merkle.ClassifiedChange) []nameTargetGroup {
 	return groups
 }
 
-// beadMapNames is the hash → name table .bead-map.json already ships, indexed
-// the two ways the sweep can use it.
+// journalRemovedEvent is the subset of one journal `removed` change event's
+// fields the removal sweep needs: enough to answer "what was this identity
+// hash called, and under which module" for a node the current spec can no
+// longer name. See spec/schema/arch_bead_map_schema.md for the full line
+// shape.
+type journalRemovedEvent struct {
+	Event    string `json:"event"`
+	Node     string `json:"node"`
+	Name     string `json:"name"`
+	NodeType string `json:"node_type"`
+	Module   string `json:"module"`
+}
+
+// journalNames is the hash → name table recovered from the task journal at
+// `<spec-dir>/.history.jsonl`, indexed the two ways the sweep can use it.
 //
-// The bead map was dismissed as a source because apis produce no beads. That
-// is true of apis and false of components, which are the only node type the
-// corpus declares today: a component record carries its module name, its
-// component name and the spec node id those two hash into. So a module whose
-// name is nowhere in the remaining prose is still recoverable — from data the
-// tool wrote itself, at the time the node existed.
+// The journal was dismissed as a source for the corpus-recovery mechanism
+// above because apis produce no tasks. That is true of apis and false of
+// components, which are the only node type the corpus declares today: a
+// removed change event carries its module name, its node name and the
+// identity hash those two (plus node type) hash into. So a module whose name
+// is nowhere in the remaining prose is still recoverable — from data
+// `spex ingest` wrote itself, at the moment the node was removed.
 //
-// Nothing here is trusted on its word. Both lookups are proofs of the same
-// kind the corpus scan uses: a name is accepted only when it hashes to the
-// key being looked up, so a stale or hand-edited record simply fails to match.
-type beadMapNames struct {
-	// modules maps IdentityHash("module", name) to name.
+// Nothing here needs re-proving the way a hand-editable file would: a change
+// event's node field IS the node's identity hash, computed once by ingest
+// from the very module/node_type/name triple the event carries, so a node
+// found by that key already carries a proven module name.
+type journalNames struct {
+	// modules maps IdentityHash("module", name) to name, built from every
+	// removed event's module field — including events for other nodes in
+	// the same retired module, which is what lets a sibling's removal prove
+	// the module name for a node with no event of its own.
 	modules map[string]string
-	// nodes maps a record's spec_node_id to the record.
-	nodes map[string]schema.BeadMapRecord
+	// nodes maps a removed event's node identity hash to the event.
+	nodes map[string]journalRemovedEvent
 }
 
-// loadBeadMapNames indexes the bead map at path. An empty path or an absent
-// file yields a nil index, which every method treats as "no names known" —
-// `spex diff` must work in a tree that has never been ingested. A file that
-// exists and cannot be read or parsed is an error: it is the same corruption
-// every other command that touches the map reports.
-func loadBeadMapNames(path string) (*beadMapNames, error) {
-	if path == "" {
-		return nil, nil
-	}
-	data, err := os.ReadFile(path)
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+// loadJournalNames reads and folds the task journal's removed change events
+// at `<spec-dir>/.history.jsonl`. A missing journal — `spex diff` runs in
+// trees that have never been ingested — yields a nil index, which moduleName
+// treats as "no names known". A journal that cannot be parsed degrades the
+// same way rather than failing the run: the journal can only strengthen
+// removal detection, never gate it (see arch_diff_command.md).
+func loadJournalNames(specDir string) *journalNames {
+	data, err := os.ReadFile(filepath.Join(specDir, ".history.jsonl"))
 	if err != nil {
-		return nil, fmt.Errorf("validator: removed-name check: read %s: %w", path, err)
-	}
-	var bm schema.BeadMap
-	if err := json.Unmarshal(data, &bm); err != nil {
-		return nil, fmt.Errorf("validator: removed-name check: parse %s: %w", path, err)
+		return nil
 	}
 
-	idx := &beadMapNames{
-		modules: make(map[string]string, len(bm.Records)),
-		nodes:   make(map[string]schema.BeadMapRecord, len(bm.Records)),
+	idx := &journalNames{
+		modules: map[string]string{},
+		nodes:   map[string]journalRemovedEvent{},
 	}
-	for _, r := range bm.Records {
-		if r.Module != "" {
-			idx.modules[schema.IdentityHash("module", r.Module)] = r.Module
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
 		}
-		if r.SpecNodeID != "" {
-			if _, seen := idx.nodes[r.SpecNodeID]; !seen {
-				idx.nodes[r.SpecNodeID] = r
-			}
+		var ev journalRemovedEvent
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			// A malformed line degrades the whole source rather than being
+			// skipped: a journal that cannot be trusted to parse cleanly is
+			// not a source the sweep can trust to have folded correctly.
+			return nil
+		}
+		if ev.Event != "removed" {
+			continue
+		}
+		idx.nodes[ev.Node] = ev
+		if ev.Module != "" {
+			idx.modules[schema.IdentityHash("module", ev.Module)] = ev.Module
 		}
 	}
-	return idx, nil
+	return idx
 }
 
-// moduleName proves the name of an orphan group's module from the bead map.
+// moduleName proves the name of an orphan group's module from the journal.
 //
-// Two routes, both hash-verified. The first reads the module hash directly:
-// a module id is IdentityHash("module", name), so a record naming that module
-// reproduces it. The second is for a module whose declared id was hand-written
-// and so derives from nothing (CheckIDDerivation exempts module ids): a record
-// for one of the removed keys reproduces that key from its own (module,
-// nodeType, component) triple, which proves the module name just as well.
-func (b *beadMapNames) moduleName(g nameTargetGroup) (string, bool) {
-	if b == nil {
+// Two routes. The first reads the module hash directly: a module id is
+// IdentityHash("module", name), so any removed event naming that module —
+// including one for a sibling node, not necessarily one of this group's own
+// keys — reproduces it. The second is for a module whose declared id was
+// hand-written and so derives from nothing (CheckIDDerivation exempts module
+// ids): a removed event for one of the group's own keys is indexed under
+// that exact key, so finding it proves the module name just as well, with no
+// further verification needed.
+func (j *journalNames) moduleName(g nameTargetGroup) (string, bool) {
+	if j == nil {
 		return "", false
 	}
-	if name, ok := b.modules[g.module]; ok {
+	if name, ok := j.modules[g.module]; ok {
 		return name, true
 	}
 	for _, key := range g.sortedKeys() {
-		rec, ok := b.nodes[key]
-		if !ok || rec.Module == "" {
-			continue
-		}
-		if schema.IdentityHash(rec.Module, g.nodeType, rec.Component) == key {
-			return rec.Module, true
+		if ev, ok := j.nodes[key]; ok {
+			return ev.Module, true
 		}
 	}
 	return "", false
 }
 
-// describeKey renders one removed key for a note, adding the name the bead map
-// records for it when there is one. The record cannot be trusted here — if it
-// hashed back to the key, moduleName would have proved the module name from it
-// and this note would not exist — so it is labelled as the unverified lead it
-// is. It is still the difference between a hash a reader can act on and one
-// they cannot.
-func (b *beadMapNames) describeKey(key string) string {
-	if b == nil {
-		return key
-	}
-	rec, ok := b.nodes[key]
-	if !ok || rec.Component == "" {
-		return key
-	}
-	return fmt.Sprintf("%s (bead map records %q in module %q, unverified: it does not hash back to the key)",
-		key, rec.Component, rec.Module)
-}
-
 // unverifiableModuleNote reports a group the sweep cannot check at all: the
-// module that declared these nodes is gone, its name is nowhere in the corpus,
-// and the bead map cannot prove it either, so no candidate phrase can be
-// hashed into their identity hashes.
+// module that declared these nodes is gone, its name is nowhere in the
+// corpus, and the task journal cannot prove it either, so no candidate
+// phrase can be hashed into their identity hashes.
 //
-// This note does not gate, and that is a deliberate choice rather than the
-// original reasoning carried forward. "I did not check" is worse than
-// "suppressed_by_live_name", which is a correct answer — but after the bead
-// map closes the recoverable case, what is left is a removal the author has no
-// action that clears: the only way to make the module name recoverable from
-// the corpus is to write it back into the prose, which is the exact opposite
-// of sweeping it, and the only way to make it recoverable from the bead map is
-// to have ingested the node before it was removed. Gating on it would be a
-// halt with no remedy. So it stays loud and non-blocking, and names everything
-// it can name.
-func unverifiableModuleNote(g nameTargetGroup, beadMap *beadMapNames) RemovedNameNote {
+// This note does not gate, and that is a deliberate choice. "I did not
+// check" is worse than "suppressed_by_live_name", which is a correct answer
+// — but after the journal closes the recoverable case, what is left is a
+// removal the author has no action that clears: the only way to make the
+// module name recoverable from the corpus is to write it back into the
+// prose, which is the exact opposite of sweeping it, and the only way to
+// make it recoverable from the journal is to have ingested the node before
+// it was removed. Gating on it would be a halt with no remedy. So it stays
+// loud and non-blocking.
+func unverifiableModuleNote(g nameTargetGroup) RemovedNameNote {
 	keys := g.sortedKeys()
-	described := make([]string, len(keys))
-	for i, k := range keys {
-		described[i] = beadMap.describeKey(k)
-	}
 	return RemovedNameNote{
 		Kind: NoteUnverifiableModule,
 		Message: fmt.Sprintf(
-			"%d removed %s node(s) under module %s could not be checked: the module was removed too and its name is recoverable neither from the corpus nor from the bead map, so their identity hashes cannot be reproduced; sweep any mention of them by hand (keys: %s)",
-			len(keys), g.nodeType, g.module, strings.Join(described, ", ")),
+			"%d removed %s node(s) under module %s could not be checked: the module was removed too and its name is recoverable neither from the corpus nor from the task journal, so their identity hashes cannot be reproduced; sweep any mention of them by hand (keys: %s)",
+			len(keys), g.nodeType, g.module, strings.Join(keys, ", ")),
 		Keys: keys,
 	}
 }

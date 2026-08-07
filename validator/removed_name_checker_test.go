@@ -23,57 +23,46 @@ import (
 // liveComponents/liveAPIs, plus the given corpus files (paths relative to the
 // spec dir, parent directories created as needed).
 type removalFixture struct {
-	modules map[string]*schema.ModuleSpec
-	files   map[string]string
-	beads   []schema.BeadMapRecord
-	hasMap  bool
+	modules      map[string]*schema.ModuleSpec
+	files        map[string]string
+	journalLines []string
+	hasJournal   bool
 }
 
 func newRemovalFixture() *removalFixture {
 	return &removalFixture{modules: map[string]*schema.ModuleSpec{}, files: map[string]string{}}
 }
 
-// withBeadRecord adds one component bead record, the shape ingest writes: the
-// module and component names alongside the spec node id they hash into.
-func (f *removalFixture) withBeadRecord(module, component string) *removalFixture {
-	f.hasMap = true
-	f.beads = append(f.beads, schema.BeadMapRecord{
-		ID:         len(f.beads) + 1,
-		SpecNodeID: schema.IdentityHash(module, "component", component),
-		BeadID:     "test-" + component,
-		BeadType:   "task",
-		Module:     module,
-		Component:  component,
+// withJournalRemoved adds one journal `removed` change event, the shape
+// ingest writes: the module and node names alongside the identity hash they
+// hash into.
+func (f *removalFixture) withJournalRemoved(module, component string) *removalFixture {
+	f.hasJournal = true
+	line, err := json.Marshal(journalRemovedEvent{
+		Event:    "removed",
+		Node:     schema.IdentityHash(module, "component", component),
+		Name:     component,
+		NodeType: "component",
+		Module:   module,
 	})
+	if err != nil {
+		panic(err)
+	}
+	f.journalLines = append(f.journalLines, string(line))
 	return f
 }
 
-// withStaleBeadRecord adds a record whose declared names do not hash into the
-// spec node id it claims — the shape a rename leaves behind. It must never be
-// believed, only quoted.
-func (f *removalFixture) withStaleBeadRecord(module, component, specNodeID string) *removalFixture {
-	f.hasMap = true
-	f.beads = append(f.beads, schema.BeadMapRecord{
-		ID:         len(f.beads) + 1,
-		SpecNodeID: specNodeID,
-		BeadID:     "test-stale-" + component,
-		BeadType:   "task",
-		Module:     module,
-		Component:  component,
-	})
+// withEmptyJournal writes a journal file with no lines, so a test can tell
+// "no journal on disk" apart from "a journal that proves nothing".
+func (f *removalFixture) withEmptyJournal() *removalFixture {
+	f.hasJournal = true
 	return f
 }
 
-// withEmptyBeadMap writes a bead map with no records, so a test can tell "no
-// map on disk" apart from "a map that proves nothing".
-func (f *removalFixture) withEmptyBeadMap() *removalFixture {
-	f.hasMap = true
-	return f
-}
-
-// beadMapPath is where build writes the bead map. walkCorpus skips dot-files,
-// so keeping it inside the fixture dir does not put it in the corpus.
-func beadMapPath(dir string) string { return filepath.Join(dir, ".bead-map.json") }
+// journalFilePath is where build writes the task journal. walkCorpus skips
+// dot-files, so keeping it inside the fixture dir does not put it in the
+// corpus.
+func journalFilePath(dir string) string { return filepath.Join(dir, ".history.jsonl") }
 
 func (f *removalFixture) module(name string) *schema.ModuleSpec {
 	if m, ok := f.modules[name]; ok {
@@ -152,14 +141,13 @@ func (f *removalFixture) build(t *testing.T, extraModules ...string) string {
 		}
 	}
 
-	if f.hasMap {
-		bm := schema.BeadMap{NextID: len(f.beads) + 1, Records: f.beads}
-		data, err := json.Marshal(bm)
-		if err != nil {
-			t.Fatalf("marshal bead map: %v", err)
+	if f.hasJournal {
+		content := ""
+		for _, line := range f.journalLines {
+			content += line + "\n"
 		}
-		if err := os.WriteFile(beadMapPath(dir), data, 0644); err != nil {
-			t.Fatalf("write bead map: %v", err)
+		if err := os.WriteFile(journalFilePath(dir), []byte(content), 0644); err != nil {
+			t.Fatalf("write journal: %v", err)
 		}
 	}
 
@@ -182,7 +170,7 @@ func removedChange(module, nodeType, name string) merkle.ClassifiedChange {
 
 func mustReport(t *testing.T, dir string, changes ...merkle.ClassifiedChange) RemovedNameReport {
 	t.Helper()
-	report, err := CheckRemovedNames(dir, beadMapPath(dir), changes)
+	report, err := CheckRemovedNames(dir, changes)
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}
@@ -344,8 +332,8 @@ func TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched(t *testing.T) {
 	}
 }
 
-// TestREQ_6f8284df92a2_RemovedAPINameSurvives: apis produce no beads and so
-// never appear in .bead-map.json, the one other hash → name table. Hashing
+// TestREQ_6f8284df92a2_RemovedAPINameSurvives: apis produce no tasks and so
+// never appear in the task journal, the one other hash → name table. Hashing
 // corpus phrases is the only way their names can be recovered at all.
 func TestREQ_6f8284df92a2_RemovedAPINameSurvives(t *testing.T) {
 	dir := newRemovalFixture().
@@ -451,8 +439,8 @@ func TestREQ_6f8284df92a2_UnverifiableModuleReported(t *testing.T) {
 // corpus-only recovery answered "one survivor" for the first and "I could not
 // check" for the second — so the sweep found less the more thoroughly the
 // module name had been swept, which inverts the incentive the gate exists to
-// create. The bead map decouples them: it recorded the module name while the
-// node existed, so both runs now report the same survivor.
+// create. The task journal decouples them: it recorded the module name while
+// the node existed, so both runs now report the same survivor.
 func TestREQ_6f8284df92a2_SweepReachIndependentOfModuleNameSurvival(t *testing.T) {
 	const survivingMention = "Nothing calls OrphanDetector any more, but its name is still here.\n"
 	change := removedChange("validator", "component", "OrphanDetector")
@@ -465,7 +453,7 @@ func TestREQ_6f8284df92a2_SweepReachIndependentOfModuleNameSurvival(t *testing.T
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := newRemovalFixture().
-				withBeadRecord("validator", "OrphanDetector").
+				withJournalRemoved("validator", "OrphanDetector").
 				withFile("other/leaf.md", tt.prose).
 				build(t, "other")
 
@@ -483,18 +471,18 @@ func TestREQ_6f8284df92a2_SweepReachIndependentOfModuleNameSurvival(t *testing.T
 	}
 }
 
-// TestREQ_6f8284df92a2_BeadMapProvesModuleFromSiblingRecord pins the first of
-// the two bead-map routes on its own. The removed node has no record of its
-// own — a node added and retired between two ingests never got a bead — but a
+// TestREQ_6f8284df92a2_JournalProvesModuleFromSiblingEvent pins the first of
+// the two journal routes on its own. The removed node has no event of its
+// own — a node added and retired between two ingests never got one — but a
 // sibling component in the same module did, and a module id is
-// IdentityHash("module", name), so that sibling's record reproduces the module
-// hash and proves the name.
-func TestREQ_6f8284df92a2_BeadMapProvesModuleFromSiblingRecord(t *testing.T) {
+// IdentityHash("module", name), so that sibling's removed event reproduces
+// the module hash and proves the name.
+func TestREQ_6f8284df92a2_JournalProvesModuleFromSiblingEvent(t *testing.T) {
 	change := removedChange("validator", "component", "OrphanDetector")
 	change.Module = schema.IdentityHash("module", "validator")
 
 	dir := newRemovalFixture().
-		withBeadRecord("validator", "SchemaChecker").
+		withJournalRemoved("validator", "SchemaChecker").
 		withFile("other/leaf.md", "OrphanDetector is still named.\n").
 		build(t, "other")
 
@@ -507,18 +495,18 @@ func TestREQ_6f8284df92a2_BeadMapProvesModuleFromSiblingRecord(t *testing.T) {
 	}
 }
 
-// TestREQ_6f8284df92a2_BeadMapProvesModuleFromNodeRecord pins the second of the
-// two bead-map routes. Module ids in project.json are exempt from
+// TestREQ_6f8284df92a2_JournalProvesModuleFromNodeEvent pins the second of
+// the two journal routes. Module ids in project.json are exempt from
 // CheckIDDerivation, so a hand-written one derives from nothing and the
-// IdentityHash("module", name) lookup cannot match it. A record for the removed
-// key still proves the module name, because the key is IdentityHash(module,
-// type, component) and the record carries all three.
-func TestREQ_6f8284df92a2_BeadMapProvesModuleFromNodeRecord(t *testing.T) {
+// IdentityHash("module", name) lookup cannot match it. A removed event for
+// the removed key itself still proves the module name, because the event is
+// indexed under that exact key.
+func TestREQ_6f8284df92a2_JournalProvesModuleFromNodeEvent(t *testing.T) {
 	change := removedChange("validator", "component", "OrphanDetector")
 	change.Module = "000000000001" // hand-written module id: derives from nothing
 
 	dir := newRemovalFixture().
-		withBeadRecord("validator", "OrphanDetector").
+		withJournalRemoved("validator", "OrphanDetector").
 		withFile("other/leaf.md", "OrphanDetector is still named.\n").
 		build(t, "other")
 
@@ -527,41 +515,20 @@ func TestREQ_6f8284df92a2_BeadMapProvesModuleFromNodeRecord(t *testing.T) {
 		t.Fatalf("want 1 survivor, got %+v / notes %+v", report.Survivors, report.Notes)
 	}
 	if report.Survivors[0].Module != "validator" {
-		t.Fatalf("want the module name proved from the record, got %+v", report.Survivors[0])
+		t.Fatalf("want the module name proved from the event, got %+v", report.Survivors[0])
 	}
 }
 
-// TestREQ_6f8284df92a2_BeadMapRecordsAreProofsNotClaims: a record whose names
-// no longer hash into its spec node id is stale, and a stale record must not be
-// able to redirect the sweep at a module that never declared the node. It is
-// quoted in the note as an unverified lead and nothing more.
-func TestREQ_6f8284df92a2_BeadMapRecordsAreProofsNotClaims(t *testing.T) {
-	key := schema.IdentityHash("validator", "component", "OrphanDetector")
+// TestREQ_6f8284df92a2_EmptyJournalStillNotes: the fallback is a second
+// source of proof, not a second reason to fall silent. A journal that
+// records nothing leaves the group exactly as unverifiable as no journal at
+// all.
+func TestREQ_6f8284df92a2_EmptyJournalStillNotes(t *testing.T) {
 	change := removedChange("validator", "component", "OrphanDetector")
 	change.Module = schema.IdentityHash("module", "validator")
 
 	dir := newRemovalFixture().
-		withStaleBeadRecord("ghost", "OrphanDetector", key).
-		withFile("other/leaf.md", "OrphanDetector is still named.\n").
-		build(t, "other")
-
-	report := mustReport(t, dir, change)
-	if len(report.Survivors) != 0 {
-		t.Fatalf("a stale record proves nothing, got %+v", report.Survivors)
-	}
-	wantOneNote(t, report.Notes, NoteUnverifiableModule,
-		key, `"OrphanDetector"`, `"ghost"`, "unverified", "could not be checked")
-}
-
-// TestREQ_6f8284df92a2_EmptyBeadMapStillNotes: the fallback is a second source
-// of proof, not a second reason to fall silent. A map that records nothing
-// leaves the group exactly as unverifiable as no map at all.
-func TestREQ_6f8284df92a2_EmptyBeadMapStillNotes(t *testing.T) {
-	change := removedChange("validator", "component", "OrphanDetector")
-	change.Module = schema.IdentityHash("module", "validator")
-
-	dir := newRemovalFixture().
-		withEmptyBeadMap().
+		withEmptyJournal().
 		withFile("other/leaf.md", "OrphanDetector is still named.\n").
 		build(t, "other")
 
@@ -572,24 +539,45 @@ func TestREQ_6f8284df92a2_EmptyBeadMapStillNotes(t *testing.T) {
 	wantOneNote(t, report.Notes, NoteUnverifiableModule, "could not be checked")
 }
 
-// TestREQ_6f8284df92a2_MissingBeadMapIsNotAnError: `spex diff` runs in trees
+// TestREQ_6f8284df92a2_MalformedJournalStillNotes: a journal line that fails
+// to parse degrades the journal source for the whole run rather than being
+// skipped — the sweep loses this name source but the run must not fail over
+// it (arch_diff_command.md: "a deliberately gentler contract than the
+// retired bead-map's hard error on a corrupt file").
+func TestREQ_6f8284df92a2_MalformedJournalStillNotes(t *testing.T) {
+	change := removedChange("validator", "component", "OrphanDetector")
+	change.Module = schema.IdentityHash("module", "validator")
+
+	dir := newRemovalFixture().
+		withFile("other/leaf.md", "OrphanDetector is still named.\n").
+		build(t, "other")
+	if err := os.WriteFile(journalFilePath(dir), []byte("{not valid json\n"), 0644); err != nil {
+		t.Fatalf("write journal: %v", err)
+	}
+
+	report := mustReport(t, dir, change)
+	if len(report.Survivors) != 0 {
+		t.Fatalf("a malformed journal proves nothing, got %+v", report.Survivors)
+	}
+	wantOneNote(t, report.Notes, NoteUnverifiableModule, "could not be checked")
+}
+
+// TestREQ_6f8284df92a2_MissingJournalIsNotAnError: `spex diff` runs in trees
 // that have never been ingested, and in tests whose working directory has no
-// map at all.
-func TestREQ_6f8284df92a2_MissingBeadMapIsNotAnError(t *testing.T) {
+// journal at all.
+func TestREQ_6f8284df92a2_MissingJournalIsNotAnError(t *testing.T) {
 	dir := newRemovalFixture().
 		withFile("validator/leaf.md", "OrphanDetector is still named.\n").
 		build(t, "validator")
 
-	for _, path := range []string{"", filepath.Join(dir, "nope.json")} {
-		report, err := CheckRemovedNames(dir, path, []merkle.ClassifiedChange{
-			removedChange("validator", "component", "OrphanDetector"),
-		})
-		if err != nil {
-			t.Fatalf("map path %q: %v", path, err)
-		}
-		if len(report.Survivors) != 1 {
-			t.Fatalf("map path %q: the corpus sweep must still run, got %+v", path, report.Survivors)
-		}
+	report, err := CheckRemovedNames(dir, []merkle.ClassifiedChange{
+		removedChange("validator", "component", "OrphanDetector"),
+	})
+	if err != nil {
+		t.Fatalf("no journal on disk: %v", err)
+	}
+	if len(report.Survivors) != 1 {
+		t.Fatalf("the corpus sweep must still run, got %+v", report.Survivors)
 	}
 }
 
@@ -631,7 +619,7 @@ func TestREQ_6f8284df92a2_SelfCheckRealCorpus(t *testing.T) {
 	}
 	classified := merkle.Classify(merkle.Diff(current, snapshot), merkle.ModuleNames(current))
 
-	report, err := CheckRemovedNames(specDir, filepath.Join("..", ".bead-map.json"), classified)
+	report, err := CheckRemovedNames(specDir, classified)
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}

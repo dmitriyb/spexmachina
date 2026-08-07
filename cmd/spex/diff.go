@@ -19,7 +19,6 @@ func newDiffCmd() *cobra.Command {
 		RunE:  runDiffE,
 	}
 	cmd.Flags().String("snapshot", "", "path to snapshot file (default: <dir>/.snapshot.json)")
-	cmd.Flags().String("map", ".bead-map.json", "path to bead mapping file, read as a hash -> name source for removal checks")
 	cmd.Flags().Bool("json", false, "output as JSON")
 	return cmd
 }
@@ -61,13 +60,13 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	// gate keyed off the classified diff, reported through .errors, and
 	// halting the pipeline with exit 2.
 	//
-	// The bead map is passed as a second hash -> name source: when a whole
-	// module is retired, its component records still carry the module name
-	// the diff can only report as a hash. It is read, never written, and an
-	// absent file is not an error — `spex diff` runs in trees that have
-	// never been ingested.
-	mapPath, _ := cmd.Flags().GetString("map")
-	removed, err := validator.CheckRemovedNames(specDir, mapPath, classified)
+	// The task journal at <spec-dir>/.history.jsonl is read as a second
+	// hash -> name source: when a whole module is retired, its removed
+	// change events still carry the module name the diff can only report
+	// as a hash. It is read, never written, and an absent (or malformed)
+	// journal is not an error — `spex diff` runs in trees that have never
+	// been ingested.
+	removed, err := validator.CheckRemovedNames(specDir, classified)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}
