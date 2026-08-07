@@ -56,9 +56,9 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	labeler := &Labeler{MappingStore: b.MappingStore}
 
 	resolver := &Resolver{
-		SpecGraph:    b.SpecGraph,
-		MappingStore: b.MappingStore,
-		Batch:        batchMap,
+		SpecGraph: b.SpecGraph,
+		Fold:      legacyStoreFold{store: b.MappingStore},
+		Batch:     batchMap,
 	}
 
 	ops := make([]Op, 0, totalOps)
@@ -107,6 +107,56 @@ func (b *Builder) lookupExistingEpic() (bool, error) {
 		return false, nil
 	}
 	return false, fmt.Errorf("emit: build: proposal epic lookup %q: %w", b.Proposal, err)
+}
+
+// legacyStoreFold adapts the legacy mapping.Store onto Resolver's
+// JournalFold interface, standing in for the task-journal fold until
+// ChangesetBuilder migrates off the legacy store.
+//
+// TODO(bead:spexmachina-y0wc.30): replace with a lookup built from
+// mapping.MappingStore's fold once ChangesetBuilder migrates — Resolver's
+// v2 contract (spexmachina-y0wc.29) no longer speaks legacy records
+// directly, so this bridges the gap in the meantime.
+type legacyStoreFold struct {
+	store mapping.Store
+}
+
+// Entry tries the proposal-epic lookup first — a component or data_flow's
+// spec_node_id never matches a NodeType=="proposal" record, so this is
+// safe for every key Resolver asks about — then falls back to the
+// spec-node lookup, collapsing "all records closed" onto Removed=true,
+// the legacy store's closest analogue to a removed node's fold entry.
+func (f legacyStoreFold) Entry(key string) (FoldEntry, bool) {
+	if rec, err := f.store.GetByProposalEpic(key); err == nil {
+		return FoldEntry{TaskID: rec.BeadID}, true
+	}
+	recs, err := f.store.GetBySpecNode(key)
+	if err != nil {
+		return FoldEntry{}, false
+	}
+	if chosen, anyOpen := pickOpenRecord(recs); anyOpen {
+		return FoldEntry{TaskID: chosen.BeadID}, true
+	}
+	return FoldEntry{Removed: true}, true
+}
+
+// pickOpenRecord returns the highest-ID record whose BeadStatus is not
+// "closed". Empty status counts as open — conservative default attaches
+// an edge rather than silently dropping. Highest-ID wins so the latest
+// re-implementation supersedes earlier records.
+func pickOpenRecord(recs []mapping.Record) (mapping.Record, bool) {
+	var chosen mapping.Record
+	var found bool
+	for _, r := range recs {
+		if r.BeadStatus == "closed" {
+			continue
+		}
+		if !found || r.ID > chosen.ID {
+			chosen = r
+			found = true
+		}
+	}
+	return chosen, found
 }
 
 // collectCreates flattens report.Creates into CreateActions and prepends a

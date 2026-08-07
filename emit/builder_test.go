@@ -253,23 +253,23 @@ func TestBuild_ClosedBeadDepIsDropped(t *testing.T) {
 	}
 }
 
-// TestBuild_SpecNodeFallback covers the spec scenario:
-// "Z has no mapping record and no in-batch op. Assert X's deps include
-// {ref:spec_node, spec_node_id:Z}."
-func TestBuild_SpecNodeFallback(t *testing.T) {
+// TestBuild_UnresolvableDepIsError covers test_changeset_builder.md's
+// "Unresolvable dep is an emit error" scenario: Z has no mapping record
+// and no in-batch op. v2 dropped the ref:spec_node adapter-time fallback,
+// so Build() must error naming Z instead of emitting a deferred ref.
+func TestBuild_UnresolvableDepIsError(t *testing.T) {
 	env := newBuilderEnv()
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", []string{"Z"}),
 		},
 	}
-	cs, err := env.build(report, "p", "h")
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+	_, err := env.build(report, "p", "h")
+	if err == nil {
+		t.Fatal("Build: want error for unresolvable dep Z, got nil")
 	}
-	x := findOp(t, cs.Ops, "X")
-	if len(x.Deps) != 1 || x.Deps[0].Kind != RefSpecNode || x.Deps[0].SpecNodeID != "Z" {
-		t.Fatalf("X.deps: want [ref:spec_node Z], got %+v", x.Deps)
+	if !strings.Contains(err.Error(), "Z") {
+		t.Errorf("error must name the unresolvable spec_node_id Z: %v", err)
 	}
 }
 
@@ -820,10 +820,12 @@ func opIndex(ops []Op, specNodeID string) int {
 }
 
 // crossComponentEnv seeds the fixture shared by the byte-identical
-// cross-component scenario: a fresh proposal, four component creates
-// (x1 depending on in-batch y1, existing-bead z-open, and fallback
-// w-none; aa1/ab1 independent for the lex tiebreak), and a mapping
-// store whose cursor starts at 50 with one open record for z-open.
+// cross-component scenario: a fresh proposal, four component creates (x1
+// depending on in-batch y1 and existing-bead z-open; aa1/ab1 independent
+// for the lex tiebreak), and a mapping store whose cursor starts at 50
+// with one open record for z-open. No unresolvable dep here — that is a
+// separate emit-error scenario (TestBuild_UnresolvableDepIsError,
+// TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset).
 func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 	env := newBuilderEnv()
 	env.store.nextID = 50
@@ -832,7 +834,7 @@ func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 	}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
-			sampleComponentCreate("x1", "m", "X", []string{"y1", "z-open", "w-none"}),
+			sampleComponentCreate("x1", "m", "X", []string{"y1", "z-open"}),
 			sampleComponentCreate("y1", "m", "Y", nil),
 			sampleComponentCreate("ab1", "m", "AB", nil),
 			sampleComponentCreate("aa1", "m", "AA", nil),
@@ -845,9 +847,9 @@ func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 // "Resolver + Sorter + Labeler + Builder produce byte-identical output
 // across runs" scenario. Two independently constructed Builders (fresh
 // stores, fresh labelers — no shared in-memory state) over identical
-// inputs must serialize to byte-identical JSON. Resolver classifies the
-// three dep shapes, TopologicalSorter orders epic-first with lex
-// tiebreak, IdempotencyLabeler pairs cursor ids with sorted order, and
+// inputs must serialize to byte-identical JSON. Resolver classifies both
+// v2 dep shapes, TopologicalSorter orders epic-first with lex tiebreak,
+// IdempotencyLabeler pairs cursor ids with sorted order, and
 // ChangesetBuilder composes the canonical output.
 func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 	env1, report1 := crossComponentEnv()
@@ -891,10 +893,10 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 		}
 	}
 
-	// Resolver: the three dep shapes on x1, input order preserved.
+	// Resolver: the two v2 dep shapes on x1, input order preserved.
 	x := findOp(t, cs1.Ops, "x1")
-	if len(x.Deps) != 3 {
-		t.Fatalf("x1 deps: want 3, got %+v", x.Deps)
+	if len(x.Deps) != 2 {
+		t.Fatalf("x1 deps: want 2, got %+v", x.Deps)
 	}
 	y := findOp(t, cs1.Ops, "y1")
 	if x.Deps[0].Kind != RefOp || x.Deps[0].OpID != y.OpID {
@@ -903,17 +905,51 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 	if x.Deps[1].Kind != RefBead || x.Deps[1].BeadID != "br-z" {
 		t.Errorf("x1 dep[1]: want ref:bead br-z, got %+v", x.Deps[1])
 	}
-	if x.Deps[2].Kind != RefSpecNode || x.Deps[2].SpecNodeID != "w-none" {
-		t.Errorf("x1 dep[2]: want ref:spec_node w-none, got %+v", x.Deps[2])
+}
+
+// TestBuild_CrossComponent_DepClassificationRoundTrip covers the spec's
+// "dep classification round-trip through Builder" scenario: one dependent
+// create whose deps array carries both v2 ref shapes — ref:op and
+// ref:bead, neither flattened or coerced — with the in-batch predecessor
+// sequenced earlier by the Sorter.
+func TestBuild_CrossComponent_DepClassificationRoundTrip(t *testing.T) {
+	env := newBuilderEnv()
+	env.store.bySpecNode["q-open"] = []mapping.Record{
+		{ID: 3, SpecNodeID: "q-open", BeadID: "br-q", BeadStatus: "open"},
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("d1", "m", "D", []string{"p1", "q-open"}),
+			sampleComponentCreate("p1", "m", "P", nil),
+		},
+	}
+	cs, err := env.build(report, "prop", "deadbeefcafe")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	d := findOp(t, cs.Ops, "d1")
+	p := findOp(t, cs.Ops, "p1")
+	if len(d.Deps) != 2 {
+		t.Fatalf("d1 deps: want exactly 2 shapes, got %+v", d.Deps)
+	}
+	if d.Deps[0].Kind != RefOp || d.Deps[0].OpID != p.OpID || d.Deps[0].BeadID != "" || d.Deps[0].SpecNodeID != "" {
+		t.Errorf("dep[0]: want pure ref:op %s, got %+v", p.OpID, d.Deps[0])
+	}
+	if d.Deps[1].Kind != RefBead || d.Deps[1].BeadID != "br-q" || d.Deps[1].OpID != "" || d.Deps[1].SpecNodeID != "" {
+		t.Errorf("dep[1]: want pure ref:bead br-q, got %+v", d.Deps[1])
+	}
+	if opIndex(cs.Ops, "p1") >= opIndex(cs.Ops, "d1") {
+		t.Errorf("sorter must sequence in-batch predecessor p1 before dependent d1: %+v", cs.Ops)
 	}
 }
 
-// TestBuild_CrossComponent_ThreeRefShapesOneCreate covers the spec's "dep
-// classification round-trip through Builder" scenario: one dependent
-// create whose deps array simultaneously carries ref:op, ref:bead, and
-// ref:spec_node — none flattened or coerced — with the in-batch
-// predecessor sequenced earlier by the Sorter.
-func TestBuild_CrossComponent_ThreeRefShapesOneCreate(t *testing.T) {
+// TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset
+// covers the same scenario's unresolvable-dep-present half: the same
+// batch, with an additional dep (r-none) that is neither in-batch nor in
+// the fold. Build() must error naming it, and no partial changeset comes
+// back.
+func TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset(t *testing.T) {
 	env := newBuilderEnv()
 	env.store.bySpecNode["q-open"] = []mapping.Record{
 		{ID: 3, SpecNodeID: "q-open", BeadID: "br-q", BeadStatus: "open"},
@@ -925,26 +961,14 @@ func TestBuild_CrossComponent_ThreeRefShapesOneCreate(t *testing.T) {
 		},
 	}
 	cs, err := env.build(report, "prop", "deadbeefcafe")
-	if err != nil {
-		t.Fatalf("Build: %v", err)
+	if err == nil {
+		t.Fatal("Build: want error for unresolvable dep r-none, got nil")
 	}
-
-	d := findOp(t, cs.Ops, "d1")
-	p := findOp(t, cs.Ops, "p1")
-	if len(d.Deps) != 3 {
-		t.Fatalf("d1 deps: want exactly 3 shapes, got %+v", d.Deps)
+	if !strings.Contains(err.Error(), "r-none") {
+		t.Errorf("error must name the unresolvable spec_node_id r-none: %v", err)
 	}
-	if d.Deps[0].Kind != RefOp || d.Deps[0].OpID != p.OpID || d.Deps[0].BeadID != "" || d.Deps[0].SpecNodeID != "" {
-		t.Errorf("dep[0]: want pure ref:op %s, got %+v", p.OpID, d.Deps[0])
-	}
-	if d.Deps[1].Kind != RefBead || d.Deps[1].BeadID != "br-q" || d.Deps[1].OpID != "" || d.Deps[1].SpecNodeID != "" {
-		t.Errorf("dep[1]: want pure ref:bead br-q, got %+v", d.Deps[1])
-	}
-	if d.Deps[2].Kind != RefSpecNode || d.Deps[2].SpecNodeID != "r-none" || d.Deps[2].OpID != "" || d.Deps[2].BeadID != "" {
-		t.Errorf("dep[2]: want pure ref:spec_node r-none, got %+v", d.Deps[2])
-	}
-	if opIndex(cs.Ops, "p1") >= opIndex(cs.Ops, "d1") {
-		t.Errorf("sorter must sequence in-batch predecessor p1 before dependent d1: %+v", cs.Ops)
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset on unresolvable dep: got %d ops", len(cs.Ops))
 	}
 }
 
