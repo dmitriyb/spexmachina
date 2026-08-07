@@ -1,13 +1,12 @@
 {
-  "version": 1,
+  "version": 2,
   "git_head": "11112222",
   "proposal": "test/substitution",
   "ops": [
     {"op_id":"op-0001","type":"create","spec_node_kind":"component","spec_node_id":"sn-anchor","idempotency":{"label":"spex:1"},"priority":2,"title":"Anchor"},
     {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-mixed","idempotency":{"label":"spex:2"},"deps":[
       {"ref":"op","op_id":"op-0001"},
-      {"ref":"bead","bead_id":"br-77"},
-      {"ref":"spec_node","spec_node_id":"abcdef123456"}
+      {"ref":"bead","bead_id":"br-77"}
     ],"priority":1,"title":"Mixed"}
   ]
 }
