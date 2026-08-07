@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -420,6 +421,97 @@ func TestREQ2_BuildTree_AllNodesHaveHashes(t *testing.T) {
 		}
 	}
 	walk(root)
+}
+
+// TestS6_BuildTree_BottomUpPropagation verifies test_hashing.md scenario S6:
+// leaf hashes match HashFile of their backing files, and interior hashes
+// equal HashChildren over their children's hashes — computed independently
+// here, not merely re-read from the tree, so a wrong composition (unsorted
+// concatenation, extra folded-in bytes) would fail this test.
+func TestS6_BuildTree_BottomUpPropagation(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	// 1. Each file-backed leaf's hash matches HashFile of its file.
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+	comp1 := findChild(t, alpha, comp1Key)
+	wantComp1Hash, err := HashFile(filepath.Join(specDir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatalf("HashFile comp1: %v", err)
+	}
+	if comp1.Hash != wantComp1Hash {
+		t.Fatalf("comp1 leaf hash: want %s, got %s", wantComp1Hash, comp1.Hash)
+	}
+
+	comp2Key := schema.IdentityHash("alpha", "component", "Comp2")
+	comp2 := findChild(t, alpha, comp2Key)
+	wantComp2Hash, err := HashFile(filepath.Join(specDir, "alpha", "arch_comp2.md"))
+	if err != nil {
+		t.Fatalf("HashFile comp2: %v", err)
+	}
+	if comp2.Hash != wantComp2Hash {
+		t.Fatalf("comp2 leaf hash: want %s, got %s", wantComp2Hash, comp2.Hash)
+	}
+
+	test1Key := schema.IdentityHash("alpha", "test_section", "Test1")
+	test1 := findChild(t, alpha, test1Key)
+	wantTest1Hash, err := HashFile(filepath.Join(specDir, "alpha", "test_comp1.md"))
+	if err != nil {
+		t.Fatalf("HashFile test1: %v", err)
+	}
+	if test1.Hash != wantTest1Hash {
+		t.Fatalf("test1 leaf hash: want %s, got %s", wantTest1Hash, test1.Hash)
+	}
+
+	metaKey := "meta/" + alphaHash
+	metaLeaf := findChild(t, alpha, metaKey)
+	wantMetaHash, err := HashFile(filepath.Join(specDir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("HashFile alpha module.json: %v", err)
+	}
+	if metaLeaf.Hash != wantMetaHash {
+		t.Fatalf("alpha meta leaf hash: want %s, got %s", wantMetaHash, metaLeaf.Hash)
+	}
+
+	// 2. The alpha module interior hash equals HashChildren over the meta
+	// envelope leaf hash plus each spec-node leaf hash directly — no
+	// intermediate group hashes. Collected and sorted independently from
+	// the actual child nodes, not assumed to already be in the right order.
+	alphaChildHashes := make([]string, len(alpha.Children))
+	for i, c := range alpha.Children {
+		alphaChildHashes[i] = c.Hash
+	}
+	sort.Strings(alphaChildHashes)
+	if len(alphaChildHashes) != 6 {
+		t.Fatalf("alpha children: want 6, got %d", len(alphaChildHashes))
+	}
+	wantAlphaHash := HashChildren(alphaChildHashes)
+	if alpha.Hash != wantAlphaHash {
+		t.Fatalf("alpha module hash: want %s, got %s", wantAlphaHash, alpha.Hash)
+	}
+
+	// 3. The root hash equals HashChildren over its five children's hashes —
+	// the project envelope leaf, the two project requirement leaves, and
+	// the alpha and beta module hashes.
+	if len(root.Children) != 5 {
+		t.Fatalf("root children: want 5, got %d", len(root.Children))
+	}
+	rootChildHashes := make([]string, len(root.Children))
+	for i, c := range root.Children {
+		rootChildHashes[i] = c.Hash
+	}
+	sort.Strings(rootChildHashes)
+	wantRootHash := HashChildren(rootChildHashes)
+	if root.Hash != wantRootHash {
+		t.Fatalf("root hash: want %s, got %s", wantRootHash, root.Hash)
+	}
 }
 
 func TestREQ2_BuildTree_JSONRoundTrip(t *testing.T) {
