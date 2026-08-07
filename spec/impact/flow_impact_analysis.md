@@ -120,9 +120,12 @@ One flat list of actions. Each carries:
   - old bead id: on a create replacing an obsoleted bead, the id of the bead it
     replaces; absent on a create for a node that had none
   - dep spec node ids: identity hashes of the spec nodes this action's bead is
-    to depend on, collected from component `uses` and transitive
-    `requires_module` edges; these are spec-graph ids, never bead ids, and
-    resolving them into refs is emit's work
+    to depend on, collected from component `uses` (direct), transitive
+    `requires_module` edges, and — for a component create whose spec node
+    appears in a changed data_flow's `uses` array — that data_flow's own
+    identity hash, added so the data_flow's create op is ordered first; these
+    are spec-graph ids, never bead ids, and resolving them into refs is
+    emit's work
   - change type: `modified` or `removed`, on an obsolete; absent on a create
   - reason: one human-readable sentence
 
