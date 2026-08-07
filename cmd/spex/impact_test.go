@@ -7,7 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -687,6 +689,75 @@ func TestE5_DiffFileEmpty(t *testing.T) {
 	}
 }
 
+// E6: Concurrent access safety. spex impact is read-only over the spec
+// directory, journal and bead file, so two simultaneous invocations must
+// both succeed and produce the same report a serial run does. The in-process
+// harness captures a run's stdout by swapping the global os.Stdout for its
+// duration (see captureStdout), so two goroutines can't each call runSpex
+// concurrently — their swaps would race each other. Instead both
+// invocations run under a single outer stdout capture and write directly to
+// the shared pipe; each report is one json.Encoder.Encode call, far under
+// the pipe's atomic-write size, so the two writes land intact and back to
+// back rather than interleaved. Run with -race to also catch any actual
+// data race the read-only claim depends on.
+func TestE6_ConcurrentAccessSafety(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+	args := []string{"impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir}
+
+	serialOut, err := runSpex(t, args...)
+	if err != nil {
+		t.Fatalf("serial run: %v", err)
+	}
+	var serialReport impact.ImpactReport
+	if err := json.Unmarshal([]byte(serialOut), &serialReport); err != nil {
+		t.Fatalf("parse serial report: %v", err)
+	}
+
+	execOnce := func() error {
+		rootCmd := cli.NewRootCmd()
+		rootCmd.AddCommand(
+			newDiffCmd(),
+			newValidateCmd(),
+			newImpactCmd(),
+			newMapCmd(),
+			newRenderCmd(),
+		)
+		rootCmd.SetErr(new(bytes.Buffer))
+		rootCmd.SetArgs(args)
+		return rootCmd.Execute()
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	combined := captureStdout(t, func() {
+		wg.Add(len(errs))
+		for i := range errs {
+			go func(i int) {
+				defer wg.Done()
+				errs[i] = execOnce()
+			}(i)
+		}
+		wg.Wait()
+	})
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent invocation %d: %v", i, err)
+		}
+	}
+
+	dec := json.NewDecoder(strings.NewReader(combined))
+	for i := range errs {
+		var report impact.ImpactReport
+		if err := dec.Decode(&report); err != nil {
+			t.Fatalf("decode concurrent report %d from combined output %q: %v", i, combined, err)
+		}
+		if !reflect.DeepEqual(report, serialReport) {
+			t.Fatalf("concurrent report %d differs from serial report:\ngot:  %+v\nwant: %+v", i, report, serialReport)
+		}
+	}
+}
+
 // E7: Spec directory with no modules — unmatched changes still report as
 // creates and the command does not panic on the missing module.json.
 func TestE7_DiffReferencesUnknownModules(t *testing.T) {
@@ -1162,8 +1233,11 @@ func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
 }
 
 // TestPairingsFromFold verifies the journal-fold adapter: node entries copy
-// straight across by identity hash, and proposal-epic entries (no Source.Node)
-// are dropped since they never match a diff change.
+// straight across by identity hash; proposal-epic entries (no Source.Node)
+// are dropped since they never match a diff change; and removed entries —
+// tombstone biographies of already-ingested removals, with no live TaskID —
+// are dropped too, so a node re-added under its old identity hash cannot be
+// matched against its own tombstone.
 func TestPairingsFromFold(t *testing.T) {
 	fold := mapping.Fold{Entries: []mapping.FoldEntry{
 		{
@@ -1176,14 +1250,101 @@ func TestPairingsFromFold(t *testing.T) {
 			TaskID: "epic-1",
 			Source: mapping.Event{Proposal: "2026-04-18-proposal"},
 		},
+		{
+			Key:     "bbbbbbbbbbbb",
+			Removed: true,
+			Source:  mapping.Event{Node: "bbbbbbbbbbbb", Name: "Comp2", NodeType: "component", Module: "m"},
+		},
 	}}
 
 	got := pairingsFromFold(fold)
 	if len(got) != 1 {
-		t.Fatalf("want 1 pairing (proposal entry dropped), got %d: %+v", len(got), got)
+		t.Fatalf("want 1 pairing (proposal entry and tombstone dropped), got %d: %+v", len(got), got)
 	}
 	if got[0].SpecNodeID != "aaaaaaaaaaaa" || got[0].TaskID != "task-1" || got[0].NodeType != "component" || got[0].Module != "m" || got[0].Name != "Comp1" {
 		t.Errorf("unexpected pairing: %+v", got[0])
+	}
+}
+
+// TestFR_RemovedThenReAddedNodeIsNotATombstoneMatch is the regression test
+// for the tombstone-fold-entry bug: a node removed from the spec and later
+// re-added under the same name — the same identity hash, since the hash is
+// hash(module, kind, name) — must classify as a fresh create. It must not
+// match the journal's biography of the old removal as if it were a live
+// pairing, which would misreport the create as a modification and emit a
+// spurious obsolete of nothing.
+func TestFR_RemovedThenReAddedNodeIsNotATombstoneMatch(t *testing.T) {
+	specDir := t.TempDir()
+	modID := schema.IdentityHash("module", "m")
+	cID := schema.IdentityHash("m", "component", "C")
+
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-project",
+		"modules": [{"id": "`+modID+`", "name": "m", "path": "m"}]
+	}`)
+	mDir := filepath.Join(specDir, "m")
+	if err := os.MkdirAll(mDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, mDir, "module.json", `{"name": "m", "components": []}`)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-add C under its old name — same identity hash as the removed node.
+	writeTestFile(t, mDir, "module.json", `{
+		"name": "m",
+		"components": [{"id": "`+cID+`", "name": "C", "content": "arch_c.md"}]
+	}`)
+	writeTestFile(t, mDir, "arch_c.md", "# C\n")
+
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Journal: C was added and tracked by spex-001, then removed with no
+	// cleanup receipt — the tombstone biography of an already-ingested
+	// removal that spex map context still answers for.
+	writeTestJournal(t, specDir, []string{
+		fmt.Sprintf(`{"event":"added","eid":"E1","node":"%s","name":"C","node_type":"component","module":"m","before":null,"after":"h1","git_head":"headsha1","proposal":"p1"}`, cID),
+		`{"event":"task_created","for":"E1","task_id":"spex-001"}`,
+		fmt.Sprintf(`{"event":"removed","eid":"E2","node":"%s","name":"C","node_type":"component","module":"m","before":"h1","after":null,"git_head":"headsha2","proposal":"p1"}`, cID),
+	})
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+
+	if len(report.Obsoletes) != 0 {
+		t.Fatalf("want no obsoletes for a tombstone match, got %+v", report.Obsoletes)
+	}
+	if len(report.Creates) != 1 {
+		t.Fatalf("want 1 create, got %d: %+v", len(report.Creates), report.Creates)
+	}
+	if want := "New spec node: m/C"; report.Creates[0].Reason != want {
+		t.Errorf("want reason %q, got %q", want, report.Creates[0].Reason)
+	}
+	if report.Creates[0].OldBeadID != "" {
+		t.Errorf("want no old_bead_id, got %q", report.Creates[0].OldBeadID)
+	}
+	if report.Summary.CreateCount != 1 || report.Summary.ObsoleteCount != 0 {
+		t.Errorf("want create_count 1, obsolete_count 0, got %+v", report.Summary)
 	}
 }
 

@@ -157,11 +157,14 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 // field copy — no rekeying. Proposal-epic entries (keyed by a proposal slug
 // rather than a spec node identity hash) carry no Source.Node and are
 // dropped: they never match a diff change, which always keys on a node's
-// identity hash.
+// identity hash. Removed entries are tombstones — biographies of
+// already-ingested removals with no live TaskID — and are dropped too: if
+// the same identity hash reappears in a diff (a component re-added under
+// its old name), a tombstone must not be mistaken for a live pairing.
 func pairingsFromFold(fold mapping.Fold) []impact.Pairing {
 	var out []impact.Pairing
 	for _, e := range fold.Entries {
-		if e.Source.Node == "" {
+		if e.Source.Node == "" || e.Removed {
 			continue
 		}
 		out = append(out, impact.Pairing{
