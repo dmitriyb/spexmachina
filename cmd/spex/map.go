@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/spf13/cobra"
@@ -62,20 +61,12 @@ func newMapCmd() *cobra.Command {
 		RunE:  runMapListE,
 	}
 
-	// TODO(bead:spexmachina-y0wc.20): context resolves against
-	// mapping.NewFileStore + mapping.ResolveContext (integer record ids,
-	// the retired .bead-map.json store) because ContextResolver has not
-	// yet been migrated onto MappingStore's FoldEntry
-	// (spec/map/arch_context_resolver.md). Rewrite once that migration
-	// lands so context takes the same identity-hash/task-id key as get
-	// and list.
 	contextCmd := &cobra.Command{
-		Use:   "context <record-id>",
-		Short: "Resolve full spec context for a mapping record",
+		Use:   "context <key>",
+		Short: "Resolve full spec context for a node, live or removed, by identity hash or task id",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runMapContextE,
 	}
-	contextCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
 	mapCmd.AddCommand(getCmd, listCmd, contextCmd)
 	return mapCmd
@@ -127,20 +118,7 @@ func runMapContextE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	id, err := strconv.Atoi(args[0])
-	if err != nil {
-		return fmt.Errorf("map context: invalid record ID: %s", args[0])
-	}
-
-	store := mapping.NewFileStore(mapFile)
-	record, err := store.Get(id)
-	if err != nil {
-		return fmt.Errorf("map context: %w", err)
-	}
-
-	result, err := mapping.ResolveContext(specDir, record)
+	result, err := mapping.ResolveContext(specDir, args[0])
 	if err != nil {
 		return fmt.Errorf("map context: %w", err)
 	}
