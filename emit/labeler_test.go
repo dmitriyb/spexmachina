@@ -1,96 +1,49 @@
 package emit
 
-import (
-	"fmt"
-	"testing"
+import "testing"
 
-	"github.com/dmitriyb/spexmachina/mapping"
-)
+// TestLabelForNodeBearingUsesSpecNodeID covers the node-bearing branch of
+// arch_idempotency_labeler.md's per-action rules: a fresh create (no
+// OldBeadID) gets spex:<spec_node_id> — a pure read off the action, no
+// store or cursor involved.
+func TestLabelForNodeBearingUsesSpecNodeID(t *testing.T) {
+	l := &Labeler{}
 
-// stubStore is a minimal mapping.Store double for Labeler tests. Only
-// NextRecordID is exercised; the other methods return errors so any
-// accidental dependency on full Store behavior fails loudly.
-type stubStore struct {
-	next   int
-	err    error
-	byBead map[string]mapping.Record
-}
-
-func (s *stubStore) NextRecordID() (int, error) {
-	if s.err != nil {
-		return 0, s.err
-	}
-	return s.next, nil
-}
-
-func (s *stubStore) Create(mapping.Record) (int, error) {
-	return 0, fmt.Errorf("stubStore.Create: not implemented")
-}
-func (s *stubStore) Get(int) (mapping.Record, error) {
-	return mapping.Record{}, fmt.Errorf("stubStore.Get: not implemented")
-}
-func (s *stubStore) GetByBead(beadID string) (mapping.Record, error) {
-	if rec, ok := s.byBead[beadID]; ok {
-		return rec, nil
-	}
-	return mapping.Record{}, fmt.Errorf("stubStore.GetByBead: not implemented")
-}
-func (s *stubStore) GetBySpecNode(string) ([]mapping.Record, error) {
-	return nil, fmt.Errorf("stubStore.GetBySpecNode: not implemented")
-}
-func (s *stubStore) GetByProposalEpic(string) (mapping.Record, error) {
-	return mapping.Record{}, fmt.Errorf("stubStore.GetByProposalEpic: not implemented")
-}
-func (s *stubStore) Update(int, map[string]string) error {
-	return fmt.Errorf("stubStore.Update: not implemented")
-}
-func (s *stubStore) Delete(int) error    { return fmt.Errorf("stubStore.Delete: not implemented") }
-func (s *stubStore) List() ([]mapping.Record, error) {
-	return nil, fmt.Errorf("stubStore.List: not implemented")
-}
-func (s *stubStore) Replace([]mapping.Record, int) error {
-	return fmt.Errorf("stubStore.Replace: not implemented")
-}
-
-// TestLabelForFreshAdvancesCursor covers the fresh-create branch of the
-// per-action rules in arch_idempotency_labeler.md: a create with no
-// OldBeadID and no cleanup Reason gets spex:<cursor> and advances the
-// cursor by one.
-func TestLabelForFreshAdvancesCursor(t *testing.T) {
-	store := &stubStore{next: 100}
-	l := &Labeler{MappingStore: store}
-
-	first, err := l.LabelFor(CreateAction{SpecNodeID: "node_a"})
+	label, err := l.LabelFor(CreateAction{SpecNodeID: "node_a"})
 	if err != nil {
-		t.Fatalf("LabelFor fresh #1: unexpected error: %v", err)
+		t.Fatalf("LabelFor fresh: unexpected error: %v", err)
 	}
-	if first != "spex:100" {
-		t.Errorf("fresh label #1: want spex:100, got %q", first)
-	}
-
-	second, err := l.LabelFor(CreateAction{SpecNodeID: "node_b"})
-	if err != nil {
-		t.Fatalf("LabelFor fresh #2: unexpected error: %v", err)
-	}
-	if second != "spex:101" {
-		t.Errorf("fresh label #2: want spex:101, got %q", second)
-	}
-
-	next, err := l.NextLabel()
-	if err != nil {
-		t.Fatalf("NextLabel: unexpected error: %v", err)
-	}
-	if next != 102 {
-		t.Errorf("cursor after two fresh creates from 100: want 102, got %d", next)
+	if label != "spex:node_a" {
+		t.Errorf("fresh label: want spex:node_a, got %q", label)
 	}
 }
 
-// TestLabelForCleanupDoesNotAdvanceCursor covers the cleanup branch: a
-// create whose Reason starts "Code cleanup:" gets the per-spec-node label
-// spex:cleanup-<SpecNodeID> and leaves the cursor untouched.
-func TestLabelForCleanupDoesNotAdvanceCursor(t *testing.T) {
-	store := &stubStore{next: 50}
-	l := &Labeler{MappingStore: store}
+// TestLabelForModifyPairUsesOwnSpecNodeID covers the other half of the
+// node-bearing branch: a modify-pair create (OldBeadID set, not a cleanup)
+// gets spex:<spec_node_id> too — the node's identity hash is unchanged
+// across the pair, so the replacement create carries the same label as the
+// original by construction, with no lookup against OldBeadID at all.
+func TestLabelForModifyPairUsesOwnSpecNodeID(t *testing.T) {
+	l := &Labeler{}
+
+	label, err := l.LabelFor(CreateAction{
+		SpecNodeID: "node_q",
+		OldBeadID:  "spexmachina-abc",
+	})
+	if err != nil {
+		t.Fatalf("LabelFor modify-pair: unexpected error: %v", err)
+	}
+	if label != "spex:node_q" {
+		t.Errorf("modify-pair label: want spex:node_q (own spec_node_id, no lookup), got %q", label)
+	}
+}
+
+// TestLabelForCleanupUsesCleanupPrefix covers the cleanup branch: a create
+// whose Reason starts "Code cleanup:" gets spex:cleanup-<spec_node_id>,
+// keyed by the removed node's identity hash so it never collides with the
+// node's own ordinary-task label.
+func TestLabelForCleanupUsesCleanupPrefix(t *testing.T) {
+	l := &Labeler{}
 
 	label, err := l.LabelFor(CreateAction{
 		SpecNodeID: "abc123def456",
@@ -103,58 +56,14 @@ func TestLabelForCleanupDoesNotAdvanceCursor(t *testing.T) {
 	if label != "spex:cleanup-abc123def456" {
 		t.Errorf("cleanup label: want spex:cleanup-abc123def456, got %q", label)
 	}
-
-	next, err := l.NextLabel()
-	if err != nil {
-		t.Fatalf("NextLabel: unexpected error: %v", err)
-	}
-	if next != 50 {
-		t.Errorf("cursor after cleanup create: want 50 (unchanged), got %d", next)
-	}
-}
-
-// TestLabelForModifyPairReusesRecordID covers the modify-pair branch: a
-// create with OldBeadID set (and not a cleanup) reuses the existing
-// record's id via MappingStore.GetByBead and does NOT advance the cursor.
-// This is the record-id-reuse rule that lets the Reconciler hit the
-// modify-pair-update branch rather than inserting a parallel record.
-func TestLabelForModifyPairReusesRecordID(t *testing.T) {
-	store := &stubStore{
-		next:   100,
-		byBead: map[string]mapping.Record{"spexmachina-abc": {ID: 42, BeadID: "spexmachina-abc"}},
-	}
-	l := &Labeler{MappingStore: store}
-
-	label, err := l.LabelFor(CreateAction{
-		SpecNodeID: "node_q",
-		OldBeadID:  "spexmachina-abc",
-	})
-	if err != nil {
-		t.Fatalf("LabelFor modify-pair: unexpected error: %v", err)
-	}
-	if label != "spex:42" {
-		t.Errorf("modify-pair label: want spex:42 (existing record id), got %q", label)
-	}
-
-	next, err := l.NextLabel()
-	if err != nil {
-		t.Fatalf("NextLabel: unexpected error: %v", err)
-	}
-	if next != 100 {
-		t.Errorf("cursor after modify-pair create: want 100 (unchanged), got %d", next)
-	}
 }
 
 // TestLabelForCleanupTakesPrecedenceOverModifyPair guards the branch order:
 // a cleanup action also carries OldBeadID (lineage), so cleanup must be
-// checked before modify-pair. Otherwise a cleanup create would get a
-// spex:<existing-id> label instead of spex:cleanup-<spec_node_id>.
+// checked before the plain node-bearing case. Otherwise a cleanup create
+// would get spex:<spec_node_id> instead of spex:cleanup-<spec_node_id>.
 func TestLabelForCleanupTakesPrecedenceOverModifyPair(t *testing.T) {
-	store := &stubStore{
-		next:   100,
-		byBead: map[string]mapping.Record{"spexmachina-old": {ID: 7, BeadID: "spexmachina-old"}},
-	}
-	l := &Labeler{MappingStore: store}
+	l := &Labeler{}
 
 	label, err := l.LabelFor(CreateAction{
 		SpecNodeID: "abc123def456",
@@ -169,30 +78,60 @@ func TestLabelForCleanupTakesPrecedenceOverModifyPair(t *testing.T) {
 	}
 }
 
-// TestLabelForModifyPairSurfacesLookupError ensures a failed GetByBead
-// lookup propagates as an error rather than silently producing a label
-// from a zero or fallback record id.
-func TestLabelForModifyPairSurfacesLookupError(t *testing.T) {
-	store := &stubStore{next: 100} // byBead nil → GetByBead returns its error
-	l := &Labeler{MappingStore: store}
+// TestLabelForEpicUsesProposalSlug covers the epic branch: the epic action's
+// SpecNodeID already carries the proposal slug, so LabelFor formats it the
+// same way it formats any other node-bearing spec_node_id.
+func TestLabelForEpicUsesProposalSlug(t *testing.T) {
+	l := &Labeler{}
 
-	_, err := l.LabelFor(CreateAction{
-		SpecNodeID: "node_q",
-		OldBeadID:  "spexmachina-missing",
+	label, err := l.LabelFor(CreateAction{
+		SpecNodeID: "2026-04-18-decouple-spex-from-br",
+		NodeType:   "proposal",
 	})
-	if err == nil {
-		t.Fatal("LabelFor modify-pair with failing lookup: want error, got nil")
+	if err != nil {
+		t.Fatalf("LabelFor epic: unexpected error: %v", err)
+	}
+	if label != "spex:2026-04-18-decouple-spex-from-br" {
+		t.Errorf("epic label: want spex:2026-04-18-decouple-spex-from-br, got %q", label)
 	}
 }
 
-// TestLabelForSurfacesInitError ensures a store counter read failure on the
-// first LabelFor (which triggers lazy cursor init) propagates as an error.
-func TestLabelForSurfacesInitError(t *testing.T) {
-	store := &stubStore{err: fmt.Errorf("boom")}
-	l := &Labeler{MappingStore: store}
+// TestLabelForMissingSpecNodeIDIsError covers the interface contract: an
+// action too malformed to read a spec_node_id from is an error, not a guess.
+func TestLabelForMissingSpecNodeIDIsError(t *testing.T) {
+	l := &Labeler{}
 
-	_, err := l.LabelFor(CreateAction{SpecNodeID: "node_a"})
+	_, err := l.LabelFor(CreateAction{})
 	if err == nil {
-		t.Fatal("LabelFor with failing store init: want error, got nil")
+		t.Fatal("LabelFor with empty SpecNodeID: want error, got nil")
+	}
+}
+
+// TestLabelForIsPureFunctionOfAction guards the per-action, per-batch
+// independence rule: two independent Labeler instances given the same
+// action produce the same label, and repeated calls on the same instance
+// for different actions never influence one another (no cursor, no shared
+// state).
+func TestLabelForIsPureFunctionOfAction(t *testing.T) {
+	action := CreateAction{SpecNodeID: "node_a"}
+
+	l1 := &Labeler{}
+	l2 := &Labeler{}
+
+	first, err := l1.LabelFor(action)
+	if err != nil {
+		t.Fatalf("LabelFor l1: unexpected error: %v", err)
+	}
+	// Interleave an unrelated call on l1 before asking l2 for the same
+	// action — a stateful implementation would let this shift l2's answer.
+	if _, err := l1.LabelFor(CreateAction{SpecNodeID: "node_b"}); err != nil {
+		t.Fatalf("LabelFor l1 (unrelated): unexpected error: %v", err)
+	}
+	second, err := l2.LabelFor(action)
+	if err != nil {
+		t.Fatalf("LabelFor l2: unexpected error: %v", err)
+	}
+	if first != second {
+		t.Errorf("LabelFor not pure: l1 gave %q, l2 gave %q for the same action", first, second)
 	}
 }

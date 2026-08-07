@@ -325,23 +325,14 @@ func TestBuild_PriorityFallback(t *testing.T) {
 // includes deps [{ref:bead, bead_id:spexmachina-abc, type:blocks}] for
 // lineage."
 //
-// Also covers the modify-pair record-id-reuse rule from
-// arch_idempotency_labeler.md: the create op's idempotency.label MUST
-// equal the existing record's id (looked up via OldBeadID), NOT a
-// freshly-reserved sequential label. Without this, Reconciler treats the
-// create as a fresh insert at a new recID and invariant 3 fails.
+// Also covers the modify-pair rule from arch_idempotency_labeler.md: the
+// create op's idempotency.label MUST equal spex:<Q's spec_node_id> — the
+// same label the original create carried, since the node's identity hash
+// does not change across a modify pair. No mapping-store seeding is needed
+// to make this true (see TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold
+// for the empty-fold half of that assertion).
 func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	env := newBuilderEnv()
-	// Seed an existing record whose bead_id matches OldBeadID. Labeler's
-	// modify-pair branch reuses this record's id (42) rather than the
-	// cursor (which would otherwise return 1 from the empty store's
-	// default).
-	const existingRecordID = 42
-	env.store.byBead["spexmachina-abc"] = mapping.Record{
-		ID:         existingRecordID,
-		BeadID:     "spexmachina-abc",
-		SpecNodeID: "Q",
-	}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			{
@@ -407,11 +398,42 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 		t.Errorf("close reason: got %q", closeOp.Reason)
 	}
 
-	// Modify-pair label reuse: the create's idempotency.label must equal
-	// the existing record's id, not a fresh sequential value.
-	wantLabel := "spex:42"
+	// Modify-pair label: the create's idempotency.label is the node's own
+	// identity hash, not a store-derived value.
+	wantLabel := "spex:Q"
 	if q.Idempotency == nil || q.Idempotency.Label != wantLabel {
-		t.Errorf("Q.idempotency.label: want %q (existing record id), got %+v", wantLabel, q.Idempotency)
+		t.Errorf("Q.idempotency.label: want %q (own spec_node_id), got %+v", wantLabel, q.Idempotency)
+	}
+}
+
+// TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold covers the other
+// half of arch_idempotency_labeler.md's modify-pair assertion: the
+// replacement create's idempotency.label is spex:<Q's spec_node_id> even
+// when the mapping store has no record at all for OldBeadID — the label is
+// read off the op itself, never looked up.
+func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
+	env := newBuilderEnv()
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "Q",
+				NodeType:   "component",
+				SpecNodeID: "Q",
+				SpecHash:   "h-Q",
+				OldBeadID:  "spexmachina-abc",
+				Reason:     "Spec node modified (new): m/Q",
+			},
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	q := findOp(t, cs.Ops, "Q")
+	if q.Idempotency == nil || q.Idempotency.Label != "spex:Q" {
+		t.Errorf("Q.idempotency.label: want spex:Q (no lookup required), got %+v", q.Idempotency)
 	}
 }
 
@@ -530,14 +552,13 @@ func TestBuild_BodyEmptyWithoutSpecPaths(t *testing.T) {
 	}
 }
 
-// TestBuild_CleanupDoesNotAdvanceCursor covers the spec scenario:
-// "Cursor non-advancement: build a changeset containing one cleanup
-// create AND one fresh component create. Assert the fresh create's
-// spex:<n> label uses the cursor value the Labeler would have returned
-// WITHOUT the cleanup op present."
-func TestBuild_CleanupDoesNotAdvanceCursor(t *testing.T) {
+// TestBuild_LabelsAreIndependentOfBatchComposition covers
+// arch_idempotency_labeler.md's "per-action, not per-batch" rule: a
+// create's label depends only on what the action looks like, never on the
+// batch it landed in or its position within it. Build the same fresh create
+// once alongside a cleanup create and once alone; its label must not move.
+func TestBuild_LabelsAreIndependentOfBatchComposition(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.nextID = 100
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			{
@@ -557,17 +578,28 @@ func TestBuild_CleanupDoesNotAdvanceCursor(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	// Three creates expected: the proposal epic (spex:100), then either
-	// cleanup or fresh in some order. The fresh-create label MUST be
-	// spex:101 (the cursor value right after the epic), not spex:102 —
-	// proving the cleanup op did not advance the cursor.
 	freshOp := findOp(t, cs.Ops, "spec_fresh")
-	if freshOp.Idempotency == nil || freshOp.Idempotency.Label != "spex:101" {
-		t.Errorf("fresh.idempotency.label: want spex:101 (cleanup did not advance cursor), got %+v", freshOp.Idempotency)
+	if freshOp.Idempotency == nil || freshOp.Idempotency.Label != "spex:spec_fresh" {
+		t.Errorf("fresh.idempotency.label: want spex:spec_fresh (own spec_node_id), got %+v", freshOp.Idempotency)
 	}
 	cleanupOp := findOp(t, cs.Ops, "spec_cleanup")
 	if cleanupOp.Idempotency == nil || cleanupOp.Idempotency.Label != "spex:cleanup-spec_cleanup" {
 		t.Errorf("cleanup.idempotency.label: want spex:cleanup-spec_cleanup, got %+v", cleanupOp.Idempotency)
+	}
+
+	env2 := newBuilderEnv()
+	soloReport := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("spec_fresh", "m", "Fresh", nil),
+		},
+	}
+	cs2, err := env2.build(soloReport, "p", "h")
+	if err != nil {
+		t.Fatalf("Build (solo): %v", err)
+	}
+	soloFreshOp := findOp(t, cs2.Ops, "spec_fresh")
+	if soloFreshOp.Idempotency == nil || soloFreshOp.Idempotency.Label != freshOp.Idempotency.Label {
+		t.Errorf("fresh label changed with batch composition: with cleanup=%+v, alone=%+v", freshOp.Idempotency, soloFreshOp.Idempotency)
 	}
 }
 
@@ -757,12 +789,12 @@ func TestBuild_BatchOpenBeadOverridesClosed(t *testing.T) {
 	}
 }
 
-// TestBuild_IdempotencyLabelsAreSequential covers the integration with
-// IdempotencyLabeler: every create op carries a spex:N label and labels
-// run sequentially starting from the mapping store's NextRecordID.
-func TestBuild_IdempotencyLabelsAreSequential(t *testing.T) {
+// TestBuild_IdempotencyLabelsMatchOwnSpecNodeID covers the integration with
+// IdempotencyLabeler: every create op's idempotency.label is
+// spex:<its own spec_node_id> — read off the op itself, independent of the
+// mapping store's NextRecordID.
+func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.nextID = 100
 	b := &Builder{
 		SpecGraph:    env.graph,
 		MappingStore: env.store,
@@ -783,7 +815,7 @@ func TestBuild_IdempotencyLabelsAreSequential(t *testing.T) {
 	if len(cs.Ops) != 3 {
 		t.Fatalf("want 3 ops, got %d", len(cs.Ops))
 	}
-	want := []string{"spex:100", "spex:101", "spex:102"}
+	want := []string{"spex:p", "spex:a", "spex:b"}
 	for i, op := range cs.Ops {
 		if op.Idempotency == nil {
 			t.Errorf("op %d: missing idempotency", i)
@@ -840,7 +872,6 @@ func TestBuild_OpFieldOrderInJSON(t *testing.T) {
 	}
 }
 
-
 // opIndex returns the position of the op targeting specNodeID, or -1.
 func opIndex(ops []Op, specNodeID string) int {
 	for i, op := range ops {
@@ -854,13 +885,12 @@ func opIndex(ops []Op, specNodeID string) int {
 // crossComponentEnv seeds the fixture shared by the byte-identical
 // cross-component scenario: a fresh proposal, four component creates (x1
 // depending on in-batch y1 and existing-bead z-open; aa1/ab1 independent
-// for the lex tiebreak), and a mapping store whose cursor starts at 50
-// with one open record for z-open. No unresolvable dep here — that is a
-// separate emit-error scenario (TestBuild_UnresolvableDepIsError,
+// for the lex tiebreak), and a mapping store with one open record for
+// z-open. No unresolvable dep here — that is a separate emit-error scenario
+// (TestBuild_UnresolvableDepIsError,
 // TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset).
 func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 	env := newBuilderEnv()
-	env.store.nextID = 50
 	env.store.bySpecNode["z-open"] = []mapping.Record{
 		{ID: 7, SpecNodeID: "z-open", BeadID: "br-z", BeadStatus: "open"},
 	}
@@ -881,7 +911,7 @@ func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 // stores, fresh labelers — no shared in-memory state) over identical
 // inputs must serialize to byte-identical JSON. Resolver classifies both
 // v2 dep shapes, TopologicalSorter orders epic-first with lex tiebreak,
-// IdempotencyLabeler pairs cursor ids with sorted order, and
+// IdempotencyLabeler stamps each op's label from its own spec_node_id, and
 // ChangesetBuilder composes the canonical output.
 func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 	env1, report1 := crossComponentEnv()
@@ -917,8 +947,9 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 		t.Errorf("sort order: want aa1 < ab1 < y1 < x1, got indices %d %d %d %d", iAA, iAB, iY, iX)
 	}
 
-	// Labeler: cursor ids 50.. paired with the sorted op order.
-	wantLabels := []string{"spex:50", "spex:51", "spex:52", "spex:53", "spex:54"}
+	// Labeler: each op's label is spex:<its own spec_node_id>, matching the
+	// sorted op order (epic, aa1, ab1, y1, x1).
+	wantLabels := []string{"spex:prop", "spex:aa1", "spex:ab1", "spex:y1", "spex:x1"}
 	for i, want := range wantLabels {
 		if cs1.Ops[i].Idempotency == nil || cs1.Ops[i].Idempotency.Label != want {
 			t.Errorf("op[%d] label: want %s, got %+v", i, want, cs1.Ops[i].Idempotency)
@@ -1005,12 +1036,13 @@ func TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset(t *tes
 }
 
 // TestBuild_CrossComponent_LabelsPairWithTopoOrder covers the spec's
-// "idempotency label reservation paired with sort order" scenario: an
-// A → B → C in-batch chain against a counter at 100 labels the topo
-// order A, B, C as spex:100/101/102; a second run against a counter
-// advanced to 103 produces 103/104/105 with the same pairing. An
-// existing proposal epic keeps the epic op out of the batch, matching
-// the spec's three-label expectation.
+// "idempotency label reservation paired with sort order" scenario, updated
+// for the store-free Labeler: an A → B → C in-batch chain labels the topo
+// order A, B, C as spex:cA/cB/cC regardless of the mapping store's
+// NextRecordID — two runs with different store counters produce identical
+// labels, proving the label is read off each op's own spec_node_id rather
+// than any store-derived cursor. An existing proposal epic keeps the epic
+// op out of the batch, matching the spec's three-label expectation.
 func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 	run := func(nextID int) Changeset {
 		env := newBuilderEnv()
@@ -1030,7 +1062,7 @@ func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 		return cs
 	}
 
-	assertPairing := func(cs Changeset, base int) {
+	assertPairing := func(cs Changeset) {
 		t.Helper()
 		wantOrder := []string{"cA", "cB", "cC"}
 		if len(cs.Ops) != 3 {
@@ -1040,15 +1072,15 @@ func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 			if cs.Ops[i].SpecNodeID != id {
 				t.Errorf("op[%d]: want %s (topo order A,B,C), got %s", i, id, cs.Ops[i].SpecNodeID)
 			}
-			want := fmt.Sprintf("spex:%d", base+i)
+			want := fmt.Sprintf("spex:%s", id)
 			if cs.Ops[i].Idempotency == nil || cs.Ops[i].Idempotency.Label != want {
 				t.Errorf("op[%d] label: want %s, got %+v", i, want, cs.Ops[i].Idempotency)
 			}
 		}
 	}
 
-	assertPairing(run(100), 100)
-	assertPairing(run(103), 103)
+	assertPairing(run(100))
+	assertPairing(run(103))
 }
 
 // TestBuild_CrossComponent_CycleErrorNamesBothNodes covers the spec's
