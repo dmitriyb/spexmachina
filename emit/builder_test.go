@@ -628,6 +628,38 @@ func TestBuild_ExistingProposalEpicResolvesToRefBead(t *testing.T) {
 	}
 }
 
+// TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent covers the
+// regression from PR #217: a closed proposal-epic record (a prior run's
+// epic bead was closed) leaves no open epic, so lookupExistingEpic treats
+// this as a new proposal and Build synthesizes a fresh proposal_epic op.
+// legacyStoreFold.Entry must not answer the proposal slug out of the
+// GetBySpecNode fallback (which ignores NodeType and would otherwise
+// re-admit the closed record as Removed=true) — every non-epic create
+// must parent under the freshly synthesized epic op, not an empty bead_id.
+func TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent(t *testing.T) {
+	env := newBuilderEnv()
+	env.store.bySpecNode["p"] = []mapping.Record{
+		{ID: 7, SpecNodeID: "p", BeadID: "br-old-epic", NodeType: "proposal", BeadStatus: "closed"},
+	}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("X", "m", "X", nil),
+		},
+	}
+	cs, err := env.build(report, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	epic := findOp(t, cs.Ops, "p")
+	if epic.SpecNodeKind != "proposal_epic" {
+		t.Fatalf("want synthesized proposal_epic op for %q, got %+v", "p", epic)
+	}
+	x := findOp(t, cs.Ops, "X")
+	if x.Parent == nil || x.Parent.Kind != RefOp || x.Parent.OpID != epic.OpID {
+		t.Errorf("X parent: want ref:op %s (fresh epic), got %+v", epic.OpID, x.Parent)
+	}
+}
+
 // TestBuild_EmptyReportWithExistingEpic covers the edge case from the spec:
 // "Empty impact report → changeset with only the proposal epic op (if any)
 // or an empty op list." With an existing epic in the mapping store and no

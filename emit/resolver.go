@@ -124,17 +124,20 @@ func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
 // ResolveParent returns the proposal-epic Ref every non-epic create op
 // parents under. Two cases:
 //
-//   - Existing epic: a re-run case. The journal fold already carries an
-//     epic entry, keyed by the proposal slug, for this proposal ref;
-//     return ref:bead.
-//   - New epic: the first emit for this proposal. ChangesetBuilder has
-//     injected a synthetic "proposal/<ref>/epic" key into r.Batch pointing
-//     at the epic op_id; return ref:op.
+//   - Existing epic: a re-run case. The journal fold already carries a
+//     live (not Removed) epic entry, keyed by the proposal slug, for this
+//     proposal ref; return ref:bead.
+//   - New epic: the first emit for this proposal, or a fold entry whose
+//     epic task closed with no live successor (Removed == true, so it
+//     carries no TaskID — same convention ResolveDeps applies). ChangesetBuilder
+//     has injected a synthetic "proposal/<ref>/epic" key into r.Batch
+//     pointing at the epic op_id; return ref:op.
 //
-// An existing epic always wins over an in-batch synthetic key — defense
-// against double-create on a re-run that misclassified the epic as new.
+// An existing, live epic always wins over an in-batch synthetic key —
+// defense against double-create on a re-run that misclassified the epic
+// as new.
 func (r *Resolver) ResolveParent(proposal string) (Ref, error) {
-	if entry, ok := r.Fold.Entry(proposal); ok {
+	if entry, ok := r.Fold.Entry(proposal); ok && !entry.Removed {
 		return Ref{Kind: RefBead, BeadID: entry.TaskID}, nil
 	}
 	epicKey := "proposal/" + proposal + "/epic"

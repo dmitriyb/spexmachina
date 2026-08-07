@@ -124,8 +124,12 @@ type legacyStoreFold struct {
 // Entry tries the proposal-epic lookup first — a component or data_flow's
 // spec_node_id never matches a NodeType=="proposal" record, so this is
 // safe for every key Resolver asks about — then falls back to the
-// spec-node lookup, collapsing "all records closed" onto Removed=true,
-// the legacy store's closest analogue to a removed node's fold entry.
+// spec-node lookup, restricted to non-proposal records: GetByProposalEpic
+// already answered the proposal-record question for this key (including
+// "closed, so not found"), and re-admitting a closed proposal record here
+// would invert that answer into Removed=true. Among the remaining records,
+// "all closed" collapses onto Removed=true, the legacy store's closest
+// analogue to a removed node's fold entry.
 func (f legacyStoreFold) Entry(key string) (FoldEntry, bool) {
 	if rec, err := f.store.GetByProposalEpic(key); err == nil {
 		return FoldEntry{TaskID: rec.BeadID}, true
@@ -134,7 +138,16 @@ func (f legacyStoreFold) Entry(key string) (FoldEntry, bool) {
 	if err != nil {
 		return FoldEntry{}, false
 	}
-	if chosen, anyOpen := pickOpenRecord(recs); anyOpen {
+	var nonProposal []mapping.Record
+	for _, r := range recs {
+		if r.NodeType != "proposal" {
+			nonProposal = append(nonProposal, r)
+		}
+	}
+	if len(nonProposal) == 0 {
+		return FoldEntry{}, false
+	}
+	if chosen, anyOpen := pickOpenRecord(nonProposal); anyOpen {
 		return FoldEntry{TaskID: chosen.BeadID}, true
 	}
 	return FoldEntry{Removed: true}, true

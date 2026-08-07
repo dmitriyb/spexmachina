@@ -411,3 +411,27 @@ func TestResolveParent_ExistingEpicBeatsBatchKey(t *testing.T) {
 		t.Errorf("parent: want ref:bead br-existing (fold wins), got %+v", got)
 	}
 }
+
+// TestResolveParent_RemovedFoldEntryFallsThroughToBatch covers a fold
+// entry whose epic task closed with no live successor (Removed == true,
+// carrying no TaskID) — the same convention ResolveDeps applies. Removed
+// must not be treated as "has an epic task"; the in-batch synthetic key
+// for a freshly created epic wins instead.
+func TestResolveParent_RemovedFoldEntryFallsThroughToBatch(t *testing.T) {
+	r := &Resolver{
+		Fold: fakeFold{
+			"prop": {Removed: true},
+		},
+		Batch: map[string]string{
+			"proposal/prop/epic": "op-001",
+		},
+	}
+
+	got, err := r.ResolveParent("prop")
+	if err != nil {
+		t.Fatalf("ResolveParent: %v", err)
+	}
+	if got.Kind != RefOp || got.OpID != "op-001" {
+		t.Errorf("parent: want ref:op op-001 (Removed fold entry ignored), got %+v", got)
+	}
+}
