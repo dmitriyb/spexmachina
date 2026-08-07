@@ -1,399 +1,314 @@
 package mapping
 
 import (
+	"bufio"
 	"bytes"
-	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"sync"
 
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
-//go:embed bead-map-envelope.schema.json
-var envelopeSchemaFS embed.FS
+// ErrNotFound is returned when Get finds no fold entry for the given key.
+var ErrNotFound = errors.New("map: not found")
 
-// ErrNotFound is returned when a record lookup finds no match.
-var ErrNotFound = errors.New("record not found")
+// nodeHashPattern matches the identity-hash shape: 12 lowercase hex
+// characters. Get uses it to distinguish a node key from a task id — the
+// two are interchangeable ways to reach one node's fold entry.
+var nodeHashPattern = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
-// Record links a spec node ID to a bead ID with structured metadata.
-type Record struct {
-	ID          int    `json:"id"`
-	SpecNodeID  string `json:"spec_node_id"`
-	BeadID      string `json:"bead_id"`
-	BeadType    string `json:"bead_type"`
-	NodeType    string `json:"node_type,omitempty"`
-	Module      string `json:"module"`
-	Component   string `json:"component"`
-	ContentFile string `json:"content_file"`
-	SpecHash    string `json:"spec_hash"`
-	BeadStatus  string `json:"bead_status,omitempty"`
+// Event is one line of the task journal (spec/.history.jsonl): a change
+// event (added/removed/modified), a task receipt (task_created/task_closed)
+// or a refresh receipt. Fields are populated according to the line's shape —
+// see spec/map/arch_mapping_store.md for the full field table.
+type Event struct {
+	Event    string   `json:"event"`
+	EID      string   `json:"eid,omitempty"`
+	Node     string   `json:"node,omitempty"`
+	Name     string   `json:"name,omitempty"`
+	NodeType string   `json:"node_type,omitempty"`
+	Module   string   `json:"module,omitempty"`
+	Before   *string  `json:"before,omitempty"`
+	After    *string  `json:"after,omitempty"`
+	GitHead  string   `json:"git_head,omitempty"`
+	Path     string   `json:"path,omitempty"`
+	Proposal string   `json:"proposal,omitempty"`
+	For      string   `json:"for,omitempty"`
+	TaskID   string   `json:"task_id,omitempty"`
+	Absorbed []string `json:"absorbed,omitempty"`
+
+	// Line is the 1-based line number the event was parsed from. It is not
+	// part of the on-disk shape; list output is ordered by it.
+	Line int `json:"-"`
 }
 
-// Store defines CRUD operations on mapping records.
-type Store interface {
-	Create(r Record) (int, error)
-	Get(id int) (Record, error)
-	GetByBead(beadID string) (Record, error)
-	GetBySpecNode(specNodeID string) ([]Record, error)
-	Update(id int, updates map[string]string) error
-	Delete(id int) error
-	List() ([]Record, error)
-	// NextRecordID reads the persisted monotonic counter that the next
-	// Create would assign. Used by emit's IdempotencyLabeler to reserve
-	// spex:<id> labels without advancing the counter — emit is pure;
-	// ingest commits the advance.
-	NextRecordID() (int, error)
-	// GetByProposalEpic returns the open proposal-epic record for the
-	// given proposal ref, used by emit's Resolver to detect re-run cases
-	// where the epic bead already exists. Closed epic records are
-	// ignored. Returns ErrNotFound if no open epic record matches.
-	GetByProposalEpic(proposal string) (Record, error)
-	// Replace atomically rewrites the full mapping state — both the
-	// records list and the next-id counter — to disk. Used by ingest's
-	// Reconciler to commit an in-memory working copy after invariants
-	// have been asserted. Records are validated against the bead-map
-	// schema before the rename; a schema violation aborts the write
-	// and leaves the on-disk file unchanged.
-	Replace(records []Record, nextID int) error
+// ParseError names the journal line and the violation found there — either
+// invalid JSON or a journal-line schema violation. The map query surface
+// (spex map get/list) surfaces it as a hard failure naming the line;
+// gating callers, like the diff removal sweep, type-assert for it and
+// degrade to "journal absent" instead of failing, because the journal is
+// never load-bearing for the pipeline.
+type ParseError struct {
+	Line int
+	Err  error
 }
 
-// mapFile is the on-disk JSON structure for .bead-map.json.
-type mapFile struct {
-	NextID  int      `json:"next_id"`
-	Records []Record `json:"records"`
+func (e *ParseError) Error() string {
+	return fmt.Sprintf("journal line %d: %v", e.Line, e.Err)
+}
+
+func (e *ParseError) Unwrap() error {
+	return e.Err
+}
+
+// FoldEntry is one node's or proposal-epic's current linkage: the latest
+// task-bearing event, or — once a node is removed — its biography.
+type FoldEntry struct {
+	// Key is the identity hash for a node entry, or the proposal slug for
+	// a proposal-epic entry.
+	Key string
+	// TaskID is the current task id. Empty when Removed is true: a removed
+	// node's fold entry carries its biography instead of a live task.
+	TaskID string
+	// Removed is true once the node's latest journal state is a removal.
+	Removed bool
+	// Source is the event that carries this entry's identity — the change
+	// event for a live node (whose name/node_type/module belong to it), the
+	// removing event for a removed node (whose proposal/git_head answer the
+	// removal), or the task_created receipt itself for a proposal-epic
+	// entry, which has no change event.
+	Source Event
+}
+
+// DanglingReceipt is a task_created receipt whose `for` names an eid no
+// change event carries. One bad pairing does not poison the rest of the
+// journal — Fold reports it rather than failing.
+type DanglingReceipt struct {
+	Receipt Event
+}
+
+// Fold is the outcome of folding the journal: the current linkage per
+// node/epic, plus any receipts that could not be paired to a change event.
+type Fold struct {
+	Entries  []FoldEntry
+	Dangling []DanglingReceipt
+}
+
+// MappingStore provides read-only access to the task journal
+// (<spec-dir>/.history.jsonl), the append-only event log linking spec node
+// identity hashes to tracker task ids. Parsing, scanning and folding it is
+// the whole of the store: the fold — the latest task-bearing event per
+// node — is the current linkage every consumer derives on demand, never a
+// stored cache. The store never writes: `spex ingest` is the journal's
+// only writer.
+type MappingStore struct {
+	path string
+}
+
+// NewMappingStore returns a MappingStore reading the journal at
+// <specDir>/.history.jsonl. The journal's location is a function of
+// --spec-dir alone — there is no separate --map/--map-file flag.
+func NewMappingStore(specDir string) *MappingStore {
+	return &MappingStore{path: filepath.Join(specDir, ".history.jsonl")}
 }
 
 var (
-	beadMapSchema    *jsonschema.Schema
-	beadMapSchemaErr error
-	beadMapOnce      sync.Once
+	journalLineSchema     *jsonschema.Schema
+	journalLineSchemaErr  error
+	journalLineSchemaOnce sync.Once
 )
 
-// getBeadMapSchema compiles the embedded .bead-map.json envelope schema once
-// and caches it. This schema is local to mapping (schema.BeadMapSchema now
-// validates one line of the journal, spec/.history.jsonl, not this envelope)
-// and goes away with MappingStore's migration onto the journal
-// (spexmachina-y0wc.19).
-func getBeadMapSchema() (*jsonschema.Schema, error) {
-	beadMapOnce.Do(func() {
-		raw, err := envelopeSchemaFS.ReadFile("bead-map-envelope.schema.json")
+// getJournalLineSchema compiles the embedded journal-line schema
+// (schema.BeadMapSchema) once and caches it.
+func getJournalLineSchema() (*jsonschema.Schema, error) {
+	journalLineSchemaOnce.Do(func() {
+		raw, err := schema.BeadMapSchema()
 		if err != nil {
-			beadMapSchemaErr = fmt.Errorf("map: load bead-map schema: %w", err)
+			journalLineSchemaErr = fmt.Errorf("load journal-line schema: %w", err)
 			return
 		}
 		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
 		if err != nil {
-			beadMapSchemaErr = fmt.Errorf("map: parse bead-map schema: %w", err)
+			journalLineSchemaErr = fmt.Errorf("parse journal-line schema: %w", err)
 			return
 		}
 		c := jsonschema.NewCompiler()
-		if err := c.AddResource("bead-map-envelope.schema.json", doc); err != nil {
-			beadMapSchemaErr = fmt.Errorf("map: add bead-map schema: %w", err)
+		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
+			journalLineSchemaErr = fmt.Errorf("add journal-line schema: %w", err)
 			return
 		}
-		beadMapSchema, beadMapSchemaErr = c.Compile("bead-map-envelope.schema.json")
+		journalLineSchema, journalLineSchemaErr = c.Compile("bead-map.schema.json")
 	})
-	return beadMapSchema, beadMapSchemaErr
+	return journalLineSchema, journalLineSchemaErr
 }
 
-// fileStore implements Store backed by a JSON file.
-type fileStore struct {
-	path string
-	mu   sync.Mutex
-}
-
-// NewFileStore creates a Store that reads/writes the given .bead-map.json path.
-func NewFileStore(path string) Store {
-	return &fileStore{path: path}
-}
-
-func (s *fileStore) Create(r Record) (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return 0, err
-	}
-
-	for _, existing := range data.Records {
-		if existing.BeadID == r.BeadID {
-			return 0, fmt.Errorf("map: duplicate bead_id %q", r.BeadID)
-		}
-		// Proposal epic records share spec_node_id across apply runs by design
-		// (one new epic per run, all referencing the same proposal). Skip the
-		// uniqueness check for those; other node types still enforce it.
-		if r.NodeType != "proposal" && existing.SpecNodeID == r.SpecNodeID {
-			return 0, fmt.Errorf("map: duplicate spec_node_id %q (record %d)", r.SpecNodeID, existing.ID)
-		}
-	}
-
-	r.ID = data.NextID
-	data.NextID++
-	data.Records = append(data.Records, r)
-	return r.ID, s.save(data)
-}
-
-func (s *fileStore) Get(id int) (Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return Record{}, err
-	}
-
-	for _, r := range data.Records {
-		if r.ID == id {
-			return r, nil
-		}
-	}
-	return Record{}, fmt.Errorf("map: %w: %d", ErrNotFound, id)
-}
-
-func (s *fileStore) GetByBead(beadID string) (Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return Record{}, err
-	}
-
-	for _, r := range data.Records {
-		if r.BeadID == beadID {
-			return r, nil
-		}
-	}
-	return Record{}, fmt.Errorf("map: %w: bead_id %q", ErrNotFound, beadID)
-}
-
-func (s *fileStore) GetBySpecNode(specNodeID string) ([]Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return nil, err
-	}
-
-	var matches []Record
-	for _, r := range data.Records {
-		if r.SpecNodeID == specNodeID {
-			matches = append(matches, r)
-		}
-	}
-	if len(matches) == 0 {
-		return nil, fmt.Errorf("map: %w: spec_node_id %q", ErrNotFound, specNodeID)
-	}
-	return matches, nil
-}
-
-func (s *fileStore) Update(id int, updates map[string]string) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return err
-	}
-
-	for i, r := range data.Records {
-		if r.ID == id {
-			if v, ok := updates["spec_hash"]; ok {
-				data.Records[i].SpecHash = v
-			}
-			if v, ok := updates["bead_id"]; ok {
-				for _, other := range data.Records {
-					if other.ID != id && other.BeadID == v {
-						return fmt.Errorf("map: duplicate bead_id %q (record %d)", v, other.ID)
-					}
-				}
-				data.Records[i].BeadID = v
-			}
-			return s.save(data)
-		}
-	}
-	return fmt.Errorf("map: %w: %d", ErrNotFound, id)
-}
-
-func (s *fileStore) Delete(id int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return err
-	}
-
-	for i, r := range data.Records {
-		if r.ID == id {
-			data.Records = append(data.Records[:i], data.Records[i+1:]...)
-			return s.save(data)
-		}
-	}
-	return fmt.Errorf("map: %w: %d", ErrNotFound, id)
-}
-
-func (s *fileStore) NextRecordID() (int, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return 0, err
-	}
-	return data.NextID, nil
-}
-
-func (s *fileStore) GetByProposalEpic(proposal string) (Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return Record{}, err
-	}
-
-	// Multiple proposal epics can share a SpecNodeID (one per apply run).
-	// Skip closed runs and return the highest-ID open record so re-runs see
-	// the latest epic.
-	var match Record
-	var found bool
-	for _, r := range data.Records {
-		if r.NodeType != "proposal" || r.SpecNodeID != proposal {
-			continue
-		}
-		if r.BeadStatus == "closed" {
-			continue
-		}
-		if !found || r.ID > match.ID {
-			match = r
-			found = true
-		}
-	}
-	if !found {
-		return Record{}, fmt.Errorf("map: %w: proposal epic %q", ErrNotFound, proposal)
-	}
-	return match, nil
-}
-
-func (s *fileStore) Replace(records []Record, nextID int) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	out := make([]Record, len(records))
-	copy(out, records)
-	data := &mapFile{
-		NextID:  nextID,
-		Records: out,
-	}
-
-	sch, err := getBeadMapSchema()
-	if err != nil {
-		return err
-	}
-	raw, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("map: marshal: %w", err)
-	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-	if err != nil {
-		return fmt.Errorf("map: parse: %w", err)
-	}
-	if err := sch.Validate(doc); err != nil {
-		return fmt.Errorf("map: schema validation: %w", err)
-	}
-
-	return s.save(data)
-}
-
-func (s *fileStore) List() ([]Record, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	data, err := s.load()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]Record, len(data.Records))
-	copy(result, data.Records)
-	return result, nil
-}
-
-// load reads and parses the mapping file. Returns an empty mapFile if the file
-// does not exist.
-func (s *fileStore) load() (*mapFile, error) {
+// Parse reads and validates the journal, returning every event in file
+// order. A missing or empty journal is a first-class state — it returns a
+// nil slice and a nil error, not a failure. A line that is not valid JSON,
+// or that violates the journal-line schema, yields a *ParseError naming
+// the line number; parsing stops at that line, since a journal that fails
+// to parse cleanly cannot be trusted to fold correctly past it.
+func (s *MappingStore) Parse() ([]Event, error) {
 	raw, err := os.ReadFile(s.path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return &mapFile{NextID: 1, Records: []Record{}}, nil
+			return nil, nil
 		}
-		return nil, fmt.Errorf("map: read %s: %w", s.path, err)
+		return nil, fmt.Errorf("read %s: %w", s.path, err)
+	}
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return nil, nil
 	}
 
-	// Validate against bead-map JSON Schema before parsing.
-	sch, err := getBeadMapSchema()
+	sch, err := getJournalLineSchema()
 	if err != nil {
 		return nil, err
 	}
-	doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-	if err != nil {
-		return nil, fmt.Errorf("map: parse %s: %w", s.path, err)
-	}
-	if err := sch.Validate(doc); err != nil {
-		return nil, fmt.Errorf("map: schema validation %s: %w", s.path, err)
-	}
 
-	var data mapFile
-	if err := json.Unmarshal(raw, &data); err != nil {
-		return nil, fmt.Errorf("map: parse %s: %w", s.path, err)
+	var events []Event
+	scanner := bufio.NewScanner(bytes.NewReader(raw))
+	scanner.Buffer(make([]byte, 0, 64*1024), 10*1024*1024)
+	lineNo := 0
+	for scanner.Scan() {
+		lineNo++
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+
+		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(line))
+		if err != nil {
+			return nil, &ParseError{Line: lineNo, Err: fmt.Errorf("invalid JSON: %w", err)}
+		}
+		if err := sch.Validate(doc); err != nil {
+			return nil, &ParseError{Line: lineNo, Err: err}
+		}
+
+		var ev Event
+		if err := json.Unmarshal(line, &ev); err != nil {
+			return nil, &ParseError{Line: lineNo, Err: err}
+		}
+		ev.Line = lineNo
+		events = append(events, ev)
 	}
-	if data.Records == nil {
-		data.Records = []Record{}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("read %s: %w", s.path, err)
 	}
-	return &data, nil
+	return events, nil
 }
 
-// save writes the mapping file atomically using write-rename.
-// Records are sorted by ID for diff-friendly output.
-func (s *fileStore) save(data *mapFile) error {
-	sort.Slice(data.Records, func(i, j int) bool {
-		return data.Records[i].ID < data.Records[j].ID
-	})
+// fold walks events in file order and computes the current linkage per
+// node: the latest task-bearing event, or, once a removed change event is
+// seen, its biography. Proposal-epic receipts (task_created carrying
+// proposal instead of for) fold without any change event, keyed by the
+// proposal slug. A task_created whose for names no known eid is reported
+// as a dangling receipt rather than dropped or failed on.
+func fold(events []Event) Fold {
+	byEID := make(map[string]Event, len(events))
+	entries := make(map[string]FoldEntry)
+	var dangling []DanglingReceipt
 
-	raw, err := json.MarshalIndent(data, "", "  ")
+	for _, ev := range events {
+		switch ev.Event {
+		case "added", "modified", "removed":
+			byEID[ev.EID] = ev
+			if ev.Event == "removed" {
+				entries[ev.Node] = FoldEntry{Key: ev.Node, Removed: true, Source: ev}
+			}
+		case "task_created":
+			if ev.Proposal != "" {
+				entries[ev.Proposal] = FoldEntry{Key: ev.Proposal, TaskID: ev.TaskID, Source: ev}
+				continue
+			}
+			change, ok := byEID[ev.For]
+			if !ok {
+				dangling = append(dangling, DanglingReceipt{Receipt: ev})
+				continue
+			}
+			entries[change.Node] = FoldEntry{Key: change.Node, TaskID: ev.TaskID, Removed: change.Event == "removed", Source: change}
+		}
+	}
+
+	out := make([]FoldEntry, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, e)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Source.Line < out[j].Source.Line })
+	return Fold{Entries: out, Dangling: dangling}
+}
+
+// List returns the folded current linkage — one entry per task-bearing
+// node plus one per removed node, in journal file-position order. Backs
+// `spex map list`.
+func (s *MappingStore) List() (Fold, error) {
+	events, err := s.Parse()
 	if err != nil {
-		return fmt.Errorf("map: marshal: %w", err)
+		return Fold{}, err
 	}
-	raw = append(raw, '\n')
+	return fold(events), nil
+}
 
-	dir := filepath.Dir(s.path)
-	tmp, err := os.CreateTemp(dir, ".bead-map-*.tmp")
+// Get resolves one key — an identity hash or a task id — to its fold
+// entry. The two keys are interchangeable ways to reach one node,
+// distinguished by shape: a 12-character lowercase hex string is treated
+// as a node identity hash and looked up directly; anything else is treated
+// as a task id and matched against each entry's current TaskID. Backs
+// `spex map get`.
+func (s *MappingStore) Get(key string) (FoldEntry, error) {
+	f, err := s.List()
 	if err != nil {
-		return fmt.Errorf("map: create temp file: %w", err)
-	}
-	tmpName := tmp.Name()
-
-	if _, err := tmp.Write(raw); err != nil {
-		tmp.Close()
-		os.Remove(tmpName)
-		return fmt.Errorf("map: write temp file: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		os.Remove(tmpName)
-		return fmt.Errorf("map: close temp file: %w", err)
+		return FoldEntry{}, err
 	}
 
-	if err := os.Rename(tmpName, s.path); err != nil {
-		os.Remove(tmpName)
-		return fmt.Errorf("map: rename %s: %w", s.path, err)
+	if nodeHashPattern.MatchString(key) {
+		for _, e := range f.Entries {
+			if e.Key == key {
+				return e, nil
+			}
+		}
+		return FoldEntry{}, fmt.Errorf("%w: node %s", ErrNotFound, key)
 	}
-	return nil
+
+	for _, e := range f.Entries {
+		if e.TaskID == key {
+			return e, nil
+		}
+	}
+	return FoldEntry{}, fmt.Errorf("%w: task %s", ErrNotFound, key)
+}
+
+// History returns every event touching one node — the change events where
+// it is the subject, plus the receipts paired to those events — oldest
+// first. This is how lineage questions ("which tasks has this node had?")
+// are answered without any stored back-pointers.
+func (s *MappingStore) History(node string) ([]Event, error) {
+	events, err := s.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	eids := map[string]bool{}
+	var history []Event
+	for _, ev := range events {
+		switch ev.Event {
+		case "added", "modified", "removed":
+			if ev.Node == node {
+				eids[ev.EID] = true
+				history = append(history, ev)
+			}
+		case "task_created", "task_closed":
+			if ev.For != "" && eids[ev.For] {
+				history = append(history, ev)
+			}
+		}
+	}
+	return history, nil
 }

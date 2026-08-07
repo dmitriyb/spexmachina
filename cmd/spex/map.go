@@ -10,6 +10,39 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// mapEntryView flattens a mapping.FoldEntry into the JSON shape
+// spec/map/arch_map_command.md documents for `spex map get`/`spex map
+// list` — the node or proposal-epic key, the current task id, and the
+// sourcing event's descriptive fields, all at the top level.
+type mapEntryView struct {
+	Node     string `json:"node,omitempty"`
+	Proposal string `json:"proposal,omitempty"`
+	TaskID   string `json:"task_id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	NodeType string `json:"node_type,omitempty"`
+	Module   string `json:"module,omitempty"`
+	GitHead  string `json:"git_head,omitempty"`
+	Removed  bool   `json:"removed,omitempty"`
+}
+
+func newMapEntryView(e mapping.FoldEntry) mapEntryView {
+	v := mapEntryView{
+		TaskID:   e.TaskID,
+		Name:     e.Source.Name,
+		NodeType: e.Source.NodeType,
+		Module:   e.Source.Module,
+		GitHead:  e.Source.GitHead,
+		Proposal: e.Source.Proposal,
+		Removed:  e.Removed,
+	}
+	// A proposal-epic entry's Source is the task_created receipt itself
+	// (no Node); a node entry's Source is its change event.
+	if e.Source.Node != "" {
+		v.Node = e.Key
+	}
+	return v
+}
+
 func newMapCmd() *cobra.Command {
 	mapCmd := &cobra.Command{
 		Use:   "map",
@@ -17,20 +50,25 @@ func newMapCmd() *cobra.Command {
 	}
 
 	getCmd := &cobra.Command{
-		Use:   "get <record-id>",
-		Short: "Get a mapping record by ID",
+		Use:   "get <key>",
+		Short: "Get one node's journal linkage by identity hash or task id",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runMapGetE,
 	}
-	getCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
 	listCmd := &cobra.Command{
 		Use:   "list",
-		Short: "List all mapping records",
+		Short: "List the folded node-to-task linkage",
 		RunE:  runMapListE,
 	}
-	listCmd.Flags().String("map-file", ".bead-map.json", "path to mapping file")
 
+	// TODO(bead:spexmachina-y0wc.20): context resolves against
+	// mapping.NewFileStore + mapping.ResolveContext (integer record ids,
+	// the retired .bead-map.json store) because ContextResolver has not
+	// yet been migrated onto MappingStore's FoldEntry
+	// (spec/map/arch_context_resolver.md). Rewrite once that migration
+	// lands so context takes the same identity-hash/task-id key as get
+	// and list.
 	contextCmd := &cobra.Command{
 		Use:   "context <record-id>",
 		Short: "Resolve full spec context for a mapping record",
@@ -44,36 +82,41 @@ func newMapCmd() *cobra.Command {
 }
 
 func runMapGetE(cmd *cobra.Command, args []string) error {
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	id, err := strconv.Atoi(args[0])
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		return fmt.Errorf("map get: invalid record ID: %s", args[0])
+		return err
 	}
 
-	store := mapping.NewFileStore(mapFile)
-	record, err := store.Get(id)
+	store := mapping.NewMappingStore(specDir)
+	entry, err := store.Get(args[0])
 	if err != nil {
-		return fmt.Errorf("map get: %w", err)
+		return fmt.Errorf("map: %w", err)
 	}
 
-	if err := json.NewEncoder(os.Stdout).Encode(record); err != nil {
-		return fmt.Errorf("map get: %w", err)
+	if err := json.NewEncoder(os.Stdout).Encode(newMapEntryView(entry)); err != nil {
+		return fmt.Errorf("map: %w", err)
 	}
 	return nil
 }
 
 func runMapListE(cmd *cobra.Command, args []string) error {
-	mapFile, _ := cmd.Flags().GetString("map-file")
-
-	store := mapping.NewFileStore(mapFile)
-	records, err := store.List()
+	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
-		return fmt.Errorf("map list: %w", err)
+		return err
 	}
 
-	if err := json.NewEncoder(os.Stdout).Encode(records); err != nil {
-		return fmt.Errorf("map list: %w", err)
+	store := mapping.NewMappingStore(specDir)
+	fold, err := store.List()
+	if err != nil {
+		return fmt.Errorf("map: %w", err)
+	}
+
+	views := make([]mapEntryView, len(fold.Entries))
+	for i, e := range fold.Entries {
+		views[i] = newMapEntryView(e)
+	}
+	if err := json.NewEncoder(os.Stdout).Encode(views); err != nil {
+		return fmt.Errorf("map: %w", err)
 	}
 	return nil
 }

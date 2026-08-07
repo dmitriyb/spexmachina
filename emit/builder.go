@@ -103,7 +103,7 @@ func (b *Builder) lookupExistingEpic() (bool, error) {
 	if err == nil {
 		return true, nil
 	}
-	if errors.Is(err, mapping.ErrNotFound) {
+	if errors.Is(err, mapping.ErrRecordNotFound) {
 		return false, nil
 	}
 	return false, fmt.Errorf("emit: build: proposal epic lookup %q: %w", b.Proposal, err)

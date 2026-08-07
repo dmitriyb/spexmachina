@@ -93,7 +93,7 @@ func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
 			// All records closed — work is satisfied, drop the dep.
 			continue
 		}
-		if !errors.Is(err, mapping.ErrNotFound) {
+		if !errors.Is(err, mapping.ErrRecordNotFound) {
 			return nil, fmt.Errorf("emit: resolver: lookup %q: %w", id, err)
 		}
 		out = append(out, Ref{Kind: RefSpecNode, SpecNodeID: id})
@@ -136,7 +136,7 @@ func (r *Resolver) ResolveParent(proposal string) (Ref, error) {
 	if err == nil {
 		return Ref{Kind: RefBead, BeadID: rec.BeadID}, nil
 	}
-	if !errors.Is(err, mapping.ErrNotFound) {
+	if !errors.Is(err, mapping.ErrRecordNotFound) {
 		return Ref{}, fmt.Errorf("emit: resolver: proposal epic lookup %q: %w", proposal, err)
 	}
 	epicKey := "proposal/" + proposal + "/epic"

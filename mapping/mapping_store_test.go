@@ -1,825 +1,468 @@
 package mapping
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
-	"sync"
 	"testing"
 )
 
-func testStore(t *testing.T) Store {
+// --- fixture helpers ---
+
+// writeJournal writes spec/.history.jsonl in dir, one line per entry.
+func writeJournal(t *testing.T, dir string, lines []string) {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), ".bead-map.json")
-	return NewFileStore(path)
-}
-
-func testRecord() Record {
-	return Record{
-		SpecNodeID:  "79946d618829",
-		BeadID:      "abc-123",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ProjectSchema",
-		ContentFile: "spec/schema/arch_project_schema.md",
-		SpecHash:    "e3b0c44",
+	content := ""
+	if len(lines) > 0 {
+		content = strings.Join(lines, "\n") + "\n"
+	}
+	path := filepath.Join(dir, ".history.jsonl")
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("write journal: %v", err)
 	}
 }
 
-func TestFR1_Create_AssignsSequentialID(t *testing.T) {
-	s := testStore(t)
-
-	r1 := testRecord()
-	id1, err := s.Create(r1)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
+// jsonField renders v as a quoted JSON string, or the literal null when v
+// is empty — change events never legitimately carry an empty-string hash,
+// so this doubles as the before/after null marker in fixtures.
+func jsonField(v string) string {
+	if v == "" {
+		return "null"
 	}
-	if id1 != 1 {
-		t.Fatalf("first ID: want 1, got %d", id1)
-	}
-
-	r2 := Record{
-		SpecNodeID:  "78883b84c32d",
-		BeadID:      "abc-456",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ModuleSchema",
-		ContentFile: "spec/schema/arch_module_schema.md",
-		SpecHash:    "d4e5f6",
-	}
-	id2, err := s.Create(r2)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if id2 != 2 {
-		t.Fatalf("second ID: want 2, got %d", id2)
-	}
+	return fmt.Sprintf("%q", v)
 }
 
-func TestFR1_Create_WritesValidJSON(t *testing.T) {
+// changeLine builds one change-event journal line (added/removed/modified).
+func changeLine(event, eid, node, name, nodeType, module, before, after, gitHead, proposal string) string {
+	return fmt.Sprintf(
+		`{"event":%q,"eid":%q,"node":%q,"name":%q,"node_type":%q,"module":%q,"before":%s,"after":%s,"git_head":%q,"proposal":%q}`,
+		event, eid, node, name, nodeType, module, jsonField(before), jsonField(after), gitHead, proposal)
+}
+
+// taskCreatedLine builds a task_created receipt. Pass proposal for an epic
+// receipt (no change event referent) or forEID for a node-pairing receipt.
+func taskCreatedLine(forEID, proposal, taskID string) string {
+	if proposal != "" {
+		return fmt.Sprintf(`{"event":"task_created","proposal":%q,"task_id":%q}`, proposal, taskID)
+	}
+	return fmt.Sprintf(`{"event":"task_created","for":%q,"task_id":%q}`, forEID, taskID)
+}
+
+// taskClosedLine builds a task_closed receipt pairing to a change event's eid.
+func taskClosedLine(forEID, taskID string) string {
+	return fmt.Sprintf(`{"event":"task_closed","for":%q,"task_id":%q}`, forEID, taskID)
+}
+
+// --- Parse a well-formed journal ---
+
+func TestREQ_934d627f0e90_ParseWellFormedJournal(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-	s := NewFileStore(path)
-
-	r := testRecord()
-	_, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read file: %v", err)
-	}
-
-	var mf mapFile
-	if err := json.Unmarshal(data, &mf); err != nil {
-		t.Fatalf("parse file: %v", err)
-	}
-
-	if mf.NextID != 2 {
-		t.Fatalf("next_id: want 2, got %d", mf.NextID)
-	}
-	if len(mf.Records) != 1 {
-		t.Fatalf("records count: want 1, got %d", len(mf.Records))
-	}
-	if mf.Records[0].BeadID != "abc-123" {
-		t.Fatalf("bead_id: want abc-123, got %s", mf.Records[0].BeadID)
-	}
-}
-
-func TestFR1_Get_ByID(t *testing.T) {
-	s := testStore(t)
-
-	r := testRecord()
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	got, err := s.Get(id)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-
-	if got.ID != id {
-		t.Fatalf("ID: want %d, got %d", id, got.ID)
-	}
-	if got.BeadID != r.BeadID {
-		t.Fatalf("BeadID: want %s, got %s", r.BeadID, got.BeadID)
-	}
-	if got.SpecNodeID != r.SpecNodeID {
-		t.Fatalf("SpecNodeID: want %s, got %s", r.SpecNodeID, got.SpecNodeID)
-	}
-	if got.Module != r.Module {
-		t.Fatalf("Module: want %s, got %s", r.Module, got.Module)
-	}
-	if got.Component != r.Component {
-		t.Fatalf("Component: want %s, got %s", r.Component, got.Component)
-	}
-	if got.ContentFile != r.ContentFile {
-		t.Fatalf("ContentFile: want %s, got %s", r.ContentFile, got.ContentFile)
-	}
-	if got.SpecHash != r.SpecHash {
-		t.Fatalf("SpecHash: want %s, got %s", r.SpecHash, got.SpecHash)
-	}
-}
-
-func TestFR1_Get_NotFound(t *testing.T) {
-	s := testStore(t)
-
-	_, err := s.Get(999)
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
-	}
-}
-
-func TestFR1_GetByBead(t *testing.T) {
-	s := testStore(t)
-
-	r := testRecord()
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	got, err := s.GetByBead("abc-123")
-	if err != nil {
-		t.Fatalf("GetByBead: %v", err)
-	}
-	if got.ID != id {
-		t.Fatalf("ID: want %d, got %d", id, got.ID)
-	}
-}
-
-func TestFR1_GetByBead_NotFound(t *testing.T) {
-	s := testStore(t)
-
-	_, err := s.GetByBead("nonexistent")
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
-	}
-}
-
-func TestFR1_GetBySpecNode(t *testing.T) {
-	s := testStore(t)
-
-	r := testRecord()
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	got, err := s.GetBySpecNode("79946d618829")
-	if err != nil {
-		t.Fatalf("GetBySpecNode: %v", err)
-	}
-	if len(got) != 1 {
-		t.Fatalf("count: want 1, got %d", len(got))
-	}
-	if got[0].ID != id {
-		t.Fatalf("ID: want %d, got %d", id, got[0].ID)
-	}
-}
-
-func TestFR1_GetBySpecNode_NotFound(t *testing.T) {
-	s := testStore(t)
-
-	_, err := s.GetBySpecNode("nonexistent/node/1")
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
-	}
-}
-
-func TestGetByProposalEpic_ReturnsLatestOpen(t *testing.T) {
-	s := testStore(t)
-
-	// Two epic records for the same proposal; the older is closed (a prior
-	// run), the newer is open (current run). Resolver should see the latest.
-	if _, err := s.Create(Record{
-		SpecNodeID: "2026-04-foo",
-		BeadID:     "epic-1",
-		BeadType:   "epic",
-		NodeType:   "proposal",
-		Module:     "proposal",
-		Component:  "2026-04-foo",
-		BeadStatus: "closed",
-	}); err != nil {
-		t.Fatalf("Create closed epic: %v", err)
-	}
-	if _, err := s.Create(Record{
-		SpecNodeID: "2026-04-foo",
-		BeadID:     "epic-2",
-		BeadType:   "epic",
-		NodeType:   "proposal",
-		Module:     "proposal",
-		Component:  "2026-04-foo",
-		BeadStatus: "open",
-	}); err != nil {
-		t.Fatalf("Create open epic: %v", err)
-	}
-
-	got, err := s.GetByProposalEpic("2026-04-foo")
-	if err != nil {
-		t.Fatalf("GetByProposalEpic: %v", err)
-	}
-	if got.BeadID != "epic-2" {
-		t.Errorf("want epic-2 (latest open), got %s", got.BeadID)
-	}
-}
-
-func TestGetByProposalEpic_NotFound(t *testing.T) {
-	s := testStore(t)
-	_, err := s.GetByProposalEpic("nonexistent")
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
-	}
-}
-
-func TestGetByProposalEpic_AllClosedReturnsNotFound(t *testing.T) {
-	s := testStore(t)
-	if _, err := s.Create(Record{
-		SpecNodeID: "P1",
-		BeadID:     "epic-old",
-		BeadType:   "epic",
-		NodeType:   "proposal",
-		Module:     "proposal",
-		Component:  "P1",
-		BeadStatus: "closed",
-	}); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	_, err := s.GetByProposalEpic("P1")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("all-closed proposal must yield ErrNotFound, got: %v", err)
-	}
-}
-
-func TestGetByProposalEpic_IgnoresNonProposalRecords(t *testing.T) {
-	s := testStore(t)
-	// A non-proposal record sharing the SpecNodeID should not match.
-	if _, err := s.Create(Record{
-		SpecNodeID: "shared-id",
-		BeadID:     "feature-bead",
-		BeadType:   "feature",
-		NodeType:   "component",
-		Module:     "m",
-		Component:  "C",
-		BeadStatus: "open",
-	}); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	_, err := s.GetByProposalEpic("shared-id")
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("non-proposal record must not match, got: %v", err)
-	}
-}
-
-func TestFR1_BeadTypePreserved(t *testing.T) {
-	s := testStore(t)
-
-	r := Record{
-		SpecNodeID:  "76d72cbe00f3",
-		BeadID:      "feat-001",
-		BeadType:    "feature",
-		Module:      "impact",
-		Component:   "ActionClassifier",
-		ContentFile: "spec/impact/arch_action_classifier.md",
-		SpecHash:    "abc123",
-	}
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	got, err := s.Get(id)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.BeadType != "feature" {
-		t.Fatalf("BeadType: want feature, got %s", got.BeadType)
-	}
-}
-
-func TestFR1_Update_SpecHash(t *testing.T) {
-	s := testStore(t)
-
-	r := testRecord()
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	err = s.Update(id, map[string]string{"spec_hash": "new-hash"})
-	if err != nil {
-		t.Fatalf("Update: %v", err)
-	}
-
-	got, err := s.Get(id)
-	if err != nil {
-		t.Fatalf("Get: %v", err)
-	}
-	if got.SpecHash != "new-hash" {
-		t.Fatalf("SpecHash: want new-hash, got %s", got.SpecHash)
-	}
-	if got.BeadID != r.BeadID {
-		t.Fatalf("BeadID changed: want %s, got %s", r.BeadID, got.BeadID)
-	}
-}
-
-func TestFR1_Update_BeadIDAndSpecHash(t *testing.T) {
-	s := testStore(t)
-
-	r := testRecord()
-	id, err := s.Create(r)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	err = s.Update(id, map[string]string{
-		"bead_id":   "replaced-bead",
-		"spec_hash": "updated-hash",
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "hash-after-1", "head1", "prop1"),
+		changeLine("removed", "e2", "bbbbbbbbbbbb", "Bar", "component", "modB", "hash-before-2", "", "head2", "prop2"),
+		taskCreatedLine("e1", "", "task-a"),
 	})
+
+	store := NewMappingStore(dir)
+	events, err := store.Parse()
 	if err != nil {
-		t.Fatalf("Update: %v", err)
+		t.Fatalf("Parse: %v", err)
+	}
+	if len(events) != 3 {
+		t.Fatalf("want 3 events, got %d", len(events))
 	}
 
-	got, err := s.Get(id)
+	e0 := events[0]
+	if e0.Event != "added" || e0.EID != "e1" || e0.Node != "aaaaaaaaaaaa" || e0.Name != "Foo" ||
+		e0.NodeType != "component" || e0.Module != "modA" || e0.Before != nil ||
+		e0.After == nil || *e0.After != "hash-after-1" || e0.GitHead != "head1" || e0.Proposal != "prop1" {
+		t.Fatalf("event 0 fields did not round-trip: %+v", e0)
+	}
+
+	e1 := events[1]
+	if e1.Event != "removed" || e1.EID != "e2" || e1.Node != "bbbbbbbbbbbb" || e1.Name != "Bar" ||
+		e1.Before == nil || *e1.Before != "hash-before-2" || e1.After != nil || e1.GitHead != "head2" || e1.Proposal != "prop2" {
+		t.Fatalf("event 1 fields did not round-trip: %+v", e1)
+	}
+
+	e2 := events[2]
+	if e2.Event != "task_created" || e2.For != "e1" || e2.TaskID != "task-a" {
+		t.Fatalf("event 2 fields did not round-trip: %+v", e2)
+	}
+}
+
+// --- Fold yields the latest task-bearing event per node ---
+
+func nodeXYJournal() []string {
+	return []string{
+		changeLine("added", "e1", "aaaaaaaaaaaa", "CompX", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-A"),
+		changeLine("modified", "e2", "aaaaaaaaaaaa", "CompX", "component", "modA", "h1", "h2", "g2", "p2"),
+		taskCreatedLine("e2", "", "task-B"),
+		changeLine("added", "e3", "bbbbbbbbbbbb", "CompY", "component", "modA", "", "h3", "g3", "p3"),
+	}
+}
+
+func TestREQ_934d627f0e90_FoldLatestTaskBearingEventPerNode(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, nodeXYJournal())
+
+	store := NewMappingStore(dir)
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+
+	var x *FoldEntry
+	for i := range f.Entries {
+		if f.Entries[i].Key == "aaaaaaaaaaaa" {
+			x = &f.Entries[i]
+		}
+		if f.Entries[i].Key == "bbbbbbbbbbbb" {
+			t.Fatalf("node Y should have no fold entry (no receipt), got %+v", f.Entries[i])
+		}
+	}
+	if x == nil {
+		t.Fatal("node X missing from fold")
+	}
+	if x.TaskID != "task-B" {
+		t.Fatalf("X.TaskID: want task-B (latest wins), got %s", x.TaskID)
+	}
+	if x.Source.EID != "e2" {
+		t.Fatalf("X.Source: want the modified event e2, got eid %s", x.Source.EID)
+	}
+}
+
+// --- Lookup by identity hash ---
+
+func TestREQ_934d627f0e90_LookupByIdentityHash(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, nodeXYJournal())
+
+	store := NewMappingStore(dir)
+	entry, err := store.Get("aaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
 	}
-	if got.BeadID != "replaced-bead" {
-		t.Fatalf("BeadID: want replaced-bead, got %s", got.BeadID)
+	if entry.TaskID != "task-B" {
+		t.Fatalf("TaskID: want task-B, got %s", entry.TaskID)
 	}
-	if got.SpecHash != "updated-hash" {
-		t.Fatalf("SpecHash: want updated-hash, got %s", got.SpecHash)
-	}
-	// Immutable fields must be unchanged
-	if got.SpecNodeID != r.SpecNodeID {
-		t.Fatalf("SpecNodeID changed: want %s, got %s", r.SpecNodeID, got.SpecNodeID)
-	}
-	if got.Module != r.Module {
-		t.Fatalf("Module changed: want %s, got %s", r.Module, got.Module)
-	}
-	if got.Component != r.Component {
-		t.Fatalf("Component changed: want %s, got %s", r.Component, got.Component)
-	}
-	if got.ContentFile != r.ContentFile {
-		t.Fatalf("ContentFile changed: want %s, got %s", r.ContentFile, got.ContentFile)
-	}
-	if got.BeadType != r.BeadType {
-		t.Fatalf("BeadType changed: want %s, got %s", r.BeadType, got.BeadType)
+	if entry.Source.Name != "CompX" || entry.Source.NodeType != "component" || entry.Source.Module != "modA" {
+		t.Fatalf("Source name/node_type/module: got %+v", entry.Source)
 	}
 }
 
-func TestFR1_Update_DuplicateBeadID(t *testing.T) {
-	s := testStore(t)
+// --- Lookup by task id ---
 
-	r1 := testRecord()
-	_, err := s.Create(r1)
+func TestREQ_934d627f0e90_LookupByTaskID(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, nodeXYJournal())
+
+	store := NewMappingStore(dir)
+	byHash, err := store.Get("aaaaaaaaaaaa")
 	if err != nil {
-		t.Fatalf("Create r1: %v", err)
+		t.Fatalf("Get by hash: %v", err)
 	}
-
-	r2 := testRecord()
-	r2.SpecNodeID = "08909d62930b"
-	r2.BeadID = "other-bead"
-	id2, err := s.Create(r2)
+	byTask, err := store.Get("task-B")
 	if err != nil {
-		t.Fatalf("Create r2: %v", err)
+		t.Fatalf("Get by task id: %v", err)
 	}
-
-	// Updating r2's bead_id to r1's bead_id must fail.
-	err = s.Update(id2, map[string]string{"bead_id": r1.BeadID})
-	if err == nil {
-		t.Fatal("want duplicate bead_id error, got nil")
-	}
-	if !strings.Contains(err.Error(), "duplicate bead_id") {
-		t.Fatalf("want duplicate bead_id error, got: %v", err)
+	if !reflect.DeepEqual(byHash, byTask) {
+		t.Fatalf("hash and task-id lookups diverged: %+v vs %+v", byHash, byTask)
 	}
 }
 
-func TestFR1_Update_NotFound(t *testing.T) {
-	s := testStore(t)
+// --- Removed node retains its biography ---
 
-	err := s.Update(999, map[string]string{"spec_hash": "x"})
-	if err == nil {
-		t.Fatal("want error, got nil")
+func TestREQ_934d627f0e90_RemovedNodeRetainsBiography(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "cccccccccccc", "CompZ", "component", "modC", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-Z"),
+		changeLine("removed", "e2", "cccccccccccc", "CompZ", "component", "modC", "h1", "", "g2-removed", "remove-prop"),
+		taskClosedLine("e2", "task-Z"),
+	})
+
+	store := NewMappingStore(dir)
+	entry, err := store.Get("cccccccccccc")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
 	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
+	if !entry.Removed {
+		t.Fatal("want Removed=true")
+	}
+	if entry.TaskID != "" {
+		t.Fatalf("removed entry should carry biography instead of a live task, got TaskID=%q", entry.TaskID)
+	}
+	if entry.Source.Name != "CompZ" || entry.Source.NodeType != "component" || entry.Source.Module != "modC" {
+		t.Fatalf("biography name/node_type/module: got %+v", entry.Source)
+	}
+	if entry.Source.Proposal != "remove-prop" {
+		t.Fatalf("biography proposal: want remove-prop, got %s", entry.Source.Proposal)
+	}
+	if entry.Source.GitHead != "g2-removed" {
+		t.Fatalf("biography git_head: want g2-removed, got %s", entry.Source.GitHead)
 	}
 }
 
-func TestFR1_Delete(t *testing.T) {
-	s := testStore(t)
+func TestREQ_934d627f0e90_RemovedNodeWithCleanupTaskStaysRemoved(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("removed", "e1", "dddddddddddd", "CompY", "component", "modD", "h1", "", "g1-removed", "remove-prop"),
+		taskClosedLine("e1", "task-Y"),
+		taskCreatedLine("e1", "", "br-cleanup"),
+	})
 
-	r := testRecord()
-	id, err := s.Create(r)
+	store := NewMappingStore(dir)
+	entry, err := store.Get("dddddddddddd")
 	if err != nil {
-		t.Fatalf("Create: %v", err)
+		t.Fatalf("Get: %v", err)
 	}
-
-	err = s.Delete(id)
-	if err != nil {
-		t.Fatalf("Delete: %v", err)
+	if !entry.Removed {
+		t.Fatal("want Removed=true even after a cleanup task_created adopts the node's task id")
 	}
-
-	_, err = s.Get(id)
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound after delete, got: %v", err)
+	if entry.TaskID != "br-cleanup" {
+		t.Fatalf("want TaskID=br-cleanup, got %q", entry.TaskID)
+	}
+	if entry.Source.Name != "CompY" || entry.Source.NodeType != "component" || entry.Source.Module != "modD" {
+		t.Fatalf("biography name/node_type/module: got %+v", entry.Source)
+	}
+	if entry.Source.Proposal != "remove-prop" {
+		t.Fatalf("biography proposal: want remove-prop, got %s", entry.Source.Proposal)
 	}
 }
 
-func TestFR1_Delete_NotFound(t *testing.T) {
-	s := testStore(t)
+// --- Epic receipts fold without a change event ---
 
-	err := s.Delete(999)
-	if err == nil {
-		t.Fatal("want error, got nil")
-	}
-	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("want ErrNotFound, got: %v", err)
-	}
-}
+func TestREQ_934d627f0e90_EpicReceiptFoldsWithoutChangeEvent(t *testing.T) {
+	dir := t.TempDir()
+	slug := "2026-04-18-decouple-spex-from-br"
+	writeJournal(t, dir, []string{
+		taskCreatedLine("", slug, "spexmachina-0lk"),
+	})
 
-func TestFR1_Delete_IDsNeverReused(t *testing.T) {
-	s := testStore(t)
-
-	r1 := testRecord()
-	id1, err := s.Create(r1)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	err = s.Delete(id1)
-	if err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-
-	r2 := Record{
-		SpecNodeID:  "78883b84c32d",
-		BeadID:      "abc-456",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ModuleSchema",
-		ContentFile: "spec/schema/arch_module_schema.md",
-		SpecHash:    "d4e5f6",
-	}
-	id2, err := s.Create(r2)
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if id2 <= id1 {
-		t.Fatalf("new ID %d should be greater than deleted ID %d", id2, id1)
-	}
-}
-
-func TestFR1_List_Sorted(t *testing.T) {
-	s := testStore(t)
-
-	records := []Record{
-		{SpecNodeID: "aabbccddeeff", BeadID: "b1", BeadType: "task", Module: "a", Component: "C1", ContentFile: "f1", SpecHash: "h1"},
-		{SpecNodeID: "112233445566", BeadID: "b2", BeadType: "task", Module: "a", Component: "C2", ContentFile: "f2", SpecHash: "h2"},
-		{SpecNodeID: "ffeeddccbbaa", BeadID: "b3", BeadType: "task", Module: "a", Component: "C3", ContentFile: "f3", SpecHash: "h3"},
-	}
-	for _, r := range records {
-		if _, err := s.Create(r); err != nil {
-			t.Fatalf("Create: %v", err)
-		}
-	}
-
-	list, err := s.List()
+	store := NewMappingStore(dir)
+	f, err := store.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
-	if len(list) != 3 {
-		t.Fatalf("count: want 3, got %d", len(list))
+	if len(f.Entries) != 1 {
+		t.Fatalf("want 1 epic entry, got %d", len(f.Entries))
 	}
-	for i := 1; i < len(list); i++ {
-		if list[i].ID <= list[i-1].ID {
-			t.Fatalf("records not sorted: ID %d after %d", list[i].ID, list[i-1].ID)
-		}
+	entry := f.Entries[0]
+	if entry.Key != slug {
+		t.Fatalf("Key: want %s, got %s", slug, entry.Key)
+	}
+	if entry.TaskID != "spexmachina-0lk" {
+		t.Fatalf("TaskID: want spexmachina-0lk, got %s", entry.TaskID)
+	}
+	if entry.Source.Node != "" || entry.Source.Name != "" {
+		t.Fatalf("epic entry should carry no invented change event, got Source=%+v", entry.Source)
 	}
 }
 
-func TestFR1_List_Empty(t *testing.T) {
-	s := testStore(t)
+// --- Deterministic order ---
 
-	list, err := s.List()
+func TestREQ_934d627f0e90_DeterministicOrder(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "111111111111", "CompP", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-P"),
+		changeLine("added", "e2", "222222222222", "CompQ", "component", "modA", "", "h2", "g2", "p2"),
+		taskCreatedLine("e2", "", "task-Q"),
+	})
+
+	store := NewMappingStore(dir)
+	first, err := store.List()
 	if err != nil {
-		t.Fatalf("List: %v", err)
+		t.Fatalf("List (1st): %v", err)
 	}
-	if len(list) != 0 {
-		t.Fatalf("want empty list, got %d records", len(list))
-	}
-}
-
-func TestFR1_DuplicateBeadID(t *testing.T) {
-	s := testStore(t)
-
-	r1 := testRecord()
-	if _, err := s.Create(r1); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	r2 := Record{
-		SpecNodeID:  "aabbccddeeff",
-		BeadID:      "abc-123", // same bead ID
-		BeadType:    "task",
-		Module:      "different",
-		Component:   "Other",
-		ContentFile: "f",
-		SpecHash:    "h",
-	}
-	_, err := s.Create(r2)
-	if err == nil {
-		t.Fatal("want error for duplicate bead_id, got nil")
-	}
-	if !strings.Contains(err.Error(), "duplicate bead_id") {
-		t.Fatalf("error should mention duplicate bead_id, got: %v", err)
-	}
-}
-
-func TestFR1_DuplicateSpecNodeID(t *testing.T) {
-	s := testStore(t)
-
-	r1 := testRecord()
-	if _, err := s.Create(r1); err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-
-	r2 := Record{
-		SpecNodeID:  "79946d618829", // same spec node ID, different bead
-		BeadID:      "different-bead",
-		BeadType:    "task",
-		Module:      "schema",
-		Component:   "ProjectSchema",
-		ContentFile: "f",
-		SpecHash:    "h",
-	}
-	_, err := s.Create(r2)
-	if err == nil {
-		t.Fatal("want error for duplicate spec_node_id, got nil")
-	}
-	if !strings.Contains(err.Error(), "duplicate spec_node_id") {
-		t.Fatalf("error should mention duplicate spec_node_id, got: %v", err)
-	}
-}
-
-func TestFR1_MissingFile_CreatedOnFirstWrite(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-	s := NewFileStore(path)
-
-	// List before any write returns empty
-	list, err := s.List()
+	second, err := store.List()
 	if err != nil {
-		t.Fatalf("List: %v", err)
+		t.Fatalf("List (2nd): %v", err)
 	}
-	if len(list) != 0 {
-		t.Fatalf("want empty list, got %d", len(list))
-	}
-
-	// First write creates the file
-	r := testRecord()
-	if _, err := s.Create(r); err != nil {
-		t.Fatalf("Create: %v", err)
+	if !reflect.DeepEqual(first, second) {
+		t.Fatalf("List not deterministic:\n%+v\nvs\n%+v", first, second)
 	}
 
-	if _, err := os.Stat(path); err != nil {
-		t.Fatalf("file should exist after create: %v", err)
+	if len(first.Entries) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(first.Entries))
+	}
+	if first.Entries[0].Key != "111111111111" || first.Entries[1].Key != "222222222222" {
+		t.Fatalf("entries not ordered by file position: %+v", first.Entries)
 	}
 }
 
-func TestFR5_InvalidSchema_RejectsExtraField(t *testing.T) {
+// --- Edge cases ---
+
+func TestREQ_934d627f0e90_MissingJournalFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
+	store := NewMappingStore(dir)
 
-	// Write a bead-map with an extra field on a record
-	invalid := `{
-		"next_id": 2,
-		"records": [{
-			"id": 1,
-			"spec_node_id": "79946d618829",
-			"bead_id": "abc-123",
-			"bead_type": "task",
-			"module": "schema",
-			"component": "ProjectSchema",
-			"content_file": "spec/schema/arch_project_schema.md",
-			"spec_hash": "e3b0c44",
-			"extra_field": "should fail"
-		}]
-	}`
-	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	s := NewFileStore(path)
-	_, err := s.List()
-	if err == nil {
-		t.Fatal("want schema validation error for extra field, got nil")
-	}
-	if !strings.Contains(err.Error(), "schema") {
-		t.Fatalf("error should mention schema validation, got: %v", err)
-	}
-}
-
-func TestFR5_InvalidSchema_BadSpecNodeIDPattern(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-
-	invalid := `{
-		"next_id": 2,
-		"records": [{
-			"id": 1,
-			"spec_node_id": "INVALID FORMAT",
-			"bead_id": "abc-123",
-			"module": "schema",
-			"component": "ProjectSchema",
-			"content_file": "spec/schema/arch_project_schema.md",
-			"spec_hash": "e3b0c44"
-		}]
-	}`
-	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	s := NewFileStore(path)
-	_, err := s.List()
-	if err == nil {
-		t.Fatal("want schema validation error for bad spec_node_id, got nil")
-	}
-}
-
-func TestFR5_InvalidSchema_MissingRequiredField(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-
-	// Record missing required "module" field
-	invalid := `{
-		"next_id": 2,
-		"records": [{
-			"id": 1,
-			"spec_node_id": "79946d618829",
-			"bead_id": "abc-123",
-			"bead_type": "task",
-			"component": "ProjectSchema",
-			"content_file": "spec/schema/arch_project_schema.md",
-			"spec_hash": "e3b0c44"
-		}]
-	}`
-	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	s := NewFileStore(path)
-	_, err := s.List()
-	if err == nil {
-		t.Fatal("want schema validation error for missing required field, got nil")
-	}
-}
-
-func TestFR5_InvalidSchema_EnvelopeExtraField(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-
-	invalid := `{
-		"next_id": 1,
-		"records": [],
-		"version": "1.0"
-	}`
-	if err := os.WriteFile(path, []byte(invalid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	s := NewFileStore(path)
-	_, err := s.List()
-	if err == nil {
-		t.Fatal("want schema validation error for envelope extra field, got nil")
-	}
-}
-
-func TestFR5_ValidSchema_AllowsOptionalBeadStatus(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-
-	valid := `{
-		"next_id": 2,
-		"records": [{
-			"id": 1,
-			"spec_node_id": "79946d618829",
-			"bead_id": "abc-123",
-			"bead_type": "task",
-			"module": "schema",
-			"component": "ProjectSchema",
-			"content_file": "spec/schema/arch_project_schema.md",
-			"spec_hash": "e3b0c44",
-			"bead_status": "closed"
-		}]
-	}`
-	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
-	}
-
-	s := NewFileStore(path)
-	list, err := s.List()
+	events, err := store.Parse()
 	if err != nil {
-		t.Fatalf("List should succeed with optional bead_status: %v", err)
+		t.Fatalf("Parse: want nil error for missing journal, got %v", err)
 	}
-	if len(list) != 1 {
-		t.Fatalf("want 1 record, got %d", len(list))
-	}
-}
-
-func TestFR5_ValidSchema_EmptyRecords(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-
-	valid := `{"next_id": 1, "records": []}`
-	if err := os.WriteFile(path, []byte(valid), 0644); err != nil {
-		t.Fatalf("write: %v", err)
+	if len(events) != 0 {
+		t.Fatalf("want no events, got %d", len(events))
 	}
 
-	s := NewFileStore(path)
-	list, err := s.List()
+	f, err := store.List()
 	if err != nil {
-		t.Fatalf("List should succeed with empty records: %v", err)
+		t.Fatalf("List: want nil error for missing journal, got %v", err)
 	}
-	if len(list) != 0 {
-		t.Fatalf("want 0 records, got %d", len(list))
+	if len(f.Entries) != 0 {
+		t.Fatalf("want empty fold, got %d entries", len(f.Entries))
 	}
 }
 
-func TestFR1_ConcurrentCreate(t *testing.T) {
+func TestREQ_934d627f0e90_EmptyJournalFile(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-	s := NewFileStore(path)
+	writeJournal(t, dir, nil)
+	store := NewMappingStore(dir)
 
-	var wg sync.WaitGroup
-	errs := make([]error, 10)
-	ids := make([]int, 10)
+	events, err := store.Parse()
+	if err != nil {
+		t.Fatalf("Parse: want nil error for empty journal, got %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("want no events, got %d", len(events))
+	}
 
-	for i := range 10 {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			r := Record{
-				SpecNodeID:  fmt.Sprintf("aabbccddee%02x", idx),
-				BeadID:      fmt.Sprintf("bead-%d", idx),
-				BeadType:    "task",
-				Module:      "mod",
-				Component:   fmt.Sprintf("Comp%d", idx),
-				ContentFile: "f",
-				SpecHash:    "h",
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: want nil error for empty journal, got %v", err)
+	}
+	if len(f.Entries) != 0 {
+		t.Fatalf("want empty fold, got %d entries", len(f.Entries))
+	}
+}
+
+func TestREQ_4aee62bd3c15_MalformedLineReportsLineNumber(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-a"),
+		"not valid json {",
+	})
+
+	store := NewMappingStore(dir)
+	_, err := store.Parse()
+	if err == nil {
+		t.Fatal("want error for malformed line")
+	}
+	var pe *ParseError
+	if !errors.As(err, &pe) {
+		t.Fatalf("want *ParseError, got %T: %v", err, err)
+	}
+	if pe.Line != 3 {
+		t.Fatalf("want line 3, got %d", pe.Line)
+	}
+}
+
+func TestREQ_4aee62bd3c15_SchemaViolationReportsLineNumber(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{
+			name: "task receipt with neither for nor proposal",
+			line: `{"event":"task_created","task_id":"spexmachina-abc"}`,
+		},
+		{
+			name: "change event missing node",
+			line: `{"event":"added","eid":"e1","name":"Foo","node_type":"component","module":"m","before":null,"after":"h","git_head":"g","proposal":"p"}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeJournal(t, dir, []string{
+				changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "h1", "g1", "p1"),
+				tt.line,
+			})
+
+			store := NewMappingStore(dir)
+			_, err := store.Parse()
+			if err == nil {
+				t.Fatal("want schema validation error")
 			}
-			ids[idx], errs[idx] = s.Create(r)
-		}(i)
+			var pe *ParseError
+			if !errors.As(err, &pe) {
+				t.Fatalf("want *ParseError, got %T: %v", err, err)
+			}
+			if pe.Line != 2 {
+				t.Fatalf("want line 2, got %d", pe.Line)
+			}
+		})
 	}
-	wg.Wait()
+}
 
-	for i, err := range errs {
-		if err != nil {
-			t.Fatalf("goroutine %d: Create failed: %v", i, err)
-		}
-	}
+func TestREQ_934d627f0e90_DanglingReceiptDoesNotPoisonFold(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "aaaaaaaaaaaa", "CompM", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-M"),
+		taskCreatedLine("no-such-eid", "", "task-orphan"),
+	})
 
-	// Verify file is valid JSON
-	data, err := os.ReadFile(path)
+	store := NewMappingStore(dir)
+	f, err := store.List()
 	if err != nil {
-		t.Fatalf("read file: %v", err)
+		t.Fatalf("List: %v", err)
 	}
-	var mf mapFile
-	if err := json.Unmarshal(data, &mf); err != nil {
-		t.Fatalf("invalid JSON after concurrent writes: %v", err)
+	if len(f.Dangling) != 1 {
+		t.Fatalf("want 1 dangling receipt, got %d", len(f.Dangling))
 	}
-	if len(mf.Records) != 10 {
-		t.Fatalf("records: want 10, got %d", len(mf.Records))
+	if f.Dangling[0].Receipt.TaskID != "task-orphan" {
+		t.Fatalf("dangling receipt task id: want task-orphan, got %s", f.Dangling[0].Receipt.TaskID)
 	}
 
-	// All IDs should be unique
-	seen := make(map[int]bool)
-	for _, id := range ids {
-		if seen[id] {
-			t.Fatalf("duplicate ID: %d", id)
+	entry, err := store.Get("aaaaaaaaaaaa")
+	if err != nil {
+		t.Fatalf("Get: rest of the journal should fold normally, got error: %v", err)
+	}
+	if entry.TaskID != "task-M" {
+		t.Fatalf("TaskID: want task-M, got %s", entry.TaskID)
+	}
+}
+
+// --- History ---
+
+func TestREQ_934d627f0e90_HistoryOldestFirst(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, nodeXYJournal())
+
+	store := NewMappingStore(dir)
+	history, err := store.History("aaaaaaaaaaaa")
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	if len(history) != 4 {
+		t.Fatalf("want 4 events (added, task_created, modified, task_created), got %d: %+v", len(history), history)
+	}
+	wantEvents := []string{"added", "task_created", "modified", "task_created"}
+	for i, want := range wantEvents {
+		if history[i].Event != want {
+			t.Fatalf("event %d: want %s, got %s", i, want, history[i].Event)
 		}
-		seen[id] = true
+	}
+}
+
+// --- Get not found ---
+
+func TestREQ_934d627f0e90_GetNotFound(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, nodeXYJournal())
+	store := NewMappingStore(dir)
+
+	if _, err := store.Get("dddddddddddd"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound for unknown hash, got %v", err)
+	}
+	if _, err := store.Get("no-such-task"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("want ErrNotFound for unknown task id, got %v", err)
 	}
 }

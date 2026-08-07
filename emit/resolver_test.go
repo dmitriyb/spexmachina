@@ -75,7 +75,7 @@ func (s *fakeStore) GetBySpecNode(id string) ([]mapping.Record, error) {
 	}
 	recs, ok := s.bySpecNode[id]
 	if !ok {
-		return nil, fmt.Errorf("fakeStore: %w: %s", mapping.ErrNotFound, id)
+		return nil, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, id)
 	}
 	return recs, nil
 }
@@ -83,7 +83,7 @@ func (s *fakeStore) GetBySpecNode(id string) ([]mapping.Record, error) {
 func (s *fakeStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
 	r, ok := s.epic[proposal]
 	if !ok {
-		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrNotFound, proposal)
+		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, proposal)
 	}
 	return r, nil
 }
@@ -97,7 +97,7 @@ func (s *fakeStore) Get(int) (mapping.Record, error) {
 func (s *fakeStore) GetByBead(beadID string) (mapping.Record, error) {
 	r, ok := s.byBead[beadID]
 	if !ok {
-		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrNotFound, beadID)
+		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, beadID)
 	}
 	return r, nil
 }

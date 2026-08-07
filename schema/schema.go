@@ -44,33 +44,6 @@ func IdentityHash(parts ...string) string {
 	return hex.EncodeToString(sum[:6])
 }
 
-// BeadMap represents a .bead-map.json file in the retired envelope format.
-// BeadMapSchema no longer validates this shape — it now validates one line
-// of spec/.history.jsonl at a time — so these types no longer round-trip
-// through it; the envelope schema now lives at
-// mapping/bead-map-envelope.schema.json, embedded in the mapping package.
-// These types remain for readers/writers that have not yet migrated to the
-// journal — mapping.MappingStore and validator/removed_name_checker.go —
-// until spexmachina-y0wc.19 migrates MappingStore onto the journal and
-// removes them.
-type BeadMap struct {
-	NextID  int             `json:"next_id"`
-	Records []BeadMapRecord `json:"records"`
-}
-
-// BeadMapRecord represents a single mapping record linking a spec node to a bead.
-type BeadMapRecord struct {
-	ID          int    `json:"id"`
-	SpecNodeID  string `json:"spec_node_id"`
-	BeadID      string `json:"bead_id"`
-	BeadType    string `json:"bead_type"`
-	Module      string `json:"module"`
-	Component   string `json:"component"`
-	ContentFile string `json:"content_file"`
-	SpecHash    string `json:"spec_hash"`
-	BeadStatus  string `json:"bead_status,omitempty"`
-}
-
 // Project represents a project.json file.
 type Project struct {
 	Name         string        `json:"name"`
