@@ -3,9 +3,13 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,111 +20,67 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// setupImpactDiffFile creates a spec dir, builds a tree, snapshots it,
-// modifies a file, runs diff, and writes the diff JSON to a temp file.
-// Returns the spec dir path and the diff file path.
-func setupImpactDiffFile(t *testing.T) (string, string) {
+// impactFixture is the spec/diff/journal/beads harness from
+// spec/impact/test_impact_command.md's Setup section: a spec tree with
+// validator/ and merkle/ modules, a pre-change snapshot, a diff whose
+// changes are SchemaChecker (modified), CoupledSectionChecker (added),
+// Hasher (modified) and DiffEngine (removed), and a three-entry journal
+// tying each surviving node to its task (spex-001, spex-003, spex-010).
+type impactFixture struct {
+	specDir         string
+	diffFile        string
+	beadsFile       string // spex-010 open — no cleanup gate fires
+	beadsClosedFile string // spex-010 closed — cleanup gate fires
+	schkID          string
+	cscID           string
+	hasrID          string
+	diffID          string
+}
+
+func setupImpactCommandFixture(t *testing.T) impactFixture {
 	t.Helper()
-	specDir := setupTestSpec(t)
+	specDir := t.TempDir()
 
-	tree, err := merkle.BuildTree(specDir)
-	if err != nil {
+	validatorModID := schema.IdentityHash("module", "validator")
+	merkleModID := schema.IdentityHash("module", "merkle")
+	schkID := schema.IdentityHash("validator", "component", "SchemaChecker")
+	cscID := schema.IdentityHash("validator", "component", "CoupledSectionChecker")
+	hasrID := schema.IdentityHash("merkle", "component", "Hasher")
+	diffID := schema.IdentityHash("merkle", "component", "DiffEngine")
+
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "`+validatorModID+`", "name": "validator", "path": "validator"},
+			{"id": "`+merkleModID+`", "name": "merkle", "path": "merkle"}
+		]
+	}`)
+
+	validatorDir := filepath.Join(specDir, "validator")
+	if err := os.MkdirAll(validatorDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+	writeTestFile(t, validatorDir, "module.json", `{
+		"name": "validator",
+		"components": [
+			{"id": "`+schkID+`", "name": "SchemaChecker", "content": "arch_schema_checker.md"}
+		]
+	}`)
+	writeTestFile(t, validatorDir, "arch_schema_checker.md", "# SchemaChecker\n")
+
+	merkleDir := filepath.Join(specDir, "merkle")
+	if err := os.MkdirAll(merkleDir, 0755); err != nil {
 		t.Fatal(err)
 	}
-
-	archPath := filepath.Join(specDir, "alpha", "arch_comp1.md")
-	if err := os.WriteFile(archPath, []byte("# Changed architecture\n"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("diff command failed: %v", err)
-	}
-
-	diffFile := filepath.Join(t.TempDir(), "diff.json")
-	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	return specDir, diffFile
-}
-
-// setupMappingFile creates a .bead-map.json with the given records.
-func setupMappingFile(t *testing.T, dir string, records []mapping.Record) string {
-	t.Helper()
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	store := mapping.NewFileStore(mapPath)
-	for _, r := range records {
-		if _, err := store.Create(r); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return mapPath
-}
-
-func TestFR4_ImpactCommand_ProducesReport(t *testing.T) {
-	specDir, diffFile := setupImpactDiffFile(t)
-
-	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: comp1Hash, BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
-	})
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
-	}
-
-	// The change.Key (identity hash) matches directly against the mapping
-	// record's SpecNodeID (also an identity hash) — no rekeying. Verify
-	// the match produced an obsolete+create pair for the existing bead.
-	if report.Summary.ObsoleteCount != 1 {
-		t.Errorf("want 1 obsolete, got %d", report.Summary.ObsoleteCount)
-	}
-	if report.Summary.CreateCount < 1 {
-		t.Errorf("want at least 1 create, got %d", report.Summary.CreateCount)
-	}
-	// Check that the create has the old bead ID as lineage
-	for _, c := range report.Creates {
-		if c.OldBeadID == "bead-1" {
-			return // found the replacement create
-		}
-	}
-	t.Error("want create with old_bead_id=bead-1, not found")
-}
-
-func TestFR4_ImpactCommand_CreateForUnmatchedNode(t *testing.T) {
-	specDir, diffFile := setupImpactDiffFile(t)
-
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
-	}
-
-	if report.Summary.CreateCount == 0 {
-		t.Fatal("expected create actions for unmatched nodes")
-	}
-}
-
-func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
-	specDir := setupTestSpec(t)
+	writeTestFile(t, merkleDir, "module.json", `{
+		"name": "merkle",
+		"components": [
+			{"id": "`+hasrID+`", "name": "Hasher", "content": "arch_hasher.md"},
+			{"id": "`+diffID+`", "name": "DiffEngine", "content": "arch_diff_engine.md"}
+		]
+	}`)
+	writeTestFile(t, merkleDir, "arch_hasher.md", "# Hasher\n")
+	writeTestFile(t, merkleDir, "arch_diff_engine.md", "# DiffEngine\n")
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
@@ -130,118 +90,87 @@ func TestFR4_ImpactCommand_NoChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("diff failed: %v", err)
+	// Apply the changes the setup section documents.
+	writeTestFile(t, validatorDir, "arch_schema_checker.md", "# SchemaChecker CHANGED\n")
+	writeTestFile(t, validatorDir, "module.json", `{
+		"name": "validator",
+		"components": [
+			{"id": "`+schkID+`", "name": "SchemaChecker", "content": "arch_schema_checker.md"},
+			{"id": "`+cscID+`", "name": "CoupledSectionChecker", "content": "arch_coupled_section_checker.md"}
+		]
+	}`)
+	writeTestFile(t, validatorDir, "arch_coupled_section_checker.md", "# CoupledSectionChecker\n")
+
+	writeTestFile(t, merkleDir, "arch_hasher.md", "# Hasher CHANGED\n")
+	writeTestFile(t, merkleDir, "module.json", `{
+		"name": "merkle",
+		"components": [
+			{"id": "`+hasrID+`", "name": "Hasher", "content": "arch_hasher.md"}
+		]
+	}`)
+	if err := os.Remove(filepath.Join(merkleDir, "arch_diff_engine.md")); err != nil {
+		t.Fatal(err)
 	}
 
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
 	diffFile := filepath.Join(t.TempDir(), "diff.json")
 	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
-	}
-
-	total := report.Summary.CreateCount + report.Summary.ObsoleteCount
-	if total != 0 {
-		t.Fatalf("expected 0 actions with no changes, got %d", total)
-	}
-}
-
-func TestNFR5_ImpactCommand_Deterministic(t *testing.T) {
-	specDir, diffFile := setupImpactDiffFile(t)
-
-	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), []mapping.Record{
-		{SpecNodeID: comp1Hash, BeadID: "bead-1", BeadType: "task", Module: "alpha", Component: "Comp1", ContentFile: "spec/alpha/arch_comp1.md", SpecHash: "abc123"},
+	writeTestJournal(t, specDir, []string{
+		fmt.Sprintf(`{"event":"added","eid":"E1","node":"%s","name":"SchemaChecker","node_type":"component","module":"validator","before":null,"after":"h1","git_head":"headsha1","proposal":"p1"}`, schkID),
+		`{"event":"task_created","for":"E1","task_id":"spex-001"}`,
+		fmt.Sprintf(`{"event":"added","eid":"E2","node":"%s","name":"Hasher","node_type":"component","module":"merkle","before":null,"after":"h2","git_head":"headsha1","proposal":"p1"}`, hasrID),
+		`{"event":"task_created","for":"E2","task_id":"spex-003"}`,
+		fmt.Sprintf(`{"event":"added","eid":"E3","node":"%s","name":"DiffEngine","node_type":"component","module":"merkle","before":null,"after":"h3","git_head":"headsha1","proposal":"p1"}`, diffID),
+		`{"event":"task_created","for":"E3","task_id":"spex-010"}`,
 	})
 
-	out1, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	out2, _ := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-
-	if out1 != out2 {
-		t.Fatalf("determinism: outputs differ\nrun1: %s\nrun2: %s", out1, out2)
-	}
-}
-
-func TestFR4_ImpactCommand_InvalidDiffJSON(t *testing.T) {
-	diffFile := filepath.Join(t.TempDir(), "bad.json")
-	if err := os.WriteFile(diffFile, []byte("not json"), 0644); err != nil {
+	beadsFile := filepath.Join(t.TempDir(), "beads.json")
+	if err := os.WriteFile(beadsFile, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"spex-001","status":"open","labels":["spex:%s"]},
+		{"id":"spex-003","status":"open","labels":["spex:%s"]},
+		{"id":"spex-010","status":"open","labels":["spex:%s"]}
+	]}`, schkID, hasrID, diffID)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, err := runSpex(t, "impact", "--diff", diffFile)
-	if err == nil {
-		t.Fatal("should fail with invalid diff JSON")
+	beadsClosedFile := filepath.Join(t.TempDir(), "beads_closed.json")
+	if err := os.WriteFile(beadsClosedFile, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"spex-001","status":"open","labels":["spex:%s"]},
+		{"id":"spex-003","status":"open","labels":["spex:%s"]},
+		{"id":"spex-010","status":"closed","labels":["spex:%s"]}
+	]}`, schkID, hasrID, diffID)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	return impactFixture{
+		specDir:         specDir,
+		diffFile:        diffFile,
+		beadsFile:       beadsFile,
+		beadsClosedFile: beadsClosedFile,
+		schkID:          schkID,
+		cscID:           cscID,
+		hasrID:          hasrID,
+		diffID:          diffID,
 	}
 }
 
-func TestFR4_ImpactCommand_NonexistentDiffFile(t *testing.T) {
-	_, err := runSpex(t, "impact", "--diff", "/nonexistent/diff.json")
-	if err == nil {
-		t.Fatal("should fail with nonexistent diff file")
+// writeEmptyBeadsFile writes an empty tracker-list JSON to a temp file for
+// tests that don't care about bead enrichment but need a valid --beads
+// input.
+func writeEmptyBeadsFile(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "beads.json")
+	if err := os.WriteFile(path, []byte(`{"issues":[]}`), 0o644); err != nil {
+		t.Fatal(err)
 	}
-}
-
-func TestFR4_ParseDiffJSON(t *testing.T) {
-	input := `{
-		"changes": [
-			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"},
-			{"path": "module/1/test_section/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
-			{"path": "module/1/component/2", "type": "removed", "impact": "arch_impl", "module": "alpha", "old_hash": "ddd"}
-		]
-	}`
-
-	changes, _, err := parseDiffJSON([]byte(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	if len(changes) != 3 {
-		t.Fatalf("want 3 changes, got %d", len(changes))
-	}
-
-	if changes[0].Type != merkle.Modified {
-		t.Errorf("change 0: want Modified, got %v", changes[0].Type)
-	}
-	if changes[0].Impact != merkle.ArchImpl {
-		t.Errorf("change 0: want ArchImpl, got %v", changes[0].Impact)
-	}
-	if changes[0].Module != "alpha" {
-		t.Errorf("change 0: want module alpha, got %s", changes[0].Module)
-	}
-	if changes[1].Type != merkle.Added {
-		t.Errorf("change 1: want Added, got %v", changes[1].Type)
-	}
-	if changes[2].Type != merkle.Removed {
-		t.Errorf("change 2: want Removed, got %v", changes[2].Type)
-	}
-}
-
-func TestFR4_ParseDiffJSON_InvalidType(t *testing.T) {
-	input := `{"changes": [{"path": "x", "type": "bogus", "impact": "impl_only", "module": "m"}]}`
-	_, _, err := parseDiffJSON([]byte(input))
-	if err == nil || !strings.Contains(err.Error(), "unknown change type") {
-		t.Fatalf("want error about unknown change type, got %v", err)
-	}
-}
-
-func TestFR4_ParseDiffJSON_InvalidImpact(t *testing.T) {
-	input := `{"changes": [{"path": "x", "type": "added", "impact": "bogus", "module": "m"}]}`
-	_, _, err := parseDiffJSON([]byte(input))
-	if err == nil || !strings.Contains(err.Error(), "unknown impact level") {
-		t.Fatalf("want error about unknown impact level, got %v", err)
-	}
+	return path
 }
 
 // runSpexWithStderr is like runSpex but also returns stderr output.
@@ -267,44 +196,712 @@ func runSpexWithStderr(t *testing.T, args ...string) (string, string, error) {
 	return stdout, errBuf.String(), execErr
 }
 
-func TestFR8_ImpactCommand_RejectsDiffWithErrors(t *testing.T) {
+// runSpexStdin runs the CLI with os.Stdin fed from the given string. This is
+// separate from cobra's SetIn: ImpactCommand reads os.Stdin directly (it
+// must accept a real pipe, per the Interface contract), not cmd.InOrStdin().
+func runSpexStdin(t *testing.T, stdin string, args ...string) (string, error) {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = old })
+
+	go func() {
+		_, _ = io.WriteString(w, stdin)
+		w.Close()
+	}()
+
+	return runSpex(t, args...)
+}
+
+func hasCleanupCreate(report impact.ImpactReport, oldBeadID string) bool {
+	for _, c := range report.Creates {
+		if c.OldBeadID == oldBeadID && strings.Contains(c.Reason, "Code cleanup") {
+			return true
+		}
+	}
+	return false
+}
+
+// S1: Full pipeline — diff file to JSON report on stdout.
+func TestS1_FullPipeline(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+
+	if len(report.Creates) != 3 {
+		t.Fatalf("want 3 creates, got %d: %+v", len(report.Creates), report.Creates)
+	}
+	wantCreates := []struct {
+		Module, Node, Reason, OldBeadID string
+	}{
+		{"merkle", "Hasher", "Spec node modified (new): merkle/Hasher", "spex-003"},
+		{"validator", "CoupledSectionChecker", "New spec node: validator/CoupledSectionChecker", ""},
+		{"validator", "SchemaChecker", "Spec node modified (new): validator/SchemaChecker", "spex-001"},
+	}
+	for i, w := range wantCreates {
+		c := report.Creates[i]
+		if c.Module != w.Module || c.Node != w.Node || c.Reason != w.Reason || c.OldBeadID != w.OldBeadID {
+			t.Errorf("create[%d]: want %+v, got %+v", i, w, c)
+		}
+	}
+
+	if len(report.Obsoletes) != 3 {
+		t.Fatalf("want 3 obsoletes, got %d: %+v", len(report.Obsoletes), report.Obsoletes)
+	}
+	wantObsoletes := []struct {
+		BeadID, Module, Node, Reason, ChangeType string
+	}{
+		{"spex-010", "merkle", "DiffEngine", "Spec node removed: merkle/DiffEngine", "removed"},
+		{"spex-003", "merkle", "Hasher", "Spec node modified: merkle/Hasher", "modified"},
+		{"spex-001", "validator", "SchemaChecker", "Spec node modified: validator/SchemaChecker", "modified"},
+	}
+	for i, w := range wantObsoletes {
+		o := report.Obsoletes[i]
+		if o.BeadID != w.BeadID || o.Module != w.Module || o.Node != w.Node || o.Reason != w.Reason || o.ChangeType != w.ChangeType {
+			t.Errorf("obsolete[%d]: want %+v, got %+v", i, w, o)
+		}
+	}
+
+	if report.Summary.CreateCount != 3 || report.Summary.ObsoleteCount != 3 {
+		t.Errorf("want summary {3,3}, got %+v", report.Summary)
+	}
+}
+
+// S2: Diff input from stdin (pipe).
+func TestS2_StdinDiff(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	want, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	diffBytes, err := os.ReadFile(fx.diffFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := runSpexStdin(t, string(diffBytes), "impact", "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if got != want {
+		t.Fatalf("stdin output differs from file output\nwant: %s\ngot: %s", want, got)
+	}
+}
+
+// S3: Diff input from stdin with --diff set to "-".
+func TestS3_StdinWithDashFlag(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	want, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	diffBytes, err := os.ReadFile(fx.diffFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := runSpexStdin(t, string(diffBytes), "impact", "--diff", "-", "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if got != want {
+		t.Fatalf("--diff - output differs from file output\nwant: %s\ngot: %s", want, got)
+	}
+}
+
+// S4: No changes — empty diff produces empty report.
+func TestS4_EmptyDiffProducesEmptyReport(t *testing.T) {
 	specDir := setupTestSpec(t)
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
+	diffFile := filepath.Join(t.TempDir(), "empty_diff.json")
+	if err := os.WriteFile(diffFile, []byte(`{"changes": [], "errors": []}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	beadsFile := writeEmptyBeadsFile(t)
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--beads", beadsFile, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("empty diff is not an error, got %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if len(report.Creates) != 0 || len(report.Obsoletes) != 0 {
+		t.Fatalf("want empty creates/obsoletes, got %+v", report)
+	}
+	if report.Summary.CreateCount != 0 || report.Summary.ObsoleteCount != 0 {
+		t.Fatalf("want zero counts, got %+v", report.Summary)
+	}
+}
+
+// S5: --json flag is accepted explicitly (default and only supported format).
+func TestS5_ExplicitJSONFlag(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--json", "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+}
+
+// S6: Pipeline composition — spex diff piped into spex impact.
+func TestS6_PipelineComposition(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	diffOut, err := runSpex(t, "diff", "--json", "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+
+	out, err := runSpexStdin(t, diffOut, "impact", "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if report.Summary.CreateCount == 0 && report.Summary.ObsoleteCount == 0 {
+		t.Fatal("want a non-empty report from the composed pipeline")
+	}
+}
+
+// S7: Exit code 0 on success, exit code 1 on error.
+func TestS7_ExitCodes(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	if _, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir); err != nil {
+		t.Fatalf("want exit 0, got %v", err)
+	}
+
+	_, stderr, err := runSpexWithStderr(t, "impact", "--diff", "nonexistent_file.json", "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err == nil {
+		t.Fatal("want exit 1 for missing diff file")
+	}
+	if !strings.Contains(err.Error(), "read diff") && !strings.Contains(stderr, "read diff") {
+		t.Fatalf("want error about the missing file, got err=%v stderr=%s", err, stderr)
+	}
+}
+
+// S8: --beads drives the cleanup gate.
+func TestS8_BeadsDrivesCleanupGate(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsClosedFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+
+	if report.Summary.CreateCount != 4 || report.Summary.ObsoleteCount != 3 {
+		t.Fatalf("want summary {4,3}, got %+v", report.Summary)
+	}
+	if !hasCleanupCreate(report, "spex-010") {
+		t.Fatalf("want a cleanup create for spex-010 (merkle/DiffEngine), creates=%+v", report.Creates)
+	}
+}
+
+// S9: --beads omitted, and --bead-cli supplied, are both inert.
+func TestS9_BeadsOmittedAndBeadCLIInert(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	base, err := runSpex(t, "impact", "--diff", fx.diffFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(base), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, base)
+	}
+	if report.Summary.CreateCount != 3 || report.Summary.ObsoleteCount != 3 {
+		t.Fatalf("want summary {3,3} without --beads, got %+v", report.Summary)
+	}
+	if hasCleanupCreate(report, "spex-010") {
+		t.Fatalf("want no cleanup create without --beads; creates=%+v", report.Creates)
+	}
+
+	for _, beadCLI := range []string{"br", "bd", "./anything"} {
+		out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--bead-cli", beadCLI, "--spec-dir", fx.specDir)
+		if err != nil {
+			t.Fatalf("--bead-cli %s: want no error, got %v", beadCLI, err)
+		}
+		if out != base {
+			t.Fatalf("--bead-cli %s: want byte-identical output to the flag-omitted run\nbase: %s\ngot: %s", beadCLI, base, out)
+		}
+	}
+}
+
+// S10: Deterministic output across runs.
+func TestS10_Deterministic(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	var outputs []string
+	for i := 0; i < 5; i++ {
+		out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+		if err != nil {
+			t.Fatalf("run %d: want no error, got %v", i, err)
+		}
+		outputs = append(outputs, out)
+	}
+	for i := 1; i < len(outputs); i++ {
+		if outputs[i] != outputs[0] {
+			t.Fatalf("run %d differs from run 0\nrun0: %s\nrun%d: %s", i, outputs[0], i, outputs[i])
+		}
+	}
+}
+
+// S11: Report output is suitable for piping to spex emit — JSON only,
+// terminated by a newline, nothing else on stdout.
+func TestS11_ReportSuitableForPiping(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if !strings.HasSuffix(out, "\n") {
+		t.Fatalf("want stdout to end in a newline, got %q", out)
+	}
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("stdout must contain only the JSON report: %v\noutput: %q", err, out)
+	}
+}
+
+// S12: Large diff with many changes completes quickly and reports correctly.
+func TestS12_LargeDiffPerformance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large-diff performance test in short mode")
+	}
+
+	specDir := t.TempDir()
+
+	const numModules = 20
+	const compsPerModule = 25 // 500 total changes
+
+	type changeSpec struct {
+		path, module, nodeType string
+	}
+
+	var projModules []string
+	var changes []changeSpec
+	for m := 0; m < numModules; m++ {
+		modName := fmt.Sprintf("mod%02d", m)
+		modID := schema.IdentityHash("module", modName)
+		projModules = append(projModules, fmt.Sprintf(`{"id":"%s","name":"%s","path":"%s"}`, modID, modName, modName))
+
+		modDir := filepath.Join(specDir, modName)
+		if err := os.MkdirAll(modDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		var comps []string
+		for c := 0; c < compsPerModule; c++ {
+			compName := fmt.Sprintf("Comp%02d", c)
+			compID := schema.IdentityHash(modName, "component", compName)
+			content := fmt.Sprintf("arch_%s.md", strings.ToLower(compName))
+			comps = append(comps, fmt.Sprintf(`{"id":"%s","name":"%s","content":"%s"}`, compID, compName, content))
+			writeTestFile(t, modDir, content, "# "+compName+"\n")
+			changes = append(changes, changeSpec{path: compID, module: modName, nodeType: "component"})
+		}
+		writeTestFile(t, modDir, "module.json", `{"name":"`+modName+`","components":[`+strings.Join(comps, ",")+`]}`)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"perf-test","modules":[`+strings.Join(projModules, ",")+`]}`)
+
+	var changeJSON []string
+	for _, c := range changes {
+		changeJSON = append(changeJSON, fmt.Sprintf(
+			`{"path":"%s","type":"modified","impact":"arch_impl","module":"%s","node_type":"%s","old_hash":"aaa","new_hash":"bbb"}`,
+			c.path, c.module, c.nodeType))
+	}
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(`{"changes":[`+strings.Join(changeJSON, ",")+`],"errors":[]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var beadLines []string
+	for i := 0; i < 300; i++ {
+		m := i % numModules
+		c := i % compsPerModule
+		compID := schema.IdentityHash(fmt.Sprintf("mod%02d", m), "component", fmt.Sprintf("Comp%02d", c))
+		beadLines = append(beadLines, fmt.Sprintf(`{"id":"bead-%d","status":"open","labels":["spex:%s"]}`, i, compID))
+	}
+	beadsFile := filepath.Join(t.TempDir(), "beads.json")
+	if err := os.WriteFile(beadsFile, []byte(`{"issues":[`+strings.Join(beadLines, ",")+`]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	start := time.Now()
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--beads", beadsFile, "--spec-dir", specDir)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+	if elapsed > 5*time.Second {
+		t.Fatalf("want completion under 5s, took %v", elapsed)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v", err)
+	}
+
+	wantCreates := numModules * compsPerModule
+	if report.Summary.CreateCount != wantCreates {
+		t.Errorf("want %d creates (every modified node is unmatched, no journal entries), got %d", wantCreates, report.Summary.CreateCount)
+	}
+	if report.Summary.ObsoleteCount != 0 {
+		t.Errorf("want 0 obsoletes, got %d", report.Summary.ObsoleteCount)
+	}
+}
+
+// E1: --beads names a file that does not exist.
+func TestE1_BeadsFileMissing(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	out, _, err := runSpexWithStderr(t, "impact", "--diff", fx.diffFile, "--beads", "/nonexistent/beads.json", "--spec-dir", fx.specDir)
+	if err == nil {
+		t.Fatal("want error for missing --beads file")
+	}
+	if !strings.Contains(err.Error(), "impact: read beads:") {
+		t.Fatalf("want 'impact: read beads:' context, got %v", err)
+	}
+	if out != "" {
+		t.Fatalf("want empty stdout, got %q", out)
+	}
+}
+
+// E2: Bead file parses but names no spec-managed bead — dropped, not an
+// error; a bead with no id at all is malformed input and IS an error.
+func TestE2_BeadFileNoSpecManagedBeads(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	noLabels := filepath.Join(t.TempDir(), "beads_no_labels.json")
+	if err := os.WriteFile(noLabels, []byte(`[{"id":"bead-x","status":"open","labels":["other:thing"]}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", noLabels, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want exit 0 (unmanaged beads are dropped, not an error), got %v", err)
+	}
+
+	base, err := runSpex(t, "impact", "--diff", fx.diffFile, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if out != base {
+		t.Fatalf("want output to match the --beads-omitted run\nwith-unmanaged-beads: %s\nomitted: %s", out, base)
+	}
+}
+
+func TestE2_BeadFileMissingID(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	badFile := filepath.Join(t.TempDir(), "beads_missing_id.json")
+	if err := os.WriteFile(badFile, []byte(`[{"status":"open","labels":["spex:`+fx.schkID+`"]}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := runSpexWithStderr(t, "impact", "--diff", fx.diffFile, "--beads", badFile, "--spec-dir", fx.specDir)
+	if err == nil {
+		t.Fatal("want error for a bead with no id")
+	}
+	if !strings.Contains(err.Error(), "index 0") && !strings.Contains(stderr, "index 0") {
+		t.Fatalf("want error naming the offending index, got err=%v stderr=%s", err, stderr)
+	}
+}
+
+// E3: Bead file holds malformed JSON.
+func TestE3_BeadFileMalformedJSON(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	badFile := filepath.Join(t.TempDir(), "beads_broken.json")
+	if err := os.WriteFile(badFile, []byte(`{"broken":`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", badFile, "--spec-dir", fx.specDir)
+	if err == nil {
+		t.Fatal("want error for malformed beads JSON")
+	}
+	if !strings.Contains(err.Error(), "impact: read beads:") {
+		t.Fatalf("want 'impact: read beads:' context, got %v", err)
+	}
+	if out != "" {
+		t.Fatalf("want empty stdout, got %q", out)
+	}
+}
+
+// E4: Diff file contains malformed JSON.
+func TestE4_DiffFileMalformedJSON(t *testing.T) {
+	specDir := setupTestSpec(t)
+	diffFile := filepath.Join(t.TempDir(), "bad_diff.json")
+	if err := os.WriteFile(diffFile, []byte(`[{"path": "foo"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error for malformed diff JSON")
+	}
+	if !strings.Contains(err.Error(), "parse diff JSON") {
+		t.Fatalf("want error referencing diff parsing, got %v", err)
+	}
+}
+
+// E5: Diff file with zero-length content.
+func TestE5_DiffFileEmpty(t *testing.T) {
+	specDir := setupTestSpec(t)
+	diffFile := filepath.Join(t.TempDir(), "empty.json")
+	if err := os.WriteFile(diffFile, []byte(``), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error for a zero-length diff file")
+	}
+}
+
+// E6: Concurrent access safety. spex impact is read-only over the spec
+// directory, journal and bead file, so two simultaneous invocations must
+// both succeed and produce the same report a serial run does. The in-process
+// harness captures a run's stdout by swapping the global os.Stdout for its
+// duration (see captureStdout), so two goroutines can't each call runSpex
+// concurrently — their swaps would race each other. Instead both
+// invocations run under a single outer stdout capture and write directly to
+// the shared pipe; each report is one json.Encoder.Encode call, far under
+// the pipe's atomic-write size, so the two writes land intact and back to
+// back rather than interleaved. Run with -race to also catch any actual
+// data race the read-only claim depends on.
+func TestE6_ConcurrentAccessSafety(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+	args := []string{"impact", "--diff", fx.diffFile, "--beads", fx.beadsFile, "--spec-dir", fx.specDir}
+
+	serialOut, err := runSpex(t, args...)
+	if err != nil {
+		t.Fatalf("serial run: %v", err)
+	}
+	var serialReport impact.ImpactReport
+	if err := json.Unmarshal([]byte(serialOut), &serialReport); err != nil {
+		t.Fatalf("parse serial report: %v", err)
+	}
+
+	execOnce := func() error {
+		rootCmd := cli.NewRootCmd()
+		rootCmd.AddCommand(
+			newDiffCmd(),
+			newValidateCmd(),
+			newImpactCmd(),
+			newMapCmd(),
+			newRenderCmd(),
+		)
+		rootCmd.SetErr(new(bytes.Buffer))
+		rootCmd.SetArgs(args)
+		return rootCmd.Execute()
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	combined := captureStdout(t, func() {
+		wg.Add(len(errs))
+		for i := range errs {
+			go func(i int) {
+				defer wg.Done()
+				errs[i] = execOnce()
+			}(i)
+		}
+		wg.Wait()
+	})
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("concurrent invocation %d: %v", i, err)
+		}
+	}
+
+	dec := json.NewDecoder(strings.NewReader(combined))
+	for i := range errs {
+		var report impact.ImpactReport
+		if err := dec.Decode(&report); err != nil {
+			t.Fatalf("decode concurrent report %d from combined output %q: %v", i, combined, err)
+		}
+		if !reflect.DeepEqual(report, serialReport) {
+			t.Fatalf("concurrent report %d differs from serial report:\ngot:  %+v\nwant: %+v", i, report, serialReport)
+		}
+	}
+}
+
+// E7: Spec directory with no modules — unmatched changes still report as
+// creates and the command does not panic on the missing module.json.
+func TestE7_DiffReferencesUnknownModules(t *testing.T) {
+	specDir := t.TempDir()
+	writeTestFile(t, specDir, "project.json", `{"name":"empty-project","modules":[]}`)
+
+	ghostID := schema.IdentityHash("ghost", "component", "GhostComp")
+	diffJSON := fmt.Sprintf(`{"changes":[{"path":"%s","type":"added","impact":"arch_impl","module":"ghost","node_type":"component","new_hash":"zzz"}],"errors":[]}`, ghostID)
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error/panic for an unknown module, got %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if report.Summary.CreateCount != 1 {
+		t.Errorf("want 1 create for the unmatched added node, got %d", report.Summary.CreateCount)
+	}
+}
+
+// E8: Bead file carries two beads claiming the same node. The join keeps one
+// status per node key, and the LAST entry in the file wins — order, not
+// status value, decides the outcome.
+func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	closedLast := filepath.Join(t.TempDir(), "beads_closed_last.json")
+	if err := os.WriteFile(closedLast, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"claim-a","status":"open","labels":["spex:%s"]},
+		{"id":"claim-b","status":"closed","labels":["spex:%s"]}
+	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", closedLast, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if !hasCleanupCreate(report, "spex-010") {
+		t.Fatalf("want a cleanup create when the LAST claim on the node is closed; creates=%+v", report.Creates)
+	}
+
+	openLast := filepath.Join(t.TempDir(), "beads_open_last.json")
+	if err := os.WriteFile(openLast, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"claim-a","status":"closed","labels":["spex:%s"]},
+		{"id":"claim-b","status":"open","labels":["spex:%s"]}
+	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out2, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", openLast, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	var report2 impact.ImpactReport
+	if err := json.Unmarshal([]byte(out2), &report2); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out2)
+	}
+	if hasCleanupCreate(report2, "spex-010") {
+		t.Fatalf("want no cleanup create when the LAST claim on the node is open; creates=%+v", report2.Creates)
+	}
+}
+
+// E9: Diff input contains errors — impact refuses to proceed.
+func TestE9_DiffWithErrorsRefusesToProceed(t *testing.T) {
+	specDir := setupTestSpec(t)
 
 	diffJSON := `{
 		"changes": [
-			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"}
+			{"path": "a1b2c3d4e5f6", "type": "modified", "impact": "arch_impl", "module": "impact", "node_type": "component"}
 		],
 		"errors": [
 			{
 				"type": "incomplete_change",
-				"message": "Requirement 2 (impact) description changed but implementing component NodeMatcher content leaf unchanged",
-				"path": "module/4/meta",
-				"related": ["module/4/component/2"]
+				"message": "Requirement 'Match changed nodes to beads' (impact) description changed but implementing component NodeMatcher content leaf unchanged",
+				"path": "0011223344aa",
+				"related": ["a1b2c3d4e5f6"]
 			}
 		]
 	}`
-
 	diffFile := filepath.Join(t.TempDir(), "diff_with_errors.json")
 	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	out, stderr, err := runSpexWithStderr(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
 	if err == nil {
-		t.Fatal("expected error when diff contains errors, got nil")
+		t.Fatal("want error when diff contains errors")
 	}
 	if !strings.Contains(err.Error(), "diff contains 1 error(s)") {
-		t.Fatalf("expected error about diff errors, got: %v", err)
+		t.Fatalf("want error about diff errors, got: %v", err)
+	}
+	if !strings.Contains(stderr, "Requirement 'Match changed nodes to beads'") {
+		t.Fatalf("want the error message on stderr, got: %s", stderr)
 	}
 	if out != "" {
-		t.Fatalf("expected empty stdout when diff has errors, got: %s", out)
+		t.Fatalf("want empty stdout, got: %s", out)
 	}
 }
 
-func TestFR8_ImpactCommand_EmptyErrorsArrayProceeds(t *testing.T) {
+func TestE9_MultipleErrorsAllPrinted(t *testing.T) {
 	specDir := setupTestSpec(t)
 
+	diffJSON := `{
+		"changes": [],
+		"errors": [
+			{"type": "incomplete_change", "message": "first error message", "path": "aaaaaaaaaaaa", "related": null},
+			{"type": "incomplete_change", "message": "second error message", "path": "bbbbbbbbbbbb", "related": null}
+		]
+	}`
+	diffFile := filepath.Join(t.TempDir(), "multi_errors.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, err := runSpexWithStderr(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error when diff contains errors")
+	}
+	if !strings.Contains(err.Error(), "diff contains 2 error(s)") {
+		t.Fatalf("want error about 2 diff errors, got: %v", err)
+	}
+	if !strings.Contains(stderr, "first error message") {
+		t.Fatalf("want first error in stderr, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "second error message") {
+		t.Fatalf("want second error in stderr, got: %s", stderr)
+	}
+}
+
+// E10: Diff input contains an empty errors array — impact proceeds normally.
+func TestE10_EmptyErrorsArrayProceeds(t *testing.T) {
+	specDir := setupTestSpec(t)
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatal(err)
@@ -313,70 +910,18 @@ func TestFR8_ImpactCommand_EmptyErrorsArrayProceeds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Create a diff with empty errors array — should proceed normally.
-	diffJSON := `{"changes": [], "errors": []}`
 	diffFile := filepath.Join(t.TempDir(), "empty_errors.json")
-	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+	if err := os.WriteFile(diffFile, []byte(`{"changes": [], "errors": []}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
 	if err != nil {
-		t.Fatalf("expected no error with empty errors array, got: %v", err)
+		t.Fatalf("want no error with an empty errors array, got: %v", err)
 	}
-
 	var report impact.ImpactReport
 	if err := json.Unmarshal([]byte(out), &report); err != nil {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
-	}
-}
-
-func TestFR8_ParseDiffJSON_ExtractsErrors(t *testing.T) {
-	input := `{
-		"changes": [
-			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"}
-		],
-		"errors": [
-			{"type": "incomplete_change", "message": "something broken", "path": "module/1/meta", "related": ["module/1/component/1"]}
-		]
-	}`
-
-	changes, diffErrors, err := parseDiffJSON([]byte(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(changes) != 1 {
-		t.Fatalf("want 1 change, got %d", len(changes))
-	}
-	if len(diffErrors) != 1 {
-		t.Fatalf("want 1 error, got %d", len(diffErrors))
-	}
-	if diffErrors[0].Type != "incomplete_change" {
-		t.Errorf("want error type incomplete_change, got %s", diffErrors[0].Type)
-	}
-	if diffErrors[0].Message != "something broken" {
-		t.Errorf("want error message 'something broken', got %s", diffErrors[0].Message)
-	}
-}
-
-func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
-	input := `{
-		"changes": [
-			{"path": "module/1/component/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"}
-		]
-	}`
-
-	changes, diffErrors, err := parseDiffJSON([]byte(input))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if len(changes) != 1 {
-		t.Fatalf("want 1 change, got %d", len(changes))
-	}
-	if len(diffErrors) != 0 {
-		t.Fatalf("want 0 errors when field absent, got %d", len(diffErrors))
 	}
 }
 
@@ -460,17 +1005,14 @@ func TestFR7_ImpactCommand_PopulatesDepSpecNodeIDs(t *testing.T) {
 	diffFile := filepath.Join(diffDir, "diff.json")
 	writeTestFile(t, diffDir, "diff.json", diffJSON)
 
-	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: alphaCompID, BeadID: "bead-alpha", BeadType: "feature", Module: "alpha", Component: "AlphaComp", ContentFile: "spec/alpha/arch_alpha.md", SpecHash: "aaa", BeadStatus: "open"},
-		{SpecNodeID: betaCompID, BeadID: "bead-beta", BeadType: "feature", Module: "beta", Component: "BetaComp", ContentFile: "spec/beta/arch_beta.md", SpecHash: "bbb", BeadStatus: "open"},
+	writeTestJournal(t, specDir, []string{
+		fmt.Sprintf(`{"event":"added","eid":"e1","node":"%s","name":"AlphaComp","node_type":"component","module":"alpha","before":null,"after":"aaa","git_head":"g1","proposal":"p1"}`, alphaCompID),
+		`{"event":"task_created","for":"e1","task_id":"bead-alpha"}`,
+		fmt.Sprintf(`{"event":"added","eid":"e2","node":"%s","name":"BetaComp","node_type":"component","module":"beta","before":null,"after":"bbb","git_head":"g1","proposal":"p1"}`, betaCompID),
+		`{"event":"task_created","for":"e2","task_id":"bead-beta"}`,
 	})
 
-	// Use an empty-bead stub so enrichment leaves the hand-set BeadStatus
-	// values alone; otherwise the real br DB would overwrite them.
-	beadsFile := writeEmptyBeadsFile(t)
-
-	// Run impact.
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -562,13 +1104,14 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	diffFile := filepath.Join(diffDir, "diff.json")
 	writeTestFile(t, diffDir, "diff.json", diffJSON)
 
-	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: baseID, BeadID: "bead-base", BeadType: "feature", Module: "mod", Component: "Base", ContentFile: "spec/mod/arch_base.md", SpecHash: "aaa", BeadStatus: "open"},
-		{SpecNodeID: userID, BeadID: "bead-user", BeadType: "feature", Module: "mod", Component: "User", ContentFile: "spec/mod/arch_user.md", SpecHash: "bbb", BeadStatus: "open"},
+	writeTestJournal(t, specDir, []string{
+		fmt.Sprintf(`{"event":"added","eid":"e1","node":"%s","name":"Base","node_type":"component","module":"mod","before":null,"after":"aaa","git_head":"g1","proposal":"p1"}`, baseID),
+		`{"event":"task_created","for":"e1","task_id":"bead-base"}`,
+		fmt.Sprintf(`{"event":"added","eid":"e2","node":"%s","name":"User","node_type":"component","module":"mod","before":null,"after":"bbb","git_head":"g1","proposal":"p1"}`, userID),
+		`{"event":"task_created","for":"e2","task_id":"bead-user"}`,
 	})
 
-	beadsFile := writeEmptyBeadsFile(t)
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("impact: %v", err)
 	}
@@ -591,299 +1134,254 @@ func TestFR7_ImpactCommand_UsesEdgePopulatesDepSpecNodeIDs(t *testing.T) {
 	t.Fatal("create action for User component with OldBeadID=bead-user not found")
 }
 
-// writeEmptyBeadsFile writes an empty tracker-list JSON to a temp file so
-// tests that hand-set BeadStatus on mapping records can opt out of
-// enrichment without leaking the real tracker DB into the run.
-func writeEmptyBeadsFile(t *testing.T) string {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, "beads.json")
-	if err := os.WriteFile(path, []byte(`{"issues":[]}`), 0o644); err != nil {
-		t.Fatal(err)
+func TestFR4_ParseDiffJSON(t *testing.T) {
+	input := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"},
+			{"path": "module/1/test_section/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"},
+			{"path": "module/1/component/2", "type": "removed", "impact": "arch_impl", "module": "alpha", "old_hash": "ddd"}
+		]
+	}`
+
+	changes, _, err := parseDiffJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
-	return path
+
+	if len(changes) != 3 {
+		t.Fatalf("want 3 changes, got %d", len(changes))
+	}
+
+	if changes[0].Type != merkle.Modified {
+		t.Errorf("change 0: want Modified, got %v", changes[0].Type)
+	}
+	if changes[0].Impact != merkle.ArchImpl {
+		t.Errorf("change 0: want ArchImpl, got %v", changes[0].Impact)
+	}
+	if changes[0].Module != "alpha" {
+		t.Errorf("change 0: want module alpha, got %s", changes[0].Module)
+	}
+	if changes[1].Type != merkle.Added {
+		t.Errorf("change 1: want Added, got %v", changes[1].Type)
+	}
+	if changes[2].Type != merkle.Removed {
+		t.Errorf("change 2: want Removed, got %v", changes[2].Type)
+	}
 }
 
-// TestEnrichRecordsWithBeadStatus verifies the helper copies live bead
-// statuses onto mapping records by joining on SpecNodeID. The third record
-// has no matching bead and must keep its empty BeadStatus — the cleanup
-// gate at action_classifier.go defaults closed for safety.
-func TestEnrichRecordsWithBeadStatus(t *testing.T) {
+func TestFR4_ParseDiffJSON_InvalidType(t *testing.T) {
+	input := `{"changes": [{"path": "x", "type": "bogus", "impact": "impl_only", "module": "m"}]}`
+	_, _, err := parseDiffJSON([]byte(input))
+	if err == nil || !strings.Contains(err.Error(), "unknown change type") {
+		t.Fatalf("want error about unknown change type, got %v", err)
+	}
+}
+
+func TestFR4_ParseDiffJSON_InvalidImpact(t *testing.T) {
+	input := `{"changes": [{"path": "x", "type": "added", "impact": "bogus", "module": "m"}]}`
+	_, _, err := parseDiffJSON([]byte(input))
+	if err == nil || !strings.Contains(err.Error(), "unknown impact level") {
+		t.Fatalf("want error about unknown impact level, got %v", err)
+	}
+}
+
+func TestFR8_ParseDiffJSON_ExtractsErrors(t *testing.T) {
+	input := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "modified", "impact": "arch_impl", "module": "alpha", "old_hash": "aaa", "new_hash": "bbb"}
+		],
+		"errors": [
+			{"type": "incomplete_change", "message": "something broken", "path": "module/1/meta", "related": ["module/1/component/1"]}
+		]
+	}`
+
+	changes, diffErrors, err := parseDiffJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("want 1 change, got %d", len(changes))
+	}
+	if len(diffErrors) != 1 {
+		t.Fatalf("want 1 error, got %d", len(diffErrors))
+	}
+	if diffErrors[0].Type != "incomplete_change" {
+		t.Errorf("want error type incomplete_change, got %s", diffErrors[0].Type)
+	}
+	if diffErrors[0].Message != "something broken" {
+		t.Errorf("want error message 'something broken', got %s", diffErrors[0].Message)
+	}
+}
+
+func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
+	input := `{
+		"changes": [
+			{"path": "module/1/component/1", "type": "added", "impact": "impl_only", "module": "alpha", "new_hash": "ccc"}
+		]
+	}`
+
+	changes, diffErrors, err := parseDiffJSON([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(changes) != 1 {
+		t.Fatalf("want 1 change, got %d", len(changes))
+	}
+	if len(diffErrors) != 0 {
+		t.Fatalf("want 0 errors when field absent, got %d", len(diffErrors))
+	}
+}
+
+// TestPairingsFromFold verifies the journal-fold adapter: node entries copy
+// straight across by identity hash; proposal-epic entries (no Source.Node)
+// are dropped since they never match a diff change; and removed entries —
+// tombstone biographies of already-ingested removals, with no live TaskID —
+// are dropped too, so a node re-added under its old identity hash cannot be
+// matched against its own tombstone.
+func TestPairingsFromFold(t *testing.T) {
+	fold := mapping.Fold{Entries: []mapping.FoldEntry{
+		{
+			Key:    "aaaaaaaaaaaa",
+			TaskID: "task-1",
+			Source: mapping.Event{Node: "aaaaaaaaaaaa", Name: "Comp1", NodeType: "component", Module: "m"},
+		},
+		{
+			Key:    "2026-04-18-proposal",
+			TaskID: "epic-1",
+			Source: mapping.Event{Proposal: "2026-04-18-proposal"},
+		},
+		{
+			Key:     "bbbbbbbbbbbb",
+			Removed: true,
+			Source:  mapping.Event{Node: "bbbbbbbbbbbb", Name: "Comp2", NodeType: "component", Module: "m"},
+		},
+	}}
+
+	got := pairingsFromFold(fold)
+	if len(got) != 1 {
+		t.Fatalf("want 1 pairing (proposal entry and tombstone dropped), got %d: %+v", len(got), got)
+	}
+	if got[0].SpecNodeID != "aaaaaaaaaaaa" || got[0].TaskID != "task-1" || got[0].NodeType != "component" || got[0].Module != "m" || got[0].Name != "Comp1" {
+		t.Errorf("unexpected pairing: %+v", got[0])
+	}
+}
+
+// TestFR_RemovedThenReAddedNodeIsNotATombstoneMatch is the regression test
+// for the tombstone-fold-entry bug: a node removed from the spec and later
+// re-added under the same name — the same identity hash, since the hash is
+// hash(module, kind, name) — must classify as a fresh create. It must not
+// match the journal's biography of the old removal as if it were a live
+// pairing, which would misreport the create as a modification and emit a
+// spurious obsolete of nothing.
+func TestFR_RemovedThenReAddedNodeIsNotATombstoneMatch(t *testing.T) {
+	specDir := t.TempDir()
+	modID := schema.IdentityHash("module", "m")
+	cID := schema.IdentityHash("m", "component", "C")
+
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-project",
+		"modules": [{"id": "`+modID+`", "name": "m", "path": "m"}]
+	}`)
+	mDir := filepath.Join(specDir, "m")
+	if err := os.MkdirAll(mDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, mDir, "module.json", `{"name": "m", "components": []}`)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// Re-add C under its old name — same identity hash as the removed node.
+	writeTestFile(t, mDir, "module.json", `{
+		"name": "m",
+		"components": [{"id": "`+cID+`", "name": "C", "content": "arch_c.md"}]
+	}`)
+	writeTestFile(t, mDir, "arch_c.md", "# C\n")
+
+	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+	diffFile := filepath.Join(t.TempDir(), "diff.json")
+	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Journal: C was added and tracked by spex-001, then removed with no
+	// cleanup receipt — the tombstone biography of an already-ingested
+	// removal that spex map context still answers for.
+	writeTestJournal(t, specDir, []string{
+		fmt.Sprintf(`{"event":"added","eid":"E1","node":"%s","name":"C","node_type":"component","module":"m","before":null,"after":"h1","git_head":"headsha1","proposal":"p1"}`, cID),
+		`{"event":"task_created","for":"E1","task_id":"spex-001"}`,
+		fmt.Sprintf(`{"event":"removed","eid":"E2","node":"%s","name":"C","node_type":"component","module":"m","before":"h1","after":null,"git_head":"headsha2","proposal":"p1"}`, cID),
+	})
+
+	out, err := runSpex(t, "impact", "--diff", diffFile, "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("impact: %v", err)
+	}
+
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+
+	if len(report.Obsoletes) != 0 {
+		t.Fatalf("want no obsoletes for a tombstone match, got %+v", report.Obsoletes)
+	}
+	if len(report.Creates) != 1 {
+		t.Fatalf("want 1 create, got %d: %+v", len(report.Creates), report.Creates)
+	}
+	if want := "New spec node: m/C"; report.Creates[0].Reason != want {
+		t.Errorf("want reason %q, got %q", want, report.Creates[0].Reason)
+	}
+	if report.Creates[0].OldBeadID != "" {
+		t.Errorf("want no old_bead_id, got %q", report.Creates[0].OldBeadID)
+	}
+	if report.Summary.CreateCount != 1 || report.Summary.ObsoleteCount != 0 {
+		t.Errorf("want create_count 1, obsolete_count 0, got %+v", report.Summary)
+	}
+}
+
+// TestEnrichPairingsWithBeadStatus verifies the helper copies live bead
+// statuses onto journal pairings by joining on SpecNodeID. The third pairing
+// has no matching bead and must keep its empty BeadStatus — the cleanup gate
+// at action_classifier.go defaults closed for safety.
+func TestEnrichPairingsWithBeadStatus(t *testing.T) {
 	beads := []impact.BeadSpec{
 		{ID: "bead-1", Status: "closed", SpecNodeID: "aaaaaaaaaaaa", Labels: []string{"spex:aaaaaaaaaaaa"}},
 		{ID: "bead-2", Status: "open", SpecNodeID: "bbbbbbbbbbbb", Labels: []string{"spex:bbbbbbbbbbbb"}},
 	}
-	records := []mapping.Record{
-		{ID: 10, BeadID: "bead-1", SpecNodeID: "aaaaaaaaaaaa"},
-		{ID: 11, BeadID: "bead-2", SpecNodeID: "bbbbbbbbbbbb"},
-		{ID: 12, BeadID: "bead-3", SpecNodeID: "cccccccccccc"},
+	pairings := []impact.Pairing{
+		{SpecNodeID: "aaaaaaaaaaaa", TaskID: "task-1"},
+		{SpecNodeID: "bbbbbbbbbbbb", TaskID: "task-2"},
+		{SpecNodeID: "cccccccccccc", TaskID: "task-3"},
 	}
 
-	out := enrichRecordsWithBeadStatus(beads, records)
+	out := enrichPairingsWithBeadStatus(beads, pairings)
 
 	want := map[string]string{
 		"aaaaaaaaaaaa": "closed",
 		"bbbbbbbbbbbb": "open",
 		"cccccccccccc": "",
 	}
-	for _, r := range out {
-		if r.BeadStatus != want[r.SpecNodeID] {
-			t.Errorf("record %s: want BeadStatus %q, got %q", r.SpecNodeID, want[r.SpecNodeID], r.BeadStatus)
+	for _, p := range out {
+		if p.BeadStatus != want[p.SpecNodeID] {
+			t.Errorf("pairing %s: want BeadStatus %q, got %q", p.SpecNodeID, want[p.SpecNodeID], p.BeadStatus)
 		}
 	}
 }
 
-// TestEnrichRecordsWithBeadStatus_EmptyInput verifies zero-record input is
+// TestEnrichPairingsWithBeadStatus_EmptyInput verifies nil pairing input is
 // returned untouched.
-func TestEnrichRecordsWithBeadStatus_EmptyInput(t *testing.T) {
-	out := enrichRecordsWithBeadStatus(nil, nil)
+func TestEnrichPairingsWithBeadStatus_EmptyInput(t *testing.T) {
+	out := enrichPairingsWithBeadStatus(nil, nil)
 	if out != nil {
 		t.Errorf("want nil slice, got %v", out)
-	}
-}
-
-// TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate verifies that --beads
-// is wired through ImpactCommand: a removed spec node whose mapping record
-// names a closed bead must produce a cleanup-create action. Without --beads,
-// BeadStatus stays empty and only the obsolete action is emitted (the cleanup
-// gate at action_classifier.go defaults closed for safety).
-func TestFR4_ImpactCommand_BeadsFileTriggersCleanupCreate(t *testing.T) {
-	dir := t.TempDir()
-	specDir := filepath.Join(dir, "spec")
-
-	modID := schema.IdentityHash("module", "alpha")
-	keepID := schema.IdentityHash("alpha", "component", "Keep")
-	dropID := schema.IdentityHash("alpha", "component", "Drop")
-	keepTestID := schema.IdentityHash("alpha", "test_section", "KeepTest")
-	dropTestID := schema.IdentityHash("alpha", "test_section", "DropTest")
-
-	if err := os.MkdirAll(specDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, specDir, "project.json", `{
-		"name": "test-project",
-		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
-	}`)
-
-	alphaDir := filepath.Join(specDir, "alpha")
-	if err := os.MkdirAll(alphaDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, alphaDir, "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"},
-			{"id": "`+dropID+`", "name": "Drop", "content": "arch_drop.md"}
-		],
-		"test_sections": [
-			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]},
-			{"id": "`+dropTestID+`", "name": "DropTest", "content": "test_drop.md", "describes": ["`+dropID+`"]}
-		]
-	}`)
-	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep\n")
-	writeTestFile(t, alphaDir, "arch_drop.md", "# Drop\n")
-	writeTestFile(t, alphaDir, "test_keep.md", "# Keep test\n")
-	writeTestFile(t, alphaDir, "test_drop.md", "# Drop test\n")
-
-	tree, err := merkle.BuildTree(specDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
-	// Remove Drop from the spec by rewriting module.json. The completeness
-	// checker requires every still-present component's content leaf to change
-	// when the module meta hash changes — touch arch_keep.md to satisfy it.
-	writeTestFile(t, alphaDir, "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"}
-		],
-		"test_sections": [
-			{"id": "`+keepTestID+`", "name": "KeepTest", "content": "test_keep.md", "describes": ["`+keepID+`"]}
-		]
-	}`)
-	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep CHANGED\n")
-	if err := os.Remove(filepath.Join(alphaDir, "arch_drop.md")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(filepath.Join(alphaDir, "test_drop.md")); err != nil {
-		t.Fatal(err)
-	}
-
-	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("diff: %v", err)
-	}
-	diffFile := filepath.Join(t.TempDir(), "diff.json")
-	if err := os.WriteFile(diffFile, []byte(diffJSON), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: keepID, BeadID: "bead-keep", BeadType: "feature", Module: "alpha", Component: "Keep", ContentFile: "spec/alpha/arch_keep.md", SpecHash: "k"},
-		{SpecNodeID: dropID, BeadID: "bead-drop", BeadType: "feature", Module: "alpha", Component: "Drop", ContentFile: "spec/alpha/arch_drop.md", SpecHash: "d"},
-	})
-
-	// Tracker output: bead-drop is closed, so the obsolete must be paired
-	// with a cleanup create.
-	beadsFile := filepath.Join(t.TempDir(), "beads.json")
-	if err := os.WriteFile(beadsFile, []byte(`{"issues":[
-		{"id":"bead-keep","status":"open","labels":["spex:`+keepID+`"]},
-		{"id":"bead-drop","status":"closed","labels":["spex:`+dropID+`"]}
-	]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", beadsFile)
-	if err != nil {
-		t.Fatalf("impact: %v", err)
-	}
-
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
-	}
-
-	var foundCleanup bool
-	for _, c := range report.Creates {
-		if c.OldBeadID == "bead-drop" && strings.Contains(c.Reason, "Code cleanup") {
-			foundCleanup = true
-			break
-		}
-	}
-	if !foundCleanup {
-		t.Fatalf("want cleanup create action for bead-drop; creates=%+v", report.Creates)
-	}
-}
-
-// TestFR4_ImpactCommand_NoBeadsFlagSkipsCleanup verifies the safety default:
-// without --beads the cleanup gate stays closed even when removed nodes have
-// matching mapping records, because BeadStatus is never populated.
-func TestFR4_ImpactCommand_NoBeadsFlagSkipsCleanup(t *testing.T) {
-	dir := t.TempDir()
-	specDir := filepath.Join(dir, "spec")
-
-	modID := schema.IdentityHash("module", "alpha")
-	keepID := schema.IdentityHash("alpha", "component", "Keep")
-	dropID := schema.IdentityHash("alpha", "component", "Drop")
-
-	if err := os.MkdirAll(specDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, specDir, "project.json", `{
-		"name": "test-project",
-		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
-	}`)
-
-	alphaDir := filepath.Join(specDir, "alpha")
-	if err := os.MkdirAll(alphaDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	writeTestFile(t, alphaDir, "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"},
-			{"id": "`+dropID+`", "name": "Drop", "content": "arch_drop.md"}
-		]
-	}`)
-	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep\n")
-	writeTestFile(t, alphaDir, "arch_drop.md", "# Drop\n")
-
-	tree, err := merkle.BuildTree(specDir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
-
-	writeTestFile(t, alphaDir, "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+keepID+`", "name": "Keep", "content": "arch_keep.md"}
-		]
-	}`)
-	writeTestFile(t, alphaDir, "arch_keep.md", "# Keep CHANGED\n")
-	if err := os.Remove(filepath.Join(alphaDir, "arch_drop.md")); err != nil {
-		t.Fatal(err)
-	}
-
-	diffJSON, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("diff: %v", err)
-	}
-	diffFile := filepath.Join(t.TempDir(), "diff.json")
-	if err := os.WriteFile(diffFile, []byte(diffJSON), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	mapPath := setupMappingFile(t, dir, []mapping.Record{
-		{SpecNodeID: dropID, BeadID: "bead-drop", BeadType: "feature", Module: "alpha", Component: "Drop", ContentFile: "spec/alpha/arch_drop.md", SpecHash: "d"},
-	})
-
-	out, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	if err != nil {
-		t.Fatalf("impact: %v", err)
-	}
-
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
-	}
-
-	for _, c := range report.Creates {
-		if strings.Contains(c.Reason, "Code cleanup") {
-			t.Fatalf("cleanup create emitted without --beads; creates=%+v", report.Creates)
-		}
-	}
-}
-
-// TestFR4_ImpactCommand_BeadsFileMissingErrors verifies a non-existent
-// --beads path is surfaced as an error rather than silently skipped.
-func TestFR4_ImpactCommand_BeadsFileMissingErrors(t *testing.T) {
-	specDir, diffFile := setupImpactDiffFile(t)
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
-
-	_, err := runSpex(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir, "--beads", "/nonexistent/beads.json")
-	if err == nil {
-		t.Fatal("want error for missing --beads file, got nil")
-	}
-	if !strings.Contains(err.Error(), "read beads") {
-		t.Fatalf("want error mentioning 'read beads', got %v", err)
-	}
-}
-
-func TestFR8_ImpactCommand_MultipleErrorsAllPrinted(t *testing.T) {
-	specDir := setupTestSpec(t)
-	mapPath := setupMappingFile(t, filepath.Dir(specDir), nil)
-
-	diffJSON := `{
-		"changes": [],
-		"errors": [
-			{"type": "incomplete_change", "message": "first error message", "path": "module/1/meta", "related": []},
-			{"type": "incomplete_change", "message": "second error message", "path": "module/2/meta", "related": []}
-		]
-	}`
-
-	diffFile := filepath.Join(t.TempDir(), "multi_errors.json")
-	if err := os.WriteFile(diffFile, []byte(diffJSON), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, stderr, err := runSpexWithStderr(t, "impact", "--diff", diffFile, "--map", mapPath, "--spec-dir", specDir)
-	if err == nil {
-		t.Fatal("expected error when diff contains errors, got nil")
-	}
-	if !strings.Contains(err.Error(), "diff contains 2 error(s)") {
-		t.Fatalf("expected error about 2 diff errors, got: %v", err)
-	}
-	if !strings.Contains(stderr, "first error message") {
-		t.Fatalf("expected first error in stderr, got: %s", stderr)
-	}
-	if !strings.Contains(stderr, "second error message") {
-		t.Fatalf("expected second error in stderr, got: %s", stderr)
 	}
 }

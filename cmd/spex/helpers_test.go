@@ -53,6 +53,10 @@ func writeTestFile(t *testing.T, dir, name, content string) {
 }
 
 // captureStdout runs fn with stdout redirected and returns what was written.
+// The read side drains concurrently with fn: an OS pipe's buffer is finite
+// (typically 64KB), and a large write (e.g. a big JSON report) would
+// otherwise block forever waiting for a reader that only starts after fn
+// returns.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 	old := os.Stdout
@@ -62,16 +66,18 @@ func captureStdout(t *testing.T, fn func()) string {
 	}
 	os.Stdout = w
 
+	outCh := make(chan string, 1)
+	go func() {
+		out, _ := io.ReadAll(r)
+		outCh <- string(out)
+	}()
+
 	fn()
 
 	w.Close()
 	os.Stdout = old
 
-	out, err := io.ReadAll(r)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(out)
+	return <-outCh
 }
 
 // runSpex executes the full spex CLI with the given args, capturing stdout.

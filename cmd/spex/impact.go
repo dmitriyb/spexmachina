@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/impact"
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -21,7 +20,6 @@ func newImpactCmd() *cobra.Command {
 		RunE:  runImpactE,
 	}
 	cmd.Flags().String("diff", "", "path to diff JSON file (default: stdin)")
-	cmd.Flags().String("map", ".bead-map.json", "path to bead mapping file")
 	cmd.Flags().String("beads", "", "path to tracker list JSON (e.g. `br list --json` output) — supplies live bead status for cleanup-bead classification")
 	// --bead-cli is retained for backward compatibility during the
 	// decouple-spex-from-br transition (proposal 2026-04-18). It is currently
@@ -39,9 +37,10 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 
 	diffFlag, _ := cmd.Flags().GetString("diff")
 
-	// Read diff JSON input.
+	// Read diff JSON input. "-" is the explicit stdin convention; an empty
+	// flag also means stdin (the flag was not supplied).
 	var diffData []byte
-	if diffFlag != "" {
+	if diffFlag != "" && diffFlag != "-" {
 		diffData, err = os.ReadFile(diffFlag)
 		if err != nil {
 			return fmt.Errorf("impact: read diff: %w", err)
@@ -58,6 +57,8 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: %w", err)
 	}
 
+	// Refuse an incomplete or inconsistent spec edit before any of
+	// matching, classification or report generation runs.
 	if len(diffErrors) > 0 {
 		for _, de := range diffErrors {
 			fmt.Fprintf(cmd.ErrOrStderr(), "error: [%s] %s\n", de.Type, de.Message)
@@ -65,18 +66,13 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: diff contains %d error(s), refusing to proceed", len(diffErrors))
 	}
 
-	// Resolve map path relative to spec dir if not absolute.
-	mapFlag, _ := cmd.Flags().GetString("map")
-	mapPath := mapFlag
-	if !filepath.IsAbs(mapPath) {
-		mapPath = filepath.Join(filepath.Dir(specDir), mapPath)
-	}
-
-	store := mapping.NewFileStore(mapPath)
-	records, err := store.List()
+	// The task journal is the sole source of node-to-task pairings. There is
+	// no separate --map flag: its location is a function of --spec-dir alone.
+	fold, err := mapping.NewMappingStore(specDir).List()
 	if err != nil {
-		return fmt.Errorf("impact: read mapping records: %w", err)
+		return fmt.Errorf("impact: read journal: map: %w", err)
 	}
+	pairings := pairingsFromFold(fold)
 
 	beadsFlag, _ := cmd.Flags().GetString("beads")
 	if beadsFlag != "" {
@@ -88,7 +84,7 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("impact: %w", err)
 		}
-		records = enrichRecordsWithBeadStatus(beads, records)
+		pairings = enrichPairingsWithBeadStatus(beads, pairings)
 	}
 
 	// Spec graph is used for test_section describes-length gating inside
@@ -98,10 +94,11 @@ func runImpactE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("impact: load spec graph: %w", err)
 	}
 
-	// Changes and records both key on identity hashes; NodeMatcher joins them
-	// directly without any path-format translation. DepSpecNodeIDs is filled
-	// inline by ClassifyActions — bead-ID resolution is deferred to emit.
-	matches, unmatched, orphaned := impact.MatchNodes(changes, pairingsFromRecords(records))
+	// Changes and pairings both key on identity hashes; NodeMatcher joins
+	// them directly without any path-format translation. DepSpecNodeIDs is
+	// filled inline by ClassifyActions — bead-ID resolution is deferred to
+	// emit.
+	matches, unmatched, orphaned := impact.MatchNodes(changes, pairings)
 	actions := impact.ClassifyActions(specGraph, matches, unmatched, orphaned)
 
 	if err := impact.GenerateReport(actions, os.Stdout); err != nil {
@@ -154,50 +151,54 @@ func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, 
 	return changes, raw.Errors, nil
 }
 
-// pairingsFromRecords adapts the legacy .bead-map.json's []mapping.Record
-// into impact.Pairing, NodeMatcher's own input shape. ImpactCommand still
-// reads bead state from .bead-map.json here rather than folding
-// spec/.history.jsonl directly — that migration belongs to this command's
-// own bead.
-// TODO(bead:spexmachina-y0wc.26): fold the task journal via
-// mapping.MappingStore instead of mapping.NewFileStore and drop this
-// adapter once ImpactCommand migrates onto it.
-func pairingsFromRecords(records []mapping.Record) []impact.Pairing {
-	if records == nil {
-		return nil
-	}
-	out := make([]impact.Pairing, len(records))
-	for i, r := range records {
-		out[i] = impact.Pairing{
-			SpecNodeID: r.SpecNodeID,
-			TaskID:     r.BeadID,
-			NodeType:   r.NodeType,
-			Module:     r.Module,
-			Name:       r.Component,
-			BeadStatus: r.BeadStatus,
+// pairingsFromFold adapts the task journal's folded linkage
+// (mapping.Fold, from spec/.history.jsonl) into impact.Pairing,
+// NodeMatcher's own input shape. Both key on identity hashes, so this is a
+// field copy — no rekeying. Proposal-epic entries (keyed by a proposal slug
+// rather than a spec node identity hash) carry no Source.Node and are
+// dropped: they never match a diff change, which always keys on a node's
+// identity hash. Removed entries are tombstones — biographies of
+// already-ingested removals with no live TaskID — and are dropped too: if
+// the same identity hash reappears in a diff (a component re-added under
+// its old name), a tombstone must not be mistaken for a live pairing.
+func pairingsFromFold(fold mapping.Fold) []impact.Pairing {
+	var out []impact.Pairing
+	for _, e := range fold.Entries {
+		if e.Source.Node == "" || e.Removed {
+			continue
 		}
+		out = append(out, impact.Pairing{
+			SpecNodeID: e.Key,
+			TaskID:     e.TaskID,
+			NodeType:   e.Source.NodeType,
+			Module:     e.Source.Module,
+			Name:       e.Source.Name,
+		})
 	}
 	return out
 }
 
-// enrichRecordsWithBeadStatus populates each mapping record's BeadStatus
-// field by matching on SpecNodeID. Records without a matching bead are
-// returned unchanged so the cleanup-bead gate at action_classifier.go
-// defaults closed (no cleanup actions emitted) for safety.
-func enrichRecordsWithBeadStatus(beads []impact.BeadSpec, records []mapping.Record) []mapping.Record {
-	if records == nil {
+// enrichPairingsWithBeadStatus populates each pairing's BeadStatus field by
+// matching on SpecNodeID. When the same node key appears on more than one
+// bead, the last one in the input wins — decodeBeads/ReadBeadsBytes preserve
+// input order, so the join is deterministic. Pairings without a matching
+// bead are returned unchanged so the cleanup-bead gate at
+// action_classifier.go defaults closed (no cleanup actions emitted) for
+// safety.
+func enrichPairingsWithBeadStatus(beads []impact.BeadSpec, pairings []impact.Pairing) []impact.Pairing {
+	if pairings == nil {
 		return nil
 	}
 	statusByNodeID := make(map[string]string, len(beads))
 	for _, b := range beads {
 		statusByNodeID[b.SpecNodeID] = b.Status
 	}
-	enriched := make([]mapping.Record, len(records))
-	for i, r := range records {
-		if status, ok := statusByNodeID[r.SpecNodeID]; ok {
-			r.BeadStatus = status
+	enriched := make([]impact.Pairing, len(pairings))
+	for i, p := range pairings {
+		if status, ok := statusByNodeID[p.SpecNodeID]; ok {
+			p.BeadStatus = status
 		}
-		enriched[i] = r
+		enriched[i] = p
 	}
 	return enriched
 }
@@ -228,66 +229,4 @@ func parseImpactLevel(s string) (merkle.ImpactLevel, error) {
 	default:
 		return 0, fmt.Errorf("unknown impact level: %q", s)
 	}
-}
-
-// moduleJSON is the subset of module.json we need for building NodeMaps.
-type moduleJSON struct {
-	Components []struct {
-		ID      string `json:"id"`
-		Name    string `json:"name"`
-		Content string `json:"content"`
-	} `json:"components"`
-}
-
-// projectJSON is the subset of project.json we need for module name→path mapping.
-type projectJSON struct {
-	Modules []struct {
-		Name string `json:"name"`
-		Path string `json:"path"`
-	} `json:"modules"`
-}
-
-// ContentMap maps node keys (e.g., "component/1") to content file paths
-// (e.g., "spec/render/arch_spec_reader.md") within a module.
-type ContentMap map[string]string
-
-// buildNodeMaps reads project.json and each module's module.json to build
-// a map of module name → NodeMap for resolving spec-ID keys to human-readable names.
-// Also returns a map of module name → ContentMap for resolving content file paths.
-func buildNodeMaps(specDir string) (map[string]impact.NodeMap, map[string]ContentMap, error) {
-	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
-	if err != nil {
-		return nil, nil, fmt.Errorf("read project.json: %w", err)
-	}
-	var proj projectJSON
-	if err := json.Unmarshal(projData, &proj); err != nil {
-		return nil, nil, fmt.Errorf("parse project.json: %w", err)
-	}
-
-	modules := map[string]impact.NodeMap{}
-	contents := map[string]ContentMap{}
-	for _, m := range proj.Modules {
-		modPath := filepath.Join(specDir, m.Path, "module.json")
-		data, err := os.ReadFile(modPath)
-		if err != nil {
-			continue // module directory may not have module.json yet
-		}
-		var mod moduleJSON
-		if err := json.Unmarshal(data, &mod); err != nil {
-			return nil, nil, fmt.Errorf("parse %s: %w", modPath, err)
-		}
-
-		nm := impact.NodeMap{}
-		cm := ContentMap{}
-		for _, c := range mod.Components {
-			if c.Content != "" && c.ID != "" {
-				nm[c.ID] = c.Name
-				cm[c.ID] = filepath.Join("spec", m.Path, c.Content)
-			}
-		}
-
-		modules[m.Name] = nm
-		contents[m.Name] = cm
-	}
-	return modules, contents, nil
 }
