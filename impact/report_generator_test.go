@@ -6,7 +6,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
@@ -27,9 +26,6 @@ func mkChange(path, typ, oldHash, newHash, nodeType, module string) merkle.Class
 		Module: module,
 	}
 }
-
-// Ensure mapping import is used (referenced in S10 test).
-var _ = mapping.Record{}
 
 // --- S7: ReportGenerator produces valid JSON with correct structure ---
 
@@ -318,8 +314,8 @@ func TestFR4_S10_FullPipeline(t *testing.T) {
 		[]Match{
 			{
 				Change: mkChange("module/1/component/1", "modified", "a", "b", "component", "alpha"),
-				Records: []mapping.Record{
-					{ID: 1, SpecNodeID: "module/1/component/1", BeadID: "bead-1", Module: "alpha", Component: "Comp1"},
+				Records: []Pairing{
+					{SpecNodeID: "module/1/component/1", TaskID: "bead-1", Module: "alpha", Name: "Comp1"},
 				},
 			},
 		},
