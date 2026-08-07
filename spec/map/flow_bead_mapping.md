@@ -30,7 +30,7 @@ digraph bead_mapping {
     "receipts.json"       -> "spex ingest"         [label="paired to its op by op_id"];
     "spex ingest"         -> ".history.jsonl"      [label="append change events + receipts"];
     "205e67ca4aad"        -> ".history.jsonl"      [label="parse and fold, read only"];
-    "08909d62930b"        -> "205e67ca4aad"        [label="spex map get / list / context"];
+    "08909d62930b"        -> "205e67ca4aad"        [label="spex map get / list"];
 }
 ```
 
@@ -49,18 +49,21 @@ Skills read the settled result through [[08909d62930b|MapCommand]] (`spex map ge
 1. `spex impact` classifies the added node as a **create** action.
 2. `spex emit` labels the op `spex:<spec_node_id>` — the hash comes off the op itself; nothing is
    read, reserved or counted.
-3. The adapter runs `br create --labels spex:<spec_node_id> --type <bead_type> …` and records the
-   new task id in its receipt. The label is applied at create time, not by a follow-up update.
+3. The adapter runs `br create --labels spex:<spec_node_id> --type <br-type> …`, where `<br-type>`
+   is `spec_node_kind` mapped through the adapter's fixed table (`component` → `feature`,
+   everything else task-shaped → `task`, `proposal_epic` → `epic`), and records the new task id in
+   its receipt. The label is applied at create time, not by a follow-up update.
 4. `spex ingest` appends the change event (`added`, with the op's node identity, leaf hashes and
    the changeset's `git_head`) and a `task_created` receipt pairing the event to the task id.
 5. The snapshot is written in the same baselining step, only when the adapter reported
    `status = complete`; the journal append and the snapshot describe the same point-in-time state.
 
-If the adapter reports `was_existing = true` (an open task already carried the label), ingest
-appends no duplicate: the event id derives from `(git_head, op_id)`, so re-processing the same op
-finds its event already present and skips it. That same derivation is the recovery path for an
-adapter that created the task last run and died before writing its receipt — the re-run's receipt
-pairs with the already-present event.
+If the adapter reports `was_existing = true` (an open task already carried the label), the event id
+— derived from `(git_head, op_id)` — decides which of two things happens. Usually the journal
+already holds the pairing from the run that made it, the derived eid matches, and ingest appends no
+duplicate. The recovery case is the opposite: an adapter that created the task last run and died
+before writing its receipt leaves no pairing in the journal at all, so this run's event and receipt
+are genuinely new — they land now, pairing the event with the task the dead run already made.
 
 ### Update (modified spec node)
 
@@ -100,7 +103,7 @@ the slug — slug-shaped ids are already the epic convention.
 
 ## Invariants
 
-Enforced by the Reconciler before the baselining commit, and re-checked on every subsequent run:
+Enforced by ingest before the baselining commit, and re-checked on every subsequent run:
 
 - Every ok create pairs exactly one `task_created` receipt with exactly one change event — cleanup
   creates excepted, as their referent is a prior `removed` event, and epic creates excepted, as
@@ -109,8 +112,8 @@ Enforced by the Reconciler before the baselining commit, and re-checked on every
   nothing is refused before it is appended.
 - Re-running ingest on the same changeset+receipts pair appends nothing: event ids derive from
   `(git_head, op_id)` and receipts pair by the same key.
-- The snapshot is saved only when receipts are complete, so the journal and the snapshot always
-  describe the same point-in-time spec state.
+- The snapshot is saved only when receipts are complete — SnapshotSaver's gate, not Reconciler's —
+  so the journal and the snapshot always describe the same point-in-time spec state.
 - Every appended line validates against the journal-line schema before the write happens.
 
 A failure at any step leaves the on-disk journal untouched — the append is a whole-file
@@ -139,7 +142,8 @@ write-and-rename, so a refused batch changes nothing.
 ### journal line shapes (spec/.history.jsonl)
 
 - Change event: `event` (`added`|`removed`|`modified`), `eid`, `node`, `name`, `node_type`,
-  `module`, `before`, `after`, `git_head`, `proposal`.
+  `module`, `before`, `after`, `git_head`, `proposal`, and an optional `path` — the node's
+  content-leaf path, present when the node has one.
 - Task receipt: `event` (`task_created`|`task_closed`), `for` (an `eid`) or `proposal` (a slug,
   epics only), `task_id`.
 - Refresh receipt: `event` (`refresh`), `git_head` (or recorded absence), `absorbed` (a list of
