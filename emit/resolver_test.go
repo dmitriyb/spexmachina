@@ -2,6 +2,7 @@ package emit
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -48,10 +49,22 @@ func (g *fakeSpecGraph) Paths(id string) (NodePaths, bool) {
 
 func intPtr(i int) *int { return &i }
 
-// fakeStore is an in-memory mapping.Store double for Resolver and
-// Labeler tests. GetBySpecNode, GetByProposalEpic, and GetByBead are
-// exercised; the other methods return errors so any accidental
-// dependency fails loudly.
+// fakeFold is an in-memory JournalFold double for Resolver's dep and
+// parent resolution tests: a plain key → FoldEntry lookup table, mirroring
+// the shape a real task-journal fold reduces to (one entry per node
+// identity hash or proposal-epic slug).
+type fakeFold map[string]FoldEntry
+
+func (f fakeFold) Entry(key string) (FoldEntry, bool) {
+	e, ok := f[key]
+	return e, ok
+}
+
+// fakeStore is an in-memory mapping.Store double used by builder_test.go
+// (Builder's MappingStore field still reads the legacy store pending
+// ChangesetBuilder's own migration). GetBySpecNode, GetByProposalEpic, and
+// GetByBead are exercised; the other methods return errors so any
+// accidental dependency fails loudly.
 type fakeStore struct {
 	bySpecNode map[string][]mapping.Record
 	byBead     map[string]mapping.Record
@@ -116,50 +129,51 @@ func (s *fakeStore) Replace([]mapping.Record, int) error {
 }
 
 // TestResolveDeps_ClassifiesEachShape covers the spec scenario:
-// deps [A, B, C] — A has an open mapping record, B is in-batch, C has
-// no record. Expected: ref:bead, ref:op, ref:spec_node respectively. The
-// input order is preserved for determinism.
+// deps [A, B, C] — A has an open fold pairing, B is in-batch, C has no
+// fold pairing at all (unresolvable). Expected: ref:bead, ref:op, then an
+// error naming C — v2 has no third ref shape to fall back to.
 func TestResolveDeps_ClassifiesEachShape(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["A"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "A", BeadID: "br-1", BeadStatus: "open"},
-	}
 	r := &Resolver{
-		MappingStore: store,
-		Batch:        map[string]string{"B": "op-007"},
+		Fold:  fakeFold{"A": {TaskID: "br-1"}},
+		Batch: map[string]string{"B": "op-007"},
 	}
 
-	got, err := r.ResolveDeps([]string{"A", "B", "C"})
+	_, err := r.ResolveDeps([]string{"A", "B", "C"})
+	if err == nil {
+		t.Fatal("ResolveDeps: want error naming unresolvable dep C, got nil")
+	}
+	if !strings.Contains(err.Error(), "C") {
+		t.Errorf("error must name the unresolvable dep C: %v", err)
+	}
+
+	// Drop C and confirm A and B still classify as ref:bead / ref:op with
+	// input order preserved.
+	got, err := r.ResolveDeps([]string{"A", "B"})
 	if err != nil {
 		t.Fatalf("ResolveDeps: %v", err)
 	}
-	if len(got) != 3 {
-		t.Fatalf("len(deps): want 3, got %d (%+v)", len(got), got)
+	if len(got) != 2 {
+		t.Fatalf("len(deps): want 2, got %d (%+v)", len(got), got)
 	}
-
 	if got[0].Kind != RefBead || got[0].BeadID != "br-1" {
 		t.Errorf("dep[0] (A): want ref:bead br-1, got %+v", got[0])
 	}
 	if got[1].Kind != RefOp || got[1].OpID != "op-007" {
 		t.Errorf("dep[1] (B): want ref:op op-007, got %+v", got[1])
 	}
-	if got[2].Kind != RefSpecNode || got[2].SpecNodeID != "C" {
-		t.Errorf("dep[2] (C): want ref:spec_node C, got %+v", got[2])
-	}
 }
 
-// TestResolveDeps_DropsClosedBeadDeps verifies that a dep whose mapping
-// record is closed is omitted entirely — the work is satisfied so no edge
-// should be emitted.
-func TestResolveDeps_DropsClosedBeadDeps(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["closed-dep"] = []mapping.Record{
-		{ID: 5, SpecNodeID: "closed-dep", BeadID: "br-old", BeadStatus: "closed"},
+// TestResolveDeps_DropsClosedFoldEntry verifies that a dep whose fold
+// pairing shows Removed (the node is gone, its task closed with it) is
+// omitted entirely — the work is satisfied so no edge should be emitted.
+func TestResolveDeps_DropsClosedFoldEntry(t *testing.T) {
+	r := &Resolver{
+		Fold: fakeFold{
+			"closed-dep": {Removed: true},
+			"open-dep":   {TaskID: "br-keep"},
+		},
+		Batch: map[string]string{},
 	}
-	store.bySpecNode["open-dep"] = []mapping.Record{
-		{ID: 6, SpecNodeID: "open-dep", BeadID: "br-keep", BeadStatus: "open"},
-	}
-	r := &Resolver{MappingStore: store, Batch: map[string]string{}}
 
 	got, err := r.ResolveDeps([]string{"closed-dep", "open-dep"})
 	if err != nil {
@@ -173,18 +187,14 @@ func TestResolveDeps_DropsClosedBeadDeps(t *testing.T) {
 	}
 }
 
-// TestResolveDeps_BatchBeatsMappingRecord covers the edge case where a
-// dep spec_node_id is BOTH in r.Batch and has an open mapping record.
-// Per the impl spec, ref:op wins — the in-batch op is the authoritative
-// latest work and the mapping record may be stale mid-batch.
-func TestResolveDeps_BatchBeatsMappingRecord(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["both"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "both", BeadID: "br-stale", BeadStatus: "open"},
-	}
+// TestResolveDeps_BatchBeatsFoldEntry covers the edge case where a dep
+// spec_node_id is BOTH in r.Batch and has an open fold entry. Per the
+// spec, ref:op wins — the in-batch op is the authoritative latest work
+// and the fold can be stale before the batch lands.
+func TestResolveDeps_BatchBeatsFoldEntry(t *testing.T) {
 	r := &Resolver{
-		MappingStore: store,
-		Batch:        map[string]string{"both": "op-9"},
+		Fold:  fakeFold{"both": {TaskID: "br-stale"}},
+		Batch: map[string]string{"both": "op-9"},
 	}
 
 	got, err := r.ResolveDeps([]string{"both"})
@@ -196,70 +206,38 @@ func TestResolveDeps_BatchBeatsMappingRecord(t *testing.T) {
 	}
 }
 
-// TestResolveDeps_EmptyStatusTreatedAsOpen covers the conservative rule
-// from the impl spec: a record with empty BeadStatus is treated as open
-// rather than silently dropped.
-func TestResolveDeps_EmptyStatusTreatedAsOpen(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["x"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "x", BeadID: "br-x", BeadStatus: ""},
-	}
-	r := &Resolver{MappingStore: store, Batch: map[string]string{}}
+// TestResolveDeps_UnresolvableDepIsError covers the v2 contract directly:
+// a dep neither in-batch nor in the fold is a hard emit-time error naming
+// the spec_node_id, not a deferred ref:spec_node shape.
+func TestResolveDeps_UnresolvableDepIsError(t *testing.T) {
+	r := &Resolver{Fold: fakeFold{}, Batch: map[string]string{}}
 
-	got, err := r.ResolveDeps([]string{"x"})
-	if err != nil {
-		t.Fatalf("ResolveDeps: %v", err)
+	_, err := r.ResolveDeps([]string{"ghost"})
+	if err == nil {
+		t.Fatal("ResolveDeps: want error for unresolvable dep, got nil")
 	}
-	if len(got) != 1 || got[0].Kind != RefBead || got[0].BeadID != "br-x" {
-		t.Fatalf("empty status must be treated as open: got %+v", got)
-	}
-}
-
-// TestResolveDeps_HighestOpenRecordWins covers pickOpenRecord's tiebreak:
-// when two open records exist for one spec_node_id, the highest-ID record's
-// bead is chosen — the latest re-implementation supersedes earlier records.
-func TestResolveDeps_HighestOpenRecordWins(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["dup"] = []mapping.Record{
-		{ID: 3, SpecNodeID: "dup", BeadID: "br-newer", BeadStatus: "open"},
-		{ID: 2, SpecNodeID: "dup", BeadID: "br-older", BeadStatus: "open"},
-		{ID: 9, SpecNodeID: "dup", BeadID: "br-closed", BeadStatus: "closed"},
-	}
-	r := &Resolver{MappingStore: store, Batch: map[string]string{}}
-
-	got, err := r.ResolveDeps([]string{"dup"})
-	if err != nil {
-		t.Fatalf("ResolveDeps: %v", err)
-	}
-	if len(got) != 1 || got[0].Kind != RefBead || got[0].BeadID != "br-newer" {
-		t.Fatalf("want ref:bead br-newer (highest open ID wins, closed ignored), got %+v", got)
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error must name the unresolvable spec_node_id: %v", err)
 	}
 }
 
 // TestResolveDeps_PreservesOrder asserts the spec's determinism property:
 // output order matches input order regardless of classification path.
 func TestResolveDeps_PreservesOrder(t *testing.T) {
-	store := newFakeStore()
-	store.bySpecNode["beta"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "beta", BeadID: "br-b", BeadStatus: "open"},
-	}
 	r := &Resolver{
-		MappingStore: store,
-		Batch:        map[string]string{"alpha": "op-1"},
+		Fold:  fakeFold{"beta": {TaskID: "br-b"}},
+		Batch: map[string]string{"alpha": "op-1"},
 	}
 
-	got, err := r.ResolveDeps([]string{"gamma", "alpha", "beta"})
+	got, err := r.ResolveDeps([]string{"alpha", "beta"})
 	if err != nil {
 		t.Fatalf("ResolveDeps: %v", err)
 	}
-	if got[0].Kind != RefSpecNode || got[0].SpecNodeID != "gamma" {
-		t.Errorf("dep[0]: want ref:spec_node gamma, got %+v", got[0])
+	if got[0].Kind != RefOp || got[0].OpID != "op-1" {
+		t.Errorf("dep[0]: want ref:op op-1, got %+v", got[0])
 	}
-	if got[1].Kind != RefOp || got[1].OpID != "op-1" {
-		t.Errorf("dep[1]: want ref:op op-1, got %+v", got[1])
-	}
-	if got[2].Kind != RefBead || got[2].BeadID != "br-b" {
-		t.Errorf("dep[2]: want ref:bead br-b, got %+v", got[2])
+	if got[1].Kind != RefBead || got[1].BeadID != "br-b" {
+		t.Errorf("dep[1]: want ref:bead br-b, got %+v", got[1])
 	}
 }
 
@@ -359,9 +337,8 @@ func TestPriority_FallbackWhenProjectReqHasNilPriority(t *testing.T) {
 // no existing epic in the mapping store; ChangesetBuilder injected the
 // synthetic "proposal/<ref>/epic" key into r.Batch pointing at the epic op_id.
 func TestResolveParent_NewEpicInBatch(t *testing.T) {
-	store := newFakeStore()
 	r := &Resolver{
-		MappingStore: store,
+		Fold: fakeFold{},
 		Batch: map[string]string{
 			"proposal/2026-04-foo/epic": "op-001",
 		},
@@ -376,21 +353,16 @@ func TestResolveParent_NewEpicInBatch(t *testing.T) {
 	}
 }
 
-// TestResolveParent_ExistingEpicInMappingStore covers the re-run path:
-// the mapping store already has an open epic record for the proposal, so
-// the parent ref points at that bead instead of an in-batch op.
-func TestResolveParent_ExistingEpicInMappingStore(t *testing.T) {
-	store := newFakeStore()
-	store.epic["2026-04-foo"] = mapping.Record{
-		ID:         42,
-		SpecNodeID: "2026-04-foo",
-		BeadID:     "spexmachina-existing-epic",
-		NodeType:   "proposal",
-		BeadStatus: "open",
-	}
+// TestResolveParent_ExistingEpicInFold covers the re-run path: the
+// journal fold already carries an epic entry, keyed by the proposal slug,
+// for this proposal, so the parent ref points at that bead instead of an
+// in-batch op.
+func TestResolveParent_ExistingEpicInFold(t *testing.T) {
 	r := &Resolver{
-		MappingStore: store,
-		Batch:        map[string]string{},
+		Fold: fakeFold{
+			"2026-04-foo": {TaskID: "spexmachina-existing-epic"},
+		},
+		Batch: map[string]string{},
 	}
 
 	got, err := r.ResolveParent("2026-04-foo")
@@ -406,10 +378,9 @@ func TestResolveParent_ExistingEpicInMappingStore(t *testing.T) {
 // neither an existing epic nor an in-batch synthetic key exists, so the
 // caller has misused the Resolver. Surface a clear error.
 func TestResolveParent_ErrorWhenNeither(t *testing.T) {
-	store := newFakeStore()
 	r := &Resolver{
-		MappingStore: store,
-		Batch:        map[string]string{},
+		Fold:  fakeFold{},
+		Batch: map[string]string{},
 	}
 
 	_, err := r.ResolveParent("missing-proposal")
@@ -420,18 +391,13 @@ func TestResolveParent_ErrorWhenNeither(t *testing.T) {
 
 // TestResolveParent_ExistingEpicBeatsBatchKey covers the re-run case:
 // even if a synthetic batch key is present (defensive builder behavior),
-// an existing epic record takes precedence so the run does not double-create.
+// an existing epic fold entry takes precedence so the run does not
+// double-create.
 func TestResolveParent_ExistingEpicBeatsBatchKey(t *testing.T) {
-	store := newFakeStore()
-	store.epic["proposal-X"] = mapping.Record{
-		ID:         5,
-		SpecNodeID: "proposal-X",
-		BeadID:     "br-existing",
-		NodeType:   "proposal",
-		BeadStatus: "open",
-	}
 	r := &Resolver{
-		MappingStore: store,
+		Fold: fakeFold{
+			"proposal-X": {TaskID: "br-existing"},
+		},
 		Batch: map[string]string{
 			"proposal/proposal-X/epic": "op-001",
 		},
@@ -442,6 +408,30 @@ func TestResolveParent_ExistingEpicBeatsBatchKey(t *testing.T) {
 		t.Fatalf("ResolveParent: %v", err)
 	}
 	if got.Kind != RefBead || got.BeadID != "br-existing" {
-		t.Errorf("parent: want ref:bead br-existing (mapping store wins), got %+v", got)
+		t.Errorf("parent: want ref:bead br-existing (fold wins), got %+v", got)
+	}
+}
+
+// TestResolveParent_RemovedFoldEntryFallsThroughToBatch covers a fold
+// entry whose epic task closed with no live successor (Removed == true,
+// carrying no TaskID) — the same convention ResolveDeps applies. Removed
+// must not be treated as "has an epic task"; the in-batch synthetic key
+// for a freshly created epic wins instead.
+func TestResolveParent_RemovedFoldEntryFallsThroughToBatch(t *testing.T) {
+	r := &Resolver{
+		Fold: fakeFold{
+			"prop": {Removed: true},
+		},
+		Batch: map[string]string{
+			"proposal/prop/epic": "op-001",
+		},
+	}
+
+	got, err := r.ResolveParent("prop")
+	if err != nil {
+		t.Fatalf("ResolveParent: %v", err)
+	}
+	if got.Kind != RefOp || got.OpID != "op-001" {
+		t.Errorf("parent: want ref:op op-001 (Removed fold entry ignored), got %+v", got)
 	}
 }

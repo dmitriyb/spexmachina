@@ -1,11 +1,8 @@
 package emit
 
 import (
-	"errors"
 	"fmt"
 	"math"
-
-	"github.com/dmitriyb/spexmachina/mapping"
 )
 
 // SpecGraph supplies Resolver's reads of the
@@ -49,13 +46,35 @@ type ProjectRequirement struct {
 	Priority *int
 }
 
-// Resolver classifies create-action deps into the three Ref shapes and
-// computes per-action priority via the implements → preq_id → project
-// requirement chain. Callers populate Batch (via Sorter) before calling
-// any method.
+// FoldEntry is the slice of one task-journal fold entry Resolver needs:
+// the key's current task id, and whether the key's last journal state is
+// a removal. Per spec/map/flow_bead_mapping.md, a task is only ever closed
+// with no live successor when its node is removed (a modify pair's closed
+// predecessor is superseded by the pair's new task, which is what the fold
+// reports); so Removed is Resolver's whole notion of "closed" — the
+// dependency is satisfied because the node it named is gone. A key with no
+// entry at all has never had a task-bearing event.
+type FoldEntry struct {
+	TaskID  string
+	Removed bool
+}
+
+// JournalFold is Resolver's read surface onto the task journal's fold:
+// point lookup by key, either a node's identity hash or a proposal-epic
+// slug — whichever a create action's dep or the run's proposal ref names.
+// ChangesetBuilder builds one from mapping.MappingStore's fold; tests
+// substitute a fake.
+type JournalFold interface {
+	Entry(key string) (FoldEntry, bool)
+}
+
+// Resolver classifies create-action deps into the two Ref shapes v2
+// supports and computes per-action priority via the implements → preq_id →
+// project requirement chain. Callers populate Batch (via Sorter) and Fold
+// (from the task journal) before calling any method.
 type Resolver struct {
-	SpecGraph    SpecGraph
-	MappingStore mapping.Store
+	SpecGraph SpecGraph
+	Fold      JournalFold
 	// Batch maps spec_node_id → op_id, populated by Sorter so Resolver can
 	// classify in-batch deps as ref:op. ChangesetBuilder additionally
 	// injects synthetic "proposal/<ref>/epic" keys for new-epic parent
@@ -63,19 +82,24 @@ type Resolver struct {
 	Batch map[string]string
 }
 
-// ResolveDeps classifies each dep spec_node_id into one of three Ref shapes
-// in priority order:
+// ResolveDeps classifies each dep spec_node_id into one of the two Ref
+// shapes v2 supports, in priority order:
 //
-//  1. ref:op       — another create op in this batch.
-//  2. ref:bead     — an open mapping-store record exists.
-//  3. ref:spec_node — fallback; adapter resolves at exec time.
+//  1. ref:op   — another create op in this batch.
+//  2. ref:bead — the fold's pairing for the spec_node_id, if its task is
+//     not closed (Removed == false).
 //
-// Closed-bead deps are dropped (the work is satisfied). Iteration order
-// is preserved: the output array index for each surviving dep matches its
-// input index modulo dropped entries. This is the structural fix for the
-// broken-dep-graph bug — same-batch deps become ref:op so the adapter
-// forward-resolves them at exec time rather than pre-resolving stale bead
-// IDs at emit time.
+// A dep whose fold pairing is closed (Removed == true) is dropped — the
+// work is satisfied, no edge needed. A dep that is neither in-batch nor in
+// the fold is an emit error naming the spec_node_id: version 2 dropped the
+// ref:spec_node adapter-time fallback, since the adapter no longer reads
+// any spex-owned file to resolve it later.
+//
+// Iteration order is preserved: the output array index for each surviving
+// dep matches its input index modulo dropped entries. This is the
+// structural fix for the broken-dep-graph bug — same-batch deps become
+// ref:op so the adapter forward-resolves them at exec time rather than
+// pre-resolving stale bead IDs at emit time.
 func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
 	out := make([]Ref, 0, len(depSpecNodeIDs))
 	for _, id := range depSpecNodeIDs {
@@ -83,61 +107,38 @@ func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
 			out = append(out, Ref{Kind: RefOp, OpID: opID})
 			continue
 		}
-		recs, err := r.MappingStore.GetBySpecNode(id)
-		if err == nil {
-			chosen, anyOpen := pickOpenRecord(recs)
-			if anyOpen {
-				out = append(out, Ref{Kind: RefBead, BeadID: chosen.BeadID})
-				continue
-			}
-			// All records closed — work is satisfied, drop the dep.
+		entry, ok := r.Fold.Entry(id)
+		if !ok {
+			return nil, fmt.Errorf("emit: resolver: unresolvable dep %q: neither an in-batch create nor a task journal pairing", id)
+		}
+		if entry.Removed {
+			// The node is gone and its task closed with it — the work is
+			// satisfied, drop the dep.
 			continue
 		}
-		if !errors.Is(err, mapping.ErrRecordNotFound) {
-			return nil, fmt.Errorf("emit: resolver: lookup %q: %w", id, err)
-		}
-		out = append(out, Ref{Kind: RefSpecNode, SpecNodeID: id})
+		out = append(out, Ref{Kind: RefBead, BeadID: entry.TaskID})
 	}
 	return out, nil
-}
-
-// pickOpenRecord returns the highest-ID record whose BeadStatus is not
-// "closed". Empty status counts as open per the impl spec — conservative
-// default attaches an edge rather than silently dropping. Highest-ID
-// wins so the latest re-implementation supersedes earlier records.
-func pickOpenRecord(recs []mapping.Record) (mapping.Record, bool) {
-	var chosen mapping.Record
-	var found bool
-	for _, r := range recs {
-		if r.BeadStatus == "closed" {
-			continue
-		}
-		if !found || r.ID > chosen.ID {
-			chosen = r
-			found = true
-		}
-	}
-	return chosen, found
 }
 
 // ResolveParent returns the proposal-epic Ref every non-epic create op
 // parents under. Two cases:
 //
-//   - Existing epic: a re-run case. The mapping store already holds an open
-//     proposal record for this proposal ref; return ref:bead.
-//   - New epic: the first emit for this proposal. ChangesetBuilder has
-//     injected a synthetic "proposal/<ref>/epic" key into r.Batch pointing
-//     at the epic op_id; return ref:op.
+//   - Existing epic: a re-run case. The journal fold already carries a
+//     live (not Removed) epic entry, keyed by the proposal slug, for this
+//     proposal ref; return ref:bead.
+//   - New epic: the first emit for this proposal, or a fold entry whose
+//     epic task closed with no live successor (Removed == true, so it
+//     carries no TaskID — same convention ResolveDeps applies). ChangesetBuilder
+//     has injected a synthetic "proposal/<ref>/epic" key into r.Batch
+//     pointing at the epic op_id; return ref:op.
 //
-// An existing epic always wins over an in-batch synthetic key — defense
-// against double-create on a re-run that misclassified the epic as new.
+// An existing, live epic always wins over an in-batch synthetic key —
+// defense against double-create on a re-run that misclassified the epic
+// as new.
 func (r *Resolver) ResolveParent(proposal string) (Ref, error) {
-	rec, err := r.MappingStore.GetByProposalEpic(proposal)
-	if err == nil {
-		return Ref{Kind: RefBead, BeadID: rec.BeadID}, nil
-	}
-	if !errors.Is(err, mapping.ErrRecordNotFound) {
-		return Ref{}, fmt.Errorf("emit: resolver: proposal epic lookup %q: %w", proposal, err)
+	if entry, ok := r.Fold.Entry(proposal); ok && !entry.Removed {
+		return Ref{Kind: RefBead, BeadID: entry.TaskID}, nil
 	}
 	epicKey := "proposal/" + proposal + "/epic"
 	if opID, ok := r.Batch[epicKey]; ok {
