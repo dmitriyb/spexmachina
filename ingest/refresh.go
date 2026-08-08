@@ -261,15 +261,21 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
-			eid := deriveRefreshEID(c.Key, nil, strPtr(c.NewHash))
-			if seenEIDs[eid] {
-				// A byte-identical (node, before, after) triple already
-				// has a journal line — e.g. a partial normal-mode run
-				// already journaled this add before refresh re-diffed
-				// the same drift. Constructing a second one would
-				// duplicate that eid.
+			if last, hasLast := lastChangeByNode[c.Key]; hasLast && last.Event == "added" {
+				// Already the journal's current state for this node —
+				// its latest change event is itself an addition, from a
+				// prior (possibly partial) run. Only the snapshot is
+				// stale. Checked off the node's latest change event
+				// rather than a raw eid-seen check: deriveRefreshEID is
+				// a pure function of (node, before, after), so a node
+				// re-added with byte-identical content after a removal
+				// derives the same eid as its first addition — that is
+				// genuinely new information (the node came back) and
+				// must still be constructed, just under a disambiguated
+				// eid (see uniqueRefreshEID below).
 				continue
 			}
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, nil, strPtr(c.NewHash)))
 			md := liveIndex[c.Key]
 			ev := mapping.Event{
 				Event: "added", EID: eid,
@@ -279,7 +285,6 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 			}
 			batch = append(batch, ev)
 			absorbed = append(absorbed, ev.EID)
-			seenEIDs[eid] = true
 
 		case merkle.Modified:
 			// meta leaves (the project.json / module.json envelope)
@@ -310,13 +315,14 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 				// Already the journal's current state for this node —
 				// its latest change event is itself a removal, from a
 				// prior (possibly partial) run. Only the snapshot is
-				// stale; constructing a second removed event would
-				// duplicate it under a different eid. Checked off the
-				// node's latest change event rather than the fold's
-				// Removed flag: fold() never updates a requirement/api
-				// entry on an "added" event (they get no task_created to
-				// carry the update), so after a re-add that flag would
-				// stay stuck on the earlier removal.
+				// stale; there is no new information here, so construct
+				// nothing rather than manufacture a redundant line under
+				// a disambiguated eid. Checked off the node's latest
+				// change event rather than the fold's Removed flag:
+				// fold() never updates a requirement/api entry on an
+				// "added" event (they get no task_created to carry the
+				// update), so after a re-add that flag would stay stuck
+				// on the earlier removal.
 				continue
 			}
 			entry, hasFold := foldByKey[c.Key]
@@ -326,8 +332,19 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 			} else if hasLast {
 				name, path = last.Name, last.Path
 			}
+			// Composes with the lastChangeByNode skip above rather than
+			// replacing it: that check only catches *consecutive*
+			// removals of the same node. A node restored verbatim
+			// between two refresh-absorbed removals derives the same
+			// eid both times too — same node, same before-hash, no
+			// after-hash — but its latest event is "added" in between,
+			// so the check above does not fire. Disambiguate instead of
+			// dropping: the removal is still real information the
+			// journal must carry, just under an eid distinct from the
+			// earlier occurrence's.
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, strPtr(c.OldHash), nil))
 			ev := mapping.Event{
-				Event: "removed", EID: deriveRefreshEID(c.Key, strPtr(c.OldHash), nil),
+				Event: "removed", EID: eid,
 				Node: c.Key, Name: name, NodeType: c.NodeType, Module: c.Module,
 				Before: strPtr(c.OldHash), After: nil,
 				GitHead: gitHead, Path: path,
@@ -407,6 +424,25 @@ func derefOrEmpty(s *string) string {
 		return ""
 	}
 	return *s
+}
+
+// uniqueRefreshEID returns base, or — if base already names a journal
+// line (this run's or an earlier one's, per seenEIDs) — a suffixed
+// variant that does not. deriveRefreshEID is a pure function of (node,
+// before, after), so an added or removed event can legitimately recur
+// with the exact same derived id across non-adjacent add/remove cycles
+// once the drift's content repeats verbatim; the caller has already
+// decided the event carries real information (via lastChangeByNode) and
+// must not be dropped, so collision is resolved by disambiguating the id
+// rather than skipping construction. Registers the chosen id in
+// seenEIDs before returning it.
+func uniqueRefreshEID(seenEIDs map[string]bool, base string) string {
+	eid := base
+	for n := 2; seenEIDs[eid]; n++ {
+		eid = fmt.Sprintf("%s#%d", base, n)
+	}
+	seenEIDs[eid] = true
+	return eid
 }
 
 // buildLiveIndex reads the current spec directory's project.json and

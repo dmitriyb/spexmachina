@@ -594,13 +594,18 @@ func TestRefresh_RerunIsIdempotent(t *testing.T) {
 // the node is back — the fourth step would then be dropped with zero
 // change events, an "amnesiac" absorption arch_refresh.md rules out. The
 // check must instead read the node's latest change event
-// (lastChangeByNode), which self-corrects on the re-add. Each cycle uses
-// a distinct title so the derived eids never collide with an earlier
-// cycle's — collision-avoidance for same-content repeats is a separate
-// concern (see TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID).
+// (lastChangeByNode), which self-corrects on the re-add.
+//
+// Run twice: once with a distinct title per cycle (so the derived eids
+// never collide across cycles) and once with the title held constant
+// (so the re-add and the second removal each derive the exact same eid
+// as their first occurrence). Both must still append one change event
+// per step — deriveRefreshEID colliding with an earlier occurrence is a
+// reason to disambiguate the id, never a reason to drop the event (see
+// TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID for the
+// one case — a Modified re-diff of an already-recorded transition —
+// where dropping is correct instead).
 func TestREQ_e68653819f38_Refresh_ReAddedThenRemovedRequirementProducesChangeEvent(t *testing.T) {
-	fx := setupRefreshFixture(t)
-
 	projectJSON := func(title string) string {
 		if title == "" {
 			return `{
@@ -623,36 +628,72 @@ func TestREQ_e68653819f38_Refresh_ReAddedThenRemovedRequirementProducesChangeEve
 		}`
 	}
 
-	steps := []struct {
+	cases := []struct {
 		name  string
-		title string // empty means the requirement is absent this step
-		event string
+		steps []struct {
+			name  string
+			title string // empty means the requirement is absent this step
+			event string
+		}
 	}{
-		{"add", "Fixture requirement", "added"},
-		{"remove", "", "removed"},
-		{"re-add", "Fixture requirement, returned", "added"},
-		{"remove again", "", "removed"},
+		{
+			name: "varying title",
+			steps: []struct {
+				name  string
+				title string
+				event string
+			}{
+				{"add", "Fixture requirement", "added"},
+				{"remove", "", "removed"},
+				{"re-add", "Fixture requirement, returned", "added"},
+				{"remove again", "", "removed"},
+			},
+		},
+		{
+			name: "constant title",
+			steps: []struct {
+				name  string
+				title string
+				event string
+			}{
+				{"add", "Fixture requirement", "added"},
+				{"remove", "", "removed"},
+				{"re-add (identical title)", "Fixture requirement", "added"},
+				{"remove again", "", "removed"},
+			},
+		},
 	}
 
-	for _, step := range steps {
-		writeFile(t, fx.specDir, "project.json", projectJSON(step.title))
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fx := setupRefreshFixture(t)
+			seenEIDs := map[string]int{}
 
-		summary, err := fx.handler().Apply(fx.specDir)
-		if err != nil {
-			t.Fatalf("%s: Apply: %v", step.name, err)
-		}
-		if summary.EventsAppended != 1 {
-			t.Fatalf("%s: events_appended: want 1, got %d", step.name, summary.EventsAppended)
-		}
-		if !summary.SnapshotSaved {
-			t.Errorf("%s: want snapshot_saved=true, got %+v", step.name, summary)
-		}
+			for _, step := range tc.steps {
+				writeFile(t, fx.specDir, "project.json", projectJSON(step.title))
 
-		events := readJournal(t, fx.specDir)
-		ev, ok := eventForNode(events, "aabbccddee09")
-		if !ok || ev.Event != step.event || ev.NodeType != "requirement" {
-			t.Fatalf("%s: want a %s requirement event, got %+v (ok=%v)", step.name, step.event, ev, ok)
-		}
+				summary, err := fx.handler().Apply(fx.specDir)
+				if err != nil {
+					t.Fatalf("%s: Apply: %v", step.name, err)
+				}
+				if summary.EventsAppended != 1 {
+					t.Fatalf("%s: events_appended: want 1, got %d", step.name, summary.EventsAppended)
+				}
+				if !summary.SnapshotSaved {
+					t.Errorf("%s: want snapshot_saved=true, got %+v", step.name, summary)
+				}
+
+				events := readJournal(t, fx.specDir)
+				ev, ok := eventForNode(events, "aabbccddee09")
+				if !ok || ev.Event != step.event || ev.NodeType != "requirement" {
+					t.Fatalf("%s: want a %s requirement event, got %+v (ok=%v)", step.name, step.event, ev, ok)
+				}
+				seenEIDs[ev.EID]++
+				if seenEIDs[ev.EID] > 1 {
+					t.Errorf("%s: eid %s reused from an earlier step; every eid must be unique", step.name, ev.EID)
+				}
+			}
+		})
 	}
 }
 
@@ -703,6 +744,107 @@ func TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID(t *testing.
 	}
 
 	events := readJournal(t, fx.specDir)
+	eidCounts := map[string]int{}
+	for _, ev := range events {
+		if ev.EID != "" {
+			eidCounts[ev.EID]++
+		}
+	}
+	for eid, count := range eidCounts {
+		if count > 1 {
+			t.Errorf("eid %s appears %d times in the journal; every eid must be unique", eid, count)
+		}
+	}
+
+	assertSnapshotIsCurrent(t, fx)
+}
+
+// TestREQ_e68653819f38_Refresh_RemovedReAddedRemovedComponentEIDsUnique
+// covers the collision the lastChangeByNode "currently removed" skip does
+// not catch: a component removed by refresh, restored verbatim by the
+// normal pipeline, then removed by refresh again. deriveRefreshEID depends
+// only on (node, before, after); the content is byte-identical both times,
+// so the second removed event's derived eid collides with the first's. The
+// intervening re-add (its own op-based eid, journaled by the normal
+// pipeline, not refresh) moves the node's latest event to "added", so the
+// lastChangeByNode skip does not fire and a removed event is constructed
+// both times — it must get its own eid rather than duplicate the first's.
+func TestREQ_e68653819f38_Refresh_RemovedReAddedRemovedComponentEIDsUnique(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	closeTask(t, fx.specDir, "head0:op-handler", "br-handler")
+
+	betaDir := filepath.Join(fx.specDir, "beta")
+	handlerContent := "# Handler\n"
+
+	removeHandler := func() {
+		writeFile(t, betaDir, "module.json", `{
+			"name": "beta",
+			"data_flows": [
+				{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+			]
+		}`)
+		if err := os.Remove(filepath.Join(betaDir, "arch_handler.md")); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	removeHandler()
+	summary1, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("run1 Apply: %v", err)
+	}
+	if summary1.EventsAppended != 1 {
+		t.Fatalf("run1 events_appended: want 1, got %d", summary1.EventsAppended)
+	}
+	removedEv1, ok := eventForNode(readJournal(t, fx.specDir), fx.handlerID)
+	if !ok || removedEv1.Event != "removed" {
+		t.Fatalf("run1: want a removed handler event, got %+v (ok=%v)", removedEv1, ok)
+	}
+
+	// Simulate the normal pipeline restoring the identical component:
+	// added + task_created + task_closed, snapshot baselined — the state
+	// thread 5's report reproduces this against.
+	writeFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"components": [
+			{"id": "`+fx.handlerID+`", "name": "Handler", "content": "arch_handler.md"}
+		],
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+		]
+	}`)
+	writeFile(t, betaDir, "arch_handler.md", handlerContent)
+	handlerHash, err := merkle.HashFile(filepath.Join(betaDir, "arch_handler.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedJournal(t, fx.specDir,
+		mapping.Event{Event: "added", EID: "head9:op-handler2", Node: fx.handlerID, Name: "Handler", NodeType: "component", Module: "aabbccddee20", After: strPtr(handlerHash), GitHead: "head9", Path: "spec/beta/arch_handler.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-handler2", For: "head9:op-handler2"},
+		mapping.Event{Event: "task_closed", TaskID: "br-handler2", For: "head9:op-handler2"},
+	)
+	if err := writeAtomic(fx.snapPath, buildFixtureTree(t, fx.specDir), refreshClock()); err != nil {
+		t.Fatalf("baseline snapshot after re-add: %v", err)
+	}
+
+	removeHandler()
+	summary2, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("run2 Apply: %v", err)
+	}
+	if summary2.EventsAppended != 1 {
+		t.Fatalf("run2 events_appended: want 1, got %d", summary2.EventsAppended)
+	}
+
+	events := readJournal(t, fx.specDir)
+	removedEv2, ok := eventForNode(events, fx.handlerID)
+	if !ok || removedEv2.Event != "removed" {
+		t.Fatalf("run2: want a removed handler event, got %+v (ok=%v)", removedEv2, ok)
+	}
+	if removedEv2.EID == removedEv1.EID {
+		t.Errorf("run2's removed eid must differ from run1's, got byte-identical %q", removedEv2.EID)
+	}
+
 	eidCounts := map[string]int{}
 	for _, ev := range events {
 		if ev.EID != "" {
