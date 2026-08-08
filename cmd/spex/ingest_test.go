@@ -48,7 +48,6 @@ func runIngest(t *testing.T, args ...string) (string, string, int, error) {
 // ingestFixture is the on-disk state required to drive `spex ingest`.
 type ingestFixture struct {
 	specDir       string
-	mapPath       string
 	changesetPath string
 	receiptsPath  string
 	snapshotPath  string
@@ -86,11 +85,6 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
 
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	if err := os.WriteFile(mapPath, []byte(`{"next_id":1,"records":[]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	cs := emit.Changeset{
 		Version:  emit.ChangesetVersion,
 		GitHead:  "deadbeefcafe",
@@ -122,7 +116,6 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 
 	return ingestFixture{
 		specDir:       specDir,
-		mapPath:       mapPath,
 		changesetPath: csPath,
 		receiptsPath:  rcPath,
 		snapshotPath:  filepath.Join(specDir, ".snapshot.json"),
@@ -150,7 +143,6 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err != nil {
 		t.Fatalf("ingest failed: %v\nstderr: %s", err, stderr)
@@ -180,9 +172,7 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 		t.Errorf("snapshot file missing after complete run: %v", err)
 	}
 
-	// Normal-mode ingest writes the task journal (spec/.history.jsonl),
-	// not .bead-map.json — see TODO(bead:spexmachina-y0wc.35) in
-	// newIngestCmd.
+	// Normal-mode ingest writes the task journal (spec/.history.jsonl).
 	entry, err := mapping.NewMappingStore(f.specDir).Get(f.compID)
 	if err != nil {
 		t.Fatalf("expected journal entry for %s after ingest: %v", f.compID, err)
@@ -204,7 +194,6 @@ func TestIngestCommand_PartialRun_SkipsSnapshot(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err != nil {
 		t.Fatalf("ingest failed: %v\nstderr: %s", err, stderr)
@@ -239,7 +228,6 @@ func TestIngestCommand_MissingChangesetFlag_Exits1(t *testing.T) {
 	_, stderr, exit, err := runIngest(t,
 		"--spec-dir", f.specDir,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for missing --changeset, got nil")
@@ -258,7 +246,6 @@ func TestIngestCommand_MissingReceiptsFlag_Exits1(t *testing.T) {
 	_, stderr, exit, err := runIngest(t,
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for missing --receipts, got nil")
@@ -289,7 +276,6 @@ func TestIngestCommand_MismatchedOpID_Exits1(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for op_id mismatch, got nil")
@@ -316,7 +302,6 @@ func TestIngestCommand_MissingOpReceipt_Exits1(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for missing receipt, got nil")
@@ -340,7 +325,6 @@ func TestIngestCommand_MalformedReceiptsJSON_Exits1(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for malformed receipts JSON, got nil")
@@ -366,7 +350,6 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for bad changeset version, got nil")
@@ -427,7 +410,6 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err == nil {
 		t.Fatal("want error for invariant failure, got nil")
@@ -451,7 +433,6 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	); err != nil {
 		t.Fatalf("first run: %v", err)
 	}
@@ -486,7 +467,6 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 		"--spec-dir", f.specDir,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 	)
 	if err != nil {
 		t.Fatalf("second run: %v", err)
@@ -531,7 +511,6 @@ func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 	_, stderr, exit, err := runIngest(t,
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil || exit != 0 {
@@ -560,7 +539,6 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 		"--mode", "refresh",
 		"--changeset", emptyCS,
 		"--receipts", emptyRC,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil || exit != 0 {
@@ -605,6 +583,44 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 	}
 }
 
+// TestIngestCommand_RefreshMode_GitHeadStampsReceipt covers the
+// --git-head flag: refresh mode stamps it onto the closing refresh
+// receipt (and every change event in the batch); normal mode ignores
+// it entirely since the changeset already carries its own git_head.
+func TestIngestCommand_RefreshMode_GitHeadStampsReceipt(t *testing.T) {
+	f, emptyCS, emptyRC := setupRefreshedFixture(t)
+
+	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp1.md", "# Comp1 (revised)\n")
+
+	_, _, exit, err := runIngest(t,
+		"--mode", "refresh",
+		"--changeset", emptyCS,
+		"--receipts", emptyRC,
+		"--git-head", "cafef00dcafe",
+		"--spec-dir", f.specDir,
+	)
+	if err != nil || exit != 0 {
+		t.Fatalf("refresh run: exit %d err %v", exit, err)
+	}
+
+	events, err := mapping.NewMappingStore(f.specDir).Parse()
+	if err != nil {
+		t.Fatalf("parse journal: %v", err)
+	}
+	var refresh *mapping.Event
+	for i := range events {
+		if events[i].Event == "refresh" {
+			refresh = &events[i]
+		}
+	}
+	if refresh == nil {
+		t.Fatalf("want a refresh receipt, journal: %+v", events)
+	}
+	if refresh.GitHead != "cafef00dcafe" {
+		t.Errorf("refresh receipt git_head: want cafef00dcafe, got %q", refresh.GitHead)
+	}
+}
+
 // TestIngestCommand_RefreshMode_RefusalExits2 covers the exit-code
 // contract: a structural diff (added leaf) maps the RefreshRefusal to
 // exit code 2 with the entries named on the error.
@@ -635,7 +651,6 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 		"--mode", "refresh",
 		"--changeset", emptyCS,
 		"--receipts", emptyRC,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if exit != 2 {
@@ -675,7 +690,6 @@ func TestIngestCommand_RefreshMode_MissingSnapshotExits1(t *testing.T) {
 		"--mode", "refresh",
 		"--changeset", emptyCS,
 		"--receipts", emptyRC,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if exit != 1 {
@@ -696,7 +710,6 @@ func TestIngestCommand_RefreshMode_NonEmptyArtifactsExits1(t *testing.T) {
 		"--mode", "refresh",
 		"--changeset", f.changesetPath,
 		"--receipts", f.receiptsPath,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if exit != 1 {
@@ -716,7 +729,6 @@ func TestIngestCommand_UnknownModeExits1(t *testing.T) {
 		"--mode", "bogus",
 		"--changeset", emptyCS,
 		"--receipts", emptyRC,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if exit != 1 {
