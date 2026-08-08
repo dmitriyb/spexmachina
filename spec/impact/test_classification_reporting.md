@@ -4,7 +4,7 @@ Integration and acceptance tests for ActionClassifier (component 3) and ReportGe
 
 ## Setup
 
-All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched pairing repeats that hash as its node key — the join NodeMatcher already made. The fixture data represents a typical diff cycle:
+All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HUNK_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched pairing repeats that hash as its node key — the join NodeMatcher already made. The fixture data represents a typical diff cycle:
 
 **Matched entries (modified spec nodes with existing beads):**
 
@@ -22,16 +22,18 @@ matches := []Match{
     },
     {
         Change: ClassifiedChange{
-            Change: Change{Key: HASR_HASH, Type: Modified, NodeType: "component", OldHash: "ddd", NewHash: "eee"},
-            Impact: ArchImpl,
+            Change: Change{Key: HUNK_HASH, Type: Modified, NodeType: "widget", OldHash: "ddd", NewHash: "eee"},
+            Impact: ImplOnly,
             Module: "merkle",
         },
         Records: []Pairing{
-            {SpecNodeID: HASR_HASH, TaskID: "spex-003", Module: "merkle", Name: "Hasher"},
+            {SpecNodeID: HUNK_HASH, TaskID: "spex-003", Module: "merkle", Name: "Hash computation"},
         },
     },
 }
 ```
+
+The second match's `NodeType` is deliberately `"widget"` — a type absent from `beadProducingTypes` — to pin an asymmetry in `ClassifyActions`: the matched branch (this one) produces obsolete+create actions for *any* node type, while the unmatched branch below gates on `beadProducingTypes` before producing anything. A matched change bypasses the node-type gate entirely; only unmatched (added) changes are filtered by it. This is intentional — a match means NodeMatcher already joined the change to a tracked bead, so the type no longer needs re-validating — but it means classification of matched changes is not restricted to bead-producing types.
 
 **Unmatched entries (new spec nodes without pairings):**
 
@@ -68,10 +70,10 @@ Call `ClassifyActions(nil, matches, unmatched, orphaned)` — the leading argume
 
 | Type | BeadID | Module | Node | Reason |
 |------|--------|--------|------|--------|
-| create | (empty) | merkle | Hasher | Spec node modified (new): merkle/Hasher |
+| create | (empty) | merkle | Hash computation | Spec node modified (new): merkle/Hash computation |
 | create | (empty) | validator | CSCH_HASH | New spec node: validator/CSCH_HASH |
 | create | (empty) | validator | SchemaChecker | Spec node modified (new): validator/SchemaChecker |
-| obsolete | spex-003 | merkle | Hasher | Spec node modified: merkle/Hasher |
+| obsolete | spex-003 | merkle | Hash computation | Spec node modified: merkle/Hash computation |
 | obsolete | spex-010 | merkle | LegacyHasher | Spec node removed: merkle/LegacyHasher |
 | obsolete | spex-001 | validator | SchemaChecker | Spec node modified: validator/SchemaChecker |
 
