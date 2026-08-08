@@ -12,7 +12,6 @@ import (
 	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/impact"
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -38,15 +37,16 @@ func runEmit(t *testing.T, stdinData string, args ...string) (string, string, er
 // emitFixture is the on-disk state required to drive `spex emit`.
 type emitFixture struct {
 	specDir    string
-	mapPath    string
 	impactJSON string
 	compID     string
 }
 
-// setupEmitFixture writes a minimal but complete spec tree and bead-map to
-// a temp dir, plus an impact report containing a single create action for
-// a brand-new component. The fixture exercises the new-proposal path
-// (synthesized epic op), single tier-1 create, no obsoletes.
+// setupEmitFixture writes a minimal but complete spec tree and a seeded
+// spec/.history.jsonl journal to a temp dir, plus an impact report
+// containing a single create action for a brand-new component. The journal
+// carries an unrelated already-paired node so the fixture exercises a real
+// fold read without affecting the new-proposal path (synthesized epic op,
+// single tier-1 create, no obsoletes) the happy-path scenarios assert on.
 func setupEmitFixture(t *testing.T) emitFixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -54,6 +54,7 @@ func setupEmitFixture(t *testing.T) emitFixture {
 
 	modID := schema.IdentityHash("module", "alpha")
 	compID := schema.IdentityHash("alpha", "component", "Comp1")
+	otherID := schema.IdentityHash("alpha", "component", "Other")
 
 	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
 		t.Fatal(err)
@@ -72,10 +73,10 @@ func setupEmitFixture(t *testing.T) emitFixture {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
 
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	if err := os.WriteFile(mapPath, []byte(`{"next_id":1,"records":[]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	writeTestJournal(t, specDir, []string{
+		`{"event":"added","eid":"e-other","node":"` + otherID + `","name":"Other","node_type":"component","module":"alpha","before":null,"after":"h-other","git_head":"cafe0000","proposal":"earlier-proposal"}`,
+		`{"event":"task_created","for":"e-other","task_id":"spex-other"}`,
+	})
 
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
@@ -99,7 +100,6 @@ func setupEmitFixture(t *testing.T) emitFixture {
 
 	return emitFixture{
 		specDir:    specDir,
-		mapPath:    mapPath,
 		impactJSON: string(data),
 		compID:     compID,
 	}
@@ -112,7 +112,6 @@ func TestEmitCommand_HappyPath_StdinStdout(t *testing.T) {
 		f.impactJSON,
 		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -153,7 +152,6 @@ func TestEmitCommand_ImpactFlag_ReadsFile(t *testing.T) {
 		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
 		"--impact", impactPath,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -178,7 +176,6 @@ func TestEmitCommand_OutFlag_WritesFileEmptyStdout(t *testing.T) {
 		"--git-head", "deadbeefcafe",
 		"--impact", impactPath,
 		"--out", outPath,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -204,7 +201,6 @@ func TestEmitCommand_OutFlag_WritesFileEmptyStdout(t *testing.T) {
 		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
 		"--impact", impactPath,
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -219,7 +215,6 @@ func TestEmitCommand_MissingGitHead_Errors(t *testing.T) {
 	f := setupEmitFixture(t)
 	_, stderr, err := runEmit(t, f.impactJSON,
 		"--proposal", "2026-04-18-decouple-spex-from-br",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err == nil {
@@ -234,7 +229,6 @@ func TestEmitCommand_MissingProposal_Errors(t *testing.T) {
 	f := setupEmitFixture(t)
 	_, stderr, err := runEmit(t, f.impactJSON,
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err == nil {
@@ -250,7 +244,6 @@ func TestEmitCommand_MalformedImpactJSON_Errors(t *testing.T) {
 	_, _, err := runEmit(t, "{not json",
 		"--proposal", "p",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err == nil {
@@ -281,7 +274,6 @@ func TestEmitCommand_ImpactErrorsArray_RefusesToProceed(t *testing.T) {
 	_, _, err = runEmit(t, string(data),
 		"--proposal", "p",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err == nil {
@@ -310,7 +302,6 @@ func TestEmitCommand_Determinism(t *testing.T) {
 	out1, _, err := runEmit(t, f.impactJSON,
 		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -319,7 +310,6 @@ func TestEmitCommand_Determinism(t *testing.T) {
 	out2, _, err := runEmit(t, f.impactJSON,
 		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err != nil {
@@ -354,11 +344,6 @@ func TestEmitCommand_CycleInBatchDeps_Errors(t *testing.T) {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_b.md", "# B\n")
 
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	if err := os.WriteFile(mapPath, []byte(`{"next_id":1,"records":[]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			{Type: "create", Module: "alpha", Node: "A", NodeType: "component", SpecNodeID: aID, DepSpecNodeIDs: []string{bID}},
@@ -372,7 +357,6 @@ func TestEmitCommand_CycleInBatchDeps_Errors(t *testing.T) {
 	_, _, err := runEmit(t, string(data),
 		"--proposal", "p",
 		"--git-head", "deadbeefcafe",
-		"--map", mapPath,
 		"--spec-dir", specDir,
 		"--out", outPath,
 	)
@@ -392,7 +376,6 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	_, _, err := runEmit(t, f.impactJSON,
 		"--proposal", "p",
 		"--git-head", "not-a-sha",
-		"--map", f.mapPath,
 		"--spec-dir", f.specDir,
 	)
 	if err == nil {
@@ -403,43 +386,127 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	}
 }
 
-// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent is an
-// end-to-end regression test for the PR #217 closed-epic-record path: with a
-// closed NodeType=="proposal" record for the proposal slug in the map file,
-// `spex emit` still synthesizes a fresh proposal_epic op that every other
-// create parents under, rather than wiring them to the closed epic's dead
-// bead_id. It runs through the whole command (Resolver, Builder,
-// legacyMapStoreFold together) and does not by itself pin any single rule
-// inside legacyMapStoreFold.Entry — see TestLegacyMapStoreFold_Entry for
-// unit coverage of the bridge's NodeType != "proposal" filter and the other
-// three rules (highest-ID tiebreak, closed-skip, proposal-epic-first
-// lookup).
-func TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent(t *testing.T) {
-	f := setupEmitFixture(t)
-	proposal := "2026-04-18-decouple-spex-from-br"
+// TestEmitCommand_ExistingEpic_ParentsUnderExistingBead pins the journal
+// read as load-bearing: a pre-existing task_created receipt keyed by the
+// proposal slug makes Builder.hasExistingEpic true, so no proposal_epic
+// op is synthesized and the lone create parents directly under the
+// journal's bead. Mutating the wiring to discard the fold would leave
+// this test asserting a synthesized epic parent instead, and fail.
+func TestEmitCommand_ExistingEpic_ParentsUnderExistingBead(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
 
-	closedEpicMap := `{"next_id":2,"records":[{
-		"id": 1,
-		"spec_node_id": "` + proposal + `",
-		"bead_id": "br-1",
-		"bead_type": "epic",
-		"node_type": "proposal",
-		"module": "",
-		"component": "` + proposal + `",
-		"content_file": "",
-		"spec_hash": "",
-		"bead_status": "closed"
-	}]}`
-	if err := os.WriteFile(f.mapPath, []byte(closedEpicMap), 0o644); err != nil {
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"br-epic"}`,
+	})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{Type: "create", Module: "alpha", Node: "Comp1", NodeType: "component", SpecNodeID: compID, SpecHash: "h1", Reason: "New spec node: alpha/Comp1"},
+		},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{CreateCount: 1, ObsoleteCount: 0},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runEmit(t,
-		f.impactJSON,
-		"--proposal", proposal,
+	stdout, stderr, err := runEmit(t, string(data),
+		"--proposal", "2026-04-18-decouple-spex-from-br",
 		"--git-head", "deadbeefcafe",
-		"--map", f.mapPath,
-		"--spec-dir", f.specDir,
+		"--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var cs emit.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+	if len(cs.Ops) != 1 {
+		t.Fatalf("want exactly 1 op (existing epic found in journal, no synthesized proposal_epic), got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+	op := cs.Ops[0]
+	if op.SpecNodeKind == "proposal_epic" {
+		t.Fatalf("want no synthesized proposal_epic when journal already carries a live epic, got %+v", op)
+	}
+	if op.Parent == nil || op.Parent.Kind != emit.RefBead || op.Parent.BeadID != "br-epic" {
+		t.Fatalf("want parent ref:bead br-epic (from journal), got %+v", op.Parent)
+	}
+}
+
+// TestEmitCommand_OutOfBatchDep_ResolvesToRefBead pins the journal read's
+// second load-bearing role: a dep naming a spec node that is not in this
+// batch, but is paired to a live task in the journal fold, must resolve
+// to ref:bead rather than erroring or being dropped. Discarding the fold
+// would turn this dep unresolvable and fail the build outright.
+func TestEmitCommand_OutOfBatchDep_ResolvesToRefBead(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+	otherID := schema.IdentityHash("alpha", "component", "Other")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"added","eid":"e-other","node":"` + otherID + `","name":"Other","node_type":"component","module":"alpha","before":null,"after":"h-other","git_head":"cafe0000","proposal":"earlier-proposal"}`,
+		`{"event":"task_created","for":"e-other","task_id":"spex-other"}`,
+	})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:           "create",
+				Module:         "alpha",
+				Node:           "Comp1",
+				NodeType:       "component",
+				SpecNodeID:     compID,
+				SpecHash:       "h1",
+				DepSpecNodeIDs: []string{otherID},
+				Reason:         "New spec node: alpha/Comp1",
+			},
+		},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{CreateCount: 1, ObsoleteCount: 0},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runEmit(t, string(data),
+		"--proposal", "2026-04-18-decouple-spex-from-br",
+		"--git-head", "deadbeefcafe",
+		"--spec-dir", specDir,
 	)
 	if err != nil {
 		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
@@ -450,126 +517,68 @@ func TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent(t *test
 		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
 	}
 
-	var epic *emit.Op
-	for i := range cs.Ops {
-		if cs.Ops[i].SpecNodeKind == "proposal_epic" {
-			epic = &cs.Ops[i]
-			break
-		}
-	}
-	if epic == nil {
-		t.Fatalf("want a synthesized proposal_epic create op despite the closed record, got ops: %+v", cs.Ops)
-	}
-
 	var compOp *emit.Op
 	for i := range cs.Ops {
-		if cs.Ops[i].SpecNodeKind == "component" {
+		if cs.Ops[i].SpecNodeID == compID {
 			compOp = &cs.Ops[i]
-			break
 		}
 	}
 	if compOp == nil {
-		t.Fatalf("want a component create op, got ops: %+v", cs.Ops)
+		t.Fatalf("want an op for Comp1, got ops: %+v", cs.Ops)
 	}
-	if compOp.Parent == nil || compOp.Parent.Kind != emit.RefOp || compOp.Parent.OpID != epic.OpID {
-		t.Errorf("component parent: want ref:op %s (fresh epic), got %+v", epic.OpID, compOp.Parent)
+	if len(compOp.Deps) != 1 || compOp.Deps[0].Kind != emit.RefBead || compOp.Deps[0].BeadID != "spex-other" {
+		t.Fatalf("want dep ref:bead spex-other (out-of-batch, journal-paired), got %+v", compOp.Deps)
 	}
 }
 
-// writeLegacyMapFile writes a .bead-map.json fixture containing exactly the
-// given records and returns its path.
-func writeLegacyMapFile(t *testing.T, records []mapping.Record) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), ".bead-map.json")
-	data, err := json.Marshal(struct {
-		NextID  int              `json:"next_id"`
-		Records []mapping.Record `json:"records"`
-	}{NextID: len(records) + 1, Records: records})
+// TestEmitCommand_MalformedJournal_Errors rounds out the exit-code
+// contract for the emit.go:62 journal read: a journal line that fails
+// schema validation must surface as a validation error (exit 1), same
+// as the other read failures in this file.
+func TestEmitCommand_MalformedJournal_Errors(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+	writeTestJournal(t, specDir, []string{"not-json"})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{Type: "create", Module: "alpha", Node: "Comp1", NodeType: "component", SpecNodeID: compID, SpecHash: "h1", Reason: "New spec node: alpha/Comp1"},
+		},
+		Summary: impact.Summary{CreateCount: 1},
+	}
+	data, err := json.Marshal(report)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(path, data, 0o644); err != nil {
-		t.Fatal(err)
+
+	_, _, err = runEmit(t, string(data),
+		"--proposal", "p",
+		"--git-head", "deadbeefcafe",
+		"--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for malformed journal, got nil")
 	}
-	return path
-}
-
-// TestLegacyMapStoreFold_Entry pins each of legacyMapStoreFold.Entry's four
-// bridge rules (cmd/spex/emit.go) directly against mapping.Store, rather
-// than through emit.Build — see the comment on
-// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent for
-// why routing through Build washes out the NodeType != "proposal" filter.
-func TestLegacyMapStoreFold_Entry(t *testing.T) {
-	const slug = "2026-04-18-decouple-spex-from-br"
-	const key = "abc123def456"
-
-	tests := []struct {
-		name      string
-		key       string
-		records   []mapping.Record
-		wantEntry emit.FoldEntry
-		wantOK    bool
-	}{
-		{
-			name: "open proposal record for the slug resolves via GetByProposalEpic",
-			key:  slug,
-			records: []mapping.Record{
-				{ID: 1, SpecNodeID: slug, BeadID: "br-1", BeadType: "epic", NodeType: "proposal", Component: slug, BeadStatus: "open"},
-			},
-			wantEntry: emit.FoldEntry{TaskID: "br-1"},
-			wantOK:    true,
-		},
-		{
-			// GetByProposalEpic skips the closed record (not found), and the
-			// NodeType != "proposal" filter then excludes it from the
-			// GetBySpecNode fallback too, leaving no record at all: ok ==
-			// false. Without the filter the closed proposal record would be
-			// admitted into pickOpenMapRecord, collapse to Removed: true,
-			// and return ok == true instead — this case is what
-			// distinguishes the two.
-			name: "closed proposal record for the slug is not re-admitted as a live epic",
-			key:  slug,
-			records: []mapping.Record{
-				{ID: 1, SpecNodeID: slug, BeadID: "br-1", BeadType: "epic", NodeType: "proposal", Component: slug, BeadStatus: "closed"},
-			},
-			wantEntry: emit.FoldEntry{},
-			wantOK:    false,
-		},
-		{
-			name: "two open non-proposal records for one key: higher ID wins",
-			key:  key,
-			records: []mapping.Record{
-				{ID: 1, SpecNodeID: key, BeadID: "br-1", BeadType: "task", NodeType: "component", Module: "m", Component: "c1", ContentFile: "c1.md", SpecHash: "h1", BeadStatus: "open"},
-				{ID: 2, SpecNodeID: key, BeadID: "br-2", BeadType: "task", NodeType: "component", Module: "m", Component: "c2", ContentFile: "c2.md", SpecHash: "h2", BeadStatus: "open"},
-			},
-			wantEntry: emit.FoldEntry{TaskID: "br-2"},
-			wantOK:    true,
-		},
-		{
-			name: "all non-proposal records for one key closed collapses onto Removed",
-			key:  key,
-			records: []mapping.Record{
-				{ID: 1, SpecNodeID: key, BeadID: "br-1", BeadType: "task", NodeType: "component", Module: "m", Component: "c1", ContentFile: "c1.md", SpecHash: "h1", BeadStatus: "closed"},
-				{ID: 2, SpecNodeID: key, BeadID: "br-2", BeadType: "task", NodeType: "component", Module: "m", Component: "c2", ContentFile: "c2.md", SpecHash: "h2", BeadStatus: "closed"},
-			},
-			wantEntry: emit.FoldEntry{Removed: true},
-			wantOK:    true,
-		},
+	if !strings.Contains(err.Error(), "read journal") {
+		t.Fatalf("want error mentioning 'read journal', got: %v", err)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			path := writeLegacyMapFile(t, tt.records)
-			fold := legacyMapStoreFold{store: mapping.NewFileStore(path)}
-
-			gotEntry, gotOK := fold.Entry(tt.key)
-			if gotOK != tt.wantOK {
-				t.Fatalf("Entry(%q) ok = %v, want %v (entry: %+v)", tt.key, gotOK, tt.wantOK, gotEntry)
-			}
-			if gotOK && gotEntry != tt.wantEntry {
-				t.Fatalf("Entry(%q) = %+v, want %+v", tt.key, gotEntry, tt.wantEntry)
-			}
-		})
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit code 1 for malformed journal, got %d (err: %v)", code, err)
 	}
 }
 
@@ -602,7 +611,6 @@ func TestEmitCommand_ValidationErrorsExit1(t *testing.T) {
 		_, _, err := runEmit(t, tc.stdin,
 			"--proposal", "p",
 			"--git-head", tc.head,
-			"--map", f.mapPath,
 			"--spec-dir", f.specDir,
 		)
 		if err == nil {
@@ -640,11 +648,6 @@ func TestEmitCommand_BuilderErrorsExit2(t *testing.T) {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_b.md", "# B\n")
 
-	mapPath := filepath.Join(dir, ".bead-map.json")
-	if err := os.WriteFile(mapPath, []byte(`{"next_id":1,"records":[]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			{Type: "create", Module: "alpha", Node: "A", NodeType: "component", SpecNodeID: aID, DepSpecNodeIDs: []string{bID}},
@@ -657,7 +660,6 @@ func TestEmitCommand_BuilderErrorsExit2(t *testing.T) {
 	_, _, err := runEmit(t, string(data),
 		"--proposal", "p",
 		"--git-head", "deadbeefcafe",
-		"--map", mapPath,
 		"--spec-dir", specDir,
 	)
 	if err == nil {
