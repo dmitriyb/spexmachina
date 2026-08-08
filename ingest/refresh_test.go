@@ -440,6 +440,55 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing(t *
 	}
 }
 
+// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing
+// pins the live-pairing gate's most important case: a removed node whose
+// open task is a cleanup bead, not the node's own original task. A
+// cleanup create's task_created pairs to the removal event itself, so
+// fold() folds it to Removed:true — a check keyed off that flag would
+// short-circuit before ever looking at TaskID/closedTaskIDs, exactly the
+// bug this test guards against. The scenario mirrors a partial
+// normal-mode run: the removal is journaled, the original task closed,
+// and a cleanup task opened against the removal's own eid, but the
+// snapshot is left untouched, so the entry is still in refresh's diff.
+func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing(t *testing.T) {
+	fx := setupRefreshFixture(t)
+
+	seedJournal(t, fx.specDir,
+		mapping.Event{Event: "removed", EID: "head1:op-rm", Node: fx.handlerID, Name: "Handler", NodeType: "component", Module: "aabbccddee20", Before: strPtr("deadbeefcafe"), GitHead: "head1", Path: "spec/beta/arch_handler.md"},
+		mapping.Event{Event: "task_closed", TaskID: "br-handler", For: "head1:op-rm"},
+		mapping.Event{Event: "task_created", TaskID: "br-cleanup", For: "head1:op-rm"},
+	)
+
+	betaDir := filepath.Join(fx.specDir, "beta")
+	writeFile(t, betaDir, "module.json", `{
+		"name": "beta",
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+		]
+	}`)
+	if err := os.Remove(filepath.Join(betaDir, "arch_handler.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	journalBefore := journalBytes(t, fx.specDir)
+	snapBefore := readBytes(t, fx.snapPath)
+
+	_, err := fx.handler().Apply(fx.specDir)
+	var refusal *RefreshRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != "live_task_pairing" {
+		t.Fatalf("want RefreshRefusal live_task_pairing, got %v", err)
+	}
+	if !strings.Contains(err.Error(), fx.handlerID) || !strings.Contains(err.Error(), "br-cleanup") {
+		t.Errorf("refusal must name the node identity hash and the open cleanup task id: %v", err)
+	}
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
+	}
+	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
+		t.Error("snapshot must be byte-identical after refusal")
+	}
+}
+
 // TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta is the direct
 // guard on writing the allow-list as the complement of impact's
 // bead-producing set: "meta" is not bead-producing, so that negation
@@ -534,6 +583,139 @@ func TestRefresh_RerunIsIdempotent(t *testing.T) {
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapAfterFirst) {
 		t.Error("snapshot must end byte-identical to the first run's state")
 	}
+}
+
+// TestREQ_e68653819f38_Refresh_ReAddedThenRemovedRequirementProducesChangeEvent
+// covers a requirement cycling add -> remove -> re-add -> remove again.
+// fold() only ever mutates a node's entry on a "removed" change event or
+// a task_created; requirements never get a task_created (that's the
+// whole reason they're absorbable), so a skip check keyed off the fold's
+// Removed flag stays pinned at true after the first removal even once
+// the node is back — the fourth step would then be dropped with zero
+// change events, an "amnesiac" absorption arch_refresh.md rules out. The
+// check must instead read the node's latest change event
+// (lastChangeByNode), which self-corrects on the re-add. Each cycle uses
+// a distinct title so the derived eids never collide with an earlier
+// cycle's — collision-avoidance for same-content repeats is a separate
+// concern (see TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID).
+func TestREQ_e68653819f38_Refresh_ReAddedThenRemovedRequirementProducesChangeEvent(t *testing.T) {
+	fx := setupRefreshFixture(t)
+
+	projectJSON := func(title string) string {
+		if title == "" {
+			return `{
+				"name": "refresh-fixture",
+				"modules": [
+					{"id": "aabbccddee10", "name": "alpha", "path": "alpha"},
+					{"id": "aabbccddee20", "name": "beta", "path": "beta"}
+				]
+			}`
+		}
+		return `{
+			"name": "refresh-fixture",
+			"modules": [
+				{"id": "aabbccddee10", "name": "alpha", "path": "alpha"},
+				{"id": "aabbccddee20", "name": "beta", "path": "beta"}
+			],
+			"requirements": [
+				{"id": "aabbccddee09", "type": "functional", "title": "` + title + `"}
+			]
+		}`
+	}
+
+	steps := []struct {
+		name  string
+		title string // empty means the requirement is absent this step
+		event string
+	}{
+		{"add", "Fixture requirement", "added"},
+		{"remove", "", "removed"},
+		{"re-add", "Fixture requirement, returned", "added"},
+		{"remove again", "", "removed"},
+	}
+
+	for _, step := range steps {
+		writeFile(t, fx.specDir, "project.json", projectJSON(step.title))
+
+		summary, err := fx.handler().Apply(fx.specDir)
+		if err != nil {
+			t.Fatalf("%s: Apply: %v", step.name, err)
+		}
+		if summary.EventsAppended != 1 {
+			t.Fatalf("%s: events_appended: want 1, got %d", step.name, summary.EventsAppended)
+		}
+		if !summary.SnapshotSaved {
+			t.Errorf("%s: want snapshot_saved=true, got %+v", step.name, summary)
+		}
+
+		events := readJournal(t, fx.specDir)
+		ev, ok := eventForNode(events, "aabbccddee09")
+		if !ok || ev.Event != step.event || ev.NodeType != "requirement" {
+			t.Fatalf("%s: want a %s requirement event, got %+v (ok=%v)", step.name, step.event, ev, ok)
+		}
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID covers
+// deriveRefreshEID's collision hazard directly: a leaf that flaps
+// v1 -> v2 -> v1 across two refreshes, then back to v2 on a third, makes
+// the third run's derived eid byte-identical to the first run's — both
+// are the same (node, before, after) triple. Without dedup the journal
+// would carry two lines under one id, and two different refresh receipts
+// would each name it in their absorbed list. The third run must not
+// construct a duplicate; the snapshot still advances to match the
+// current (v2) content.
+func TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	betaDir := filepath.Join(fx.specDir, "beta")
+
+	v1 := "# Handler\n"
+	v2 := "# Handler (revised)\n"
+
+	writeFile(t, betaDir, "arch_handler.md", v2)
+	summary1, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("run1 Apply: %v", err)
+	}
+	if summary1.EventsAppended != 1 {
+		t.Fatalf("run1 events_appended: want 1, got %d", summary1.EventsAppended)
+	}
+
+	writeFile(t, betaDir, "arch_handler.md", v1)
+	summary2, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("run2 Apply: %v", err)
+	}
+	if summary2.EventsAppended != 1 {
+		t.Fatalf("run2 events_appended: want 1, got %d", summary2.EventsAppended)
+	}
+
+	writeFile(t, betaDir, "arch_handler.md", v2)
+	summary3, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("run3 Apply: %v", err)
+	}
+	if summary3.EventsAppended != 0 {
+		t.Errorf("run3 events_appended: want 0 (identical transition already journaled under this eid), got %d", summary3.EventsAppended)
+	}
+	if !summary3.SnapshotSaved {
+		t.Errorf("run3: want snapshot_saved=true, got %+v", summary3)
+	}
+
+	events := readJournal(t, fx.specDir)
+	eidCounts := map[string]int{}
+	for _, ev := range events {
+		if ev.EID != "" {
+			eidCounts[ev.EID]++
+		}
+	}
+	for eid, count := range eidCounts {
+		if count > 1 {
+			t.Errorf("eid %s appears %d times in the journal; every eid must be unique", eid, count)
+		}
+	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
 // TestRefresh_MissingSnapshotRefused covers the edge case: refresh's

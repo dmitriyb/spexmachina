@@ -207,27 +207,34 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	}
 	closedTaskIDs := map[string]bool{}
 	lastChangeByNode := map[string]mapping.Event{}
+	seenEIDs := make(map[string]bool, len(existing))
 	for _, ev := range existing {
 		switch ev.Event {
 		case "task_closed":
 			closedTaskIDs[ev.TaskID] = true
-		case "added", "modified":
+		case "added", "modified", "removed":
 			lastChangeByNode[ev.Node] = ev
+		}
+		if ev.EID != "" {
+			seenEIDs[ev.EID] = true
 		}
 	}
 
 	// Live-pairing gate: a removed entry whose node's current fold
 	// linkage is still a live, unclosed task_created refuses the run —
 	// bead work is owed and the normal pipeline must close or clean it
-	// up first. A node the fold already shows as removed, or whose live
-	// task's id appears among closedTaskIDs, has no open work left.
+	// up first. Liveness is decided from TaskID/closedTaskIDs alone: the
+	// fold's Removed flag says nothing about whether that task is open —
+	// a cleanup's task_created folds to Removed:true too, since it
+	// inherits Removed from the removal event it pairs with — so it must
+	// not gate this check.
 	var livePairing []string
 	for _, c := range changes {
 		if c.Type != merkle.Removed {
 			continue
 		}
 		entry, ok := foldByKey[c.Key]
-		if ok && !entry.Removed && entry.TaskID != "" && !closedTaskIDs[entry.TaskID] {
+		if ok && entry.TaskID != "" && !closedTaskIDs[entry.TaskID] {
 			livePairing = append(livePairing, fmt.Sprintf("%s (%s)", c.Key, entry.TaskID))
 		}
 	}
@@ -254,15 +261,25 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
+			eid := deriveRefreshEID(c.Key, nil, strPtr(c.NewHash))
+			if seenEIDs[eid] {
+				// A byte-identical (node, before, after) triple already
+				// has a journal line — e.g. a partial normal-mode run
+				// already journaled this add before refresh re-diffed
+				// the same drift. Constructing a second one would
+				// duplicate that eid.
+				continue
+			}
 			md := liveIndex[c.Key]
 			ev := mapping.Event{
-				Event: "added", EID: deriveRefreshEID(c.Key, nil, strPtr(c.NewHash)),
+				Event: "added", EID: eid,
 				Node: c.Key, Name: md.Name, NodeType: c.NodeType, Module: c.Module,
 				Before: nil, After: strPtr(c.NewHash),
 				GitHead: gitHead, Path: md.Path,
 			}
 			batch = append(batch, ev)
 			absorbed = append(absorbed, ev.EID)
+			seenEIDs[eid] = true
 
 		case merkle.Modified:
 			// meta leaves (the project.json / module.json envelope)
@@ -272,30 +289,41 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 			if c.NodeType == "meta" {
 				continue
 			}
+			eid := deriveRefreshEID(c.Key, strPtr(c.OldHash), strPtr(c.NewHash))
+			if seenEIDs[eid] {
+				continue
+			}
 			md := liveIndex[c.Key]
 			ev := mapping.Event{
-				Event: "modified", EID: deriveRefreshEID(c.Key, strPtr(c.OldHash), strPtr(c.NewHash)),
+				Event: "modified", EID: eid,
 				Node: c.Key, Name: md.Name, NodeType: c.NodeType, Module: c.Module,
 				Before: strPtr(c.OldHash), After: strPtr(c.NewHash),
 				GitHead: gitHead, Path: md.Path,
 			}
 			batch = append(batch, ev)
 			absorbed = append(absorbed, ev.EID)
+			seenEIDs[eid] = true
 
 		case merkle.Removed:
-			entry, hasFold := foldByKey[c.Key]
-			if hasFold && entry.Removed {
+			last, hasLast := lastChangeByNode[c.Key]
+			if hasLast && last.Event == "removed" {
 				// Already the journal's current state for this node —
-				// a prior (possibly partial) normal-mode run already
-				// recorded the removal. Only the snapshot is stale;
-				// constructing a second removed event would duplicate
-				// it under a different eid.
+				// its latest change event is itself a removal, from a
+				// prior (possibly partial) run. Only the snapshot is
+				// stale; constructing a second removed event would
+				// duplicate it under a different eid. Checked off the
+				// node's latest change event rather than the fold's
+				// Removed flag: fold() never updates a requirement/api
+				// entry on an "added" event (they get no task_created to
+				// carry the update), so after a re-add that flag would
+				// stay stuck on the earlier removal.
 				continue
 			}
+			entry, hasFold := foldByKey[c.Key]
 			name, path := "", ""
 			if hasFold {
 				name, path = entry.Source.Name, entry.Source.Path
-			} else if last, ok := lastChangeByNode[c.Key]; ok {
+			} else if hasLast {
 				name, path = last.Name, last.Path
 			}
 			ev := mapping.Event{
