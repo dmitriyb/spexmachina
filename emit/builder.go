@@ -53,7 +53,7 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 		}
 	}
 
-	labeler := &Labeler{MappingStore: b.MappingStore}
+	labeler := &Labeler{}
 
 	resolver := &Resolver{
 		SpecGraph: b.SpecGraph,
@@ -63,10 +63,11 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 
 	ops := make([]Op, 0, totalOps)
 	for _, oc := range ordered {
-		// Per-action labelling: modify-pair creates reuse existing
-		// record-id; cleanup creates use spex:cleanup-<spec_node_id>;
-		// fresh creates consume the cursor. See
-		// spec/emit/arch_idempotency_labeler.md.
+		// Per-action labelling: node-bearing creates (fresh and
+		// modify-pair alike) and the epic create format
+		// spex:<spec_node_id>; cleanup creates format
+		// spex:cleanup-<spec_node_id>. Pure function of the action — no
+		// cursor, no store read. See spec/emit/arch_idempotency_labeler.md.
 		label, err := labeler.LabelFor(oc.Action)
 		if err != nil {
 			return Changeset{}, fmt.Errorf("emit: build: %w", err)
