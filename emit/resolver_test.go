@@ -1,21 +1,18 @@
 package emit
 
 import (
-	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/dmitriyb/spexmachina/mapping"
 )
 
 // fakeSpecGraph is an in-memory SpecGraph for Resolver priority tests.
 // Lookups miss when the requested key is not pre-loaded so callers can
 // exercise the fallback paths explicitly.
 type fakeSpecGraph struct {
-	components   map[string]Component
-	moduleReqs   map[string]ModuleRequirement
-	projectReqs  map[string]ProjectRequirement
-	paths        map[string]NodePaths
+	components  map[string]Component
+	moduleReqs  map[string]ModuleRequirement
+	projectReqs map[string]ProjectRequirement
+	paths       map[string]NodePaths
 }
 
 func newFakeSpecGraph() *fakeSpecGraph {
@@ -58,74 +55,6 @@ type fakeFold map[string]FoldEntry
 func (f fakeFold) Entry(key string) (FoldEntry, bool) {
 	e, ok := f[key]
 	return e, ok
-}
-
-// fakeStore is an in-memory mapping.Store double used by builder_test.go
-// (Builder's MappingStore field still reads the legacy store pending
-// ChangesetBuilder's own migration). GetBySpecNode, GetByProposalEpic, and
-// GetByBead are exercised; the other methods return errors so any
-// accidental dependency fails loudly.
-type fakeStore struct {
-	bySpecNode map[string][]mapping.Record
-	byBead     map[string]mapping.Record
-	epic       map[string]mapping.Record
-	err        error
-	nextID     int
-}
-
-func newFakeStore() *fakeStore {
-	return &fakeStore{
-		bySpecNode: make(map[string][]mapping.Record),
-		byBead:     make(map[string]mapping.Record),
-		epic:       make(map[string]mapping.Record),
-		nextID:     1,
-	}
-}
-
-func (s *fakeStore) GetBySpecNode(id string) ([]mapping.Record, error) {
-	if s.err != nil {
-		return nil, s.err
-	}
-	recs, ok := s.bySpecNode[id]
-	if !ok {
-		return nil, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, id)
-	}
-	return recs, nil
-}
-
-func (s *fakeStore) GetByProposalEpic(proposal string) (mapping.Record, error) {
-	r, ok := s.epic[proposal]
-	if !ok {
-		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, proposal)
-	}
-	return r, nil
-}
-
-func (s *fakeStore) Create(mapping.Record) (int, error) {
-	return 0, fmt.Errorf("fakeStore.Create: not implemented")
-}
-func (s *fakeStore) Get(int) (mapping.Record, error) {
-	return mapping.Record{}, fmt.Errorf("fakeStore.Get: not implemented")
-}
-func (s *fakeStore) GetByBead(beadID string) (mapping.Record, error) {
-	r, ok := s.byBead[beadID]
-	if !ok {
-		return mapping.Record{}, fmt.Errorf("fakeStore: %w: %s", mapping.ErrRecordNotFound, beadID)
-	}
-	return r, nil
-}
-func (s *fakeStore) Update(int, map[string]string) error {
-	return fmt.Errorf("fakeStore.Update: not implemented")
-}
-func (s *fakeStore) Delete(int) error    { return fmt.Errorf("fakeStore.Delete: not implemented") }
-func (s *fakeStore) List() ([]mapping.Record, error) {
-	return nil, fmt.Errorf("fakeStore.List: not implemented")
-}
-func (s *fakeStore) NextRecordID() (int, error) {
-	return s.nextID, nil
-}
-func (s *fakeStore) Replace([]mapping.Record, int) error {
-	return fmt.Errorf("fakeStore.Replace: not implemented")
 }
 
 // TestResolveDeps_ClassifiesEachShape covers the spec scenario:

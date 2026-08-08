@@ -1,33 +1,30 @@
 package emit
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/dmitriyb/spexmachina/impact"
-	"github.com/dmitriyb/spexmachina/mapping"
 )
 
-// Builder composes a changeset.json from an impact report, the mapping
-// store, the spec graph, and a caller-supplied git HEAD. It is the
+// Builder composes a changeset.json from an impact report, the task
+// journal's fold, the spec graph, and a caller-supplied git HEAD. It is the
 // orchestration layer of the emit pipeline; topological ordering, dep
-// classification, and label reservation are delegated to Sorter, Resolver,
-// and Labeler.
+// classification, and label assignment are delegated to Sorter, Resolver,
+// and Labeler. Builder is set up once per run from the four values that do
+// not change while it runs — SpecGraph, Fold, GitHead, Proposal — and is
+// then handed exactly one impact report per Build call.
 type Builder struct {
-	SpecGraph    SpecGraph
-	MappingStore mapping.Store
-	GitHead      string
-	Proposal     string
+	SpecGraph SpecGraph
+	Fold      JournalFold
+	GitHead   string
+	Proposal  string
 }
 
-// Build runs the emit pipeline end-to-end and returns the v1 changeset.
+// Build runs the emit pipeline end-to-end and returns the v2 changeset.
 // On any sub-component error no partial changeset is returned — the caller
 // receives the zero value plus a wrapped error.
 func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
-	hasExistingEpic, err := b.lookupExistingEpic()
-	if err != nil {
-		return Changeset{}, err
-	}
+	hasExistingEpic := b.hasExistingEpic()
 
 	creates := b.collectCreates(report, hasExistingEpic)
 
@@ -57,7 +54,7 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 
 	resolver := &Resolver{
 		SpecGraph: b.SpecGraph,
-		Fold:      legacyStoreFold{store: b.MappingStore},
+		Fold:      b.Fold,
 		Batch:     batchMap,
 	}
 
@@ -96,81 +93,15 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	}, nil
 }
 
-// lookupExistingEpic queries the mapping store for an open proposal-epic
-// record. ErrNotFound is the steady-state "first emit for this proposal"
-// signal and returns hasExistingEpic=false without an error.
-func (b *Builder) lookupExistingEpic() (bool, error) {
-	_, err := b.MappingStore.GetByProposalEpic(b.Proposal)
-	if err == nil {
-		return true, nil
-	}
-	if errors.Is(err, mapping.ErrRecordNotFound) {
-		return false, nil
-	}
-	return false, fmt.Errorf("emit: build: proposal epic lookup %q: %w", b.Proposal, err)
-}
-
-// legacyStoreFold adapts the legacy mapping.Store onto Resolver's
-// JournalFold interface, standing in for the task-journal fold until
-// ChangesetBuilder migrates off the legacy store.
-//
-// TODO(bead:spexmachina-y0wc.30): replace with a lookup built from
-// mapping.MappingStore's fold once ChangesetBuilder migrates — Resolver's
-// v2 contract (spexmachina-y0wc.29) no longer speaks legacy records
-// directly, so this bridges the gap in the meantime.
-type legacyStoreFold struct {
-	store mapping.Store
-}
-
-// Entry tries the proposal-epic lookup first — a component or data_flow's
-// spec_node_id never matches a NodeType=="proposal" record, so this is
-// safe for every key Resolver asks about — then falls back to the
-// spec-node lookup, restricted to non-proposal records: GetByProposalEpic
-// already answered the proposal-record question for this key (including
-// "closed, so not found"), and re-admitting a closed proposal record here
-// would invert that answer into Removed=true. Among the remaining records,
-// "all closed" collapses onto Removed=true, the legacy store's closest
-// analogue to a removed node's fold entry.
-func (f legacyStoreFold) Entry(key string) (FoldEntry, bool) {
-	if rec, err := f.store.GetByProposalEpic(key); err == nil {
-		return FoldEntry{TaskID: rec.BeadID}, true
-	}
-	recs, err := f.store.GetBySpecNode(key)
-	if err != nil {
-		return FoldEntry{}, false
-	}
-	var nonProposal []mapping.Record
-	for _, r := range recs {
-		if r.NodeType != "proposal" {
-			nonProposal = append(nonProposal, r)
-		}
-	}
-	if len(nonProposal) == 0 {
-		return FoldEntry{}, false
-	}
-	if chosen, anyOpen := pickOpenRecord(nonProposal); anyOpen {
-		return FoldEntry{TaskID: chosen.BeadID}, true
-	}
-	return FoldEntry{Removed: true}, true
-}
-
-// pickOpenRecord returns the highest-ID record whose BeadStatus is not
-// "closed". Empty status counts as open — conservative default attaches
-// an edge rather than silently dropping. Highest-ID wins so the latest
-// re-implementation supersedes earlier records.
-func pickOpenRecord(recs []mapping.Record) (mapping.Record, bool) {
-	var chosen mapping.Record
-	var found bool
-	for _, r := range recs {
-		if r.BeadStatus == "closed" {
-			continue
-		}
-		if !found || r.ID > chosen.ID {
-			chosen = r
-			found = true
-		}
-	}
-	return chosen, found
+// hasExistingEpic reports whether the task journal fold already carries a
+// live (not Removed) epic entry for this run's proposal slug — the same
+// check Resolver.ResolveParent applies. A miss, or a fold entry whose epic
+// task closed with no live successor, means this is the first emit for the
+// proposal (or a re-run after that epic's closure), so Builder synthesizes
+// a fresh proposal_epic create.
+func (b *Builder) hasExistingEpic() bool {
+	entry, ok := b.Fold.Entry(b.Proposal)
+	return ok && !entry.Removed
 }
 
 // collectCreates flattens report.Creates into CreateActions and prepends a

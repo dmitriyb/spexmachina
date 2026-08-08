@@ -158,8 +158,8 @@ func TestEmitCommand_ImpactFlag_ReadsFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
 	}
-	if !strings.Contains(stdout, `"version": 1`) {
-		t.Fatalf("expected v1 changeset on stdout, got: %s", stdout)
+	if !strings.Contains(stdout, `"version": 2`) {
+		t.Fatalf("expected v2 changeset on stdout, got: %s", stdout)
 	}
 }
 

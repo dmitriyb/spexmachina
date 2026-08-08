@@ -3,33 +3,33 @@ package emit
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/impact"
-	"github.com/dmitriyb/spexmachina/mapping"
 )
 
-// builderEnv bundles the fakes a Builder test typically needs.
+// builderEnv bundles the fakes a Builder test typically needs: a fake
+// task-journal fold (open task pairings, removed nodes, proposal-epic
+// entries — whatever the scenario seeds) and a fake spec graph.
 type builderEnv struct {
-	store *fakeStore
+	fold  fakeFold
 	graph *fakeSpecGraph
 }
 
 func newBuilderEnv() *builderEnv {
 	return &builderEnv{
-		store: newFakeStore(),
+		fold:  fakeFold{},
 		graph: newFakeSpecGraph(),
 	}
 }
 
 func (e *builderEnv) build(report impact.ImpactReport, proposal, head string) (Changeset, error) {
 	b := &Builder{
-		SpecGraph:    e.graph,
-		MappingStore: e.store,
-		GitHead:      head,
-		Proposal:     proposal,
+		SpecGraph: e.graph,
+		Fold:      e.fold,
+		GitHead:   head,
+		Proposal:  proposal,
 	}
 	return b.Build(report)
 }
@@ -61,7 +61,7 @@ func findOp(t *testing.T, ops []Op, specNodeID string) Op {
 
 // TestBuild_CanonicalTopLevelFields covers the spec scenario:
 // "Build a changeset from a single-create impact report. Assert the output
-// has version: 1 at the top, git_head set to the fixed SHA, and canonical
+// has version: 2 at the top, git_head set to the fixed SHA, and canonical
 // field order."
 func TestBuild_CanonicalTopLevelFields(t *testing.T) {
 	env := newBuilderEnv()
@@ -74,8 +74,8 @@ func TestBuild_CanonicalTopLevelFields(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if cs.Version != 1 {
-		t.Errorf("version: want 1, got %d", cs.Version)
+	if cs.Version != 2 {
+		t.Errorf("version: want 2, got %d", cs.Version)
 	}
 	if cs.GitHead != "deadbeefcafe1234" {
 		t.Errorf("git_head: want deadbeefcafe1234, got %q", cs.GitHead)
@@ -213,9 +213,7 @@ func TestBuild_InBatchDepChainResolvesToRefOp(t *testing.T) {
 // has deps: [{ref:bead, bead_id:<Y's bead>}]."
 func TestBuild_ExistingBeadDepResolvesToRefBead(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["Y"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "Y", BeadID: "br-Y", BeadStatus: "open"},
-	}
+	env.fold["Y"] = FoldEntry{TaskID: "br-Y"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", []string{"Y"}),
@@ -235,9 +233,7 @@ func TestBuild_ExistingBeadDepResolvesToRefBead(t *testing.T) {
 // "Y's mapping record has status: closed. Assert X's deps is empty."
 func TestBuild_ClosedBeadDepIsDropped(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["Y"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "Y", BeadID: "br-Y", BeadStatus: "closed"},
-	}
+	env.fold["Y"] = FoldEntry{Removed: true}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", []string{"Y"}),
@@ -633,13 +629,7 @@ func TestBuild_CycleErrorAborts(t *testing.T) {
 // is synthesized.
 func TestBuild_ExistingProposalEpicResolvesToRefBead(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.epic["p-ref"] = mapping.Record{
-		ID:         42,
-		SpecNodeID: "p-ref",
-		BeadID:     "spexmachina-existing-epic",
-		NodeType:   "proposal",
-		BeadStatus: "open",
-	}
+	env.fold["p-ref"] = FoldEntry{TaskID: "spexmachina-existing-epic"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", nil),
@@ -661,18 +651,15 @@ func TestBuild_ExistingProposalEpicResolvesToRefBead(t *testing.T) {
 }
 
 // TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent covers the
-// regression from PR #217: a closed proposal-epic record (a prior run's
-// epic bead was closed) leaves no open epic, so lookupExistingEpic treats
-// this as a new proposal and Build synthesizes a fresh proposal_epic op.
-// legacyStoreFold.Entry must not answer the proposal slug out of the
-// GetBySpecNode fallback (which ignores NodeType and would otherwise
-// re-admit the closed record as Removed=true) — every non-epic create
-// must parent under the freshly synthesized epic op, not an empty bead_id.
+// regression from PR #217: a closed proposal-epic fold entry (a prior
+// run's epic bead was closed, so the journal's latest state for the
+// proposal slug is Removed) leaves no live epic, so hasExistingEpic
+// treats this as a new proposal and Build synthesizes a fresh
+// proposal_epic op. Every non-epic create must parent under the freshly
+// synthesized epic op, not an empty bead_id.
 func TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["p"] = []mapping.Record{
-		{ID: 7, SpecNodeID: "p", BeadID: "br-old-epic", NodeType: "proposal", BeadStatus: "closed"},
-	}
+	env.fold["p"] = FoldEntry{Removed: true}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", nil),
@@ -698,13 +685,7 @@ func TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent(t *testing.T) {
 // actions, the result is empty.
 func TestBuild_EmptyReportWithExistingEpic(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.epic["p-ref"] = mapping.Record{
-		ID:         1,
-		SpecNodeID: "p-ref",
-		BeadID:     "br-epic",
-		NodeType:   "proposal",
-		BeadStatus: "open",
-	}
+	env.fold["p-ref"] = FoldEntry{TaskID: "br-epic"}
 	cs, err := env.build(impact.ImpactReport{}, "p-ref", "h")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
@@ -736,13 +717,7 @@ func TestBuild_EmptyReportNewProposalSynthesizesEpic(t *testing.T) {
 // needed." With an existing epic, the changeset contains only close ops.
 func TestBuild_OnlyClosesNoCreates(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.epic["p"] = mapping.Record{
-		ID:         1,
-		SpecNodeID: "p",
-		BeadID:     "br-epic",
-		NodeType:   "proposal",
-		BeadStatus: "open",
-	}
+	env.fold["p"] = FoldEntry{TaskID: "br-epic"}
 	report := impact.ImpactReport{
 		Obsoletes: []impact.Action{
 			{Type: "obsolete", BeadID: "br-1", Module: "m", Node: "A", NodeType: "component", Reason: "removed"},
@@ -769,9 +744,7 @@ func TestBuild_OnlyClosesNoCreates(t *testing.T) {
 // the closed bead (skipped)."
 func TestBuild_BatchOpenBeadOverridesClosed(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["Y"] = []mapping.Record{
-		{ID: 1, SpecNodeID: "Y", BeadID: "br-old", BeadStatus: "closed"},
-	}
+	env.fold["Y"] = FoldEntry{Removed: true}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("Y", "m", "Y", nil),
@@ -796,10 +769,10 @@ func TestBuild_BatchOpenBeadOverridesClosed(t *testing.T) {
 func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 	env := newBuilderEnv()
 	b := &Builder{
-		SpecGraph:    env.graph,
-		MappingStore: env.store,
-		GitHead:      "h",
-		Proposal:     "p",
+		SpecGraph: env.graph,
+		Fold:      env.fold,
+		GitHead:   "h",
+		Proposal:  "p",
 	}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
@@ -832,9 +805,7 @@ func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 // field name in the JSON.
 func TestBuild_OpFieldOrderInJSON(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.epic["p"] = mapping.Record{
-		ID: 1, SpecNodeID: "p", BeadID: "br-epic", NodeType: "proposal", BeadStatus: "open",
-	}
+	env.fold["p"] = FoldEntry{TaskID: "br-epic"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("X", "m", "X", nil),
@@ -891,9 +862,7 @@ func opIndex(ops []Op, specNodeID string) int {
 // TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset).
 func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["z-open"] = []mapping.Record{
-		{ID: 7, SpecNodeID: "z-open", BeadID: "br-z", BeadStatus: "open"},
-	}
+	env.fold["z-open"] = FoldEntry{TaskID: "br-z"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("x1", "m", "X", []string{"y1", "z-open"}),
@@ -977,9 +946,7 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 // sequenced earlier by the Sorter.
 func TestBuild_CrossComponent_DepClassificationRoundTrip(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["q-open"] = []mapping.Record{
-		{ID: 3, SpecNodeID: "q-open", BeadID: "br-q", BeadStatus: "open"},
-	}
+	env.fold["q-open"] = FoldEntry{TaskID: "br-q"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("d1", "m", "D", []string{"p1", "q-open"}),
@@ -996,10 +963,10 @@ func TestBuild_CrossComponent_DepClassificationRoundTrip(t *testing.T) {
 	if len(d.Deps) != 2 {
 		t.Fatalf("d1 deps: want exactly 2 shapes, got %+v", d.Deps)
 	}
-	if d.Deps[0].Kind != RefOp || d.Deps[0].OpID != p.OpID || d.Deps[0].BeadID != "" || d.Deps[0].SpecNodeID != "" {
+	if d.Deps[0].Kind != RefOp || d.Deps[0].OpID != p.OpID || d.Deps[0].BeadID != "" {
 		t.Errorf("dep[0]: want pure ref:op %s, got %+v", p.OpID, d.Deps[0])
 	}
-	if d.Deps[1].Kind != RefBead || d.Deps[1].BeadID != "br-q" || d.Deps[1].OpID != "" || d.Deps[1].SpecNodeID != "" {
+	if d.Deps[1].Kind != RefBead || d.Deps[1].BeadID != "br-q" || d.Deps[1].OpID != "" {
 		t.Errorf("dep[1]: want pure ref:bead br-q, got %+v", d.Deps[1])
 	}
 	if opIndex(cs.Ops, "p1") >= opIndex(cs.Ops, "d1") {
@@ -1014,9 +981,7 @@ func TestBuild_CrossComponent_DepClassificationRoundTrip(t *testing.T) {
 // back.
 func TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset(t *testing.T) {
 	env := newBuilderEnv()
-	env.store.bySpecNode["q-open"] = []mapping.Record{
-		{ID: 3, SpecNodeID: "q-open", BeadID: "br-q", BeadStatus: "open"},
-	}
+	env.fold["q-open"] = FoldEntry{TaskID: "br-q"}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("d1", "m", "D", []string{"p1", "q-open", "r-none"}),
@@ -1038,16 +1003,16 @@ func TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset(t *tes
 // TestBuild_CrossComponent_LabelsPairWithTopoOrder covers the spec's
 // "idempotency label reservation paired with sort order" scenario, updated
 // for the store-free Labeler: an A → B → C in-batch chain labels the topo
-// order A, B, C as spex:cA/cB/cC regardless of the mapping store's
-// NextRecordID — two runs with different store counters produce identical
-// labels, proving the label is read off each op's own spec_node_id rather
-// than any store-derived cursor. An existing proposal epic keeps the epic
-// op out of the batch, matching the spec's three-label expectation.
+// order A, B, C as spex:cA/cB/cC. There is no store-derived cursor left to
+// vary — Labeler reads each label off its own op's spec_node_id — so two
+// independently constructed envs over identical inputs must still pair
+// identically, proving the label depends on the op alone. An existing
+// proposal epic keeps the epic op out of the batch, matching the spec's
+// three-label expectation.
 func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
-	run := func(nextID int) Changeset {
+	run := func() Changeset {
 		env := newBuilderEnv()
-		env.store.nextID = nextID
-		env.store.epic["prop"] = mapping.Record{ID: 1, BeadID: "br-epic", BeadStatus: "open"}
+		env.fold["prop"] = FoldEntry{TaskID: "br-epic"}
 		report := impact.ImpactReport{
 			Creates: []impact.Action{
 				sampleComponentCreate("cC", "m", "C", []string{"cB"}),
@@ -1057,7 +1022,7 @@ func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 		}
 		cs, err := env.build(report, "prop", "deadbeefcafe")
 		if err != nil {
-			t.Fatalf("Build(counter=%d): %v", nextID, err)
+			t.Fatalf("Build: %v", err)
 		}
 		return cs
 	}
@@ -1072,15 +1037,15 @@ func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 			if cs.Ops[i].SpecNodeID != id {
 				t.Errorf("op[%d]: want %s (topo order A,B,C), got %s", i, id, cs.Ops[i].SpecNodeID)
 			}
-			want := fmt.Sprintf("spex:%s", id)
+			want := "spex:" + id
 			if cs.Ops[i].Idempotency == nil || cs.Ops[i].Idempotency.Label != want {
 				t.Errorf("op[%d] label: want %s, got %+v", i, want, cs.Ops[i].Idempotency)
 			}
 		}
 	}
 
-	assertPairing(run(100))
-	assertPairing(run(103))
+	assertPairing(run())
+	assertPairing(run())
 }
 
 // TestBuild_CrossComponent_CycleErrorNamesBothNodes covers the spec's
