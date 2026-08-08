@@ -699,56 +699,68 @@ func TestREQ_e68653819f38_Refresh_ReAddedThenRemovedRequirementProducesChangeEve
 
 // TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID covers
 // deriveRefreshEID's collision hazard directly: a leaf that flaps
-// v1 -> v2 -> v1 across two refreshes, then back to v2 on a third, makes
-// the third run's derived eid byte-identical to the first run's — both
-// are the same (node, before, after) triple. Without dedup the journal
-// would carry two lines under one id, and two different refresh receipts
-// would each name it in their absorbed list. The third run must not
-// construct a duplicate; the snapshot still advances to match the
-// current (v2) content.
+// v2 -> v1 -> v2 -> v1 -> v2 -> v1 across six refreshes makes every
+// odd-numbered run's derived eid byte-identical to run 1's, and every
+// even-numbered run's byte-identical to run 2's — deriveRefreshEID depends
+// only on (node, before, after), and the flap only ever visits two states.
+// Each of these six runs is still a real content transition relative to
+// the snapshot the previous run left behind, so each must still append its
+// own change event — dropping any of them (as a raw eid-seen skip would
+// from run 3 onward) leaves that transition amnesiac: absorbed into the
+// snapshot with no journal line and no receipt naming it. The collision is
+// resolved by disambiguating the id (uniqueRefreshEID), never by skipping
+// construction; only a re-diff of the exact same transition the node's
+// latest journaled event already records — a partial run's stale
+// snapshot, not a flap — skips.
 func TestREQ_e68653819f38_Refresh_FlappingContentDoesNotDuplicateEID(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	betaDir := filepath.Join(fx.specDir, "beta")
 
+	// setupRefreshFixture seeds arch_handler.md with v1's content, so the
+	// snapshot baseline already matches v1 before run 1.
 	v1 := "# Handler\n"
 	v2 := "# Handler (revised)\n"
+	sequence := []string{v2, v1, v2, v1, v2, v1}
 
-	writeFile(t, betaDir, "arch_handler.md", v2)
-	summary1, err := fx.handler().Apply(fx.specDir)
-	if err != nil {
-		t.Fatalf("run1 Apply: %v", err)
-	}
-	if summary1.EventsAppended != 1 {
-		t.Fatalf("run1 events_appended: want 1, got %d", summary1.EventsAppended)
-	}
+	seenEIDs := map[string]int{}
+	for i, content := range sequence {
+		run := i + 1
+		writeFile(t, betaDir, "arch_handler.md", content)
+		summary, err := fx.handler().Apply(fx.specDir)
+		if err != nil {
+			t.Fatalf("run%d Apply: %v", run, err)
+		}
+		if summary.EventsAppended != 1 {
+			t.Fatalf("run%d events_appended: want 1 (a real content transition, not a re-diff of the already-journaled one), got %d", run, summary.EventsAppended)
+		}
+		if !summary.SnapshotSaved {
+			t.Errorf("run%d: want snapshot_saved=true, got %+v", run, summary)
+		}
 
-	writeFile(t, betaDir, "arch_handler.md", v1)
-	summary2, err := fx.handler().Apply(fx.specDir)
-	if err != nil {
-		t.Fatalf("run2 Apply: %v", err)
-	}
-	if summary2.EventsAppended != 1 {
-		t.Fatalf("run2 events_appended: want 1, got %d", summary2.EventsAppended)
-	}
-
-	writeFile(t, betaDir, "arch_handler.md", v2)
-	summary3, err := fx.handler().Apply(fx.specDir)
-	if err != nil {
-		t.Fatalf("run3 Apply: %v", err)
-	}
-	if summary3.EventsAppended != 0 {
-		t.Errorf("run3 events_appended: want 0 (identical transition already journaled under this eid), got %d", summary3.EventsAppended)
-	}
-	if !summary3.SnapshotSaved {
-		t.Errorf("run3: want snapshot_saved=true, got %+v", summary3)
+		events := readJournal(t, fx.specDir)
+		ev, ok := eventForNode(events, fx.handlerID)
+		if !ok || ev.Event != "modified" {
+			t.Fatalf("run%d: want the latest journal line for %s to be a modified event, got %+v (ok=%v)", run, fx.handlerID, ev, ok)
+		}
+		seenEIDs[ev.EID]++
+		if seenEIDs[ev.EID] > 1 {
+			t.Errorf("run%d: eid %s reused from an earlier run; every eid must be unique", run, ev.EID)
+		}
 	}
 
 	events := readJournal(t, fx.specDir)
+	modifiedCount := 0
 	eidCounts := map[string]int{}
 	for _, ev := range events {
+		if ev.Event == "modified" && ev.Node == fx.handlerID {
+			modifiedCount++
+		}
 		if ev.EID != "" {
 			eidCounts[ev.EID]++
 		}
+	}
+	if modifiedCount != len(sequence) {
+		t.Errorf("modified events journaled across %d real content transitions: want %d, got %d", len(sequence), len(sequence), modifiedCount)
 	}
 	for eid, count := range eidCounts {
 		if count > 1 {

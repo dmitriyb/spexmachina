@@ -294,10 +294,22 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 			if c.NodeType == "meta" {
 				continue
 			}
-			eid := deriveRefreshEID(c.Key, strPtr(c.OldHash), strPtr(c.NewHash))
-			if seenEIDs[eid] {
+			if last, hasLast := lastChangeByNode[c.Key]; hasLast && last.Event == "modified" &&
+				derefOrEmpty(last.Before) == c.OldHash && derefOrEmpty(last.After) == c.NewHash {
+				// Already the journal's current state for this node —
+				// its latest change event already records this exact
+				// before->after transition, from a prior (possibly
+				// partial) run that journaled it but left the snapshot
+				// stale. Nothing new to say, so construct nothing,
+				// mirroring the Added/Removed branches above. A
+				// transition that recurs after an intervening one
+				// (a flap back to an earlier state) is NOT this case —
+				// its before/after pair won't match the latest event —
+				// and falls through to construct below, same as a
+				// content-identical re-add falls through on Added.
 				continue
 			}
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, strPtr(c.OldHash), strPtr(c.NewHash)))
 			md := liveIndex[c.Key]
 			ev := mapping.Event{
 				Event: "modified", EID: eid,
@@ -307,7 +319,6 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 			}
 			batch = append(batch, ev)
 			absorbed = append(absorbed, ev.EID)
-			seenEIDs[eid] = true
 
 		case merkle.Removed:
 			last, hasLast := lastChangeByNode[c.Key]
