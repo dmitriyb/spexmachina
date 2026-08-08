@@ -56,19 +56,10 @@ func TestRef_OpShape(t *testing.T) {
 	}
 }
 
-func TestRef_SpecNodeShape(t *testing.T) {
-	r := Ref{Kind: RefSpecNode, SpecNodeID: "dbe8d1e707d5"}
-	got := encode(t, r)
-	want := `{"ref":"spec_node","spec_node_id":"dbe8d1e707d5"}`
-	if got != want {
-		t.Fatalf("spec_node ref: got %s want %s", got, want)
-	}
-}
-
 func TestRef_OmitsUnusedDiscriminators(t *testing.T) {
 	r := Ref{Kind: RefBead, BeadID: "br-1"}
 	got := encode(t, r)
-	for _, banned := range []string{`"op_id"`, `"spec_node_id"`, `"type"`} {
+	for _, banned := range []string{`"op_id"`, `"type"`} {
 		if strings.Contains(got, banned) {
 			t.Fatalf("bead ref must not contain %s: %s", banned, got)
 		}
@@ -142,7 +133,7 @@ func TestOp_PriorityOmittedWhenZero(t *testing.T) {
 	}
 }
 
-func TestChangeset_V1Schema(t *testing.T) {
+func TestChangeset_V2Schema(t *testing.T) {
 	cs := Changeset{
 		Version:  ChangesetVersion,
 		GitHead:  "deadbeefcafe1234",
@@ -159,15 +150,15 @@ func TestChangeset_V1Schema(t *testing.T) {
 		},
 	}
 	got := encode(t, cs)
-	if !strings.Contains(got, `"version":1`) {
-		t.Fatalf("changeset must declare version 1: %s", got)
+	if !strings.Contains(got, `"version":2`) {
+		t.Fatalf("changeset must declare version 2: %s", got)
 	}
 	fieldOrder(t, got, "changeset", "version", "git_head", "proposal", "ops")
 }
 
-func TestChangeset_VersionConstantIsOne(t *testing.T) {
-	if ChangesetVersion != 1 {
-		t.Fatalf("ChangesetVersion: got %d want 1", ChangesetVersion)
+func TestChangeset_VersionConstantIsTwo(t *testing.T) {
+	if ChangesetVersion != 2 {
+		t.Fatalf("ChangesetVersion: got %d want 2", ChangesetVersion)
 	}
 }
 
@@ -210,14 +201,12 @@ func TestOpKindConstants(t *testing.T) {
 
 func TestRefKindConstants(t *testing.T) {
 	cases := map[string]string{
-		"RefBead":     RefBead,
-		"RefOp":       RefOp,
-		"RefSpecNode": RefSpecNode,
+		"RefBead": RefBead,
+		"RefOp":   RefOp,
 	}
 	want := map[string]string{
-		"RefBead":     "bead",
-		"RefOp":       "op",
-		"RefSpecNode": "spec_node",
+		"RefBead": "bead",
+		"RefOp":   "op",
 	}
 	for k, v := range cases {
 		if v != want[k] {

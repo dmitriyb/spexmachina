@@ -26,7 +26,7 @@ func newEmitCmd() *cobra.Command {
 		Use:   "emit",
 		Short: "Emit a tool-agnostic changeset from an impact report",
 		Long: `Emit reads an impact report, the bead mapping store, and the spec
-graph, then writes a deterministic changeset.json (v1) describing the
+graph, then writes a deterministic changeset.json (v2) describing the
 ordered create/close/label/tag operations an external adapter must apply.
 
 Inputs:
@@ -63,10 +63,16 @@ Outputs:
 			}
 
 			builder := &emit.Builder{
-				SpecGraph:    specGraph,
-				MappingStore: store,
-				GitHead:      gitHead,
-				Proposal:     proposal,
+				SpecGraph: specGraph,
+				// TODO(bead:spexmachina-y0wc.31): EmitCommand still reads
+				// the legacy .bead-map.json store; ChangesetBuilder's own
+				// migration (spexmachina-y0wc.30) moved its Fold field onto
+				// the emit.JournalFold contract, so this command bridges
+				// the gap until EmitCommand itself migrates onto the task
+				// journal (mapping.NewMappingStore(specDir).List()).
+				Fold:     legacyMapStoreFold{store: store},
+				GitHead:  gitHead,
+				Proposal: proposal,
 			}
 			cs, err := builder.Build(report)
 			if err != nil {
@@ -280,4 +286,63 @@ func (g *emitSpecGraph) ProjectRequirement(id string) (emit.ProjectRequirement, 
 func (g *emitSpecGraph) Paths(id string) (emit.NodePaths, bool) {
 	p, ok := g.paths[id]
 	return p, ok
+}
+
+// legacyMapStoreFold adapts the legacy mapping.Store (.bead-map.json) onto
+// emit.Builder's JournalFold contract, standing in for the real task
+// journal fold until EmitCommand migrates (spexmachina-y0wc.31) onto
+// mapping.NewMappingStore(specDir).List().
+type legacyMapStoreFold struct {
+	store mapping.Store
+}
+
+// Entry tries the proposal-epic lookup first — a component or data_flow's
+// spec_node_id never matches a NodeType=="proposal" record, so this is
+// safe for every key Resolver or Builder asks about — then falls back to
+// the spec-node lookup, restricted to non-proposal records: GetByProposalEpic
+// already answered the proposal-record question for this key (including
+// "closed, so not found"), and re-admitting a closed proposal record here
+// would invert that answer into Removed=true. Among the remaining records,
+// "all closed" collapses onto Removed=true, the legacy store's closest
+// analogue to a removed node's fold entry.
+func (f legacyMapStoreFold) Entry(key string) (emit.FoldEntry, bool) {
+	if rec, err := f.store.GetByProposalEpic(key); err == nil {
+		return emit.FoldEntry{TaskID: rec.BeadID}, true
+	}
+	recs, err := f.store.GetBySpecNode(key)
+	if err != nil {
+		return emit.FoldEntry{}, false
+	}
+	var nonProposal []mapping.Record
+	for _, r := range recs {
+		if r.NodeType != "proposal" {
+			nonProposal = append(nonProposal, r)
+		}
+	}
+	if len(nonProposal) == 0 {
+		return emit.FoldEntry{}, false
+	}
+	if chosen, anyOpen := pickOpenMapRecord(nonProposal); anyOpen {
+		return emit.FoldEntry{TaskID: chosen.BeadID}, true
+	}
+	return emit.FoldEntry{Removed: true}, true
+}
+
+// pickOpenMapRecord returns the highest-ID record whose BeadStatus is not
+// "closed". Empty status counts as open — conservative default attaches
+// an edge rather than silently dropping. Highest-ID wins so the latest
+// re-implementation supersedes earlier records.
+func pickOpenMapRecord(recs []mapping.Record) (mapping.Record, bool) {
+	var chosen mapping.Record
+	var found bool
+	for _, r := range recs {
+		if r.BeadStatus == "closed" {
+			continue
+		}
+		if !found || r.ID > chosen.ID {
+			chosen = r
+			found = true
+		}
+	}
+	return chosen, found
 }

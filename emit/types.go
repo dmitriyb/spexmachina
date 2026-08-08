@@ -1,8 +1,11 @@
 package emit
 
 // Changeset version constant. Bumped when the schema changes in a
-// non-backwards-compatible way; emit always writes the latest.
-const ChangesetVersion = 1
+// non-backwards-compatible way; emit always writes the latest. Version 2
+// dropped the ref:spec_node shape: a dep that is neither in-batch nor in
+// the task journal fold is an emit-time error instead of a deferred,
+// adapter-resolved reference.
+const ChangesetVersion = 2
 
 // Op type vocabulary. Tool-agnostic — adapters for br, bd, GitHub Issues,
 // or Jira consume the same vocabulary.
@@ -13,11 +16,13 @@ const (
 	OpTag    = "tag"
 )
 
-// Ref kind discriminator values. Each Ref is exactly one of these three.
+// Ref kind discriminator values. Each Ref is exactly one of these two.
+// Version 1 also carried a third shape, ref:spec_node, an adapter-time
+// lookup against the mapping store; version 2 dropped it — a dep that
+// cannot be classified as either shape below is an emit-time error.
 const (
-	RefBead     = "bead"
-	RefOp       = "op"
-	RefSpecNode = "spec_node"
+	RefBead = "bead"
+	RefOp   = "op"
 )
 
 // Type tiers control op ordering. Within each tier TopologicalSorter
@@ -35,21 +40,19 @@ const (
 // blocks high-priority items nor sinks below low-priority cleanup work.
 const FallbackPriority = 3
 
-// Ref encodes a forward-resolvable reference. Exactly one of BeadID, OpID,
-// or SpecNodeID is set per Ref; omitempty keeps the JSON clean.
+// Ref encodes a forward-resolvable reference. Exactly one of BeadID or OpID
+// is set per Ref; omitempty keeps the JSON clean.
 //
-//	{ "ref": "bead",      "bead_id":      "<id>" }   pre-existing bead
-//	{ "ref": "op",        "op_id":        "<id>" }   another op in this changeset
-//	{ "ref": "spec_node", "spec_node_id": "<id>" }   adapter-time fallback
+//	{ "ref": "bead", "bead_id": "<id>" }   pre-existing bead
+//	{ "ref": "op",   "op_id":   "<id>" }   another op in this changeset
 //
 // EdgeType is optional and carries the dep edge label (e.g. "blocks") on
 // obsolete+create lineage refs.
 type Ref struct {
-	Kind       string `json:"ref"`
-	BeadID     string `json:"bead_id,omitempty"`
-	OpID       string `json:"op_id,omitempty"`
-	SpecNodeID string `json:"spec_node_id,omitempty"`
-	EdgeType   string `json:"type,omitempty"`
+	Kind     string `json:"ref"`
+	BeadID   string `json:"bead_id,omitempty"`
+	OpID     string `json:"op_id,omitempty"`
+	EdgeType string `json:"type,omitempty"`
 }
 
 // Idem carries the idempotency label the adapter matches against the
@@ -79,7 +82,7 @@ type Op struct {
 	Reason       string   `json:"reason,omitempty"`
 }
 
-// Changeset is the v1 output schema. Field order is fixed; ops are emitted
+// Changeset is the v2 output schema. Field order is fixed; ops are emitted
 // in the order TopologicalSorter produced and never re-sorted at write time.
 type Changeset struct {
 	Version  int    `json:"version"`
