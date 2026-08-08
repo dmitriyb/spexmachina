@@ -16,14 +16,15 @@ import (
 )
 
 func newIngestCmd() *cobra.Command {
-	var changesetPath, receiptsPath, mapPath, mode string
+	var changesetPath, receiptsPath, mode, gitHead string
 
 	cmd := &cobra.Command{
 		Use:   "ingest",
-		Short: "Reconcile mapping records and save snapshot from a changeset+receipts pair",
+		Short: "Reconcile the task journal and save snapshot from a changeset+receipts pair",
 		Long: `Ingest reads a changeset.json (produced by spex emit) and the
-receipts.json an adapter wrote after applying it, reconciles the bead
-mapping store, and writes spec/.snapshot.json when the run is complete.
+receipts.json an adapter wrote after applying it, reconciles the task
+journal (spec/.history.jsonl), and writes spec/.snapshot.json when the
+run is complete.
 
 With --mode refresh (empty changeset + empty receipts), ingest instead
 absorbs spec drift: one change event per drifted or absorbable
@@ -37,8 +38,10 @@ still-open task is refused regardless of its type.
 Inputs:
   --changeset <file>   changeset JSON (required)
   --receipts <file>    receipts JSON (required)
-  --map <file>         bead mapping file (default: .bead-map.json)
   --mode <mode>        normal (default) or refresh
+  --git-head <sha>     refresh mode only: commit stamped on the refresh
+                        receipt. Normal mode ignores it — the changeset
+                        already carries its own git_head.
 
 Exit codes:
   0 — success (complete OR partial with no reconciler errors)
@@ -67,18 +70,12 @@ Exit codes:
 			}
 
 			if mode == "refresh" {
-				return runRefreshMode(cmd, specDir, cs, rc)
+				return runRefreshMode(cmd, specDir, cs, rc, gitHead)
 			}
 			if mode != "normal" {
 				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
 			}
 
-			// TODO(bead:spexmachina-y0wc.35): IngestCommand's full migration
-			// to the task journal (preflight/error-handling review per
-			// arch_ingest_command.md, and whether --map still belongs on
-			// normal-mode invocations) is that bead's own work. This wiring
-			// is the minimal fix Reconciler's journal-based constructor
-			// forces so `go build ./...` keeps passing.
 			graph, err := newIngestSpecGraph(specDir)
 			if err != nil {
 				return ingestInputErr(fmt.Errorf("ingest: load spec graph: %w", err))
@@ -114,8 +111,8 @@ Exit codes:
 
 	cmd.Flags().StringVar(&changesetPath, "changeset", "", "path to changeset.json")
 	cmd.Flags().StringVar(&receiptsPath, "receipts", "", "path to receipts.json")
-	cmd.Flags().StringVar(&mapPath, "map", ".bead-map.json", "path to bead mapping file")
 	cmd.Flags().StringVar(&mode, "mode", "normal", "run mode: normal or refresh")
+	cmd.Flags().StringVar(&gitHead, "git-head", "", "refresh mode only: commit stamped on the refresh receipt")
 	_ = cmd.MarkFlagRequired("changeset")
 	_ = cmd.MarkFlagRequired("receipts")
 	return cmd
@@ -125,15 +122,15 @@ Exit codes:
 // (structural diff entries, a live task pairing on a removed node) map
 // to the invariant exit code 2; pre-flight failures (missing snapshot,
 // non-empty artifacts) and IO errors map to input-error exit code 1,
-// per arch_ingest_command.md.
-//
-// TODO(bead:spexmachina-y0wc.35): wire a --git-head flag through to
-// RefreshHandler.GitHead once IngestCommand grows one; until then every
-// refresh run records --git-head as absent.
-func runRefreshMode(cmd *cobra.Command, specDir string, cs emit.Changeset, rc adapters.Receipts) error {
+// per arch_ingest_command.md. An empty gitHead records the refresh
+// receipt's git_head as absent, per RefreshHandler's GitHead contract.
+func runRefreshMode(cmd *cobra.Command, specDir string, cs emit.Changeset, rc adapters.Receipts, gitHead string) error {
 	h := &ingest.RefreshHandler{
 		Changeset: &cs,
 		Receipts:  &rc,
+	}
+	if gitHead != "" {
+		h.GitHead = &gitHead
 	}
 	sum, err := h.Apply(specDir)
 	if err != nil {
@@ -301,11 +298,6 @@ func (g *ingestSpecGraph) registerLeaf(mod schema.Module, modDir, id, name, cont
 	}
 	g.nodes[id] = md
 	return nil
-}
-
-func (g *ingestSpecGraph) HasNode(id string) bool {
-	_, ok := g.nodes[id]
-	return ok
 }
 
 func (g *ingestSpecGraph) NodeMetadata(id string) (ingest.NodeMetadata, error) {
