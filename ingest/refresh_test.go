@@ -2,7 +2,6 @@ package ingest
 
 import (
 	"errors"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -18,15 +17,14 @@ import (
 
 // refreshFixture bundles the state a RefreshHandler test needs: a spec
 // dir with two modules, a snapshot matching the initial spec state, and
-// a seeded bead-map whose records' spec_hash values match the snapshot.
+// a seeded journal recording each module's component as already created
+// (task_created) — the state a normal-mode run would have left behind.
 type refreshFixture struct {
 	specDir  string
 	snapPath string
-	mapPath  string
-	store    mapping.Store
-	// widgetID/handlerID are component spec_node_ids with bead-map
-	// records; testID is a record-less test_section leaf and flowID a
-	// record-less data_flow leaf.
+	// widgetID/handlerID are component spec_node_ids with journal
+	// entries and open tasks; testID is a record-less test_section leaf
+	// and flowID a record-less data_flow leaf.
 	widgetID  string
 	handlerID string
 	testID    string
@@ -38,8 +36,8 @@ var refreshClock = func() time.Time {
 }
 
 // setupRefreshFixture writes the fixture spec, snapshots it, and seeds
-// the bead-map with records whose spec_hash matches the snapshot state
-// (i.e., clean — tests introduce drift by editing content files after).
+// the journal with an added event + open task_created per component —
+// clean state; tests introduce drift by editing content files after.
 func setupRefreshFixture(t *testing.T) refreshFixture {
 	t.Helper()
 	specDir := t.TempDir()
@@ -95,21 +93,27 @@ func setupRefreshFixture(t *testing.T) refreshFixture {
 	writeFile(t, betaDir, "arch_handler.md", "# Handler\n")
 	writeFile(t, betaDir, "flow_handler.md", "# Handler pipeline\n")
 
-	// Snapshot the initial state — the diff baseline.
+	widgetHash, err := merkle.HashFile(filepath.Join(alphaDir, "arch_widget.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	handlerHash, err := merkle.HashFile(filepath.Join(betaDir, "arch_handler.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	seedJournal(t, specDir,
+		mapping.Event{Event: "added", EID: "head0:op-widget", Node: fx.widgetID, Name: "Widget", NodeType: "component", Module: "aabbccddee10", After: strPtr(widgetHash), GitHead: "head0", Path: "spec/alpha/arch_widget.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-widget", For: "head0:op-widget"},
+		mapping.Event{Event: "added", EID: "head0:op-handler", Node: fx.handlerID, Name: "Handler", NodeType: "component", Module: "aabbccddee20", After: strPtr(handlerHash), GitHead: "head0", Path: "spec/beta/arch_handler.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-handler", For: "head0:op-handler"},
+	)
+
 	tree := buildFixtureTree(t, specDir)
 	if err := writeAtomic(fx.snapPath, tree, refreshClock()); err != nil {
 		t.Fatalf("seed snapshot: %v", err)
 	}
 
-	hashes := map[string]string{}
-	collectLeafHashes(hashes, tree)
-
-	records := []mapping.Record{
-		{ID: 1, SpecNodeID: fx.widgetID, BeadID: "br-widget", BeadType: "feature", NodeType: "component", Module: "alpha", Component: "Widget", ContentFile: "spec/alpha/arch_widget.md", SpecHash: hashes[fx.widgetID], BeadStatus: "closed"},
-		{ID: 2, SpecNodeID: fx.handlerID, BeadID: "br-handler", BeadType: "feature", NodeType: "component", Module: "beta", Component: "Handler", ContentFile: "spec/beta/arch_handler.md", SpecHash: hashes[fx.handlerID], BeadStatus: "open"},
-		{ID: 3, SpecNodeID: "2026-06-01-some-proposal", BeadID: "br-epic", BeadType: "epic", NodeType: "proposal", Module: "", Component: "2026-06-01-some-proposal", ContentFile: "", SpecHash: "", BeadStatus: "open"},
-	}
-	fx.store, fx.mapPath = newTestStore(t, records, 4)
 	return fx
 }
 
@@ -124,13 +128,24 @@ func buildFixtureTree(t *testing.T, specDir string) *merkle.Node {
 
 func (fx refreshFixture) handler() *RefreshHandler {
 	return &RefreshHandler{
-		Store:        fx.store,
 		SnapshotPath: fx.snapPath,
-		Changeset:    &emit.Changeset{Version: 1},
-		Receipts:     &adapters.Receipts{Version: 1, Status: adapters.StatusComplete},
+		Changeset:    &emit.Changeset{Version: emit.ChangesetVersion},
+		Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
 		Now:          refreshClock,
 	}
 }
+
+// closeTask appends a task_closed receipt for taskID, paired to the
+// node's own added-event eid — standing in for a bead the normal
+// pipeline (or an earlier partial run) already retired.
+func closeTask(t *testing.T, specDir, forEID, taskID string) {
+	t.Helper()
+	seedJournal(t, specDir, mapping.Event{Event: "task_closed", TaskID: taskID, For: forEID})
+}
+
+// closeTask (above) and this fixture both build on seedJournal,
+// readJournal and journalBytes — defined once in reconciler_test.go and
+// shared across every test in this package.
 
 func readBytes(t *testing.T, path string) []byte {
 	t.Helper()
@@ -139,41 +154,6 @@ func readBytes(t *testing.T, path string) []byte {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return data
-}
-
-func recordByID(t *testing.T, store mapping.Store, id int) mapping.Record {
-	t.Helper()
-	rec, err := store.Get(id)
-	if err != nil {
-		t.Fatalf("get record %d: %v", id, err)
-	}
-	return rec
-}
-
-// dropRecord deletes one record from the store, standing in for the
-// bead-map edit that accompanies retiring a spec node.
-func dropRecord(t *testing.T, store mapping.Store, id int) {
-	t.Helper()
-	records, err := store.List()
-	if err != nil {
-		t.Fatal(err)
-	}
-	nextID, err := store.NextRecordID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	kept := make([]mapping.Record, 0, len(records))
-	for _, rec := range records {
-		if rec.ID != id {
-			kept = append(kept, rec)
-		}
-	}
-	if len(kept) == len(records) {
-		t.Fatalf("record %d not present in the fixture", id)
-	}
-	if err := store.Replace(kept, nextID); err != nil {
-		t.Fatal(err)
-	}
 }
 
 // assertSnapshotIsCurrent checks that the run rebaselined the snapshot
@@ -198,52 +178,69 @@ func assertSnapshotMatchesSpec(t *testing.T, specDir, snapPath string) {
 	}
 }
 
-// TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes covers the headline
-// scenario: content-only edits are absorbed — stale records' spec_hash
-// updates, untouched records stay byte-identical, and the snapshot is
-// rewritten to the current state.
-func TestRefresh_ModifiedOnlyDiff_UpdatesStaleHashes(t *testing.T) {
+// eventForNode returns the last added/modified/removed event in events
+// whose Node matches key.
+func eventForNode(events []mapping.Event, key string) (mapping.Event, bool) {
+	var found mapping.Event
+	ok := false
+	for _, ev := range events {
+		if (ev.Event == "added" || ev.Event == "modified" || ev.Event == "removed") && ev.Node == key {
+			found, ok = ev, true
+		}
+	}
+	return found, ok
+}
+
+// TestRefresh_ModifiedOnlyDiff_AppendsEventsAndRewritesSnapshot covers
+// the headline scenario: content-only edits — to a task-owning
+// component and to a record-less test_section alike — are absorbed as
+// modified events, and the snapshot is rewritten to the current state.
+func TestRefresh_ModifiedOnlyDiff_AppendsEventsAndRewritesSnapshot(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
-	// Drift two leaves: one with a record (Handler) and one without
-	// (the test_section) — both are content-only modifications.
 	writeFile(t, filepath.Join(fx.specDir, "beta"), "arch_handler.md", "# Handler (revised)\n")
 	writeFile(t, filepath.Join(fx.specDir, "alpha"), "test_widget_logic.md", "# Widget logic (clarified)\n")
-
-	widgetBefore := recordByID(t, fx.store, 1)
 
 	summary, err := fx.handler().Apply(fx.specDir)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if summary.RecordsUpdated != 1 {
-		t.Errorf("records_updated: want 1 (Handler), got %d", summary.RecordsUpdated)
-	}
-	if summary.RecordsUnchanged != 2 {
-		t.Errorf("records_unchanged: want 2 (Widget + proposal), got %d", summary.RecordsUnchanged)
+	if summary.EventsAppended != 2 {
+		t.Errorf("events_appended: want 2, got %d", summary.EventsAppended)
 	}
 	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
 		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
 	}
 
-	tree := buildFixtureTree(t, fx.specDir)
-	hashes := map[string]string{}
-	collectLeafHashes(hashes, tree)
-
-	if got := recordByID(t, fx.store, 2); got.SpecHash != hashes[fx.handlerID] {
-		t.Errorf("handler spec_hash: want current %s, got %s", hashes[fx.handlerID], got.SpecHash)
-	}
-	if got := recordByID(t, fx.store, 1); got != widgetBefore {
-		t.Errorf("widget record must be untouched: before %+v, after %+v", widgetBefore, got)
-	}
-
-	snapTree, err := merkle.Load(fx.snapPath)
+	handlerHash, err := merkle.HashFile(filepath.Join(fx.specDir, "beta", "arch_handler.md"))
 	if err != nil {
-		t.Fatalf("load rewritten snapshot: %v", err)
+		t.Fatal(err)
 	}
-	if snapTree.Hash != tree.Hash {
-		t.Errorf("snapshot root: want current %s, got %s", tree.Hash, snapTree.Hash)
+	testHash, err := merkle.HashFile(filepath.Join(fx.specDir, "alpha", "test_widget_logic.md"))
+	if err != nil {
+		t.Fatal(err)
 	}
+
+	events := readJournal(t, fx.specDir)
+	handlerEv, ok := eventForNode(events, fx.handlerID)
+	if !ok || handlerEv.Event != "modified" || handlerEv.After == nil || *handlerEv.After != handlerHash {
+		t.Errorf("handler event: want modified after=%s, got %+v", handlerHash, handlerEv)
+	}
+	testEv, ok := eventForNode(events, fx.testID)
+	if !ok || testEv.Event != "modified" || testEv.After == nil || *testEv.After != testHash {
+		t.Errorf("test_section event: want modified after=%s, got %+v", testHash, testEv)
+	}
+
+	last := events[len(events)-1]
+	if last.Event != "refresh" {
+		t.Fatalf("want the batch closed by a refresh receipt, got %+v", last)
+	}
+	wantAbsorbed := map[string]bool{handlerEv.EID: true, testEv.EID: true}
+	if len(last.Absorbed) != 2 || !wantAbsorbed[last.Absorbed[0]] || !wantAbsorbed[last.Absorbed[1]] {
+		t.Errorf("refresh receipt absorbed: want exactly {%s, %s}, got %v", handlerEv.EID, testEv.EID, last.Absorbed)
+	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
 // TestREQ_e68653819f38_Refresh_RefusesAddedComponent covers the
@@ -267,7 +264,7 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
 	}`)
 	writeFile(t, alphaDir, "arch_new_thing.md", "# New thing\n")
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 	snapBefore := readBytes(t, fx.snapPath)
 
 	_, err := fx.handler().Apply(fx.specDir)
@@ -281,8 +278,8 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
 	if !strings.Contains(err.Error(), "normal pipeline") {
 		t.Errorf("refusal must point at the normal pipeline: %v", err)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical after refusal")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
 		t.Error("snapshot must be byte-identical after refusal")
@@ -307,7 +304,7 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 	snapBefore := readBytes(t, fx.snapPath)
 
 	_, err := fx.handler().Apply(fx.specDir)
@@ -321,20 +318,35 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
 	if !strings.Contains(err.Error(), "normal pipeline") {
 		t.Errorf("refusal must point at the normal pipeline: %v", err)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical after refusal")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
 		t.Error("snapshot must be byte-identical after refusal")
 	}
 }
 
-// TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI covers the absorbable
-// side of the type filter: an api produces no bead, so removing one is
-// content migration and refresh rebaselines it. No bead-map record points
-// at an api, so the map is untouched.
-func TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsAbsorbableStructuralSet covers
+// the absorbable side of the type filter across every kind that owns
+// one: a new requirement, an api added and another removed, and a
+// component removed whose task was already closed. A test that only
+// exercised the refusal side would pass against an implementation that
+// refused everything.
+func TestREQ_e68653819f38_Refresh_AbsorbsAbsorbableStructuralSet(t *testing.T) {
 	fx := setupRefreshFixture(t)
+
+	closeTask(t, fx.specDir, "head0:op-handler", "br-handler")
+
+	writeFile(t, fx.specDir, "project.json", `{
+		"name": "refresh-fixture",
+		"modules": [
+			{"id": "aabbccddee10", "name": "alpha", "path": "alpha"},
+			{"id": "aabbccddee20", "name": "beta", "path": "beta"}
+		],
+		"requirements": [
+			{"id": "aabbccddee09", "type": "functional", "title": "Fixture requirement"}
+		]
+	}`)
 	alphaDir := filepath.Join(fx.specDir, "alpha")
 	writeFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
@@ -343,62 +355,11 @@ func TestREQ_e68653819f38_Refresh_AbsorbsRemovedAPI(t *testing.T) {
 		],
 		"test_sections": [
 			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
-		]
-	}`)
-
-	mapBefore := readBytes(t, fx.mapPath)
-
-	summary, err := fx.handler().Apply(fx.specDir)
-	if err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
-		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
-	}
-	if summary.RecordsUpdated != 0 {
-		t.Errorf("records_updated: want 0 (no record names an api), got %d", summary.RecordsUpdated)
-	}
-	assertSnapshotIsCurrent(t, fx)
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be unchanged: no record points at an api")
-	}
-}
-
-// TestREQ_e68653819f38_Refresh_AbsorbsAddedAPI covers the addition side
-// of the type filter: an api node produces no bead, so declaring one is
-// absorbed rather than refused.
-func TestREQ_e68653819f38_Refresh_AbsorbsAddedAPI(t *testing.T) {
-	fx := setupRefreshFixture(t)
-	writeFile(t, filepath.Join(fx.specDir, "alpha"), "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+fx.widgetID+`", "name": "Widget", "content": "arch_widget.md"}
-		],
-		"test_sections": [
-			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
 		],
 		"apis": [
-			{"id": "aabbccddee05", "name": "spex widget", "group": "cli"}
+			{"id": "aabbccddee07", "name": "spex widget create", "group": "cli"}
 		]
 	}`)
-
-	summary, err := fx.handler().Apply(fx.specDir)
-	if err != nil {
-		t.Fatalf("Apply: %v", err)
-	}
-	if !summary.SnapshotSaved {
-		t.Errorf("want the added api rebaselined into the snapshot, got %+v", summary)
-	}
-	assertSnapshotIsCurrent(t, fx)
-}
-
-// TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithRetiredRecord
-// covers the reason component is on the absorbable list at all: a spec
-// component whose implementing code is gone is retired by deleting the
-// node and its bead-map record together, leaving no bead work for the
-// normal pipeline to do.
-func TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithRetiredRecord(t *testing.T) {
-	fx := setupRefreshFixture(t)
 	betaDir := filepath.Join(fx.specDir, "beta")
 	writeFile(t, betaDir, "module.json", `{
 		"name": "beta",
@@ -409,31 +370,45 @@ func TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithRetiredRecord(t *te
 	if err := os.Remove(filepath.Join(betaDir, "arch_handler.md")); err != nil {
 		t.Fatal(err)
 	}
-	dropRecord(t, fx.store, 2)
-
-	widgetBefore := recordByID(t, fx.store, 1)
 
 	summary, err := fx.handler().Apply(fx.specDir)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
+	}
+	if summary.EventsAppended != 4 {
+		t.Errorf("events_appended: want 4 (requirement added, api added, api removed, component removed), got %d", summary.EventsAppended)
 	}
 	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
 		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
 	}
+
+	events := readJournal(t, fx.specDir)
+	reqEv, ok := eventForNode(events, "aabbccddee09")
+	if !ok || reqEv.Event != "added" || reqEv.NodeType != "requirement" {
+		t.Errorf("want an added requirement event, got %+v (ok=%v)", reqEv, ok)
+	}
+	addedAPI, ok := eventForNode(events, "aabbccddee07")
+	if !ok || addedAPI.Event != "added" || addedAPI.NodeType != "api" {
+		t.Errorf("want an added api event, got %+v (ok=%v)", addedAPI, ok)
+	}
+	removedAPI, ok := eventForNode(events, "aabbccddee06")
+	if !ok || removedAPI.Event != "removed" || removedAPI.NodeType != "api" {
+		t.Errorf("want a removed api event, got %+v (ok=%v)", removedAPI, ok)
+	}
+	removedComp, ok := eventForNode(events, fx.handlerID)
+	if !ok || removedComp.Event != "removed" || removedComp.NodeType != "component" || removedComp.Name != "Handler" {
+		t.Errorf("want a removed component event named Handler, got %+v (ok=%v)", removedComp, ok)
+	}
+
 	assertSnapshotIsCurrent(t, fx)
-	if got := recordByID(t, fx.store, 1); got != widgetBefore {
-		t.Errorf("surviving records must be untouched: before %+v, after %+v", widgetBefore, got)
-	}
-	if _, err := fx.store.Get(2); err == nil {
-		t.Error("the retired component's record must not be resurrected")
-	}
 }
 
-// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithSurvivingRecord
+// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing
 // pins the boundary that makes absorbing component removals safe: the
-// type filter admits the removal, and the orphan gate then refuses it
-// because the bead-map record still points at the deleted node.
-func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithSurvivingRecord(t *testing.T) {
+// type filter admits the removal, and the live-pairing gate then
+// refuses it because the node's task is still open — no task_closed
+// answers br-handler anywhere in the journal.
+func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	betaDir := filepath.Join(fx.specDir, "beta")
 	writeFile(t, betaDir, "module.json", `{
@@ -446,19 +421,19 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithSurvivingRecord(t *
 		t.Fatal(err)
 	}
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 	snapBefore := readBytes(t, fx.snapPath)
 
 	_, err := fx.handler().Apply(fx.specDir)
 	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "orphan_record" {
-		t.Fatalf("want RefreshRefusal orphan_record, got %v", err)
+	if !errors.As(err, &refusal) || refusal.Kind != "live_task_pairing" {
+		t.Fatalf("want RefreshRefusal live_task_pairing, got %v", err)
 	}
 	if !strings.Contains(err.Error(), fx.handlerID) || !strings.Contains(err.Error(), "br-handler") {
-		t.Errorf("refusal must name spec_node_id and bead_id: %v", err)
+		t.Errorf("refusal must name the node identity hash and the live task id: %v", err)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical after refusal")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
 		t.Error("snapshot must be byte-identical after refusal")
@@ -487,7 +462,7 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta(t *testing.T) {
 	}
 	writeFile(t, gammaDir, "module.json", `{"name": "gamma"}`)
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 	snapBefore := readBytes(t, fx.snapPath)
 
 	_, err := fx.handler().Apply(fx.specDir)
@@ -498,46 +473,8 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta(t *testing.T) {
 	if !strings.Contains(err.Error(), "meta/aabbccddee30") {
 		t.Errorf("refusal must name the added module envelope leaf: %v", err)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical after refusal")
-	}
-	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
-		t.Error("snapshot must be byte-identical after refusal")
-	}
-}
-
-// TestRefresh_RefusesOnOrphanRecord covers the orphan gate: a bead-map
-// record whose spec_node_id has no live spec node names both the node
-// and the bead in the refusal, and neither file changes. The proposal
-// record (spec_node_id = proposal ref) is exempt by design.
-func TestRefresh_RefusesOnOrphanRecord(t *testing.T) {
-	fx := setupRefreshFixture(t)
-	records, err := fx.store.List()
-	if err != nil {
-		t.Fatal(err)
-	}
-	records = append(records, mapping.Record{
-		ID: 9, SpecNodeID: "deaddeadbeef", BeadID: "br-ghost", BeadType: "feature",
-		NodeType: "component", Module: "alpha", Component: "Ghost",
-		ContentFile: "spec/alpha/arch_ghost.md", SpecHash: "h",
-	})
-	if err := fx.store.Replace(records, 10); err != nil {
-		t.Fatal(err)
-	}
-
-	mapBefore := readBytes(t, fx.mapPath)
-	snapBefore := readBytes(t, fx.snapPath)
-
-	_, err = fx.handler().Apply(fx.specDir)
-	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "orphan_record" {
-		t.Fatalf("want RefreshRefusal orphan_record, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "deaddeadbeef") || !strings.Contains(err.Error(), "br-ghost") {
-		t.Errorf("refusal must name spec_node_id and bead_id: %v", err)
-	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical after refusal")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
 		t.Error("snapshot must be byte-identical after refusal")
@@ -545,26 +482,26 @@ func TestRefresh_RefusesOnOrphanRecord(t *testing.T) {
 }
 
 // TestRefresh_CleanSpecIsNoOp covers the no-drift scenario: refresh on
-// a spec byte-identical to the snapshot succeeds, updates nothing, and
+// a spec byte-identical to the snapshot succeeds, appends nothing, and
 // rewrites neither file (so git status is unperturbed).
 func TestRefresh_CleanSpecIsNoOp(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 	snapBefore := readBytes(t, fx.snapPath)
 
 	summary, err := fx.handler().Apply(fx.specDir)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if summary.RecordsUpdated != 0 || summary.SnapshotSaved {
-		t.Errorf("want zero updates and no snapshot write, got %+v", summary)
+	if summary.EventsAppended != 0 || summary.SnapshotSaved {
+		t.Errorf("want zero events and no snapshot write, got %+v", summary)
 	}
 	if summary.Status != adapters.StatusComplete {
 		t.Errorf("status: want complete, got %q", summary.Status)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be byte-identical on a clean no-op")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical on a clean no-op")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
 		t.Error("snapshot must be byte-identical on a clean no-op")
@@ -572,8 +509,8 @@ func TestRefresh_CleanSpecIsNoOp(t *testing.T) {
 }
 
 // TestRefresh_RerunIsIdempotent covers the idempotency scenario: a
-// second refresh over the state the first one produced updates zero
-// records and leaves both files byte-identical.
+// second refresh over the state the first one produced finds no more
+// drift (the snapshot now matches the spec) and appends nothing.
 func TestRefresh_RerunIsIdempotent(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	writeFile(t, filepath.Join(fx.specDir, "beta"), "arch_handler.md", "# Handler v2\n")
@@ -581,18 +518,18 @@ func TestRefresh_RerunIsIdempotent(t *testing.T) {
 	if _, err := fx.handler().Apply(fx.specDir); err != nil {
 		t.Fatalf("first Apply: %v", err)
 	}
-	mapAfterFirst := readBytes(t, fx.mapPath)
+	journalAfterFirst := journalBytes(t, fx.specDir)
 	snapAfterFirst := readBytes(t, fx.snapPath)
 
 	summary, err := fx.handler().Apply(fx.specDir)
 	if err != nil {
 		t.Fatalf("second Apply: %v", err)
 	}
-	if summary.RecordsUpdated != 0 {
-		t.Errorf("second run: want zero updates, got %d", summary.RecordsUpdated)
+	if summary.EventsAppended != 0 || summary.SnapshotSaved {
+		t.Errorf("second run: want zero events and no snapshot write, got %+v", summary)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapAfterFirst) {
-		t.Error("bead-map must end byte-identical to the first run's state")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalAfterFirst) {
+		t.Error("journal must end byte-identical to the first run's state")
 	}
 	if got := readBytes(t, fx.snapPath); string(got) != string(snapAfterFirst) {
 		t.Error("snapshot must end byte-identical to the first run's state")
@@ -620,23 +557,23 @@ func TestRefresh_NonEmptyArtifactsRefused(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
 	h := fx.handler()
-	h.Changeset = &emit.Changeset{Version: 1, Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate}}}
+	h.Changeset = &emit.Changeset{Version: emit.ChangesetVersion, Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate}}}
 	if _, err := h.Apply(fx.specDir); !errors.Is(err, ErrRefreshNonEmptyArtifacts) {
 		t.Fatalf("non-empty changeset: want ErrRefreshNonEmptyArtifacts, got %v", err)
 	}
 
 	h = fx.handler()
-	h.Receipts = &adapters.Receipts{Version: 1, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk}}}
+	h.Receipts = &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk}}}
 	if _, err := h.Apply(fx.specDir); !errors.Is(err, ErrRefreshNonEmptyArtifacts) {
 		t.Fatalf("non-empty receipts: want ErrRefreshNonEmptyArtifacts, got %v", err)
 	}
 }
 
-// TestRefresh_SnapshotWriteFailureRollsBackBeadMap covers the atomicity
-// edge case: when the snapshot write fails after the bead-map write,
-// the bead-map is rolled back so both files stay at the pre-refresh
-// state — they move together or not at all.
-func TestRefresh_SnapshotWriteFailureRollsBackBeadMap(t *testing.T) {
+// TestRefresh_SnapshotWriteFailureRollsBackJournal covers the
+// atomicity edge case: when the snapshot write fails after the journal
+// append, the journal is rolled back so both files stay at the
+// pre-refresh state — they move together or not at all.
+func TestRefresh_SnapshotWriteFailureRollsBackJournal(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission-based write failure not portable to windows")
 	}
@@ -662,7 +599,7 @@ func TestRefresh_SnapshotWriteFailureRollsBackBeadMap(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(roDir, 0755) })
 
-	mapBefore := readBytes(t, fx.mapPath)
+	journalBefore := journalBytes(t, fx.specDir)
 
 	h := fx.handler()
 	h.SnapshotPath = lockedSnap
@@ -673,8 +610,50 @@ func TestRefresh_SnapshotWriteFailureRollsBackBeadMap(t *testing.T) {
 	if !strings.Contains(err.Error(), "snapshot") {
 		t.Errorf("error must name the failing step: %v", err)
 	}
-	if got := readBytes(t, fx.mapPath); string(got) != string(mapBefore) {
-		t.Error("bead-map must be rolled back to its pre-refresh content")
+	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be rolled back to its pre-refresh content")
+	}
+}
+
+// TestRefresh_GitHead_RecordsGivenValueOrRecordedAbsence covers the
+// receipt's --git-head contract: a run given a value stamps it onto
+// every constructed change event and records it as a JSON string on the
+// refresh receipt; a run given none records the absence as JSON null,
+// not the empty string.
+func TestRefresh_GitHead_RecordsGivenValueOrRecordedAbsence(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	writeFile(t, filepath.Join(fx.specDir, "beta"), "arch_handler.md", "# Handler v2\n")
+
+	head := "cafebabe1234"
+	h := fx.handler()
+	h.GitHead = &head
+	if _, err := h.Apply(fx.specDir); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	raw := string(journalBytes(t, fx.specDir))
+	if !strings.Contains(raw, `"git_head":"cafebabe1234"`) {
+		t.Errorf("journal must record the given git_head as a string:\n%s", raw)
+	}
+	if strings.Contains(raw, `"git_head":null`) {
+		t.Errorf("journal must not record a null git_head when one was given:\n%s", raw)
+	}
+
+	events := readJournal(t, fx.specDir)
+	handlerEv, ok := eventForNode(events, fx.handlerID)
+	if !ok || handlerEv.GitHead != head {
+		t.Errorf("modified event git_head: want %q, got %+v", head, handlerEv)
+	}
+
+	// Second fixture: no --git-head given.
+	fx2 := setupRefreshFixture(t)
+	writeFile(t, filepath.Join(fx2.specDir, "beta"), "arch_handler.md", "# Handler v2\n")
+	if _, err := fx2.handler().Apply(fx2.specDir); err != nil {
+		t.Fatalf("Apply (absent git-head): %v", err)
+	}
+	raw2 := string(journalBytes(t, fx2.specDir))
+	if !strings.Contains(raw2, `"git_head":null`) {
+		t.Errorf("journal must record the absence of --git-head as null on the refresh receipt:\n%s", raw2)
 	}
 }
 
@@ -703,7 +682,7 @@ func setContentFile(t *testing.T, dir, name, content string, present bool) {
 		writeFile(t, dir, name, content)
 		return
 	}
-	if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(filepath.Join(dir, name)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("remove %s: %v", name, err)
 	}
 }
@@ -793,17 +772,19 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 // allow-list — dropping an admitted direction, or admitting a refused
 // one — fails a row here.
 //
-// The bead-map is empty in every row so the orphan gate can never stand
-// in for the type filter: a refusal below is the type filter's own, and
-// an absorbed removal is not an artefact of a record that happened to
-// survive. (The orphan gate's own role in making component removals safe
-// is covered by RefusesRemovedComponentWithSurvivingRecord.)
+// The journal is empty in every row so the live-pairing gate can never
+// stand in for the type filter: a refusal below is the type filter's
+// own, and an absorbed removal is not an artefact of a task that
+// happened to already be closed. (The live-pairing gate's own role in
+// making component removals safe is covered by
+// RefusesRemovedComponentWithLiveTaskPairing and
+// AbsorbsAbsorbableStructuralSet.)
 //
 // requirement is covered at both levels — a module requirement in alpha
 // and a project requirement in project.json — because tree_builder
 // reaches the two through different paths. Removing a component is
-// absorbed here where the existing removed-component tests only reach
-// the gate through a bead-map record.
+// absorbed here where the dedicated component tests only reach the gate
+// through a journal with a task pairing.
 func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 	cases := []struct {
 		name string
@@ -844,18 +825,16 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 			if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
 				t.Fatalf("seed snapshot: %v", err)
 			}
-			store, mapPath := newTestStore(t, nil, 1)
 
 			writeRefreshTypeSpec(t, specDir, tc.variant, tc.added)
 
-			mapBefore := readBytes(t, mapPath)
+			journalBefore := journalBytes(t, specDir)
 			snapBefore := readBytes(t, snapPath)
 
 			h := &RefreshHandler{
-				Store:        store,
 				SnapshotPath: snapPath,
-				Changeset:    &emit.Changeset{Version: 1},
-				Receipts:     &adapters.Receipts{Version: 1, Status: adapters.StatusComplete},
+				Changeset:    &emit.Changeset{Version: emit.ChangesetVersion},
+				Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
 				Now:          refreshClock,
 			}
 			summary, err := h.Apply(specDir)
@@ -885,8 +864,8 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 			if !strings.Contains(err.Error(), "normal pipeline") {
 				t.Errorf("refusal must point at the normal pipeline: %v", err)
 			}
-			if got := readBytes(t, mapPath); string(got) != string(mapBefore) {
-				t.Error("bead-map must be byte-identical after refusal")
+			if got := journalBytes(t, specDir); string(got) != string(journalBefore) {
+				t.Error("journal must be byte-identical after refusal")
 			}
 			if got := readBytes(t, snapPath); string(got) != string(snapBefore) {
 				t.Error("snapshot must be byte-identical after refusal")

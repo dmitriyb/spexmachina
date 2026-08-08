@@ -56,22 +56,6 @@ func (e *nodeNotFoundError) Error() string { return "fake spec graph: no node " 
 // idem builds the *Idem struct emit attaches to create ops.
 func idem(label string) *emit.Idem { return &emit.Idem{Label: label} }
 
-// newTestStore creates a fresh legacy fileStore over a temp
-// .bead-map.json, seeded with the given records and counter. Reconciler
-// no longer uses this store (see newTestReconciler) — it stays here
-// because RefreshHandler still does, and refresh_test.go shares this
-// helper.
-func newTestStore(t *testing.T, records []mapping.Record, nextID int) (mapping.Store, string) {
-	t.Helper()
-	dir := t.TempDir()
-	path := filepath.Join(dir, ".bead-map.json")
-	store := mapping.NewFileStore(path)
-	if err := store.Replace(records, nextID); err != nil {
-		t.Fatalf("seed store: %v", err)
-	}
-	return store, path
-}
-
 // newTestReconciler creates a Reconciler over a fresh temp spec dir with
 // no journal on disk yet — the "bootstrap" state every scenario starts
 // from unless it calls seedJournal first.

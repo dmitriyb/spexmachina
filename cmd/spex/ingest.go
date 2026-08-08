@@ -10,21 +10,10 @@ import (
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/ingest"
-	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/spf13/cobra"
 )
-
-// resolveMapPath joins a relative --map path with the spec dir's parent
-// (matching the impact command's convention) so callers can pass either
-// an absolute path or a path relative to the project root.
-func resolveMapPath(path, specDir string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(filepath.Dir(specDir), path)
-}
 
 func newIngestCmd() *cobra.Command {
 	var changesetPath, receiptsPath, mapPath, mode string
@@ -37,11 +26,13 @@ receipts.json an adapter wrote after applying it, reconciles the bead
 mapping store, and writes spec/.snapshot.json when the run is complete.
 
 With --mode refresh (empty changeset + empty receipts), ingest instead
-absorbs spec drift: every mapping record's spec_hash is aligned with
-current content and the snapshot is rewritten, atomically, with no bead
+absorbs spec drift: one change event per drifted or absorbable
+added/removed leaf is appended to the task journal, closed by a refresh
+receipt, and the snapshot is rewritten — atomically, with no bead
 lifecycle. Added/removed leaves are refused unless their node type is
 in the refresh absorbable set — requirement and api in both directions,
-component in the removed direction only.
+component in the removed direction only — and a removed node with a
+still-open task is refused regardless of its type.
 
 Inputs:
   --changeset <file>   changeset JSON (required)
@@ -53,8 +44,9 @@ Exit codes:
   0 — success (complete OR partial with no reconciler errors)
   1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure,
       missing pre-refresh snapshot, non-empty refresh artifacts)
-  2 — invariant failure (mapping store unchanged on disk) or refresh
-      refusal (added/removed entries, orphan record)`,
+  2 — invariant failure (journal unchanged on disk) or refresh refusal
+      (non-absorbable added/removed entries, a live task pairing on a
+      removed node)`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			specDir, err := resolveSpecDir(cmd)
@@ -74,10 +66,8 @@ Exit codes:
 				return ingestInputErr(err)
 			}
 
-			store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
-
 			if mode == "refresh" {
-				return runRefreshMode(cmd, store, specDir, cs, rc)
+				return runRefreshMode(cmd, specDir, cs, rc)
 			}
 			if mode != "normal" {
 				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
@@ -132,12 +122,16 @@ Exit codes:
 }
 
 // runRefreshMode dispatches to the RefreshHandler pathway. Refusals
-// (structural diff entries, orphan records) map to the invariant exit
-// code 2; pre-flight failures (missing snapshot, non-empty artifacts)
-// and IO errors map to input-error exit code 1, per arch_ingest_command.md.
-func runRefreshMode(cmd *cobra.Command, store mapping.Store, specDir string, cs emit.Changeset, rc adapters.Receipts) error {
+// (structural diff entries, a live task pairing on a removed node) map
+// to the invariant exit code 2; pre-flight failures (missing snapshot,
+// non-empty artifacts) and IO errors map to input-error exit code 1,
+// per arch_ingest_command.md.
+//
+// TODO(bead:spexmachina-y0wc.35): wire a --git-head flag through to
+// RefreshHandler.GitHead once IngestCommand grows one; until then every
+// refresh run records --git-head as absent.
+func runRefreshMode(cmd *cobra.Command, specDir string, cs emit.Changeset, rc adapters.Receipts) error {
 	h := &ingest.RefreshHandler{
-		Store:     store,
 		Changeset: &cs,
 		Receipts:  &rc,
 	}
