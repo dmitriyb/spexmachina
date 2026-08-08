@@ -278,19 +278,19 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 	cs := emit.Changeset{
 		Version: emit.ChangesetVersion, GitHead: "cafe0002", Proposal: "p3",
 		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
 			{
-				OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
+				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
 				Idempotency: idem("spex:beadbead0002"),
 				Deps:        []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 			},
+			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
 		},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-new", WasExisting: false},
+			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"},
 		},
 	}
 
@@ -460,19 +460,19 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	cs := emit.Changeset{
 		Version: emit.ChangesetVersion, GitHead: "cafe9999", Proposal: "p4",
 		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-A"}, Reason: "Spec node modified: m/X"},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-A", EdgeType: "blocks"}}},
-			{OpID: "op-3", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-B"}, Reason: "Spec node removed: m/Z"},
-			{OpID: "op-4", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
+			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-A", EdgeType: "blocks"}}},
+			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
+			{OpID: "op-3", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-A"}, Reason: "Spec node modified: m/X"},
+			{OpID: "op-4", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-B"}, Reason: "Spec node removed: m/Z"},
 		},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-A2", WasExisting: false},
-			{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "br-B"},
-			{OpID: "op-4", Status: adapters.OpStatusOk, BeadID: "br-Y", WasExisting: false},
+			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A2", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-Y", WasExisting: false},
+			{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "br-A"},
+			{OpID: "op-4", Status: adapters.OpStatusOk, BeadID: "br-B"},
 		},
 	}
 
@@ -489,7 +489,7 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	if len(newLines) != 7 {
 		t.Fatalf("got %d new lines, want 7: %+v", len(newLines), newLines)
 	}
-	wantKinds := []string{"modified", "task_closed", "task_created", "removed", "task_closed", "added", "task_created"}
+	wantKinds := []string{"modified", "task_closed", "task_created", "added", "task_created", "removed", "task_closed"}
 	for i, want := range wantKinds {
 		if newLines[i].Event != want {
 			t.Errorf("new line %d = %q, want %q", i, newLines[i].Event, want)
@@ -592,6 +592,98 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 	line := journal[1]
 	if line.Event != "task_created" || line.For != "E1" || line.TaskID != "br-cleanup" {
 		t.Errorf("cleanup receipt = %+v, want for=E1/task_id=br-cleanup", line)
+	}
+}
+
+// TestApply_CleanupCreate_PairsWithSameBatchRemoval covers the case real
+// emit output actually produces: the cleanup create and the close that
+// removes its node land in the SAME batch, with the create ordered before
+// the close (emit/builder.go orders every changeset create-before-close).
+// At the time the cleanup create is processed, neither the journal's fold
+// nor the batch-so-far shows the node as removed yet — the referent has
+// to come from the precomputed same-batch removal map, not a scan of
+// already-appended lines.
+func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "added", EID: "E1", Node: hexGone, Name: "Gone", NodeType: "component",
+			Module: "m", After: strPtr("h-gone"), GitHead: "seedhead", Proposal: "seed-p", Path: "m/gone.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "E1"},
+	)
+
+	cs := emit.Changeset{
+		Version: emit.ChangesetVersion, GitHead: "cafebeef", Proposal: "p",
+		Ops: []emit.Op{
+			{
+				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
+				Idempotency: idem("spex:cleanup-" + hexGone), Labels: []string{"spex:cleanup"},
+			},
+			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+		},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{
+			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-cleanup", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-gone"},
+		},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 2 {
+		t.Errorf("summary = %+v, want 1 event / 2 receipts", sum)
+	}
+
+	journal := readJournal(t, dir)
+	newLines := journal[2:]
+	if len(newLines) != 3 {
+		t.Fatalf("got %d new lines, want 3: %+v", len(newLines), newLines)
+	}
+	cleanupReceipt, removed, closedReceipt := newLines[0], newLines[1], newLines[2]
+	if removed.Event != "removed" || removed.Node != hexGone {
+		t.Fatalf("line 2 = %+v, want removed event for %s", removed, hexGone)
+	}
+	if cleanupReceipt.Event != "task_created" || cleanupReceipt.TaskID != "br-cleanup" || cleanupReceipt.For != removed.EID {
+		t.Errorf("cleanup receipt = %+v, want for=%s task_id=br-cleanup", cleanupReceipt, removed.EID)
+	}
+	if closedReceipt.Event != "task_closed" || closedReceipt.TaskID != "br-gone" || closedReceipt.For != removed.EID {
+		t.Errorf("task_closed = %+v, want for=%s task_id=br-gone", closedReceipt, removed.EID)
+	}
+}
+
+// TestApply_ModifiedClose_NoPairedCreateRefusedBeforeAppend covers
+// "Modified close with no paired create → refused before append": a
+// "Spec node modified" close whose bead no create in the batch claims via
+// a blocks dep must not silently succeed with the retired task's closure
+// missing from the journal.
+func TestApply_ModifiedClose_NoPairedCreateRefusedBeforeAppend(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	cs := emit.Changeset{
+		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []emit.Op{
+			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-orphan"}, Reason: "Spec node modified: m/Orphan"},
+		},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-orphan"}},
+	}
+
+	_, err := r.Apply(cs, rc)
+	if err == nil || !strings.Contains(err.Error(), "br-orphan") {
+		t.Fatalf("Apply: got %v, want error naming br-orphan", err)
+	}
+	if len(journalBytes(t, dir)) != 0 {
+		t.Error("journal file written despite refused batch")
 	}
 }
 

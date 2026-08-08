@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 
@@ -97,9 +98,12 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 	batchEIDs := map[string]bool{}
 	hasEID := func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] }
 
+	removals := sameBatchRemovals(cs, receiptsByOp, fold)
+
 	var (
 		sum             ReconcileSummary
 		batch           []mapping.Event
+		modifiedHandled = map[string]bool{}
 		pendingModified = map[string]emit.Op{}
 	)
 	appendBatch := func(lines []mapping.Event) {
@@ -133,11 +137,16 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 					if op.Target == nil || op.Target.Kind != emit.RefBead || op.Target.BeadID == "" {
 						return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
 					}
-					// The paired create builds the modified event and
-					// both receipts; this close constructs nothing on
-					// its own. See arch_reconciler.md "The Modified-Node
+					// Emit orders the paired create before this close (see
+					// arch_reconciler.md "Ordering"), so the create has
+					// already built the modified event and both receipts
+					// by the time this close is reached — unless no such
+					// create exists in the batch, which is checked once
+					// the whole batch is processed. See "The Modified-Node
 					// Pair".
-					pendingModified[op.Target.BeadID] = op
+					if !modifiedHandled[op.Target.BeadID] {
+						pendingModified[op.Target.BeadID] = op
+					}
 				}
 			case adapters.OpStatusError:
 				sum.Errors++
@@ -151,7 +160,7 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 			switch opRC.Status {
 			case adapters.OpStatusOk:
 				sum.OkCreates++
-				lines, err := r.buildCreate(cs, op, opRC, fold, pendingModified, hasEID, batch)
+				lines, err := r.buildCreate(cs, op, opRC, fold, modifiedHandled, removals, hasEID)
 				if err != nil {
 					return ReconcileSummary{}, err
 				}
@@ -167,6 +176,16 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 		default:
 			return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: op %s: unknown type %q", op.OpID, op.Type)
 		}
+	}
+
+	if len(pendingModified) > 0 {
+		beadIDs := make([]string, 0, len(pendingModified))
+		for beadID := range pendingModified {
+			beadIDs = append(beadIDs, beadID)
+		}
+		sort.Strings(beadIDs)
+		op := pendingModified[beadIDs[0]]
+		return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: op %s: modified close for bead %s has no paired create in this batch", op.OpID, beadIDs[0])
 	}
 
 	if len(batch) > 0 {
@@ -203,21 +222,55 @@ func (r *Reconciler) journalPath() string {
 // else, per arch_reconciler.md — a proposal-epic's spec_node_id is a
 // proposal stem, not an identity hash, and a cleanup's spec_node_id names
 // an already-removed node; neither may reach the spec graph.
-func (r *Reconciler) buildCreate(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, pendingModified map[string]emit.Op, hasEID func(string) bool, batchSoFar []mapping.Event) ([]mapping.Event, error) {
+func (r *Reconciler) buildCreate(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, modifiedHandled map[string]bool, removals map[string]string, hasEID func(string) bool) ([]mapping.Event, error) {
 	switch op.SpecNodeKind {
 	case "proposal_epic":
 		return buildEpicCreate(op, opRC, fold), nil
 	case "cleanup":
-		return buildCleanupCreate(op, opRC, fold, batchSoFar)
+		return buildCleanupCreate(op, opRC, fold, removals)
 	default:
 		if oldBeadID, ok := blocksDepBeadID(op); ok {
-			if closeOp, pending := pendingModified[oldBeadID]; pending {
-				delete(pendingModified, oldBeadID)
-				return r.buildModifiedPair(cs, op, opRC, closeOp, fold, hasEID)
-			}
+			// Emit orders this create before the close that retires
+			// oldBeadID (see arch_reconciler.md "Ordering"), so the pair
+			// is built here, off the create's own blocks dep, rather
+			// than waiting for the close. Marking it handled lets the
+			// later close recognise the pairing already happened instead
+			// of parking itself as unconsumed.
+			modifiedHandled[oldBeadID] = true
+			return r.buildModifiedPair(cs, op, opRC, oldBeadID, fold, hasEID)
 		}
 		return r.buildFreshCreate(cs, op, opRC, hasEID)
 	}
+}
+
+// sameBatchRemovals maps every node identity hash this batch's ok
+// "Spec node removed" closes will retire to the eid their removed event
+// will carry — computed once, before any op is processed, so a cleanup
+// create for that same hash resolves its referent regardless of whether
+// emit placed the cleanup's create before or after its own removal close
+// (real changesets always put it before — see arch_reconciler.md
+// "Ordering"). Node hash comes from the fold's live entry for the close's
+// target bead, exactly as buildRemoved resolves it.
+func sameBatchRemovals(cs emit.Changeset, receiptsByOp map[string]adapters.OpReceipt, fold mapping.Fold) map[string]string {
+	out := map[string]string{}
+	for _, op := range cs.Ops {
+		if op.Type != emit.OpClose || !strings.HasPrefix(op.Reason, ReasonRemovedPrefix) {
+			continue
+		}
+		if receiptsByOp[op.OpID].Status != adapters.OpStatusOk {
+			continue
+		}
+		if op.Target == nil || op.Target.Kind != emit.RefBead || op.Target.BeadID == "" {
+			continue
+		}
+		for _, e := range fold.Entries {
+			if e.TaskID == op.Target.BeadID {
+				out[e.Key] = deriveEID(cs.GitHead, op.OpID)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // buildEpicCreate builds the one-line receipt a proposal-epic create
@@ -237,27 +290,24 @@ func buildEpicCreate(op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold) []m
 
 // buildCleanupCreate builds the one-line receipt a cleanup create implies:
 // a task_created whose for names the removed node's own removal event.
-// The journal is checked first, then the in-progress batch (the removal
-// may be concurrent, landing earlier in this same changeset); a hash that
-// matches neither is a malformed changeset, not a fallback. See
-// arch_reconciler.md "Cleanup-Create Ops".
-func buildCleanupCreate(op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, batchSoFar []mapping.Event) ([]mapping.Event, error) {
+// The journal is checked first — a live (not yet removed) fold entry for
+// the hash means the removal is still pending in this same batch, so it
+// falls through to removals, the precomputed same-batch removal map (see
+// sameBatchRemovals); a hash that matches neither is a malformed
+// changeset, not a fallback. See arch_reconciler.md "Cleanup-Create Ops".
+func buildCleanupCreate(op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, removals map[string]string) ([]mapping.Event, error) {
 	hash := op.SpecNodeID
 	for _, e := range fold.Entries {
-		if e.Key != hash {
+		if e.Key != hash || !e.Removed {
 			continue
 		}
 		if e.TaskID != "" {
-			return nil, nil // idempotent no-op: already claimed by a task
+			return nil, nil // idempotent no-op: cleanup already landed for this removal
 		}
-		if e.Removed {
-			return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: e.Source.EID}}, nil
-		}
+		return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: e.Source.EID}}, nil
 	}
-	for _, ev := range batchSoFar {
-		if ev.Event == "removed" && ev.Node == hash {
-			return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: ev.EID}}, nil
-		}
+	if eid, ok := removals[hash]; ok {
+		return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: eid}}, nil
 	}
 	return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no removed event", op.OpID, hash)
 }
@@ -291,12 +341,13 @@ func (r *Reconciler) buildFreshCreate(cs emit.Changeset, op emit.Op, opRC adapte
 }
 
 // buildModifiedPair builds the one modified event plus both receipts for
-// a close+create pair replacing the same node identity. The eid derives
+// a create+close pair replacing the same node identity. The eid derives
 // from the create op's id — the pair is one event, not two — and the
 // before-hash comes from the node's current live fold entry (its content
-// hash prior to this change). See arch_reconciler.md "The Modified-Node
-// Pair".
-func (r *Reconciler) buildModifiedPair(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, closeOp emit.Op, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
+// hash prior to this change). oldBeadID is the retiring task, read off
+// the create op's own `blocks` dep — the paired close need not have been
+// processed yet. See arch_reconciler.md "The Modified-Node Pair".
+func (r *Reconciler) buildModifiedPair(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, oldBeadID string, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
 	eid := deriveEID(cs.GitHead, op.OpID)
 	if hasEID(eid) {
 		return nil, nil
@@ -327,7 +378,7 @@ func (r *Reconciler) buildModifiedPair(cs emit.Changeset, op emit.Op, opRC adapt
 		Proposal: cs.Proposal,
 		Path:     md.ContentFile,
 	}
-	closed := mapping.Event{Event: "task_closed", TaskID: closeOp.Target.BeadID, For: eid}
+	closed := mapping.Event{Event: "task_closed", TaskID: oldBeadID, For: eid}
 	created := mapping.Event{Event: "task_created", TaskID: opRC.BeadID, For: eid}
 	return []mapping.Event{ev, closed, created}, nil
 }

@@ -45,14 +45,23 @@ events and receipts.
 
 ## The Modified-Node Pair
 
-Emit generates two ops for a modified node: a close op for the old task, plus a create op with the
-same `spex:<spec_node_id>` label — same label because the node's hash has not changed. Reconciler
-processes them as a pair: one `modified` change event, a `task_closed` for the retired task and a
-`task_created` for its successor — both receipts carrying the pair's `modified` event as their
-`for`, so the join needs no scan by task id. Nothing is rebound and nothing is deleted — the old pairing
-stays in the journal as lineage, and the fold answers with the successor because it is later in
-the file. Detection mechanism: the close op's reason field. "Spec node removed" → removed event;
-"Spec node modified" → wait for the paired create.
+Emit generates two ops for a modified node: a create op with the `spex:<spec_node_id>` label —
+same label because the node's hash has not changed — plus a close op for the old task, in that
+order (see "Ordering"). The create op alone carries everything the pair needs: its `blocks` dep
+names the old bead directly, and the node's current live fold entry supplies the prior content
+hash for `before`. Reconciler builds the whole pair while processing the create — one `modified`
+change event, a `task_closed` for the retired task and a `task_created` for its successor, both
+receipts carrying the pair's `modified` event as their `for`, so the join needs no scan by task id
+— without waiting to see the paired close. Nothing is rebound and nothing is deleted — the old
+pairing stays in the journal as lineage, and the fold answers with the successor because it is
+later in the file.
+
+When the paired close is then reached, it constructs nothing of its own — the create already built
+both receipts — and detects that by the close op's target bead having already been claimed by an
+earlier create's `blocks` dep. A "Spec node modified" close whose bead was never claimed by any
+create in the batch is not silently dropped: once the whole batch is processed, Reconciler fails
+loudly on it as a malformed changeset, rather than reporting success having appended nothing for
+it. "Spec node removed" closes construct the `removed` event directly and never park.
 
 ## Adapter-Side Recovery
 
@@ -96,7 +105,12 @@ The Reconciler MUST treat them as a distinct case:
 - **Construct** a `task_created` whose `for` is the journal's latest `removed` event for that
   hash — the cleanup task is born pointing at the removal it answers, which is what makes its
   label resolvable from day one. If the journal holds no removed event for the hash (the removal
-  is in this same batch), the referent is the batch's own removed event.
+  is in this same batch), the referent is the removal's eid, resolved from the whole batch's ok
+  removal closes before any op is processed — not from a scan of lines already appended to the
+  batch. Emit lists the cleanup create before the close that performs its removal (see
+  "Ordering"), so at the point the create is processed neither the on-disk fold nor the
+  batch-so-far shows the node as removed yet; only a batch-wide, order-independent resolution
+  gets the referent right.
 - A cleanup op whose hash matches no removed event anywhere is an invariant failure, not a
   fallback — a cleanup for a removal that never happened is a malformed changeset.
 
@@ -149,9 +163,15 @@ changeset's git_head rather than off tracker state that may have moved underneat
 ## Ordering
 
 Within a run, ops are processed in the order they appear in changeset.json — same order the
-adapter executed them, same order their lines land in the journal. Ordering matters for the
-modified-node pair (close precedes create; emit always emits them in that order) and it is what
-makes the fold's "latest wins" rule meaningful.
+adapter executed them, same order their lines land in the journal. Emit orders every changeset
+create-before-close: all create ops first, in `Sorter`'s topological order, then one close op per
+obsolete (`arch_changeset_builder.md`, "Op ids"). The modified-node pair and a cleanup create with
+its own removal both arrive in that order — the create before the close naming the same bead or
+node. Reconciler does not depend on seeing the close first for either: the modified-node pair is
+built entirely from the create op's own `blocks` dep and the pre-batch fold (see "The Modified-Node
+Pair"), and a cleanup's referent is resolved from the whole batch's ok removal closes before any op
+is processed (see "Cleanup-Create Ops"). Ordering is still what makes the fold's "latest wins" rule
+meaningful once lines land.
 
 ## Error Surface
 

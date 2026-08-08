@@ -68,24 +68,24 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	)
 
 	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []emit.Op{
-		{OpID: "op-01", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
-		{OpID: "op-02", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
-		{OpID: "op-03", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
-		{OpID: "op-04", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
-		{OpID: "op-05", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
-		{OpID: "op-06", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-		{OpID: "op-07", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-		{OpID: "op-08", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-01", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
+		{OpID: "op-02", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
+		{OpID: "op-03", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-04", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+		{OpID: "op-05", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-06", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
+		{OpID: "op-07", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
+		{OpID: "op-08", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-old1"},
-		{OpID: "op-02", Status: adapters.OpStatusOk, BeadID: "br-new1"},
-		{OpID: "op-03", Status: adapters.OpStatusOk, BeadID: "br-old2"},
-		{OpID: "op-04", Status: adapters.OpStatusOk, BeadID: "br-new2"},
-		{OpID: "op-05", Status: adapters.OpStatusOk, BeadID: "br-gone"},
-		{OpID: "op-06", Status: adapters.OpStatusOk, BeadID: "br-A"},
-		{OpID: "op-07", Status: adapters.OpStatusOk, BeadID: "br-B"},
-		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-C"},
+		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-new1"},
+		{OpID: "op-02", Status: adapters.OpStatusOk, BeadID: "br-new2"},
+		{OpID: "op-03", Status: adapters.OpStatusOk, BeadID: "br-A"},
+		{OpID: "op-04", Status: adapters.OpStatusOk, BeadID: "br-B"},
+		{OpID: "op-05", Status: adapters.OpStatusOk, BeadID: "br-C"},
+		{OpID: "op-06", Status: adapters.OpStatusOk, BeadID: "br-old1"},
+		{OpID: "op-07", Status: adapters.OpStatusOk, BeadID: "br-old2"},
+		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-gone"},
 	}}
 
 	sum, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
@@ -93,10 +93,9 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	if sum.OkCreates != 5 || sum.OkCloses != 3 {
 		t.Errorf("summary = %+v, want 5 ok creates / 3 ok closes", sum)
 	}
-	// 2 modified events + 1 removed event + 2 added events (A, B, C count
-	// as 3, but only A/B/C — wait: 2 modify pairs contribute 1 event each
-	// (2), the removal contributes 1 event (1), the 3 fresh creates
-	// contribute 1 event each (3) = 6 events.
+	// 2 modify pairs contribute 1 event each (2), the removal contributes
+	// 1 event (1), the 3 fresh creates contribute 1 event each (3) = 6
+	// events.
 	if sum.EventsAppended != 6 {
 		t.Errorf("events_appended = %d, want 6", sum.EventsAppended)
 	}
@@ -235,7 +234,7 @@ func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 }
 
 // TestConsistencyInvariants_LineageReplacesRebind covers "Lineage
-// replaces the rebind invariant": after a modified-node close+create pair
+// replaces the rebind invariant": after a modified-node create+close pair
 // runs, the journal holds BOTH pairings — the retired task_created for
 // the old bead stays present — and the fold answers with the new task
 // only. No assertion demands the old line be gone; asserting its
@@ -251,12 +250,12 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 	)
 
 	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+		{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"},
-		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-new"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"},
+		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"},
 	}}
 
 	if _, err := r.Apply(cs, rc); err != nil {
