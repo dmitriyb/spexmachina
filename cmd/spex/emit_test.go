@@ -386,6 +386,202 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	}
 }
 
+// TestEmitCommand_ExistingEpic_ParentsUnderExistingBead pins the journal
+// read as load-bearing: a pre-existing task_created receipt keyed by the
+// proposal slug makes Builder.hasExistingEpic true, so no proposal_epic
+// op is synthesized and the lone create parents directly under the
+// journal's bead. Mutating the wiring to discard the fold would leave
+// this test asserting a synthesized epic parent instead, and fail.
+func TestEmitCommand_ExistingEpic_ParentsUnderExistingBead(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"br-epic"}`,
+	})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{Type: "create", Module: "alpha", Node: "Comp1", NodeType: "component", SpecNodeID: compID, SpecHash: "h1", Reason: "New spec node: alpha/Comp1"},
+		},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{CreateCount: 1, ObsoleteCount: 0},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runEmit(t, string(data),
+		"--proposal", "2026-04-18-decouple-spex-from-br",
+		"--git-head", "deadbeefcafe",
+		"--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var cs emit.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+	if len(cs.Ops) != 1 {
+		t.Fatalf("want exactly 1 op (existing epic found in journal, no synthesized proposal_epic), got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+	op := cs.Ops[0]
+	if op.SpecNodeKind == "proposal_epic" {
+		t.Fatalf("want no synthesized proposal_epic when journal already carries a live epic, got %+v", op)
+	}
+	if op.Parent == nil || op.Parent.Kind != emit.RefBead || op.Parent.BeadID != "br-epic" {
+		t.Fatalf("want parent ref:bead br-epic (from journal), got %+v", op.Parent)
+	}
+}
+
+// TestEmitCommand_OutOfBatchDep_ResolvesToRefBead pins the journal read's
+// second load-bearing role: a dep naming a spec node that is not in this
+// batch, but is paired to a live task in the journal fold, must resolve
+// to ref:bead rather than erroring or being dropped. Discarding the fold
+// would turn this dep unresolvable and fail the build outright.
+func TestEmitCommand_OutOfBatchDep_ResolvesToRefBead(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+	otherID := schema.IdentityHash("alpha", "component", "Other")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"added","eid":"e-other","node":"` + otherID + `","name":"Other","node_type":"component","module":"alpha","before":null,"after":"h-other","git_head":"cafe0000","proposal":"earlier-proposal"}`,
+		`{"event":"task_created","for":"e-other","task_id":"spex-other"}`,
+	})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:           "create",
+				Module:         "alpha",
+				Node:           "Comp1",
+				NodeType:       "component",
+				SpecNodeID:     compID,
+				SpecHash:       "h1",
+				DepSpecNodeIDs: []string{otherID},
+				Reason:         "New spec node: alpha/Comp1",
+			},
+		},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{CreateCount: 1, ObsoleteCount: 0},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runEmit(t, string(data),
+		"--proposal", "2026-04-18-decouple-spex-from-br",
+		"--git-head", "deadbeefcafe",
+		"--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var cs emit.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+
+	var compOp *emit.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeID == compID {
+			compOp = &cs.Ops[i]
+		}
+	}
+	if compOp == nil {
+		t.Fatalf("want an op for Comp1, got ops: %+v", cs.Ops)
+	}
+	if len(compOp.Deps) != 1 || compOp.Deps[0].Kind != emit.RefBead || compOp.Deps[0].BeadID != "spex-other" {
+		t.Fatalf("want dep ref:bead spex-other (out-of-batch, journal-paired), got %+v", compOp.Deps)
+	}
+}
+
+// TestEmitCommand_MalformedJournal_Errors rounds out the exit-code
+// contract for the emit.go:62 journal read: a journal line that fails
+// schema validation must surface as a validation error (exit 1), same
+// as the other read failures in this file.
+func TestEmitCommand_MalformedJournal_Errors(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+	writeTestJournal(t, specDir, []string{"not-json"})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{Type: "create", Module: "alpha", Node: "Comp1", NodeType: "component", SpecNodeID: compID, SpecHash: "h1", Reason: "New spec node: alpha/Comp1"},
+		},
+		Summary: impact.Summary{CreateCount: 1},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = runEmit(t, string(data),
+		"--proposal", "p",
+		"--git-head", "deadbeefcafe",
+		"--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for malformed journal, got nil")
+	}
+	if !strings.Contains(err.Error(), "read journal") {
+		t.Fatalf("want error mentioning 'read journal', got: %v", err)
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit code 1 for malformed journal, got %d (err: %v)", code, err)
+	}
+}
+
 // exitCodeOf extracts the process exit code an error carries via the
 // ExitCode interface main.go honors. Zero means no code attached.
 func exitCodeOf(err error) int {
