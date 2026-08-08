@@ -1,6 +1,8 @@
 package impact
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -36,7 +38,7 @@ type depFixture struct {
 	CompC   string
 	// Matched-scenario components.
 	SCHK string // SchemaChecker (module validator)
-	HUNK string // an unknown node type the gate must drop
+	HUNK string // node type absent from beadProducingTypes; matched branch bypasses the gate, unlike unmatched
 	NEW  string // new added component without a record
 	REG  string // proposal/Registrar
 }
@@ -440,6 +442,95 @@ func TestFR3_E1_ClassifyActions_EmptyInputs(t *testing.T) {
 	actions := ClassifyActions(nil, nil, nil, nil)
 	if len(actions) != 0 {
 		t.Errorf("want 0 actions for nil inputs, got %d", len(actions))
+	}
+}
+
+// --- E4: Very large action list ---
+
+// TestFR3_E4_ClassifyActionsLargeActionList exercises ClassifyActions (not
+// just GenerateReport) at 10,000-action scale with a populated spec graph,
+// so the DepSpecNodeIDs walk — the plausible quadratic site — actually runs
+// on every create. Components are spread across many modules (rather than
+// one) to mirror a real spec graph's shape.
+func TestFR3_E4_ClassifyActionsLargeActionList(t *testing.T) {
+	const (
+		numModules     = 100
+		compsPerModule = 50 // 100 * 50 = 5,000 unmatched creates
+		numOrphaned    = 5000
+	)
+
+	modules := make(map[string]mapping.ModuleInfo, numModules)
+	modulesByID := make(map[string]string, numModules)
+	unmatched := make([]Unmatched, 0, numModules*compsPerModule)
+
+	for m := 0; m < numModules; m++ {
+		modName := fmt.Sprintf("bulk%d", m)
+		modID := schema.IdentityHash("module", modName)
+		comps := make([]mapping.ComponentInfo, compsPerModule)
+		for c := 0; c < compsPerModule; c++ {
+			compID := schema.IdentityHash(modName, "component", fmt.Sprintf("Comp%d", c))
+			var uses []string
+			if c > 0 {
+				uses = []string{comps[c-1].ID}
+			}
+			comps[c] = mapping.ComponentInfo{ID: compID, Name: fmt.Sprintf("Comp%d", c), Uses: uses}
+			unmatched = append(unmatched, Unmatched{Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Key: compID, Type: merkle.Added, NewHash: "h", NodeType: "component"},
+				Impact: merkle.ArchImpl,
+				Module: modName,
+			}})
+		}
+		var requires []string
+		if m > 0 {
+			requires = []string{schema.IdentityHash("module", fmt.Sprintf("bulk%d", m-1))}
+		}
+		modules[modName] = mapping.ModuleInfo{ID: modID, Name: modName, Components: comps, RequiresModule: requires}
+		modulesByID[modID] = modName
+	}
+	graph := &stubSpecGraph{modules: modules, modulesByID: modulesByID}
+
+	orphaned := make([]Orphaned, numOrphaned)
+	for i := 0; i < numOrphaned; i++ {
+		orphaned[i] = Orphaned{
+			Record:   Pairing{SpecNodeID: schema.IdentityHash("orphan", "component", fmt.Sprintf("Orphan%d", i)), TaskID: fmt.Sprintf("bead-%d", i), Module: "orphan", Name: fmt.Sprintf("Orphan%d", i)},
+			NodeType: "component",
+		}
+	}
+
+	actions := ClassifyActions(graph, nil, unmatched, orphaned)
+	if len(actions) != numModules*compsPerModule+numOrphaned {
+		t.Fatalf("want %d actions, got %d", numModules*compsPerModule+numOrphaned, len(actions))
+	}
+
+	var creates, obsoletes int
+	for _, a := range actions {
+		switch a.Type {
+		case "create":
+			creates++
+		case "obsolete":
+			obsoletes++
+		}
+	}
+	if creates != numModules*compsPerModule {
+		t.Errorf("want %d creates, got %d", numModules*compsPerModule, creates)
+	}
+	if obsoletes != numOrphaned {
+		t.Errorf("want %d obsoletes, got %d", numOrphaned, obsoletes)
+	}
+
+	var buf bytes.Buffer
+	if err := GenerateReport(actions, &buf); err != nil {
+		t.Fatalf("GenerateReport: unexpected error: %v", err)
+	}
+	var report ImpactReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if report.Summary.CreateCount != creates {
+		t.Errorf("report want %d creates, got %d", creates, report.Summary.CreateCount)
+	}
+	if report.Summary.ObsoleteCount != obsoletes {
+		t.Errorf("report want %d obsoletes, got %d", obsoletes, report.Summary.ObsoleteCount)
 	}
 }
 

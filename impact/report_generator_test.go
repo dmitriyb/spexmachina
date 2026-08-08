@@ -267,9 +267,9 @@ func TestNFR5_GenerateReportDeterministic(t *testing.T) {
 	}
 }
 
-// --- D10: ReportGenerator includes DepSpecNodeIDs in create action JSON ---
+// --- D14: ReportGenerator includes DepSpecNodeIDs in create action JSON ---
 
-func TestFR4_D10_GenerateReportIncludesDepSpecNodeIDs(t *testing.T) {
+func TestFR4_D14_GenerateReportIncludesDepSpecNodeIDs(t *testing.T) {
 	actions := []Action{
 		{Type: "create", Module: "impact", Node: "ActionClassifier", DepSpecNodeIDs: []string{"abc123", "def456"}, Reason: "New spec node"},
 	}
@@ -288,9 +288,9 @@ func TestFR4_D10_GenerateReportIncludesDepSpecNodeIDs(t *testing.T) {
 	}
 }
 
-// --- D11: ReportGenerator omits dep_spec_node_ids when empty ---
+// --- D14: ReportGenerator omits dep_spec_node_ids when empty ---
 
-func TestFR4_D11_GenerateReportOmitsEmptyDepSpecNodeIDs(t *testing.T) {
+func TestFR4_D14_GenerateReportOmitsEmptyDepSpecNodeIDs(t *testing.T) {
 	actions := []Action{
 		{Type: "create", Module: "impact", Node: "ActionClassifier", Reason: "New spec node"},
 	}
