@@ -102,14 +102,36 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
   show the node as removed yet when the cleanup create is processed, since its removal comes
   after it in this same batch.
 
-### Modified close with no paired create → refused before append
+### Modified close with no paired create, bead unknown to the journal → refused before append
 
 - Changeset: one close op, reason starting "Spec node modified", targeting a bead that no create
-  in the batch claims via a `blocks` dep.
+  in the batch claims via a `blocks` dep, and that has no fold entry at all.
 - Receipts: close op `status: "ok"`.
 - Expected: structured error naming the op and the unclaimed bead; the journal file is
   byte-identical to its pre-run state. A batch is not reported as successful with a retired
   task's closure silently missing from the journal.
+
+### Modified close with no paired create, bead live in the journal → modified event from the close alone
+
+- Initial journal: `added` + `task_created` (task `br-old`) for a `test_section` node.
+- Changeset: one close op, reason starting "Spec node modified", targeting `br-old`; no create op
+  in the batch claims `br-old` via a `blocks` dep — the shape `impact/action_classifier.go` emits
+  for a coupled `test_section` edit (obsolete with no replacement create).
+- Receipts: close op `status: "ok"`.
+- Expected: a `modified` change event for the node (identity and prior hash from the journal's live
+  fold entry for `br-old`, current name/module/path/hash from the spec graph) plus a `task_closed`
+  for `br-old` naming it. No `task_created` — there is no successor task.
+
+### Modify-pair create errored, paired close ok → partial run tolerated
+
+- Initial journal: `added` + `task_created` (task `br-old`) for a node.
+- Changeset: [modify-pair create for that node with a `blocks` dep on `br-old`, an unrelated fresh
+  create, close of `br-old` (modified)] — emit's real ordering (creates before closes).
+- Receipts: the modify-pair create `status: "error"`; the unrelated create and the close both `ok`.
+- Expected: nothing constructed for the modify-pair (neither the `modified` event nor the
+  `task_closed` for `br-old`) — the errored create leaves its pair incomplete, which is not a
+  malformed changeset. The unrelated create's `added` event and `task_created` still land; the run
+  reports success.
 
 ### Receipt referencing nothing → refused before append
 

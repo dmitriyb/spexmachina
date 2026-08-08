@@ -99,6 +99,7 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 	hasEID := func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] }
 
 	removals := sameBatchRemovals(cs, receiptsByOp, fold)
+	claimedByCreate := modifiedPairClaims(cs)
 
 	var (
 		sum             ReconcileSummary
@@ -184,8 +185,26 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 			beadIDs = append(beadIDs, beadID)
 		}
 		sort.Strings(beadIDs)
-		op := pendingModified[beadIDs[0]]
-		return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: op %s: modified close for bead %s has no paired create in this batch", op.OpID, beadIDs[0])
+		for _, beadID := range beadIDs {
+			op := pendingModified[beadID]
+			if claimedByCreate[beadID] {
+				// The paired create exists in this batch but its receipt
+				// was error/skipped — a partial run. Construct nothing for
+				// the pair and let the rest of the batch land; see
+				// arch_reconciler.md "The Modified-Node Pair".
+				continue
+			}
+			// No create in the batch ever claimed this bead: the shape
+			// ActionClassifier emits for a coupled test_section edit (an
+			// obsolete with no replacement create). The node still exists,
+			// so build the modified event straight from the close, off the
+			// fold's live entry for the bead.
+			lines, err := r.buildModifiedFromClose(cs, op, receiptsByOp[op.OpID], fold, hasEID)
+			if err != nil {
+				return ReconcileSummary{}, err
+			}
+			appendBatch(lines)
+		}
 	}
 
 	if len(batch) > 0 {
@@ -421,6 +440,79 @@ func (r *Reconciler) buildRemoved(cs emit.Changeset, op emit.Op, opRC adapters.O
 		GitHead:  cs.GitHead,
 		Proposal: cs.Proposal,
 		Path:     entry.Source.Path,
+	}
+	closed := mapping.Event{Event: "task_closed", TaskID: opRC.BeadID, For: eid}
+	return []mapping.Event{ev, closed}, nil
+}
+
+// modifiedPairClaims maps every old bead id a create op in this batch
+// claims via its `blocks` dep — regardless of that create's own receipt
+// status. A "Spec node modified" close whose bead appears here but is
+// still unhandled after the batch loop lost its pairing to a create that
+// errored or was skipped (a partial run); a close whose bead does not
+// appear here at all was never paired with a create by emit in the first
+// place. See arch_reconciler.md "The Modified-Node Pair".
+func modifiedPairClaims(cs emit.Changeset) map[string]bool {
+	out := map[string]bool{}
+	for _, op := range cs.Ops {
+		if op.Type != emit.OpCreate {
+			continue
+		}
+		if oldBeadID, ok := blocksDepBeadID(op); ok {
+			out[oldBeadID] = true
+		}
+	}
+	return out
+}
+
+// buildModifiedFromClose builds the modified event plus its task_closed for
+// an ok "Spec node modified" close whose bead no create op in the batch
+// ever claimed via a `blocks` dep — the shape ActionClassifier emits for a
+// coupled test_section edit (an obsolete action with no replacement
+// create). The node still exists post-edit, so its current metadata comes
+// from the spec graph; its identity and prior hash come from the journal's
+// live fold entry for the bead being closed, exactly as buildRemoved
+// resolves a removed node's identity. No task_created is built — there is
+// no successor task to pair. See arch_reconciler.md "The Modified-Node
+// Pair".
+func (r *Reconciler) buildModifiedFromClose(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
+	if op.Target == nil || op.Target.Kind != emit.RefBead || op.Target.BeadID == "" {
+		return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
+	}
+	eid := deriveEID(cs.GitHead, op.OpID)
+	if hasEID(eid) {
+		return nil, nil
+	}
+
+	var entry mapping.FoldEntry
+	found := false
+	for _, e := range fold.Entries {
+		if e.TaskID == op.Target.BeadID {
+			entry, found = e, true
+			break
+		}
+	}
+	if !found {
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.BeadID)
+	}
+
+	md, err := r.lookupMetadata(entry.Key)
+	if err != nil {
+		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
+	}
+
+	ev := mapping.Event{
+		Event:    "modified",
+		EID:      eid,
+		Node:     entry.Key,
+		Name:     nonEmpty(md.Component, entry.Source.Name),
+		NodeType: nonEmpty(md.NodeType, entry.Source.NodeType),
+		Module:   md.Module,
+		Before:   entry.Source.After,
+		After:    strPtr(md.SpecHash),
+		GitHead:  cs.GitHead,
+		Proposal: cs.Proposal,
+		Path:     md.ContentFile,
 	}
 	closed := mapping.Event{Event: "task_closed", TaskID: opRC.BeadID, For: eid}
 	return []mapping.Event{ev, closed}, nil

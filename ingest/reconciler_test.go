@@ -658,12 +658,12 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 	}
 }
 
-// TestApply_ModifiedClose_NoPairedCreateRefusedBeforeAppend covers
-// "Modified close with no paired create → refused before append": a
-// "Spec node modified" close whose bead no create in the batch claims via
-// a blocks dep must not silently succeed with the retired task's closure
-// missing from the journal.
-func TestApply_ModifiedClose_NoPairedCreateRefusedBeforeAppend(t *testing.T) {
+// TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend covers the
+// remaining malformed-changeset shape: a "Spec node modified" close naming
+// a bead the journal has never heard of (no fold entry at all) has no
+// identity to build a modified event from, so it is refused rather than
+// silently dropped.
+func TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
@@ -684,6 +684,136 @@ func TestApply_ModifiedClose_NoPairedCreateRefusedBeforeAppend(t *testing.T) {
 	}
 	if len(journalBytes(t, dir)) != 0 {
 		t.Error("journal file written despite refused batch")
+	}
+}
+
+// TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone
+// covers the shape ActionClassifier emits for a coupled test_section edit:
+// an "obsolete" action with no replacement create (impact/action_classifier.go
+// "coupled" branch). No create in the batch claims the bead via a `blocks`
+// dep, but the bead is live in the journal, so the close alone must build
+// the modified event and its task_closed — no task_created, since there is
+// no successor task.
+func TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexMod1] = NodeMetadata{
+		Module: "m", Component: "Section", ContentFile: "m/test_section.md",
+		SpecHash: "new-hash", NodeType: "test_section",
+	}
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "added", EID: "E1", Node: hexMod1, Name: "Section",
+			NodeType: "test_section", Module: "m", After: strPtr("old-hash"),
+			GitHead: "seedhead", Proposal: "seed-p", Path: "m/test_section.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
+	)
+
+	cs := emit.Changeset{
+		Version: emit.ChangesetVersion, GitHead: "cafeeeee", Proposal: "p5",
+		Ops: []emit.Op{
+			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Section"},
+		},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.OkCloses != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 ok close / 1 event / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 4 {
+		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
+	}
+	modified := journal[2]
+	if modified.Event != "modified" || modified.Node != hexMod1 {
+		t.Fatalf("line 3 = %+v, want modified event for %s", modified, hexMod1)
+	}
+	if modified.Before == nil || *modified.Before != "old-hash" {
+		t.Errorf("modified before = %v, want old-hash", modified.Before)
+	}
+	if modified.After == nil || *modified.After != "new-hash" {
+		t.Errorf("modified after = %v, want new-hash", modified.After)
+	}
+	closed := journal[3]
+	if closed.Event != "task_closed" || closed.TaskID != "br-old" || closed.For != modified.EID {
+		t.Errorf("task_closed = %+v, want for=%s task_id=br-old", closed, modified.EID)
+	}
+}
+
+// TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated covers the
+// partial-receipts shape from the PR discussion: a modify-pair's create
+// errors while its paired close comes back ok, alongside an unrelated ok
+// create. The errored create must not poison the rest of the batch — the
+// unrelated create still lands, and the orphaned close constructs nothing
+// rather than failing the whole run.
+func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "new-a", NodeType: "component"}
+	graph.nodes[hexB] = NodeMetadata{Module: "m", Component: "B", ContentFile: "b.md", SpecHash: "hb", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{Event: "added", EID: "seedA", Node: hexA, Name: "A", NodeType: "component", Module: "m", After: strPtr("old-a"), GitHead: "seedhead", Proposal: "seed-p", Path: "a.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-old", For: "seedA"},
+	)
+
+	cs := emit.Changeset{
+		Version: emit.ChangesetVersion, GitHead: "cafe4321", Proposal: "p6",
+		Ops: []emit.Op{
+			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+			{OpID: "op-3", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/A"},
+		},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial,
+		Ops: []adapters.OpReceipt{
+			{OpID: "op-1", Status: adapters.OpStatusError, Error: "tracker boom"},
+			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-B", WasExisting: false},
+			{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "br-old"},
+		},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.OkCreates != 1 || sum.OkCloses != 1 || sum.Errors != 1 {
+		t.Errorf("summary = %+v, want 1 ok create / 1 ok close / 1 error", sum)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt appended (B only)", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 4 {
+		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
+	}
+	for _, ev := range journal[2:] {
+		if ev.Node == hexA {
+			t.Fatalf("errored create for A appears in journal: %+v", ev)
+		}
+		if ev.TaskID == "br-old" {
+			t.Fatalf("orphaned close for br-old appears in journal: %+v", ev)
+		}
+	}
+	added := journal[2]
+	if added.Event != "added" || added.Node != hexB {
+		t.Fatalf("line 3 = %+v, want added event for B", added)
+	}
+	created := journal[3]
+	if created.Event != "task_created" || created.TaskID != "br-B" || created.For != added.EID {
+		t.Errorf("task_created = %+v, want for=%s task_id=br-B", created, added.EID)
 	}
 }
 

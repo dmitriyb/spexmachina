@@ -38,7 +38,9 @@ events and receipts.
 | create  | other          | ok             | the change event (`added`, or `modified` when paired with a close) plus a `task_created` with the receipt's task id |
 | create  | any            | error/skipped  | nothing |
 | close   | —              | ok (reason="Spec node removed")  | the `removed` change event plus a `task_closed` |
-| close   | —              | ok (reason starts "Spec node modified") | a `task_closed` whose `for` is the pair's `modified` event; the paired create op owns that event |
+| close   | —              | ok (reason starts "Spec node modified"), bead claimed by a create in this batch | a `task_closed` whose `for` is the pair's `modified` event; the paired create op owns that event |
+| close   | —              | ok (reason starts "Spec node modified"), bead's create errored/skipped in this batch | nothing — partial run, see "The Modified-Node Pair" |
+| close   | —              | ok (reason starts "Spec node modified"), bead claimed by no create in this batch | the `modified` change event plus a `task_closed`, built from the close alone — no `task_created` (see "The Modified-Node Pair") |
 | close   | —              | error          | nothing |
 | label   | —              | any            | nothing (labels don't reach the journal) |
 | tag     | —              | any            | nothing |
@@ -58,10 +60,27 @@ later in the file.
 
 When the paired close is then reached, it constructs nothing of its own — the create already built
 both receipts — and detects that by the close op's target bead having already been claimed by an
-earlier create's `blocks` dep. A "Spec node modified" close whose bead was never claimed by any
-create in the batch is not silently dropped: once the whole batch is processed, Reconciler fails
-loudly on it as a malformed changeset, rather than reporting success having appended nothing for
-it. "Spec node removed" closes construct the `removed` event directly and never park.
+earlier create's `blocks` dep. A "Spec node modified" close whose bead was not claimed by an
+already-processed create is parked until the whole batch has been processed, then resolved one of
+two ways, discriminated on whether a create op for that bead exists in the changeset at all — not
+on receipt order:
+
+- **A create op for the bead exists in the changeset, but its receipt was `error` or `skipped`.**
+  This is a partial run (`scripts/apply-br.sh` routinely continues past a failed create to close
+  the old task anyway): the pair constructs nothing, same as any other errored/skipped create, and
+  the rest of the batch still lands.
+- **No create op for the bead exists in the changeset at all.** This is the shape
+  `impact/action_classifier.go` emits for a coupled `test_section` edit: an `obsolete` action with
+  no replacement create, because the section's bead is folded into its owning component going
+  forward rather than replaced. The node itself still exists — only its hash changed — so the close
+  builds the `modified` event and its `task_closed` on its own: identity and prior hash come from
+  the journal's live fold entry for the closing bead (exactly as `buildRemoved` resolves a removed
+  node's identity), and current name/module/path/hash come from the spec graph. No `task_created` is
+  built — there is no successor task to pair.
+
+A close naming a bead the journal has never heard of (no fold entry at all) has no identity to
+build from and is refused as a malformed changeset. "Spec node removed" closes construct the
+`removed` event directly and never park.
 
 ## Adapter-Side Recovery
 
