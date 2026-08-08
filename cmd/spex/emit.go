@@ -20,12 +20,12 @@ import (
 var gitHeadRe = regexp.MustCompile(`^[0-9a-f]{7,40}$`)
 
 func newEmitCmd() *cobra.Command {
-	var proposal, gitHead, impactPath, outPath, mapPath string
+	var proposal, gitHead, impactPath, outPath string
 
 	cmd := &cobra.Command{
 		Use:   "emit",
 		Short: "Emit a tool-agnostic changeset from an impact report",
-		Long: `Emit reads an impact report, the bead mapping store, and the spec
+		Long: `Emit reads an impact report, the task journal, and the spec
 graph, then writes a deterministic changeset.json (v2) describing the
 ordered create/close/label/tag operations an external adapter must apply.
 
@@ -55,7 +55,13 @@ Outputs:
 				return validationErr(err)
 			}
 
-			store := mapping.NewFileStore(resolveMapPath(mapPath, specDir))
+			// The task journal is the sole source of node-to-task pairings.
+			// There is no separate --map flag: its location is a function
+			// of --spec-dir alone. An absent journal folds empty.
+			fold, err := mapping.NewMappingStore(specDir).List()
+			if err != nil {
+				return validationErr(fmt.Errorf("emit: read journal: %w", err))
+			}
 
 			specGraph, err := newEmitSpecGraph(specDir)
 			if err != nil {
@@ -64,15 +70,9 @@ Outputs:
 
 			builder := &emit.Builder{
 				SpecGraph: specGraph,
-				// TODO(bead:spexmachina-y0wc.31): EmitCommand still reads
-				// the legacy .bead-map.json store; ChangesetBuilder's own
-				// migration (spexmachina-y0wc.30) moved its Fold field onto
-				// the emit.JournalFold contract, so this command bridges
-				// the gap until EmitCommand itself migrates onto the task
-				// journal (mapping.NewMappingStore(specDir).List()).
-				Fold:     legacyMapStoreFold{store: store},
-				GitHead:  gitHead,
-				Proposal: proposal,
+				Fold:      newJournalFold(fold),
+				GitHead:   gitHead,
+				Proposal:  proposal,
 			}
 			cs, err := builder.Build(report)
 			if err != nil {
@@ -87,7 +87,6 @@ Outputs:
 	cmd.Flags().StringVar(&gitHead, "git-head", "", "git HEAD SHA (7-40 hex chars)")
 	cmd.Flags().StringVar(&impactPath, "impact", "", "impact report path (default: stdin)")
 	cmd.Flags().StringVar(&outPath, "out", "", "changeset output path (default: stdout)")
-	cmd.Flags().StringVar(&mapPath, "map", ".bead-map.json", "path to bead mapping file")
 	_ = cmd.MarkFlagRequired("proposal")
 	_ = cmd.MarkFlagRequired("git-head")
 	return cmd
@@ -99,16 +98,6 @@ func validateGitHead(s string) error {
 		return fmt.Errorf("emit: --git-head must be a hex SHA (7-40 chars), got %q", s)
 	}
 	return nil
-}
-
-// resolveMapPath joins a relative --map path with the spec dir's parent
-// (matching the impact command's convention) so callers can pass either
-// an absolute path or a path relative to the project root.
-func resolveMapPath(path, specDir string) string {
-	if filepath.IsAbs(path) {
-		return path
-	}
-	return filepath.Join(filepath.Dir(specDir), path)
 }
 
 // readImpactReport decodes the report from the named file or, when path is
@@ -288,61 +277,26 @@ func (g *emitSpecGraph) Paths(id string) (emit.NodePaths, bool) {
 	return p, ok
 }
 
-// legacyMapStoreFold adapts the legacy mapping.Store (.bead-map.json) onto
-// emit.Builder's JournalFold contract, standing in for the real task
-// journal fold until EmitCommand migrates (spexmachina-y0wc.31) onto
-// mapping.NewMappingStore(specDir).List().
-type legacyMapStoreFold struct {
-	store mapping.Store
+// journalFold adapts mapping.Fold — the parsed <spec-dir>/.history.jsonl
+// linkage — onto emit.Builder's JournalFold contract: point lookup by key,
+// either a node's identity hash or a proposal-epic slug, indexed once at
+// construction for O(1) reads.
+type journalFold struct {
+	entries map[string]mapping.FoldEntry
 }
 
-// Entry tries the proposal-epic lookup first — a component or data_flow's
-// spec_node_id never matches a NodeType=="proposal" record, so this is
-// safe for every key Resolver or Builder asks about — then falls back to
-// the spec-node lookup, restricted to non-proposal records: GetByProposalEpic
-// already answered the proposal-record question for this key (including
-// "closed, so not found"), and re-admitting a closed proposal record here
-// would invert that answer into Removed=true. Among the remaining records,
-// "all closed" collapses onto Removed=true, the legacy store's closest
-// analogue to a removed node's fold entry.
-func (f legacyMapStoreFold) Entry(key string) (emit.FoldEntry, bool) {
-	if rec, err := f.store.GetByProposalEpic(key); err == nil {
-		return emit.FoldEntry{TaskID: rec.BeadID}, true
+func newJournalFold(fold mapping.Fold) journalFold {
+	entries := make(map[string]mapping.FoldEntry, len(fold.Entries))
+	for _, e := range fold.Entries {
+		entries[e.Key] = e
 	}
-	recs, err := f.store.GetBySpecNode(key)
-	if err != nil {
-		return emit.FoldEntry{}, false
-	}
-	var nonProposal []mapping.Record
-	for _, r := range recs {
-		if r.NodeType != "proposal" {
-			nonProposal = append(nonProposal, r)
-		}
-	}
-	if len(nonProposal) == 0 {
-		return emit.FoldEntry{}, false
-	}
-	if chosen, anyOpen := pickOpenMapRecord(nonProposal); anyOpen {
-		return emit.FoldEntry{TaskID: chosen.BeadID}, true
-	}
-	return emit.FoldEntry{Removed: true}, true
+	return journalFold{entries: entries}
 }
 
-// pickOpenMapRecord returns the highest-ID record whose BeadStatus is not
-// "closed". Empty status counts as open — conservative default attaches
-// an edge rather than silently dropping. Highest-ID wins so the latest
-// re-implementation supersedes earlier records.
-func pickOpenMapRecord(recs []mapping.Record) (mapping.Record, bool) {
-	var chosen mapping.Record
-	var found bool
-	for _, r := range recs {
-		if r.BeadStatus == "closed" {
-			continue
-		}
-		if !found || r.ID > chosen.ID {
-			chosen = r
-			found = true
-		}
+func (f journalFold) Entry(key string) (emit.FoldEntry, bool) {
+	e, ok := f.entries[key]
+	if !ok {
+		return emit.FoldEntry{}, false
 	}
-	return chosen, found
+	return emit.FoldEntry{TaskID: e.TaskID, Removed: e.Removed}, true
 }

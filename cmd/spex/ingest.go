@@ -16,6 +16,16 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// resolveMapPath joins a relative --map path with the spec dir's parent
+// (matching the impact command's convention) so callers can pass either
+// an absolute path or a path relative to the project root.
+func resolveMapPath(path, specDir string) string {
+	if filepath.IsAbs(path) {
+		return path
+	}
+	return filepath.Join(filepath.Dir(specDir), path)
+}
+
 func newIngestCmd() *cobra.Command {
 	var changesetPath, receiptsPath, mapPath, mode string
 
