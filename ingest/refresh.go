@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // Sentinel pre-flight errors for refresh mode. IngestCommand maps these
@@ -47,25 +49,14 @@ type refreshDirections struct {
 // envelope leaf: absorbing an added or removed meta leaf would baseline
 // a whole module appearing or vanishing without any gate seeing it.
 //
-// The list does NOT protect against premature requirement absorption:
-// "requirement" is absorbable in both directions, and refresh runs
-// neither `spex validate` nor the completeness checker, so it will
-// baseline a requirement addition or removal that `spex diff` refuses
-// with exit 2. `spex validate` still reports uncovered requirements
-// afterwards (it reads the spec, not the snapshot); what a premature
-// refresh buries permanently is the diff-side completeness obligation.
-// Callers own the ordering: run the gates before refresh — refresh does
-// not run them for you.
-//
-// "component" is removal-only. A removed component's bead already
+// "component" is removal-only. A removed component's task already
 // exists, and absorbing the node's disappearance is safe only because
-// the orphan gate below still demands the bead-map record be retired
-// first. An *added* component is a bead that was never created;
-// baselining it into the snapshot would remove it from `spex diff`
-// permanently, which is precisely the bead lifecycle refresh must not
-// bypass. component is on the list at all only because retiring a spec
-// component whose code is gone is a structural removal with no bead
-// work left to do.
+// the live-pairing gate below still demands the task be closed first.
+// An *added* component is a bead that was never created; baselining it
+// into the snapshot would remove it from `spex diff` permanently, which
+// is precisely the bead lifecycle refresh must not bypass. component is
+// on the list at all only because retiring a spec component whose code
+// is gone is a structural removal with no bead work left to do.
 var refreshAbsorbable = map[string]refreshDirections{
 	"requirement": {added: true, removed: true},
 	"api":         {added: true, removed: true},
@@ -73,11 +64,12 @@ var refreshAbsorbable = map[string]refreshDirections{
 }
 
 // RefreshRefusal is the typed error for the refresh gates: structural
-// diff entries or orphan mapping records. IngestCommand maps it to a
-// non-zero exit with a structured stderr message naming the entries.
+// diff entries or a live task pairing on a removed node. IngestCommand
+// maps it to a non-zero exit with a structured stderr message naming
+// the entries.
 type RefreshRefusal struct {
-	Kind    string   // "added_entries" | "removed_entries" | "orphan_record"
-	Entries []string // identity-hash keys (or "spec_node_id (bead_id)" for orphans)
+	Kind    string   // "added_entries" | "removed_entries" | "live_task_pairing"
+	Entries []string
 	Hint    string
 }
 
@@ -86,44 +78,54 @@ func (e *RefreshRefusal) Error() string {
 		e.Kind, strings.Join(e.Entries, ", "), e.Hint)
 }
 
-// RefreshSummary is the stdout contract of `spex ingest --mode refresh`.
-// Field order on this struct IS the canonical JSON field order. Status
-// is always "complete" on success — refresh has no partial state;
+// RefreshSummary is the stdout contract of `spex ingest --mode refresh`,
+// per flow_ingest.md's "Summary output (mode: refresh)" shape. Field
+// order on this struct IS the canonical JSON field order. Status is
+// always "complete" on success — refresh has no partial state;
 // unsuccessful runs return an error and never print a summary.
 type RefreshSummary struct {
-	RecordsUpdated   int    `json:"records_updated"`
-	RecordsUnchanged int    `json:"records_unchanged"`
-	SnapshotSaved    bool   `json:"snapshot_saved"`
-	Status           string `json:"status"`
+	EventsAppended int    `json:"events_appended"`
+	SnapshotSaved  bool   `json:"snapshot_saved"`
+	Status         string `json:"status"`
 }
 
 // RefreshHandler is the refresh-mode ingest pathway: it absorbs drift
 // that owes no bead work — content edits to any leaf, plus additions
-// and removals of the node types on refreshAbsorbable — by re-hashing
-// every content leaf, updating stale mapping-record spec_hash fields,
-// and rewriting the snapshot — atomically, with no bead lifecycle. See
-// spec/ingest/arch_refresh.md for the refusal contract.
+// and removals of the node types on refreshAbsorbable — by appending
+// one change event per absorbed drift entry to the task journal, closed
+// by one refresh receipt, and rewriting the snapshot — atomically, with
+// no bead lifecycle. See spec/ingest/arch_refresh.md for the refusal
+// contract.
 type RefreshHandler struct {
-	// Store is the bead-map the handler updates in place. Only
-	// spec_hash fields ever change; bead ids, statuses, and the
-	// monotonic counter are untouched.
-	Store mapping.Store
-	// SnapshotPath is the diff baseline and rewrite target. Defaults
-	// to <specDir>/.snapshot.json when empty.
+	// SnapshotPath is the diff baseline and rewrite target. Defaults to
+	// <specDir>/.snapshot.json when empty.
 	SnapshotPath string
 	// Changeset and Receipts are the (required, empty) artifacts the
 	// caller parsed. Any ops present refuse the run.
 	Changeset *emit.Changeset
 	Receipts  *adapters.Receipts
+	// GitHead is the optional --git-head value. Nil records the value's
+	// absence (a JSON null on the refresh receipt); a non-nil value is
+	// also stamped onto every change event the run constructs.
+	GitHead *string
 	// Now is the timestamp source for the rewritten snapshot's
 	// created_at. Defaults to time.Now; tests inject a fixed clock.
 	Now func() time.Time
 }
 
-// Apply runs the refresh-mode pathway end-to-end: pre-flight, diff
-// gates, orphan gate, spec_hash updates, and the atomic paired commit
-// of bead-map + snapshot. On any error both files are left unchanged
-// (the bead-map is rolled back if the snapshot write fails after it).
+// liveMetadata is what Apply needs from the current spec graph to name a
+// still-live node's added or modified change event: its declared name and
+// (for the node types that have one) its content-leaf path.
+type liveMetadata struct {
+	Name string
+	Path string
+}
+
+// Apply runs the refresh-mode pathway end-to-end: pre-flight, the diff
+// against the pre-refresh snapshot, the structural and live-pairing
+// gates, event construction, and the atomic paired commit of the
+// journal and the snapshot. On any error both files are left unchanged
+// (the journal is rolled back if the snapshot write fails after it).
 func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	var summary RefreshSummary
 
@@ -152,121 +154,367 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, fmt.Errorf("ingest: refresh: %w", err)
 	}
 
-	// Structural gate. Only the node types on refreshAbsorbable may
-	// appear as an addition or a removal, and only in the direction
-	// that type allows; everything else refuses the run.
 	changes := merkle.Diff(tree, snapshot)
-	var added, removed []string
+	if len(changes) == 0 {
+		summary.Status = adapters.StatusComplete
+		return summary, nil
+	}
+
+	// Structural gate: any added or removed entry the absorbable set
+	// does not cover refuses the whole run before anything is
+	// constructed. Modified entries never reach this gate.
+	var addedRefused, removedRefused []string
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
 			if !refreshAbsorbable[c.NodeType].added {
-				added = append(added, c.Key)
+				addedRefused = append(addedRefused, c.Key)
 			}
 		case merkle.Removed:
 			if !refreshAbsorbable[c.NodeType].removed {
-				removed = append(removed, c.Key)
+				removedRefused = append(removedRefused, c.Key)
 			}
 		}
 	}
-	if len(added) > 0 {
+	if len(addedRefused) > 0 {
 		return summary, &RefreshRefusal{
 			Kind:    "added_entries",
-			Entries: added,
+			Entries: addedRefused,
 			Hint:    "refresh mode does not absorb structural changes; use the normal pipeline",
 		}
 	}
-	if len(removed) > 0 {
+	if len(removedRefused) > 0 {
 		return summary, &RefreshRefusal{
 			Kind:    "removed_entries",
-			Entries: removed,
+			Entries: removedRefused,
 			Hint:    "refresh mode does not absorb structural changes; use the normal pipeline",
 		}
 	}
 
-	leafHashes := map[string]string{}
-	collectLeafHashes(leafHashes, tree)
-
-	records, err := h.Store.List()
+	store := mapping.NewMappingStore(specDir)
+	existing, err := store.Parse()
 	if err != nil {
-		return summary, fmt.Errorf("ingest: refresh: read bead-map: %w", err)
+		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
 	}
-	nextID, err := h.Store.NextRecordID()
+	fold, err := store.List()
 	if err != nil {
-		return summary, fmt.Errorf("ingest: refresh: read bead-map counter: %w", err)
+		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
 	}
 
-	// Orphan gate. Proposal-epic records reference the proposal ref,
-	// not a spec node hash, so they are exempt — same rule as the
-	// Reconciler's invariant 4.
-	for _, rec := range records {
-		if rec.NodeType == "proposal" {
+	foldByKey := make(map[string]mapping.FoldEntry, len(fold.Entries))
+	for _, e := range fold.Entries {
+		foldByKey[e.Key] = e
+	}
+	closedTaskIDs := map[string]bool{}
+	lastChangeByNode := map[string]mapping.Event{}
+	seenEIDs := make(map[string]bool, len(existing))
+	for _, ev := range existing {
+		switch ev.Event {
+		case "task_closed":
+			closedTaskIDs[ev.TaskID] = true
+		case "added", "modified", "removed":
+			lastChangeByNode[ev.Node] = ev
+		}
+		if ev.EID != "" {
+			seenEIDs[ev.EID] = true
+		}
+	}
+
+	// Live-pairing gate: a removed entry whose node's current fold
+	// linkage is still a live, unclosed task_created refuses the run —
+	// bead work is owed and the normal pipeline must close or clean it
+	// up first. Liveness is decided from TaskID/closedTaskIDs alone: the
+	// fold's Removed flag says nothing about whether that task is open —
+	// a cleanup's task_created folds to Removed:true too, since it
+	// inherits Removed from the removal event it pairs with — so it must
+	// not gate this check.
+	var livePairing []string
+	for _, c := range changes {
+		if c.Type != merkle.Removed {
 			continue
 		}
-		if _, ok := leafHashes[rec.SpecNodeID]; !ok {
-			return summary, &RefreshRefusal{
-				Kind:    "orphan_record",
-				Entries: []string{fmt.Sprintf("%s (%s)", rec.SpecNodeID, rec.BeadID)},
-				Hint:    "orphan mapping record; structural drift requires the normal pipeline",
+		entry, ok := foldByKey[c.Key]
+		if ok && entry.TaskID != "" && !closedTaskIDs[entry.TaskID] {
+			livePairing = append(livePairing, fmt.Sprintf("%s (%s)", c.Key, entry.TaskID))
+		}
+	}
+	if len(livePairing) > 0 {
+		return summary, &RefreshRefusal{
+			Kind:    "live_task_pairing",
+			Entries: livePairing,
+			Hint:    "live task for removed node; structural drift requires the normal pipeline",
+		}
+	}
+
+	liveIndex, err := buildLiveIndex(specDir)
+	if err != nil {
+		return summary, fmt.Errorf("ingest: refresh: %w", err)
+	}
+
+	gitHead := ""
+	if h.GitHead != nil {
+		gitHead = *h.GitHead
+	}
+
+	var batch []mapping.Event
+	var absorbed []string
+	for _, c := range changes {
+		switch c.Type {
+		case merkle.Added:
+			if last, hasLast := lastChangeByNode[c.Key]; hasLast && last.Event == "added" {
+				// Already the journal's current state for this node —
+				// its latest change event is itself an addition, from a
+				// prior (possibly partial) run. Only the snapshot is
+				// stale. Checked off the node's latest change event
+				// rather than a raw eid-seen check: deriveRefreshEID is
+				// a pure function of (node, before, after), so a node
+				// re-added with byte-identical content after a removal
+				// derives the same eid as its first addition — that is
+				// genuinely new information (the node came back) and
+				// must still be constructed, just under a disambiguated
+				// eid (see uniqueRefreshEID below).
+				continue
 			}
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, nil, strPtr(c.NewHash)))
+			md := liveIndex[c.Key]
+			ev := mapping.Event{
+				Event: "added", EID: eid,
+				Node: c.Key, Name: md.Name, NodeType: c.NodeType, Module: c.Module,
+				Before: nil, After: strPtr(c.NewHash),
+				GitHead: gitHead, Path: md.Path,
+			}
+			batch = append(batch, ev)
+			absorbed = append(absorbed, ev.EID)
+
+		case merkle.Modified:
+			// meta leaves (the project.json / module.json envelope)
+			// carry no node_type the journal-line schema accepts —
+			// their drift is absorbed into the snapshot rewrite alone,
+			// never as a change event.
+			if c.NodeType == "meta" {
+				continue
+			}
+			if last, hasLast := lastChangeByNode[c.Key]; hasLast && last.Event == "modified" &&
+				derefOrEmpty(last.Before) == c.OldHash && derefOrEmpty(last.After) == c.NewHash {
+				// Already the journal's current state for this node —
+				// its latest change event already records this exact
+				// before->after transition, from a prior (possibly
+				// partial) run that journaled it but left the snapshot
+				// stale. Nothing new to say, so construct nothing,
+				// mirroring the Added/Removed branches above. A
+				// transition that recurs after an intervening one
+				// (a flap back to an earlier state) is NOT this case —
+				// its before/after pair won't match the latest event —
+				// and falls through to construct below, same as a
+				// content-identical re-add falls through on Added.
+				continue
+			}
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, strPtr(c.OldHash), strPtr(c.NewHash)))
+			md := liveIndex[c.Key]
+			ev := mapping.Event{
+				Event: "modified", EID: eid,
+				Node: c.Key, Name: md.Name, NodeType: c.NodeType, Module: c.Module,
+				Before: strPtr(c.OldHash), After: strPtr(c.NewHash),
+				GitHead: gitHead, Path: md.Path,
+			}
+			batch = append(batch, ev)
+			absorbed = append(absorbed, ev.EID)
+
+		case merkle.Removed:
+			last, hasLast := lastChangeByNode[c.Key]
+			if hasLast && last.Event == "removed" {
+				// Already the journal's current state for this node —
+				// its latest change event is itself a removal, from a
+				// prior (possibly partial) run. Only the snapshot is
+				// stale; there is no new information here, so construct
+				// nothing rather than manufacture a redundant line under
+				// a disambiguated eid. Checked off the node's latest
+				// change event rather than the fold's Removed flag:
+				// fold() never updates a requirement/api entry on an
+				// "added" event (they get no task_created to carry the
+				// update), so after a re-add that flag would stay stuck
+				// on the earlier removal.
+				continue
+			}
+			entry, hasFold := foldByKey[c.Key]
+			name, path := "", ""
+			if hasFold {
+				name, path = entry.Source.Name, entry.Source.Path
+			} else if hasLast {
+				name, path = last.Name, last.Path
+			}
+			// Composes with the lastChangeByNode skip above rather than
+			// replacing it: that check only catches *consecutive*
+			// removals of the same node. A node restored verbatim
+			// between two refresh-absorbed removals derives the same
+			// eid both times too — same node, same before-hash, no
+			// after-hash — but its latest event is "added" in between,
+			// so the check above does not fire. Disambiguate instead of
+			// dropping: the removal is still real information the
+			// journal must carry, just under an eid distinct from the
+			// earlier occurrence's.
+			eid := uniqueRefreshEID(seenEIDs, deriveRefreshEID(c.Key, strPtr(c.OldHash), nil))
+			ev := mapping.Event{
+				Event: "removed", EID: eid,
+				Node: c.Key, Name: name, NodeType: c.NodeType, Module: c.Module,
+				Before: strPtr(c.OldHash), After: nil,
+				GitHead: gitHead, Path: path,
+			}
+			batch = append(batch, ev)
+			absorbed = append(absorbed, ev.EID)
 		}
 	}
 
-	// Update stale spec_hash fields in the in-memory copy. No other
-	// record field changes; the counter does not advance.
-	before := make([]mapping.Record, len(records))
-	copy(before, records)
-	for i := range records {
-		if records[i].NodeType == "proposal" {
-			summary.RecordsUnchanged++
-			continue
-		}
-		current := leafHashes[records[i].SpecNodeID]
-		if records[i].SpecHash != current {
-			records[i].SpecHash = current
-			summary.RecordsUpdated++
-		} else {
-			summary.RecordsUnchanged++
-		}
+	if absorbed == nil {
+		absorbed = []string{}
+	}
+	batch = append(batch, mapping.Event{Event: "refresh", GitHead: gitHead, Absorbed: absorbed})
+
+	if err := checkInvariant5(batch); err != nil {
+		return summary, err
 	}
 
-	summary.Status = adapters.StatusComplete
-
-	// Clean no-op: nothing drifted, so neither file is rewritten —
-	// re-running refresh on the same state must not perturb git status.
-	if summary.RecordsUpdated == 0 && len(changes) == 0 {
-		return summary, nil
+	journalPath := filepath.Join(specDir, ".history.jsonl")
+	originalJournal, readErr := os.ReadFile(journalPath)
+	journalExisted := true
+	if readErr != nil {
+		if !errors.Is(readErr, os.ErrNotExist) {
+			return summary, fmt.Errorf("ingest: refresh: read journal: %w", readErr)
+		}
+		journalExisted = false
 	}
 
-	// Atomic paired commit: bead-map first, snapshot second; roll the
-	// bead-map back if the snapshot write fails so the two files never
-	// represent different points in time.
+	if err := appendJournal(journalPath, batch); err != nil {
+		return summary, fmt.Errorf("ingest: refresh: write journal: %w", err)
+	}
+
 	now := h.Now
 	if now == nil {
 		now = time.Now
 	}
-	if err := h.Store.Replace(records, nextID); err != nil {
-		return summary, fmt.Errorf("ingest: refresh: write bead-map: %w", err)
-	}
 	if err := writeAtomic(snapPath, tree, now()); err != nil {
-		if rbErr := h.Store.Replace(before, nextID); rbErr != nil {
-			return summary, fmt.Errorf("ingest: refresh: write snapshot: %w (bead-map rollback also failed: %v)", err, rbErr)
+		var rbErr error
+		if journalExisted {
+			rbErr = restoreJournalBytes(journalPath, originalJournal)
+		} else {
+			rbErr = os.Remove(journalPath)
 		}
-		return summary, fmt.Errorf("ingest: refresh: write snapshot: %w (bead-map rolled back)", err)
+		if rbErr != nil {
+			return summary, fmt.Errorf("ingest: refresh: write snapshot: %w (journal rollback also failed: %v)", err, rbErr)
+		}
+		return summary, fmt.Errorf("ingest: refresh: write snapshot: %w (journal rolled back)", err)
 	}
+
+	summary.EventsAppended = len(absorbed)
 	summary.SnapshotSaved = true
+	summary.Status = adapters.StatusComplete
 	return summary, nil
 }
 
-// collectLeafHashes flattens the tree's leaves into a key → content-hash
-// map, the lookup table for both the orphan gate and the spec_hash
-// updates.
-func collectLeafHashes(out map[string]string, n *merkle.Node) {
-	if n.Type == "leaf" {
-		out[n.Key] = n.Hash
-		return
+// restoreJournalBytes rewrites the journal at path back to original via
+// the same temp-file + rename sequence appendJournal uses, so a rollback
+// carries the same crash-safety guarantee as the write it undoes.
+func restoreJournalBytes(path string, original []byte) error {
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, original, 0644); err != nil {
+		return err
 	}
-	for _, child := range n.Children {
-		collectLeafHashes(out, child)
+	return os.Rename(tmp, path)
+}
+
+// deriveRefreshEID derives a refresh-born change event's id from the
+// drift it records — the node identity plus its before/after hashes —
+// rather than from (git_head, op_id): a refresh-born event has no op
+// behind it. See arch_refresh.md.
+func deriveRefreshEID(node string, before, after *string) string {
+	return "refresh:" + node + ":" + derefOrEmpty(before) + ":" + derefOrEmpty(after)
+}
+
+func derefOrEmpty(s *string) string {
+	if s == nil {
+		return ""
 	}
+	return *s
+}
+
+// uniqueRefreshEID returns base, or — if base already names a journal
+// line (this run's or an earlier one's, per seenEIDs) — a suffixed
+// variant that does not. deriveRefreshEID is a pure function of (node,
+// before, after), so an added or removed event can legitimately recur
+// with the exact same derived id across non-adjacent add/remove cycles
+// once the drift's content repeats verbatim; the caller has already
+// decided the event carries real information (via lastChangeByNode) and
+// must not be dropped, so collision is resolved by disambiguating the id
+// rather than skipping construction. Registers the chosen id in
+// seenEIDs before returning it.
+func uniqueRefreshEID(seenEIDs map[string]bool, base string) string {
+	eid := base
+	for n := 2; seenEIDs[eid]; n++ {
+		eid = fmt.Sprintf("%s#%d", base, n)
+	}
+	seenEIDs[eid] = true
+	return eid
+}
+
+// buildLiveIndex reads the current spec directory's project.json and
+// every module.json to resolve the name and content-leaf path (when the
+// node type has one) of every requirement, api, component, data_flow and
+// test_section the spec currently declares. Apply uses it to name added
+// and modified events — both always describe a node the current spec
+// still carries.
+func buildLiveIndex(specDir string) (map[string]liveMetadata, error) {
+	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read project.json: %w", err)
+	}
+	var proj schema.Project
+	if err := json.Unmarshal(projData, &proj); err != nil {
+		return nil, fmt.Errorf("parse project.json: %w", err)
+	}
+
+	idx := map[string]liveMetadata{}
+	for _, req := range proj.Requirements {
+		idx[req.ID] = liveMetadata{Name: req.Title}
+	}
+
+	for _, mod := range proj.Modules {
+		modDir := filepath.Join(specDir, mod.Path)
+		modPath := filepath.Join(modDir, "module.json")
+		data, err := os.ReadFile(modPath)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", modPath, err)
+		}
+		var ms schema.ModuleSpec
+		if err := json.Unmarshal(data, &ms); err != nil {
+			return nil, fmt.Errorf("parse %s: %w", modPath, err)
+		}
+
+		for _, req := range ms.Requirements {
+			idx[req.ID] = liveMetadata{Name: req.Title}
+		}
+		for _, api := range ms.APIs {
+			idx[api.ID] = liveMetadata{Name: api.Name}
+		}
+		for _, c := range ms.Components {
+			idx[c.ID] = liveMetadata{Name: c.Name, Path: contentPath(mod.Path, c.Content)}
+		}
+		for _, df := range ms.DataFlows {
+			idx[df.ID] = liveMetadata{Name: df.Name, Path: contentPath(mod.Path, df.Content)}
+		}
+		for _, ts := range ms.TestSections {
+			idx[ts.ID] = liveMetadata{Name: ts.Name, Path: contentPath(mod.Path, ts.Content)}
+		}
+	}
+	return idx, nil
+}
+
+// contentPath renders a node's content-leaf path in the journal's
+// recorded convention: "spec/<module-path>/<content-file>", regardless
+// of what the spec directory is actually called on disk. Empty when the
+// node has no content file (requirement and api events never call this).
+func contentPath(modPath, content string) string {
+	if content == "" {
+		return ""
+	}
+	return filepath.Join("spec", modPath, content)
 }

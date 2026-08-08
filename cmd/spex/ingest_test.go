@@ -521,9 +521,10 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 }
 
 // setupRefreshedFixture runs a complete normal-mode ingest over the
-// fixture (materialising a record and the snapshot baseline), then
-// writes the empty changeset+receipts pair refresh mode requires.
-// Returns the fixture plus the two empty artifact paths.
+// fixture — materialising the component's added event + task_created in
+// spec/.history.jsonl and the snapshot baseline — then writes the empty
+// changeset+receipts pair refresh mode requires. Returns the fixture
+// plus the two empty artifact paths.
 func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 	t.Helper()
 	f := setupIngestFixture(t, adapters.StatusComplete)
@@ -537,26 +538,6 @@ func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 		t.Fatalf("seed normal ingest: exit %d err %v stderr %s", exit, err, stderr)
 	}
 
-	// TODO(bead:spexmachina-y0wc.34): RefreshHandler still reads the
-	// legacy .bead-map.json (see arch_refresh.md); normal-mode ingest now
-	// writes the task journal instead (see the TODO in newIngestCmd).
-	// Seed the equivalent legacy record directly so refresh-mode fixtures
-	// still have a record to update, until RefreshHandler's own
-	// migration to the journal.
-	archPath := filepath.Join(f.specDir, "alpha", "arch_comp1.md")
-	hash, err := merkle.HashFile(archPath)
-	if err != nil {
-		t.Fatalf("hash seed content: %v", err)
-	}
-	store := mapping.NewFileStore(f.mapPath)
-	if err := store.Replace([]mapping.Record{{
-		ID: f.recordID, SpecNodeID: f.compID, BeadID: f.beadID, BeadType: "feature",
-		NodeType: "component", Module: "alpha", Component: "Comp1",
-		ContentFile: "spec/alpha/arch_comp1.md", SpecHash: hash,
-	}}, f.recordID+1); err != nil {
-		t.Fatalf("seed legacy bead-map record: %v", err)
-	}
-
 	dir := filepath.Dir(f.changesetPath)
 	emptyCS := filepath.Join(dir, "refresh-changeset.json")
 	writeJSON(t, emptyCS, emit.Changeset{Version: emit.ChangesetVersion})
@@ -566,9 +547,9 @@ func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 }
 
 // TestIngestCommand_RefreshMode_AbsorbsDrift covers the command-level
-// happy path: --mode refresh dispatches to RefreshHandler, updates the
-// stale record's spec_hash, rewrites the snapshot, and emits the
-// refresh summary shape.
+// happy path: --mode refresh dispatches to RefreshHandler, appends a
+// modified change event for the drifted leaf, rewrites the snapshot,
+// and emits the refresh summary shape.
 func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 	f, emptyCS, emptyRC := setupRefreshedFixture(t)
 
@@ -590,24 +571,37 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &sum); err != nil {
 		t.Fatalf("parse summary %q: %v", stdout, err)
 	}
-	if sum.RecordsUpdated != 1 || !sum.SnapshotSaved || sum.Status != adapters.StatusComplete {
-		t.Errorf("summary: want 1 updated, snapshot_saved, complete; got %+v", sum)
+	if sum.EventsAppended != 1 || !sum.SnapshotSaved || sum.Status != adapters.StatusComplete {
+		t.Errorf("summary: want 1 event appended, snapshot_saved, complete; got %+v", sum)
 	}
 
-	store := mapping.NewFileStore(f.mapPath)
-	rec, err := store.Get(f.recordID)
+	events, err := mapping.NewMappingStore(f.specDir).Parse()
 	if err != nil {
-		t.Fatalf("get record: %v", err)
+		t.Fatalf("parse journal: %v", err)
 	}
 	wantHash, err := merkle.HashFile(filepath.Join(f.specDir, "alpha", "arch_comp1.md"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if rec.SpecHash != wantHash {
-		t.Errorf("record spec_hash: want current %s, got %s", wantHash, rec.SpecHash)
+	var modified *mapping.Event
+	for i := range events {
+		if events[i].Event == "modified" && events[i].Node == f.compID {
+			modified = &events[i]
+		}
 	}
-	if rec.BeadID != f.beadID {
-		t.Errorf("bead_id must be untouched: want %s, got %s", f.beadID, rec.BeadID)
+	if modified == nil {
+		t.Fatalf("want a modified event for %s, journal: %+v", f.compID, events)
+	}
+	if modified.After == nil || *modified.After != wantHash {
+		t.Errorf("modified event after: want %s, got %+v", wantHash, modified.After)
+	}
+
+	entry, err := mapping.NewMappingStore(f.specDir).Get(f.compID)
+	if err != nil {
+		t.Fatalf("get fold entry: %v", err)
+	}
+	if entry.TaskID != f.beadID {
+		t.Errorf("task pairing must be untouched: want %s, got %s", f.beadID, entry.TaskID)
 	}
 }
 
@@ -627,7 +621,12 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	}`)
 	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp2.md", "# Comp2\n")
 
-	mapBefore, err := os.ReadFile(f.mapPath)
+	journalPath := filepath.Join(f.specDir, ".history.jsonl")
+	journalBefore, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapBefore, err := os.ReadFile(f.snapshotPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,12 +644,19 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	if runErr == nil || !strings.Contains(runErr.Error(), newID) {
 		t.Errorf("refusal must name the added entry %s: %v", newID, runErr)
 	}
-	mapAfter, err := os.ReadFile(f.mapPath)
+	journalAfter, err := os.ReadFile(journalPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(mapAfter) != string(mapBefore) {
-		t.Error("bead-map must be unchanged after refusal")
+	if string(journalAfter) != string(journalBefore) {
+		t.Error("journal must be unchanged after refusal")
+	}
+	snapAfter, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(snapAfter) != string(snapBefore) {
+		t.Error("snapshot must be unchanged after refusal")
 	}
 }
 

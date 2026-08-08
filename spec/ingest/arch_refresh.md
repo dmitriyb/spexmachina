@@ -56,6 +56,23 @@ absorbed, so a refresh is visible in history instead of amnesiac.
 Both file writes go through a temp-file + rename sequence under one atomic commit boundary: either
 both files move to the new state or neither does.
 
+### Recurring drift and eid collisions
+
+`deriveRefreshEID` is a pure function of `(node, before, after)`, so the same drift can legitimately
+recur: a node removed and later re-added with byte-identical content derives the same `added` eid
+both times, and a leaf whose content flaps between two states derives the same `modified` eid every
+time it revisits a transition it has visited before. Before constructing a diff entry's event,
+refresh checks whether the node's *latest* journaled change event already records this exact state
+— an `added`/`removed` entry against the latest event's kind, a `modified` entry against the latest
+event's kind **and** its before/after pair. When it does, there is nothing new to say (the drift was
+already absorbed by an earlier, possibly partial, run and only the snapshot is stale) and refresh
+constructs nothing for that entry. Every other diff entry is genuinely new information — the node
+came back, or the transition recurred after an intervening one — and is always constructed, even
+when its derived eid collides with an earlier, non-adjacent occurrence already in the journal. On
+collision the id is disambiguated with a `#2`, `#3`, ... suffix (`refresh:<node>:<before>:<after>#2`)
+rather than reused, so every `eid` in the journal stays unique while the recurrence itself is still
+recorded.
+
 A run that finds nothing to absorb — no diff entry of any kind — writes neither file, appends
 nothing (no empty receipt), and reports `snapshot_saved: false`. That is what lets a second
 refresh over an unchanged tree leave `git status` clean.

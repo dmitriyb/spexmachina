@@ -31,20 +31,30 @@
 //
 // # Mode: refresh
 //
-// Absorbs content-only drift on non-bead-producing leaves without bead
-// lifecycle. The changeset and receipts must be empty; the pre-refresh
-// snapshot is the diff baseline and must exist:
+// Absorbs spec drift that owes no bead work — content edits to any
+// leaf, plus additions and removals of the node types on
+// RefreshHandler's absorbable list (requirements and apis in either
+// direction, component removals) — without any bead lifecycle running.
+// The changeset and receipts must be empty; the pre-refresh snapshot is
+// the diff baseline and must exist:
 //
 //  1. Pre-flight: both artifacts empty, snapshot present.
 //  2. Compute the diff: rebuild the current tree, load the snapshot,
 //     run the merkle diff.
-//  3. Refusal gates: any added or removed entry, or any orphan
-//     bead-map record, refuses the run (typed RefreshRefusal) with
-//     both files byte-identical to their pre-call state.
-//  4. Update stale record spec_hash fields in memory — no other field,
-//     no counter advance.
-//  5. Atomic paired commit: .bead-map.json and spec/.snapshot.json
-//     move together; a snapshot-write failure rolls the bead-map back.
+//  3. Refusal gates: any added or removed entry the absorbable set does
+//     not cover, or any removed node whose journal fold still shows a
+//     live (unclosed) task pairing, refuses the run (typed
+//     RefreshRefusal) with both files byte-identical to their pre-call
+//     state.
+//  4. Construct one change event per absorbed drift entry — added,
+//     modified or removed, before/after hashes taken straight off the
+//     two trees — closed by one refresh receipt naming the batch's
+//     event ids and stamped with --git-head when given. A refresh-born
+//     event's eid derives from (node, before, after) rather than
+//     (git_head, op_id), since no op stands behind it.
+//  5. Atomic paired commit: spec/.history.jsonl and spec/.snapshot.json
+//     move together; a snapshot-write failure rolls the journal append
+//     back. A run that finds no diff entry at all writes neither file.
 //  6. Emit a JSON RefreshSummary to stdout.
 //
 // # Partial-run recovery (mode: normal)
@@ -58,18 +68,18 @@
 //
 // # Atomic writes
 //
-// spec/.history.jsonl (normal mode) and .bead-map.json plus
-// spec/.snapshot.json (refresh mode) are written via temp-file + rename.
-// A crash mid-write leaves the pre-write file intact. Refresh mode is
-// stricter than normal mode: its two writes form one commit boundary,
-// because the refreshed snapshot IS the next run's diff baseline.
+// spec/.history.jsonl and spec/.snapshot.json are both written via
+// temp-file + rename, in both modes. A crash mid-write leaves the
+// pre-write file intact. Refresh mode is stricter than normal mode: its
+// two writes form one commit boundary, because the refreshed snapshot
+// IS the next run's diff baseline.
 //
 // # Exit codes
 //
 // 0 success; 1 input error (bad flags, malformed JSON, op_id mismatch,
 // snapshot write failure, missing pre-refresh snapshot, non-empty
-// refresh artifacts); 2 invariant failure or refresh refusal (mapping
-// file unchanged on disk in both cases).
+// refresh artifacts); 2 invariant failure or refresh refusal (journal
+// unchanged on disk in both cases).
 //
 // # Contract surface
 //

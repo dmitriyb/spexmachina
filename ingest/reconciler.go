@@ -728,9 +728,22 @@ type taskReceiptLine struct {
 	Proposal string `json:"proposal,omitempty"`
 }
 
+// refreshReceiptLine mirrors the refreshReceipt journal-line shape exactly:
+// git_head is nullable (a refresh run with no --git-head records the
+// absence as JSON null, not empty string) and absorbed always serialises
+// as an array, even when empty — RefreshHandler is this line kind's only
+// writer, see arch_refresh.md.
+type refreshReceiptLine struct {
+	Event    string   `json:"event"`
+	GitHead  *string  `json:"git_head"`
+	Absorbed []string `json:"absorbed"`
+}
+
 // encodeLine renders one mapping.Event as the wire JSON its event kind
 // requires. It is used both to append new lines and, via checkInvariant5,
-// to schema-validate them before the append commits.
+// to schema-validate them before the append commits. Reconciler and
+// RefreshHandler are the journal format's only writers and share this
+// encoder so the two components can never drift apart on wire shape.
 func encodeLine(ev mapping.Event) ([]byte, error) {
 	switch ev.Event {
 	case "added", "modified", "removed":
@@ -743,6 +756,16 @@ func encodeLine(ev mapping.Event) ([]byte, error) {
 		return json.Marshal(taskReceiptLine{
 			Event: ev.Event, TaskID: ev.TaskID, For: ev.For, Proposal: ev.Proposal,
 		})
+	case "refresh":
+		var gitHead *string
+		if ev.GitHead != "" {
+			gitHead = strPtr(ev.GitHead)
+		}
+		absorbed := ev.Absorbed
+		if absorbed == nil {
+			absorbed = []string{}
+		}
+		return json.Marshal(refreshReceiptLine{Event: ev.Event, GitHead: gitHead, Absorbed: absorbed})
 	default:
 		return nil, fmt.Errorf("unknown journal line kind %q", ev.Event)
 	}
