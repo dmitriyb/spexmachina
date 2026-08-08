@@ -85,7 +85,7 @@
     {
       "id": "db90eb607bcb",
       "name": "IngestCommand",
-      "description": "CLI entry point: spex ingest --changeset <file> --receipts <file> [--mode refresh]. Loads both artifacts, inspects the run mode, and dispatches: mode: normal wires Reconciler and SnapshotSaver; mode: refresh wires RefreshHandler. Returns exit 0 on success or non-zero with a structured error on any invariant violation or IO failure.",
+      "description": "CLI entry point: spex ingest --changeset <file> --receipts <file> [--mode refresh] [--git-head <sha>]. Loads both artifacts, inspects the run mode, and dispatches: mode: normal wires Reconciler and SnapshotSaver; mode: refresh wires RefreshHandler. Returns exit 0 on success or non-zero with a structured error on any invariant violation or IO failure.",
       "content": "arch_ingest_command.md",
       "implements": [
         "20589ccf7072"
@@ -168,7 +168,7 @@
     {
       "id": "3589714e50f8",
       "name": "spex ingest",
-      "description": "Reconcile mapping records and save snapshot from a changeset+receipts pair",
+      "description": "Reconcile the task journal and save snapshot from a changeset+receipts pair",
       "provided_by": [
         "db90eb607bcb"
       ],
