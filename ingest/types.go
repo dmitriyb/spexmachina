@@ -26,23 +26,25 @@ const (
 	ExitInvariant  = 2
 )
 
-// Summary is the v1 stdout contract of `spex ingest`. Field order on
-// this struct IS the canonical JSON field order — do not reorder.
-// SnapshotSaved and Status always serialize (no omitempty); the count
-// fields are integers and naturally serialize as 0 when absent.
+// Summary is the v1 stdout contract of `spex ingest` (mode: normal), per
+// flow_ingest.md's "Summary output" shape. Field order on this struct IS
+// the canonical JSON field order — do not reorder. SnapshotSaved and
+// Status always serialize (no omitempty); the count fields are integers
+// and naturally serialize as 0 when absent.
 //
 // Ok aggregates ok creates and ok closes — the per-op type breakdown
 // stays inside the reconciler's internal summary and does not surface
-// on the wire. The receipts top-level status (complete | partial)
-// echoes back into Status so callers can drive downstream behavior
-// without re-reading receipts.json.
+// on the wire. EventsAppended and ReceiptsAppended are Reconciler's two
+// append counts, zero on an idempotent re-run even when Ok is not. The
+// receipts top-level status (complete | partial) echoes back into Status
+// so callers can drive downstream behavior without re-reading
+// receipts.json.
 type Summary struct {
-	Ok             int    `json:"ok"`
-	Skipped        int    `json:"skipped"`
-	Errors         int    `json:"errors"`
-	RecordsAdded   int    `json:"records_added"`
-	RecordsUpdated int    `json:"records_updated"`
-	RecordsDeleted int    `json:"records_deleted"`
-	SnapshotSaved  bool   `json:"snapshot_saved"`
-	Status         string `json:"status"`
+	Ok               int    `json:"ok"`
+	Skipped          int    `json:"skipped"`
+	Errors           int    `json:"errors"`
+	EventsAppended   int    `json:"events_appended"`
+	ReceiptsAppended int    `json:"receipts_appended"`
+	SnapshotSaved    bool   `json:"snapshot_saved"`
+	Status           string `json:"status"`
 }

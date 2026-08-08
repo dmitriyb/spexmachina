@@ -166,8 +166,8 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 	if sum.Ok != 1 {
 		t.Errorf("want ok=1, got %d", sum.Ok)
 	}
-	if sum.RecordsAdded != 1 {
-		t.Errorf("want records_added=1, got %d", sum.RecordsAdded)
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("want events_appended=1/receipts_appended=1, got %+v", sum)
 	}
 	if !sum.SnapshotSaved {
 		t.Errorf("want snapshot_saved=true on complete run")
@@ -180,16 +180,15 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 		t.Errorf("snapshot file missing after complete run: %v", err)
 	}
 
-	store := mapping.NewFileStore(f.mapPath)
-	rec, err := store.Get(f.recordID)
+	// Normal-mode ingest writes the task journal (spec/.history.jsonl),
+	// not .bead-map.json — see TODO(bead:spexmachina-y0wc.35) in
+	// newIngestCmd.
+	entry, err := mapping.NewMappingStore(f.specDir).Get(f.compID)
 	if err != nil {
-		t.Fatalf("expected record %d after ingest: %v", f.recordID, err)
+		t.Fatalf("expected journal entry for %s after ingest: %v", f.compID, err)
 	}
-	if rec.BeadID != f.beadID {
-		t.Errorf("want bead_id=%s, got %s", f.beadID, rec.BeadID)
-	}
-	if rec.SpecNodeID != f.compID {
-		t.Errorf("want spec_node_id=%s, got %s", f.compID, rec.SpecNodeID)
+	if entry.TaskID != f.beadID {
+		t.Errorf("want task_id=%s, got %s", f.beadID, entry.TaskID)
 	}
 }
 
@@ -380,35 +379,49 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 	}
 }
 
-func TestIngestCommand_InvariantFailure_Exits2_PreservesMapping(t *testing.T) {
+// TestIngestCommand_InvariantFailure_Exits2_PreservesJournal covers the
+// exit-2 invariant-failure path against the journal model: a close op
+// targeting a bead with no journal pairing at all (Reconciler's
+// invariant 1 — "no journal entry for bead ...") fails the whole batch,
+// including the earlier, otherwise-valid create op, and the journal file
+// is never written.
+func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
-	// Seed an orphan record (spec_node_id not present in the spec graph)
-	// so invariant 4 fires after the working-copy apply.
-	orphanState := `{
-		"next_id": 5,
-		"records": [
+	cs := emit.Changeset{
+		Version:  emit.ChangesetVersion,
+		GitHead:  "deadbeefcafe",
+		Proposal: "test-proposal",
+		Ops: []emit.Op{
 			{
-				"id": 4,
-				"spec_node_id": "ghostnode00",
-				"bead_id": "bead-ghost",
-				"bead_type": "feature",
-				"node_type": "component",
-				"module": "alpha",
-				"component": "Ghost",
-				"content_file": "spec/alpha/arch_ghost.md",
-				"spec_hash": "deadbeef"
-			}
-		]
-	}`
-	if err := os.WriteFile(f.mapPath, []byte(orphanState), 0o644); err != nil {
-		t.Fatal(err)
+				OpID:         "op-0001",
+				Type:         emit.OpCreate,
+				SpecNodeKind: "component",
+				SpecNodeID:   f.compID,
+				Idempotency:  &emit.Idem{Label: "spex:" + f.compID},
+				Title:        "Comp1",
+			},
+			{
+				OpID:   "op-0002",
+				Type:   emit.OpClose,
+				Target: &emit.Ref{Kind: emit.RefBead, BeadID: "bead-ghost"},
+				Reason: "Spec node removed: alpha/Ghost",
+			},
+		},
 	}
+	writeJSON(t, f.changesetPath, cs)
 
-	mappingBefore, err := os.ReadFile(f.mapPath)
-	if err != nil {
-		t.Fatal(err)
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion,
+		Status:  adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{
+			{OpID: "op-0001", Status: adapters.OpStatusOk, BeadID: "bead-1"},
+			{OpID: "op-0002", Status: adapters.OpStatusOk, BeadID: "bead-ghost"},
+		},
 	}
+	writeJSON(t, f.receiptsPath, rc)
+
+	journalPath := filepath.Join(f.specDir, ".history.jsonl")
 
 	_, _, exit, err := runIngest(t,
 		"--spec-dir", f.specDir,
@@ -426,17 +439,12 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesMapping(t *testing.T) {
 		t.Errorf("want error mentioning invariant, got: %v", err)
 	}
 
-	mappingAfter, err := os.ReadFile(f.mapPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(mappingBefore) != string(mappingAfter) {
-		t.Errorf("invariant failure should leave .bead-map.json untouched\nbefore: %s\nafter:  %s",
-			mappingBefore, mappingAfter)
+	if _, statErr := os.Stat(journalPath); !os.IsNotExist(statErr) {
+		t.Errorf("invariant failure should leave the journal unwritten, stat err: %v", statErr)
 	}
 }
 
-func TestIngestCommand_ReRun_LeavesMappingByteIdentical(t *testing.T) {
+func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
 	if _, _, _, err := runIngest(t,
@@ -448,7 +456,8 @@ func TestIngestCommand_ReRun_LeavesMappingByteIdentical(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 
-	mapAfter1, err := os.ReadFile(f.mapPath)
+	journalPath := filepath.Join(f.specDir, ".history.jsonl")
+	journalAfter1, err := os.ReadFile(journalPath)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -487,17 +496,17 @@ func TestIngestCommand_ReRun_LeavesMappingByteIdentical(t *testing.T) {
 	if err := json.Unmarshal([]byte(stdout), &sum); err != nil {
 		t.Fatalf("decode summary: %v", err)
 	}
-	if sum.RecordsAdded != 0 || sum.RecordsUpdated != 0 || sum.RecordsDeleted != 0 {
-		t.Errorf("want zero record changes on idempotent re-run, got %+v", sum)
+	if sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("want zero appends on idempotent re-run, got %+v", sum)
 	}
 
-	mapAfter2, err := os.ReadFile(f.mapPath)
+	journalAfter2, err := os.ReadFile(journalPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(mapAfter1) != string(mapAfter2) {
-		t.Errorf(".bead-map.json changed across idempotent re-runs:\nrun1: %s\nrun2: %s",
-			mapAfter1, mapAfter2)
+	if string(journalAfter1) != string(journalAfter2) {
+		t.Errorf("journal changed across idempotent re-runs:\nrun1: %s\nrun2: %s",
+			journalAfter1, journalAfter2)
 	}
 
 	snapAfter2, err := os.ReadFile(f.snapshotPath)
@@ -526,6 +535,26 @@ func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 	)
 	if err != nil || exit != 0 {
 		t.Fatalf("seed normal ingest: exit %d err %v stderr %s", exit, err, stderr)
+	}
+
+	// TODO(bead:spexmachina-y0wc.34): RefreshHandler still reads the
+	// legacy .bead-map.json (see arch_refresh.md); normal-mode ingest now
+	// writes the task journal instead (see the TODO in newIngestCmd).
+	// Seed the equivalent legacy record directly so refresh-mode fixtures
+	// still have a record to update, until RefreshHandler's own
+	// migration to the journal.
+	archPath := filepath.Join(f.specDir, "alpha", "arch_comp1.md")
+	hash, err := merkle.HashFile(archPath)
+	if err != nil {
+		t.Fatalf("hash seed content: %v", err)
+	}
+	store := mapping.NewFileStore(f.mapPath)
+	if err := store.Replace([]mapping.Record{{
+		ID: f.recordID, SpecNodeID: f.compID, BeadID: f.beadID, BeadType: "feature",
+		NodeType: "component", Module: "alpha", Component: "Comp1",
+		ContentFile: "spec/alpha/arch_comp1.md", SpecHash: hash,
+	}}, f.recordID+1); err != nil {
+		t.Fatalf("seed legacy bead-map record: %v", err)
 	}
 
 	dir := filepath.Dir(f.changesetPath)

@@ -1,25 +1,28 @@
-// Package ingest is the pipeline tail: it moves the mapping store and
+// Package ingest is the pipeline tail: it moves the task journal and
 // the merkle snapshot together, in one of two modes dispatched by
 // IngestCommand's --mode flag (see spec/ingest/flow_ingest.md). Both
 // modes terminate with the same atomicity guarantee: snapshot and
-// .bead-map.json represent the same point-in-time spec state, or
+// spec/.history.jsonl represent the same point-in-time spec state, or
 // neither moves.
 //
 // # Mode: normal (default)
 //
-// Reconciles the mapping store from a paired changeset.json (typed by
+// Reconciles the task journal from a paired changeset.json (typed by
 // emit) + receipts.json (typed by adapters). Pure function over local
 // files — no subprocesses, no tracker calls, no git calls:
 //
 //  1. Pre-flight: parse both files, changeset version == 2 / receipts
 //     version == 1 check, op_id set equality between changeset and
 //     receipts.
-//  2. Reconciler.Apply: clone the mapping store in memory, apply per-op
-//     transitions (insert on ok create, delete on ok close-on-removed,
-//     update on the close+create modified-node pair), assert the
-//     consistency invariants (1–5 and 7; invariant 6 — snapshot saved
-//     iff complete — is SnapshotSaver's gate), atomically commit
-//     .bead-map.json.
+//  2. Reconciler.Apply: construct the batch's journal lines in memory —
+//     change events and task receipts, with event ids derived from
+//     (git_head, op_id) — dropping any line whose eid (or, for cleanup
+//     and proposal-epic creates, whose fold entry) the journal already
+//     carries. Only once the batch is complete does it assert
+//     invariants 1, 2 and 5 over journal-plus-batch (invariant 3 —
+//     re-running appends nothing — falls out of the dedup construction
+//     itself; invariant 4 — snapshot saved iff complete — is
+//     SnapshotSaver's gate), then commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
 //     leave the snapshot untouched so the next emit recomputes against
@@ -47,19 +50,19 @@
 // # Partial-run recovery (mode: normal)
 //
 // A partial top-level status means some ops succeeded and some did not.
-// The mapping store reflects the partial state (records for ok creates,
-// no records for error creates). The snapshot is intentionally NOT
+// The journal reflects the partial state (events and receipts for ok
+// ops, nothing for error ops). The snapshot is intentionally NOT
 // written so the next `spex emit` diffs the spec against the original
 // baseline and resurfaces the unfinished ops through the idempotency
 // path. This is the "unfinished operations resurface" mechanism.
 //
 // # Atomic writes
 //
-// Both .bead-map.json and spec/.snapshot.json are written via temp-file
-// + rename. A crash mid-write leaves the pre-write file intact. Refresh
-// mode is stricter than normal mode: the two writes form one commit
-// boundary, because the refreshed snapshot IS the next run's diff
-// baseline.
+// spec/.history.jsonl (normal mode) and .bead-map.json plus
+// spec/.snapshot.json (refresh mode) are written via temp-file + rename.
+// A crash mid-write leaves the pre-write file intact. Refresh mode is
+// stricter than normal mode: its two writes form one commit boundary,
+// because the refreshed snapshot IS the next run's diff baseline.
 //
 // # Exit codes
 //

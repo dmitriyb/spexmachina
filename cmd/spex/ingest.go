@@ -83,12 +83,18 @@ Exit codes:
 				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
 			}
 
+			// TODO(bead:spexmachina-y0wc.35): IngestCommand's full migration
+			// to the task journal (preflight/error-handling review per
+			// arch_ingest_command.md, and whether --map still belongs on
+			// normal-mode invocations) is that bead's own work. This wiring
+			// is the minimal fix Reconciler's journal-based constructor
+			// forces so `go build ./...` keeps passing.
 			graph, err := newIngestSpecGraph(specDir)
 			if err != nil {
 				return ingestInputErr(fmt.Errorf("ingest: load spec graph: %w", err))
 			}
 
-			reconciler := &ingest.Reconciler{MappingStore: store, SpecGraph: graph}
+			reconciler := &ingest.Reconciler{SpecDir: specDir, SpecGraph: graph}
 			sum, err := reconciler.Apply(cs, rc)
 			if err != nil {
 				return ingestInvariantErr(err)
@@ -101,14 +107,13 @@ Exit codes:
 			}
 
 			final := ingest.Summary{
-				Ok:             sum.OkCreates + sum.OkCloses,
-				Skipped:        sum.Skipped,
-				Errors:         sum.Errors,
-				RecordsAdded:   sum.RecordsAdded,
-				RecordsUpdated: sum.RecordsUpdated,
-				RecordsDeleted: sum.RecordsDeleted,
-				SnapshotSaved:  wrote,
-				Status:         rc.Status,
+				Ok:               sum.OkCreates + sum.OkCloses,
+				Skipped:          sum.Skipped,
+				Errors:           sum.Errors,
+				EventsAppended:   sum.EventsAppended,
+				ReceiptsAppended: sum.ReceiptsAppended,
+				SnapshotSaved:    wrote,
+				Status:           rc.Status,
 			}
 			enc := json.NewEncoder(cmd.OutOrStdout())
 			enc.SetIndent("", "  ")

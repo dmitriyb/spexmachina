@@ -115,19 +115,18 @@ func TestExitCodes_Distinct(t *testing.T) {
 
 func TestSummary_CanonicalFieldOrder(t *testing.T) {
 	s := Summary{
-		Ok:             12,
-		Skipped:        1,
-		Errors:         0,
-		RecordsAdded:   8,
-		RecordsUpdated: 2,
-		RecordsDeleted: 2,
-		SnapshotSaved:  true,
-		Status:         adapters.StatusComplete,
+		Ok:               12,
+		Skipped:          1,
+		Errors:           0,
+		EventsAppended:   8,
+		ReceiptsAppended: 10,
+		SnapshotSaved:    true,
+		Status:           adapters.StatusComplete,
 	}
 	got := encode(t, s)
 	fieldOrder(t, got, "summary",
 		"ok", "skipped", "errors",
-		"records_added", "records_updated", "records_deleted",
+		"events_appended", "receipts_appended",
 		"snapshot_saved", "status",
 	)
 }
@@ -137,17 +136,16 @@ func TestSummary_MatchesFlowSpecExample(t *testing.T) {
 	// shape. Pin byte-for-byte equality so any future field rename or
 	// reorder breaks the test loudly.
 	s := Summary{
-		Ok:             10,
-		Skipped:        1,
-		Errors:         0,
-		RecordsAdded:   7,
-		RecordsUpdated: 2,
-		RecordsDeleted: 1,
-		SnapshotSaved:  true,
-		Status:         adapters.StatusComplete,
+		Ok:               10,
+		Skipped:          1,
+		Errors:           0,
+		EventsAppended:   8,
+		ReceiptsAppended: 10,
+		SnapshotSaved:    true,
+		Status:           adapters.StatusComplete,
 	}
 	got := encode(t, s)
-	want := `{"ok":10,"skipped":1,"errors":0,"records_added":7,"records_updated":2,"records_deleted":1,"snapshot_saved":true,"status":"complete"}`
+	want := `{"ok":10,"skipped":1,"errors":0,"events_appended":8,"receipts_appended":10,"snapshot_saved":true,"status":"complete"}`
 	if got != want {
 		t.Fatalf("flow spec summary mismatch:\n got %s\nwant %s", got, want)
 	}
@@ -157,10 +155,10 @@ func TestSummary_PartialRunShape(t *testing.T) {
 	// Partial top-level status surfaces verbatim and snapshot_saved is
 	// false. Both fields must serialize even at their zero values.
 	s := Summary{
-		Ok:           2,
-		Errors:       1,
-		RecordsAdded: 2,
-		Status:       adapters.StatusPartial,
+		Ok:             2,
+		Errors:         1,
+		EventsAppended: 2,
+		Status:         adapters.StatusPartial,
 	}
 	got := encode(t, s)
 	if !strings.Contains(got, `"snapshot_saved":false`) {
@@ -181,9 +179,8 @@ func TestSummary_AllZeroFieldsPresent(t *testing.T) {
 		`"ok":0`,
 		`"skipped":0`,
 		`"errors":0`,
-		`"records_added":0`,
-		`"records_updated":0`,
-		`"records_deleted":0`,
+		`"events_appended":0`,
+		`"receipts_appended":0`,
 		`"snapshot_saved":false`,
 		`"status":""`,
 	} {
@@ -195,10 +192,10 @@ func TestSummary_AllZeroFieldsPresent(t *testing.T) {
 
 func TestSummary_DeterministicEncoding(t *testing.T) {
 	s := Summary{
-		Ok:            7,
-		RecordsAdded:  5,
-		SnapshotSaved: true,
-		Status:        adapters.StatusComplete,
+		Ok:             7,
+		EventsAppended: 5,
+		SnapshotSaved:  true,
+		Status:         adapters.StatusComplete,
 	}
 	first := encode(t, s)
 	second := encode(t, s)
@@ -212,14 +209,13 @@ func TestSummary_RoundTrip(t *testing.T) {
 	// same Summary so callers can pipe `spex ingest` through `jq` or
 	// re-read it programmatically.
 	original := Summary{
-		Ok:             10,
-		Skipped:        1,
-		Errors:         2,
-		RecordsAdded:   7,
-		RecordsUpdated: 2,
-		RecordsDeleted: 1,
-		SnapshotSaved:  false,
-		Status:         adapters.StatusPartial,
+		Ok:               10,
+		Skipped:          1,
+		Errors:           2,
+		EventsAppended:   7,
+		ReceiptsAppended: 9,
+		SnapshotSaved:    false,
+		Status:           adapters.StatusPartial,
 	}
 	wire := encode(t, original)
 	var got Summary
