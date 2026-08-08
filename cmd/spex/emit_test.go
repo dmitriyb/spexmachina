@@ -12,6 +12,7 @@ import (
 	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/impact"
+	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -402,15 +403,17 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	}
 }
 
-// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent covers
-// the PR #217 regression at the legacyMapStoreFold bridge (cmd/spex), the
-// counterpart to emit.TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent
-// which covers the same rule at the Builder/fold level. A closed
-// NodeType=="proposal" record for the proposal slug must NOT be re-admitted
-// through the GetBySpecNode fallback as a live epic: legacyMapStoreFold.Entry
-// filters it out via the NodeType != "proposal" guard, hasExistingEpic sees
-// no live epic, and Build synthesizes a fresh proposal_epic op that every
-// other create parents under.
+// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent is an
+// end-to-end regression test for the PR #217 closed-epic-record path: with a
+// closed NodeType=="proposal" record for the proposal slug in the map file,
+// `spex emit` still synthesizes a fresh proposal_epic op that every other
+// create parents under, rather than wiring them to the closed epic's dead
+// bead_id. It runs through the whole command (Resolver, Builder,
+// legacyMapStoreFold together) and does not by itself pin any single rule
+// inside legacyMapStoreFold.Entry — see TestLegacyMapStoreFold_Entry for
+// unit coverage of the bridge's NodeType != "proposal" filter and the other
+// three rules (highest-ID tiebreak, closed-skip, proposal-epic-first
+// lookup).
 func TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent(t *testing.T) {
 	f := setupEmitFixture(t)
 	proposal := "2026-04-18-decouple-spex-from-br"
@@ -470,6 +473,103 @@ func TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent(t *test
 	}
 	if compOp.Parent == nil || compOp.Parent.Kind != emit.RefOp || compOp.Parent.OpID != epic.OpID {
 		t.Errorf("component parent: want ref:op %s (fresh epic), got %+v", epic.OpID, compOp.Parent)
+	}
+}
+
+// writeLegacyMapFile writes a .bead-map.json fixture containing exactly the
+// given records and returns its path.
+func writeLegacyMapFile(t *testing.T, records []mapping.Record) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), ".bead-map.json")
+	data, err := json.Marshal(struct {
+		NextID  int              `json:"next_id"`
+		Records []mapping.Record `json:"records"`
+	}{NextID: len(records) + 1, Records: records})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// TestLegacyMapStoreFold_Entry pins each of legacyMapStoreFold.Entry's four
+// bridge rules (cmd/spex/emit.go) directly against mapping.Store, rather
+// than through emit.Build — see the comment on
+// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent for
+// why routing through Build washes out the NodeType != "proposal" filter.
+func TestLegacyMapStoreFold_Entry(t *testing.T) {
+	const slug = "2026-04-18-decouple-spex-from-br"
+	const key = "abc123def456"
+
+	tests := []struct {
+		name      string
+		key       string
+		records   []mapping.Record
+		wantEntry emit.FoldEntry
+		wantOK    bool
+	}{
+		{
+			name: "open proposal record for the slug resolves via GetByProposalEpic",
+			key:  slug,
+			records: []mapping.Record{
+				{ID: 1, SpecNodeID: slug, BeadID: "br-1", BeadType: "epic", NodeType: "proposal", Component: slug, BeadStatus: "open"},
+			},
+			wantEntry: emit.FoldEntry{TaskID: "br-1"},
+			wantOK:    true,
+		},
+		{
+			// GetByProposalEpic skips the closed record (not found), and the
+			// NodeType != "proposal" filter then excludes it from the
+			// GetBySpecNode fallback too, leaving no record at all: ok ==
+			// false. Without the filter the closed proposal record would be
+			// admitted into pickOpenMapRecord, collapse to Removed: true,
+			// and return ok == true instead — this case is what
+			// distinguishes the two.
+			name: "closed proposal record for the slug is not re-admitted as a live epic",
+			key:  slug,
+			records: []mapping.Record{
+				{ID: 1, SpecNodeID: slug, BeadID: "br-1", BeadType: "epic", NodeType: "proposal", Component: slug, BeadStatus: "closed"},
+			},
+			wantEntry: emit.FoldEntry{},
+			wantOK:    false,
+		},
+		{
+			name: "two open non-proposal records for one key: higher ID wins",
+			key:  key,
+			records: []mapping.Record{
+				{ID: 1, SpecNodeID: key, BeadID: "br-1", BeadType: "task", NodeType: "component", Module: "m", Component: "c1", ContentFile: "c1.md", SpecHash: "h1", BeadStatus: "open"},
+				{ID: 2, SpecNodeID: key, BeadID: "br-2", BeadType: "task", NodeType: "component", Module: "m", Component: "c2", ContentFile: "c2.md", SpecHash: "h2", BeadStatus: "open"},
+			},
+			wantEntry: emit.FoldEntry{TaskID: "br-2"},
+			wantOK:    true,
+		},
+		{
+			name: "all non-proposal records for one key closed collapses onto Removed",
+			key:  key,
+			records: []mapping.Record{
+				{ID: 1, SpecNodeID: key, BeadID: "br-1", BeadType: "task", NodeType: "component", Module: "m", Component: "c1", ContentFile: "c1.md", SpecHash: "h1", BeadStatus: "closed"},
+				{ID: 2, SpecNodeID: key, BeadID: "br-2", BeadType: "task", NodeType: "component", Module: "m", Component: "c2", ContentFile: "c2.md", SpecHash: "h2", BeadStatus: "closed"},
+			},
+			wantEntry: emit.FoldEntry{Removed: true},
+			wantOK:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := writeLegacyMapFile(t, tt.records)
+			fold := legacyMapStoreFold{store: mapping.NewFileStore(path)}
+
+			gotEntry, gotOK := fold.Entry(tt.key)
+			if gotOK != tt.wantOK {
+				t.Fatalf("Entry(%q) ok = %v, want %v (entry: %+v)", tt.key, gotOK, tt.wantOK, gotEntry)
+			}
+			if gotOK && gotEntry != tt.wantEntry {
+				t.Fatalf("Entry(%q) = %+v, want %+v", tt.key, gotEntry, tt.wantEntry)
+			}
+		})
 	}
 }
 
