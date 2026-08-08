@@ -26,7 +26,7 @@ func newEmitCmd() *cobra.Command {
 		Use:   "emit",
 		Short: "Emit a tool-agnostic changeset from an impact report",
 		Long: `Emit reads an impact report, the bead mapping store, and the spec
-graph, then writes a deterministic changeset.json (v1) describing the
+graph, then writes a deterministic changeset.json (v2) describing the
 ordered create/close/label/tag operations an external adapter must apply.
 
 Inputs:

@@ -402,6 +402,77 @@ func TestEmitCommand_BadGitHead_Errors(t *testing.T) {
 	}
 }
 
+// TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent covers
+// the PR #217 regression at the legacyMapStoreFold bridge (cmd/spex), the
+// counterpart to emit.TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent
+// which covers the same rule at the Builder/fold level. A closed
+// NodeType=="proposal" record for the proposal slug must NOT be re-admitted
+// through the GetBySpecNode fallback as a live epic: legacyMapStoreFold.Entry
+// filters it out via the NodeType != "proposal" guard, hasExistingEpic sees
+// no live epic, and Build synthesizes a fresh proposal_epic op that every
+// other create parents under.
+func TestEmitCommand_ClosedProposalEpicRecord_SynthesizesFreshEpicParent(t *testing.T) {
+	f := setupEmitFixture(t)
+	proposal := "2026-04-18-decouple-spex-from-br"
+
+	closedEpicMap := `{"next_id":2,"records":[{
+		"id": 1,
+		"spec_node_id": "` + proposal + `",
+		"bead_id": "br-1",
+		"bead_type": "epic",
+		"node_type": "proposal",
+		"module": "",
+		"component": "` + proposal + `",
+		"content_file": "",
+		"spec_hash": "",
+		"bead_status": "closed"
+	}]}`
+	if err := os.WriteFile(f.mapPath, []byte(closedEpicMap), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runEmit(t,
+		f.impactJSON,
+		"--proposal", proposal,
+		"--git-head", "deadbeefcafe",
+		"--map", f.mapPath,
+		"--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var cs emit.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+
+	var epic *emit.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeKind == "proposal_epic" {
+			epic = &cs.Ops[i]
+			break
+		}
+	}
+	if epic == nil {
+		t.Fatalf("want a synthesized proposal_epic create op despite the closed record, got ops: %+v", cs.Ops)
+	}
+
+	var compOp *emit.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeKind == "component" {
+			compOp = &cs.Ops[i]
+			break
+		}
+	}
+	if compOp == nil {
+		t.Fatalf("want a component create op, got ops: %+v", cs.Ops)
+	}
+	if compOp.Parent == nil || compOp.Parent.Kind != emit.RefOp || compOp.Parent.OpID != epic.OpID {
+		t.Errorf("component parent: want ref:op %s (fresh epic), got %+v", epic.OpID, compOp.Parent)
+	}
+}
+
 // exitCodeOf extracts the process exit code an error carries via the
 // ExitCode interface main.go honors. Zero means no code attached.
 func exitCodeOf(err error) int {

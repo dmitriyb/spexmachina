@@ -11,8 +11,9 @@
 // emit) + receipts.json (typed by adapters). Pure function over local
 // files — no subprocesses, no tracker calls, no git calls:
 //
-//  1. Pre-flight: parse both files, version == 1 check, op_id set
-//     equality between changeset and receipts.
+//  1. Pre-flight: parse both files, changeset version == 2 / receipts
+//     version == 1 check, op_id set equality between changeset and
+//     receipts.
 //  2. Reconciler.Apply: clone the mapping store in memory, apply per-op
 //     transitions (insert on ok create, delete on ok close-on-removed,
 //     update on the close+create modified-node pair), assert the
