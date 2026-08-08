@@ -12,22 +12,23 @@ import (
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
-// Tests for spec/ingest/test_consistency_invariants.md scenarios that
-// require Reconciler.Apply and SnapshotSaver.Save to run together. The
-// per-component tests in reconciler_test.go and snapshot_saver_test.go
-// cover invariants 1–5, 7 and the snapshot gate in isolation. The spec's
-// happy-path scenario and the invariant 6 scenarios both claim
-// ".bead-map.json AND snapshot" updated/untouched in lock-step — that
-// integrated property only emerges when both components run against the
-// same fixture, which is what these tests do.
+// Tests for spec/ingest/test_consistency_invariants.md. Invariants 1, 2,
+// 3 and 5 — the ones Reconciler itself asserts — are exercised in
+// isolation in reconciler_test.go (TestCheckInvariant1_*,
+// TestCheckInvariant2_*, TestApply_Idempotent_RerunAppendsNothing,
+// TestCheckInvariant5_*) and the "lineage replaces the rebind invariant"
+// property is proven by TestApply_ModifiedPair_LineageExtendedNotRebound.
+// What only emerges when Reconciler.Apply and SnapshotSaver.Save run
+// together against shared on-disk state is invariant 4 (snapshot saved
+// iff complete) and the spec's Happy Path acceptance — that is what the
+// tests below cover. "One snapshot format across both writers" lives in
+// snapshot_format_test.go.
 
 // runWithSnapshot drives Reconciler.Apply followed by SnapshotSaver.Save
 // against shared on-disk state, mirroring the order IngestCommand wires.
-// The helper centralises the integration so the scenario tests stay a
-// flat read of inputs → assertions.
-func runWithSnapshot(t *testing.T, store mapping.Store, graph SpecGraph, specDir, snapPath string, cs emit.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
+func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath string, cs emit.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
 	t.Helper()
-	r := &Reconciler{MappingStore: store, SpecGraph: graph}
+	r := &Reconciler{SpecDir: specDir, SpecGraph: graph}
 	sum, err := r.Apply(cs, rc)
 	if err != nil {
 		t.Fatalf("Reconciler.Apply: %v", err)
@@ -40,95 +41,91 @@ func runWithSnapshot(t *testing.T, store mapping.Store, graph SpecGraph, specDir
 	return sum, wrote
 }
 
-// TestConsistencyInvariants_HappyPath_BeadMapAndSnapshotBothUpdated
-// covers the spec's "Happy Path" acceptance from
-// test_consistency_invariants.md: a complete-status run with a realistic
-// mix (fresh creates, modified pairs, removed close) lands updates in
-// both .bead-map.json and spec/.snapshot.json, and the bead-map passes
-// schema validation (invariant 7) on commit. The component-isolated
-// TestInvariant_HappyPath in reconciler_test.go cannot prove the
-// "snapshot updated" half of the spec acceptance — only the integrated
-// run proves Reconciler.Apply's commit and SnapshotSaver.Save's atomic
-// rename both succeed against the same fixture state.
-func TestConsistencyInvariants_HappyPath_BeadMapAndSnapshotBothUpdated(t *testing.T) {
+// TestConsistencyInvariants_HappyPath covers the spec's "Happy Path"
+// acceptance: a full complete run with 5 ok creates and 3 ok closes — 2
+// of the creates paired with 2 of the closes as modify pairs, the third
+// close a removal. All invariants pass; the journal gains exactly the
+// expected events and receipts, the snapshot is rewritten, and every
+// appended line validates against the journal-line schema (proven by
+// Reconciler.Apply not erroring, since invariant 5 is checked before any
+// write).
+func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	specDir := setupSpecDir(t)
 	snapPath := filepath.Join(specDir, ".snapshot.json")
 
 	graph := newFakeSpecGraph()
-	for _, id := range []string{"A", "B", "C", "Mod1", "Mod2"} {
-		graph.nodes[id] = NodeMetadata{
-			Module: "m", Component: id, ContentFile: id + ".md",
-			SpecHash: "h" + id, NodeType: "component",
-		}
+	for _, id := range []string{hexMod1, hexMod2, hexA, hexB, hexC} {
+		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "new-" + id, NodeType: "component"}
 	}
 
-	initial := []mapping.Record{
-		{ID: 10, SpecNodeID: "Mod1", BeadID: "br-old1", BeadType: "feature", Module: "m", Component: "Mod1", ContentFile: "Mod1.md", SpecHash: "old1"},
-		{ID: 11, SpecNodeID: "Mod2", BeadID: "br-old2", BeadType: "feature", Module: "m", Component: "Mod2", ContentFile: "Mod2.md", SpecHash: "old2"},
-		{ID: 12, SpecNodeID: "Gone", BeadID: "br-gone", BeadType: "feature", Module: "m", Component: "Gone", ContentFile: "Gone.md", SpecHash: "hg"},
-	}
-	store, mapPath := newTestStore(t, initial, 13)
+	seedJournal(t, specDir,
+		mapping.Event{Event: "added", EID: "seed-Mod1", Node: hexMod1, Name: "Mod1", NodeType: "component", Module: "m", After: strPtr("old-Mod1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod1.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-old1", For: "seed-Mod1"},
+		mapping.Event{Event: "added", EID: "seed-Mod2", Node: hexMod2, Name: "Mod2", NodeType: "component", Module: "m", After: strPtr("old-Mod2"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod2.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-old2", For: "seed-Mod2"},
+		mapping.Event{Event: "added", EID: "seed-Gone", Node: hexGone, Name: "Gone", NodeType: "component", Module: "m", After: strPtr("h-gone"), GitHead: "seedhead", Proposal: "seed-p", Path: "Gone.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
+	)
 
-	// 5 ok creates (3 fresh A/B/C + 2 modified-pair re-creates Mod1/Mod2),
-	// 3 ok closes (2 modified, 1 removed). Matches the spec's "5 ok
-	// creates, 3 ok closes (2 modified, 1 removed)" shape.
-	cs := emit.Changeset{Version: 1, Ops: []emit.Op{
-		{OpID: "op-01", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: Mod1"},
-		{OpID: "op-02", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "Mod1", Idempotency: idem("spex:10")},
-		{OpID: "op-03", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: Mod2"},
-		{OpID: "op-04", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "Mod2", Idempotency: idem("spex:11")},
-		{OpID: "op-05", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: Gone"},
-		{OpID: "op-06", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:13")},
-		{OpID: "op-07", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "B", Idempotency: idem("spex:14")},
-		{OpID: "op-08", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "C", Idempotency: idem("spex:15")},
+	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []emit.Op{
+		{OpID: "op-01", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
+		{OpID: "op-02", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
+		{OpID: "op-03", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-04", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+		{OpID: "op-05", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-06", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
+		{OpID: "op-07", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
+		{OpID: "op-08", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 	}}
-	delete(graph.nodes, "Gone") // post-removed: must not resolve in invariant 4
-
-	rc := adapters.Receipts{Version: 1, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-old1"},
-		{OpID: "op-02", Status: adapters.OpStatusOk, BeadID: "br-new1"},
-		{OpID: "op-03", Status: adapters.OpStatusOk, BeadID: "br-old2"},
-		{OpID: "op-04", Status: adapters.OpStatusOk, BeadID: "br-new2"},
-		{OpID: "op-05", Status: adapters.OpStatusOk, BeadID: "br-gone"},
-		{OpID: "op-06", Status: adapters.OpStatusOk, BeadID: "br-A"},
-		{OpID: "op-07", Status: adapters.OpStatusOk, BeadID: "br-B"},
-		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-C"},
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
+		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-new1"},
+		{OpID: "op-02", Status: adapters.OpStatusOk, BeadID: "br-new2"},
+		{OpID: "op-03", Status: adapters.OpStatusOk, BeadID: "br-A"},
+		{OpID: "op-04", Status: adapters.OpStatusOk, BeadID: "br-B"},
+		{OpID: "op-05", Status: adapters.OpStatusOk, BeadID: "br-C"},
+		{OpID: "op-06", Status: adapters.OpStatusOk, BeadID: "br-old1"},
+		{OpID: "op-07", Status: adapters.OpStatusOk, BeadID: "br-old2"},
+		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-gone"},
 	}}
 
-	sum, wrote := runWithSnapshot(t, store, graph, specDir, snapPath, cs, rc)
+	sum, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
 
 	if sum.OkCreates != 5 || sum.OkCloses != 3 {
 		t.Errorf("summary = %+v, want 5 ok creates / 3 ok closes", sum)
 	}
-	if sum.RecordsAdded != 3 || sum.RecordsUpdated != 2 || sum.RecordsDeleted != 1 {
-		t.Errorf("summary = %+v, want 3 add / 2 upd / 1 del", sum)
+	// 2 modify pairs contribute 1 event each (2), the removal contributes
+	// 1 event (1), the 3 fresh creates contribute 1 event each (3) = 6
+	// events.
+	if sum.EventsAppended != 6 {
+		t.Errorf("events_appended = %d, want 6", sum.EventsAppended)
+	}
+	// Receipts: 2 modify pairs × 2 receipts (closed+created) = 4, 1
+	// removed close × 1 receipt (closed) = 1, 3 fresh creates × 1 receipt
+	// (created) = 3. Total 8.
+	if sum.ReceiptsAppended != 8 {
+		t.Errorf("receipts_appended = %d, want 8", sum.ReceiptsAppended)
 	}
 
-	// Bead-map updates landed: Mod1/Mod2 rebound to new bead_ids; A/B/C
-	// inserted; Gone removed.
-	for id, wantBead := range map[int]string{10: "br-new1", 11: "br-new2", 13: "br-A", 14: "br-B", 15: "br-C"} {
-		rec, err := store.Get(id)
-		if err != nil {
-			t.Errorf("Get(%d): %v", id, err)
-			continue
+	fold, err := mapping.NewMappingStore(specDir).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	byKey := map[string]mapping.FoldEntry{}
+	for _, e := range fold.Entries {
+		byKey[e.Key] = e
+	}
+	want := map[string]string{hexMod1: "br-new1", hexMod2: "br-new2", hexA: "br-A", hexB: "br-B", hexC: "br-C"}
+	for key, task := range want {
+		if byKey[key].TaskID != task {
+			t.Errorf("fold[%s].TaskID = %q, want %q", key, byKey[key].TaskID, task)
 		}
-		if rec.BeadID != wantBead {
-			t.Errorf("record %d bead_id = %q, want %q", id, rec.BeadID, wantBead)
-		}
 	}
-	if _, err := store.Get(12); err == nil {
-		t.Error("removed record 12 still present after happy path")
+	if !byKey[hexGone].Removed {
+		t.Errorf("fold[Gone] = %+v, want removed", byKey[hexGone])
 	}
 
-	// Bead-map on disk is schema-valid (invariant 7): re-read via a fresh
-	// store. fileStore.NewFileStore + Replace already validates on write,
-	// but List on a fresh handle proves the persisted bytes round-trip.
-	fresh := mapping.NewFileStore(mapPath)
-	if _, err := fresh.List(); err != nil {
-		t.Errorf("on-disk .bead-map.json failed to round-trip: %v", err)
-	}
-
-	// Snapshot was written (invariant 6 complete branch).
+	// Every appended line validated against the journal-line schema — if
+	// it hadn't, Apply would have returned an error above.
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")
 	}
@@ -145,48 +142,36 @@ func TestConsistencyInvariants_HappyPath_BeadMapAndSnapshotBothUpdated(t *testin
 	}
 }
 
-// TestConsistencyInvariants_PartialRun_SnapshotUntouched covers
-// invariant 6's partial branch from test_consistency_invariants.md:
-// when receipts top-level status is partial, Reconciler.Apply still
-// commits the ok ops to .bead-map.json, but SnapshotSaver.Save MUST
-// leave spec/.snapshot.json byte-for-byte unchanged. This is the
-// "unfinished operations resurface" property: the next emit must diff
-// against the pre-run baseline, not a partial state.
-func TestConsistencyInvariants_PartialRun_SnapshotUntouched(t *testing.T) {
+// TestConsistencyInvariants_Invariant4_PartialLeavesSnapshotUntouched
+// covers invariant 4's partial branch: Reconciler.Apply still appends
+// the ok op's journal lines, but SnapshotSaver.Save must leave
+// spec/.snapshot.json byte-for-byte unchanged.
+func TestConsistencyInvariants_Invariant4_PartialLeavesSnapshotUntouched(t *testing.T) {
 	specDir := setupSpecDir(t)
 	snapPath := filepath.Join(specDir, ".snapshot.json")
 
-	// Seed a recognisable baseline so we can byte-compare after Save.
 	baseline := []byte(`{"baseline":true,"root_hash":"deadbeef"}`)
 	if err := os.WriteFile(snapPath, baseline, 0644); err != nil {
 		t.Fatalf("seed baseline: %v", err)
 	}
 
 	graph := newFakeSpecGraph()
-	for _, id := range []string{"A", "B"} {
-		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "h" + id, NodeType: "component"}
-	}
-	store, _ := newTestStore(t, nil, 100)
+	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 
-	cs := emit.Changeset{Version: 1, Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:100")},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "B", Idempotency: idem("spex:101")},
+	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 	}}
-	rc := adapters.Receipts{Version: 1, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
 		{OpID: "op-2", Status: adapters.OpStatusError, Error: "tracker boom"},
 	}}
 
-	_, wrote := runWithSnapshot(t, store, graph, specDir, snapPath, cs, rc)
+	sum, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
 
-	// Reconciler still committed the ok op to bead-map (partial state is
-	// internally consistent).
-	rec, err := store.Get(100)
-	if err != nil || rec.BeadID != "br-A" {
-		t.Errorf("ok op commit: rec=%+v err=%v, want bead br-A", rec, err)
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt (only the ok op)", sum)
 	}
-
-	// Saver gate fired: wrote=false and snapshot bytes unchanged.
 	if wrote {
 		t.Error("Saver.Save reported wrote=true on partial status")
 	}
@@ -197,14 +182,18 @@ func TestConsistencyInvariants_PartialRun_SnapshotUntouched(t *testing.T) {
 	if string(got) != string(baseline) {
 		t.Fatalf("snapshot mutated on partial run:\n got %s\nwant %s", got, baseline)
 	}
+
+	journal := readJournal(t, specDir)
+	if len(journal) != 2 || journal[0].Node != hexA {
+		t.Errorf("journal = %+v, want the ok op's added+task_created for A only", journal)
+	}
 }
 
-// TestConsistencyInvariants_CompleteRun_OverwritesPriorSnapshot covers
-// the second half of invariant 6 from test_consistency_invariants.md:
-// a complete-status run replaces any pre-existing snapshot with a fresh
-// tree. The pre-existing baseline must be gone after Save returns —
-// otherwise the next emit would diff against stale bytes.
-func TestConsistencyInvariants_CompleteRun_OverwritesPriorSnapshot(t *testing.T) {
+// TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot covers
+// invariant 4's complete branch: a complete-status run replaces any
+// pre-existing snapshot with a fresh tree in the same run that appends
+// the journal lines.
+func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 	specDir := setupSpecDir(t)
 	snapPath := filepath.Join(specDir, ".snapshot.json")
 
@@ -214,17 +203,16 @@ func TestConsistencyInvariants_CompleteRun_OverwritesPriorSnapshot(t *testing.T)
 	}
 
 	graph := newFakeSpecGraph()
-	graph.nodes["A"] = NodeMetadata{Module: "m", Component: "A", ContentFile: "A.md", SpecHash: "hA", NodeType: "component"}
-	store, _ := newTestStore(t, nil, 1)
+	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 
-	cs := emit.Changeset{Version: 1, Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:1")},
+	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 	}}
-	rc := adapters.Receipts{Version: 1, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
 	}}
 
-	_, wrote := runWithSnapshot(t, store, graph, specDir, snapPath, cs, rc)
+	_, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
 
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")
@@ -242,5 +230,56 @@ func TestConsistencyInvariants_CompleteRun_OverwritesPriorSnapshot(t *testing.T)
 	}
 	if snap.RootHash == "" || snap.RootHash == "00000000" {
 		t.Errorf("snapshot root_hash = %q, want fresh non-stale value", snap.RootHash)
+	}
+}
+
+// TestConsistencyInvariants_LineageReplacesRebind covers "Lineage
+// replaces the rebind invariant": after a modified-node create+close pair
+// runs, the journal holds BOTH pairings — the retired task_created for
+// the old bead stays present — and the fold answers with the new task
+// only. No assertion demands the old line be gone; asserting its
+// continued presence IS the test.
+func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexM] = NodeMetadata{Module: "m", Component: "M", ContentFile: "m.md", SpecHash: "new-hash", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{Event: "added", EID: "E1", Node: hexM, Name: "M", NodeType: "component", Module: "m", After: strPtr("old-hash"), GitHead: "seedhead", Proposal: "seed-p", Path: "m.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
+	)
+
+	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []emit.Op{
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+		{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
+	}}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
+		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"},
+		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"},
+	}}
+
+	if _, err := r.Apply(cs, rc); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	journal := readJournal(t, dir)
+	oldPairingStillPresent := false
+	for _, ev := range journal {
+		if ev.Event == "task_created" && ev.TaskID == "br-old" {
+			oldPairingStillPresent = true
+		}
+	}
+	if !oldPairingStillPresent {
+		t.Fatal("old task_created (br-old) missing — lineage must not be deleted")
+	}
+
+	fold, err := mapping.NewMappingStore(dir).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, e := range fold.Entries {
+		if e.Key == hexM && e.TaskID != "br-new" {
+			t.Errorf("fold[M].TaskID = %q, want br-new", e.TaskID)
+		}
 	}
 }

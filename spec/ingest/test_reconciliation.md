@@ -30,13 +30,15 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
   biography that outlives the node — plus a `task_closed` receipt for `br-old`. The earlier
   pairing lines remain untouched: nothing is ever deleted.
 
-### Modified node: close+create → lineage extended, not rebound
+### Modified node: create+close → lineage extended, not rebound
 
 - Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0002`.
-- Changeset: close op for `br-old`, then create op for `beadbead0002` with label `spex:beadbead0002`.
+- Changeset: create op for `beadbead0002` with label `spex:beadbead0002` and a `blocks` dep on
+  `br-old`, then close op for `br-old` — emit's real ordering (creates before closes).
 - Receipts: both ok; create's `bead_id: "br-new"`, `was_existing: false`.
 - Expected: a `modified` change event for `beadbead0002`, a `task_closed` for `br-old`, a `task_created`
-  for `br-new`. The fold now answers `beadbead0002 → br-new`; the `br-old` pairing remains as lineage.
+  for `br-new` — all built while processing the create, off its `blocks` dep, without waiting for
+  the close. The fold now answers `beadbead0002 → br-new`; the `br-old` pairing remains as lineage.
 
 ### Was_existing=true → idempotent no-op
 
@@ -61,12 +63,12 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 ### Mixed ops: one batch, ordered append
 
-- Changeset: [close br-A (modified lineage), create for node X replacing A, close br-B (removed),
-  create for new node Y].
+- Changeset: [create for node X replacing A (modified lineage), create for new node Y, close br-A
+  (modified), close br-B (removed)] — emit's real ordering (creates before closes).
 - Receipts: all ok.
 - Expected: the journal gains, in op order, the modified event for X with its two receipts, the
-  removed event for B's node with its task_closed, and the added event for Y with its
-  task_created. The fold answers X → new task, no live entry for B's node, Y → its task.
+  added event for Y with its task_created, and the removed event for B's node with its
+  task_closed. The fold answers X → new task, no live entry for B's node, Y → its task.
 
 ### Proposal-epic create → receipt keyed by slug, no spec-graph lookup
 
@@ -81,12 +83,55 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 ### Cleanup create → receipt pairs with the prior removed event
 
-- Initial journal: a `removed` event for node `abc123def456` (eid `E1`).
+- Initial journal: a `removed` event for node `abc123def456` (eid `E1`), from a prior run.
 - Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"`,
   `idempotency.label: "spex:cleanup-abc123def456"`.
 - Receipts: `status: "ok"`, `bead_id: "br-cleanup"`, `was_existing: false`.
 - Expected: a `task_created` receipt with `for: "E1"` and `task_id: "br-cleanup"` — the cleanup
   task is born pointing at the removal it answers. No new change event.
+
+### Cleanup create → receipt pairs with a same-batch removal
+
+- Initial journal: `added` + `task_created` (task `br-gone`) for the still-live node being
+  cleaned up.
+- Changeset: [cleanup create for that node's hash, then close `br-gone` (removed)] — emit's real
+  ordering, the cleanup create before the close that performs its removal.
+- Receipts: both ok.
+- Expected: same shape as the prior-removal scenario, but the referent is resolved from the
+  batch's own removal close rather than the journal — neither the fold nor lines already appended
+  show the node as removed yet when the cleanup create is processed, since its removal comes
+  after it in this same batch.
+
+### Modified close with no paired create, bead unknown to the journal → refused before append
+
+- Changeset: one close op, reason starting "Spec node modified", targeting a bead that no create
+  in the batch claims via a `blocks` dep, and that has no fold entry at all.
+- Receipts: close op `status: "ok"`.
+- Expected: structured error naming the op and the unclaimed bead; the journal file is
+  byte-identical to its pre-run state. A batch is not reported as successful with a retired
+  task's closure silently missing from the journal.
+
+### Modified close with no paired create, bead live in the journal → modified event from the close alone
+
+- Initial journal: `added` + `task_created` (task `br-old`) for a `test_section` node.
+- Changeset: one close op, reason starting "Spec node modified", targeting `br-old`; no create op
+  in the batch claims `br-old` via a `blocks` dep — the shape `impact/action_classifier.go` emits
+  for a coupled `test_section` edit (obsolete with no replacement create).
+- Receipts: close op `status: "ok"`.
+- Expected: a `modified` change event for the node (identity and prior hash from the journal's live
+  fold entry for `br-old`, current name/module/path/hash from the spec graph) plus a `task_closed`
+  for `br-old` naming it. No `task_created` — there is no successor task.
+
+### Modify-pair create errored, paired close ok → partial run tolerated
+
+- Initial journal: `added` + `task_created` (task `br-old`) for a node.
+- Changeset: [modify-pair create for that node with a `blocks` dep on `br-old`, an unrelated fresh
+  create, close of `br-old` (modified)] — emit's real ordering (creates before closes).
+- Receipts: the modify-pair create `status: "error"`; the unrelated create and the close both `ok`.
+- Expected: nothing constructed for the modify-pair (neither the `modified` event nor the
+  `task_closed` for `br-old`) — the errored create leaves its pair incomplete, which is not a
+  malformed changeset. The unrelated create's `added` event and `task_created` still land; the run
+  reports success.
 
 ### Receipt referencing nothing → refused before append
 
