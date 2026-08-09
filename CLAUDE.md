@@ -51,6 +51,13 @@ Your task's spec context is provided on input, and the spec files are the source
 - Cleanup beads (label `spex:cleanup`) resolve through the journal: their `spex:cleanup-<hash>` hash names a removed node whose biography `spex map context` still answers.
 - `br` reads a local sqlite db rebuilt from `.beads/issues.jsonl`; pass `--no-db` to any `br` command to read JSONL-only (always fresh). `br list` hides rows by default (open-only, `--limit 50`) — use `br ready`, `br show`, or `br list --all --limit 0`.
 
+## Spec Change Doctrine
+
+- **The spec is the truth; it changes only in the authoring loop** (interactive sessions using `/propose`, `/spec`, `/spec-review`, `/drift-fix`). Implementer boxes never write `spec/` — the portitor gate denies it structurally.
+- **An implementer that finds a spec defect files a drift report**, `drifts/drift-<bead-id>.json` (schema: `schema/drift.schema.json`), never a spec edit. Non-blocking reports ride along in the bead's own PR and are triaged after the epic. A blocking report (the bead's own contract is ambiguous) travels as its own PR — the drift file plus the bead's return to `open` in the same commit — and stops the epic via the settle sentinel; the reviewer of that PR validates the drift claim itself. `/drift-fix` consumes all reports.
+- **The baseline (`spec/.snapshot.json`) moves only deliberately** — a mint when work is born, a refresh when a correction owes none — always in the authoring loop, never automated, never in a box. Every refresh states its reason.
+- **An epic whose drifts/ is non-empty is not closed** until `/drift-fix` has triaged the reports.
+
 ## Organizational Constraints
 
 - **Spec traceability**: All code traces back to bead requirements.
@@ -58,6 +65,6 @@ Your task's spec context is provided on input, and the spec files are the source
 
 ## Where to Find Details
 
-- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency).
+- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency), `/drift-fix` (triage implementer drift reports).
 - **Proposals**: `spec/proposals/`
 - **Beads**: `.beads/`

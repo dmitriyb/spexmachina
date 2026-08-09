@@ -179,6 +179,14 @@ diff: 1 completeness error(s) found     # exit 2
 
 `spex validate` has no warnings. Every finding is an error, `warning_count` is always 0, and a spec either validates or does not.
 
+### Retired vocabulary (required when anything is retired)
+
+If the proposal retires a term, flag, file, command, or concept, the draft MUST carry a
+`## Retired vocabulary` section listing each retired token on its own line as `- ` + backticked
+term. This feeds `scripts/lens-lexicon.sh`: every future spec-review sweeps the corpus for these
+terms, which is what keeps migration shadows (sibling text nobody updated) from surviving review.
+A proposal that retires nothing omits the section.
+
 ## Step 6: Draft Proposal as the Plan File
 
 The plan file has TWO parts: **instructions header** then **proposal content**, separated by `---`. Both are required.

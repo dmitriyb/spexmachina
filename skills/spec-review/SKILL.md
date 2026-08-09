@@ -137,6 +137,33 @@ comm -3 /tmp/declared /tmp/ondisk   # empty output = clean
 
 This is LLM judgment: every question below is one neither gate can answer.
 
+### Mandatory lenses — run all six, count what you check
+
+These lenses exist because implementation keeps catching what linear reading misses. Each is a
+forced enumeration: build the pair list first, then check every pair. The final report must state
+the pair count per lens (see Step 9) — a verdict without coverage numbers is not a verdict.
+
+1. **Usage strings vs flag vocabulary** — `scripts/lens-usage-strings.sh` (deterministic, exit 1
+   on mismatch): every `--flag` in a module.json component/api description must appear in the
+   owning arch leaf. The PR #224 class: a description carrying a retired flag.
+2. **Counts and enumerations vs the graph** — `scripts/lens-counts.sh` (worksheet): every written
+   count of graph objects ("twelve constructors", "fifteen apis") paired with the actual number
+   from the slim render. Judge each pairing.
+3. **Flow claims vs arch authority** — for every pair (flow leaf, component in its `uses`):
+   extract each claim the flow makes about that component and verify it against the component's
+   arch leaf, which is authoritative. The PR #196 class: five flow claims contradicting
+   `arch_reconciler.md`.
+4. **Retired lexicon sweep** — `scripts/lens-lexicon.sh` (deterministic, exit 1 on hits): every
+   term declared under a proposal's "## Retired vocabulary" heading, swept across the corpus
+   outside `spec/proposals/`. The PR #201 class: sibling fields the migration never updated.
+5. **New surfaces vs project constraints** — every api or component added or materially changed
+   in the audit scope, checked against every project-level non-functional requirement (the
+   no-subprocess-vs-`spex upgrade` class: a new surface that collides with a standing constraint
+   nobody re-read).
+6. **Intersection cells** — for every leaf declaring two or more modes or interacting flags:
+   enumerate the mode/flag pairs and confirm the leaf decides each intersection (the
+   `--check`-during-anomaly class: two sections each valid alone, contradictory on one cell).
+
 **Component (`arch_*.md`)**
 
 - Does the prose describe behaviour that satisfies every requirement in `implements`? Does it claim
@@ -288,13 +315,21 @@ adapter. The author reviews first.
 
 ## Step 9: No-findings exit
 
-If Step 5 produced nothing actionable AND both Step 2 gates are clean, print exactly:
+If Step 5 produced nothing actionable AND both Step 2 gates are clean, print the coverage
+contract — a bare "clean" is not a valid exit:
 
 ```
 spec-review: no actionable findings (N nodes audited across M modules)
+  lens 1 usage-strings: <pairs checked> (script exit 0)
+  lens 2 counts: <claims judged>
+  lens 3 flow-vs-arch: <claim pairs checked>
+  lens 4 lexicon: <terms swept> (script exit 0)
+  lens 5 surfaces-vs-constraints: <surface x constraint pairs>
+  lens 6 intersections: <cells checked>
 ```
 
-Where N and M come from the audit scope. Exit without entering plan mode and without writing a file.
+Where N and M come from the audit scope. A clean verdict asserts only "nothing found at these
+counts and depth" — never "no defects exist". If a lens was inapplicable, say so with a reason. Exit without entering plan mode and without writing a file.
 
 ## Out of scope
 

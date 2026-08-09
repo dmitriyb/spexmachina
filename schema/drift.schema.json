@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/drift.schema.json",
+  "title": "Spex Machina Drift Report",
+  "description": "A drift report filed by an implementer who found a spec defect during task implementation. Written to drifts/drift-<bead-id>.json; never a spec edit. Triaged by the /drift-fix skill in the authoring loop, which fixes the spec through review, makes the deliberate mint-or-refresh decision, and deletes the report in the same PR.",
+  "type": "object",
+  "required": ["bead", "node", "files", "claim", "authoritative_source", "evidence", "blocking"],
+  "additionalProperties": false,
+  "properties": {
+    "bead": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The bead id whose implementation surfaced the defect."
+    },
+    "node": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{12}$",
+      "description": "Identity hash of the spec node whose contract carries the defect."
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" },
+      "description": "Spec files involved, repo-relative (the defective leaf and any file it contradicts)."
+    },
+    "claim": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The defective statement, quoted or precisely paraphrased, with its location."
+    },
+    "authoritative_source": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the implementer believes is the truth, and where it is established (a sibling leaf, a requirement, observed constraint). For a hole (unspecified case): the case that is undecided."
+    },
+    "evidence": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Why the claim is wrong or undecidable: the concrete contradiction, the input the contract does not decide, or the dependency seam that does not exist."
+    },
+    "blocking": {
+      "type": "boolean",
+      "description": "True iff the defect is in the bead's OWN contract (its leaf, its implements chain, its uses seams) and makes the task ambiguous or unimplementable — the implementer cannot produce a valid result. False for defects in neighbors that do not gate this bead's work."
+    },
+    "proposed_fix": {
+      "type": "string",
+      "description": "Optional: the implementer's suggested correction. Advisory only — the authoring loop decides."
+    }
+  }
+}
