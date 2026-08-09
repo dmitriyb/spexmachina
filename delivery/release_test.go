@@ -1,7 +1,7 @@
-// Package delivery holds build-failing tests that pin the release
-// pipeline's non-Go artifacts (.goreleaser.yaml, the release workflow) to
-// the contract spec/delivery/arch_release.md states, so a drifted config
-// breaks CI instead of silently diverging from the spec.
+// Build-failing tests that pin the release pipeline's non-Go artifacts
+// (.goreleaser.yaml, the release workflow) to the contract
+// spec/delivery/arch_release.md states, so a drifted config breaks CI
+// instead of silently diverging from the spec.
 package delivery
 
 import (
@@ -109,6 +109,17 @@ func TestReleaseWorkflow_PerArtifactChecksums(t *testing.T) {
 
 	if !strings.Contains(wf, "sha256sum") {
 		t.Error("release workflow does not generate per-artifact sha256 checksums")
+	}
+}
+
+func TestReleaseWorkflow_ManifestGeneratedAndPublished(t *testing.T) {
+	wf := readRepoFile(t, ".github/workflows/release.yml")
+
+	if !strings.Contains(wf, "gen-manifest") {
+		t.Error("release workflow does not run the release manifest generator")
+	}
+	if !strings.Contains(wf, "gh release upload") || !strings.Contains(wf, "manifest.json") {
+		t.Error("release workflow does not publish manifest.json to the release")
 	}
 }
 
