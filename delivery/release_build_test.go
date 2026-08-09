@@ -2,8 +2,9 @@
 // artifacts" and its edge case, exercising the real mechanisms
 // .goreleaser.yaml and .github/workflows/release.yml wire up — ldflags
 // stamping, byte-identical builds, SSHSIG signing/verification, and
-// per-artifact checksums — with `go build`, `ssh-keygen`, and `sha256sum`,
-// the same commands GoReleaser and the workflow themselves shell out to.
+// per-artifact and consolidated checksums — with `go build`, `ssh-keygen`,
+// and `sha256sum`, the same commands GoReleaser and the workflow themselves
+// shell out to.
 //
 // test_release.md allows a local GoReleaser snapshot build as the
 // alternative to exercising against a real pre-release tag; neither is
@@ -52,12 +53,20 @@ func repoRootDir(t *testing.T) string {
 
 // buildSpex cross-compiles cmd/spex the same way .goreleaser.yaml's build
 // stanza does: CGO disabled, paths trimmed, version metadata injected only
-// through ldflags.
-func buildSpex(t *testing.T, goos, goarch string, ldflags []string, outPath string) {
+// through ldflags. A non-empty gocache pins GOCACHE to an isolated
+// directory so the build cannot be served from another build's cache entry
+// — callers proving byte-identity across two builds must give each build
+// its own gocache, or the second "build" is just a cache-hit copy of the
+// first and the comparison can never fail.
+func buildSpex(t *testing.T, goos, goarch string, ldflags []string, outPath, gocache string) {
 	t.Helper()
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", strings.Join(ldflags, " "), "-o", outPath, "./cmd/spex")
 	cmd.Dir = repoRootDir(t)
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	env := append(os.Environ(), "CGO_ENABLED=0", "GOOS="+goos, "GOARCH="+goarch)
+	if gocache != "" {
+		env = append(env, "GOCACHE="+gocache)
+	}
+	cmd.Env = env
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("go build GOOS=%s GOARCH=%s: %v\n%s", goos, goarch, err, out)
 	}
@@ -116,7 +125,7 @@ func TestReleaseBuild_LdflagsStampVersionCommitDate(t *testing.T) {
 		"-X main.date=2026-08-09T00:00:00Z",
 	}
 	outPath := filepath.Join(t.TempDir(), "spex")
-	buildSpex(t, runtime.GOOS, runtime.GOARCH, ldflags, outPath)
+	buildSpex(t, runtime.GOOS, runtime.GOARCH, ldflags, outPath, "")
 
 	out, err := exec.Command(outPath, "version").CombinedOutput()
 	if err != nil {
@@ -156,8 +165,14 @@ func TestReleaseBuild_ByteIdenticalAcrossRepeatBuilds(t *testing.T) {
 				dir := t.TempDir()
 				first := filepath.Join(dir, "spex-1")
 				second := filepath.Join(dir, "spex-2")
-				buildSpex(t, goosVal, goarchVal, ldflags, first)
-				buildSpex(t, goosVal, goarchVal, ldflags, second)
+				// Distinct, isolated GOCACHE per build: without this the
+				// second go build is a cache hit against the first
+				// build's cache entry (same source, same flags), and the
+				// byte-identity assertion below can never fail — it would
+				// pass even for a compiler that leaked a build timestamp,
+				// since no second compile would ever actually run.
+				buildSpex(t, goosVal, goarchVal, ldflags, first, filepath.Join(t.TempDir(), "cache1"))
+				buildSpex(t, goosVal, goarchVal, ldflags, second, filepath.Join(t.TempDir(), "cache2"))
 
 				a, err := os.ReadFile(first)
 				if err != nil {
@@ -364,6 +379,80 @@ func TestReleaseChecksums_PerArtifactMatchesRecomputedSHA256(t *testing.T) {
 		if out, err := verify.CombinedOutput(); err != nil {
 			t.Errorf("sha256sum -c %s.sha256 failed: %v\n%s", name, err, out)
 		}
+	}
+}
+
+// TestReleaseChecksums_ConsolidatedMatchesRecomputedSHA256 exercises
+// test_release.md's "the consolidated checksum file matches independently
+// recomputed sha256 sums" — the half of the checksum case
+// TestReleaseChecksums_PerArtifactMatchesRecomputedSHA256 above doesn't
+// reach. .goreleaser.yaml's checksum block (name_template
+// "spex_{{ .Version }}_checksums.txt", algorithm sha256) is GoReleaser's own
+// internal writer, with no equivalent shell step in the workflow to extract
+// the way "Generate per-artifact checksums" is extracted above. So this
+// builds the consolidated file the same way GoReleaser does — one
+// `sha256sum` invocation over every archive, producing a single multi-entry
+// file in the standard sha256sum format — and cross-checks every line
+// against an independently recomputed digest, then re-verifies the whole
+// file with `sha256sum -c`.
+func TestReleaseChecksums_ConsolidatedMatchesRecomputedSHA256(t *testing.T) {
+	cfg := readRepoFile(t, ".goreleaser.yaml")
+	if !strings.Contains(cfg, "spex_{{ .Version }}_checksums.txt") {
+		t.Fatal(".goreleaser.yaml: consolidated checksum name_template changed — update this test")
+	}
+
+	dir := t.TempDir()
+	names := []string{"spex_1.2.3_linux_amd64.tar.gz", "spex_1.2.3_darwin_arm64.tar.gz"}
+	contents := map[string][]byte{
+		names[0]: []byte("linux amd64 archive contents"),
+		names[1]: []byte("darwin arm64 archive contents"),
+	}
+	wantSHA := map[string]string{}
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(dir, name), contents[name], 0o644); err != nil {
+			t.Fatalf("write %s: %v", name, err)
+		}
+		sum := sha256.Sum256(contents[name])
+		wantSHA[name] = hex.EncodeToString(sum[:])
+	}
+
+	checksumsName := "spex_1.2.3_checksums.txt"
+	sumCmd := exec.Command("sha256sum", names...)
+	sumCmd.Dir = dir
+	out, err := sumCmd.Output()
+	if err != nil {
+		t.Fatalf("sha256sum %v: %v", names, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, checksumsName), out, 0o644); err != nil {
+		t.Fatalf("write %s: %v", checksumsName, err)
+	}
+
+	seen := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 {
+			t.Fatalf("consolidated checksums line malformed: %q", line)
+		}
+		got, name := fields[0], fields[1]
+		want, ok := wantSHA[name]
+		if !ok {
+			t.Fatalf("consolidated checksums file names unknown archive %q", name)
+		}
+		if got != want {
+			t.Errorf("%s: consolidated checksums file records %s, want independently recomputed sha256 %s", name, got, want)
+		}
+		seen[name] = true
+	}
+	for _, name := range names {
+		if !seen[name] {
+			t.Errorf("consolidated checksums file missing entry for %s", name)
+		}
+	}
+
+	verify := exec.Command("sha256sum", "-c", checksumsName)
+	verify.Dir = dir
+	if out, err := verify.CombinedOutput(); err != nil {
+		t.Errorf("sha256sum -c %s failed: %v\n%s", checksumsName, err, out)
 	}
 }
 
