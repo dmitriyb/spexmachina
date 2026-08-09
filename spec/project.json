@@ -7,7 +7,7 @@
       "id": "d5a8407d38e1",
       "type": "functional",
       "title": "Validate spec structure",
-      "description": "Given a spec directory, confirm it is a valid DAG with no cycles and no broken references, that every declared content path resolves, and that coverage holds in both directions — every component described by a test_section, every requirement derived and implemented. Structured error output.",
+      "description": "Given a spec directory, confirm it is a valid DAG with no cycles and no broken references, that every declared content path resolves, and that coverage holds in both directions \u2014 every component described by a test_section, every requirement derived and implemented. Structured error output.",
       "priority": 1
     },
     {
@@ -24,7 +24,7 @@
       "id": "9120788210c9",
       "type": "functional",
       "title": "Map spec nodes to beads",
-      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, module, spec_hash, proposal). Plan-relevant is a closed set of node types — component, data_flow and test_section, plus one epic per proposal — and a mapping record points at a node in that set, never at prose that elaborates one.",
+      "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, module, spec_hash, proposal). Plan-relevant is a closed set of node types \u2014 component, data_flow and test_section, plus one epic per proposal \u2014 and a mapping record points at a node in that set, never at prose that elaborates one.",
       "priority": 1
     },
     {
@@ -137,15 +137,29 @@
       "id": "58ea35f52b86",
       "type": "non_functional",
       "title": "No runtime subprocesses",
-      "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts — outside the spex binary — bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
+      "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
       "priority": 2
     },
     {
       "id": "96c6c15ecc3e",
       "type": "non_functional",
       "title": "Declared stack",
-      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today — github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the journal lines of spec/.history.jsonl; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
+      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the journal lines of spec/.history.jsonl; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
       "priority": 2
+    },
+    {
+      "id": "de4dd3cbb4dd",
+      "type": "functional",
+      "title": "Delivery pipeline",
+      "description": "spex has an automated, reproducible release pipeline that turns a version tag into signed, checksummed, provenance-attested, cross-architecture binaries, with the GoReleaser configuration and the workflow files as the source of truth for how a release is built.",
+      "priority": 1
+    },
+    {
+      "id": "5b50178bf72e",
+      "type": "functional",
+      "title": "Installable and self-updating",
+      "description": "Pre-built signed binaries for linux and macOS (amd64, arm64), installable via a verified install script and go install, and updatable in place with spex upgrade.",
+      "priority": 1
     }
   ],
   "modules": [
@@ -188,7 +202,7 @@
       "id": "742ff18345ed",
       "name": "emit",
       "path": "emit",
-      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, the task journal, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json — an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding — that an external adapter consumes.",
+      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, the task journal, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json \u2014 an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding \u2014 that an external adapter consumes.",
       "requires_module": [
         "725a083f66a1",
         "fb20a21b62f1"
@@ -242,6 +256,12 @@
         "f03774b40bd5",
         "085966b6bfa1"
       ]
+    },
+    {
+      "id": "500a759fd1b0",
+      "name": "delivery",
+      "path": "delivery",
+      "description": "Tool delivery: trigger-tiered CI carrying the spec gate, a tag-driven release pipeline producing signed and attested cross-architecture binaries, a self-verifying release manifest, and the embedded self-update mechanism spex upgrade drives."
     }
   ]
 }

@@ -12,7 +12,7 @@ Integration and acceptance tests for the RootCommand component.
 ### 1. No arguments prints help
 
 **Input**: `spex` (no args)
-**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, impact, map, register, log, template, version, render, emit, ingest), plus cobra's own `completion` and `help`.
+**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, impact, map, register, log, template, version, render, emit, ingest, upgrade), plus cobra's own `completion` and `help`.
 
 ### 2. --help flag prints help
 

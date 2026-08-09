@@ -23,6 +23,12 @@ The root's persistent `--spec-dir` is read too: it is the tree the snapshot is c
 where both `spec/.snapshot.json` and the journal `spec/.history.jsonl` live. The retired `--map`
 flag is gone with the file it pointed at.
 
+`--git-head` exists because refresh mode has no other source of provenance: a refresh runs on an
+empty changeset, so no `git_head` field rides in for the refresh receipt to record. The command is
+the only place that knows the operator's answer, and it passes the value through to the refresh
+pathway untouched — it never invokes git to discover a commit itself, which keeps the
+no-subprocess contract intact across both modes.
+
 The module puts one external surface in the graph: [[3589714e50f8|the api `spex ingest`]], whose
 `provided_by` names IngestCommand and whose declared name is the bare invocation string. That is
 what makes `--mode refresh` a flag on the surface rather than a second surface — both pathways

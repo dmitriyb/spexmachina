@@ -1,0 +1,121 @@
+{
+  "name": "delivery",
+  "description": "Tool delivery: trigger-tiered CI carrying the spec gate, a tag-driven release pipeline producing signed and attested cross-architecture binaries, a self-verifying release manifest, and the embedded self-update mechanism spex upgrade drives.",
+  "requirements": [
+    {
+      "id": "68f38bb4cc74",
+      "type": "functional",
+      "title": "Tiered CI by trigger",
+      "preq_id": "de4dd3cbb4dd",
+      "description": "GitHub Actions workflows tiered by trigger cost: a fast gate on every pull request (build, vet, test, and the spec gate), the same gate plus the race detector on push to main, and a nightly fuzz run that discovers fuzz targets at run time rather than from a hardcoded list. Changes touching neither Go code nor the spec skip the runners; each workflow cancels its own superseded runs."
+    },
+    {
+      "id": "07bbd73df14f",
+      "type": "functional",
+      "title": "Spec gate on every PR",
+      "preq_id": "54de5bdaa9a5",
+      "description": "After building the binary, every pull request runs spex validate and then asserts that spex diff reports no completeness errors. The job honors the diff exit-code contract (0 clean, 2 completeness errors, 1 tree build failure) without discarding the exit status, and the check is marked required for merge through branch protection."
+    },
+    {
+      "id": "1a614dd66ebb",
+      "type": "functional",
+      "title": "Cross-architecture binary release",
+      "preq_id": "de4dd3cbb4dd",
+      "description": "A version tag triggers a GoReleaser build that cross-compiles linux and darwin on amd64 and arm64 with CGO disabled and trimmed paths, stamps version, commit, and date via ldflags, and publishes a GitHub Release."
+    },
+    {
+      "id": "1cbfffdeb281",
+      "type": "functional",
+      "title": "Signed and attested artifacts",
+      "preq_id": "de4dd3cbb4dd",
+      "description": "Every release archive is SSHSIG-signed with the shared Ed25519 release key and accompanied by sha256 checksums and a SLSA build-provenance attestation: three independent ways to trust a downloaded binary."
+    },
+    {
+      "id": "99127d3a1b95",
+      "type": "functional",
+      "title": "Machine-readable release manifest",
+      "preq_id": "de4dd3cbb4dd",
+      "description": "A self-verifying manifest is derived from GoReleaser's own output, recomputing each artifact's sha256 and size from the bytes on disk rather than trusting internal bookkeeping, so a downstream consumer can pin a per-target checksum programmatically."
+    },
+    {
+      "id": "6956c1a875ae",
+      "type": "non_functional",
+      "title": "Deterministic ldflags-stamped builds",
+      "preq_id": "6faeb216618a",
+      "description": "Release builds are reproducible: CGO disabled, trimmed paths, and version metadata injected only through ldflags, so a given tag yields byte-stable binaries and the stamped version is authoritative for the forward-only upgrade guard."
+    },
+    {
+      "id": "d051819c3224",
+      "type": "functional",
+      "title": "In-place self-update via the embedded installer",
+      "preq_id": "5b50178bf72e",
+      "description": "The verified install script carries an upgrade mode and is embedded byte-for-byte into the binary; spex upgrade drives it against the running binary's own path. Replacement is staged and atomic with a kept backup, the latest path is forward-only and non-overridable, and an explicitly named version installs in any direction."
+    },
+    {
+      "id": "5b33ea62c4e3",
+      "type": "non_functional",
+      "title": "Embedded installer byte-identical to the released one",
+      "preq_id": "5b50178bf72e",
+      "description": "A build-failing test asserts the embedded install script is byte-identical to the released copy at the repository root, so the binary can never ship an installer that drifted from the published, signed one."
+    }
+  ],
+  "components": [
+    {
+      "id": "1c2de3dbfe1c",
+      "name": "CIPipeline",
+      "description": "Trigger-tiered GitHub Actions workflows: the pull-request fast gate, the main-branch gate with the race detector, and the nightly fuzz run with discovered targets.",
+      "content": "arch_ci.md",
+      "implements": ["68f38bb4cc74"],
+      "uses": ["4153dbd38133"]
+    },
+    {
+      "id": "4153dbd38133",
+      "name": "SpecGate",
+      "description": "The CI job that makes spex self-hosting rather than merely tested: spex validate plus the spex diff completeness assertion on every pull request.",
+      "content": "arch_spec_gate.md",
+      "implements": ["07bbd73df14f"]
+    },
+    {
+      "id": "649f5268a2b2",
+      "name": "ReleasePipeline",
+      "description": "Tag-triggered GoReleaser build publishing signed, checksummed, provenance-attested cross-architecture archives as a GitHub Release.",
+      "content": "arch_release.md",
+      "implements": ["1a614dd66ebb", "1cbfffdeb281", "6956c1a875ae"]
+    },
+    {
+      "id": "5f9a7e641c09",
+      "name": "ReleaseManifest",
+      "description": "Self-verifying manifest.json generated from the release pipeline's output, recomputed from the artifact bytes on disk.",
+      "content": "arch_manifest.md",
+      "implements": ["99127d3a1b95"],
+      "uses": ["649f5268a2b2"]
+    },
+    {
+      "id": "a1e437df5c01",
+      "name": "SelfUpdate",
+      "description": "The embedded install script's upgrade mode: staged atomic self-replace with backup, forward-only version guard, rollback, and the byte-identity invariant with the released installer.",
+      "content": "arch_self_update.md",
+      "implements": ["d051819c3224", "5b33ea62c4e3"]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "191f87d4981b",
+      "name": "CI and Spec Gate Tests",
+      "content": "test_ci.md",
+      "describes": ["1c2de3dbfe1c", "4153dbd38133"]
+    },
+    {
+      "id": "4270d42b13af",
+      "name": "Release Pipeline Tests",
+      "content": "test_release.md",
+      "describes": ["649f5268a2b2", "5f9a7e641c09"]
+    },
+    {
+      "id": "24a49bd622f7",
+      "name": "Self-Update Tests",
+      "content": "test_self_update.md",
+      "describes": ["a1e437df5c01"]
+    }
+  ]
+}
