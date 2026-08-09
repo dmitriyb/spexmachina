@@ -65,6 +65,6 @@ Your task's spec context is provided on input, and the spec files are the source
 
 ## Where to Find Details
 
-- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency).
+- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency), `/drift-fix` (triage implementer drift reports).
 - **Proposals**: `spec/proposals/`
 - **Beads**: `.beads/`

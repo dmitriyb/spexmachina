@@ -314,7 +314,7 @@ This is the standing test for whether a paragraph belongs in an arch leaf at all
 
 | # | Arm | Test | Verdict |
 |---|-----|------|---------|
-| 0 | CONTRADICTS | asserts what the arch leaf denies | Resolve against the code, keep one statement, file a drift bead for the loser. Never silently pick. |
+| 0 | CONTRADICTS | asserts what the arch leaf denies | Resolve against the code, keep one statement, record the loser in a `drifts/` report for `/drift-fix`. Never silently pick. |
 | 1 | SYNTAX | the load-bearing content is a language fence, or a sentence whose subject is a language identifier | Delete — but first ask: does it assert something a caller can observe (stdout, exit code, a file written, an ordering, a naming convention)? If yes, restate it language-neutrally **into the arch section whose subject it shares**, creating one only if none exists, then delete. |
 | — | *exception* | the destination component implements a requirement **whose description names the algorithm or bound the fence encodes** | Keep, as language-neutral pseudocode. |
 | 2 | ALREADY SAID | the arch leaf has a section or sentence whose **subject** is the same node, artifact, field or condition | Delete. If the impl wording is more precise, replace the arch words **in place**; the section count does not grow. |

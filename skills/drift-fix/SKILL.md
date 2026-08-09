@@ -1,6 +1,6 @@
 ---
 name: drift-fix
-description: "Triage drift reports filed by implementers (drifts/*.json), fix the spec through review, make the deliberate mint-or-refresh decision, and clear the reports"
+description: "Triage drift reports filed by implementers (drifts/drift-*.json), fix the spec through review, make the deliberate mint-or-refresh decision, and clear the reports"
 argument-hint: "[drift-file ...]"
 ---
 
@@ -14,9 +14,8 @@ interactive — the baseline (snapshot) moves only here, only on purpose, never 
 
 Two entry modes, same procedure:
 
-- **Mid-epic (blocking):** the epic settled with `halt_reason: blocking_drift` (the sentinel
-  vocabulary ships with the faber-side config in dot; until that lands, a blocking report simply
-  means "do not run the epic further"). The report reaches main through its own PR: the
+- **Mid-epic (blocking):** the epic settled with `halt_reason: blocking_drift` (the sentinel is
+  emitted by the faber-side epic hook configured in dot). The report reaches main through its own PR: the
   implementer commits ONLY `drifts/drift-<bead>.json` plus the bead's return to `open` (undoing
   the claim) in the same commit, and that PR is reviewed and merged like any other — the reviewer
   is validating the drift claim itself. After THIS skill's fix-PR merges, the epic resumes with a
