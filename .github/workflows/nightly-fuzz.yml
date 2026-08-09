@@ -1,0 +1,44 @@
+name: nightly-fuzz
+
+on:
+  schedule:
+    # Off the top of the hour to avoid GitHub's scheduled-workflow congestion window.
+    - cron: "17 3 * * *"
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fuzz:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Discover and run fuzz targets
+        env:
+          FUZZTIME: 60s
+        run: |
+          set -euo pipefail
+          found=0
+          while IFS= read -r pkg; do
+            targets=$(go test -list '^Fuzz' "$pkg" | grep '^Fuzz' || true)
+            for target in $targets; do
+              found=$((found + 1))
+              echo "::group::fuzz $pkg :: $target"
+              go test -run '^$' -fuzz "^${target}$" -fuzztime "$FUZZTIME" "$pkg"
+              echo "::endgroup::"
+            done
+          done < <(go list ./...)
+          if [ "$found" -eq 0 ]; then
+            echo "::error::no fuzz targets discovered in the tree"
+            exit 1
+          fi
+          echo "discovered and ran $found fuzz target(s)"
