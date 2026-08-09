@@ -386,3 +386,53 @@ func TestSelfUpdate_UnwritableTargetDirStopsAndReportsElevation(t *testing.T) {
 		t.Error("target was modified despite an unwritable target directory")
 	}
 }
+
+// TestSelfUpdate_FailedCopyDuringSwapLeavesTargetUntouched drives
+// replace_target's staging cp through a stub that writes a truncated file
+// and fails, the way a real cp can die part-way through (e.g. ENOSPC). The
+// swap must not proceed on that partial file: the target stays exactly as
+// it was, no backup is created, and no staged residue is left behind.
+func TestSelfUpdate_FailedCopyDuringSwapLeavesTargetUntouched(t *testing.T) {
+	goos, goarch := hostPlatform(t)
+	privKey, pubKey := generateThrowawayKey(t)
+	script := scriptCopyWithKey(t, pubKey)
+
+	assetsDir := t.TempDir()
+	fabricateSignedArchive(t, assetsDir, "v2.0.0", goos, goarch, privKey)
+	origin := newFakeOrigin(t, "v2.0.0", assetsDir)
+
+	targetDir := t.TempDir()
+	target := filepath.Join(targetDir, "spex")
+	writeFakeBinary(t, target, "v1.0.0")
+	wantBytes, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target fixture: %v", err)
+	}
+
+	failingCPDir := t.TempDir()
+	failingCP := filepath.Join(failingCPDir, "cp")
+	// $2 is the destination cp was asked to write; write a truncated
+	// payload there and exit non-zero, mirroring a cp that dies mid-copy.
+	stub := "#!/bin/sh\nprintf 'NEW' > \"$2\"\nexit 1\n"
+	if err := os.WriteFile(failingCP, []byte(stub), 0o755); err != nil {
+		t.Fatalf("write failing cp stub: %v", err)
+	}
+
+	res := runScript(t, script, []string{"--upgrade", "--target", target, "--current-version", "v1.0.0"}, []string{
+		"SPEX_INSTALL_API_ORIGIN=" + origin.URL,
+		"SPEX_INSTALL_RELEASE_ORIGIN=" + origin.URL,
+		"PATH=" + failingCPDir + ":" + buildShimBinDir(t) + ":" + os.Getenv("PATH"),
+	})
+	if res.ExitCode == 0 {
+		t.Fatalf("exit code = 0, want non-zero when the staging cp fails\nstdout:\n%s", res.Stdout)
+	}
+
+	gotBytes, err := os.ReadFile(target)
+	if err != nil {
+		t.Fatalf("read target after failure: %v", err)
+	}
+	if string(gotBytes) != string(wantBytes) {
+		t.Error("target was modified despite a failed staging cp")
+	}
+	assertExactEntries(t, targetDir, "spex")
+}

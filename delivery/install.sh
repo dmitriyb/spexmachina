@@ -110,6 +110,10 @@ CURRENT_VERSION=""
 CHECK=false
 ROLLBACK=false
 
+# Preserved for the first-install sudo re-exec below, since the parsing
+# loop shifts "$@" away as it goes.
+ORIG_ARGS=("$@")
+
 while [ $# -gt 0 ]; do
   case "$1" in
     --upgrade)
@@ -372,8 +376,14 @@ replace_target() {
   staged="${target_dir}/.$(basename "$TARGET").new.$$"
   backup="${TARGET}.bak"
 
-  cp "$new_bin" "$staged"
-  chmod +x "$staged"
+  if ! cp "$new_bin" "$staged"; then
+    rm -f "$staged"
+    return 1
+  fi
+  if ! chmod +x "$staged"; then
+    rm -f "$staged"
+    return 1
+  fi
 
   if [ -e "$TARGET" ]; then
     if ! mv -f "$TARGET" "$backup"; then
@@ -484,7 +494,16 @@ fi
 mkdir -p "$INSTALL_DIR" 2>/dev/null || true
 if [ ! -w "$INSTALL_DIR" ]; then
   if [ "$(id -u)" != "0" ] && command -v sudo >/dev/null 2>&1; then
-    exec sudo "$0" "$@"
+    # sudo's env_reset strips SPEX_INSTALL_VERSION/SPEX_INSTALL_API_ORIGIN/
+    # SPEX_INSTALL_RELEASE_ORIGIN by default, and "$@" was already consumed
+    # by the arg-parsing loop above — replay the original arguments and
+    # forward the resolved install dir and pinned version explicitly so the
+    # elevated run installs exactly where and what the caller asked for.
+    exec sudo env \
+      SPEX_INSTALL_VERSION="${SPEX_INSTALL_VERSION:-}" \
+      SPEX_INSTALL_API_ORIGIN="$SPEX_INSTALL_API_ORIGIN" \
+      SPEX_INSTALL_RELEASE_ORIGIN="$SPEX_INSTALL_RELEASE_ORIGIN" \
+      "$0" "${ORIG_ARGS[@]}" --dir "$INSTALL_DIR"
   fi
   die "install directory $INSTALL_DIR is not writable"
 fi
