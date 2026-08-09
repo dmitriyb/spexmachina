@@ -1,0 +1,59 @@
+version: 2
+
+project_name: spex
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: spex
+    main: ./cmd/spex
+    binary: spex
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    flags:
+      - -trimpath
+    ldflags:
+      - -X main.version={{ .Tag }}
+      - -X main.commit={{ .Commit }}
+      - -X main.date={{ .CommitDate }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
+archives:
+  - id: spex
+    formats:
+      - tar.gz
+    name_template: >-
+      spex_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+
+checksum:
+  name_template: "spex_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+# SSHSIG-signs every archive with the shared Ed25519 release key (also used
+# by faber and portitor), verifiable with the standard "file" namespace
+# check. A failed signing run aborts the goreleaser pipeline before the
+# release-publish step, so unsigned archives are never published.
+signs:
+  - id: sshsig
+    cmd: ssh-keygen
+    args:
+      - "-Y"
+      - "sign"
+      - "-n"
+      - "file"
+      - "-f"
+      - "{{ .Env.RELEASE_SSH_SIGNING_KEY_PATH }}"
+      - "${artifact}"
+    artifacts: archive
+    signature: "${artifact}.sig"
+
+release:
+  mode: replace

@@ -1,0 +1,65 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Import release signing key
+        run: |
+          umask 077
+          key_dir="$RUNNER_TEMP/release-key"
+          mkdir -p "$key_dir"
+          printf '%s\n' "${{ secrets.RELEASE_SSH_SIGNING_KEY }}" > "$key_dir/id_ed25519"
+          echo "RELEASE_SSH_SIGNING_KEY_PATH=$key_dir/id_ed25519" >> "$GITHUB_ENV"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SSH_SIGNING_KEY_PATH: ${{ env.RELEASE_SSH_SIGNING_KEY_PATH }}
+
+      - name: Generate per-artifact checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          for archive in *.tar.gz; do
+            sha256sum "$archive" > "$archive.sha256"
+          done
+
+      - name: Publish per-artifact checksums
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ github.ref_name }}" dist/*.sha256
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.tar.gz"
+
+      - name: Remove release signing key
+        if: always()
+        run: rm -f "$RELEASE_SSH_SIGNING_KEY_PATH"
