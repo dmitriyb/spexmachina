@@ -23,7 +23,8 @@ builds:
     ldflags:
       - -X main.version={{ .Tag }}
       - -X main.commit={{ .Commit }}
-      - -X main.date={{ .Date }}
+      - -X main.date={{ .CommitDate }}
+    mod_timestamp: '{{ .CommitTimestamp }}'
 
 archives:
   - id: spex

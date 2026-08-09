@@ -28,7 +28,7 @@ func TestReleaseConfig_BuildMatrixAndStamping(t *testing.T) {
 		"-trimpath",
 		"-X main.version={{ .Tag }}",
 		"-X main.commit={{ .Commit }}",
-		"-X main.date={{ .Date }}",
+		"-X main.date={{ .CommitDate }}",
 	} {
 		if !strings.Contains(cfg, want) {
 			t.Errorf(".goreleaser.yaml missing %q", want)
