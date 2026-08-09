@@ -32,8 +32,9 @@ their specs are the starting point for `/spec` and the implementation pass. They
 repositories `github.com/dmitriyb/faber` and `github.com/dmitriyb/portitor`, which should be cloned
 into `/tmp` to read the details below. Portitor is the closer analog (a single binary, like spex).
 
-- **Module structure** — each repo's `spec/delivery/` (`module.json`, `arch_ci.md`, `arch_release.md`,
-  `arch_self_update.md`, `test_delivery.md`).
+- **Module structure** — each repo's `spec/delivery/`. Portitor has the full set (`module.json`,
+  `arch_ci.md`, `arch_release.md`, `arch_self_update.md`, `test_delivery.md`); faber folds the
+  self-update contract into `arch_release.md`.
 - **`spex upgrade` front-end** — portitor's `spec/cli/arch_upgrade_command.md` and
   `test_upgrade_command.md`.
 
@@ -106,8 +107,8 @@ component, and content-leaf structure is authored by `/spec`, not enumerated her
 
 ### Depends on the declarative spec contracts migration
 
-That migration (`2026-07-25-declarative-spec-contracts.md`, in flight on
-`proposal/declarative-spec-contracts`) changes the spec format under this proposal. Two things written
+That migration (`2026-07-25-declarative-spec-contracts.md`, since merged to main) changes the spec
+format under this proposal. Two things written
 above are no longer authorable, and one is new:
 
 - **Milestones are deleted.** The node type is gone from `schema/schema.go`,
@@ -128,8 +129,8 @@ above are no longer authorable, and one is new:
   tokenizing must reproduce the name exactly, in at most six whitespace-separated words, so
   `spex upgrade` is fine and `spex upgrade [--check]` is rejected.
 
-None of this blocks authoring; it changes what `/spec` may write. **Author `spec/delivery/` after that
-migration merges**, or expect to redo the impl leaves.
+None of this blocks authoring; it changes what `/spec` may write. With the migration merged,
+`spec/delivery/` is authored against the post-migration format from the start.
 
 ### `spex upgrade` in the `cli` module
 
@@ -164,7 +165,8 @@ documenting the `spex upgrade` surface above and the published release-signing p
 - Feature beads per delivery component: CI pipeline, release pipeline, signing/provenance, release
   manifest, self-update mechanism.
 - A feature bead for the `cli` module's `UpgradeCommand`.
-- Task beads for each component's impl and test content leaves, cut through the normal pipeline.
+- Task beads for each component's arch and test content leaves, cut through the normal pipeline
+  (post-migration there are no impl leaves; the arch leaf carries the whole contract).
 
 **Modified beads:** The `cli` module gains one new component (`UpgradeCommand`); its existing beads
 are otherwise unchanged.
