@@ -31,10 +31,21 @@ const goreleaserArchiveType = "Archive"
 // archive, checksum file, and signature; only entries whose Type is
 // "Archive" become manifest entries.
 type GoReleaserArtifact struct {
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Goos   string `json:"goos"`
-	Goarch string `json:"goarch"`
+	Name   string          `json:"name"`
+	Type   string          `json:"type"`
+	Goos   string          `json:"goos"`
+	Goarch string          `json:"goarch"`
+	Extra  goreleaserExtra `json:"extra"`
+}
+
+// goreleaserExtra is the subset of an artifacts.json record's "extra" map
+// this package reads: GoReleaser's own recorded checksum, shaped
+// "sha256:<hex>". It is used only as a cross-check against the sha256 this
+// package recomputes from the archive bytes — never as the source of
+// truth — so a future GoReleaser upgrade dropping or reshaping other
+// "extra" fields does not affect this package.
+type goreleaserExtra struct {
+	Checksum string `json:"Checksum"`
 }
 
 // GoReleaserMetadata is the subset of a dist/metadata.json record this
@@ -94,7 +105,13 @@ func (m *Manifest) Find(os, arch string) (ManifestEntry, bool) {
 // returns the resulting manifest. GoReleaser's intermediate per-target
 // binaries and its own metadata records are not "Archive"-typed and are
 // filtered out. A missing or unreadable archive file is a release-blocking
-// failure, so it is returned as an error rather than skipped.
+// failure, so it is returned as an error rather than skipped. When an
+// artifact record carries GoReleaser's own recorded checksum, the
+// recomputed hash is cross-checked against it; a disagreement between the
+// two is also a release-blocking failure. A record with no checksum, or
+// one not shaped "sha256:<hex>", skips the cross-check rather than
+// failing, so a future GoReleaser upgrade changing or omitting that field
+// does not break generation.
 func GenerateManifest(distDir string, artifacts []GoReleaserArtifact, meta GoReleaserMetadata) (*Manifest, error) {
 	m := &Manifest{
 		SchemaVersion: SchemaVersion,
@@ -112,6 +129,9 @@ func GenerateManifest(distDir string, artifacts []GoReleaserArtifact, meta GoRel
 		if err != nil {
 			return nil, fmt.Errorf("delivery: generate manifest: archive %s: %w", a.Name, err)
 		}
+		if recorded, ok := parseGoReleaserChecksum(a.Extra.Checksum); ok && recorded != sum {
+			return nil, fmt.Errorf("delivery: generate manifest: archive %s: recomputed sha256 %s disagrees with GoReleaser's recorded checksum %s", a.Name, sum, recorded)
+		}
 		m.Artifacts = append(m.Artifacts, ManifestEntry{
 			Target:   Target{OS: a.Goos, Arch: a.Goarch},
 			Filename: a.Name,
@@ -120,6 +140,20 @@ func GenerateManifest(distDir string, artifacts []GoReleaserArtifact, meta GoRel
 		})
 	}
 	return m, nil
+}
+
+// parseGoReleaserChecksum extracts the hex digest from a GoReleaser
+// "extra.Checksum" value shaped "sha256:<hex>". A value with no such
+// prefix — including the empty string a record with no checksum
+// unmarshals to — returns ok=false, telling GenerateManifest to skip the
+// disagreement check rather than treat an absent or reshaped field as a
+// mismatch.
+func parseGoReleaserChecksum(checksum string) (hexDigest string, ok bool) {
+	const prefix = "sha256:"
+	if !strings.HasPrefix(checksum, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(checksum, prefix), true
 }
 
 // releaseStatus derives a release's status from its tag-derived version:

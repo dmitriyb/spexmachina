@@ -199,6 +199,58 @@ func TestManifest_SingleTargetResolutionSufficesToVerify(t *testing.T) {
 	}
 }
 
+func TestManifest_MissingArchiveFileIsError(t *testing.T) {
+	dir := t.TempDir()
+	artifacts := []GoReleaserArtifact{
+		{Name: "spex_1.2.3_linux_amd64.tar.gz", Type: goreleaserArchiveType, Goos: "linux", Goarch: "amd64"},
+	}
+	meta := GoReleaserMetadata{ProjectName: "spex", Version: "1.2.3", Commit: "deadbeef", Date: "2026-08-09T00:00:00Z"}
+
+	_, err := GenerateManifest(dir, artifacts, meta)
+	if err == nil {
+		t.Fatal("GenerateManifest with an Archive record whose file is absent returned nil error, want a release-blocking failure")
+	}
+}
+
+func TestManifest_ChecksumDisagreementIsError(t *testing.T) {
+	dir := t.TempDir()
+	name := "spex_1.2.3_linux_amd64.tar.gz"
+	writeArchive(t, dir, name, []byte("archive contents"))
+	artifacts := []GoReleaserArtifact{
+		{
+			Name: name, Type: goreleaserArchiveType, Goos: "linux", Goarch: "amd64",
+			Extra: goreleaserExtra{Checksum: "sha256:deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"},
+		},
+	}
+	meta := GoReleaserMetadata{ProjectName: "spex", Version: "1.2.3", Commit: "deadbeef", Date: "2026-08-09T00:00:00Z"}
+
+	_, err := GenerateManifest(dir, artifacts, meta)
+	if err == nil {
+		t.Fatal("GenerateManifest with a recomputed sha256 disagreeing with GoReleaser's recorded checksum returned nil error, want a release-blocking failure")
+	}
+}
+
+func TestManifest_ChecksumAgreementDoesNotError(t *testing.T) {
+	dir := t.TempDir()
+	name := "spex_1.2.3_linux_amd64.tar.gz"
+	sum, _ := writeArchive(t, dir, name, []byte("archive contents"))
+	artifacts := []GoReleaserArtifact{
+		{
+			Name: name, Type: goreleaserArchiveType, Goos: "linux", Goarch: "amd64",
+			Extra: goreleaserExtra{Checksum: "sha256:" + sum},
+		},
+	}
+	meta := GoReleaserMetadata{ProjectName: "spex", Version: "1.2.3", Commit: "deadbeef", Date: "2026-08-09T00:00:00Z"}
+
+	m, err := GenerateManifest(dir, artifacts, meta)
+	if err != nil {
+		t.Fatalf("GenerateManifest with an agreeing recorded checksum returned an error: %v", err)
+	}
+	if len(m.Artifacts) != 1 {
+		t.Fatalf("manifest has %d entries, want 1", len(m.Artifacts))
+	}
+}
+
 func TestManifest_LoadGoReleaserRecords(t *testing.T) {
 	dir := t.TempDir()
 
@@ -228,6 +280,30 @@ func TestManifest_LoadGoReleaserRecords(t *testing.T) {
 	}
 	if meta.ProjectName != "spex" || meta.Version != "1.2.3" {
 		t.Errorf("meta = %+v, want project_name=spex version=1.2.3", meta)
+	}
+}
+
+func TestManifest_LoadGoReleaserArtifactsMalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "artifacts.json")
+	if err := os.WriteFile(path, []byte(`{not valid json`), 0o644); err != nil {
+		t.Fatalf("write artifacts.json: %v", err)
+	}
+
+	if _, err := LoadGoReleaserArtifacts(path); err == nil {
+		t.Fatal("LoadGoReleaserArtifacts with malformed JSON returned nil error")
+	}
+}
+
+func TestManifest_LoadGoReleaserMetadataMalformedJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "metadata.json")
+	if err := os.WriteFile(path, []byte(`{not valid json`), 0o644); err != nil {
+		t.Fatalf("write metadata.json: %v", err)
+	}
+
+	if _, err := LoadGoReleaserMetadata(path); err == nil {
+		t.Fatal("LoadGoReleaserMetadata with malformed JSON returned nil error")
 	}
 }
 
