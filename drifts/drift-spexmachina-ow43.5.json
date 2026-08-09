@@ -1,0 +1,12 @@
+{
+  "bead": "spexmachina-ow43.5",
+  "node": "649f5268a2b2",
+  "files": [
+    "spec/delivery/arch_release.md"
+  ],
+  "claim": "arch_release.md, \"Release assets\": \"Beyond the archives, the release carries the checksum files, the signatures, the manifest produced by the manifest generator, and the canonical install script with its signature — the verified download path the README documents.\"",
+  "authoritative_source": ".github/workflows/release.yml and .goreleaser.yaml, the source of truth arch_release.md itself names for how a release is built.",
+  "evidence": "Neither file signs or uploads install.sh (or an install.sh.sig) to the GitHub Release: .goreleaser.yaml's `signs:` block covers only `artifacts: archive`, and release.yml's upload steps cover only per-artifact checksums (dist/*.sha256) and manifest.json. spexmachina-ow43.5 (this bead) is what first creates install.sh at the repository root, so ReleasePipeline (implemented earlier in this epic, spexmachina-ow43.3) could not have wired its publication — the script did not exist yet. The gap is real but does not gate this bead's own contract (spec/delivery/arch_self_update.md, which only specifies the script's own behavior, not release-workflow wiring), so it is filed non-blocking.",
+  "blocking": false,
+  "proposed_fix": "Add an SSHSIG-sign step for install.sh (same key, same `-n file` namespace install.sh's own verify step expects) and an upload step (`gh release upload \"$tag\" install.sh install.sh.sig`) to .github/workflows/release.yml, and have the README document the curl-and-verify download path for it."
+}
