@@ -63,9 +63,10 @@ fi
 
 valid=$(jq -r '.valid' "$validate_out")
 error_count=$(jq -r '.error_count' "$validate_out")
+warning_count=$(jq -r '.warning_count' "$validate_out")
 
-if [[ "$valid" != "true" || "$error_count" != "0" ]]; then
-    echo "spec gate: structural pass failed (valid=$valid, error_count=$error_count)" >&2
+if [[ "$valid" != "true" || "$error_count" != "0" || "$warning_count" != "0" ]]; then
+    echo "spec gate: structural pass failed (valid=$valid, error_count=$error_count, warning_count=$warning_count)" >&2
     jq -r '.errors[]? | "  error: [\(.check)] \(.path): \(.message)"' "$validate_out" >&2
     rm -f "$validate_out"
     exit 1

@@ -7,8 +7,8 @@
 #  1. Real-binary cases: build spex from this tree and run the gate against
 #     fixture spec directories derived from this repo's own (valid) spec/ —
 #     the clean pass, the completeness-error pass, and the two ways a build
-#     can fail (a broken snapshot the diff pass alone reads, and a broken
-#     module.json the structural pass alone reads). Exercises the real
+#     can fail (a broken snapshot the diff pass alone reads, and an uncovered
+#     requirement the structural pass alone reads). Exercises the real
 #     `spex validate` / `spex diff` exit-code contract end to end.
 #
 #  2. Mock-binary cases, against testdata/spec-gate/mock_spex.sh: verdict
@@ -137,6 +137,15 @@ if [[ -x /usr/bin/env ]] && "$MOCK_SPEX" validate >/dev/null 2>&1; then
     MOCK_VALIDATE_STDOUT='{"valid":true,"error_count":3,"warning_count":0,"errors":[{"check":"schema","severity":"error","path":"x","message":"inconsistent verdict"}]}' \
     MOCK_VALIDATE_EXIT=0 \
         assert_case "structural pass asserts on the JSON verdict, not exit status" \
+            "$MOCK_SPEX" "unused" 1 "structural pass failed"
+
+    # warning_count is the other finding count in the verdict: a `valid: true`,
+    # `error_count: 0` report with a non-zero warning_count must still fail the
+    # job, even though the real validator can never emit this shape today
+    # (WarningCount is always 0 — see validator/error_reporter.go).
+    MOCK_VALIDATE_STDOUT='{"valid":true,"error_count":0,"warning_count":3,"errors":[]}' \
+    MOCK_VALIDATE_EXIT=0 \
+        assert_case "structural pass asserts on warning_count too" \
             "$MOCK_SPEX" "unused" 1 "structural pass failed"
 
     # Diff notes are disclosures, never violations: they must not gate the exit
