@@ -137,7 +137,7 @@
       "id": "58ea35f52b86",
       "type": "non_functional",
       "title": "No runtime subprocesses",
-      "description": "The spex binary invokes no external subprocesses at runtime. All interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs.",
+      "description": "The spex spec pipeline invokes no external subprocesses: all interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs. The sole sanctioned exception, outside every pipeline path, is spex upgrade driving the embedded installer synchronously.",
       "priority": 2
     },
     {

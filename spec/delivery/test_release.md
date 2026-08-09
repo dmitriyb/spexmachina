@@ -25,5 +25,4 @@ Acceptance coverage for [[649f5268a2b2|ReleasePipeline]] and [[5f9a7e641c09|Rele
 
 ## Edge cases
 
-- A tag on a tree whose spec gate would fail must not produce a release — the release workflow runs the same gate first.
 - A failed signing step aborts the release rather than publishing unsigned archives.

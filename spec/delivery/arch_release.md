@@ -14,7 +14,7 @@ The build cross-compiles linux and darwin on amd64 and arm64 — four archives, 
 - sha256 checksums — consolidated for the release, plus a per-artifact checksum file so one target verifies without downloading the other three;
 - a SLSA build-provenance attestation binding each archive to the repository and the tag's commit.
 
-A failed signing step aborts the release; unsigned archives are never published. The release workflow also runs the spec gate before building — a tag on a tree the gate would reject does not become a release.
+A failed signing step aborts the release; unsigned archives are never published.
 
 ## Release assets
 

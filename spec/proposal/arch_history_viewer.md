@@ -30,7 +30,7 @@ That split is a declared fact of the graph, not something a reader has to infer 
 
 Taking parsed data is a declared contract rather than a convenience: this component implements
 [[fd540b407fb4|Bead data via stdin]], and the proposal-level requirement "No runtime subprocesses"
-(project req `58ea35f52b86`) forbids the spex binary running a tracker at all. The previous
+(project req `58ea35f52b86`) forbids any pipeline surface running a tracker at all — the requirement's sole sanctioned exception, the upgrade command's embedded-installer drive, is nowhere near this path. The previous
 `CLIBeadLister` ran `br list --json` as a subprocess; it is retired. The viewer is a pure function
 over data it's given.
 

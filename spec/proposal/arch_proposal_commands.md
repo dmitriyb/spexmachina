@@ -73,7 +73,7 @@ spex template <project|change>
 
 ## No subprocess invocation
 
-Implements the project-level non-functional requirement `No runtime subprocesses` (id `58ea35f52b86`) for the proposal surface area:
+Implements the project-level non-functional requirement `No runtime subprocesses` (id `58ea35f52b86`) for the proposal surface area — a surface with no share in that requirement's sole sanctioned exception (the cli upgrade command's embedded-installer drive):
 
 - `spex log` reads stdin; caller pipes tracker output.
 - `spex register` reads a file path; no tracker interaction.

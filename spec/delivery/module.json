@@ -41,7 +41,7 @@
       "id": "6956c1a875ae",
       "type": "non_functional",
       "title": "Deterministic ldflags-stamped builds",
-      "preq_id": "6faeb216618a",
+      "preq_id": "de4dd3cbb4dd",
       "description": "Release builds are reproducible: CGO disabled, trimmed paths, and version metadata injected only through ldflags, so a given tag yields byte-stable binaries and the stamped version is authoritative for the forward-only upgrade guard."
     },
     {
@@ -65,37 +65,54 @@
       "name": "CIPipeline",
       "description": "Trigger-tiered GitHub Actions workflows: the pull-request fast gate, the main-branch gate with the race detector, and the nightly fuzz run with discovered targets.",
       "content": "arch_ci.md",
-      "implements": ["68f38bb4cc74"],
-      "uses": ["4153dbd38133"]
+      "implements": [
+        "68f38bb4cc74"
+      ],
+      "uses": [
+        "4153dbd38133"
+      ]
     },
     {
       "id": "4153dbd38133",
       "name": "SpecGate",
       "description": "The CI job that makes spex self-hosting rather than merely tested: spex validate plus the spex diff completeness assertion on every pull request.",
       "content": "arch_spec_gate.md",
-      "implements": ["07bbd73df14f"]
+      "implements": [
+        "07bbd73df14f"
+      ]
     },
     {
       "id": "649f5268a2b2",
       "name": "ReleasePipeline",
       "description": "Tag-triggered GoReleaser build publishing signed, checksummed, provenance-attested cross-architecture archives as a GitHub Release.",
       "content": "arch_release.md",
-      "implements": ["1a614dd66ebb", "1cbfffdeb281", "6956c1a875ae"]
+      "implements": [
+        "1a614dd66ebb",
+        "1cbfffdeb281",
+        "6956c1a875ae"
+      ]
     },
     {
       "id": "5f9a7e641c09",
       "name": "ReleaseManifest",
       "description": "Self-verifying manifest.json generated from the release pipeline's output, recomputed from the artifact bytes on disk.",
       "content": "arch_manifest.md",
-      "implements": ["99127d3a1b95"],
-      "uses": ["649f5268a2b2"]
+      "implements": [
+        "99127d3a1b95"
+      ],
+      "uses": [
+        "649f5268a2b2"
+      ]
     },
     {
       "id": "a1e437df5c01",
       "name": "SelfUpdate",
       "description": "The embedded install script's upgrade mode: staged atomic self-replace with backup, forward-only version guard, rollback, and the byte-identity invariant with the released installer.",
       "content": "arch_self_update.md",
-      "implements": ["d051819c3224", "5b33ea62c4e3"]
+      "implements": [
+        "d051819c3224",
+        "5b33ea62c4e3"
+      ]
     }
   ],
   "test_sections": [
@@ -103,19 +120,27 @@
       "id": "191f87d4981b",
       "name": "CI and Spec Gate Tests",
       "content": "test_ci.md",
-      "describes": ["1c2de3dbfe1c", "4153dbd38133"]
+      "describes": [
+        "1c2de3dbfe1c",
+        "4153dbd38133"
+      ]
     },
     {
       "id": "4270d42b13af",
       "name": "Release Pipeline Tests",
       "content": "test_release.md",
-      "describes": ["649f5268a2b2", "5f9a7e641c09"]
+      "describes": [
+        "649f5268a2b2",
+        "5f9a7e641c09"
+      ]
     },
     {
       "id": "24a49bd622f7",
       "name": "Self-Update Tests",
       "content": "test_self_update.md",
-      "describes": ["a1e437df5c01"]
+      "describes": [
+        "a1e437df5c01"
+      ]
     }
   ]
 }
