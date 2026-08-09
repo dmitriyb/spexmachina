@@ -23,6 +23,7 @@ func main() {
 		newRenderCmd(),
 		newEmitCmd(),
 		newIngestCmd(),
+		newUpgradeCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
