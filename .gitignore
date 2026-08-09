@@ -1,6 +1,9 @@
 # Build output
 bin/
 
+# Local scratch tmpdir for `go test` binaries (/tmp is noexec in some sandboxes)
+.gotmp/
+
 # bv (beads viewer) local config and caches
 .bv/
 
