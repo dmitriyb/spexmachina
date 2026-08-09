@@ -62,7 +62,7 @@ Failure modes never write a partial changeset.
 - Does not append to the journal or save a snapshot — those belong to ingest.
 - Does not invoke git — `--git-head` is caller-supplied.
 
-Those three absences are one property: [[aa2375420738|emit is a pure function of the files and flags it is handed]]. It starts no subprocess, opens no connection and asks no tracker anything, so the same impact report, task journal, spec directory, proposal ref and SHA produce the same bytes on every machine and at every hour.
+Those three absences are one property: [[aa2375420738|emit is a pure function of the files and flags it is handed]]. It starts no subprocess, opens no connection and asks no tracker anything — the project prohibition's one sanctioned exception, the upgrade command's installer drive, never enters an emit run — so the same impact report, task journal, spec directory, proposal ref and SHA produce the same bytes on every machine and at every hour.
 
 ## Test surface
 

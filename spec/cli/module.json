@@ -21,14 +21,21 @@
       "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Identity hash computation command",
-      "description": "`spex hash-id --module \u003cmodule\u003e --type \u003ctype\u003e --name \u003cname\u003e` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing."
+      "description": "`spex hash-id --module <module> --type <type> --name <name>` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing."
     },
     {
       "id": "293b27f73924",
       "preq_id": "96c6c15ecc3e",
       "type": "non_functional",
       "title": "Bounded third-party CLI surface",
-      "description": "cobra is the only third-party CLI framework in the binary: no second command library and no hand-rolled argument parser stands beside it, and argument and flag parsing, help text, unknown-command suggestions and shell completions are taken from cobra's built-ins rather than reimplemented. cobra reaches exactly two packages: cli, which holds the root command and nothing else, and cmd/spex, which holds all twelve subcommand constructors, one per file. No other package imports it — the worker packages that do the module's actual work define no commands and see no CLI framework at all, and a subcommand's run function reads flags into plain Go values before calling into them. What is bounded is therefore both which third-party module may be reached for and how far it reaches: the root command imports cobra and nothing else, and cobra stops at command construction. pflag and mousetrap arrive transitively through cobra and are never imported directly. A subcommand needing a capability cobra does not provide reaches for the standard library; anything else amends the project's declared stack before it is written. The bounded surface is now enumerated in the graph rather than only counted here: each of the twelve constructors' commands is declared as an api node in the module that owns its entry point, plus the three `spex map` children, and the api names are globally unique across the project so no two modules can claim one invocation. The bare `spex` root is deliberately not among them — it runs no operation, only cobra's help, and every capability it does own is a persistent flag or a built-in, none of which is part of an api name."
+      "description": "cobra is the only third-party CLI framework in the binary: no second command library and no hand-rolled argument parser stands beside it, and argument and flag parsing, help text, unknown-command suggestions and shell completions are taken from cobra's built-ins rather than reimplemented. cobra reaches exactly two packages: cli, which holds the root command and nothing else, and cmd/spex, which holds all thirteen subcommand constructors, one per file. No other package imports it \u2014 the worker packages that do the module's actual work define no commands and see no CLI framework at all, and a subcommand's run function reads flags into plain Go values before calling into them. What is bounded is therefore both which third-party module may be reached for and how far it reaches: the root command imports cobra and nothing else, and cobra stops at command construction. pflag and mousetrap arrive transitively through cobra and are never imported directly. A subcommand needing a capability cobra does not provide reaches for the standard library; anything else amends the project's declared stack before it is written. The bounded surface is now enumerated in the graph rather than only counted here: each of the thirteen constructors' commands is declared as an api node in the module that owns its entry point, plus the three `spex map` children, and the api names are globally unique across the project so no two modules can claim one invocation. The bare `spex` root is deliberately not among them \u2014 it runs no operation, only cobra's help, and every capability it does own is a persistent flag or a built-in, none of which is part of an api name."
+    },
+    {
+      "id": "cb1775f0a576",
+      "type": "functional",
+      "title": "In-place upgrade command",
+      "preq_id": "5b50178bf72e",
+      "description": "spex upgrade self-updates the installed binary by driving the embedded installer's upgrade mode: forward-only to the latest signed release by default, an exact release in any direction via --version, report-only via --check / --dry-run, and restoration of the previous binary via --rollback. It reimplements none of the resolve, download, verify, or replace logic."
     }
   ],
   "components": [
@@ -45,7 +52,7 @@
     {
       "id": "bbdb70e6f9f7",
       "name": "VersionCommand",
-      "description": "`spex version` — prints version and build info injected via ldflags at build time.",
+      "description": "`spex version` \u2014 prints version and build info injected via ldflags at build time.",
       "content": "arch_version_command.md",
       "implements": [
         "e15f238e9534"
@@ -57,10 +64,22 @@
     {
       "id": "a338e50fec70",
       "name": "HashIDCommand",
-      "description": "`spex hash-id --module \u003cmodule\u003e --type \u003ctype\u003e --name \u003cname\u003e` — computes and prints the identity hash for a spec node. Calls schema.IdentityHash with parts derived from the flags.",
+      "description": "`spex hash-id --module <module> --type <type> --name <name>` \u2014 computes and prints the identity hash for a spec node. Calls schema.IdentityHash with parts derived from the flags.",
       "content": "arch_hash_id_command.md",
       "implements": [
         "0c395440d59f"
+      ],
+      "uses": [
+        "b6758cdfabc4"
+      ]
+    },
+    {
+      "id": "ab15d9e23c4a",
+      "name": "UpgradeCommand",
+      "description": "Thin front-end that translates the upgrade flag surface into the embedded installer's upgrade-mode invocation against the running binary's own path.",
+      "content": "arch_upgrade_command.md",
+      "implements": [
+        "cb1775f0a576"
       ],
       "uses": [
         "b6758cdfabc4"
@@ -104,6 +123,14 @@
       "describes": [
         "a338e50fec70"
       ]
+    },
+    {
+      "id": "ccfae4f355b3",
+      "name": "Upgrade Command Tests",
+      "content": "test_upgrade_command.md",
+      "describes": [
+        "ab15d9e23c4a"
+      ]
     }
   ],
   "apis": [
@@ -122,6 +149,15 @@
       "description": "Print version and build information",
       "provided_by": [
         "bbdb70e6f9f7"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "766b86a25cc2",
+      "name": "spex upgrade",
+      "description": "Self-update the installed binary. Surface: bare invocation (forward-only latest), --version vX.Y.Z (exact release, any direction), --check / --dry-run (report only, exit 0), --rollback (restore the previous binary from its backup). No --force.",
+      "provided_by": [
+        "ab15d9e23c4a"
       ],
       "group": "cli"
     }

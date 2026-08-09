@@ -21,6 +21,8 @@ Any status other than `complete` skips the write and reports that nothing was wr
 
 That gate governs this write path, not the file. `spex ingest --mode refresh` reaches the same `spec/.snapshot.json` through [[f9033352c13f|RefreshHandler]], which never calls this component's status gate — though it does share the temp-file-plus-rename writer described under "Atomic Write" — and has a gate of its own: an empty changeset, an empty receipts file, and a pre-existing snapshot, after which it writes only if something drifted. A refresh over an already-current spec succeeds, reports `snapshot_saved` false, and leaves the file byte-identical. A reader tracing who moves the snapshot must count both paths.
 
+The two paths also differ in where their provenance comes from. On this component's path the receipts answer to a changeset that carries its own `git_head`, so the saver needs no commit input of its own; the refresh path's empty changeset carries none, which is why the command surface grew a refresh-only `--git-head` for the operator to supply — stamped on the refresh receipt, never consumed here.
+
 That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so a caller reading stdout can tell a saved snapshot from a skipped one without stat-ing the file.
 
 ## Why the Gate
