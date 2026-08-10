@@ -265,7 +265,7 @@ func TestReleaseSigning_SSHSIGRoundTripAndTamperDetection(t *testing.T) {
 // TestReleaseSigning_FailedSigningAbortsRatherThanPublish exercises
 // test_release.md's edge case: "A failed signing step aborts the release
 // rather than publishing unsigned archives." A missing signing key is what
-// a broken RELEASE_SSH_SIGNING_KEY_PATH looks like in CI: the exact command
+// a broken SSH_SIGNING_KEY_PATH looks like in CI: the exact command
 // .goreleaser.yaml's signs block shells out to must fail loudly and never
 // produce a signature, which is what makes GoReleaser abort the pipeline
 // before the publish step runs.

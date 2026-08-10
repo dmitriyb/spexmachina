@@ -96,7 +96,7 @@ func TestReleaseWorkflow_TagTriggered(t *testing.T) {
 		"goreleaser-action",
 		"release --clean",
 		"attest-build-provenance",
-		"RELEASE_SSH_SIGNING_KEY",
+		"SSH_SIGNING_KEY",
 	} {
 		if !strings.Contains(wf, want) {
 			t.Errorf("release workflow missing %q", want)
