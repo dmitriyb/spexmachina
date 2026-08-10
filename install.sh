@@ -21,16 +21,22 @@ set -euo pipefail
 
 # --- Trust anchor -----------------------------------------------------
 #
-# The public half of the shared Ed25519 release-signing key (the private
-# half is the RELEASE_SSH_SIGNING_KEY secret .goreleaser.yaml signs
-# archives with). Deliberately not overridable by any environment
-# variable or flag: a test harness that needs to exercise this script
-# against a throwaway release bakes a throwaway key into its own copy of
-# this file, exactly as a real release bakes the real one. Whatever
-# origin serves a download, the archive must still verify against this
-# key.
-SPEX_TRUST_IDENTITY="spex-release"
-SPEX_RELEASE_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKjpktVq9Et0GgMW5hPugO/ZAh4FiO00OLdhD4/nyT9M"
+# The public half of the Ed25519 release-signing key shared with the
+# sibling tools faber and portitor (the private half is the
+# SSH_SIGNING_KEY repository secret .goreleaser.yaml signs archives
+# with). The same base64 appears in those repositories' READMEs and
+# install scripts; it must stay byte-identical across all three.
+# Deliberately not overridable by any environment variable or flag: a
+# test harness that needs to exercise this script against a throwaway
+# release bakes a throwaway key into its own copy of this file, exactly
+# as a real release bakes the real one. Whatever origin serves a
+# download, the archive must still verify against this key.
+#
+# Identity and key together form the allowed_signers line this script
+# writes and verifies against — byte-identical to the line faber and
+# portitor publish, so one pinned copy serves all three.
+SPEX_TRUST_IDENTITY="dvbozhko@gmail.com"
+SPEX_RELEASE_PUBKEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhmCWVDP/Tcm3CqXNjTQTChbKxr223xMob9zc56Uuny release signing"
 
 # --- Test-only origin hooks ---------------------------------------------
 #

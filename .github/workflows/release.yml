@@ -26,12 +26,29 @@ jobs:
           go-version-file: go.mod
 
       - name: Import release signing key
+        # Same secret name as the sibling tools (faber, portitor):
+        # SSH_SIGNING_KEY. Passed through env rather than interpolated into
+        # the script body, so a multi-line key never splices into the shell
+        # source. The empty guard is load-bearing: ssh-keygen reports an
+        # empty key file as "Couldn't load public key <path>: No such file
+        # or directory", which reads as a missing file and hides the real
+        # cause until the signing step fails minutes later.
+        env:
+          SSH_SIGNING_KEY: ${{ secrets.SSH_SIGNING_KEY }}
         run: |
+          set -euo pipefail
+          if [ -z "$SSH_SIGNING_KEY" ]; then
+            echo "::error::SSH_SIGNING_KEY is not set for this repository"
+            exit 1
+          fi
           umask 077
           key_dir="$RUNNER_TEMP/release-key"
           mkdir -p "$key_dir"
-          printf '%s\n' "${{ secrets.RELEASE_SSH_SIGNING_KEY }}" > "$key_dir/id_ed25519"
-          echo "RELEASE_SSH_SIGNING_KEY_PATH=$key_dir/id_ed25519" >> "$GITHUB_ENV"
+          printf '%s\n' "$SSH_SIGNING_KEY" > "$key_dir/id_ed25519"
+          # ssh-keygen refuses a private key with group/other permissions
+          # set, even under a strict umask on some runner images.
+          chmod 600 "$key_dir/id_ed25519"
+          echo "SSH_SIGNING_KEY_PATH=$key_dir/id_ed25519" >> "$GITHUB_ENV"
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -40,7 +57,25 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_SSH_SIGNING_KEY_PATH: ${{ env.RELEASE_SSH_SIGNING_KEY_PATH }}
+          SSH_SIGNING_KEY_PATH: ${{ env.SSH_SIGNING_KEY_PATH }}
+
+      - name: Sign install.sh
+        # install.sh is not a GoReleaser-managed artifact (it is not built
+        # per target), so it is signed here while the key is still on disk,
+        # with the identical `ssh-keygen -Y sign -n file` invocation the
+        # signs block uses for archives — and the identical one install.sh
+        # itself runs to verify what it downloads. Publishing the script
+        # with its signature is what makes the README's verified download
+        # path real; spec/delivery/arch_release.md, "Release assets",
+        # already required it.
+        run: |
+          set -euo pipefail
+          cp install.sh dist/install.sh
+          ssh-keygen -Y sign -f "$SSH_SIGNING_KEY_PATH" -n file dist/install.sh
+
+      - name: Remove release signing key
+        if: always()
+        run: rm -f "$SSH_SIGNING_KEY_PATH"
 
       - name: Generate per-artifact checksums
         run: |
@@ -50,10 +85,10 @@ jobs:
             sha256sum "$archive" > "$archive.sha256"
           done
 
-      - name: Publish per-artifact checksums
+      - name: Publish per-artifact checksums and the signed install script
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ github.ref_name }}" dist/*.sha256
+        run: gh release upload "${{ github.ref_name }}" dist/*.sha256 dist/install.sh dist/install.sh.sig
 
       - name: Generate release manifest
         run: go run ./cmd/gen-manifest --dist dist
@@ -67,7 +102,3 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: "dist/*.tar.gz"
-
-      - name: Remove release signing key
-        if: always()
-        run: rm -f "$RELEASE_SSH_SIGNING_KEY_PATH"

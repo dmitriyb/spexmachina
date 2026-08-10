@@ -50,7 +50,7 @@ signs:
       - "-n"
       - "file"
       - "-f"
-      - "{{ .Env.RELEASE_SSH_SIGNING_KEY_PATH }}"
+      - "{{ .Env.SSH_SIGNING_KEY_PATH }}"
       - "${artifact}"
     artifacts: archive
     signature: "${artifact}.sig"
