@@ -8,14 +8,15 @@ Scenarios split by what they exercise. S1 and S2 exercise BeadReader alone, agai
 
 Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 
-- A tracker listing (the shape BeadReader's `--beads` input takes) pairing identity hashes with bead ids, for S1/S2:
+- A tracker listing (the shape BeadReader's `--beads` input takes), for S1/S2. The labels are
+  present because real tracker output carries them; BeadReader reads none of them:
 
 ```json
 {
   "issues": [
-    {"id": "spex-001", "status": "open",        "labels": ["spex:<SCHK_HASH>", "commit:deadbeef"]},
-    {"id": "spex-002", "status": "in_progress", "labels": ["spex:<HASR_HASH>"]},
-    {"id": "spex-003", "status": "open",        "labels": ["spex:<HTST_HASH>"]}
+    {"id": "spex-001", "status": "open",        "labels": ["spex:<HEAD>:op-1", "commit:deadbeef"]},
+    {"id": "spex-002", "status": "in_progress", "labels": ["spex:<HEAD>:op-2"]},
+    {"id": "spex-003", "status": "open",        "labels": ["spex:<HEAD>:op-3"]}
   ]
 }
 ```
@@ -51,13 +52,13 @@ The `node_type` field is now part of the change record because identity hashes d
 
 ## Scenarios
 
-### S1: BeadReader extracts pairings correctly
+### S1: BeadReader carries id and status, parses no labels
 
-Parse the tracker listing above. Assert each entry carries the four fields the interface promises (`ID`, `SpecNodeID`, `Status`, `Labels`), that `SpecNodeID` reads back the identity hash out of the bead's `spex:<spec_node_id>` label, and that every `SpecNodeID` matches the identity hash pattern `^[a-f0-9]{12}$`.
+Parse the tracker listing above. Assert each entry carries the two fields the interface promises (`ID`, `Status`), in input order, and that no entry exposes anything derived from a label — the linkage lives in the journal fold, and status joins onto it by task id.
 
-### S2: BeadReader returns empty slice when no pairings exist
+### S2: BeadReader returns empty slice on empty input
 
-A tracker listing whose beads carry no `spex:` label — and, separately, an empty `issues` array, and an empty bare array. Assert an empty slice rather than an error for each of the three: absence and emptiness are both first-class states, not error conditions.
+An empty `issues` array, and separately an empty bare array. Assert an empty slice rather than an error for both: absence and emptiness are both first-class states, not error conditions.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 

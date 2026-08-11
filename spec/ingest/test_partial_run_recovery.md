@@ -22,9 +22,12 @@ run completes the work.
 ## Run 2 Scenario
 
 1. User re-runs the pipeline: impact → emit → adapter → ingest.
-2. The new emit folds the journal, sees A and B already paired, and produces only C's create.
-   The label is `spex:<C's spec_node_id>` — the same label both runs, by construction, because
-   the label is the node's own hash: no counter, no reserved range, nothing to recompute.
+2. The new impact run folds the journal and drops A and B as already tracked — their open
+   pairings' events record the same after hashes the unchanged leaves still carry — so the
+   report, and therefore emit, carries only C's create.
+   Its label is `spex:<git_head>:<C's op_id in this batch>` — a fresh derivation, and nothing
+   requires it to match Run 1's: C's Run-1 create errored, so no task and no pairing exist for
+   the old label to find. No counter, no reserved range, nothing to recompute.
 3. Adapter creates C fresh, receipt ok, was_existing=false.
 4. Ingest Run 2 appends C's change event and `task_created` receipt. Snapshot now saved.
 
@@ -38,16 +41,22 @@ run completes the work.
 
 ## Partial with Adapter-Side Duplicates
 
-Edge case: adapter, mid-run, died AFTER creating C in the tracker but BEFORE writing C's receipt.
-Run 2's emit still sees C as unpaired (no task-bearing event in the fold). Emit labels C's create
-`spex:<C's hash>` — necessarily the same label as the dead run used. The adapter finds a task with
-that label already in the tracker, responds `was_existing: true` — the correct idempotent match.
-Ingest Run 2 appends C's event and pairs it with the pre-existing task id.
+Edge case: adapter, mid-run, died AFTER creating C in the tracker but BEFORE writing receipts —
+which means no `receipts.json` at all, since receipts are written once after the last op, so
+ingest refuses the run and the discipline is **re-run the adapter with the same changeset**,
+never re-emit. The re-run derives nothing: the changeset's labels are byte-identical to the dead
+run's, so the adapter's exact-match probe (any status) finds the task the dead run made and
+responds `was_existing: true` — the correct idempotent match — for C, and for A and B alike.
+Receipts land complete; ingest appends every pairing, C's carrying the pre-existing task id.
+
+The same-changeset discipline is what the label guards; a *fresh* emit would mint fresh labels
+(different op ids), miss the orphaned task, and duplicate it — which is why an aborted adapter
+run is re-run, not re-emitted, exactly as the adapters module's receipts contract states.
 
 ### Assertion
 
-Tested by mocking the adapter to return `was_existing: true` for C's receipt in Run 2. Expected:
-the pairing lands normally; no error; no duplicate task in the tracker.
+Tested by mocking the adapter to return `was_existing: true` for C's receipt in the same-changeset
+re-run. Expected: the pairing lands normally; no error; no duplicate task in the tracker.
 
 ## Snapshot Correctness
 

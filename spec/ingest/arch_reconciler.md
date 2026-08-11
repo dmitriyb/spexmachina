@@ -3,8 +3,9 @@
 Consumes `changeset.json` + `receipts.json` and turns each op's receipt into journal lines:
 [[539030e8c5a4|an ok create appends a change event and the task_created receipt pairing it, an ok
 close on a removed node appends the removed event and its task_closed, and a receipt reporting an
-error appends nothing]]. Cleanup creates pair with a prior removed event instead of a fresh one;
-epic creates pair with a proposal slug and no event at all. Nothing reaches disk until
+error appends nothing]]. Cleanup creates pair with the removal event they answer — prior-batch or
+same-batch — instead of a fresh one; epic creates pair with the proposal's `registered` event —
+every receipt references an event. Nothing reaches disk until
 [[ee28b5d190ae|the journal invariants this component checks]] hold over the batch.
 
 ## Responsibilities
@@ -12,10 +13,12 @@ epic creates pair with a proposal slug and no event at all. Nothing reaches disk
 - Pair each op in the changeset with its corresponding receipt by op_id.
 - For ok ops, construct the journal lines the op implies — change event, receipts, or both.
 - For error/skipped ops, construct nothing.
-- Derive each change event's `eid` from `(git_head, op_id)` and drop any line whose eid the
-  journal already contains — the batch is idempotent by construction.
+- Derive each change event's `eid` from `(git_head, op_id)` and drop any line the journal already
+  contains — the batch is idempotent by construction, and the epic's receipt dedups by its
+  registered-event referent like every other line.
 - After constructing the whole batch, assert the invariants against journal-plus-batch.
-- Atomically commit the append: whole-file write-and-rename, same guarantee as the snapshot.
+- Commit the append through MappingStore's writer-owner primitive: whole-file write-and-rename,
+  same guarantee as the snapshot.
 
 ## Interface
 
@@ -33,8 +36,8 @@ events and receipts.
 
 | Op type | spec_node_kind | Receipt status | Journal lines constructed |
 |---------|----------------|----------------|---------------------------|
-| create  | `proposal_epic` | ok            | one `task_created` with `proposal: <stem>` and no `for` — no change event (see Proposal-Epic Ops) |
-| create  | `cleanup`       | ok            | one `task_created` whose `for` is the prior `removed` event for the op's spec_node_id (see Cleanup-Create Ops) |
+| create  | `proposal_epic` | ok            | one `task_created` whose `for` is the proposal's `registered` event — no change event (see Proposal-Epic Ops) |
+| create  | `cleanup`       | ok            | one `task_created` whose `for` is the `removed` event for the op's spec_node_id (see Cleanup-Create Ops) |
 | create  | other          | ok             | the change event (`added`, or `modified` when paired with a close) plus a `task_created` with the receipt's task id |
 | create  | any            | error/skipped  | nothing |
 | close   | —              | ok (reason="Spec node removed")  | the `removed` change event plus a `task_closed` |
@@ -47,8 +50,9 @@ events and receipts.
 
 ## The Modified-Node Pair
 
-Emit generates two ops for a modified node: a create op with the `spex:<spec_node_id>` label —
-same label because the node's hash has not changed — plus a close op for the old task, in that
+Emit generates two ops for a modified node: a create op labeled `spex:<eid>` of the pair's
+`modified` event — the very event this component will mint from the create op's
+`(git_head, op_id)` — plus a close op for the old task, in that
 order (see "Ordering"). The create op alone carries everything the pair needs: its `blocks` dep
 names the old bead directly, and the node's current live fold entry supplies the prior content
 hash for `before`. Reconciler builds the whole pair while processing the create — one `modified`
@@ -84,7 +88,8 @@ build from and is refused as a malformed changeset. "Spec node removed" closes c
 
 ## Adapter-Side Recovery
 
-`was_existing = true` means the adapter found an open task already carrying the op's label.
+`was_existing = true` means the adapter found a task already carrying the op's exact label, in
+any status.
 Usually the journal already holds the pairing and the derived eid matches — the batch constructs
 the same lines, finds them present, and appends nothing. The interesting case is
 `was_existing = true` with no pairing in the journal: the signature of a previous run where the
@@ -104,18 +109,26 @@ The Reconciler MUST treat them as a distinct case:
 
 - **Skip** the spec-graph metadata lookup. The stem is not an identity hash; the lookup would
   always fail with `"spec graph: no node <stem>"` and abort the run with exit 2.
-- **Construct** only a receipt: `{"event": "task_created", "proposal": <stem>, "task_id": <receipt's>}`.
-  No change event exists or is invented — an epic is not born from a diff entry, and the receipt's
-  `proposal` key is the whole of its addressing.
+- **Construct** only a receipt: `{"event": "task_created", "for": "<registered eid>",
+  "task_id": <receipt's>}`. The referent is the proposal's `registered` event, which registration
+  appended when the lifecycle opened (a one-shot backfill line covers proposals registered before
+  the event type existed). No change event exists or is invented — an epic is not born from a
+  diff entry; it is born from a registration, and the registered event is that fact on the
+  record.
+- An epic op for a proposal with no `registered` event in the journal is an invariant failure —
+  emit refuses to build such an op, so its arrival marks a malformed changeset.
 
-The fold lists epic tasks keyed by their slug, which is how a re-run recognises an epic that
-already exists.
+Legacy epic receipts carrying `proposal: <stem>` and no `for` are read as inert history behind
+the fold's read-only legacy branch; none is ever constructed anew. The fold lists epic tasks
+keyed by their slug — carried by the registered event, or by the legacy receipt itself — which is
+how a re-run recognises an epic that already exists.
 
 ## Cleanup-Create Ops
 
 Create ops with `spec_node_kind == "cleanup"` represent a code-cleanup task for a spec node that
 was removed in a prior or concurrent batch. Their `spec_node_id` carries the identity hash of the
-now-removed node, and their label is `spex:cleanup-<spec_node_id>`.
+now-removed node, and their label is `spex:<eid>` of the removal event they answer — label and
+`task_created` referent are the same event.
 
 The Reconciler MUST treat them as a distinct case:
 
@@ -138,8 +151,9 @@ The Reconciler MUST treat them as a distinct case:
 The invariants are asserted once, after the whole batch is constructed and before anything reaches
 disk, in numeric order, so the first message a caller sees names the most upstream cause:
 
-1. Every ok create pairs exactly one `task_created` with exactly one referent — a change event in
-   journal or batch, a prior removed event for cleanups, or a proposal slug for epics.
+1. Every ok create pairs exactly one `task_created` with exactly one referent event — a change
+   event in journal or batch, the removal event for cleanups, or the registered event for epics.
+   The retired "or a proposal slug" arm survives only in legacy lines already on disk.
 2. No receipt references an eid that neither the journal nor the batch contains.
 3. The batch minus already-present lines is what lands — re-running the same pair appends nothing,
    because eids derive from `(git_head, op_id)`.
@@ -161,10 +175,11 @@ the point the adapter stopped rather than a rollback of the whole batch. Gating 
 the snapshot's job, not the journal's — the journal may run ahead of the snapshot until the
 completing re-run, and only in that direction.
 
-## Sole writer, no tracker
+## One write path, no tracker
 
-Reconciler (with RefreshHandler, its refresh-mode sibling) is the only writer of
-`spec/.history.jsonl`. Emit folds the journal — parent resolution, epic recognition — and never
+Reconciler (with RefreshHandler, its refresh-mode sibling) appends through the map module's
+MappingStore — the journal's writer-owner, whose one primitive also serves the proposal
+Registrar's `registered` event. Emit folds the journal — parent resolution, epic recognition — and never
 writes it. That asymmetry is deliberate: a failed emit that never reaches ingest must leave the
 journal byte-identical, so the next emit re-derives the same view and the run is retryable.
 

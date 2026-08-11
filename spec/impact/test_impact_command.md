@@ -16,7 +16,7 @@ Tests use a temporary directory containing:
    - `merkle/arch_hasher.md` modified (impact: arch_impl) — component Hasher
    - `merkle/arch_diff_engine.md` removed (impact: arch_impl) — component DiffEngine
 
-4. **A journal** at `<spec-dir>/.history.jsonl`. It is what ties a task to a spec node — the task's own label carries the same hash, and the two sources must agree. The store validates each line against the journal-line schema on read; a malformed line is refused with `impact: read journal: map: journal line <n>: …` and exit 1. Three pairings:
+4. **A journal** at `<spec-dir>/.history.jsonl`. It is the sole source of what ties a task to a spec node — the bead file below contributes status only. The store validates each line against the journal-line schema on read; a malformed line is refused with `impact: read journal: map: journal line <n>: …` and exit 1. Three pairings:
 
 ```json
 {"event":"added","eid":"<E1>","node":"<SCHK_HASH>","name":"SchemaChecker","node_type":"component","module":"validator","before":null,"after":"<SCHK_SPEC_SHA>","git_head":"<HEAD>","proposal":"<P>"}
@@ -32,14 +32,14 @@ Tests use a temporary directory containing:
 ```json
 {
   "issues": [
-    {"id": "spex-001", "status": "open",   "labels": ["spex:<SCHK_HASH>"]},
-    {"id": "spex-003", "status": "open",   "labels": ["spex:<HASR_HASH>"]},
-    {"id": "spex-010", "status": "open",   "labels": ["spex:<DIFF_HASH>"]}
+    {"id": "spex-001", "status": "open",   "labels": ["spex:<HEAD>:op-1"]},
+    {"id": "spex-003", "status": "open",   "labels": ["spex:<HEAD>:op-2"]},
+    {"id": "spex-010", "status": "open",   "labels": ["spex:<HEAD>:op-3"]}
   ]
 }
 ```
 
-The `spex:<spec_node_id>` label carries the node's identity hash and nothing else. Each bead's `status` is joined onto the fold's pairing whose node key is that hash, and a bead with no live-form `spex:` label is dropped without comment. The cleanup scenario uses a variant of this file in which `spex-010` reads `"status": "closed"`.
+The labels are present because real tracker output carries them; the command reads none of them. Each bead's `status` is joined onto the fold's pairing whose `task_id` matches the bead's `id`, and a bead whose id no pairing references contributes nothing, without comment. The cleanup scenario uses a variant of this file in which `spex-010` reads `"status": "closed"`.
 
 ## Scenarios
 
@@ -165,13 +165,13 @@ Run `spex impact --diff diff.json --beads nonexistent_file.json`. Assert:
 
 An unreadable bead file is fatal, unlike an omitted one: a caller who asked for live status and did not get it is not silently given a report computed without it.
 
-### E2: Bead file parses but names no spec-managed bead
+### E2: Bead file parses but names no bead the fold knows
 
-Provide a `--beads` file that is a valid JSON array in which no object carries a `spex:` label. Assert:
-- Exit code is 0 — an empty result is not an error
-- Every bead in the file is dropped, no pairing gains a status, and the report matches the S9 run with `--beads` omitted
+Provide a `--beads` file that is a valid JSON array whose bead ids appear in no journal pairing. Assert:
+- Exit code is 0 — an empty join is not an error
+- No pairing gains a status, and the report matches the S9 run with `--beads` omitted
 
-Provide a second file in which one object has no `id` at all. Assert exit code 1 and an error naming the offending index — a bead with no id is malformed input, not an unmanaged bead to skip.
+Provide a second file in which one object has no `id` at all. Assert exit code 1 and an error naming the offending index — a bead with no id is malformed input, not an unpaired bead to skip.
 
 ### E3: Bead file holds malformed JSON
 
@@ -200,11 +200,11 @@ If `spex impact` is run twice simultaneously against the same spec directory, jo
 
 Provide a diff referencing modules that do not exist in the spec tree. Assert that unmatched changes are reported (creates for added nodes) and no panics occur due to missing module.json files.
 
-### E8: Bead file carries two beads claiming the same node
+### E8: Bead file carries duplicate ids
 
-Provide a `--beads` file holding two beads with different ids but the same `spex:<HASR_HASH>` label, one open and one closed. Assert the command exits 0 rather than reporting a conflict, and that the pairing for `<HASR_HASH>` ends up with the status of the bead that appeared **last** in the file — the join keeps one status per node key and later entries overwrite earlier ones. Order is preserved from the input, so the outcome is deterministic, not arbitrary.
+Provide a `--beads` file holding two entries with the same `id`, one open and one closed. Assert the command exits 0 rather than reporting a conflict, and that the pairing whose `task_id` is that id ends up with the status of the entry that appeared **last** in the file — the join keeps one status per task id and later entries overwrite earlier ones. Order is preserved from the input, so the outcome is deterministic, not arbitrary.
 
-Also provide a bead carrying two live-form `spex:` labels, `spex:<SCHK_HASH>` and `spex:<HASR_HASH>`. Assert the first one that reads as a 12-hex hash or a dated slug wins and the rest are ignored, and that a bead whose only `spex:` labels are inert forms (`spex:42`, `spex:obsolete`, bare `spex:cleanup`) is dropped from the result silently — exactly as a bead carrying no `spex:` label is.
+Also assert that whatever labels the entries carry — current `spex:<eid>` forms, legacy `spex:<hash>` or `spex:42` forms, markers like `spex:obsolete` — has no effect on the join: labels are adapter-facing keys the command never reads.
 
 ### E9: Diff input contains errors — impact refuses to proceed
 

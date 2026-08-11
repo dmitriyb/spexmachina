@@ -39,14 +39,25 @@ An added, modified or removed api therefore yields zero actions, and the reason 
 | Spec Change | Existing Bead? | Action |
 |-------------|---------------|--------|
 | added | no | **create** new bead |
-| added | yes (unexpected) | **obsolete** old bead + **create** new bead |
+| added | yes, already tracked (see below) | no action |
+| added | yes, hashes differ | **obsolete** old bead + **create** new bead |
 | modified | no | **create** new bead |
-| modified | yes | **obsolete** old bead + **create** new bead |
+| modified | yes, already tracked (see below) | no action |
+| modified | yes, hashes differ | **obsolete** old bead + **create** new bead |
 | removed | no | no action |
 | removed | yes, open/in_progress | **obsolete** old bead |
 | removed | yes, closed | **obsolete** old bead + **create** cleanup bead |
 
-The "review" action is eliminated. Any spec change to a node with an existing bead always obsoletes the old bead. If the node still exists (added or modified), a fresh bead is created.
+**Already tracked**: a matched `added` or `modified` change whose open pairing's sourcing event
+records an `after` hash equal to the change's current hash yields no action. The journal already
+pairs a live task with exactly this state; the change resurfaced only because a partial run left
+the snapshot unsaved, not because new work exists. This one cell is what makes the re-run story
+true — the impact report after a partial ingest carries only the ops whose pairings never landed,
+so emit's fresh labels can never obsolete-and-duplicate work a prior run already created. When the
+hashes differ the node genuinely changed since its last pairing, and the pair rule below applies.
+
+The "review" action is eliminated. Any spec change to a node with an existing bead that is not
+already tracked obsoletes the old bead. If the node still exists (added or modified), a fresh bead is created.
 
 ## DepSpecNodeIDs Collection
 
@@ -75,7 +86,7 @@ An `Action` is a decision about *what happened to a spec node*, never an instruc
 | parent (the proposal epic) | Resolver |
 | dep refs resolved from a create's `DepSpecNodeIDs`, and whether each takes the `ref:op` or `ref:bead` shape | Resolver |
 | the extra `ref:bead` lineage dep on a modify pair's create op, derived from that create's old bead id | ChangesetBuilder, appending it after Resolver has returned |
-| the idempotency label — a pure function of the op's own spec_node_id, identical across a modify pair by construction | IdempotencyLabeler |
+| the idempotency label — `spex:<eid>` of the op's referent journal event, distinct across a modify pair by construction | IdempotencyLabeler |
 | priority, via the `implements → preq_id → priority` chain | Resolver |
 | op ordering and `op_id` assignment | TopologicalSorter |
 

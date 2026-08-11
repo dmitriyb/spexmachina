@@ -47,11 +47,14 @@ Exit code 0. Empty array `[]` if the journal is absent or holds no task-bearing 
 The same key shapes apply. Alone among the three, its payload is indented rather than printed on a
 single line.
 
-A live node resolves entirely from the spec: the resolver discovers the declaring module, reads the
-component's own `content` for the arch file, and scans `describes`/`uses` arrays for the test and
-flow paths. A removed node resolves from the journal: name, node type, module, removing proposal,
-last task, and the `git_head` refs bracketing its final change — which is what turns a
-`spex:cleanup-<hash>` label from a dead end into a `git show` away from full context.
+A live node's files resolve entirely from the spec: the resolver discovers the declaring module,
+reads the component's own `content` for the arch file, and scans `describes`/`uses` arrays for the
+test and flow paths. Every answer — live or removed — also carries the event bracket off the
+node's latest task-bearing journal event: `eid`, `event`, `before_head`, `after_head`, so a
+consumer sees the change (`git diff <before_head> <after_head> -- <leaves>`), not just the state.
+A removed node resolves from the journal: name, node type, module, removing proposal, last task,
+and the same bracket off its `removed` event — which is what keeps a cleanup task, whose journal
+pairing references that removal event, a `git show` away from full context.
 
 ```
 $ spex map context a1b2c3d4e5f6
@@ -59,11 +62,16 @@ $ spex map context a1b2c3d4e5f6
   "arch_file": "spec/impact/arch_action_classifier.md",
   "test_files": ["spec/impact/test_classification_reporting.md"],
   "flow_files": ["spec/impact/flow_impact_analysis.md"],
-  "module_file": "spec/impact/module.json"
+  "module_file": "spec/impact/module.json",
+  "eid": "cafe1234:op-7",
+  "event": "modified",
+  "before_head": "beef5678",
+  "after_head": "cafe1234"
 }
 ```
 
-All from one key, all deterministic, nothing read from a cache. Exit code 0 on success, 1 if the
+All from one key, all deterministic, nothing read from a cache; existing keys keep their meaning,
+so the output is a superset of the pre-bracket shape. Exit code 0 on success, 1 if the
 key is unknown to both spec and journal or a module.json is unreadable.
 
 ## Interface
@@ -109,10 +117,12 @@ tracker.
 
 This is not a scope decision that could be revisited subcommand by subcommand — it follows from
 where journal events come from. A change event is born from a changeset op at baselining; a receipt
-is born from the adapter's report of what the tracker did. An event written by `spex map` would
-have no op behind it, no receipt, and no task carrying its label — a forged line in a file whose
-whole value is that every line traces to a pipeline run. So MapCommand is the query face of a
-journal whose write path runs through `ingest`; skills read spec context through it, nothing writes
+is born from the adapter's report of what the tracker did; a `registered` event is born from a
+registration. An event written by `spex map` would
+have no op behind it, no receipt, and no lifecycle it opens — a forged line in a file whose
+whole value is that every line traces to a pipeline run or a registration. So MapCommand is the
+query face of a journal whose every append runs through MappingStore's writer-owner primitive on
+behalf of `ingest` or the Registrar; skills read spec context through it, nothing writes
 through it.
 
 ### A node is the only thing addressable

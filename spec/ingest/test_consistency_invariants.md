@@ -8,8 +8,10 @@ complete run leaves `spec/.history.jsonl` AND the snapshot both updated and sche
 
 ## The Five Invariants
 
-1. Every ok create pairs exactly one `task_created` receipt with exactly one referent — a change
-   event, a prior `removed` event (cleanup creates), or a proposal slug (epic creates).
+1. Every ok create pairs exactly one `task_created` receipt with exactly one referent event — a
+   change event, the `removed` event the cleanup answers (prior-batch or same-batch), or the
+   proposal's `registered` event (epic creates). A `proposal`-keyed receipt with no `for` is a
+   legacy line read as inert history, never constructed anew.
 2. No receipt references an event id the journal does not contain.
 3. Re-running the same changeset+receipts pair appends nothing — event ids derive from
    `(git_head, op_id)`.

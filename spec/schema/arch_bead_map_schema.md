@@ -2,7 +2,8 @@
 
 The journal-line JSON Schema definition. It validates each line of `spec/.history.jsonl` — the
 task journal linking spec nodes to tasks — and those line shapes are the whole of
-[[f7ef8bef0ba1|what the journal may hold]]: change events, receipt events, and nothing else.
+[[f7ef8bef0ba1|what the journal may hold]]: change events, the registered event, receipt
+events, and nothing else.
 
 ## Scope
 
@@ -12,12 +13,18 @@ Defines the JSON Schema for one journal line, covering:
   `name`, `node_type`, `module`, `before`, `after`, `git_head`, `proposal`, and an optional
   `path` — the node's content-leaf path, present when the node has one. `before` and `after`
   admit `null` — an add has no before, a removal no after.
-- **Task receipts**: `event` drawn from `task_created` / `task_closed`, plus `task_id` and exactly
-  one of `for` (an `eid`) or `proposal` (a slug — the epic case).
+- **Registered event**: `event: "registered"`, plus `eid` (of the form `<git_head>:<slug>`),
+  `proposal` (the slug), and `git_head`. No `node` field — registration opens a proposal's
+  lifecycle before any spec change exists, and the epic's `task_created` references this event.
+- **Task receipts**: `event` drawn from `task_created` / `task_closed`, plus `task_id` and a
+  `for` (an `eid`). A `task_created` carrying a `proposal` slug instead of `for` remains
+  admitted as a legacy shape: pre-migration epic lines validate as inert history, but no new
+  append uses it.
 - **Refresh receipts**: `event: "refresh"`, `git_head` (admitting recorded absence), `absorbed`
   (an array of `eid`s).
-- **Format constraints**: `node` is constrained to the 12-character identity-hash pattern; an
-  epic receipt's `proposal` carries the slug-shaped reference instead. `node_type` is the closed
+- **Format constraints**: `node` is constrained to the 12-character identity-hash pattern; a
+  *legacy* epic receipt's `proposal` carries the slug-shaped reference instead — current epic
+  receipts reference the registered event through `for` like every other receipt. `node_type` is the closed
   enum of node kinds a change event may describe — the task-owning kinds `component`,
   `data_flow`, `test_section`, plus `requirement` and `api`, which only refresh-born events
   carry — and each line is a self-contained object: there is no envelope, no counter, and no integer id anywhere
@@ -28,9 +35,10 @@ Defines the JSON Schema for one journal line, covering:
 ### Single key format across the pipeline
 
 A change event's `node` is that node's identity hash. The merkle tree keys its leaves by the same
-identity hash, and the tracker labels carry it too (`spex:<spec_node_id>`). This means impact
-analysis joins a changed merkle node against the journal fold — and against parsed bead labels —
-with no key translation anywhere. Earlier formats used `<module>/<node_type>/<integer_id>` keys
+identity hash, so impact analysis joins a changed merkle node against the journal fold with no key
+translation anywhere. Tracker labels carry the *event* id instead (`spex:<eid>`) — an
+adapter-facing idempotency key spex reads nothing from, so no label ever needs parsing back into a
+node key. Earlier formats used `<module>/<node_type>/<integer_id>` keys
 that required rekeying between merkle and the retired bead-map; that translation layer died when
 identity hashes were introduced, and the journal keeps the single-format property.
 
@@ -38,9 +46,10 @@ identity hashes were introduced, and the journal keeps the single-format propert
 
 The enum is the schema's own statement of what a change event may describe: the task-owning kinds
 (component, data_flow, test_section) plus the refresh-absorbable ones (requirement, api) —
-proposals appear only in receipts, as slugs. Task receipts pair only with events of task-owning
-kinds; requirement and api events exist so refresh absorption is on the record, never to mint
-tasks. A
+a proposal is never a change event's subject; it appears as the slug on the `registered` event
+that opens its lifecycle. Task receipts pair with events of task-owning kinds and, for epics,
+with the registered event; requirement and api events exist so refresh absorption is on the
+record, never to mint tasks. A
 kind of spec content that exists only as part of a component's contract has no entry, because it
 never owns a task of its own — it reaches the tracker inside the task of the component it belongs
 to.

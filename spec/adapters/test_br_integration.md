@@ -20,7 +20,7 @@ fi
 - Assertions:
   - All 5 ops land as receipts.
   - `br list --json` output matches expected beads (count, statuses, labels).
-  - `spex:<spec_node_id>` labels present on new beads.
+  - `spex:<eid>` labels present on new beads — each op's referent event id, `<git_head>:<op_id>`.
   - `spex:obsolete` + `commit:<HEAD>` labels present on the closed beads.
   - Receipts top-level status: complete.
 

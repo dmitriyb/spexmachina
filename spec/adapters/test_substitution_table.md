@@ -40,9 +40,9 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 - op-0005 deps on op-0004 (ref:op). op-0004 errored.
 - Expected: op-0005 receipt `status=error`, error message `"dependency op-0004 errored; cannot resolve op ref"`. op-0005 is NOT executed against br.
 
-### Ref to skipped op (was_existing=true) still resolves
+### Ref to an idempotent re-match (was_existing=true) still resolves
 
-- op-0003 was a create, receipted skipped with was_existing=true and bead_id=br-10 (the existing bead). op-0005 deps on op-0003.
+- op-0003 was a create whose label matched an existing bead: receipted `ok` with was_existing=true and bead_id=br-10 (the existing bead). op-0005 deps on op-0003.
 - Expected: op-0005's deps resolve op-0003 → br-10; execution proceeds normally.
 
 ### Forward ref before table has entry (programmer error)

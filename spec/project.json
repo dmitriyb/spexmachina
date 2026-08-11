@@ -230,7 +230,10 @@
       "id": "51016138121c",
       "name": "proposal",
       "path": "proposal",
-      "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates."
+      "description": "Proposal lifecycle management: registration, structure validation, history tracking, templates.",
+      "requires_module": [
+        "fb20a21b62f1"
+      ]
     },
     {
       "id": "8f2beb43e606",

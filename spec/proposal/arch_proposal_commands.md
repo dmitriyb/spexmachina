@@ -4,9 +4,10 @@ CLI entry points for proposal management: `spex register`, `spex log`, `spex tem
 
 ## Responsibilities
 
-- `spex register`: take the proposal path off the command line and hand it to
+- `spex register`: take the proposal path and the caller-supplied git head off the command line
+  and hand them to
   [[24180f55c0b4|Registrar]], which decides both whether the file is accepted and what it ends up
-  being called
+  being called, and appends the `registered` journal event that opens the proposal's lifecycle
 - `spex log`: read the tracker's bead data from stdin and parse it, then hand the records to
   [[97f73ced5a02|HistoryViewer]] — the reading and parsing are this component's half of that
   surface, the grouping and rendering are the viewer's
@@ -51,7 +52,10 @@ pipe.
 
 ## `spex register` interface
 
-[[2b62ad5e8ef2|Register proposal]] at the command layer. On success the command writes one line to
+[[2b62ad5e8ef2|Register proposal]] at the command layer. The command carries a `--git-head <sha>`
+flag — the caller supplies `$(git rev-parse HEAD)` from their shell, exactly as for `spex emit`,
+because spex never calls git; the head feeds the registered event's `<git_head>:<slug>` eid. On
+success the command writes one line to
 stdout, `registered: <spec-dir>/proposals/<filename>`. The filename half is the basename Registrar
 chose rather than one the command derived, and the directory half is the spec directory this run
 resolved — so a run pointed elsewhere by `--spec-dir` names the path it actually wrote. On a refused proposal the command
@@ -66,7 +70,7 @@ so `spex template change > my-proposal.md` is the intended way to start one.
 ## Interface
 
 ```
-spex register <proposal-path>
+spex register <proposal-path> --git-head <sha>
 spex log [--proposal <ref>] [--json]   # reads bead data on stdin
 spex template <project|change>
 ```

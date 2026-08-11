@@ -152,8 +152,9 @@ failures return a structured error and no summary.
 
 For the full construction table, see `arch_reconciler.md`. Summary:
 
-- ok create → change event plus `task_created`; cleanup creates pair with the prior `removed`
-  event instead, epic creates carry a proposal slug and no event.
+- ok create → change event plus `task_created`; cleanup creates pair with the `removed` event
+  they answer (prior-batch or same-batch), epic creates pair with the proposal's `registered`
+  event — every receipt references an event.
 - ok create / was_existing=true → same lines constructed; already-present lines (matched by
   derived event id) are dropped, so a true duplicate appends nothing and adapter-side recovery
   appends the missing pairing.

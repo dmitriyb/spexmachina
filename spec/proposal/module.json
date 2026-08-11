@@ -7,7 +7,7 @@
       "preq_id": "b42bc8a9b82a",
       "type": "functional",
       "title": "Register proposal",
-      "description": "Copy or link a proposal file to spec/proposals/, validate that required sections are present (Vision, Modules, Key requirements, Design decisions for project proposals; Context, Proposed change, Impact expectation for change proposals)."
+      "description": "Copy or link a proposal file to spec/proposals/, validate that required sections are present (Vision, Modules, Key requirements, Design decisions for project proposals; Context, Proposed change, Impact expectation for change proposals). A successful registration also appends the registered event that opens the proposal's lifecycle to the task journal — {\"event\":\"registered\",\"eid\":\"<git_head>:<slug>\",\"proposal\":\"<slug>\",\"git_head\":\"<head>\"} — through the map module's MappingStore, the journal's writer-owner: the module that starts a lifecycle records its start, and the proposal epic's task_created later references this event. The git head is caller-supplied, never read from git by spex; the append is idempotent by eid, so a recovery re-run appends nothing."
     },
     {
       "id": "2e38135487be",
@@ -42,7 +42,7 @@
     {
       "id": "24180f55c0b4",
       "name": "Registrar",
-      "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present.",
+      "description": "Copies or links a proposal file to spec/proposals/ and validates that required sections are present. On success, appends the registered event that opens the proposal's lifecycle to the task journal through the map module's MappingStore — idempotent by eid, with the git head supplied by the caller.",
       "content": "arch_registrar.md",
       "implements": [
         "2b62ad5e8ef2",
@@ -90,7 +90,7 @@
     {
       "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file \u2192 register (validate + copy) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
+      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
         "24180f55c0b4",
