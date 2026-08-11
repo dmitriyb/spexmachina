@@ -12,32 +12,37 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Create: first run
 
-- Changeset with one create op, idempotency.label = `spex:100`.
+- Changeset with one create op, idempotency.label = `spex:cafe1234:op-1`.
 - br sandbox empty.
 - Expected: `br create` invoked; new bead created; receipt `was_existing=false`, `bead_id=<new>`, `status=ok`.
 
 ### Create: re-run matches existing
 
-- Same changeset, same label `spex:100`.
-- br sandbox has a bead with label `spex:100` (from a prior run).
-- Expected: `br create` NOT invoked; `br list --json | jq` locates the existing bead; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`.
+- Same changeset, same label `spex:cafe1234:op-1`.
+- br sandbox has a bead with label `spex:cafe1234:op-1` (from a prior run).
+- Expected: `br create` NOT invoked; the status-unfiltered probe (`br list --json --all --limit 0 --label …`) locates the existing bead; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`.
+
+### Create: re-run matches a closed bead too
+
+- Same changeset, same label. The sandbox bead carrying `spex:cafe1234:op-1` is `status=closed`.
+- Expected: still a match — exact label, any status; `br create` NOT invoked; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`. The open-only filter died with the node-keyed labels whose collisions it dodged: a bead carrying this exact eid label, whatever its status, can only be this op's own earlier product.
 
 ### Create: label mismatch surfaces as new create
 
-- Changeset label `spex:<hash-A>`. Sandbox has a bead with label `spex:<hash-B>` (a different node's hash).
+- Changeset label `spex:<eid-A>`. Sandbox has a bead with label `spex:<eid-B>` (a different event's eid — including a closed modify-pair predecessor, whose label is a different eid by construction).
 - Expected: `br create` invoked; new bead; receipt `was_existing=false`.
 
 ### Create: cleanup-bead production
 
-- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cleanup-abc123def456"`, `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
+- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cafe1234:op-9"` (the eid of the removal event the same-batch close op `op-9` implies), `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
 - br sandbox empty.
-- Expected: idempotency check via `br list --json --label spex:cleanup-abc123def456` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:cleanup-abc123def456 --type task --json --priority 3 --deps blocks:spexmachina-old`, then `br update <new> --add-label spex:cleanup`. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains both `spex:cleanup` and `spex:cleanup-abc123def456`.
-- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` is what marks a bead as cleanup bookkeeping — its journal receipt pairs with the removal event it answers rather than a fresh change event, and any tracker-side query for cleanup work keys off it; the unique label `spex:cleanup-<spec_node_id>` provides re-run idempotency that pre-decouple lacked. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
+- Expected: idempotency check via `br list --json --all --limit 0 --label spex:cafe1234:op-9` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:cafe1234:op-9 --type task --json --priority 3 --deps blocks:spexmachina-old`, then `br update <new> --add-label spex:cleanup`. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains both `spex:cleanup` and `spex:cafe1234:op-9`.
+- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` is what marks a bead as cleanup bookkeeping — its journal receipt pairs with the removal event it answers rather than a fresh change event, and any tracker-side query for cleanup work keys off it; the idempotency label is that removal event's own eid, so the linkage key and the receipt's referent are one fact. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
 
 ### Create: cleanup-bead re-run is idempotent
 
-- Same changeset as above. Sandbox already has a bead with label `spex:cleanup-abc123def456` (from a prior run).
-- Expected: `br create` NOT invoked; `br list --json --label spex:cleanup-abc123def456` finds the existing bead; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`.
+- Same changeset as above. Sandbox already has a bead with label `spex:cafe1234:op-9` (from a prior run).
+- Expected: `br create` NOT invoked; `br list --json --all --limit 0 --label spex:cafe1234:op-9` finds the existing bead; receipt `was_existing=true`, `bead_id=<existing>`, `status=ok`.
 - This is what pre-decouple lacked — `createCleanupBead` had no idempotency check and would create duplicates on every re-run.
 
 ### Close: first run
@@ -66,7 +71,7 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 - Changeset with 3 creates (2 new, 1 matching existing) and 2 closes (1 open, 1 already-obsoleted).
 - Run adapter once. Assert all 5 receipts match expectations.
 - Run adapter AGAIN with the same inputs.
-- Expected: second run's receipts all show `was_existing=true` / `status=skipped` as appropriate; tracker state is identical before and after the second run.
+- Expected: second run's receipts show `status=ok` with `was_existing=true` on every create and `status=skipped` (`"already obsoleted"`) on every close; tracker state is identical before and after the second run.
 
 ## Fixtures
 

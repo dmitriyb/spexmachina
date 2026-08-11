@@ -48,20 +48,25 @@ into spex's own files.
 ## Parent Resolution
 
 The proposal epic is the parent of every non-epic create in the run, and [[79c821e01654|the
-journal fold is consulted first for which epic that is]]:
+journal fold is consulted first for which epic that is]]. The epic's identity is the proposal's
+`registered` event — the fold answers both that event and any epic task already paired to it:
 
-- If the proposal is **new** (no epic task in the fold for this slug), the epic is also a new
-  create op (the first op). Each subsequent create's `parent` is `{ref:op,op_id:"<epic op>"}`.
-- If the proposal **already has an epic task** in the fold (re-run of a partial run, or
-  idempotent re-emit), the epic op is skipped; each create's `parent` is
+- If the proposal has a registered event but **no epic task** paired to it, the epic is a new
+  create op (the first op), labeled with the registered event's eid. Each subsequent create's
+  `parent` is `{ref:op,op_id:"<epic op>"}`.
+- If the fold **already pairs an epic task** with the registered event (re-run of a partial run,
+  or idempotent re-emit — including legacy epics whose pairing reaches the fold through its
+  read-only legacy branch), the epic op is skipped; each create's `parent` is
   `{ref:bead,bead_id:"<existing epic task>"}`. An epic that already exists wins over an in-batch
   one, so a re-run that misread the epic as new still parents its creates under the task that is
   already there.
+- If the journal holds **no registered event** for the proposal, that is an emit error naming the
+  slug: registration opens the lifecycle, so the fix is `spex register`, not a synthesized epic.
 
 The epic's own `spec_node_id` is synthetic: no node in the spec tree corresponds to it, so the
 value carried in `changeset.json` is the proposal ref itself rather than a 12-hex identity hash,
 and a reader can tell the epic apart from every other create by that shape alone — as can the
-fold, which lists epics keyed by slug.
+fold, which lists epics keyed by the slug the registered event carries.
 
 ## Priority
 

@@ -7,7 +7,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Reconcile per-op receipts",
-      "description": "For every ok receipt, append journal events. A create receipt appends the change event — node identity, leaf hashes, git_head from the changeset — and a task_created receipt pairing it to the tracker id; cleanup creates pair with the prior removed event, epic creates pair with the proposal slug. An ok close on a removed node appends the removed event and a task_closed receipt. A modified node's close+create pair appends the modified event plus both receipts; the old pairing stays in the journal as lineage. Receipts with status=error append nothing."
+      "description": "For every ok receipt, append journal events. A create receipt appends the change event — node identity, leaf hashes, git_head from the changeset — and a task_created receipt pairing it to the tracker id; cleanup creates pair with the removal event they answer — the journal's latest removed event for the node, or the one their batch's close implies — epic creates pair with the proposal's registered event; every receipt references an event. An ok close on a removed node appends the removed event and a task_closed receipt. A modified node's close+create pair appends the modified event plus both receipts; the old pairing stays in the journal as lineage. Receipts with status=error append nothing."
     },
     {
       "id": "16dbbee94e88",
@@ -28,7 +28,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Mapping consistency invariants",
-      "description": "After ingest runs, the journal satisfies: (1) every ok create has exactly one task_created receipt paired to exactly one referent — a change event, a prior removed event for cleanups, or a proposal slug for epics; (2) no receipt references an event id the journal does not contain; (3) re-running the same changeset+receipts pair appends nothing, because event ids derive from git_head and op_id; (4) the snapshot is saved iff receipts are complete, so journal and snapshot describe the same point-in-time state; (5) every appended line validates against the journal-line schema before the write. The retired store invariants — one record per node, modify rebinds the record — are void by construction over an append-only log: lineage replaces them. Ingest asserts these invariants and returns a structured error if any fails."
+      "description": "After ingest runs, the journal satisfies: (1) every ok create has exactly one task_created receipt paired to exactly one referent event — a change event, the removal event for cleanups, or the registered event for epics; (2) every task_created references an existing event — the retired \"or proposal\" arm survives only in legacy lines already on disk, read behind the fold's read-only legacy branch and never appended anew; (3) re-running the same changeset+receipts pair appends nothing, because event ids derive from git_head and op_id; (4) the snapshot is saved iff receipts are complete, so journal and snapshot describe the same point-in-time state; (5) every appended line validates against the journal-line schema before the write. The retired store invariants — one record per node, modify rebinds the record — are void by construction over an append-only log: lineage replaces them. Ingest asserts these invariants and returns a structured error if any fails."
     },
     {
       "id": "ffab5d1337ac",
@@ -49,7 +49,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Re-run idempotency",
-      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id), so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Adapter-side idempotency rests on the spex:<spec_node_id> labels; journal-side idempotency rests on the derived event ids. No duplication, no unexpected obsoletion."
+      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id) — the same derivation emit uses to mint spex:<eid> labels — so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Idempotency is deterministic eids journal-side and receipts (op_id → bead_id) adapter-side: the label guards re-runs of one changeset, the receipts pair whatever landed. No duplication, no unexpected obsoletion."
     },
     {
       "id": "e68653819f38",
@@ -63,7 +63,7 @@
     {
       "id": "2b5158af774b",
       "name": "Reconciler",
-      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, a prior removed event (cleanups) or a proposal slug (epics), task_closed for closes. Asserts the journal invariants before the append commits, and the append is idempotent by derived event id, so re-processing a batch changes nothing.",
+      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, the removal event the cleanup answers (cleanups) or the registered event (epics), task_closed for closes; every receipt references an event. Appends through MappingStore's writer-owner primitive, dedups the epic's receipt by eid like every other line, and asserts the journal invariants before the append commits — the append is idempotent by derived event id, so re-processing a batch changes nothing.",
       "content": "arch_reconciler.md",
       "implements": [
         "539030e8c5a4",

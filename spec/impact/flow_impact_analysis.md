@@ -17,7 +17,7 @@ digraph impact_analysis {
     "beads.json"     -> "bec96486c6b2"  [label="--beads"];
     "merkle diff"    -> "06035e7f0c39"  [label="classified changes, on stdin or --diff <file>"];
     "spec/.history.jsonl" -> "06035e7f0c39"  [label="journal fold, read only"];
-    "bec96486c6b2"   -> "06035e7f0c39"  [label="live status, joined on spex:<spec_node_id>"];
+    "bec96486c6b2"   -> "06035e7f0c39"  [label="live status, joined by task id"];
     "06035e7f0c39"   -> "76d72cbe00f3"  [label="matched, unmatched, orphaned"];
     "spec dir"       -> "76d72cbe00f3"  [label="uses, requires_module, describes"];
     "76d72cbe00f3"   -> "60d4747021ec"  [label="actions"];
@@ -28,7 +28,7 @@ digraph impact_analysis {
 The four solid nodes are the components this flow is made of; everything dashed is a file or a stream
 the flow reads or writes. [[bec96486c6b2|BeadReader]] is the only one of the four that touches tracker
 state, and it touches it as a file: the listing the caller redirected into `--beads`, never a command
-it ran itself. What it produces is joined onto the fold's pairings by label, and that join happens in
+it ran itself. What it produces is joined onto the fold's pairings by task id, and that join happens in
 memory on the way past: this flow reads `spec/.history.jsonl` and never writes it.
 [[06035e7f0c39|NodeMatcher]] is handed pairings that already carry a live status, and it passes that
 status through untouched. It joins those pairings to the diff's changes on identity hash and splits the
@@ -72,20 +72,18 @@ workflow: review the impact report, then approve the emit → adapter run.
 
 ### BeadReader → NodeMatcher
 
-What BeadReader hands back is one entry per spec-managed bead, and each entry
-carries four things and no more:
+What BeadReader hands back is one entry per bead, and each entry carries two
+things and no more:
 
   - bead id: the tracker's own id, `spexmachina-abc` and the like
-  - spec node id: the identity hash read out of the bead's `spex:<spec_node_id>` label
   - status: the bead's live status, exactly as the input reported it
-  - labels: the bead's full label list, kept for downstream filters
 
-The entry's spec node id IS the identity hash, straight off the label, so the
-join to a spec node is direct: each entry's status is copied onto the journal
-fold's pairing whose node key matches, and it is those enriched pairings —
-carrying a `bead_status` alongside the node key they already held — that reach
+No label is read: the fold's pairing already carries the task id its receipt
+recorded, so each entry's status is copied onto the journal fold's pairing
+whose task id matches, and it is those enriched pairings — carrying a
+`bead_status` alongside the node key they already held — that reach
 NodeMatcher. Pairings for which no bead was supplied arrive with that status
-unset.
+unset, and a bead the fold never names joins nothing.
 
 ### NodeMatcher → ActionClassifier
 

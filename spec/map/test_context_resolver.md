@@ -26,8 +26,9 @@ spec/
 - data_flow `444444444444`: uses [`aabbccddeeff`, `ffeeddccbbaa`], content "flow_pipeline.md"
 
 **Fixture journal:** an `added` event for each component with a `task_created` receipt
-(Parser → task `abc-123`), and for the removed-node cases a node `999999999999` (Widget,
-component, module alpha) with `added`, `task_created` (task `abc-777`), then `removed`
+(Parser → task `abc-123`, added at git_head `beef0001`), and for the removed-node cases a node
+`999999999999` (Widget, component, module alpha) with `added` (git_head `beef0001`),
+`task_created` (task `abc-777`), then `removed`
 (proposal `2026-08-01-task-journal`, git_head `cafe1234`).
 
 ## Scenarios
@@ -43,6 +44,29 @@ component, module alpha) with `added`, `task_created` (task `abc-777`), then `re
 - `ContextResult.TestFiles` contains `"spec/alpha/test_components.md"` (test_section `333333333333` describes [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.FlowFiles` contains `"spec/alpha/flow_pipeline.md"` (data_flow `444444444444` uses [`aabbccddeeff`, `ffeeddccbbaa`])
 - `ContextResult.ModuleFile` is `"spec/alpha/module.json"`
+- the bracket comes off Parser's latest task-bearing event: `Eid` and `Event` (`added`) are that
+  event's, `AfterHead` is `beef0001`, and `BeforeHead` is null — an add has no predecessor
+
+### S1b: Bracket follows the lineage's latest event
+
+**Given** the fixture journal extended with a `modified` event for Parser (git_head `cafe9999`)
+and its `task_created` receipt.
+
+**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
+
+**Then:** the file set is unchanged from S1; the bracket now reports the `modified` event —
+`AfterHead` is `cafe9999`, `BeforeHead` is `beef0001` (the preceding event's git_head), so a
+consumer can run `git diff beef0001 cafe9999 -- spec/alpha/arch_parser.md` instead of
+reconstructing the delta by hand.
+
+### S1c: Live node with no task-bearing event serves a null bracket
+
+**Given** the Builder component present in module.json but absent from the journal.
+
+**When** `ResolveContext(specDir, "ffeeddccbbaa")` is called.
+
+**Then:** the file set resolves from the spec exactly as in S1; `Eid`, `Event`, `BeforeHead` and
+`AfterHead` are all null. The file set never depends on the journal.
 
 ### S2: Resolve by task id reaches the same node
 
@@ -74,7 +98,7 @@ component, module alpha) with `added`, `task_created` (task `abc-777`), then `re
 
 **When** `ResolveContext(specDir, "999999999999")` is called.
 
-**Then:** the result carries no spec file paths and instead reports: name `Widget`, node_type `component`, module `alpha`, the removing proposal `2026-08-01-task-journal`, the last task `abc-777`, and the `git_head` refs bracketing its final change — everything needed to run `git show`/`git diff` for the retired leaf. Not an error.
+**Then:** the result carries no spec file paths and instead reports: name `Widget`, node_type `component`, module `alpha`, the removing proposal `2026-08-01-task-journal`, the last task `abc-777`, and the bracket off the `removed` event — its `eid` and `event`, `after_head` `cafe1234`, `before_head` `beef0001` — everything needed to run `git show`/`git diff` for the retired leaf, in the same bracket shape a live node serves. Not an error.
 
 ## Edge Cases
 

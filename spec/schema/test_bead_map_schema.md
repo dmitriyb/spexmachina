@@ -13,7 +13,7 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
 **Fixture: valid change event:**
 
 ```json
-{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}
 ```
@@ -21,10 +21,17 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
 **Fixture: valid task receipt:**
 
 ```json
-{"event":"task_created","for":"9f2c41a0b7d3","task_id":"spexmachina-abc"}
+{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}
 ```
 
-**Fixture: valid epic receipt:**
+**Fixture: valid registered event:**
+
+```json
+{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage",
+ "proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234"}
+```
+
+**Fixture: legacy epic receipt (admitted as inert history):**
 
 ```json
 {"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-0lk"}
@@ -33,21 +40,22 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
 **Fixture: valid refresh receipt:**
 
 ```json
-{"event":"refresh","git_head":"cafe1234","absorbed":["9f2c41a0b7d3"]}
+{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-7"]}
 ```
 
 ## Scenarios
 
 ### S1: Each fixture line passes validation
 
-**Input:** the four fixtures above, validated one line at a time.
-**Expected:** all pass. Every fixture is a complete, self-contained object.
+**Input:** the five fixtures above, validated one line at a time.
+**Expected:** all pass. Every fixture is a complete, self-contained object — the legacy epic
+receipt included, because pre-migration lines validate as inert history.
 
 ### S2: Unknown event value fails
 
 **Input:** the change-event fixture with `"event": "renamed"`.
 **Expected:** validation fails naming the enum constraint — the admitted values are exactly
-`added`, `removed`, `modified`, `task_created`, `task_closed`, `refresh`.
+`added`, `removed`, `modified`, `registered`, `task_created`, `task_closed`, `refresh`.
 
 ### S3: Change event missing `node` fails
 
@@ -59,7 +67,8 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
 **Input:** a change event with `"node": "not-a-hash"`, and another with `"node": "A1B2C3D4E5F6"`
 (uppercase).
 **Expected:** both fail — `node` is constrained to `^[a-f0-9]{12}$`. Slug-shaped references
-belong only in a receipt's `proposal` field.
+live in `proposal` fields (the registered event's, or a legacy receipt's) and inside the
+registered `eid`'s `<git_head>:<slug>` form — never in `node`.
 
 ### S5: `before`/`after` admit null but not absence
 
@@ -70,8 +79,16 @@ omitting the key fails.
 ### S6: Task receipt requires exactly one referent
 
 **Input:** a `task_created` with both `for` and `proposal`; another with neither.
-**Expected:** both fail. A receipt answers either a change event or a proposal slug — one, and
-only one.
+**Expected:** both fail. A receipt answers exactly one referent — an event's `eid` via `for`, or
+(legacy shape only, never appended anew) a proposal slug.
+
+### S6b: Registered event shape
+
+**Input:** the registered fixture; a variant omitting `proposal`; a variant omitting `eid`; a
+variant carrying a `node` field.
+**Expected:** the fixture passes; all three variants fail — registration opens a proposal's
+lifecycle before any spec change exists, so the shape requires `eid`, `proposal` and `git_head`
+and admits no `node`.
 
 ### S7: `node_type` is a closed enum
 

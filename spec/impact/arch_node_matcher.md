@@ -1,6 +1,6 @@
 # NodeMatcher
 
-[[d165e2fe215e|Correlating changed spec nodes with the beads that already track them]] is a single equality test here: the merkle diff and the bead labels name a node with the same identity hash, so a match is a direct lookup and nothing else.
+[[d165e2fe215e|Correlating changed spec nodes with the beads that already track them]] is a single equality test here: the merkle diff and the journal fold name a node with the same identity hash, so a match is a direct lookup and nothing else — the fold supplies every pairing, and no bead label is ever consulted.
 
 ## Responsibilities
 

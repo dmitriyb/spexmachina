@@ -14,8 +14,8 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 ### Ok create → event and receipt appended
 
-- Changeset: one create op, spec_node_id `abc123def456`, idempotency label `spex:abc123def456`,
-  git_head `cafe1234`.
+- Changeset: one create op, spec_node_id `abc123def456`, idempotency label
+  `spex:cafe1234:<op_id>` (the eid the event below will carry), git_head `cafe1234`.
 - Receipts: corresponding op receipt with `status: "ok"`, `bead_id: "br-new"`, `was_existing: false`.
 - Expected: the journal gains an `added` change event for node `abc123def456` (eid derived from
   `(cafe1234, <op_id>)`) and a `task_created` receipt with `for` naming that eid and
@@ -33,7 +33,8 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 ### Modified node: create+close → lineage extended, not rebound
 
 - Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0002`.
-- Changeset: create op for `beadbead0002` with label `spex:beadbead0002` and a `blocks` dep on
+- Changeset: create op for `beadbead0002` labeled `spex:<git_head>:<its op_id>` (the pair's
+  `modified` eid) and a `blocks` dep on
   `br-old`, then close op for `br-old` — emit's real ordering (creates before closes).
 - Receipts: both ok; create's `bead_id: "br-new"`, `was_existing: false`.
 - Expected: a `modified` change event for `beadbead0002`, a `task_closed` for `br-old`, a `task_created`
@@ -70,22 +71,31 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
   added event for Y with its task_created, and the removed event for B's node with its
   task_closed. The fold answers X → new task, no live entry for B's node, Y → its task.
 
-### Proposal-epic create → receipt keyed by slug, no spec-graph lookup
+### Proposal-epic create → receipt references the registered event, no spec-graph lookup
 
+- Initial journal: a `registered` event for the proposal
+  (`eid: "beef0001:2026-04-29-decouple-contract-gaps"`).
 - Changeset: one create op with `spec_node_kind: "proposal_epic"`,
   `spec_node_id: "2026-04-29-decouple-contract-gaps"` (the proposal stem),
-  `idempotency.label: "spex:2026-04-29-decouple-contract-gaps"`.
+  `idempotency.label: "spex:beef0001:2026-04-29-decouple-contract-gaps"` — the registered eid.
 - Receipts: `status: "ok"`, `bead_id: "br-epic"`, `was_existing: false`.
 - Spec graph: empty (the proposal stem is NOT a spec-graph node by design).
-- Expected: a `task_created` receipt carrying `proposal: "2026-04-29-decouple-contract-gaps"` and
-  no `for` — no change event is invented for it. The reconciler MUST NOT resolve the stem against
-  the spec graph; that lookup would fail because the stem is not in the identity-hash keyspace.
+- Expected: a `task_created` receipt with `for: "beef0001:2026-04-29-decouple-contract-gaps"` —
+  no change event is invented, and no `proposal`-keyed receipt is constructed. The reconciler
+  MUST NOT resolve the stem against the spec graph; that lookup would fail because the stem is
+  not in the identity-hash keyspace.
+
+### Proposal-epic create without a registered event → invariant failure
+
+- Same changeset as above, but the journal holds no `registered` event for the slug.
+- Expected: a structured error naming the slug and the missing referent; nothing appended. Emit
+  refuses to build such an op, so its arrival marks a malformed changeset.
 
 ### Cleanup create → receipt pairs with the prior removed event
 
 - Initial journal: a `removed` event for node `abc123def456` (eid `E1`), from a prior run.
 - Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"`,
-  `idempotency.label: "spex:cleanup-abc123def456"`.
+  `idempotency.label: "spex:E1"` — the removal event's own eid.
 - Receipts: `status: "ok"`, `bead_id: "br-cleanup"`, `was_existing: false`.
 - Expected: a `task_created` receipt with `for: "E1"` and `task_id: "br-cleanup"` — the cleanup
   task is born pointing at the removal it answers. No new change event.

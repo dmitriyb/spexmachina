@@ -16,7 +16,8 @@ digraph proposal_lifecycle {
     "spec/.snapshot.json"     [style=dashed];
     "97f73ced5a02"            [label="HistoryViewer\n97f73ced"];
 
-    "authored proposal"       -> "24180f55c0b4"            [label="spex register"];
+    "authored proposal"       -> "24180f55c0b4"            [label="spex register --git-head <sha>"];
+    "24180f55c0b4"            -> "spec/.history.jsonl"     [label="append registered event"];
     "24180f55c0b4"            -> "spec/proposals/<ref>.md" [label="validate sections, copy"];
     "spec/proposals/<ref>.md" -> "spec change"             [label="/spec"];
     "spec change"             -> "impact report"           [label="spex validate, diff, impact"];
@@ -35,8 +36,11 @@ a human or an LLM authored, the spec files `/spec` edits (`project.json`, `modul
 the reports and receipts the middle of the pipeline writes, and the beads themselves, which live in
 whatever tracker the user runs. Two of those artifacts carry more than their name says:
 `changeset.json` leads with the proposal-epic create op and follows it with the ordered bead ops,
-and `receipts.json` carries a bead id for every op the adapter actually executed. One step leaves
-two marks rather than one: `spex ingest` appends to the task journal, and on a run the adapter
+and `receipts.json` carries a bead id for every op the adapter actually executed. Two steps leave
+two marks rather than one. Registration writes the proposal copy and appends the `registered`
+event — through the map module's MappingStore, the journal's writer-owner — whose
+`<git_head>:<slug>` eid is what the epic's `task_created` will reference. And `spex ingest`
+appends to the task journal, and on a run the adapter
 reported complete it also rebaselines `spec/.snapshot.json` — the baseline the next `spex diff`
 measures against, so a partial run deliberately leaves the old one standing.
 
@@ -60,12 +64,14 @@ parented under that epic. That parentage is what HistoryViewer walks back.
 Each step is derived from the one before it, and each derivation is recorded:
 
 1. A conversation produces a proposal.
-2. The proposal drives a spec change.
-3. The spec change produces a merkle diff.
-4. The diff produces an impact report.
-5. The impact report produces a changeset.
-6. The changeset, executed, produces receipts.
-7. The receipts produce beads and their bead-map records.
+2. Registration records two marks: the file under `spec/proposals/` and the `registered` journal
+   event opening the lifecycle.
+3. The proposal drives a spec change.
+4. The spec change produces a merkle diff.
+5. The diff produces an impact report.
+6. The impact report produces a changeset.
+7. The changeset, executed, produces receipts.
+8. The receipts produce beads and their journal events.
 
 Any point in this chain can be traced forward or backward. The proposal is the
 anchor point that explains "why" a change was made; the changeset and receipts
@@ -90,8 +96,10 @@ coupled only by a filesystem naming convention on the proposal's stem
 - Registrar (`spex register`) copies the proposal to
   `spec/proposals/<stem>.md`. `<stem>` is the source filename if it already
   matches the dated convention, otherwise today's date plus a slug of the H1
-  heading. Nothing else is recorded — no timestamp, no title, no path —
-  anywhere.
+  heading. Beyond the copy, the only other mark is the `registered` journal
+  event keyed on that same stem — no timestamp, no title, no path is recorded
+  anywhere, and HistoryViewer reads neither the journal nor anything else
+  Registrar wrote beyond the file.
 - HistoryViewer (`spex log`) never reads anything Registrar wrote beyond that
   file: it groups beads by the `spec_proposal:<stem>` label already on each
   bead, then re-opens `spec/proposals/<stem>.md` at render time to read the
@@ -105,8 +113,9 @@ coupled only by a filesystem naming convention on the proposal's stem
   into the changeset's top-level `proposal` field
 - Carried by the proposal-epic create op: `spec_node_kind = "proposal_epic"`,
   `spec_node_id` = the reference itself (not an identity hash), title
-  `"Proposal: <ref>"`. Ingest materialises its mapping record with
-  `node_type = "proposal"` and no spec-graph lookup.
+  `"Proposal: <ref>"`. The op's idempotency label is `spex:<eid>` of the proposal's
+  `registered` event, read from the journal fold, and ingest pairs the epic's `task_created`
+  to that event through `for` — no spec-graph lookup, no side channel.
 - Used by HistoryViewer (`spex log`) to group beads under the proposal
 
 ### HistoryViewer → stdout

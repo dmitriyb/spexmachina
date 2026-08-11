@@ -1,84 +1,87 @@
 # IdempotencyLabeler
 
 Assigns each create op the `idempotency.label` [[0d468e176aaf|the adapter matches against the
-tracker before it creates anything]], so a re-run re-attaches to the task the last run made
-instead of making a second one. The label format depends on the action class — three branches:
-node-bearing (fresh and modify-pair alike), cleanup, epic. Every branch is a pure function of the
-action: no cursor, no store read, no state.
+tracker before it creates anything]], so a re-run of the same changeset re-attaches to the task
+the last run made instead of making a second one. One rule covers every action class: the label
+is `spex:<eid>` of the journal event the op's `task_created` will reference. Event ids are
+deterministic, which is what lets emit know them before ingest mints the events: no cursor, no
+store write, no state.
 
 ## Responsibilities
 
-- For each create action, return the appropriate label per the per-action rules below. Labeler is
-  **per-action**, not per-batch: the label depends on what the action looks like, not on the
-  action's position in the ordered batch.
+- For each create action, return `spex:<eid>` of the op's referent event, per the referent rules
+  below. Labeler is **per-action**, not per-batch: the label depends on what the action looks
+  like, not on the action's position in the ordered batch.
 - Surface assigned labels to ChangesetBuilder so each op's JSON carries its label.
 
-## Per-action rules
+## One rule, three referents
 
-| Action class | Discriminator | Label format |
-|--------------|---------------|--------------|
-| Node-bearing | the action targets a spec node — fresh creates and modify-pair creates alike | `spex:<spec_node_id>` — the node's own identity hash |
-| Cleanup      | the action's reason starts with `"Code cleanup:"` | `spex:cleanup-<spec_node_id>` |
-| Epic         | `spec_node_kind` is `proposal_epic` | `spex:<proposal-slug>` |
+| Action class | Discriminator | Referent event whose eid the label carries |
+|--------------|---------------|--------------------------------------------|
+| Node-bearing | the action targets a spec node — fresh creates and modify-pair creates alike | the change event ingest will mint, eid derived from `(git_head, op_id)` |
+| Cleanup      | the action's reason starts with `"Code cleanup:"` | the `removed` event the cleanup answers: the journal's latest `removed` event for the node, read from the fold, when the removal already landed — else the event its same-batch close implies, eid derived from the close op's `(git_head, op_id)`. The same resolution order the reconciler pairs the receipt by, so label and referent stay one fact |
+| Epic         | `spec_node_kind` is `proposal_epic` | the proposal's `registered` event, eid (`<git_head>:<slug>`) read from the journal fold |
 
-### Why fresh and modify-pair share one branch
-
-The retired integer-label scheme needed three behaviors: fresh creates consumed a counter,
-modify-pairs looked the old task's record up to reuse its integer, and the two could desynchronize
-(the reconciler's invariant 3 existed to catch exactly that). Under `spex:<spec_node_id>` the
-distinction dissolves: the node's identity hash does not change across a modify pair, so the
-replacement create carries the same label as the original *by construction*, with no lookup and no
-store dependency. The adapter's label probe still resolves to the open task when one exists, which
-is all modify-pair detection ever needed from the label.
-
-### Why cleanup uses a distinct prefix
-
-A cleanup task and the node's ordinary task must not collide on one label: the ordinary task
-tracks building the node, the cleanup task tracks dismantling what the removed node left behind,
-and both can exist in the tracker's history for the same hash. The `cleanup-` prefix keeps the two
-keyspaces disjoint while still carrying the removed node's identity — which the journal's
-`removed` event makes resolvable from day one.
+The label and the pairing are the same fact stated twice: whatever event the op's `task_created`
+will reference, that event's eid is the label. The retired scheme keyed labels on the *node*
+(`spex:<spec_node_id>`), which collides across a node's lifetime by construction and forced two
+compensations — the adapter's open-only filter and the `cleanup-` prefix — plus a third shape for
+epics, whose registration produced no event at all. Keying on the *event* dissolves all three: a
+label is unique per change, which is what a task is, so cleanup and ordinary tasks for the same
+node carry different labels because they reference different events, and the epic keys the event
+its lifecycle opened with.
 
 ## Why label-at-emit-time, not adapter-time
 
 The label is the adapter's idempotency key — it checks the tracker for a task carrying this label
-before creating. If two emit runs were to assign labels for the same spec node differently,
-re-runs could duplicate tasks. Computing labels deterministically at emit time keeps them stable —
-and because every branch is a pure function of the action, the determinism no longer depends on
-any persisted state. A failed emit that never reaches ingest changes nothing anywhere; the next
-emit derives byte-identical labels from the same input.
+before creating. Computing labels deterministically at emit time keeps them stable: the same
+changeset re-run derives byte-identical labels, so the adapter's exact-match probe re-attaches to
+whatever the earlier run already made. A failed emit that never reaches ingest changes nothing
+anywhere; re-emitting from the same inputs — the same impact report, journal and `--git-head` —
+produces the same labels.
+
+The label guards re-runs of one changeset; receipts guard recovery across changesets. An eid
+embeds the run's `git_head`, so a *fresh* emit at a moved HEAD mints fresh labels — which is
+correct, because that emit describes a new run — and the discipline for an aborted adapter run is
+already re-run-the-same-changeset, never re-emit-and-ingest-the-gap: the adapter that dies before
+writing receipts leaves nothing for ingest, and its receipts (`op_id → bead_id`), once written,
+are what pair every landed task. Journal-side, deterministic eids make ingest re-runs append
+nothing; adapter-side, receipts are the recovery mechanism.
 
 Partial runs compose the same way. Emit three fresh creates; the adapter lands the first two and
 fails the third; ingest appends the two pairings and — because the run was partial — writes no
-snapshot. The next diff recomputes against the same baseline, the impact report carries only the
-op that never landed, and its label is the same `spex:<spec_node_id>` again. The tracker holds no
-open task with that label, so the create goes through.
+snapshot. The next diff recomputes against the same baseline, and the impact report carries only
+the op whose pairing never landed, so nothing already journaled is re-created whatever label the
+new run mints for it.
 
 ## Interface
 
-Labeler is asked for one label at a time and answers with one label, or with an error for an
-action so malformed it has no spec_node_id to read. The builder passes that error straight up, so
-`spex emit` fails without writing a changeset rather than emitting an op whose idempotency key is
-a guess.
+Labeler is asked for one label at a time and answers with one label, or with an error — for an
+action so malformed it has no referent to derive (no spec_node_id to key an event from), and for
+an epic whose proposal has no `registered` event in the fold, which means the proposal was never
+registered: the fix is `spex register`, not a guessed label. The builder passes either error
+straight up, so `spex emit` fails without writing a changeset rather than emitting an op whose
+idempotency key is a guess.
 
 An earlier design reserved a flat block of N integer labels up front. It could not express
 per-action rules; the design after it read a cursor from the mapping store and kept invariant
-machinery to stop the cursor and the records desynchronizing. Deriving the label from the op
-retired both — there is nothing left to reserve, read, or desynchronize.
+machinery to stop the cursor and the records desynchronizing; the design after that keyed on the
+node and needed a prefix and a slug shape to dodge the collisions node-keying creates. Deriving
+the label from the referent event retired all of it — there is nothing left to reserve, read,
+prefix, or desynchronize.
 
 ## Conflict Avoidance
 
 - A label is only assigned to a *new* create op. Close ops, label ops, and tag ops do not get
   `spex:<...>` assigned (they reference existing tasks by `bead_id` or target spec_node_id).
-- Node-bearing labels are `spex:<12-hex>`; the hash has exactly one spelling, so a label
-  comparison is a string comparison.
-- The three branches produce disjoint label shapes (`spex:<hash>`, `spex:cleanup-<hash>`,
-  `spex:<slug>` — a slug is never 12 bare hex characters), so no two action classes can collide
-  on one tracker label.
-- Legacy `spex:<int>` labels on closed tasks are inert: no branch emits an integer form, and the
-  adapter's probe matches exact strings, so old labels can never capture a new create.
-- Cleanup labels are pure functions of `action.SpecNodeID`; identical inputs across runs produce
-  identical labels. The adapter's label lookup gives idempotent re-runs.
+- An eid has exactly one spelling, so a label comparison is a string comparison — the adapter's
+  probe matches exact strings with no parsing.
+- Two create ops can never share a label, because no two ops reference the same event: eids embed
+  the op id (or, for the epic, the registered event's slug), and event ids are unique in the
+  journal by construction.
+- Legacy `spex:<int>`, `spex:<spec_node_id>` and `spex:cleanup-<hash>` labels on existing tasks
+  are inert: no rule emits those shapes, and exact matching means old labels can never capture a
+  new create.
 
 ## Test surface
 

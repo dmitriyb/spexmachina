@@ -66,9 +66,11 @@ runs six steps in this order and writes one file:
    map the later steps need, are assigned from that order by ChangesetBuilder
    once the close ops have been counted.
 4. **Label them.** [[6f4b6dd8928f|IdempotencyLabeler]] answers with one label
-   per create action, each a pure function of the op: fresh and modify-pair
-   creates take `spex:<spec_node_id>`, a cleanup takes
-   `spex:cleanup-<spec_node_id>`, and an epic takes `spex:<proposal-slug>`.
+   per create action — `spex:<eid>` of the journal event the op's `task_created`
+   will reference: fresh and modify-pair creates key the change event derived
+   from `(git_head, op_id)`, a cleanup keys the removal event its same-batch
+   close implies, and an epic keys the proposal's `registered` event read from
+   the fold.
 5. **Resolve the references.** [[f7775ac5f1f3|Resolver]] writes each dep as
    `ref:op` or `ref:bead` — an unresolvable dep is an emit error, not a
    deferred shape — points every non-epic create's
@@ -80,9 +82,10 @@ runs six steps in this order and writes one file:
    order to stdout or to `--out`.
 
 Steps 3 and 4 come before step 5 for a reason: a dep can only be written as
-`ref:op` once the op it points at has an op_id. Ordering settles for the batch
+`ref:op` once the op it points at has an op_id — and a label can only be derived
+once the op id it embeds is assigned. Ordering settles for the batch
 as a whole before the first ref is written; labelling runs per action, each
-create's label read off that same create's own identity.
+create's label derived from that same create's own referent event.
 
 ## Data Shapes
 
@@ -99,12 +102,13 @@ Emit folds the task journal here and writes nothing back to it:
 
 - the fold's pairing for a spec node, for the `ref:bead` classification and the
   closed-dep drop;
-- the fold's epic entry for the proposal slug, for parent resolution on a
-  re-run.
+- the proposal's `registered` event — the epic's label and referent — and any
+  epic task already paired to it, for parent resolution; no registered event is
+  an emit error naming the slug.
 
-Nothing else is read: labels come off the ops themselves, and appending to the
-journal is ingest's job once the adapter's receipts say a task was actually
-made.
+Nothing else is read: every other label derives from the op itself, and
+appending to the journal is ingest's job once the adapter's receipts say a task
+was actually made.
 
 ### changeset.json (output)
 
@@ -119,7 +123,7 @@ made.
       "type": "create",
       "spec_node_kind": "proposal_epic",
       "spec_node_id": "2026-04-18-decouple-spex-from-br",
-      "idempotency": { "label": "spex:2026-04-18-decouple-spex-from-br" },
+      "idempotency": { "label": "spex:beef0001:2026-04-18-decouple-spex-from-br" },
       "priority": 3,
       "title": "Proposal: 2026-04-18-decouple-spex-from-br"
     },
@@ -128,7 +132,7 @@ made.
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "7f06f7d80e94",
-      "idempotency": { "label": "spex:7f06f7d80e94" },
+      "idempotency": { "label": "spex:deadbeef:op-2" },
       "parent": { "ref": "op", "op_id": "op-1" },
       "priority": 1,
       "title": "emit: ChangesetBuilder",

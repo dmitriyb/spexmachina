@@ -118,7 +118,20 @@ matches := []Match{
 }
 ```
 
-Assert the actions are `"obsolete"` (old bead) + `"create"` (new bead) — even for an "added" change type, the presence of an existing bead triggers the obsolete+create flow for consistency.
+Assert the actions are `"obsolete"` (old bead) + `"create"` (new bead) — even for an "added" change type, the presence of an existing bead with a *different* tracked hash triggers the obsolete+create flow for consistency. The fixture's pairing records an `after` hash unequal to the change's `NewHash`; the equal-hash case is S3b.
+
+### S3b: Already-tracked change yields no action
+
+Provide a Match entry — `added` or `modified` — whose open pairing's sourcing event records an
+`after` hash equal to the change's current hash (`NewHash: "new111"`, pairing event
+`After: "new111"`).
+
+Assert zero actions for that change: the journal already pairs a live task with exactly this
+state, and the change resurfaced only because a partial run left the snapshot unsaved. Vary the
+fixture: the same pairing with `After: "old000"` produces the normal obsolete+create pair — the
+drop keys on hash equality, never on the mere existence of a pairing. This cell is what keeps a
+re-run's fresh `spex:<eid>` labels from obsoleting and duplicating work a prior partial run
+already created.
 
 ### S4: ActionClassifier handles removed node without a matching bead
 

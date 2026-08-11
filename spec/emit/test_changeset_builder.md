@@ -29,11 +29,16 @@ implementation bead.
 
 ### Proposal epic parents every non-epic create
 
-- Impact report with one proposal, one component create, one data_flow create. Assert: first op is
-  `type: create` with `spec_node_kind: proposal_epic` and `idempotency.label: "spex:<slug>"`;
-  following two creates' `parent` fields are `{"ref":"op","op_id":"<epic op_id>"}`.
-- With the journal fold already listing an epic task for the slug, no epic create is emitted and
-  every create's parent is `{"ref":"bead","bead_id":"<epic task>"}`.
+- Impact report with one proposal, one component create, one data_flow create; the journal holds
+  the proposal's `registered` event (`eid: "<reg-head>:<slug>"`). Assert: first op is
+  `type: create` with `spec_node_kind: proposal_epic` and
+  `idempotency.label: "spex:<reg-head>:<slug>"` — the registered event's eid, not the changeset's
+  own git_head; following two creates' `parent` fields are `{"ref":"op","op_id":"<epic op_id>"}`.
+- With the journal fold already pairing an epic task with the registered event, no epic create is
+  emitted and every create's parent is `{"ref":"bead","bead_id":"<epic task>"}`.
+- With no `registered` event in the journal for the proposal, `Builder.Build()` returns an error
+  naming the slug — registration opens the lifecycle, so emit refuses to synthesize an epic
+  referent.
 
 ### In-batch dep chain resolves to ref:op
 
@@ -74,10 +79,11 @@ implementation bead.
     `labels: ["spex:obsolete","commit:<git-head>"]`.
   - Create op for the replacement includes `deps: [{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}]`
     for lineage.
-  - Create op's `idempotency.label` is `spex:<Q's spec_node_id>` — the same label the original
-    create carried, with no lookup required, because the node's identity hash is unchanged across
-    the modify pair. Nothing in the fixture needs seeding to make this true; assert it holds with
-    an empty fold as well as a populated one.
+  - Create op's `idempotency.label` is `spex:<git_head>:<its op_id>` — the eid of this run's
+    `modified` event, derived with no lookup and distinct from any label the original create
+    carried, because each change in the lineage references its own event. Nothing in the fixture
+    needs seeding to make this true; assert it holds with an empty fold as well as a populated
+    one.
 
 ### Cleanup-bead create
 
@@ -88,7 +94,18 @@ implementation bead.
     form).
   - `labels: ["spex:cleanup"]` on the create op (the discriminator label; emit populates
     `Op.Labels` on creates, not just on closes).
-  - `idempotency.label: "spex:cleanup-abc123def456"` — unique by removed-node identity hash.
+  - `idempotency.label: "spex:<git_head>:<close op_id>"` — the eid of the `removed` event the
+    same-batch close implies, so the cleanup's `task_created` referent and its label are the same
+    event.
+
+### Cleanup-bead create for a prior-batch removal
+
+- The journal already holds the `removed` event for the node (eid `E1`, from an earlier run whose
+  cleanup errored); the batch carries the cleanup create but **no** close op for that node —
+  its close landed last run.
+- Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
+  any op in this batch — so a re-run at a moved HEAD still carries the label of the removal it
+  answers, and label and `task_created` referent stay one fact across runs.
   - `deps: [{"ref":"bead","bead_id":"spexmachina-old","type":"blocks"}]` — lineage from the
     closed task being cleaned up.
   - `priority: 3` (`emit.FallbackPriority`).
@@ -101,11 +118,13 @@ implementation bead.
 - **Components exercised together**: `Resolver` classifies each dep into ref:op or ref:bead;
   `TopologicalSorter` orders the create ops — proposal epic first, then in-batch dep
   predecessors, with lex-tiebreak among independent ops; `IdempotencyLabeler` stamps each op's
-  label from its own spec_node_id; `ChangesetBuilder` composes the final changeset with canonical
-  field order.
+  label with its referent event's eid; `ChangesetBuilder` composes the final changeset with
+  canonical field order.
 - **Assertions**:
   - First and second `changeset.json` outputs are byte-identical (SHA-256 equal).
-  - Each op's `idempotency.label` matches `spex:<its own spec_node_id>`.
+  - Each op's `idempotency.label` matches `spex:<eid>` of its referent event —
+    `<git_head>:<its own op_id>` for node-bearing creates, the registered event's eid for the
+    epic.
   - Each op's `deps` carries the expected ref shape.
   - Each op appears in topologically valid order with lex-tiebreak respected.
 - **Rationale**: determinism is the headline contract, and under label-from-the-op it no longer

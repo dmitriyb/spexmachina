@@ -4,7 +4,8 @@
 
 - Create a temporary spec directory with project.json, two modules, and a populated
   `spec/.history.jsonl`: change events for several live nodes with `task_created` receipts,
-  one removed node with its full biography, and one epic receipt keyed by proposal slug
+  one removed node with its full biography, one `registered` event with its epic `task_created`
+  referencing it, and one legacy epic receipt keyed by proposal slug
 - Build the `spex` binary with `go build`
 
 ## Scenarios
@@ -32,12 +33,17 @@
 ### spex map context — live node
 
 - **Input**: `spex map context <identity hash of a live component>`
-- **Expected**: JSON output with arch_file, test_files, flow_files, module_file — every path derived from the spec, none from the journal. Exit code 0.
+- **Expected**: JSON output with arch_file, test_files, flow_files, module_file — every path derived from the spec, none from the journal — plus the event bracket eid, event, before_head, after_head off the node's latest task-bearing journal event. Existing keys keep their meaning: the output is a superset of the pre-bracket shape. Exit code 0.
+
+### spex map context — live node with no task-bearing event
+
+- **Input**: `spex map context <identity hash of a live component the journal has no task-bearing event for>`
+- **Expected**: the file set resolves normally; the bracket fields are null. Exit code 0.
 
 ### spex map context — removed node
 
 - **Input**: `spex map context <identity hash of the removed node>`
-- **Expected**: JSON output with the node's name, node_type, module, the proposal that removed it, and the before/after git_head refs of its last change — the material an agent needs to run `git diff` for the change and `git show` for the final leaf. Exit code 0.
+- **Expected**: JSON output with the node's name, node_type, module, the proposal that removed it, and the bracket off its removed event — eid, event, before_head, after_head — the material an agent needs to run `git diff` for the change and `git show` for the final leaf. Exit code 0.
 
 ### Output format consistency
 

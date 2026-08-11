@@ -28,7 +28,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Parent resolution from mapping store",
-      "description": "Each create op's parent field encodes the proposal epic for the run. The epic is either the op_id of a same-run epic create (first op) or a bead_id ref to a pre-existing epic, recognised by folding the task journal for the proposal's slug. All non-epic creates in the run parent under this single epic reference. The title's store is identity-bearing legacy; the journal fold is the source."
+      "description": "Each create op's parent field encodes the proposal epic for the run. The epic is either the op_id of a same-run epic create (first op) or a bead_id ref to a pre-existing epic task, recognised by folding the task journal. The epic's identity is the proposal's registered event: the fold answers both that event — whose eid the epic op's label and its task_created referent carry — and any epic task already paired to it; a proposal with no registered event in the journal is an emit error naming the slug, because registration opens the lifecycle. All non-epic creates in the run parent under this single epic reference. The title's store is identity-bearing legacy; the journal fold is the source."
     },
     {
       "id": "d096fd5d6cd8",
@@ -42,7 +42,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotency label construction",
-      "description": "Each create op carries an idempotency.label field taken from the op itself: a fresh or modify-pair create's label is spex:<spec_node_id> — the node's identity hash, stable across the modify lineage because the hash does not change — a cleanup create's label is spex:cleanup-<spec_node_id>, and an epic create's label is spex:<proposal-slug>. No counter, no cursor, no store read: the label is a pure function of the op. The adapter matches the label against the tracker before creating; a pre-existing match produces a was_existing=true receipt rather than a duplicate bead."
+      "description": "Every create op's idempotency.label is spex:<eid> of the journal event its task_created will reference — one rule for every action class. Node-bearing creates (fresh and modify-pair alike) key the change event ingest will mint from (git_head, op_id); cleanup creates key the removal event they answer — the journal's latest removed event for the node when the removal already landed, otherwise the event their same-batch close implies, derived from the close op's (git_head, op_id) — the same resolution order the reconciler pairs them by; epic creates key the proposal's registered event, read from the journal fold. Event ids are deterministic, so emit knows every eid at changeset-build time: no counter, no cursor, no store write. A label is unique per change — which is what a task is — so no cleanup- prefix, no slug shape, and no collision rationale survive. The adapter matches the label against the tracker before creating; a pre-existing match produces a was_existing=true receipt rather than a duplicate bead."
     },
     {
       "id": "22e63e959749",
@@ -87,7 +87,7 @@
     {
       "id": "f7775ac5f1f3",
       "name": "Resolver",
-      "description": "Resolves each create action's DepSpecNodeIDs and parent_spec_node_id into refs the adapter can apply blind. Classifies each dep: if another op in the same batch targets the spec_node_id → ref:op; otherwise the journal fold answers with the open task already tracking the node → ref:bead. There is no adapter-time fallback: a dep that is neither in-batch nor in the fold is an emit error, because the adapter no longer reads any spex-owned file. Also computes priority by walking component.implements → module_requirement.preq_id → project_requirement.priority and taking the minimum.",
+      "description": "Resolves each create action's DepSpecNodeIDs and parent_spec_node_id into refs the adapter can apply blind. Classifies each dep: if another op in the same batch targets the spec_node_id → ref:op; otherwise the journal fold answers with the open task already tracking the node → ref:bead. There is no adapter-time fallback: a dep that is neither in-batch nor in the fold is an emit error, because the adapter no longer reads any spex-owned file. Resolves the epic parent through the proposal's registered event in the fold — a same-run epic create is ref:op, an epic task already paired to the registered event is ref:bead, and a proposal with no registered event is an emit error. Also computes priority by walking component.implements → module_requirement.preq_id → project_requirement.priority and taking the minimum.",
       "content": "arch_resolver.md",
       "implements": [
         "d096fd5d6cd8",
@@ -107,7 +107,7 @@
     {
       "id": "6f4b6dd8928f",
       "name": "IdempotencyLabeler",
-      "description": "Assigns each create op its idempotency.label, branching on action class: spex:<spec_node_id> for fresh and modify-pair creates — the same value in both cases, because the label is the node's own identity hash — spex:cleanup-<spec_node_id> for cleanup creates, spex:<proposal-slug> for epic creates. Stateless: no cursor, no store dependency, nothing persisted; the label is read off the op.",
+      "description": "Assigns each create op its idempotency.label: spex:<eid> of the journal event the op's task_created will reference — the change event derived from (git_head, op_id) for fresh and modify-pair creates, the removal event the cleanup answers for cleanup creates (read from the fold when the removal already landed, else derived from the same-batch close op), the registered event read from the journal fold for epic creates. One rule, no shape branching. Stateless: no cursor, nothing persisted; the label derives from the op and, for epics and prior-batch cleanups, the fold.",
       "content": "arch_idempotency_labeler.md",
       "implements": [
         "0d468e176aaf"

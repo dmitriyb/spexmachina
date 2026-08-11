@@ -8,7 +8,7 @@ Composes `changeset.json` v2 from the impact report, the spec graph, the task jo
 - **Detect cleanup actions** by the `"Code cleanup:"` prefix on the action's reason. Cleanup actions get a distinct op shape — see "Cleanup op shape" below.
 - Resolve each create action's parent and deps via Resolver into the two ref shapes.
 - Order the create ops via TopologicalSorter so in-batch deps come before dependents.
-- **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** The label depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the three formats.
+- **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** Every label is `spex:<eid>` of the op's referent journal event; which event that is depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the referent rules.
 - Emit close ops carrying the obsolete labels: `spex:obsolete`, and `commit:<git_head>` built from [[22e63e959749|the SHA the caller passed in]] — the builder never asks git for it.
 - Write the final v2 changeset with canonical field order and stable key ordering inside every nested object.
 
@@ -62,7 +62,7 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `type`            | `"create"`                                                                                  |
 | `spec_node_kind`  | `"cleanup"` (NOT the underlying spec node's kind — adapter and reconciler key off this)     |
 | `spec_node_id`    | the identity hash of the now-removed spec node, for traceability                            |
-| `idempotency.label` | `"spex:cleanup-<spec_node_id>"` per the labeler's cleanup branch                          |
+| `idempotency.label` | `"spex:<eid>"` of the removal event the cleanup answers — a prior removal read from the fold, or the one the same-batch close implies — per the labeler's cleanup referent rule |
 | `parent`          | proposal-epic ref (same as other creates)                                                   |
 | `deps`            | one `bead` ref to the removed node's old bead, edge type `blocks` — lineage                 |
 | `priority`        | `3`, the fallback                                                                           |
@@ -70,7 +70,7 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `labels`          | `["spex:cleanup"]` — a cleanup create is the only create-class op that carries labels, so the adapter can stamp the discriminator label on the bead as it creates it. Close ops carry labels too; conventional creates do not. |
 | `body`            | empty                                                                                       |
 
-Modify-pair creates — a create paired with the close of the bead it replaces, with no cleanup reason — keep the conventional shape, and their `idempotency.label` is identical to the original create's by construction — the node's identity hash does not change across the pair, so no lookup and no reuse rule is needed. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
+Modify-pair creates — a create paired with the close of the bead it replaces, with no cleanup reason — keep the conventional shape, and their `idempotency.label` is `spex:<eid>` of this run's `modified` event, distinct from the closed predecessor's label by construction — each change in a node's lineage references its own event, so no lookup and no reuse rule is needed and the old label can never collide. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
 
 ## Op Shape
 
@@ -80,7 +80,7 @@ Modify-pair creates — a create paired with the close of the bead it replaces, 
   "type": "create",
   "spec_node_kind": "component",
   "spec_node_id": "7f06f7d80e94",
-  "idempotency": { "label": "spex:7f06f7d80e94" },
+  "idempotency": { "label": "spex:deadbeefcafe1234:op-0004" },
   "parent": { "ref": "op", "op_id": "op-0001" },
   "deps": [
     { "ref": "bead", "bead_id": "spexmachina-ab1" },

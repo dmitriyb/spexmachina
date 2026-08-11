@@ -26,6 +26,10 @@ tmpdir/
 
 `valid-change.md` contains all three required change sections (Context, Proposed change, Impact expectation) with substantive placeholder content.
 
+Every `Register` call carries the fixture git head `cafe1234` — the caller-supplied head that
+feeds the registered event's eid; scenario prose omits the argument for brevity. The temp spec
+directory starts with no `spec/.history.jsonl`.
+
 ## Scenarios
 
 ### S1: Register a valid project proposal
@@ -37,6 +41,8 @@ tmpdir/
 - The slug is derived from the H1 heading of the proposal (lowercased, spaces replaced with hyphens, non-alphanumeric characters stripped).
 - The copied file's content is byte-for-byte identical to the source.
 - File permissions on the copy are 0644 (`copyFile` opens with that mode; no test asserts it).
+- `spec/.history.jsonl` gains exactly one line: a `registered` event with
+  `eid: "cafe1234:<slug>"`, `proposal: "<slug>"` (the copied file's stem), `git_head: "cafe1234"`.
 - Function returns nil error.
 
 ### S2: Register a valid change proposal
@@ -55,7 +61,8 @@ tmpdir/
 **Then:**
 - Function returns an error.
 - Error message includes the name of every missing section ("Design decisions").
-- No file is written to `spec/proposals/`.
+- No file is written to `spec/proposals/`, and no journal line is appended — a refusal leaves
+  neither mark.
 
 ### S4: Reject change proposal with missing sections
 
@@ -140,6 +147,17 @@ tmpdir/
 **Then:**
 - Second call returns an error indicating the target file already exists.
 - The existing file is not overwritten.
+
+### E3b: Crash recovery — event appended, file not copied
+
+**Given** a journal already holding the `registered` event a prior interrupted run appended
+(`eid: "cafe1234:<slug>"`), and no file in `spec/proposals/`.
+**When** `Register` is called for the same proposal with the same git head.
+**Then:**
+- The append finds its eid already present and adds nothing — the journal still holds exactly
+  one `registered` line for the slug.
+- The copy lands normally and the function returns nil error. No ordering leaves a registered
+  file without its event.
 
 ### E4: Proposal containing both project and change markers
 

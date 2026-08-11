@@ -28,7 +28,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotent create via label",
-      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing open bead carrying the op's idempotency.label (spex:<spec_node_id> on ordinary creates, spex:cleanup-<spec_node_id> on cleanup creates, spex:<proposal-slug> on epic creates); the adapter treats the label as opaque and does not parse it. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
+      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing bead carrying the op's idempotency.label — an exact string match, in any bead status; the adapter treats the label as opaque and does not parse it. The open-only filter of the node-keyed label era is gone with the collisions it existed to dodge: a label is spex:<eid>, unique per change, so any bead carrying it — open or closed — can only be the product of this same op's earlier run. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
     },
     {
       "id": "7bad082a34b6",

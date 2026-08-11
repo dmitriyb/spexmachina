@@ -1,10 +1,11 @@
 # ContextResolver
 
 Given one key — a node's identity hash or a task id — resolves all spec files needed to implement
-or review that node. That resolution is what it means to hold
-[[40a3d3155131|the full spec context of a record]]: for a live node, the spec graph alone answers;
-for a removed node, the [[205e67ca4aad|journal fold]] carries the biography that outlives the node.
-No mapping record exists to be handed in — the key is the whole of the input.
+or review that node, plus the event bracket that locates its latest change in git. That resolution
+is what it means to hold [[40a3d3155131|the full spec context of a record]]: for a live node, the
+spec graph answers the files and the [[205e67ca4aad|journal fold]] answers the bracket; for a
+removed node, the journal carries the biography that outlives the node. No mapping record exists
+to be handed in — the key is the whole of the input.
 
 ## Responsibilities
 
@@ -12,18 +13,25 @@ No mapping record exists to be handed in — the key is the whole of the input.
   step and is the hash
 - For a live node: locate the declaring module.json, read the component's declared `content` for
   the arch file, and discover test and flow paths by scanning declarations for the hash
+- For any node, live or removed: serve the event bracket — `eid`, `event`, `before_head`,
+  `after_head` — off the node's latest task-bearing journal event, so a consumer can turn the
+  answer into `git diff <before_head> <after_head> -- <leaves>` instead of reconstructing the
+  delta by hand
 - For a removed node: return the journal's biography — name, node type, module, removing proposal,
-  last task, and the `git_head` refs bracketing its final change
+  last task — alongside that bracket
 - Return all of it as one structured result
 
 ## Interface
 
 Resolution takes a spec directory and one key, and produces one result. For a live node the keys a
-caller parses are `arch_file`, `test_files`, `flow_files`, `module_file`; for a removed node they
-are `name`, `node_type`, `module`, `proposal`, `task_id`, `before_head`, `after_head`.
+caller parses are `arch_file`, `test_files`, `flow_files`, `module_file`, `eid`, `event`,
+`before_head`, `after_head`; for a removed node they are `name`, `node_type`, `module`,
+`proposal`, `task_id`, `eid`, `event`, `before_head`, `after_head`.
 [[3c8a43221ed2|`spex map context`]] prints that result, so those keys are the result under another
-name. The removed-node shape is what makes a `spex:cleanup-<hash>` label a working reference
-instead of a dead end: the hash resolves to enough context to run `git show` on the retired leaf.
+name — a superset of the pre-bracket shape, with every existing key keeping its meaning. The
+removed-node shape is what keeps a cleanup task born with working context instead of a dead end:
+its journal pairing references the removal event, so the task id resolves to enough context to
+run `git show` on the retired leaf.
 
 ## Algorithm
 
@@ -34,11 +42,16 @@ instead of a dead end: the hash resolves to enough context to run `git show` on 
 3. If found live: the arch file is the component's declared `content` under its module directory;
    scan `test_sections` for `describes` containing the hash and `data_flows` for `uses` containing
    it, prepending `<spec dir>/<module>/` to each `content`; the module file is that module's
-   `module.json`
+   `module.json`. The bracket comes from the journal: `eid` and `event` are the node's latest
+   task-bearing event, `after_head` that event's `git_head`, `before_head` the `git_head` of the
+   node's preceding change event — null when the latest event is an `added` or the journal holds
+   no prior. A live node with no task-bearing event yet serves a null bracket; the file set does
+   not depend on the journal
 4. If declared nowhere live: consult the journal for the hash's latest `removed` event and return
-   the biography. The leaf path comes off the event's `path` field; `after_head` is the removing
-   event's `git_head`, and `before_head` is the `git_head` of the node's latest prior change
-   event, absent when the journal holds none (a backfilled node with no recorded prior change).
+   the biography with the same bracket shape. The leaf path comes off the event's `path` field;
+   `eid` and `event` are the removal event's, `after_head` its `git_head`, and `before_head` the
+   `git_head` of the node's latest prior change event, absent when the journal holds none (a
+   backfilled node with no recorded prior change).
    A hash with no journal history either is a not-found error that names the key and says it is
    unknown to both spec and journal
 
@@ -69,9 +82,10 @@ The retired record-based resolver read `module` and `content_file` off a stored 
 measurably wrong in five cases where the cache had gone stale while derivation stayed correct. This
 resolver stores nothing: the module is found by scanning for the declaring `module.json`, the arch
 path is the component's own `content` field, and the discovered lists are functions of the module's
-declarations. The one thing derivation cannot recover — the identity of a node that no longer
-exists — is exactly what the journal keeps, which is the division of labor: spec for the present,
-journal for the past, nothing in between to drift.
+declarations. What derivation cannot recover — the identity of a node that no longer exists, and
+the commit refs bracketing any node's latest change — is exactly what the journal keeps, which is
+the division of labor: spec for the present state, journal for history, nothing in between to
+drift.
 
 ### The result's shape follows the module, not any record
 

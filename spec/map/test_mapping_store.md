@@ -5,10 +5,13 @@
 - Create a temporary directory with a valid spec structure (project.json + one module)
 - Write `spec/.history.jsonl` line by line as each scenario requires: change events
   (`added`/`removed`/`modified` with `eid`, `node`, `name`, `node_type`, `module`, `before`,
-  `after`, `git_head`, `proposal`) and receipt events (`task_created`/`task_closed` with `for`
-  and `task_id`, or `proposal` in place of `for` for epic tasks)
-- Construct a MappingStore instance pointing at the temp directory. The store only reads;
-  no scenario writes through it
+  `after`, `git_head`, `proposal`), `registered` events (`eid` of the form `<git_head>:<slug>`,
+  `proposal`, `git_head`), and receipt events (`task_created`/`task_closed` with `for` and
+  `task_id` — plus the legacy shape carrying `proposal` in place of `for`, for the
+  legacy-branch scenarios)
+- Construct a MappingStore instance pointing at the temp directory. Read scenarios go through
+  its parse/fold surface; append scenarios go through its append primitive — the journal's one
+  write path
 
 ## Scenarios
 
@@ -37,10 +40,20 @@
 - **Input**: node Z with `added`, `task_created`, then `removed`
 - **Expected**: the fold marks Z removed; a lookup still returns its name, node_type, module and the removing event's `proposal` and `git_head` — the journal is the only surviving name record for Z
 
-### Epic receipts fold without a change event
+### Registered event folds the epic
+
+- **Input**: a `registered` event (`eid: "cafe1234:2026-08-11-event-keyed-linkage"`, proposal slug, git_head) followed by a `task_created` whose `for` references that eid
+- **Expected**: the fold lists the epic task keyed by the slug the registered event carries, sourced from the registered event — the same referencing rule as every other receipt
+
+### Legacy epic receipts fold without a change event
 
 - **Input**: a `task_created` receipt carrying `proposal: "2026-04-18-decouple-spex-from-br"` and no `for`
-- **Expected**: the fold lists the epic task keyed by the proposal slug; no change event is required or invented
+- **Expected**: the fold's read-only legacy branch lists the epic task keyed by the proposal slug; no change event is required or invented, and nothing is migrated or rewritten
+
+### Append validates and lands atomically
+
+- **Input**: append a batch of two valid lines; then append a batch whose second line violates the journal-line schema
+- **Expected**: the first batch lands whole — the file gains exactly the two lines, via write-and-rename; the second batch is refused naming the offending line, and the file is byte-identical to its pre-append state — a refused batch changes nothing
 
 ### Deterministic order
 

@@ -1,13 +1,13 @@
 {
   "name": "map",
-  "description": "Spec-to-task correlation layer. Owns access to the task journal (spec/.history.jsonl), the append-only event log that links spec node identity hashes to tracker task ids. Provides journal reads and folds, context resolution, and the CLI query interface.",
+  "description": "Spec-to-task correlation layer. Owns the task journal (spec/.history.jsonl), the append-only event log that links spec node identity hashes to tracker task ids — reads, folds, and the single append primitive every journal writer uses. Provides context resolution and the CLI query interface.",
   "requirements": [
     {
       "id": "934d627f0e90",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Store mapping records",
-      "description": "Read the task journal (spec/.history.jsonl), one JSON object per line, append-only. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). Current linkage is a fold, never a stored cache: the latest task-bearing event per node. No metadata is denormalized; names and modules are read from the event that carried them."
+      "description": "Own the task journal (spec/.history.jsonl), one JSON object per line, append-only. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — the registered event records the opening of a proposal's lifecycle, and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). MappingStore is the journal's one writer-owner: every append — ingest's reconciliation and refresh batches, the Registrar's registered event — goes through its atomic, schema-validating append primitive; nothing writes around it. Current linkage is a fold, never a stored cache: the latest task-bearing event per node, with the epic's entry sourced from its registered event. No metadata is denormalized; names and modules are read from the event that carried them."
     },
     {
       "id": "27c046dde129",
@@ -28,14 +28,14 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Resolve full spec context from record",
-      "description": "Given an identity hash or a task id, deterministically resolve all spec files needed to implement the node. A live node resolves from the spec alone: the arch file from the component's declared content, test_sections whose describes array contains the component ID, data_flows whose uses array contains it, and the module file — all derived, nothing read from a cache. A removed node resolves from the journal: its name, node_type, module, the proposal that removed it, and the git_head refs bracketing its last change. Returns a single JSON blob."
+      "description": "Given an identity hash or a task id, deterministically resolve all spec files needed to implement the node, plus the event bracket that locates its latest change in git — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone: the arch file from the component's declared content, test_sections whose describes array contains the component ID, data_flows whose uses array contains it, and the module file — all derived, nothing read from a cache; its bracket comes from the journal: the latest task-bearing event's git_head against the git_head of the node's preceding change event, before_head null when the latest event is an added, the whole bracket null when the node has no task-bearing event yet. A removed node resolves from the journal: its name, node_type, module, the proposal that removed it, and the same bracket off its removed event. Returns a single JSON blob."
     }
   ],
   "components": [
     {
       "id": "205e67ca4aad",
       "name": "MappingStore",
-      "description": "Read access to the task journal: parse, scan and fold spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store never writes: ingest is the journal's only writer.",
+      "description": "Owner of the task journal: parse, scan, fold and append spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store owns the journal's one append primitive — atomic write-and-rename, each line schema-validated before the write commits; ingest's reconciliation and refresh batches and the proposal Registrar's registered event all write through it, and nothing writes around it.",
       "content": "arch_mapping_store.md",
       "implements": [
         "934d627f0e90",
@@ -45,7 +45,7 @@
     {
       "id": "08909d62930b",
       "name": "MapCommand",
-      "description": "CLI entry point for spex map. Wires MappingStore and ContextResolver to serve queries and context resolution.",
+      "description": "CLI entry point for spex map. Wires MappingStore and ContextResolver to serve queries and context resolution. The context payload carries the node's event bracket — eid, event, before_head, after_head — alongside the file set, keyed by identity hash or task id as before; existing keys keep their meaning, so the output is a superset of the pre-bracket shape.",
       "content": "arch_map_command.md",
       "implements": [
         "27c046dde129"
@@ -58,7 +58,7 @@
     {
       "id": "6b79188dff4c",
       "name": "ContextResolver",
-      "description": "Given an identity hash or a task id, resolves all spec files for the node. A live node resolves from the spec alone by matching the hash against ids declared in module.json — the arch file, the test_sections and data_flows that name it, and the module file itself; nothing is read from a cache. A removed node resolves from the journal: name, node_type, module, removing proposal, and the git_head refs bracketing its last change. Pure function over spec directory plus journal — deterministic and cacheable.",
+      "description": "Given an identity hash or a task id, resolves all spec files for the node plus its event bracket — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone by matching the hash against ids declared in module.json — the arch file, the test_sections and data_flows that name it, and the module file itself; nothing is read from a cache. Its bracket comes from the journal: the latest task-bearing event's git_head against the preceding change event's, before_head null for an added, the whole bracket null when no task-bearing event exists. A removed node resolves from the journal: name, node_type, module, removing proposal, and the same bracket off its removed event. Pure function over spec directory plus journal — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [
         "40a3d3155131"
@@ -72,7 +72,7 @@
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "How a task pairs with the event that spawned it. Emit stamps each create op with a spex:<spec_node_id> idempotency label taken from the changeset op itself, the adapter applies that label to the task it creates, and ingest appends the change event and its task_created receipt to the journal at baselining. Skills query the resulting linkage via MapCommand.",
+      "description": "How a task pairs with the event that spawned it. Emit derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, the adapter applies that label to the task it creates, and ingest appends the change event and its task_created receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",

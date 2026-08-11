@@ -43,7 +43,7 @@ spex impact --diff diff.json --beads <(br list --json)
 
 When `--beads` is supplied:
 - BeadReader parses the file into one entry per spec-managed bead — a pure parse, with nothing started or contacted from inside impact.
-- Each parsed bead's live status is joined onto the matching pairing by the `spex:<spec_node_id>` label.
+- Each parsed bead's live status is joined onto the matching pairing by task id — the fold's pairing carries the task id the receipt recorded, and no label is parsed.
 - The enriched pairings flow into ActionClassifier, and the removed-node gate that asks whether a bead is closed then has a real answer to read.
 
 When `--beads` is omitted, ImpactCommand proceeds with the fold as-is. The cleanup-bead gate defaults closed (no cleanup actions emitted) for safety — callers who want cleanup classification must supply `--beads`.
