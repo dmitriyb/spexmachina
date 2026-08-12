@@ -54,8 +54,23 @@ pipe.
 
 [[2b62ad5e8ef2|Register proposal]] at the command layer. The command carries a `--git-head <sha>`
 flag — the caller supplies `$(git rev-parse HEAD)` from their shell, exactly as for `spex emit`,
-because spex never calls git; the head feeds the registered event's `<git_head>:<slug>` eid. On
-success the command writes one line to
+because spex never calls git; the head feeds the registered event's `<git_head>:<slug>` eid.
+
+The flag is **required**, and required in the same shape `spex emit` requires it: a pre-flight checks
+that the value matches `^[0-9a-f]{7,40}$`, and a head that is absent or malformed is refused there —
+before the proposal file is read, before Registrar is reached, so neither the journal append nor the
+copy can happen. The exit is non-zero and the error names the flag. There is no headless path: an
+empty head would key the registered event `":<slug>"`, an eid no later `task_created --for` could
+address, so the run is refused rather than threaded through. A bare `spex register <path>` is
+therefore an error, not a shorthand that defaults the head to empty.
+
+Two refusals meet on the barest invocation of all, `spex register` with neither a path nor a head,
+and the order between them is fixed: the missing positional argument is reported, not the missing
+flag. The argument count is checked before any flag is, so the pre-flight above is first only among
+the things this command does itself. That ordering is what keeps the missing-path message the answer
+to a bare invocation, whatever the flag is doing.
+
+On success the command writes one line to
 stdout, `registered: <spec-dir>/proposals/<filename>`. The filename half is the basename Registrar
 chose rather than one the command derived, and the directory half is the spec directory this run
 resolved — so a run pointed elsewhere by `--spec-dir` names the path it actually wrote. On a refused proposal the command
