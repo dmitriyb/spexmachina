@@ -42,9 +42,12 @@ func writeModuleJSON(t *testing.T, dir string, ms schema.ModuleSpec) {
 
 // buildContextFixture lays out the alpha module (Parser, Builder, Ghost),
 // its test_sections and data_flow, and a journal pairing Parser with task
-// abc-123 and recording removed node Widget (999999999999) — the fixture
-// spec/map/test_context_resolver.md describes.
-func buildContextFixture(t *testing.T) string {
+// abc-123 (added at git_head beef0001) and recording removed node Widget
+// (999999999999) — the fixture spec/map/test_context_resolver.md
+// describes. Builder has an added event (e2) but no task_created receipt
+// naming it, for S1c. Extra lines are appended to the journal after the
+// base fixture, for scenarios that extend a node's history (S1b).
+func buildContextFixture(t *testing.T, extra ...string) string {
 	t.Helper()
 	specDir := t.TempDir()
 
@@ -71,14 +74,16 @@ func buildContextFixture(t *testing.T) string {
 		},
 	})
 
-	writeJournal(t, specDir, []string{
-		changeLine("added", "e1", "aabbccddeeff", "Parser", "component", "alpha", "", "h1", "", ""),
+	lines := []string{
+		changeLine("added", "e1", "aabbccddeeff", "Parser", "component", "alpha", "", "h1", "beef0001", ""),
 		taskCreatedLine("e1", "", "abc-123"),
 		changeLine("added", "e2", "ffeeddccbbaa", "Builder", "component", "alpha", "", "h2", "", ""),
-		changeLine("added", "e3", "999999999999", "Widget", "component", "alpha", "", "h3", "babe0000", ""),
+		changeLine("added", "e3", "999999999999", "Widget", "component", "alpha", "", "h3", "beef0001", ""),
 		taskCreatedLine("e3", "", "abc-777"),
 		changeLine("removed", "e4", "999999999999", "Widget", "component", "alpha", "h3", "", "cafe1234", "2026-08-01-task-journal"),
-	})
+	}
+	lines = append(lines, extra...)
+	writeJournal(t, specDir, lines)
 
 	return specDir
 }
@@ -114,6 +119,107 @@ func TestREQ_40a3d3155131_S1_ResolveLiveComponentByHash(t *testing.T) {
 	wantModule := filepath.Join(specDir, "alpha", "module.json")
 	if result.ModuleFile != wantModule {
 		t.Errorf("ModuleFile = %q, want %q", result.ModuleFile, wantModule)
+	}
+
+	if result.Eid != "e1" {
+		t.Errorf("Eid = %q, want e1", result.Eid)
+	}
+	if result.Event != "added" {
+		t.Errorf("Event = %q, want added", result.Event)
+	}
+	if result.AfterHead != "beef0001" {
+		t.Errorf("AfterHead = %q, want beef0001", result.AfterHead)
+	}
+	if result.BeforeHead != "" {
+		t.Errorf("BeforeHead = %q, want empty — an add has no predecessor", result.BeforeHead)
+	}
+}
+
+// --- S1b: bracket follows the lineage's latest event ---
+
+func TestREQ_40a3d3155131_S1b_BracketFollowsLatestEvent(t *testing.T) {
+	specDir := buildContextFixture(t,
+		changeLine("modified", "e5", "aabbccddeeff", "Parser", "component", "alpha", "h1", "h5", "cafe9999", ""),
+		taskCreatedLine("e5", "", "abc-124"),
+	)
+
+	result, err := ResolveContext(specDir, "aabbccddeeff")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+
+	wantArch := filepath.Join(specDir, "alpha", "arch_parser.md")
+	if result.ArchFile != wantArch {
+		t.Errorf("ArchFile = %q, want %q (file set unchanged from S1)", result.ArchFile, wantArch)
+	}
+
+	if result.Eid != "e5" {
+		t.Errorf("Eid = %q, want e5", result.Eid)
+	}
+	if result.Event != "modified" {
+		t.Errorf("Event = %q, want modified", result.Event)
+	}
+	if result.AfterHead != "cafe9999" {
+		t.Errorf("AfterHead = %q, want cafe9999", result.AfterHead)
+	}
+	if result.BeforeHead != "beef0001" {
+		t.Errorf("BeforeHead = %q, want beef0001 (the preceding event's git_head)", result.BeforeHead)
+	}
+}
+
+// --- S1c: live node with no task-bearing event serves a null bracket ---
+
+func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
+	specDir := buildContextFixture(t)
+
+	result, err := ResolveContext(specDir, "ffeeddccbbaa")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+	if result.Removed {
+		t.Fatalf("want live result, got Removed=true: %+v", result)
+	}
+
+	wantArch := filepath.Join(specDir, "alpha", "arch_builder.md")
+	if result.ArchFile != wantArch {
+		t.Errorf("ArchFile = %q, want %q — the file set never depends on the journal", result.ArchFile, wantArch)
+	}
+
+	if result.Eid != "" || result.Event != "" || result.BeforeHead != "" || result.AfterHead != "" {
+		t.Errorf("want null bracket for a node with no task-bearing event, got %+v", result)
+	}
+}
+
+// --- S1d: a resurrected node's before_head is null for the add, not the prior removal ---
+
+func TestREQ_40a3d3155131_S1d_BeforeHeadNullForResurrectedAdd(t *testing.T) {
+	specDir := buildContextFixture(t,
+		changeLine("added", "e6", "112233445566", "Ghost", "component", "alpha", "", "g6", "cafeaaa1", ""),
+		taskCreatedLine("e6", "", "task-001"),
+		changeLine("removed", "e7", "112233445566", "Ghost", "component", "alpha", "g6", "", "cafeaaa2", "some-proposal"),
+		changeLine("added", "e8", "112233445566", "Ghost", "component", "alpha", "", "g8", "cafeaaa3", ""),
+		taskCreatedLine("e8", "", "task-002"),
+	)
+
+	result, err := ResolveContext(specDir, "112233445566")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+	if result.Removed {
+		t.Fatalf("want live result (re-added), got Removed=true: %+v", result)
+	}
+
+	if result.Eid != "e8" {
+		t.Errorf("Eid = %q, want e8 (the resurrection event)", result.Eid)
+	}
+	if result.Event != "added" {
+		t.Errorf("Event = %q, want added", result.Event)
+	}
+	if result.AfterHead != "cafeaaa3" {
+		t.Errorf("AfterHead = %q, want cafeaaa3", result.AfterHead)
+	}
+	if result.BeforeHead != "" {
+		t.Errorf("BeforeHead = %q, want empty — the latest event is an added, so it has no predecessor regardless of position in the lineage", result.BeforeHead)
 	}
 }
 
@@ -206,11 +312,17 @@ func TestREQ_40a3d3155131_S5_RemovedNodeResolvesFromJournal(t *testing.T) {
 	if result.TaskID != "abc-777" {
 		t.Errorf("TaskID = %q, want abc-777 (the last task before removal)", result.TaskID)
 	}
+	if result.Eid != "e4" {
+		t.Errorf("Eid = %q, want e4 (the removal event's own eid)", result.Eid)
+	}
+	if result.Event != "removed" {
+		t.Errorf("Event = %q, want removed", result.Event)
+	}
 	if result.AfterHead != "cafe1234" {
 		t.Errorf("AfterHead = %q, want cafe1234", result.AfterHead)
 	}
-	if result.BeforeHead != "babe0000" {
-		t.Errorf("BeforeHead = %q, want babe0000 (the prior change's git_head)", result.BeforeHead)
+	if result.BeforeHead != "beef0001" {
+		t.Errorf("BeforeHead = %q, want beef0001 (the prior change's git_head)", result.BeforeHead)
 	}
 }
 

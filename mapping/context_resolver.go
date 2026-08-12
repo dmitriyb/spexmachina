@@ -16,7 +16,12 @@ import (
 // live shape (paths into the current spec) for a node the spec still
 // declares, or the removed shape (the journal's biography) for a node the
 // journal remembers but the spec no longer carries. Removed distinguishes
-// them.
+// them. The bracket — Eid, Event, BeforeHead, AfterHead — accompanies both
+// shapes: it locates the node's latest change in git, off the journal
+// rather than the spec, so a consumer can run
+// `git diff <before_head> <after_head> -- <leaves>` instead of
+// reconstructing the delta by hand. A live node with no task-bearing event
+// yet carries a null (empty) bracket.
 type ContextResult struct {
 	Removed bool `json:"removed,omitempty"`
 
@@ -27,11 +32,15 @@ type ContextResult struct {
 	ModuleFile string   `json:"module_file,omitempty"`
 
 	// Removed shape — populated when Removed is true.
-	Name       string `json:"name,omitempty"`
-	NodeType   string `json:"node_type,omitempty"`
-	Module     string `json:"module,omitempty"`
-	Proposal   string `json:"proposal,omitempty"`
-	TaskID     string `json:"task_id,omitempty"`
+	Name     string `json:"name,omitempty"`
+	NodeType string `json:"node_type,omitempty"`
+	Module   string `json:"module,omitempty"`
+	Proposal string `json:"proposal,omitempty"`
+	TaskID   string `json:"task_id,omitempty"`
+
+	// Bracket — populated for both shapes off the journal.
+	Eid        string `json:"eid,omitempty"`
+	Event      string `json:"event,omitempty"`
 	BeforeHead string `json:"before_head,omitempty"`
 	AfterHead  string `json:"after_head,omitempty"`
 }
@@ -78,17 +87,17 @@ func ResolveContext(specDir, key string) (ContextResult, error) {
 
 		for _, c := range ms.Components {
 			if c.ID == hash {
-				return liveResult(specDir, mod.Path, modPath, hash, c.Content, ms), nil
+				return liveResult(store, specDir, mod.Path, modPath, hash, c.Content, ms)
 			}
 		}
 		for _, df := range ms.DataFlows {
 			if df.ID == hash {
-				return liveResult(specDir, mod.Path, modPath, hash, df.Content, ms), nil
+				return liveResult(store, specDir, mod.Path, modPath, hash, df.Content, ms)
 			}
 		}
 		for _, sec := range ms.TestSections {
 			if sec.ID == hash {
-				return liveResult(specDir, mod.Path, modPath, hash, sec.Content, ms), nil
+				return liveResult(store, specDir, mod.Path, modPath, hash, sec.Content, ms)
 			}
 		}
 	}
@@ -98,8 +107,11 @@ func ResolveContext(specDir, key string) (ContextResult, error) {
 
 // liveResult builds the live shape for the node identified by hash, whose
 // own declared content is content, declared by module ms at mod.Path
-// (relative to specDir), whose module.json lives at modPath.
-func liveResult(specDir, modRelPath, modPath, hash, content string, ms schema.ModuleSpec) ContextResult {
+// (relative to specDir), whose module.json lives at modPath. The bracket
+// comes from the journal, off the node's latest task-bearing event; a node
+// with no task-bearing event yet carries a null bracket, never an error —
+// the file set never depends on the journal.
+func liveResult(store *MappingStore, specDir, modRelPath, modPath, hash, content string, ms schema.ModuleSpec) (ContextResult, error) {
 	modDir := filepath.Join(specDir, modRelPath)
 
 	var testFiles []string
@@ -116,12 +128,62 @@ func liveResult(specDir, modRelPath, modPath, hash, content string, ms schema.Mo
 		}
 	}
 
-	return ContextResult{
+	result := ContextResult{
 		ArchFile:   filepath.Join(modDir, content),
 		TestFiles:  testFiles,
 		FlowFiles:  flowFiles,
 		ModuleFile: modPath,
 	}
+
+	history, err := store.History(hash)
+	if err != nil {
+		return ContextResult{}, fmt.Errorf("context: %w", err)
+	}
+	if eid, event, before, after, ok := latestTaskBearingBracket(history); ok {
+		result.Eid = eid
+		result.Event = event
+		result.BeforeHead = before
+		result.AfterHead = after
+	}
+	return result, nil
+}
+
+// latestTaskBearingBracket scans a node's history for its latest
+// task-bearing change event — one a task_created receipt names via `for` —
+// and returns the bracket anchored on it: that event's own eid and kind,
+// the git_head of the change event immediately preceding it in the node's
+// lineage (empty for an added, or when none precedes), and its own
+// git_head. ok is false when the node has no task-bearing event yet.
+func latestTaskBearingBracket(history []Event) (eid, event, before, after string, ok bool) {
+	var changeEvents []Event
+	taskBearing := map[string]bool{}
+	for _, ev := range history {
+		switch ev.Event {
+		case "added", "modified", "removed":
+			changeEvents = append(changeEvents, ev)
+		case "task_created":
+			if ev.For != "" {
+				taskBearing[ev.For] = true
+			}
+		}
+	}
+
+	idx := -1
+	for i := len(changeEvents) - 1; i >= 0; i-- {
+		if taskBearing[changeEvents[i].EID] {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return "", "", "", "", false
+	}
+
+	latest := changeEvents[idx]
+	if idx > 0 && latest.Event != "added" {
+		before = changeEvents[idx-1].GitHead
+	}
+	return latest.EID, latest.Event, before, latest.GitHead, true
 }
 
 // removedResult resolves the biography of a node the spec no longer
@@ -175,6 +237,8 @@ func removedResult(store *MappingStore, hash string) (ContextResult, error) {
 		Module:     removedEv.Module,
 		Proposal:   removedEv.Proposal,
 		TaskID:     taskID,
+		Eid:        removedEv.EID,
+		Event:      removedEv.Event,
 		BeforeHead: beforeHead,
 		AfterHead:  removedEv.GitHead,
 	}, nil
