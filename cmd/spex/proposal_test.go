@@ -29,7 +29,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 	registerCmd := findSubcommand(root, "register")
 	registerCmd.SetOut(&out)
 
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -50,6 +50,15 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 	if !found {
 		t.Error("registered proposal file not found in spec/proposals/")
 	}
+
+	// The registered event's eid is keyed by the caller-supplied --git-head.
+	journal, err := os.ReadFile(filepath.Join(specDir, ".history.jsonl"))
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	if !strings.Contains(string(journal), `"eid":"cafe1234:`) {
+		t.Errorf("want registered event eid keyed by --git-head, got:\n%s", journal)
+	}
 }
 
 func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
@@ -62,7 +71,7 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 	os.WriteFile(inputFile, []byte(content), 0644)
 
 	root := buildTestCmd(specDir)
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -84,7 +93,7 @@ func TestREQ30_S3_RegisterValidationFailure(t *testing.T) {
 	os.WriteFile(inputFile, []byte(content), 0644)
 
 	root := buildTestCmd(specDir)
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("want error for invalid proposal, got nil")
@@ -115,7 +124,7 @@ func TestREQ30_S5_RegisterNonexistentFile(t *testing.T) {
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
 
 	root := buildTestCmd(specDir)
-	root.SetArgs([]string{"register", filepath.Join(tmp, "input", "ghost.md")})
+	root.SetArgs([]string{"register", filepath.Join(tmp, "input", "ghost.md"), "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("want error for nonexistent file, got nil")
@@ -133,20 +142,88 @@ func TestREQ30_E6_RegisterIdempotency(t *testing.T) {
 
 	// First register.
 	root1 := buildTestCmd(specDir)
-	root1.SetArgs([]string{"register", inputFile})
+	root1.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	if err := root1.Execute(); err != nil {
 		t.Fatalf("first register: %v", err)
 	}
 
 	// Second register should fail.
 	root2 := buildTestCmd(specDir)
-	root2.SetArgs([]string{"register", inputFile})
+	root2.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root2.Execute()
 	if err == nil {
 		t.Fatal("want error on second register, got nil")
 	}
 	if !strings.Contains(err.Error(), "already registered") {
 		t.Errorf("want 'already registered' error, got: %v", err)
+	}
+}
+
+func TestREQ30_E7_RegisterMissingGitHead(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+
+	content := "# Change Proposal: New Change\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
+	inputFile := filepath.Join(tmp, "new-change.md")
+	os.WriteFile(inputFile, []byte(content), 0644)
+
+	root := buildTestCmd(specDir)
+	root.SetArgs([]string{"register", inputFile})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("want error for missing --git-head, got nil")
+	}
+	if !strings.Contains(err.Error(), "git-head") {
+		t.Errorf("want error naming the missing --git-head flag, got: %v", err)
+	}
+
+	entries, _ := os.ReadDir(filepath.Join(specDir, "proposals"))
+	if len(entries) > 0 {
+		t.Error("file should not be created when --git-head is missing")
+	}
+	if _, err := os.Stat(filepath.Join(specDir, ".history.jsonl")); err == nil {
+		t.Error("journal should not be written when --git-head is missing")
+	}
+}
+
+func TestREQ30_E8_RegisterMalformedGitHead(t *testing.T) {
+	content := "# Change Proposal: New Change\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
+
+	tests := []struct {
+		name    string
+		gitHead string
+	}{
+		{"non-hex characters", "zznothex"},
+		{"too short", "cafe"},
+		{"empty value", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tmp := t.TempDir()
+			specDir := filepath.Join(tmp, "spec")
+			os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+			inputFile := filepath.Join(tmp, "new-change.md")
+			os.WriteFile(inputFile, []byte(content), 0644)
+
+			root := buildTestCmd(specDir)
+			root.SetArgs([]string{"register", inputFile, "--git-head", tt.gitHead})
+			err := root.Execute()
+			if err == nil {
+				t.Fatal("want error for malformed --git-head, got nil")
+			}
+			if !strings.Contains(err.Error(), "git-head") {
+				t.Errorf("want error naming --git-head, got: %v", err)
+			}
+
+			entries, _ := os.ReadDir(filepath.Join(specDir, "proposals"))
+			if len(entries) > 0 {
+				t.Error("file should not be created with a malformed --git-head")
+			}
+			if _, err := os.Stat(filepath.Join(specDir, ".history.jsonl")); err == nil {
+				t.Error("journal should not be written with a malformed --git-head")
+			}
+		})
 	}
 }
 
@@ -388,7 +465,7 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 
 	// Step 1: register.
 	root1 := buildTestCmd(specDir)
-	root1.SetArgs([]string{"register", inputFile})
+	root1.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	if err := root1.Execute(); err != nil {
 		t.Fatalf("register: %v", err)
 	}
