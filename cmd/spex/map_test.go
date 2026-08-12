@@ -210,6 +210,7 @@ func setupMapContextTestSpec(t *testing.T) (specDir string) {
 		`{"event":"added","eid":"e2","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":null,"after":"h2","git_head":"babe0000","proposal":"prop2"}`,
 		`{"event":"task_created","for":"e2","task_id":"test-def"}`,
 		`{"event":"removed","eid":"e3","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":"h2","after":null,"git_head":"cafe5678","proposal":"prop3"}`,
+		`{"event":"added","eid":"e4","node":"ffeeddccbbaa","name":"Comp2","node_type":"component","module":"alpha","before":null,"after":"h4","git_head":"feed0001","proposal":"prop4"}`,
 	})
 
 	return dir
@@ -239,6 +240,43 @@ func TestFR_MapContext_LiveNode(t *testing.T) {
 	if len(result.TestFiles) == 0 {
 		t.Error("want non-empty test_files")
 	}
+	// The event bracket rides alongside the file set, off the node's latest
+	// task-bearing journal event — an added, so before_head is empty.
+	if result.Eid != "e1" || result.Event != "added" {
+		t.Errorf("want bracket eid=e1 event=added, got eid=%q event=%q", result.Eid, result.Event)
+	}
+	if result.BeforeHead != "" {
+		t.Errorf("want empty before_head for an added event, got %q", result.BeforeHead)
+	}
+	if result.AfterHead != "cafe1234" {
+		t.Errorf("want after_head cafe1234, got %q", result.AfterHead)
+	}
+}
+
+func TestFR_MapContext_LiveNode_NoTaskBearingEvent(t *testing.T) {
+	specDir := setupMapContextTestSpec(t)
+
+	// Comp2 (ffeeddccbbaa) has a change event in the journal but no
+	// task_created receipt referencing it, so it carries no task-bearing
+	// event — the file set still resolves normally, but the bracket is null.
+	out, err := runSpex(t, "map", "context", "--spec-dir", specDir, "ffeeddccbbaa")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result mapping.ContextResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
+	}
+	if result.Removed {
+		t.Fatal("want live result, got Removed=true")
+	}
+	if result.ArchFile == "" {
+		t.Error("want non-empty arch_file")
+	}
+	if result.Eid != "" || result.Event != "" || result.BeforeHead != "" || result.AfterHead != "" {
+		t.Errorf("want null bracket fields for a node with no task-bearing event, got %+v", result)
+	}
 }
 
 func TestFR_MapContext_RemovedNode(t *testing.T) {
@@ -261,6 +299,9 @@ func TestFR_MapContext_RemovedNode(t *testing.T) {
 	}
 	if result.Proposal != "prop3" {
 		t.Errorf("want removing proposal prop3, got %q", result.Proposal)
+	}
+	if result.Eid != "e3" || result.Event != "removed" {
+		t.Errorf("want bracket eid=e3 event=removed, got eid=%q event=%q", result.Eid, result.Event)
 	}
 	if result.AfterHead != "cafe5678" || result.BeforeHead != "babe0000" {
 		t.Errorf("want git_head refs bracketing the final change, got before=%q after=%q", result.BeforeHead, result.AfterHead)
