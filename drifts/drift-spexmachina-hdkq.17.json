@@ -1,0 +1,15 @@
+{
+  "bead": "spexmachina-hdkq.17",
+  "node": "dbe8d1e707d5",
+  "files": [
+    "spec/emit/flow_emit.md",
+    "spec/emit/arch_idempotency_labeler.md",
+    "spec/emit/arch_changeset_builder.md",
+    "spec/emit/test_changeset_builder.md"
+  ],
+  "claim": "spec/emit/flow_emit.md step 4 (lines 68-73), the cleanup referent: \"a cleanup keys the removal event its same-batch close implies\" (only the same-batch branch, no fold-read branch); and the Journal reads section (lines 99-111), which lists exactly two reads (the fold's pairing for a spec node; the proposal's registered event) and closes with \"Nothing else is read: every other label derives from the op itself\" — affirmatively foreclosing a fold read for the cleanup referent.",
+  "authoritative_source": "spec/emit/arch_idempotency_labeler.md's \"One rule, three referents\" table (line 22), the Cleanup row: the referent is \"the journal's latest `removed` event for the node, read from the fold, when the removal already landed — else the event its same-batch close implies\" — two branches, not one.",
+  "evidence": "Three sibling leaves all carry the prior-batch fold-read branch that c1faf52 added: arch_idempotency_labeler.md:22 (quoted above), arch_changeset_builder.md:65 (\"a prior removal read from the fold, or the one the same-batch close implies\"), and test_changeset_builder.md's \"Cleanup-bead create for a prior-batch removal\" scenario (lines 101-108), which asserts idempotency.label is spex:E1 \"read from the fold, not derived from any op in this batch\". flow_emit.md's step 4 states only the same-batch branch, and its Journal reads section forecloses the fold read the first branch needs — but spec/map/arch_mapping_store.md:88 confirms the fold does surface a node's full event history (including removed events), so the read flow_emit.md denies is one the mapping store actually supports. flow_emit.md still mirrors what c1faf52 rewrote before the post-authoring /spec-review fix that added the prior-batch branch landed elsewhere, which is how it went stale.",
+  "blocking": false,
+  "proposed_fix": "In flow_emit.md step 4, change the cleanup clause to: \"a cleanup keys the journal's latest removed event for the node, read from the fold, when the removal already landed — else the event its same-batch close implies\". In the Journal reads section, add a third bullet for that fold read (the removed event for a node, when a prior-batch cleanup answers it) alongside the existing two, and adjust the closing sentence so it no longer forecloses it."
+}
