@@ -57,15 +57,17 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 #### S4: Register with missing file argument
 
 **Given** no arguments passed after `register`.
-**When** `spex register` is executed (no proposal path).
+**When** `spex register` is executed (no proposal path, and no `--git-head` either).
 **Then:**
 - Exit code is 1.
-- Stderr contains a usage message indicating that a proposal file path is required.
+- Stderr contains a usage message indicating that a proposal file path is required — the missing
+  path, not the missing `--git-head`. Both are absent here and the argument count is checked first,
+  so this is the message the barest invocation gets (see E7 for the flag's own message).
 
 #### S5: Register with nonexistent file
 
 **Given** the path `input/ghost.md` does not exist.
-**When** `spex register input/ghost.md` is executed.
+**When** `spex register input/ghost.md --git-head cafe1234` is executed.
 **Then:**
 - Exit code is 1.
 - Stderr contains a file-not-found error.
@@ -170,7 +172,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **When:**
 1. `spex template change > /tmp/new-proposal.md` (generate template).
 2. Fill in required sections in `/tmp/new-proposal.md` with real content.
-3. `spex register /tmp/new-proposal.md` (register the filled-in proposal).
+3. `spex register /tmp/new-proposal.md --git-head cafe1234` (register the filled-in proposal).
 4. `spex log --json` (view history).
 **Then:**
 - Step 3 succeeds (exit code 0).
@@ -180,7 +182,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 #### S17: Register preserves composability contract
 
 **Given** a valid change proposal file.
-**When** `spex register input/new-change.md` is executed.
+**When** `spex register input/new-change.md --git-head cafe1234` is executed.
 **Then:**
 - The command reads a file (input), writes a file (output to `spec/proposals/`), and exits 0 or 1.
 - No interactive prompts. No network calls. No side effects outside the spec directory.
@@ -191,7 +193,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E1: Register when spec/proposals/ is a symlink
 
 **Given** `spec/proposals` is a symlink to `/tmp/shared-proposals/`.
-**When** `spex register input/new-change.md` is executed.
+**When** `spex register input/new-change.md --git-head cafe1234` is executed.
 **Then:**
 - File is written through the symlink to the target directory.
 - Exit code is 0.
@@ -199,7 +201,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E2: Register with read-only proposals directory
 
 **Given** `spec/proposals/` exists but has permissions 0555 (read + execute only).
-**When** `spex register input/new-change.md` is executed.
+**When** `spex register input/new-change.md --git-head cafe1234` is executed.
 **Then:**
 - Exit code is 1.
 - Stderr contains a permission-denied error.
@@ -216,7 +218,8 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E4: Multiple subcommands share the same spec directory default
 
 **Given** the working directory contains `spec/proposals/` with existing proposals.
-**When** `spex register`, `spex log`, and `spex template` are each run without `--spec-dir`.
+**When** `spex register <path> --git-head cafe1234`, `spex log`, and `spex template` are each run
+without `--spec-dir`.
 **Then:**
 - All three commands default to `spec/` as the spec directory relative to the current working directory.
 - Behavior is consistent: a file registered with `spex register` is visible in `spex log` output.
@@ -224,7 +227,8 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E5: Concurrent register calls for different proposals
 
 **Given** two valid proposal files `a.md` and `b.md`.
-**When** `spex register a.md` and `spex register b.md` are executed concurrently.
+**When** `spex register a.md --git-head cafe1234` and `spex register b.md --git-head cafe1234` are
+executed concurrently.
 **Then:**
 - Both succeed (exit code 0 for each).
 - `spec/proposals/` contains both registered files.
@@ -233,8 +237,31 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E6: Register idempotency check
 
 **Given** a valid proposal that has already been registered.
-**When** `spex register input/new-change.md` is executed a second time on the same day.
+**When** `spex register input/new-change.md --git-head cafe1234` is executed a second time on the
+same day.
 **Then:**
 - Exit code is 1 (target file already exists).
 - Stderr contains a message indicating the proposal is already registered.
 - The existing registered file is not modified or overwritten.
+
+### E7: Register with no `--git-head`
+
+**Given** `new-change.md` is a valid change proposal.
+**When** `spex register input/new-change.md` is executed with the flag omitted entirely.
+**Then:**
+- Exit code is 1.
+- Stderr names the missing required flag; the pre-flight described in
+  `arch_proposal_commands.md` refuses the run before Registrar is reached.
+- No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl` — a
+  headless `":<slug>"` eid never reaches the journal.
+
+### E8: Register with a malformed `--git-head`
+
+**Given** `new-change.md` is a valid change proposal.
+**When** `spex register input/new-change.md --git-head zznothex` is executed (also: an empty value,
+and a value shorter than 7 characters).
+**Then:**
+- Exit code is 1.
+- Stderr carries the pre-flight message naming the expected form, as `spex emit` does for the same
+  flag.
+- No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl`.
