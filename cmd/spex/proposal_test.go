@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/spf13/cobra"
 )
 
@@ -29,7 +30,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 	registerCmd := findSubcommand(root, "register")
 	registerCmd.SetOut(&out)
 
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -41,14 +42,27 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 
 	// Verify file was created in proposals dir.
 	entries, _ := os.ReadDir(filepath.Join(specDir, "proposals"))
-	found := false
+	var slug string
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), "-new-change.md") {
+			slug = strings.TrimSuffix(e.Name(), ".md")
+		}
+	}
+	if slug == "" {
+		t.Fatal("registered proposal file not found in spec/proposals/")
+	}
+
+	// The --git-head flag feeds the registered event's eid.
+	events := journalEvents(t, specDir)
+	wantEID := "cafe1234:" + slug
+	found := false
+	for _, ev := range events {
+		if ev.Event == "registered" && ev.EID == wantEID {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("registered proposal file not found in spec/proposals/")
+		t.Errorf("want registered event with eid %q, got events: %+v", wantEID, events)
 	}
 }
 
@@ -445,6 +459,17 @@ func TestREQ30_LogProposalFilter(t *testing.T) {
 	if strings.Contains(out, "spexmachina-abc") {
 		t.Errorf("filtered bead leaked into output:\n%s", out)
 	}
+}
+
+// journalEvents parses spec/.history.jsonl into events, failing the test on
+// any parse error.
+func journalEvents(t *testing.T, specDir string) []mapping.Event {
+	t.Helper()
+	events, err := mapping.NewMappingStore(specDir).Parse()
+	if err != nil {
+		t.Fatalf("parse journal: %v", err)
+	}
+	return events
 }
 
 // --- helpers ---
