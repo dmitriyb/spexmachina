@@ -801,7 +801,7 @@ func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
 		{"id":"spex-001","status":"open","labels":["spex:%s"]},
 		{"id":"spex-003","status":"open","labels":["spex:%s"]},
 		{"id":"spex-010","status":"open","labels":["spex:obsolete"]},
-		{"id":"spex-010","status":"closed","labels":["spex:42"]}
+		{"id":"spex-010","status":"closed","labels":["spex:E3"]}
 	]}`, fx.schkID, fx.hasrID)), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -838,14 +838,15 @@ func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
 	}
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
+	var report2 impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report2); err != nil {
 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
 	}
-	if report.Summary.CreateCount != 3 || report.Summary.ObsoleteCount != 3 {
-		t.Fatalf("closed-then-open: want summary {3,3} (last entry wins), got %+v", report.Summary)
+	if report2.Summary.CreateCount != 3 || report2.Summary.ObsoleteCount != 3 {
+		t.Fatalf("closed-then-open: want summary {3,3} (last entry wins), got %+v", report2.Summary)
 	}
-	if hasCleanupCreate(report, "spex-010") {
-		t.Fatalf("closed-then-open: want no cleanup create for spex-010, creates=%+v", report.Creates)
+	if hasCleanupCreate(report2, "spex-010") {
+		t.Fatalf("closed-then-open: want no cleanup create for spex-010, creates=%+v", report2.Creates)
 	}
 }
 
