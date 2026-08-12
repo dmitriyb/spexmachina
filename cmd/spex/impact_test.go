@@ -785,52 +785,66 @@ func TestE7_DiffReferencesUnknownModules(t *testing.T) {
 	}
 }
 
-// E8: Bead file carries two beads claiming the same node. The join keeps one
-// status per node key, and the LAST entry in the file wins — order, not
-// status value, decides the outcome.
-func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
-	fx := setupImpactCommandFixture(t)
-
-	closedLast := filepath.Join(t.TempDir(), "beads_closed_last.json")
-	if err := os.WriteFile(closedLast, []byte(fmt.Sprintf(`{"issues":[
-		{"id":"claim-a","status":"open","labels":["spex:%s"]},
-		{"id":"claim-b","status":"closed","labels":["spex:%s"]}
-	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", closedLast, "--spec-dir", fx.specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-	var report impact.ImpactReport
-	if err := json.Unmarshal([]byte(out), &report); err != nil {
-		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
-	}
-	if !hasCleanupCreate(report, "spex-010") {
-		t.Fatalf("want a cleanup create when the LAST claim on the node is closed; creates=%+v", report.Creates)
-	}
-
-	openLast := filepath.Join(t.TempDir(), "beads_open_last.json")
-	if err := os.WriteFile(openLast, []byte(fmt.Sprintf(`{"issues":[
-		{"id":"claim-a","status":"closed","labels":["spex:%s"]},
-		{"id":"claim-b","status":"open","labels":["spex:%s"]}
-	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	out2, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", openLast, "--spec-dir", fx.specDir)
-	if err != nil {
-		t.Fatalf("want no error, got %v", err)
-	}
-	var report2 impact.ImpactReport
-	if err := json.Unmarshal([]byte(out2), &report2); err != nil {
-		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out2)
-	}
-	if hasCleanupCreate(report2, "spex-010") {
-		t.Fatalf("want no cleanup create when the LAST claim on the node is open; creates=%+v", report2.Creates)
-	}
-}
+// TODO(bead:spexmachina-hdkq.16): TestE8_DuplicateBeadClaimsLastWins tested
+// the retired label-based join — two different bead ids ("claim-a",
+// "claim-b") carrying the same spex:<hash> label, "last claim on the node
+// wins" keyed by that label. spexmachina-hdkq.13 retired label parsing from
+// BeadReader (spec/impact/arch_bead_reader.md, "No Label Parsing"); the join
+// now keys on task id, so this scenario has no equivalent under the new
+// design — a spec node's current claim comes from journal lineage (see
+// test_bead_matching.md S4), not from multiple simultaneous label matches in
+// one --beads listing.
+//
+// The already-authored spec/impact/test_impact_command.md now documents a
+// different E8 (line 203, "Bead file carries duplicate ids"): the SAME bead
+// id appearing twice in one --beads file, last entry wins by task id. That
+// is ImpactCommand's own test-section content to write, once
+// enrichPairingsWithBeadStatus's task-id join is exercised end to end by its
+// owning bead.
+//
+// func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
+// 	fx := setupImpactCommandFixture(t)
+//
+// 	closedLast := filepath.Join(t.TempDir(), "beads_closed_last.json")
+// 	if err := os.WriteFile(closedLast, []byte(fmt.Sprintf(`{"issues":[
+// 		{"id":"claim-a","status":"open","labels":["spex:%s"]},
+// 		{"id":"claim-b","status":"closed","labels":["spex:%s"]}
+// 	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", closedLast, "--spec-dir", fx.specDir)
+// 	if err != nil {
+// 		t.Fatalf("want no error, got %v", err)
+// 	}
+// 	var report impact.ImpactReport
+// 	if err := json.Unmarshal([]byte(out), &report); err != nil {
+// 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+// 	}
+// 	if !hasCleanupCreate(report, "spex-010") {
+// 		t.Fatalf("want a cleanup create when the LAST claim on the node is closed; creates=%+v", report.Creates)
+// 	}
+//
+// 	openLast := filepath.Join(t.TempDir(), "beads_open_last.json")
+// 	if err := os.WriteFile(openLast, []byte(fmt.Sprintf(`{"issues":[
+// 		{"id":"claim-a","status":"closed","labels":["spex:%s"]},
+// 		{"id":"claim-b","status":"open","labels":["spex:%s"]}
+// 	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
+// 		t.Fatal(err)
+// 	}
+//
+// 	out2, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", openLast, "--spec-dir", fx.specDir)
+// 	if err != nil {
+// 		t.Fatalf("want no error, got %v", err)
+// 	}
+// 	var report2 impact.ImpactReport
+// 	if err := json.Unmarshal([]byte(out2), &report2); err != nil {
+// 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out2)
+// 	}
+// 	if hasCleanupCreate(report2, "spex-010") {
+// 		t.Fatalf("want no cleanup create when the LAST claim on the node is open; creates=%+v", report2.Creates)
+// 	}
+// }
 
 // E9: Diff input contains errors — impact refuses to proceed.
 func TestE9_DiffWithErrorsRefusesToProceed(t *testing.T) {
@@ -1349,30 +1363,34 @@ func TestFR_RemovedThenReAddedNodeIsNotATombstoneMatch(t *testing.T) {
 }
 
 // TestEnrichPairingsWithBeadStatus verifies the helper copies live bead
-// statuses onto journal pairings by joining on SpecNodeID. The third pairing
-// has no matching bead and must keep its empty BeadStatus — the cleanup gate
-// at action_classifier.go defaults closed for safety.
+// statuses onto journal pairings by joining on task id (bead.ID ==
+// pairing.TaskID) — spexmachina-hdkq.13 retired BeadSpec.SpecNodeID and
+// BeadSpec.Labels (BeadReader no longer parses labels — see
+// spec/impact/arch_bead_reader.md, "No Label Parsing"), so the join moved
+// from spec node id to task id per flow_impact_analysis.md. The third
+// pairing has no matching bead and must keep its empty BeadStatus — the
+// cleanup gate at action_classifier.go defaults closed for safety.
 func TestEnrichPairingsWithBeadStatus(t *testing.T) {
 	beads := []impact.BeadSpec{
-		{ID: "bead-1", Status: "closed", SpecNodeID: "aaaaaaaaaaaa", Labels: []string{"spex:aaaaaaaaaaaa"}},
-		{ID: "bead-2", Status: "open", SpecNodeID: "bbbbbbbbbbbb", Labels: []string{"spex:bbbbbbbbbbbb"}},
+		{ID: "bead-1", Status: "closed"},
+		{ID: "bead-2", Status: "open"},
 	}
 	pairings := []impact.Pairing{
-		{SpecNodeID: "aaaaaaaaaaaa", TaskID: "task-1"},
-		{SpecNodeID: "bbbbbbbbbbbb", TaskID: "task-2"},
+		{SpecNodeID: "aaaaaaaaaaaa", TaskID: "bead-1"},
+		{SpecNodeID: "bbbbbbbbbbbb", TaskID: "bead-2"},
 		{SpecNodeID: "cccccccccccc", TaskID: "task-3"},
 	}
 
 	out := enrichPairingsWithBeadStatus(beads, pairings)
 
 	want := map[string]string{
-		"aaaaaaaaaaaa": "closed",
-		"bbbbbbbbbbbb": "open",
-		"cccccccccccc": "",
+		"bead-1": "closed",
+		"bead-2": "open",
+		"task-3": "",
 	}
 	for _, p := range out {
-		if p.BeadStatus != want[p.SpecNodeID] {
-			t.Errorf("pairing %s: want BeadStatus %q, got %q", p.SpecNodeID, want[p.SpecNodeID], p.BeadStatus)
+		if p.BeadStatus != want[p.TaskID] {
+			t.Errorf("pairing %s: want BeadStatus %q, got %q", p.TaskID, want[p.TaskID], p.BeadStatus)
 		}
 	}
 }
