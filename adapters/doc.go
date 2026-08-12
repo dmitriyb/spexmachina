@@ -24,8 +24,9 @@
 // Re-running the same changeset against an unchanged tracker state must
 // produce the same final tracker state. Already-created beads are
 // detected via the IdempotencyLabelPrefix label and recorded as
-// was_existing=true skipped receipts; already-closed beads are detected
-// via the ObsoleteLabel and recorded as status=skipped with reason
+// was_existing=true status=ok receipts, so ingest still constructs a
+// journal line for them; already-closed beads are detected via the
+// ObsoleteLabel and recorded as status=skipped with reason
 // "already obsoleted".
 //
 // # Contract surface

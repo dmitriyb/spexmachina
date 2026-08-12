@@ -57,7 +57,7 @@ type Ref struct {
 
 // Idem carries the idempotency label the adapter matches against the
 // tracker before creating a bead. A pre-existing match yields a
-// was_existing=true skipped receipt rather than a duplicate bead.
+// was_existing=true ok receipt rather than a duplicate bead.
 type Idem struct {
 	Label string `json:"label"`
 }
