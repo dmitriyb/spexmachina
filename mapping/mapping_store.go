@@ -486,6 +486,11 @@ func (s *MappingStore) Append(events []Event) error {
 		os.Remove(tmpName)
 		return fmt.Errorf("append: write temp file: %w", err)
 	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return fmt.Errorf("append: sync temp file: %w", err)
+	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(tmpName)
 		return fmt.Errorf("append: close temp file: %w", err)

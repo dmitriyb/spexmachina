@@ -392,6 +392,61 @@ func TestREQ_934d627f0e90_AppendRefusedBatchChangesNothing(t *testing.T) {
 	}
 }
 
+func TestREQ_934d627f0e90_AppendLandsOnNonEmptyJournal(t *testing.T) {
+	dir := t.TempDir()
+	store := NewMappingStore(dir)
+	journalPath := filepath.Join(dir, ".history.jsonl")
+	node := "aaaaaaaaaaaa"
+
+	first := []Event{
+		{Event: "added", EID: "e1", Node: node, Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
+		{Event: "task_created", For: "e1", TaskID: "task-a"},
+	}
+	if err := store.Append(first); err != nil {
+		t.Fatalf("Append first batch: %v", err)
+	}
+
+	second := []Event{
+		{Event: "modified", EID: "e2", Node: node, Name: "Foo", NodeType: "component", Module: "modA", Before: strPtr("h1"), After: strPtr("h2"), GitHead: "g2", Proposal: "p1"},
+		{Event: "task_created", For: "e2", TaskID: "task-b"},
+	}
+	if err := store.Append(second); err != nil {
+		t.Fatalf("Append second batch: %v", err)
+	}
+
+	raw, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("want 4 lines after both appends, got %d: %q", len(lines), raw)
+	}
+
+	events, err := store.Parse()
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	wantEvents := []string{"added", "task_created", "modified", "task_created"}
+	for i, ev := range events {
+		if ev.Event != wantEvents[i] {
+			t.Fatalf("line %d: want event %q, got %q", i+1, wantEvents[i], ev.Event)
+		}
+	}
+
+	// The fold must reflect both batches: node X's lineage runs
+	// added+task-a then modified+task-b, folding to the second task — the
+	// same lineage rule test_mapping_store.md pins for the read path, now
+	// proven through the write path.
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(f.Entries) != 1 || f.Entries[0].TaskID != "task-b" {
+		t.Fatalf("want 1 entry with TaskID task-b, got %+v", f.Entries)
+	}
+}
+
 // --- Deterministic order ---
 
 func TestREQ_934d627f0e90_DeterministicOrder(t *testing.T) {
