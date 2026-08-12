@@ -103,6 +103,9 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 		`{"event":"removed","eid":"e2","node":"dddddddddddd","name":"CompY","node_type":"component","module":"modD","before":"h1","after":null,"git_head":"g2","proposal":"remove-prop"}`,
 		`{"event":"task_closed","for":"e2","task_id":"task-Y"}`,
 		`{"event":"task_created","for":"e2","task_id":"br-cleanup"}`,
+		`{"event":"registered","eid":"e9","proposal":"2026-08-11-slug","git_head":"g9"}`,
+		`{"event":"task_created","for":"e9","task_id":"epic-1"}`,
+		`{"event":"task_created","proposal":"legacy-slug","task_id":"epic-legacy"}`,
 	})
 
 	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
@@ -114,14 +117,19 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &entries); err != nil {
 		t.Fatalf("output should be valid JSON array: %v\noutput: %s", err, out)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("want 2 entries, got %d: %s", len(entries), out)
+	if len(entries) != 4 {
+		t.Fatalf("want 4 entries, got %d: %s", len(entries), out)
 	}
 
-	var removed map[string]any
+	var removed, registeredEpic, legacyEpic map[string]any
 	for _, e := range entries {
-		if e["node"] == "dddddddddddd" {
+		switch {
+		case e["node"] == "dddddddddddd":
 			removed = e
+		case e["proposal"] == "2026-08-11-slug":
+			registeredEpic = e
+		case e["proposal"] == "legacy-slug":
+			legacyEpic = e
 		}
 	}
 	if removed == nil {
@@ -132,6 +140,61 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	}
 	if removed["task_id"] != "br-cleanup" {
 		t.Errorf("removed node should adopt the cleanup task id, got %v", removed["task_id"])
+	}
+
+	if registeredEpic == nil {
+		t.Fatalf("want an entry for the registered-sourced epic, got %s", out)
+	}
+	if registeredEpic["task_id"] != "epic-1" {
+		t.Errorf("registered epic task_id: want epic-1, got %v", registeredEpic["task_id"])
+	}
+	if registeredEpic["git_head"] != "g9" {
+		t.Errorf("registered epic git_head: want g9, got %v", registeredEpic["git_head"])
+	}
+	if _, hasNode := registeredEpic["node"]; hasNode {
+		t.Errorf("registered epic should carry no node field, got %v", registeredEpic["node"])
+	}
+
+	if legacyEpic == nil {
+		t.Fatalf("want an entry for the legacy slug-keyed epic, got %s", out)
+	}
+	if legacyEpic["task_id"] != "epic-legacy" {
+		t.Errorf("legacy epic task_id: want epic-legacy, got %v", legacyEpic["task_id"])
+	}
+	if _, hasNode := legacyEpic["node"]; hasNode {
+		t.Errorf("legacy epic should carry no node field, got %v", legacyEpic["node"])
+	}
+
+	// Both epic entries must also surface individually through `map get`,
+	// by their task id, with the same shape `map list` folded them into.
+	registeredGet, err := runSpex(t, "map", "get", "--spec-dir", dir, "epic-1")
+	if err != nil {
+		t.Fatalf("map get epic-1: want no error, got %v", err)
+	}
+	var registeredGot map[string]any
+	if err := json.Unmarshal([]byte(registeredGet), &registeredGot); err != nil {
+		t.Fatalf("map get epic-1: output should be valid JSON: %v\noutput: %s", err, registeredGet)
+	}
+	if registeredGot["proposal"] != "2026-08-11-slug" || registeredGot["git_head"] != "g9" || registeredGot["task_id"] != "epic-1" {
+		t.Errorf("map get epic-1: want the registered-sourced epic entry, got %+v", registeredGot)
+	}
+	if _, hasNode := registeredGot["node"]; hasNode {
+		t.Errorf("map get epic-1: should carry no node field, got %v", registeredGot["node"])
+	}
+
+	legacyGet, err := runSpex(t, "map", "get", "--spec-dir", dir, "epic-legacy")
+	if err != nil {
+		t.Fatalf("map get epic-legacy: want no error, got %v", err)
+	}
+	var legacyGot map[string]any
+	if err := json.Unmarshal([]byte(legacyGet), &legacyGot); err != nil {
+		t.Fatalf("map get epic-legacy: output should be valid JSON: %v\noutput: %s", err, legacyGet)
+	}
+	if legacyGot["proposal"] != "legacy-slug" || legacyGot["task_id"] != "epic-legacy" {
+		t.Errorf("map get epic-legacy: want the legacy slug-keyed epic entry, got %+v", legacyGot)
+	}
+	if _, hasNode := legacyGot["node"]; hasNode {
+		t.Errorf("map get epic-legacy: should carry no node field, got %v", legacyGot["node"])
 	}
 }
 
@@ -210,6 +273,7 @@ func setupMapContextTestSpec(t *testing.T) (specDir string) {
 		`{"event":"added","eid":"e2","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":null,"after":"h2","git_head":"babe0000","proposal":"prop2"}`,
 		`{"event":"task_created","for":"e2","task_id":"test-def"}`,
 		`{"event":"removed","eid":"e3","node":"dddddddddddd","name":"Retired","node_type":"component","module":"alpha","before":"h2","after":null,"git_head":"cafe5678","proposal":"prop3"}`,
+		`{"event":"added","eid":"e4","node":"ffeeddccbbaa","name":"Comp2","node_type":"component","module":"alpha","before":null,"after":"h4","git_head":"feed0001","proposal":"prop4"}`,
 	})
 
 	return dir
@@ -239,6 +303,43 @@ func TestFR_MapContext_LiveNode(t *testing.T) {
 	if len(result.TestFiles) == 0 {
 		t.Error("want non-empty test_files")
 	}
+	// The event bracket rides alongside the file set, off the node's latest
+	// task-bearing journal event — an added, so before_head is empty.
+	if result.Eid != "e1" || result.Event != "added" {
+		t.Errorf("want bracket eid=e1 event=added, got eid=%q event=%q", result.Eid, result.Event)
+	}
+	if result.BeforeHead != "" {
+		t.Errorf("want empty before_head for an added event, got %q", result.BeforeHead)
+	}
+	if result.AfterHead != "cafe1234" {
+		t.Errorf("want after_head cafe1234, got %q", result.AfterHead)
+	}
+}
+
+func TestFR_MapContext_LiveNode_NoTaskBearingEvent(t *testing.T) {
+	specDir := setupMapContextTestSpec(t)
+
+	// Comp2 (ffeeddccbbaa) has a change event in the journal but no
+	// task_created receipt referencing it, so it carries no task-bearing
+	// event — the file set still resolves normally, but the bracket is null.
+	out, err := runSpex(t, "map", "context", "--spec-dir", specDir, "ffeeddccbbaa")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result mapping.ContextResult
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output should be valid JSON: %v\noutput: %s", err, out)
+	}
+	if result.Removed {
+		t.Fatal("want live result, got Removed=true")
+	}
+	if result.ArchFile == "" {
+		t.Error("want non-empty arch_file")
+	}
+	if result.Eid != "" || result.Event != "" || result.BeforeHead != "" || result.AfterHead != "" {
+		t.Errorf("want null bracket fields for a node with no task-bearing event, got %+v", result)
+	}
 }
 
 func TestFR_MapContext_RemovedNode(t *testing.T) {
@@ -261,6 +362,9 @@ func TestFR_MapContext_RemovedNode(t *testing.T) {
 	}
 	if result.Proposal != "prop3" {
 		t.Errorf("want removing proposal prop3, got %q", result.Proposal)
+	}
+	if result.Eid != "e3" || result.Event != "removed" {
+		t.Errorf("want bracket eid=e3 event=removed, got eid=%q event=%q", result.Eid, result.Event)
 	}
 	if result.AfterHead != "cafe5678" || result.BeforeHead != "babe0000" {
 		t.Errorf("want git_head refs bracketing the final change, got before=%q after=%q", result.BeforeHead, result.AfterHead)
