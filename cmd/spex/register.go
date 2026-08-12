@@ -23,7 +23,10 @@ func runRegisterE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	filename, err := proposal.Register(args[0], specDir)
+	// TODO(bead:spexmachina-hdkq.12): wire a --git-head flag on this command
+	// and pass the caller-supplied value here instead of "" — Registrar now
+	// requires it to key the registered journal event's eid.
+	filename, err := proposal.Register(args[0], specDir, "")
 	if err != nil {
 		return err
 	}
