@@ -167,12 +167,17 @@ func pairingsFromFold(fold mapping.Fold) []impact.Pairing {
 		if e.Source.Node == "" || e.Removed {
 			continue
 		}
+		var after string
+		if e.Source.After != nil {
+			after = *e.Source.After
+		}
 		out = append(out, impact.Pairing{
 			SpecNodeID: e.Key,
 			TaskID:     e.TaskID,
 			NodeType:   e.Source.NodeType,
 			Module:     e.Source.Module,
 			Name:       e.Source.Name,
+			After:      after,
 		})
 	}
 	return out

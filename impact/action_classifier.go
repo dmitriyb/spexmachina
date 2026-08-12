@@ -39,6 +39,11 @@ var beadProducingTypes = map[string]bool{
 // unmatched added/modified nodes produce a single create; orphans produce an
 // obsolete (plus a cleanup create for closed beads).
 //
+// A matched added or modified record whose Pairing.After already equals the
+// change's current hash is already tracked — its task was created against
+// exactly this state, and the change resurfaced only because a partial
+// ingest run left the snapshot unsaved. That record yields no action at all.
+//
 // For each create action, DepSpecNodeIDs is populated with identity hashes
 // from: the component's direct `uses` edges, the transitive `requires_module`
 // closure (with cycle detection), and data_flow add-ons (components appearing
@@ -69,6 +74,15 @@ func ClassifyActions(graph mapping.SpecGraph, matches []Match, unmatched []Unmat
 			coupled := nodeType == "test_section" && !testSectionProducesBead(graph, m.Change.Module, specNodeID)
 
 			for _, r := range m.Records {
+				// Already tracked: the pairing's sourcing event already
+				// records the change's current hash as its after hash, so
+				// the journal already pairs a live task with exactly this
+				// state. The change resurfaced only because a partial run
+				// left the snapshot unsaved, not because new work exists —
+				// yield no action for this record at all.
+				if r.After != "" && r.After == newHash {
+					continue
+				}
 				node := nodeName(r)
 				// Obsolete the old bead.
 				actions = append(actions, Action{
