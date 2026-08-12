@@ -180,7 +180,7 @@ func latestTaskBearingBracket(history []Event) (eid, event, before, after string
 	}
 
 	latest := changeEvents[idx]
-	if idx > 0 {
+	if idx > 0 && latest.Event != "added" {
 		before = changeEvents[idx-1].GitHead
 	}
 	return latest.EID, latest.Event, before, latest.GitHead, true
