@@ -9,7 +9,7 @@ import (
 // Pairing is one journal fold entry — a spec node's current task linkage, as
 // mapping.MappingStore folds it from spec/.history.jsonl — enriched with the
 // bead's live status. Folding the journal and joining BeadReader's live
-// status onto each entry by identity hash happens upstream, in ImpactCommand;
+// status onto each entry by task id happens upstream, in ImpactCommand;
 // matching reads neither, carrying BeadStatus through untouched for
 // ActionClassifier's cleanup gate further down. A pairing for which no bead
 // was supplied arrives with BeadStatus unset.
