@@ -179,23 +179,28 @@ func pairingsFromFold(fold mapping.Fold) []impact.Pairing {
 }
 
 // enrichPairingsWithBeadStatus populates each pairing's BeadStatus field by
-// matching on SpecNodeID. When the same node key appears on more than one
-// bead, the last one in the input wins — decodeBeads/ReadBeadsBytes preserve
-// input order, so the join is deterministic. Pairings without a matching
-// bead are returned unchanged so the cleanup-bead gate at
-// action_classifier.go defaults closed (no cleanup actions emitted) for
-// safety.
+// matching on task id. spexmachina-hdkq.13 retired BeadSpec.SpecNodeID and
+// BeadSpec.Labels — BeadReader no longer parses labels (see
+// spec/impact/arch_bead_reader.md, "No Label Parsing") — so the join moved
+// from spec node id to task id, per flow_impact_analysis.md's "BeadReader →
+// NodeMatcher" data shape: "each entry's status is copied onto the journal
+// fold's pairing whose task id matches". When the same task id appears on
+// more than one bead, the last one in the input wins — decodeBeads/
+// ReadBeadsBytes preserve input order, so the join is deterministic.
+// Pairings without a matching bead are returned unchanged so the
+// cleanup-bead gate at action_classifier.go defaults closed (no cleanup
+// actions emitted) for safety.
 func enrichPairingsWithBeadStatus(beads []impact.BeadSpec, pairings []impact.Pairing) []impact.Pairing {
 	if pairings == nil {
 		return nil
 	}
-	statusByNodeID := make(map[string]string, len(beads))
+	statusByTaskID := make(map[string]string, len(beads))
 	for _, b := range beads {
-		statusByNodeID[b.SpecNodeID] = b.Status
+		statusByTaskID[b.ID] = b.Status
 	}
 	enriched := make([]impact.Pairing, len(pairings))
 	for i, p := range pairings {
-		if status, ok := statusByNodeID[p.SpecNodeID]; ok {
+		if status, ok := statusByTaskID[p.TaskID]; ok {
 			p.BeadStatus = status
 		}
 		enriched[i] = p
