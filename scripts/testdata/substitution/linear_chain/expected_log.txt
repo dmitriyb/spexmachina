@@ -1,7 +1,7 @@
 br --version
-br list --json --label spex:1
+br list --json --all --limit 0 --label spex:1
 br create --title A --labels spex:1 --type feature --json --priority 1
-br list --json --label spex:2
+br list --json --all --limit 0 --label spex:2
 br create --title B --labels spex:2 --type feature --json --priority 1 --deps blocked-by:br-100
-br list --json --label spex:3
+br list --json --all --limit 0 --label spex:3
 br create --title C --labels spex:3 --type feature --json --priority 1 --deps blocked-by:br-101

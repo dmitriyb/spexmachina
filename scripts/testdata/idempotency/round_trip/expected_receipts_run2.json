@@ -2,9 +2,9 @@
   "version": 1,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0001","status":"skipped","bead_id":"mock-001","was_existing":true,"reason":"idempotent re-match"},
-    {"op_id":"op-0002","status":"skipped","bead_id":"mock-002","was_existing":true,"reason":"idempotent re-match"},
-    {"op_id":"op-0003","status":"skipped","bead_id":"existing-already","was_existing":true,"reason":"idempotent re-match"},
+    {"op_id":"op-0001","status":"ok","bead_id":"mock-001","was_existing":true},
+    {"op_id":"op-0002","status":"ok","bead_id":"mock-002","was_existing":true},
+    {"op_id":"op-0003","status":"ok","bead_id":"existing-already","was_existing":true},
     {"op_id":"op-0004","status":"skipped","bead_id":"existing-open","was_existing":false,"reason":"already obsoleted"},
     {"op_id":"op-0005","status":"skipped","bead_id":"existing-closed","was_existing":false,"reason":"already obsoleted"}
   ]

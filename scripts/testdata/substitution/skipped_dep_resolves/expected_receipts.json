@@ -2,7 +2,7 @@
   "version": 1,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0003","status":"skipped","bead_id":"br-10","was_existing":true,"reason":"idempotent re-match"},
+    {"op_id":"op-0003","status":"ok","bead_id":"br-10","was_existing":true},
     {"op_id":"op-0005","status":"ok","bead_id":"br-11","was_existing":false}
   ]
 }

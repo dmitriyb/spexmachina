@@ -216,24 +216,28 @@ process_create() {
         return
     fi
 
-    # Idempotency pre-check: any OPEN bead carrying this label?
-    # Open-only filter mirrors pre-decouple apply/bead_creator.go::FindExisting.
-    # Closed beads carrying the same label are historical (landed in a prior
-    # lifecycle, closed by /review, label persisted across close) and MUST
-    # NOT count as a match — modify-pair creates deliberately reuse the
-    # closed OLD bead's label as their idempotency.label, so without the
-    # filter we'd treat the closed bead as a match and skip the create.
+    # Idempotency pre-check: any bead carrying this exact label, in any
+    # status? Status-unfiltered and unbounded (--all --limit 0) because
+    # br list's defaults hide closed beads and cap the row count, and
+    # either default would silently reintroduce the retired open-only
+    # semantics. Labels are spex:<eid> — unique per change — so a bead
+    # carrying this op's exact label, whatever its status, can only be
+    # this same op's own earlier product; no status filtering is needed.
     # See spec/adapters/arch_br_reference_adapter.md "Idempotency".
     local existing
-    if ! existing=$("$BR_BIN" list --json --label "$label" 2>/dev/null \
+    if ! existing=$("$BR_BIN" list --json --all --limit 0 --label "$label" 2>/dev/null \
             | jq -r --arg L "$label" \
-                '(.issues // []) | map(select(((.labels // []) | any(. == $L)) and .status == "open")) | .[0].id // empty'); then
+                '(.issues // []) | map(select((.labels // []) | any(. == $L))) | .[0].id // empty'); then
         append_receipt_error "$op_id" "" "br list failed during idempotency check"
         return
     fi
     if [[ -n "$existing" && "$existing" != "null" ]]; then
+        # Per flow_adapter.md: a match ends the op with an ok receipt, not
+        # skipped — ingest constructs journal lines only for ok receipts,
+        # and this was_existing=true pairing is what the crashed-adapter
+        # recovery path needs to land.
         SUB_TABLE["$op_id"]="$existing"
-        append_receipt_skipped "$op_id" "$existing" true "idempotent re-match"
+        append_receipt_ok "$op_id" "$existing" true
         return
     fi
 
