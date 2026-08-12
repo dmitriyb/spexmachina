@@ -2,13 +2,39 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spexmachina.dev/schema/bead-map.json",
   "title": "Spex Machina Task Journal Line",
-  "description": "Schema for one line of spec/.history.jsonl, the task journal linking spec nodes to tasks. Each line is a self-contained object: a change event, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
+  "description": "Schema for one line of spec/.history.jsonl, the task journal linking spec nodes to tasks. Each line is a self-contained object: a change event, the registered event that opens a proposal's lifecycle, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
   "oneOf": [
     { "$ref": "#/$defs/changeEvent" },
+    { "$ref": "#/$defs/registeredEvent" },
     { "$ref": "#/$defs/taskReceipt" },
     { "$ref": "#/$defs/refreshReceipt" }
   ],
   "$defs": {
+    "registeredEvent": {
+      "type": "object",
+      "description": "Opens a proposal's lifecycle before any spec change exists.",
+      "required": ["event", "eid", "proposal", "git_head"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["registered"]
+        },
+        "eid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "This event's own id, of the form <git_head>:<slug>."
+        },
+        "proposal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The proposal slug this registration opens."
+        },
+        "git_head": {
+          "type": "string"
+        }
+      }
+    },
     "changeEvent": {
       "type": "object",
       "description": "Records what a baselining absorbed for one spec node.",
@@ -78,7 +104,7 @@
         "for": {
           "type": "string",
           "minLength": 1,
-          "description": "The eid of the change event this receipt answers."
+          "description": "The eid this receipt answers — a change event's eid, or, for epics, the registered event's eid."
         },
         "proposal": {
           "type": "string",

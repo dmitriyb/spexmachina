@@ -44,15 +44,18 @@ func validateLine(t *testing.T, sch *jsonschema.Schema, doc string) error {
 
 // Fixtures, verbatim from test_bead_map_schema.md.
 const (
-	fixtureChangeEvent = `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+	fixtureChangeEvent = `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 
-	fixtureTaskReceipt = `{"event":"task_created","for":"9f2c41a0b7d3","task_id":"spexmachina-abc"}`
+	fixtureTaskReceipt = `{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}`
+
+	fixtureRegisteredEvent = `{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage",
+ "proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234"}`
 
 	fixtureEpicReceipt = `{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-0lk"}`
 
-	fixtureRefreshReceipt = `{"event":"refresh","git_head":"cafe1234","absorbed":["9f2c41a0b7d3"]}`
+	fixtureRefreshReceipt = `{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-7"]}`
 )
 
 // --- S1: Each fixture line passes validation ---
@@ -66,6 +69,7 @@ func TestFR7_S1_FixturesPass(t *testing.T) {
 	}{
 		{"change event", fixtureChangeEvent},
 		{"task receipt", fixtureTaskReceipt},
+		{"registered event", fixtureRegisteredEvent},
 		{"epic receipt", fixtureEpicReceipt},
 		{"refresh receipt", fixtureRefreshReceipt},
 	}
@@ -164,6 +168,40 @@ func TestFR7_S6_TaskReceiptExactlyOneReferent(t *testing.T) {
 		doc := `{"event":"task_created","task_id":"spexmachina-abc"}`
 		if err := validateLine(t, sch, doc); err == nil {
 			t.Fatal("expected validation error when neither for nor proposal is present")
+		}
+	})
+}
+
+// --- S6b: Registered event shape ---
+
+func TestFR7_S6b_RegisteredEventShape(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("fixture passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureRegisteredEvent); err != nil {
+			t.Fatalf("registered fixture should pass: %v", err)
+		}
+	})
+
+	t.Run("omitting proposal fails", func(t *testing.T) {
+		doc := `{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage","git_head":"cafe1234"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for registered event omitting proposal")
+		}
+	})
+
+	t.Run("omitting eid fails", func(t *testing.T) {
+		doc := `{"event":"registered","proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for registered event omitting eid")
+		}
+	})
+
+	t.Run("carrying node fails", func(t *testing.T) {
+		doc := `{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage",
+ "proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234","node":"a1b2c3d4e5f6"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for registered event carrying node")
 		}
 	})
 }
@@ -356,8 +394,8 @@ func TestFR7_BeadMapSchemaSelfContainedRefs(t *testing.T) {
 	}
 
 	oneOf, ok := raw["oneOf"].([]any)
-	if !ok || len(oneOf) != 3 {
-		t.Fatalf("top-level oneOf should list 3 line shapes, got %v", raw["oneOf"])
+	if !ok || len(oneOf) != 4 {
+		t.Fatalf("top-level oneOf should list 4 line shapes, got %v", raw["oneOf"])
 	}
 	for _, entry := range oneOf {
 		m := entry.(map[string]any)
