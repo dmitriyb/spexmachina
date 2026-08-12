@@ -785,22 +785,69 @@ func TestE7_DiffReferencesUnknownModules(t *testing.T) {
 	}
 }
 
-// TODO(bead:spexmachina-hdkq.16): TestE8_DuplicateBeadClaimsLastWins tested
-// the retired label-based join — two different bead ids ("claim-a",
-// "claim-b") carrying the same spex:<hash> label, "last claim on the node
-// wins" keyed by that label. spexmachina-hdkq.13 retired label parsing from
-// BeadReader (spec/impact/arch_bead_reader.md, "No Label Parsing"); the join
-// now keys on task id, so this scenario has no equivalent under the new
-// design — a spec node's current claim comes from journal lineage (see
-// test_bead_matching.md S4), not from multiple simultaneous label matches in
-// one --beads listing.
-//
-// The already-authored spec/impact/test_impact_command.md now documents a
-// different E8 (line 203, "Bead file carries duplicate ids"): the SAME bead
-// id appearing twice in one --beads file, last entry wins by task id. That
-// is ImpactCommand's own test-section content to write, once
-// enrichPairingsWithBeadStatus's task-id join is exercised end to end by its
-// owning bead.
+// E8: Bead file carries duplicate ids — the pairing whose task id matches
+// ends up with the status of the entry that appeared last in the file, and
+// whatever label form the entries carry (current spex:<eid>, legacy
+// spex:<hash> or spex:42, or a marker like spex:obsolete) has no effect on
+// the join, since ImpactCommand never reads labels.
+func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
+	fx := setupImpactCommandFixture(t)
+
+	// spex-010 (merkle/DiffEngine, removed) appears twice: open first,
+	// closed last. Last-wins means the cleanup gate should fire, matching
+	// the beadsClosedFile run's {4,3} summary.
+	openThenClosed := filepath.Join(t.TempDir(), "beads_open_then_closed.json")
+	if err := os.WriteFile(openThenClosed, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"spex-001","status":"open","labels":["spex:%s"]},
+		{"id":"spex-003","status":"open","labels":["spex:%s"]},
+		{"id":"spex-010","status":"open","labels":["spex:obsolete"]},
+		{"id":"spex-010","status":"closed","labels":["spex:42"]}
+	]}`, fx.schkID, fx.hasrID)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", openThenClosed, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	var report impact.ImpactReport
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if report.Summary.CreateCount != 4 || report.Summary.ObsoleteCount != 3 {
+		t.Fatalf("open-then-closed: want summary {4,3} (last entry wins), got %+v", report.Summary)
+	}
+	if !hasCleanupCreate(report, "spex-010") {
+		t.Fatalf("open-then-closed: want a cleanup create for spex-010, creates=%+v", report.Creates)
+	}
+
+	// Reverse order: closed first, open last. Last-wins means the cleanup
+	// gate should NOT fire, matching the beadsFile run's {3,3} summary —
+	// proving the outcome tracks input order, not "any closed entry wins".
+	closedThenOpen := filepath.Join(t.TempDir(), "beads_closed_then_open.json")
+	if err := os.WriteFile(closedThenOpen, []byte(fmt.Sprintf(`{"issues":[
+		{"id":"spex-001","status":"open","labels":["spex:%s"]},
+		{"id":"spex-003","status":"open","labels":["spex:%s"]},
+		{"id":"spex-010","status":"closed","labels":["spex:42"]},
+		{"id":"spex-010","status":"open","labels":["spex:obsolete"]}
+	]}`, fx.schkID, fx.hasrID)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err = runSpex(t, "impact", "--diff", fx.diffFile, "--beads", closedThenOpen, "--spec-dir", fx.specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if err := json.Unmarshal([]byte(out), &report); err != nil {
+		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
+	}
+	if report.Summary.CreateCount != 3 || report.Summary.ObsoleteCount != 3 {
+		t.Fatalf("closed-then-open: want summary {3,3} (last entry wins), got %+v", report.Summary)
+	}
+	if hasCleanupCreate(report, "spex-010") {
+		t.Fatalf("closed-then-open: want no cleanup create for spex-010, creates=%+v", report.Creates)
+	}
+}
 
 // E9: Diff input contains errors — impact refuses to proceed.
 func TestE9_DiffWithErrorsRefusesToProceed(t *testing.T) {
