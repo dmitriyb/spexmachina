@@ -103,6 +103,9 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 		`{"event":"removed","eid":"e2","node":"dddddddddddd","name":"CompY","node_type":"component","module":"modD","before":"h1","after":null,"git_head":"g2","proposal":"remove-prop"}`,
 		`{"event":"task_closed","for":"e2","task_id":"task-Y"}`,
 		`{"event":"task_created","for":"e2","task_id":"br-cleanup"}`,
+		`{"event":"registered","eid":"e9","proposal":"2026-08-11-slug","git_head":"g9"}`,
+		`{"event":"task_created","for":"e9","task_id":"epic-1"}`,
+		`{"event":"task_created","proposal":"legacy-slug","task_id":"epic-legacy"}`,
 	})
 
 	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
@@ -114,14 +117,19 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &entries); err != nil {
 		t.Fatalf("output should be valid JSON array: %v\noutput: %s", err, out)
 	}
-	if len(entries) != 2 {
-		t.Fatalf("want 2 entries, got %d: %s", len(entries), out)
+	if len(entries) != 4 {
+		t.Fatalf("want 4 entries, got %d: %s", len(entries), out)
 	}
 
-	var removed map[string]any
+	var removed, registeredEpic, legacyEpic map[string]any
 	for _, e := range entries {
-		if e["node"] == "dddddddddddd" {
+		switch {
+		case e["node"] == "dddddddddddd":
 			removed = e
+		case e["proposal"] == "2026-08-11-slug":
+			registeredEpic = e
+		case e["proposal"] == "legacy-slug":
+			legacyEpic = e
 		}
 	}
 	if removed == nil {
@@ -132,6 +140,61 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	}
 	if removed["task_id"] != "br-cleanup" {
 		t.Errorf("removed node should adopt the cleanup task id, got %v", removed["task_id"])
+	}
+
+	if registeredEpic == nil {
+		t.Fatalf("want an entry for the registered-sourced epic, got %s", out)
+	}
+	if registeredEpic["task_id"] != "epic-1" {
+		t.Errorf("registered epic task_id: want epic-1, got %v", registeredEpic["task_id"])
+	}
+	if registeredEpic["git_head"] != "g9" {
+		t.Errorf("registered epic git_head: want g9, got %v", registeredEpic["git_head"])
+	}
+	if _, hasNode := registeredEpic["node"]; hasNode {
+		t.Errorf("registered epic should carry no node field, got %v", registeredEpic["node"])
+	}
+
+	if legacyEpic == nil {
+		t.Fatalf("want an entry for the legacy slug-keyed epic, got %s", out)
+	}
+	if legacyEpic["task_id"] != "epic-legacy" {
+		t.Errorf("legacy epic task_id: want epic-legacy, got %v", legacyEpic["task_id"])
+	}
+	if _, hasNode := legacyEpic["node"]; hasNode {
+		t.Errorf("legacy epic should carry no node field, got %v", legacyEpic["node"])
+	}
+
+	// Both epic entries must also surface individually through `map get`,
+	// by their task id, with the same shape `map list` folded them into.
+	registeredGet, err := runSpex(t, "map", "get", "--spec-dir", dir, "epic-1")
+	if err != nil {
+		t.Fatalf("map get epic-1: want no error, got %v", err)
+	}
+	var registeredGot map[string]any
+	if err := json.Unmarshal([]byte(registeredGet), &registeredGot); err != nil {
+		t.Fatalf("map get epic-1: output should be valid JSON: %v\noutput: %s", err, registeredGet)
+	}
+	if registeredGot["proposal"] != "2026-08-11-slug" || registeredGot["git_head"] != "g9" || registeredGot["task_id"] != "epic-1" {
+		t.Errorf("map get epic-1: want the registered-sourced epic entry, got %+v", registeredGot)
+	}
+	if _, hasNode := registeredGot["node"]; hasNode {
+		t.Errorf("map get epic-1: should carry no node field, got %v", registeredGot["node"])
+	}
+
+	legacyGet, err := runSpex(t, "map", "get", "--spec-dir", dir, "epic-legacy")
+	if err != nil {
+		t.Fatalf("map get epic-legacy: want no error, got %v", err)
+	}
+	var legacyGot map[string]any
+	if err := json.Unmarshal([]byte(legacyGet), &legacyGot); err != nil {
+		t.Fatalf("map get epic-legacy: output should be valid JSON: %v\noutput: %s", err, legacyGet)
+	}
+	if legacyGot["proposal"] != "legacy-slug" || legacyGot["task_id"] != "epic-legacy" {
+		t.Errorf("map get epic-legacy: want the legacy slug-keyed epic entry, got %+v", legacyGot)
+	}
+	if _, hasNode := legacyGot["node"]; hasNode {
+		t.Errorf("map get epic-legacy: should carry no node field, got %v", legacyGot["node"])
 	}
 }
 
