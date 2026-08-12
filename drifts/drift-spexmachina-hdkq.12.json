@@ -1,0 +1,14 @@
+{
+  "bead": "spexmachina-hdkq.12",
+  "node": "a20cc3f7f6f1",
+  "files": [
+    "spec/proposal/test_proposal_commands.md",
+    "spec/proposal/arch_proposal_commands.md",
+    "spec/proposal/arch_registrar.md"
+  ],
+  "claim": "spec/proposal/test_proposal_commands.md, S16 step 3 (line 173), S17 (line 183), E1 (line 194), E2 (line 202), E5 (line 227) and E6 (line 236) each invoke `spex register input/new-change.md` (or equivalent) with no `--git-head` flag and require exit code 0.",
+  "authoritative_source": "The same leaf's own S1 (line 31: `spex register input/new-change.md --git-head cafe1234`, Then: eid is `cafe1234:<slug>`) and S2 (line 41) both pass `--git-head`. arch_proposal_commands.md's Interface section (line 73) gives the synopsis unbracketed — `spex register <proposal-path> --git-head <sha>` — unlike the bracketed optional flags on `spex log`, and its 'spex register interface' prose (line 55-57) says the caller supplies the head 'exactly as for `spex emit`', which enforces the flag with `MarkFlagRequired` plus a `^[0-9a-f]{7,40}$` pre-flight (cmd/spex/emit.go:19-20,91). arch_registrar.md line 17 gives the eid form as `<git_head>:<slug>` with no empty-head case.",
+  "evidence": "If `--git-head` is enforced as required (matching the Interface synopsis and 'exactly as for spex emit'), S16 step 3, S17, E1, E2, E5 and E6 all fail at the flag pre-flight instead of reaching exit 0 as their Then sections require — those six scenarios were written before this proposal added the flag and were never updated to pass it. If the flag stays optional (the current implementation, cmd/spex/register.go:18, matches this reading), a bare `spex register p.md` succeeds and appends `{\"eid\":\":<slug>\",...,\"git_head\":\"\"}` to the journal — contradicting arch_registrar.md's eid form and leaving a `\":<slug>\"` key no later `task_created --for` can address, silently reinstating the compat default this bead's proposal states it retires. Flagged in PR #254 review (thread on cmd/spex/register.go:18): 'file a drift report for the contradiction rather than silently picking the lenient reading.' Both readings are defensible from a different part of the same leaf/component, so the ambiguity is in this bead's own contract and cannot be resolved by implementer choice.",
+  "blocking": true,
+  "proposed_fix": "Add `--git-head cafe1234` (or another placeholder SHA) to the `spex register` invocations in S16 step 3, S17, E1, E2, E5 and E6 of test_proposal_commands.md, matching S1/S2/S3, and enforce the flag as required in cmd/spex/register.go (MarkFlagRequired + the same `^[0-9a-f]{7,40}$` pre-flight `spex emit` uses) so an absent or malformed head is refused before the journal append, not threaded through as an empty or unvalidated eid segment."
+}
