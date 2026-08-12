@@ -56,6 +56,17 @@ func taskClosedLine(forEID, taskID string) string {
 	return fmt.Sprintf(`{"event":"task_closed","for":%q,"task_id":%q}`, forEID, taskID)
 }
 
+// registeredLine builds a registered event opening a proposal's lifecycle.
+func registeredLine(eid, proposal, gitHead string) string {
+	return fmt.Sprintf(`{"event":"registered","eid":%q,"proposal":%q,"git_head":%q}`, eid, proposal, gitHead)
+}
+
+// strPtr returns a pointer to s, for populating Event.Before/After in
+// Append test fixtures.
+func strPtr(s string) *string {
+	return &s
+}
+
 // --- Parse a well-formed journal ---
 
 func TestREQ_934d627f0e90_ParseWellFormedJournal(t *testing.T) {
@@ -261,6 +272,123 @@ func TestREQ_934d627f0e90_EpicReceiptFoldsWithoutChangeEvent(t *testing.T) {
 	}
 	if entry.Source.Node != "" || entry.Source.Name != "" {
 		t.Fatalf("epic entry should carry no invented change event, got Source=%+v", entry.Source)
+	}
+}
+
+// --- Registered event folds the epic ---
+
+func TestREQ_934d627f0e90_RegisteredEventFoldsEpic(t *testing.T) {
+	dir := t.TempDir()
+	eid := "cafe1234:2026-08-11-event-keyed-linkage"
+	slug := "2026-08-11-event-keyed-linkage"
+	writeJournal(t, dir, []string{
+		registeredLine(eid, slug, "cafe1234"),
+		taskCreatedLine(eid, "", "spexmachina-hdkq"),
+	})
+
+	store := NewMappingStore(dir)
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(f.Entries) != 1 {
+		t.Fatalf("want 1 epic entry, got %d: %+v", len(f.Entries), f.Entries)
+	}
+	entry := f.Entries[0]
+	if entry.Key != slug {
+		t.Fatalf("Key: want the registered event's slug %s, got %s", slug, entry.Key)
+	}
+	if entry.TaskID != "spexmachina-hdkq" {
+		t.Fatalf("TaskID: want spexmachina-hdkq, got %s", entry.TaskID)
+	}
+	if entry.Source.Event != "registered" || entry.Source.EID != eid {
+		t.Fatalf("Source: want the registered event, got %+v", entry.Source)
+	}
+
+	byTask, err := store.Get("spexmachina-hdkq")
+	if err != nil {
+		t.Fatalf("Get(task id): %v", err)
+	}
+	if !reflect.DeepEqual(entry, byTask) {
+		t.Fatalf("List entry and Get-by-task-id diverged: %+v vs %+v", entry, byTask)
+	}
+}
+
+// --- Append validates and lands atomically ---
+
+func TestREQ_934d627f0e90_AppendLandsBatchAtomically(t *testing.T) {
+	dir := t.TempDir()
+	store := NewMappingStore(dir)
+	journalPath := filepath.Join(dir, ".history.jsonl")
+
+	batch := []Event{
+		{Event: "added", EID: "e1", Node: "aaaaaaaaaaaa", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
+		{Event: "task_created", For: "e1", TaskID: "task-a"},
+	}
+	if err := store.Append(batch); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	raw, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(raw), "\n"), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("want 2 lines after first append, got %d: %q", len(lines), raw)
+	}
+
+	// A second batch parses and folds exactly as the first, proving the
+	// write went through the store's own read path.
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(f.Entries) != 1 || f.Entries[0].TaskID != "task-a" {
+		t.Fatalf("want 1 entry with TaskID task-a, got %+v", f.Entries)
+	}
+}
+
+func TestREQ_934d627f0e90_AppendRefusedBatchChangesNothing(t *testing.T) {
+	dir := t.TempDir()
+	store := NewMappingStore(dir)
+	journalPath := filepath.Join(dir, ".history.jsonl")
+
+	seed := []Event{
+		{Event: "added", EID: "e1", Node: "aaaaaaaaaaaa", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
+	}
+	if err := store.Append(seed); err != nil {
+		t.Fatalf("Append seed: %v", err)
+	}
+	before, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+
+	// Second line's node fails the identity-hash pattern — a schema
+	// violation, not invalid JSON.
+	badBatch := []Event{
+		{Event: "added", EID: "e2", Node: "bbbbbbbbbbbb", Name: "Bar", NodeType: "component", Module: "modA", After: strPtr("h2"), GitHead: "g2", Proposal: "p2"},
+		{Event: "added", EID: "e3", Node: "not-a-hash", Name: "Baz", NodeType: "component", Module: "modA", After: strPtr("h3"), GitHead: "g3", Proposal: "p3"},
+	}
+	err = store.Append(badBatch)
+	if err == nil {
+		t.Fatal("want error for batch with schema-violating line")
+	}
+	var ae *AppendError
+	if !errors.As(err, &ae) {
+		t.Fatalf("want *AppendError, got %T: %v", err, err)
+	}
+	if ae.Line != 2 {
+		t.Fatalf("want offending batch line 2, got %d", ae.Line)
+	}
+
+	after, err := os.ReadFile(journalPath)
+	if err != nil {
+		t.Fatalf("read journal: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Fatalf("refused batch changed the file:\nbefore: %q\nafter:  %q", before, after)
 	}
 }
 
