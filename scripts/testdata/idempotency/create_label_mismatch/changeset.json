@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "git_head": "abcdef0123456789",
+  "git_head": "cafe1234deadbeef",
   "proposal": "test/idempotency",
   "ops": [
     {
@@ -8,9 +8,9 @@
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-200",
-      "idempotency": {"label": "spex:200"},
+      "idempotency": {"label": "spex:cafe1234:op-2"},
       "priority": 1,
-      "title": "Different record id"
+      "title": "Different eid, distinct from any closed predecessor"
     }
   ]
 }

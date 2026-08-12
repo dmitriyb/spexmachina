@@ -1,0 +1,5 @@
+{
+  "issues": [
+    {"id":"existing-7","title":"prior bead, closed since","status":"closed","issue_type":"feature","labels":["spex:cafe1234:op-1"]}
+  ]
+}

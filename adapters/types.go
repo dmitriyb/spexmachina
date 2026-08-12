@@ -16,9 +16,10 @@ const (
 )
 
 // Per-op status vocabulary. ok = the op executed and produced its intended
-// effect; skipped = the op was a no-op due to idempotency (was_existing
-// match on create, already-obsolete on close); error = the op failed and
-// no state was changed.
+// effect, or was a no-op due to an idempotent create match (was_existing
+// match on create — ingest still needs the journal line); skipped = the op
+// was a no-op because the tracker state was already-obsolete on close;
+// error = the op failed and no state was changed.
 const (
 	OpStatusOk      = "ok"
 	OpStatusSkipped = "skipped"

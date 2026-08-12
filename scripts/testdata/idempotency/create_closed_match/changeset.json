@@ -10,7 +10,7 @@
       "spec_node_id": "sn-100",
       "idempotency": {"label": "spex:cafe1234:op-1"},
       "priority": 2,
-      "title": "Should be skipped"
+      "title": "Should still match despite closed status"
     }
   ]
 }
