@@ -76,7 +76,7 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 	os.WriteFile(inputFile, []byte(content), 0644)
 
 	root := buildTestCmd(specDir)
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err != nil {
 		t.Fatalf("register: %v", err)
@@ -85,6 +85,18 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Join(specDir, "proposals"))
 	if len(entries) == 0 {
 		t.Error("no file created in custom spec dir proposals/")
+	}
+
+	// The journal follows --spec-dir exactly as the proposals directory does.
+	events := journalEvents(t, specDir)
+	found := false
+	for _, ev := range events {
+		if ev.Event == "registered" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("want registered event in %s/.history.jsonl, got events: %+v", specDir, events)
 	}
 }
 
@@ -98,7 +110,7 @@ func TestREQ30_S3_RegisterValidationFailure(t *testing.T) {
 	os.WriteFile(inputFile, []byte(content), 0644)
 
 	root := buildTestCmd(specDir)
-	root.SetArgs([]string{"register", inputFile})
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
 	err := root.Execute()
 	if err == nil {
 		t.Fatal("want error for invalid proposal, got nil")
@@ -111,6 +123,12 @@ func TestREQ30_S3_RegisterValidationFailure(t *testing.T) {
 	entries, _ := os.ReadDir(filepath.Join(specDir, "proposals"))
 	if len(entries) > 0 {
 		t.Error("file should not be created on validation failure")
+	}
+
+	// Nothing appended to spec/.history.jsonl.
+	events := journalEvents(t, specDir)
+	if len(events) > 0 {
+		t.Errorf("want no journal events on validation failure, got: %+v", events)
 	}
 }
 
