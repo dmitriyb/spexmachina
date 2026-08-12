@@ -801,50 +801,6 @@ func TestE7_DiffReferencesUnknownModules(t *testing.T) {
 // is ImpactCommand's own test-section content to write, once
 // enrichPairingsWithBeadStatus's task-id join is exercised end to end by its
 // owning bead.
-//
-// func TestE8_DuplicateBeadClaimsLastWins(t *testing.T) {
-// 	fx := setupImpactCommandFixture(t)
-//
-// 	closedLast := filepath.Join(t.TempDir(), "beads_closed_last.json")
-// 	if err := os.WriteFile(closedLast, []byte(fmt.Sprintf(`{"issues":[
-// 		{"id":"claim-a","status":"open","labels":["spex:%s"]},
-// 		{"id":"claim-b","status":"closed","labels":["spex:%s"]}
-// 	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
-// 		t.Fatal(err)
-// 	}
-//
-// 	out, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", closedLast, "--spec-dir", fx.specDir)
-// 	if err != nil {
-// 		t.Fatalf("want no error, got %v", err)
-// 	}
-// 	var report impact.ImpactReport
-// 	if err := json.Unmarshal([]byte(out), &report); err != nil {
-// 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out)
-// 	}
-// 	if !hasCleanupCreate(report, "spex-010") {
-// 		t.Fatalf("want a cleanup create when the LAST claim on the node is closed; creates=%+v", report.Creates)
-// 	}
-//
-// 	openLast := filepath.Join(t.TempDir(), "beads_open_last.json")
-// 	if err := os.WriteFile(openLast, []byte(fmt.Sprintf(`{"issues":[
-// 		{"id":"claim-a","status":"closed","labels":["spex:%s"]},
-// 		{"id":"claim-b","status":"open","labels":["spex:%s"]}
-// 	]}`, fx.diffID, fx.diffID)), 0644); err != nil {
-// 		t.Fatal(err)
-// 	}
-//
-// 	out2, err := runSpex(t, "impact", "--diff", fx.diffFile, "--beads", openLast, "--spec-dir", fx.specDir)
-// 	if err != nil {
-// 		t.Fatalf("want no error, got %v", err)
-// 	}
-// 	var report2 impact.ImpactReport
-// 	if err := json.Unmarshal([]byte(out2), &report2); err != nil {
-// 		t.Fatalf("invalid JSON report: %v\noutput: %s", err, out2)
-// 	}
-// 	if hasCleanupCreate(report2, "spex-010") {
-// 		t.Fatalf("want no cleanup create when the LAST claim on the node is open; creates=%+v", report2.Creates)
-// 	}
-// }
 
 // E9: Diff input contains errors — impact refuses to proceed.
 func TestE9_DiffWithErrorsRefusesToProceed(t *testing.T) {
