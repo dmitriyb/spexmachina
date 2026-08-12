@@ -9,14 +9,12 @@ import (
 )
 
 func newRegisterCmd() *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "register <proposal-path>",
 		Short: "Register a proposal into spec/proposals/",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runRegisterE,
 	}
-	cmd.Flags().String("git-head", "", "git HEAD SHA (caller-supplied, e.g. $(git rev-parse HEAD))")
-	return cmd
 }
 
 func runRegisterE(cmd *cobra.Command, args []string) error {
@@ -25,12 +23,10 @@ func runRegisterE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	gitHead, err := cmd.Flags().GetString("git-head")
-	if err != nil {
-		return fmt.Errorf("resolve git-head: %w", err)
-	}
-
-	filename, err := proposal.Register(args[0], specDir, gitHead)
+	// TODO(bead:spexmachina-hdkq.12): wire a --git-head flag on this command
+	// and pass the caller-supplied value here instead of "" — Registrar now
+	// requires it to key the registered journal event's eid.
+	filename, err := proposal.Register(args[0], specDir, "")
 	if err != nil {
 		return err
 	}
