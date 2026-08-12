@@ -218,6 +218,75 @@ func TestFR3_S3_ClassifyActions_AddedWithExistingBead(t *testing.T) {
 	}
 }
 
+// --- S3b: Already-tracked change yields no action ---
+
+func TestFR3_S3b_ClassifyActions_AlreadyTrackedYieldsNoAction(t *testing.T) {
+	h := newDepFixture()
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Key: h.REG, Type: merkle.Added, NewHash: "new111", NodeType: "component"},
+				Impact: merkle.ArchImpl,
+				Module: "proposal",
+			},
+			Records: []Pairing{
+				{SpecNodeID: h.REG, TaskID: "spex-020", Module: "proposal", Name: "Registrar", After: "new111"},
+			},
+		},
+	}
+
+	actions := ClassifyActions(nil, matches, nil, nil)
+
+	if len(actions) != 0 {
+		t.Fatalf("want 0 actions for already-tracked change, got %d: %+v", len(actions), actions)
+	}
+}
+
+func TestFR3_S3b_ClassifyActions_HashMismatchStillProducesPair(t *testing.T) {
+	h := newDepFixture()
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Key: h.REG, Type: merkle.Added, NewHash: "new111", NodeType: "component"},
+				Impact: merkle.ArchImpl,
+				Module: "proposal",
+			},
+			Records: []Pairing{
+				{SpecNodeID: h.REG, TaskID: "spex-020", Module: "proposal", Name: "Registrar", After: "old000"},
+			},
+		},
+	}
+
+	actions := ClassifyActions(nil, matches, nil, nil)
+
+	if len(actions) != 2 {
+		t.Fatalf("want 2 actions (obsolete + create) when after hash differs, got %d: %+v", len(actions), actions)
+	}
+	assertHasAction(t, actions, "obsolete", "spex-020", "proposal", "Registrar", "Spec node modified: proposal/Registrar")
+}
+
+func TestFR3_S3b_ClassifyActions_ModifiedAlreadyTracked(t *testing.T) {
+	hash := schema.IdentityHash("validator", "component", "SchemaChecker")
+	matches := []Match{
+		{
+			Change: merkle.ClassifiedChange{
+				Change: merkle.Change{Key: hash, Type: merkle.Modified, OldHash: "aaa", NewHash: "bbb", NodeType: "component"},
+				Impact: merkle.ArchImpl,
+				Module: "validator",
+			},
+			Records: []Pairing{
+				{SpecNodeID: hash, TaskID: "spex-001", Module: "validator", Name: "SchemaChecker", After: "bbb"},
+			},
+		},
+	}
+
+	actions := ClassifyActions(nil, matches, nil, nil)
+
+	if len(actions) != 0 {
+		t.Fatalf("want 0 actions for already-tracked modified change, got %d: %+v", len(actions), actions)
+	}
+}
+
 // --- S4: Removed node without a matching bead ---
 
 func TestFR3_S4_ClassifyActions_RemovedNoRecord(t *testing.T) {

@@ -20,6 +20,12 @@ type Pairing struct {
 	Module     string // the node's module name
 	Name       string // the node's human-readable name
 	BeadStatus string
+	// After is the sourcing event's recorded after-hash — the spec node's
+	// content hash the journal paired with this pairing's task. ActionClassifier
+	// compares it against a matched change's current hash to detect the
+	// already-tracked case: the change resurfaced only because a partial
+	// ingest run left the snapshot unsaved, not because new work exists.
+	After string
 }
 
 // Match pairs a classified change with every pairing that stores its spec node's identity hash.

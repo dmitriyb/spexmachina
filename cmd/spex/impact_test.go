@@ -1209,11 +1209,12 @@ func TestFR8_ParseDiffJSON_NoErrorsField(t *testing.T) {
 // are dropped too, so a node re-added under its old identity hash cannot be
 // matched against its own tombstone.
 func TestPairingsFromFold(t *testing.T) {
+	afterHash := "ccc111"
 	fold := mapping.Fold{Entries: []mapping.FoldEntry{
 		{
 			Key:    "aaaaaaaaaaaa",
 			TaskID: "task-1",
-			Source: mapping.Event{Node: "aaaaaaaaaaaa", Name: "Comp1", NodeType: "component", Module: "m"},
+			Source: mapping.Event{Node: "aaaaaaaaaaaa", Name: "Comp1", NodeType: "component", Module: "m", After: &afterHash},
 		},
 		{
 			Key:    "2026-04-18-proposal",
@@ -1231,8 +1232,32 @@ func TestPairingsFromFold(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("want 1 pairing (proposal entry and tombstone dropped), got %d: %+v", len(got), got)
 	}
-	if got[0].SpecNodeID != "aaaaaaaaaaaa" || got[0].TaskID != "task-1" || got[0].NodeType != "component" || got[0].Module != "m" || got[0].Name != "Comp1" {
+	if got[0].SpecNodeID != "aaaaaaaaaaaa" || got[0].TaskID != "task-1" || got[0].NodeType != "component" || got[0].Module != "m" || got[0].Name != "Comp1" || got[0].After != afterHash {
 		t.Errorf("unexpected pairing: %+v", got[0])
+	}
+}
+
+// TestPairingsFromFold_NilAfterYieldsEmptyString verifies that a fold entry
+// whose sourcing event carries no after hash (Source.After is nil) copies
+// across as Pairing.After == "", not a dereferenced-nil panic. A removed
+// event's sourcing After is always nil, but a defensive entry here pins the
+// adapter's nil-safety directly regardless of which event shapes end up
+// nil in practice.
+func TestPairingsFromFold_NilAfterYieldsEmptyString(t *testing.T) {
+	fold := mapping.Fold{Entries: []mapping.FoldEntry{
+		{
+			Key:    "cccccccccccc",
+			TaskID: "task-2",
+			Source: mapping.Event{Node: "cccccccccccc", Name: "Comp3", NodeType: "component", Module: "m"},
+		},
+	}}
+
+	got := pairingsFromFold(fold)
+	if len(got) != 1 {
+		t.Fatalf("want 1 pairing, got %d: %+v", len(got), got)
+	}
+	if got[0].After != "" {
+		t.Errorf("want empty After, got %q", got[0].After)
 	}
 }
 
