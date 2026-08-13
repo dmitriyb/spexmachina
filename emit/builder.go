@@ -7,17 +7,23 @@ import (
 )
 
 // Builder composes a changeset.json from an impact report, the task
-// journal's fold, the spec graph, and a caller-supplied git HEAD. It is the
-// orchestration layer of the emit pipeline; topological ordering, dep
-// classification, and label assignment are delegated to Sorter, Resolver,
-// and Labeler. Builder is set up once per run from the four values that do
-// not change while it runs — SpecGraph, Fold, GitHead, Proposal — and is
-// then handed exactly one impact report per Build call.
+// journal's fold, the run's registration, the spec graph, and a
+// caller-supplied git HEAD. It is the orchestration layer of the emit
+// pipeline; topological ordering, dep classification, and label assignment
+// are delegated to Sorter, Resolver, and Labeler. Builder is set up once
+// per run from the five values that do not change while it runs —
+// SpecGraph, Fold, Registration, GitHead, Proposal — and is then handed
+// exactly one impact report per Build call.
 type Builder struct {
 	SpecGraph SpecGraph
 	Fold      JournalFold
-	GitHead   string
-	Proposal  string
+	// Registration is the run's registration fact, resolved by EmitCommand
+	// from the journal's parsed events before Builder is assembled. It
+	// decides, together with Fold, whether a proposal_epic create is
+	// synthesized for this run — see hasExistingEpic and Resolver.ResolveParent.
+	Registration Registration
+	GitHead      string
+	Proposal     string
 }
 
 // Build runs the emit pipeline end-to-end and returns the v2 changeset.
@@ -25,8 +31,15 @@ type Builder struct {
 // receives the zero value plus a wrapped error.
 func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	hasExistingEpic := b.hasExistingEpic()
+	// A fresh epic is only synthesized once the run has a registration to
+	// label it with — the fold is asked first (hasExistingEpic), and the
+	// registration decides only what the fold's silence means. With no
+	// live epic and no registration, no epic create is added; every
+	// non-epic create's parent resolution then surfaces the
+	// never-registered error itself (Resolver.ResolveParent).
+	synthesizeEpic := !hasExistingEpic && b.Registration.OK
 
-	creates := b.collectCreates(report, hasExistingEpic)
+	creates := b.collectCreates(report, synthesizeEpic)
 
 	sorter := &Sorter{}
 	ordered, _, err := sorter.Sort(creates)
@@ -41,7 +54,7 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 		ordered[i].OpID = fmt.Sprintf("op-%0*d", pad, i+1)
 		batchMap[ordered[i].Action.SpecNodeID] = ordered[i].OpID
 	}
-	if !hasExistingEpic {
+	if synthesizeEpic {
 		for _, oo := range ordered {
 			if oo.Action.NodeType == "proposal" {
 				batchMap["proposal/"+b.Proposal+"/epic"] = oo.OpID
@@ -53,19 +66,21 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 	labeler := &Labeler{}
 
 	resolver := &Resolver{
-		SpecGraph: b.SpecGraph,
-		Fold:      b.Fold,
-		Batch:     batchMap,
+		SpecGraph:    b.SpecGraph,
+		Fold:         b.Fold,
+		Registration: b.Registration,
+		Batch:        batchMap,
 	}
 
 	ops := make([]Op, 0, totalOps)
 	for _, oc := range ordered {
 		// Per-action labelling: node-bearing creates (fresh and
-		// modify-pair alike) and the epic create format
-		// spex:<spec_node_id>; cleanup creates format
-		// spex:cleanup-<spec_node_id>. Pure function of the action — no
-		// cursor, no store read. See spec/emit/arch_idempotency_labeler.md.
-		label, err := labeler.LabelFor(oc.Action)
+		// modify-pair alike) format spex:<spec_node_id>; cleanup creates
+		// format spex:cleanup-<spec_node_id>; the epic create formats
+		// spex:<eid> of the run's registration. Pure function of the
+		// action and the registration — no cursor, no store read. See
+		// spec/emit/arch_idempotency_labeler.md.
+		label, err := labeler.LabelFor(oc.Action, b.Registration)
 		if err != nil {
 			return Changeset{}, fmt.Errorf("emit: build: %w", err)
 		}
@@ -96,19 +111,20 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 // hasExistingEpic reports whether the task journal fold already carries a
 // live (not Removed) epic entry for this run's proposal slug — the same
 // check Resolver.ResolveParent applies. A miss, or a fold entry whose epic
-// task closed with no live successor, means this is the first emit for the
-// proposal (or a re-run after that epic's closure), so Builder synthesizes
-// a fresh proposal_epic create.
+// task closed with no live successor, means there is no live epic; whether
+// Builder then synthesizes a fresh proposal_epic create additionally
+// depends on the run's registration — see synthesizeEpic in Build.
 func (b *Builder) hasExistingEpic() bool {
 	entry, ok := b.Fold.Entry(b.Proposal)
 	return ok && !entry.Removed
 }
 
 // collectCreates flattens report.Creates into CreateActions and prepends a
-// synthetic proposal-epic create when no open epic record exists.
-func (b *Builder) collectCreates(report impact.ImpactReport, hasExistingEpic bool) []CreateAction {
+// synthetic proposal-epic create when synthesizeEpic is true (no live epic
+// in the fold, and the run has a registration to label it with).
+func (b *Builder) collectCreates(report impact.ImpactReport, synthesizeEpic bool) []CreateAction {
 	creates := make([]CreateAction, 0, len(report.Creates)+1)
-	if !hasExistingEpic {
+	if synthesizeEpic {
 		creates = append(creates, CreateAction{
 			SpecNodeID: b.Proposal,
 			NodeType:   "proposal",

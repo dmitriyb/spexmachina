@@ -47,6 +47,10 @@ type emitFixture struct {
 // carries an unrelated already-paired node so the fixture exercises a real
 // fold read without affecting the new-proposal path (synthesized epic op,
 // single tier-1 create, no obsoletes) the happy-path scenarios assert on.
+// It also carries a registered event for the fixture's own proposal
+// (2026-04-18-decouple-spex-from-br) — without one, EmitCommand's
+// registration read finds nothing and the builder refuses to synthesize
+// an epic.
 func setupEmitFixture(t *testing.T) emitFixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -76,6 +80,7 @@ func setupEmitFixture(t *testing.T) emitFixture {
 	writeTestJournal(t, specDir, []string{
 		`{"event":"added","eid":"e-other","node":"` + otherID + `","name":"Other","node_type":"component","module":"alpha","before":null,"after":"h-other","git_head":"cafe0000","proposal":"earlier-proposal"}`,
 		`{"event":"task_created","for":"e-other","task_id":"spex-other"}`,
+		`{"event":"registered","eid":"cafe0000:2026-04-18-decouple-spex-from-br","proposal":"2026-04-18-decouple-spex-from-br","git_head":"cafe0000"}`,
 	})
 
 	report := impact.ImpactReport{
@@ -480,6 +485,7 @@ func TestEmitCommand_OutOfBatchDep_ResolvesToRefBead(t *testing.T) {
 	writeTestJournal(t, specDir, []string{
 		`{"event":"added","eid":"e-other","node":"` + otherID + `","name":"Other","node_type":"component","module":"alpha","before":null,"after":"h-other","git_head":"cafe0000","proposal":"earlier-proposal"}`,
 		`{"event":"task_created","for":"e-other","task_id":"spex-other"}`,
+		`{"event":"registered","eid":"cafe0000:2026-04-18-decouple-spex-from-br","proposal":"2026-04-18-decouple-spex-from-br","git_head":"cafe0000"}`,
 	})
 
 	report := impact.ImpactReport{

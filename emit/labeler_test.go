@@ -9,7 +9,7 @@ import "testing"
 func TestLabelForNodeBearingUsesSpecNodeID(t *testing.T) {
 	l := &Labeler{}
 
-	label, err := l.LabelFor(CreateAction{SpecNodeID: "node_a"})
+	label, err := l.LabelFor(CreateAction{SpecNodeID: "node_a"}, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor fresh: unexpected error: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestLabelForModifyPairUsesOwnSpecNodeID(t *testing.T) {
 	label, err := l.LabelFor(CreateAction{
 		SpecNodeID: "node_q",
 		OldBeadID:  "spexmachina-abc",
-	})
+	}, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor modify-pair: unexpected error: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestLabelForCleanupUsesCleanupPrefix(t *testing.T) {
 		SpecNodeID: "abc123def456",
 		OldBeadID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
-	})
+	}, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor cleanup: unexpected error: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestLabelForCleanupTakesPrecedenceOverModifyPair(t *testing.T) {
 		SpecNodeID: "abc123def456",
 		OldBeadID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
-	})
+	}, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor cleanup-with-oldbead: unexpected error: %v", err)
 	}
@@ -78,21 +78,40 @@ func TestLabelForCleanupTakesPrecedenceOverModifyPair(t *testing.T) {
 	}
 }
 
-// TestLabelForEpicUsesProposalSlug covers the epic branch: the epic action's
-// SpecNodeID already carries the proposal slug, so LabelFor formats it the
-// same way it formats any other node-bearing spec_node_id.
-func TestLabelForEpicUsesProposalSlug(t *testing.T) {
+// TestLabelForEpicUsesRegistrationEID covers the epic branch: an epic
+// action's label is spex:<eid> of the run's registration — not the action's
+// own SpecNodeID (the bare proposal slug) — because the fold only carries
+// the epic once its task exists, so the registration is the only referent
+// available at label time.
+func TestLabelForEpicUsesRegistrationEID(t *testing.T) {
 	l := &Labeler{}
 
 	label, err := l.LabelFor(CreateAction{
 		SpecNodeID: "2026-04-18-decouple-spex-from-br",
 		NodeType:   "proposal",
-	})
+	}, Registration{EID: "deadbeef:2026-04-18-decouple-spex-from-br", OK: true})
 	if err != nil {
 		t.Fatalf("LabelFor epic: unexpected error: %v", err)
 	}
-	if label != "spex:2026-04-18-decouple-spex-from-br" {
-		t.Errorf("epic label: want spex:2026-04-18-decouple-spex-from-br, got %q", label)
+	const want = "spex:deadbeef:2026-04-18-decouple-spex-from-br"
+	if label != want {
+		t.Errorf("epic label: want %s, got %q", want, label)
+	}
+}
+
+// TestLabelForEpicNoRegistrationIsError covers the interface contract: an
+// epic action for a proposal with no registration in the journal is an
+// error — the fix is `spex register`, not a guessed label. This is the
+// same verdict Resolver's missing-parent error reads.
+func TestLabelForEpicNoRegistrationIsError(t *testing.T) {
+	l := &Labeler{}
+
+	_, err := l.LabelFor(CreateAction{
+		SpecNodeID: "2026-04-18-decouple-spex-from-br",
+		NodeType:   "proposal",
+	}, Registration{})
+	if err == nil {
+		t.Fatal("LabelFor epic with no registration: want error, got nil")
 	}
 }
 
@@ -101,7 +120,7 @@ func TestLabelForEpicUsesProposalSlug(t *testing.T) {
 func TestLabelForMissingSpecNodeIDIsError(t *testing.T) {
 	l := &Labeler{}
 
-	_, err := l.LabelFor(CreateAction{})
+	_, err := l.LabelFor(CreateAction{}, Registration{})
 	if err == nil {
 		t.Fatal("LabelFor with empty SpecNodeID: want error, got nil")
 	}
@@ -118,16 +137,16 @@ func TestLabelForIsPureFunctionOfAction(t *testing.T) {
 	l1 := &Labeler{}
 	l2 := &Labeler{}
 
-	first, err := l1.LabelFor(action)
+	first, err := l1.LabelFor(action, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor l1: unexpected error: %v", err)
 	}
 	// Interleave an unrelated call on l1 before asking l2 for the same
 	// action — a stateful implementation would let this shift l2's answer.
-	if _, err := l1.LabelFor(CreateAction{SpecNodeID: "node_b"}); err != nil {
+	if _, err := l1.LabelFor(CreateAction{SpecNodeID: "node_b"}, Registration{}); err != nil {
 		t.Fatalf("LabelFor l1 (unrelated): unexpected error: %v", err)
 	}
-	second, err := l2.LabelFor(action)
+	second, err := l2.LabelFor(action, Registration{})
 	if err != nil {
 		t.Fatalf("LabelFor l2: unexpected error: %v", err)
 	}

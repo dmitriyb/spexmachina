@@ -12,9 +12,18 @@ import (
 // builderEnv bundles the fakes a Builder test typically needs: a fake
 // task-journal fold (open task pairings, removed nodes, proposal-epic
 // entries — whatever the scenario seeds) and a fake spec graph.
+//
+// reg is a pointer so most scenarios can leave it unset: build() then
+// defaults it to a present registration keyed off the run's own
+// proposal/head, which is what lets a plain "new proposal" fixture
+// synthesize an epic without every test having to spell out a
+// registration event by hand. Scenarios that specifically exercise the
+// registration-absent path (legacy epics, never-registered proposals) set
+// reg explicitly to override the default.
 type builderEnv struct {
 	fold  fakeFold
 	graph *fakeSpecGraph
+	reg   *Registration
 }
 
 func newBuilderEnv() *builderEnv {
@@ -25,11 +34,16 @@ func newBuilderEnv() *builderEnv {
 }
 
 func (e *builderEnv) build(report impact.ImpactReport, proposal, head string) (Changeset, error) {
+	reg := e.reg
+	if reg == nil {
+		reg = &Registration{EID: head + ":" + proposal, OK: true}
+	}
 	b := &Builder{
-		SpecGraph: e.graph,
-		Fold:      e.fold,
-		GitHead:   head,
-		Proposal:  proposal,
+		SpecGraph:    e.graph,
+		Fold:         e.fold,
+		Registration: *reg,
+		GitHead:      head,
+		Proposal:     proposal,
 	}
 	return b.Build(report)
 }
@@ -133,11 +147,17 @@ func TestBuild_DeterministicAcrossRuns(t *testing.T) {
 }
 
 // TestBuild_ProposalEpicIsFirstAndParents covers the spec scenario:
-// "Impact report with one component create, one data_flow create. Assert:
-// first op is type: create with spec_node_kind: proposal_epic; following
-// two creates' parent fields are {ref:op, op_id:<epic op_id>}."
+// "Impact report with one component create, one data_flow create; the
+// run's registration carries the proposal's registered event. Assert:
+// first op is type: create with spec_node_kind: proposal_epic and
+// idempotency.label: the registered event's eid, not the changeset's own
+// git_head; following two creates' parent fields are {ref:op, op_id:<epic
+// op_id>}." The registration's eid deliberately uses a head distinct from
+// the run's --git-head to prove the label derives from the registration,
+// not from GitHead.
 func TestBuild_ProposalEpicIsFirstAndParents(t *testing.T) {
 	env := newBuilderEnv()
+	env.reg = &Registration{EID: "reg-head1:p-ref", OK: true}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
 			sampleComponentCreate("c1", "emit", "Comp", nil),
@@ -161,6 +181,9 @@ func TestBuild_ProposalEpicIsFirstAndParents(t *testing.T) {
 	first := cs.Ops[0]
 	if first.Type != OpCreate || first.SpecNodeKind != "proposal_epic" {
 		t.Errorf("first op: want type=create kind=proposal_epic, got type=%s kind=%s", first.Type, first.SpecNodeKind)
+	}
+	if first.Idempotency == nil || first.Idempotency.Label != "spex:reg-head1:p-ref" {
+		t.Errorf("epic label: want spex:reg-head1:p-ref (registration eid, not git_head head1), got %+v", first.Idempotency)
 	}
 	epicOpID := first.OpID
 	for _, op := range cs.Ops[1:] {
@@ -650,6 +673,65 @@ func TestBuild_ExistingProposalEpicResolvesToRefBead(t *testing.T) {
 	}
 }
 
+// TestBuild_LegacyEpicNoRegistrationResolvesToRefBead covers the legacy
+// shape from the spec's "Proposal epic parents every non-epic create"
+// scenario: the fold pairs an epic task with the proposal, but the run
+// carries no registration at all — a lifecycle that predates the
+// registered event entirely. The same assertion as the plain re-run case
+// holds: parents are ref:bead and no error is raised, because the fold is
+// asked first and a live epic task settles the question before the
+// registration is even consulted.
+func TestBuild_LegacyEpicNoRegistrationResolvesToRefBead(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold["p-ref"] = FoldEntry{TaskID: "spexmachina-legacy-epic"}
+	env.reg = &Registration{} // no registration in the journal at all
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("X", "m", "X", nil),
+		},
+	}
+	cs, err := env.build(report, "p-ref", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, op := range cs.Ops {
+		if op.SpecNodeKind == "proposal_epic" {
+			t.Fatal("legacy epic (fold-paired, unregistered) must not synthesize a new proposal_epic op")
+		}
+	}
+	x := findOp(t, cs.Ops, "X")
+	if x.Parent == nil || x.Parent.Kind != RefBead || x.Parent.BeadID != "spexmachina-legacy-epic" {
+		t.Errorf("X parent: want ref:bead spexmachina-legacy-epic, got %+v", x.Parent)
+	}
+}
+
+// TestBuild_NoEpicNoRegistrationIsError covers the spec's fourth case: no
+// epic pairing in the fold and no registration for the proposal in the
+// journal. Builder.Build() returns an error naming the slug — registration
+// opens the lifecycle, so the fix is `spex register`, not a synthesized
+// epic. No epic op is added to the batch (unlike the registered case), so
+// the error comes from the first non-epic create's own parent resolution,
+// and no partial changeset is returned.
+func TestBuild_NoEpicNoRegistrationIsError(t *testing.T) {
+	env := newBuilderEnv()
+	env.reg = &Registration{}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			sampleComponentCreate("X", "m", "X", nil),
+		},
+	}
+	cs, err := env.build(report, "never-registered", "h")
+	if err == nil {
+		t.Fatalf("Build: want error naming the unregistered proposal, got nil and %d ops", len(cs.Ops))
+	}
+	if !strings.Contains(err.Error(), "never-registered") {
+		t.Errorf("error must name the unregistered proposal slug: %v", err)
+	}
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset on registration error: %d ops", len(cs.Ops))
+	}
+}
+
 // TestBuild_ClosedProposalEpicSynthesizesFreshEpicParent covers the
 // regression from PR #217: a closed proposal-epic fold entry (a prior
 // run's epic bead was closed, so the journal's latest state for the
@@ -763,16 +845,18 @@ func TestBuild_BatchOpenBeadOverridesClosed(t *testing.T) {
 }
 
 // TestBuild_IdempotencyLabelsMatchOwnSpecNodeID covers the integration with
-// IdempotencyLabeler: every create op's idempotency.label is
+// IdempotencyLabeler: every node-bearing create op's idempotency.label is
 // spex:<its own spec_node_id> — read off the op itself, independent of the
-// mapping store's NextRecordID.
+// mapping store's NextRecordID. The synthesized epic is the one exception:
+// its label is spex:<eid> of the run's registration, not spex:<proposal>.
 func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 	env := newBuilderEnv()
 	b := &Builder{
-		SpecGraph: env.graph,
-		Fold:      env.fold,
-		GitHead:   "h",
-		Proposal:  "p",
+		SpecGraph:    env.graph,
+		Fold:         env.fold,
+		Registration: Registration{EID: "h:p", OK: true},
+		GitHead:      "h",
+		Proposal:     "p",
 	}
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
@@ -788,7 +872,7 @@ func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 	if len(cs.Ops) != 3 {
 		t.Fatalf("want 3 ops, got %d", len(cs.Ops))
 	}
-	want := []string{"spex:p", "spex:a", "spex:b"}
+	want := []string{"spex:h:p", "spex:a", "spex:b"}
 	for i, op := range cs.Ops {
 		if op.Idempotency == nil {
 			t.Errorf("op %d: missing idempotency", i)
@@ -916,9 +1000,11 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 		t.Errorf("sort order: want aa1 < ab1 < y1 < x1, got indices %d %d %d %d", iAA, iAB, iY, iX)
 	}
 
-	// Labeler: each op's label is spex:<its own spec_node_id>, matching the
-	// sorted op order (epic, aa1, ab1, y1, x1).
-	wantLabels := []string{"spex:prop", "spex:aa1", "spex:ab1", "spex:y1", "spex:x1"}
+	// Labeler: each node-bearing op's label is spex:<its own spec_node_id>;
+	// the epic's is spex:<eid> of the run's registration
+	// (deadbeefcafe:prop, env.build's default). Matches the sorted op
+	// order (epic, aa1, ab1, y1, x1).
+	wantLabels := []string{"spex:deadbeefcafe:prop", "spex:aa1", "spex:ab1", "spex:y1", "spex:x1"}
 	for i, want := range wantLabels {
 		if cs1.Ops[i].Idempotency == nil || cs1.Ops[i].Idempotency.Label != want {
 			t.Errorf("op[%d] label: want %s, got %+v", i, want, cs1.Ops[i].Idempotency)
