@@ -70,7 +70,7 @@ func newTestReconciler(t *testing.T, graph SpecGraph) (*Reconciler, string) {
 // Reconciler.Apply would have produced.
 func seedJournal(t *testing.T, specDir string, lines ...mapping.Event) {
 	t.Helper()
-	if err := appendJournal(filepath.Join(specDir, ".history.jsonl"), lines); err != nil {
+	if err := mapping.NewMappingStore(specDir).Append(lines); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
 }
@@ -122,7 +122,7 @@ func TestApply_OkCreate_EventAndReceiptAppended(t *testing.T) {
 			Type:         emit.OpCreate,
 			SpecNodeKind: "component",
 			SpecNodeID:   "abc123def456",
-			Idempotency:  idem("spex:abc123def456"),
+			Idempotency:  idem("spex:cafe1234:op-1"),
 			Title:        "ingest: Reconciler",
 		}},
 	}
@@ -264,7 +264,7 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 		Ops: []emit.Op{
 			{
 				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
-				Idempotency: idem("spex:beadbead0002"),
+				Idempotency: idem("spex:cafe0002:op-1"),
 				Deps:        []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 			},
 			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
@@ -499,20 +499,24 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	}
 }
 
-// TestApply_ProposalEpicCreate_ReceiptKeyedBySlug covers "Proposal-epic
-// create → receipt keyed by slug, no spec-graph lookup". The spec graph
-// is empty on purpose: if the reconciler ever looks the stem up, the fake
-// graph's ErrNotFound-style error surfaces and this test fails.
-func TestApply_ProposalEpicCreate_ReceiptKeyedBySlug(t *testing.T) {
+// TestApply_ProposalEpicCreate_ReferencesRegisteredEvent covers "Proposal-
+// epic create → receipt references the registered event, no spec-graph
+// lookup". The spec graph is empty on purpose: if the reconciler ever
+// looks the stem up, the fake graph's ErrNotFound-style error surfaces and
+// this test fails.
+func TestApply_ProposalEpicCreate_ReferencesRegisteredEvent(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
 	stem := "2026-04-29-decouple-contract-gaps"
+	registeredEID := "beef0001:" + stem
+	seedJournal(t, dir, mapping.Event{Event: "registered", EID: registeredEID, Proposal: stem, GitHead: "beef0001"})
+
 	cs := emit.Changeset{
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: stem,
 		Ops: []emit.Op{{
 			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "proposal_epic",
-			SpecNodeID: stem, Idempotency: idem("spex:" + stem), Title: "Proposal: " + stem,
+			SpecNodeID: stem, Idempotency: idem("spex:" + registeredEID), Title: "Proposal: " + stem,
 		}},
 	}
 	rc := adapters.Receipts{
@@ -529,12 +533,42 @@ func TestApply_ProposalEpicCreate_ReceiptKeyedBySlug(t *testing.T) {
 	}
 
 	journal := readJournal(t, dir)
-	if len(journal) != 1 {
-		t.Fatalf("journal has %d lines, want 1: %+v", len(journal), journal)
+	if len(journal) != 2 {
+		t.Fatalf("journal has %d lines, want 2 (seed + epic receipt): %+v", len(journal), journal)
 	}
-	line := journal[0]
-	if line.Event != "task_created" || line.Proposal != stem || line.TaskID != "br-epic" || line.For != "" {
-		t.Errorf("epic receipt = %+v, want task_created/proposal=%s/task_id=br-epic/no for", line, stem)
+	line := journal[1]
+	if line.Event != "task_created" || line.For != registeredEID || line.TaskID != "br-epic" || line.Proposal != "" {
+		t.Errorf("epic receipt = %+v, want task_created/for=%s/task_id=br-epic/no proposal", line, registeredEID)
+	}
+}
+
+// TestApply_ProposalEpicCreate_NoRegisteredEvent_InvariantFailure covers
+// "Proposal-epic create without a registered event → invariant failure":
+// emit refuses to build such an op, so its arrival marks a malformed
+// changeset and nothing is appended.
+func TestApply_ProposalEpicCreate_NoRegisteredEvent_InvariantFailure(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	stem := "2026-04-29-decouple-contract-gaps"
+	cs := emit.Changeset{
+		Version: emit.ChangesetVersion, GitHead: "g", Proposal: stem,
+		Ops: []emit.Op{{
+			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "proposal_epic",
+			SpecNodeID: stem, Idempotency: idem("spex:beef0001:" + stem), Title: "Proposal: " + stem,
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-epic", WasExisting: false}},
+	}
+
+	_, err := r.Apply(cs, rc)
+	if err == nil || !strings.Contains(err.Error(), stem) {
+		t.Fatalf("Apply: got %v, want error naming the slug %s", err, stem)
+	}
+	if len(journalBytes(t, dir)) != 0 {
+		t.Error("journal file written despite refused batch")
 	}
 }
 
@@ -553,7 +587,7 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []emit.Op{{
 			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "abc123def456",
-			Idempotency: idem("spex:cleanup-abc123def456"), Labels: []string{"spex:cleanup"},
+			Idempotency: idem("spex:E1"), Labels: []string{"spex:cleanup"},
 		}},
 	}
 	rc := adapters.Receipts{
@@ -604,7 +638,7 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 		Ops: []emit.Op{
 			{
 				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
-				Idempotency: idem("spex:cleanup-" + hexGone), Labels: []string{"spex:cleanup"},
+				Idempotency: idem("spex:cafebeef:op-2"), Labels: []string{"spex:cleanup"},
 			},
 			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 		},
@@ -813,7 +847,7 @@ func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []emit.Op{{
 			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00",
-			Idempotency: idem("spex:cleanup-nosuchnode00"),
+			Idempotency: idem("spex:nosuchnode00"),
 		}},
 	}
 	rc := adapters.Receipts{
@@ -842,7 +876,7 @@ func TestApply_AtomicOnConstructionFailure(t *testing.T) {
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []emit.Op{
 			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:cleanup-nosuchnode00")},
+			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:nosuchnode00")},
 		},
 	}
 	rc := adapters.Receipts{
