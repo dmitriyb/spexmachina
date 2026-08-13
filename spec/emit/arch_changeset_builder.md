@@ -1,6 +1,6 @@
 # ChangesetBuilder
 
-Composes `changeset.json` v2 from the impact report, the spec graph, the task journal's fold, the proposal ref, and a caller-supplied git HEAD SHA. Those inputs are the whole of what it reads — [[aa2375420738|it opens no other file, starts no subprocess and asks no tracker anything]], so the same inputs always compose the same bytes. The no-subprocess requirement's sole sanctioned exception (the cli upgrade surface) sits outside every emit path, so nothing loosens here. Dep resolution is delegated to [[f7775ac5f1f3|Resolver]], ordering to [[7249fd093b8a|TopologicalSorter]], and idempotency label assignment to [[6f4b6dd8928f|IdempotencyLabeler]].
+Composes `changeset.json` v2 from the impact report, the spec graph, the task journal's fold, the run's registration, the proposal ref, and a caller-supplied git HEAD SHA. Those inputs are the whole of what it reads — [[aa2375420738|it opens no other file, starts no subprocess and asks no tracker anything]], so the same inputs always compose the same bytes. The no-subprocess requirement's sole sanctioned exception (the cli upgrade surface) sits outside every emit path, so nothing loosens here. Dep resolution is delegated to [[f7775ac5f1f3|Resolver]], ordering to [[7249fd093b8a|TopologicalSorter]], and idempotency label assignment to [[6f4b6dd8928f|IdempotencyLabeler]].
 
 ## Responsibilities
 
@@ -14,7 +14,7 @@ Composes `changeset.json` v2 from the impact report, the spec graph, the task jo
 
 ## Interface
 
-The builder is set up once per run from four values that do not change while it runs — the spec graph, the journal fold, the git HEAD SHA and the proposal ref — and is then handed exactly one impact report. It answers with one v2 changeset or with an error, never with both.
+The builder is set up once per run from five values that do not change while it runs — the spec graph, the journal fold, the run's registration, the git HEAD SHA and the proposal ref — and is then handed exactly one impact report. It answers with one v2 changeset or with an error, never with both.
 
 The document it answers with carries four top-level fields in this order: the schema version (always `2`), the git HEAD, the proposal ref, and the ordered op list.
 
