@@ -58,10 +58,21 @@ Outputs:
 			// The task journal is the sole source of node-to-task pairings.
 			// There is no separate --map flag: its location is a function
 			// of --spec-dir alone. An absent journal folds empty.
-			fold, err := mapping.NewMappingStore(specDir).List()
+			store := mapping.NewMappingStore(specDir)
+			fold, err := store.List()
 			if err != nil {
 				return validationErr(fmt.Errorf("emit: read journal: %w", err))
 			}
+
+			// The run's registration is resolved from the journal's parsed
+			// events directly, not the fold: the fold lists only
+			// task-bearing pairings, so a proposal registered but not yet
+			// epic'd would be indistinguishable from one never registered.
+			events, err := store.Parse()
+			if err != nil {
+				return validationErr(fmt.Errorf("emit: read journal: %w", err))
+			}
+			registration := resolveRegistration(events, proposal)
 
 			specGraph, err := newEmitSpecGraph(specDir)
 			if err != nil {
@@ -69,10 +80,11 @@ Outputs:
 			}
 
 			builder := &emit.Builder{
-				SpecGraph: specGraph,
-				Fold:      newJournalFold(fold),
-				GitHead:   gitHead,
-				Proposal:  proposal,
+				SpecGraph:    specGraph,
+				Fold:         newJournalFold(fold),
+				Registration: registration,
+				GitHead:      gitHead,
+				Proposal:     proposal,
 			}
 			cs, err := builder.Build(report)
 			if err != nil {
@@ -299,4 +311,20 @@ func (f journalFold) Entry(key string) (emit.FoldEntry, bool) {
 		return emit.FoldEntry{}, false
 	}
 	return emit.FoldEntry{TaskID: e.TaskID, Removed: e.Removed}, true
+}
+
+// resolveRegistration finds the run's registration: the eid of the latest
+// `registered` event in the journal whose proposal matches proposal, or
+// Registration{} if the journal holds none. This is a separate read from
+// the fold, in file order rather than through fold's byEID/entries maps,
+// because a `registered` event with no `task_created` yet has no
+// task-bearing pairing to appear in the fold as.
+func resolveRegistration(events []mapping.Event, proposal string) emit.Registration {
+	var reg emit.Registration
+	for _, ev := range events {
+		if ev.Event == "registered" && ev.Proposal == proposal {
+			reg = emit.Registration{EID: ev.EID, OK: true}
+		}
+	}
+	return reg
 }

@@ -263,11 +263,13 @@ func TestPriority_FallbackWhenProjectReqHasNilPriority(t *testing.T) {
 }
 
 // TestResolveParent_NewEpicInBatch covers the new-proposal path: there is
-// no existing epic in the mapping store; ChangesetBuilder injected the
-// synthetic "proposal/<ref>/epic" key into r.Batch pointing at the epic op_id.
+// no existing epic in the mapping store, the run has a registration, and
+// ChangesetBuilder injected the synthetic "proposal/<ref>/epic" key into
+// r.Batch pointing at the epic op_id.
 func TestResolveParent_NewEpicInBatch(t *testing.T) {
 	r := &Resolver{
-		Fold: fakeFold{},
+		Fold:         fakeFold{},
+		Registration: Registration{EID: "head1:2026-04-foo", OK: true},
 		Batch: map[string]string{
 			"proposal/2026-04-foo/epic": "op-001",
 		},
@@ -285,7 +287,11 @@ func TestResolveParent_NewEpicInBatch(t *testing.T) {
 // TestResolveParent_ExistingEpicInFold covers the re-run path: the
 // journal fold already carries an epic entry, keyed by the proposal slug,
 // for this proposal, so the parent ref points at that bead instead of an
-// in-batch op.
+// in-batch op. Registration is left at its zero value (no registration) on
+// purpose — this doubles as the legacy-epic scenario: a live epic task
+// settles the question before the registration is even consulted, so an
+// epic whose lifecycle predates the registered event entirely still
+// resolves without error.
 func TestResolveParent_ExistingEpicInFold(t *testing.T) {
 	r := &Resolver{
 		Fold: fakeFold{
@@ -303,10 +309,12 @@ func TestResolveParent_ExistingEpicInFold(t *testing.T) {
 	}
 }
 
-// TestResolveParent_ErrorWhenNeither covers the impossible-state guard:
-// neither an existing epic nor an in-batch synthetic key exists, so the
-// caller has misused the Resolver. Surface a clear error.
-func TestResolveParent_ErrorWhenNeither(t *testing.T) {
+// TestResolveParent_ErrorWhenNeitherFoldNorRegistration covers the spec's
+// third case: no live epic in the fold and no registration for the
+// proposal in the journal. This is an emit error naming the slug —
+// registration opens the lifecycle, so the fix is `spex register`, not a
+// synthesized epic.
+func TestResolveParent_ErrorWhenNeitherFoldNorRegistration(t *testing.T) {
 	r := &Resolver{
 		Fold:  fakeFold{},
 		Batch: map[string]string{},
@@ -315,6 +323,26 @@ func TestResolveParent_ErrorWhenNeither(t *testing.T) {
 	_, err := r.ResolveParent("missing-proposal")
 	if err == nil {
 		t.Fatal("ResolveParent: want error for missing epic, got nil")
+	}
+	if !strings.Contains(err.Error(), "missing-proposal") {
+		t.Errorf("error must name the unregistered proposal slug: %v", err)
+	}
+}
+
+// TestResolveParent_ErrorWhenRegisteredButBatchKeyMissing covers the
+// defensive fallback: the run has a registration but ChangesetBuilder
+// failed to inject the synthetic batch key (a caller-wiring bug, not a
+// spec-defined state). Resolver still refuses rather than guessing.
+func TestResolveParent_ErrorWhenRegisteredButBatchKeyMissing(t *testing.T) {
+	r := &Resolver{
+		Fold:         fakeFold{},
+		Registration: Registration{EID: "head1:missing-proposal", OK: true},
+		Batch:        map[string]string{},
+	}
+
+	_, err := r.ResolveParent("missing-proposal")
+	if err == nil {
+		t.Fatal("ResolveParent: want error when batch key missing despite registration, got nil")
 	}
 }
 
@@ -344,13 +372,14 @@ func TestResolveParent_ExistingEpicBeatsBatchKey(t *testing.T) {
 // TestResolveParent_RemovedFoldEntryFallsThroughToBatch covers a fold
 // entry whose epic task closed with no live successor (Removed == true,
 // carrying no TaskID) — the same convention ResolveDeps applies. Removed
-// must not be treated as "has an epic task"; the in-batch synthetic key
-// for a freshly created epic wins instead.
+// must not be treated as "has an epic task"; with a registration present,
+// the in-batch synthetic key for a freshly created epic wins instead.
 func TestResolveParent_RemovedFoldEntryFallsThroughToBatch(t *testing.T) {
 	r := &Resolver{
 		Fold: fakeFold{
 			"prop": {Removed: true},
 		},
+		Registration: Registration{EID: "head1:prop", OK: true},
 		Batch: map[string]string{
 			"proposal/prop/epic": "op-001",
 		},

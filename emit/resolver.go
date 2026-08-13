@@ -68,13 +68,27 @@ type JournalFold interface {
 	Entry(key string) (FoldEntry, bool)
 }
 
+// Registration is the run's one fact about the proposal's lifecycle: the
+// eid of its `registered` journal event, or its absence. It is resolved by
+// EmitCommand from the journal's parsed events, never from Fold — the fold
+// lists only task-bearing pairings, so a proposal registered but not yet
+// epic'd and a proposal never registered miss it identically. Zero value
+// (OK: false) means the journal holds no registered event for the
+// proposal.
+type Registration struct {
+	EID string
+	OK  bool
+}
+
 // Resolver classifies create-action deps into the two Ref shapes v2
 // supports and computes per-action priority via the implements → preq_id →
-// project requirement chain. Callers populate Batch (via Sorter) and Fold
-// (from the task journal) before calling any method.
+// project requirement chain. Callers populate Batch (via Sorter), Fold
+// (from the task journal) and Registration (from the journal's parsed
+// events) before calling any method.
 type Resolver struct {
-	SpecGraph SpecGraph
-	Fold      JournalFold
+	SpecGraph    SpecGraph
+	Fold         JournalFold
+	Registration Registration
 	// Batch maps spec_node_id → op_id, populated by Sorter so Resolver can
 	// classify in-batch deps as ref:op. ChangesetBuilder additionally
 	// injects synthetic "proposal/<ref>/epic" keys for new-epic parent
@@ -122,16 +136,24 @@ func (r *Resolver) ResolveDeps(depSpecNodeIDs []string) ([]Ref, error) {
 }
 
 // ResolveParent returns the proposal-epic Ref every non-epic create op
-// parents under. Two cases:
+// parents under. The fold is asked first, and the registration decides
+// only what the fold's silence means:
 //
-//   - Existing epic: a re-run case. The journal fold already carries a
-//     live (not Removed) epic entry, keyed by the proposal slug, for this
-//     proposal ref; return ref:bead.
-//   - New epic: the first emit for this proposal, or a fold entry whose
-//     epic task closed with no live successor (Removed == true, so it
-//     carries no TaskID — same convention ResolveDeps applies). ChangesetBuilder
-//     has injected a synthetic "proposal/<ref>/epic" key into r.Batch
-//     pointing at the epic op_id; return ref:op.
+//   - Existing epic: the journal fold already carries a live (not Removed)
+//     epic entry, keyed by the proposal slug, for this proposal ref —
+//     re-run of a partial run, idempotent re-emit, or a legacy epic whose
+//     lifecycle predates the registered event entirely. Return ref:bead.
+//     This branch is checked before the registration is consulted at all,
+//     so a legacy epic resolves with no registration in the journal.
+//   - No live epic, registration present: the first emit for this
+//     proposal, or a re-run after that epic's closure (Removed == true, so
+//     the fold entry carries no TaskID — same convention ResolveDeps
+//     applies). ChangesetBuilder has injected a synthetic
+//     "proposal/<ref>/epic" key into r.Batch pointing at the epic op_id;
+//     return ref:op.
+//   - No live epic, no registration: the proposal was never registered.
+//     Emit error naming the slug — registration opens the lifecycle, so
+//     the fix is `spex register`, not a synthesized epic.
 //
 // An existing, live epic always wins over an in-batch synthetic key —
 // defense against double-create on a re-run that misclassified the epic
@@ -140,11 +162,14 @@ func (r *Resolver) ResolveParent(proposal string) (Ref, error) {
 	if entry, ok := r.Fold.Entry(proposal); ok && !entry.Removed {
 		return Ref{Kind: RefBead, BeadID: entry.TaskID}, nil
 	}
+	if !r.Registration.OK {
+		return Ref{}, fmt.Errorf("emit: resolver: proposal %q has no registered event in the journal; run `spex register` first", proposal)
+	}
 	epicKey := "proposal/" + proposal + "/epic"
 	if opID, ok := r.Batch[epicKey]; ok {
 		return Ref{Kind: RefOp, OpID: opID}, nil
 	}
-	return Ref{}, fmt.Errorf("emit: resolver: proposal epic not found for %q", proposal)
+	return Ref{}, fmt.Errorf("emit: resolver: proposal epic op missing from batch for %q despite registration", proposal)
 }
 
 // Priority walks component.implements → module_requirement.preq_id →
