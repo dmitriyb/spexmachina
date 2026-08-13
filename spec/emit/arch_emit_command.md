@@ -31,12 +31,14 @@ Before running the builder:
 
 1. Require `--proposal`, and require `--git-head` to match `^[0-9a-f]{7,40}$`.
 2. Parse the impact report JSON; reject if `errors` array is non-empty (consistent with impact's own gate). The gate is re-applied here rather than trusted upstream, so a stale report piped in from an earlier run cannot slip past.
-3. Parse and fold the task journal at `<spec-dir>/.history.jsonl` — an absent journal folds empty.
+3. Parse and fold the task journal at `<spec-dir>/.history.jsonl` — an absent journal folds empty. From the same parsed events, resolve the run's registration: the `registered` event whose proposal is `--proposal`, or nothing if the journal holds none. One parse answers both — the fold lists task-bearing pairings, the registration is a lifecycle fact that has no pairing until the epic's task lands.
 4. Load the spec graph rooted at the spec directory's `project.json`.
 
 ## Wiring
 
-EmitCommand assembles the run and then gets out of the way. It gathers five things — the impact report from stdin or `--impact`, the journal fold, the spec graph rooted at the spec directory, the `--git-head` SHA and the `--proposal` ref — and hands all five to [[7f06f7d80e94|ChangesetBuilder]], which owns everything from there.
+EmitCommand assembles the run and then gets out of the way. It gathers six things — the impact report from stdin or `--impact`, the journal fold, the run's registration, the spec graph rooted at the spec directory, the `--git-head` SHA and the `--proposal` ref — and hands all six to [[7f06f7d80e94|ChangesetBuilder]], which owns everything from there.
+
+The registration is resolved here rather than inside the builder for the same reason the fold is: the command is the one place permitted to know where the journal lives and how it parses, and everything downstream of it receives finished answers. Neither the builder nor its three subordinates opens `.history.jsonl`.
 
 The three subordinate components — Resolver, TopologicalSorter and IdempotencyLabeler — are reached only through the builder. EmitCommand neither builds nor calls them, which is why this module's `uses` graph runs command → builder → the three rather than command → all four: there is exactly one place a change to the composition has to be made.
 
