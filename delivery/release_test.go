@@ -112,6 +112,28 @@ func TestReleaseWorkflow_PerArtifactChecksums(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflow_SignsAndPublishesInstallScript(t *testing.T) {
+	wf := readRepoFile(t, ".github/workflows/release.yml")
+
+	for _, want := range []string{"ssh-keygen", "-Y", "sign", "-n", "file"} {
+		if !strings.Contains(wf, want) {
+			t.Errorf("release workflow does not sign install.sh with %q", want)
+		}
+	}
+	if !strings.Contains(wf, "install.sh") {
+		t.Fatal("release workflow does not reference install.sh at all")
+	}
+
+	if !strings.Contains(wf, "gh release upload") {
+		t.Fatal("release workflow does not upload any release assets")
+	}
+	for _, want := range []string{"dist/install.sh", "dist/install.sh.sig"} {
+		if !strings.Contains(wf, want) {
+			t.Errorf("release workflow does not publish %q to the release", want)
+		}
+	}
+}
+
 func TestReleaseWorkflow_ManifestGeneratedAndPublished(t *testing.T) {
 	wf := readRepoFile(t, ".github/workflows/release.yml")
 
