@@ -46,17 +46,24 @@ type ProjectRequirement struct {
 	Priority *int
 }
 
-// FoldEntry is the slice of one task-journal fold entry Resolver needs:
-// the key's current task id, and whether the key's last journal state is
-// a removal. Per spec/map/flow_bead_mapping.md, a task is only ever closed
-// with no live successor when its node is removed (a modify pair's closed
-// predecessor is superseded by the pair's new task, which is what the fold
-// reports); so Removed is Resolver's whole notion of "closed" — the
-// dependency is satisfied because the node it named is gone. A key with no
-// entry at all has never had a task-bearing event.
+// FoldEntry is the slice of one task-journal fold entry Resolver and
+// IdempotencyLabeler need: the key's current task id, whether the key's
+// last journal state is a removal, and — when it is — the eid of that
+// removed event. Per spec/map/flow_bead_mapping.md, a task is only ever
+// closed with no live successor when its node is removed (a modify pair's
+// closed predecessor is superseded by the pair's new task, which is what
+// the fold reports); so Removed is Resolver's whole notion of "closed" —
+// the dependency is satisfied because the node it named is gone. A key
+// with no entry at all has never had a task-bearing event.
 type FoldEntry struct {
 	TaskID  string
 	Removed bool
+	// RemovedEID is the eid of the fold's latest `removed` journal event
+	// for this key. Meaningful only when Removed is true; IdempotencyLabeler
+	// reads it for a cleanup create answering a removal that already landed
+	// in an earlier batch — see arch_idempotency_labeler.md's cleanup
+	// referent rule.
+	RemovedEID string
 }
 
 // JournalFold is Resolver's read surface onto the task journal's fold:

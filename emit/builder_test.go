@@ -345,11 +345,12 @@ func TestBuild_PriorityFallback(t *testing.T) {
 // lineage."
 //
 // Also covers the modify-pair rule from arch_idempotency_labeler.md: the
-// create op's idempotency.label MUST equal spex:<Q's spec_node_id> — the
-// same label the original create carried, since the node's identity hash
-// does not change across a modify pair. No mapping-store seeding is needed
-// to make this true (see TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold
-// for the empty-fold half of that assertion).
+// create op's idempotency.label is spex:<git_head>:<its own op_id> — the
+// eid of this run's own modified event, distinct from whatever label the
+// closed predecessor carried, since each change in the lineage references
+// its own event. No fold seeding is needed to make this true (see
+// TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold for the
+// empty-fold half of that assertion).
 func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	env := newBuilderEnv()
 	report := impact.ImpactReport{
@@ -417,19 +418,20 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 		t.Errorf("close reason: got %q", closeOp.Reason)
 	}
 
-	// Modify-pair label: the create's idempotency.label is the node's own
-	// identity hash, not a store-derived value.
-	wantLabel := "spex:Q"
+	// Modify-pair label: the create's idempotency.label is spex:<git_head>
+	// :<its own op_id> — this run's own change event, not a store-derived
+	// value and not the close op's id.
+	wantLabel := "spex:deadbeef:" + q.OpID
 	if q.Idempotency == nil || q.Idempotency.Label != wantLabel {
-		t.Errorf("Q.idempotency.label: want %q (own spec_node_id), got %+v", wantLabel, q.Idempotency)
+		t.Errorf("Q.idempotency.label: want %q (own op_id), got %+v", wantLabel, q.Idempotency)
 	}
 }
 
 // TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold covers the other
 // half of arch_idempotency_labeler.md's modify-pair assertion: the
-// replacement create's idempotency.label is spex:<Q's spec_node_id> even
-// when the mapping store has no record at all for OldBeadID — the label is
-// read off the op itself, never looked up.
+// replacement create's idempotency.label is spex:<git_head>:<its own op_id>
+// even when the journal fold has no record at all for OldBeadID — a
+// modify-pair's label never consults the fold, only its own op_id.
 func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
 	env := newBuilderEnv()
 	report := impact.ImpactReport{
@@ -451,17 +453,20 @@ func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	q := findOp(t, cs.Ops, "Q")
-	if q.Idempotency == nil || q.Idempotency.Label != "spex:Q" {
-		t.Errorf("Q.idempotency.label: want spex:Q (no lookup required), got %+v", q.Idempotency)
+	wantLabel := "spex:deadbeef:" + q.OpID
+	if q.Idempotency == nil || q.Idempotency.Label != wantLabel {
+		t.Errorf("Q.idempotency.label: want %q (own op_id, no fold lookup), got %+v", wantLabel, q.Idempotency)
 	}
 }
 
 // TestBuild_CleanupOpShape covers the spec scenario from
-// arch_changeset_builder.md "Cleanup op shape": an action with Reason
-// starting "Code cleanup:" produces an op with spec_node_kind="cleanup",
-// title=Reason verbatim, labels=[spex:cleanup], idempotency=spex:cleanup-
-// <spec_node_id>, deps carrying the OldBeadID lineage, priority=
-// FallbackPriority.
+// arch_changeset_builder.md "Cleanup op shape" and test_changeset_builder.md's
+// "Cleanup-bead create": an action with Reason starting "Code cleanup:"
+// produces an op with spec_node_kind="cleanup", title=Reason verbatim,
+// labels=[spex:cleanup], deps carrying the OldBeadID lineage, priority=
+// FallbackPriority, and idempotency.label=spex:<git_head>:<close op_id> —
+// the eid of the removed event the same-batch close implies, so the
+// cleanup's task_created referent and its label are the same event.
 func TestBuild_CleanupOpShape(t *testing.T) {
 	env := newBuilderEnv()
 	report := impact.ImpactReport{
@@ -474,6 +479,17 @@ func TestBuild_CleanupOpShape(t *testing.T) {
 				SpecNodeID: "abc123def456",
 				OldBeadID:  "spexmachina-old",
 				Reason:     "Code cleanup: m/X",
+			},
+		},
+		Obsoletes: []impact.Action{
+			{
+				Type:       "obsolete",
+				BeadID:     "spexmachina-old",
+				Module:     "m",
+				Node:       "X",
+				NodeType:   "component",
+				ChangeType: "removed",
+				Reason:     "Spec node removed: m/X",
 			},
 		},
 	}
@@ -493,8 +509,19 @@ func TestBuild_CleanupOpShape(t *testing.T) {
 	if len(op.Labels) != 1 || op.Labels[0] != "spex:cleanup" {
 		t.Errorf("labels: want [spex:cleanup], got %+v", op.Labels)
 	}
-	if op.Idempotency == nil || op.Idempotency.Label != "spex:cleanup-abc123def456" {
-		t.Errorf("idempotency.label: want spex:cleanup-abc123def456, got %+v", op.Idempotency)
+	var closeOp Op
+	for _, o := range cs.Ops {
+		if o.Type == OpClose {
+			closeOp = o
+			break
+		}
+	}
+	if closeOp.OpID == "" {
+		t.Fatal("no close op found for spexmachina-old")
+	}
+	wantLabel := "spex:deadbeef:" + closeOp.OpID
+	if op.Idempotency == nil || op.Idempotency.Label != wantLabel {
+		t.Errorf("idempotency.label: want %q (same-batch close op's eid), got %+v", wantLabel, op.Idempotency)
 	}
 	if op.Priority != FallbackPriority {
 		t.Errorf("priority: want FallbackPriority=%d, got %d", FallbackPriority, op.Priority)
@@ -507,6 +534,52 @@ func TestBuild_CleanupOpShape(t *testing.T) {
 	}
 	if !foundLineage {
 		t.Errorf("deps: want ref:bead spexmachina-old type:blocks, got %+v", op.Deps)
+	}
+}
+
+// TestBuild_CleanupOpUsesFoldRemovedEventForPriorBatchRemoval covers
+// test_changeset_builder.md's "Cleanup-bead create for a prior-batch
+// removal" scenario: the journal already holds the removed event for the
+// node (read from the fold), and the batch carries the cleanup create but
+// no same-batch close op — its close landed last run. The label must read
+// from the fold, not be derived from any op in this batch, so a re-run at
+// a moved HEAD still carries the label of the removal it answers.
+func TestBuild_CleanupOpUsesFoldRemovedEventForPriorBatchRemoval(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold["abc123def456"] = FoldEntry{Removed: true, RemovedEID: "E1"}
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:       "create",
+				Module:     "m",
+				Node:       "X",
+				NodeType:   "component",
+				SpecNodeID: "abc123def456",
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: m/X",
+			},
+		},
+	}
+	cs, err := env.build(report, "p", "deadbeef-moved")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	op := findOp(t, cs.Ops, "abc123def456")
+	if op.Idempotency == nil || op.Idempotency.Label != "spex:E1" {
+		t.Errorf("idempotency.label: want spex:E1 (fold's removed event, not derived from any op in this batch), got %+v", op.Idempotency)
+	}
+	var foundLineage bool
+	for _, d := range op.Deps {
+		if d.Kind == RefBead && d.BeadID == "spexmachina-old" && d.EdgeType == "blocks" {
+			foundLineage = true
+		}
+	}
+	if !foundLineage {
+		t.Errorf("deps: want ref:bead spexmachina-old type:blocks, got %+v", op.Deps)
+	}
+	if op.Priority != FallbackPriority {
+		t.Errorf("priority: want FallbackPriority=%d, got %d", FallbackPriority, op.Priority)
 	}
 }
 
@@ -558,6 +631,17 @@ func TestBuild_BodyEmptyWithoutSpecPaths(t *testing.T) {
 				Reason:     "Code cleanup: m/Y",
 			},
 		},
+		Obsoletes: []impact.Action{
+			{
+				Type:       "obsolete",
+				BeadID:     "spexmachina-old",
+				Module:     "m",
+				Node:       "Y",
+				NodeType:   "component",
+				ChangeType: "removed",
+				Reason:     "Spec node removed: m/Y",
+			},
+		},
 	}
 	cs, err := env.build(report, "p", "deadbeef")
 	if err != nil {
@@ -571,12 +655,15 @@ func TestBuild_BodyEmptyWithoutSpecPaths(t *testing.T) {
 	}
 }
 
-// TestBuild_LabelsAreIndependentOfBatchComposition covers
-// arch_idempotency_labeler.md's "per-action, not per-batch" rule: a
-// create's label depends only on what the action looks like, never on the
-// batch it landed in or its position within it. Build the same fresh create
-// once alongside a cleanup create and once alone; its label must not move.
-func TestBuild_LabelsAreIndependentOfBatchComposition(t *testing.T) {
+// TestBuild_LabelsDeriveIndependentlyPerAction covers
+// arch_idempotency_labeler.md's "per-action, not per-batch" rule: Labeler
+// carries no cursor or counter, so each create's label is computed solely
+// from that create's own referent — never leaked from, or into, another
+// action's label in the same batch. Build a batch with a cleanup create
+// alongside a fresh create and assert each label matches its own referent
+// formula and the two never collide, whatever op_ids Sorter/Builder happen
+// to assign them.
+func TestBuild_LabelsDeriveIndependentlyPerAction(t *testing.T) {
 	env := newBuilderEnv()
 	report := impact.ImpactReport{
 		Creates: []impact.Action{
@@ -591,6 +678,17 @@ func TestBuild_LabelsAreIndependentOfBatchComposition(t *testing.T) {
 			},
 			sampleComponentCreate("spec_fresh", "m", "Fresh", nil),
 		},
+		Obsoletes: []impact.Action{
+			{
+				Type:       "obsolete",
+				BeadID:     "spexmachina-old",
+				Module:     "m",
+				Node:       "Cleanup",
+				NodeType:   "component",
+				ChangeType: "removed",
+				Reason:     "Spec node removed: m/Cleanup",
+			},
+		},
 	}
 	cs, err := env.build(report, "p", "h")
 	if err != nil {
@@ -598,27 +696,28 @@ func TestBuild_LabelsAreIndependentOfBatchComposition(t *testing.T) {
 	}
 
 	freshOp := findOp(t, cs.Ops, "spec_fresh")
-	if freshOp.Idempotency == nil || freshOp.Idempotency.Label != "spex:spec_fresh" {
-		t.Errorf("fresh.idempotency.label: want spex:spec_fresh (own spec_node_id), got %+v", freshOp.Idempotency)
-	}
-	cleanupOp := findOp(t, cs.Ops, "spec_cleanup")
-	if cleanupOp.Idempotency == nil || cleanupOp.Idempotency.Label != "spex:cleanup-spec_cleanup" {
-		t.Errorf("cleanup.idempotency.label: want spex:cleanup-spec_cleanup, got %+v", cleanupOp.Idempotency)
+	wantFresh := "spex:h:" + freshOp.OpID
+	if freshOp.Idempotency == nil || freshOp.Idempotency.Label != wantFresh {
+		t.Errorf("fresh.idempotency.label: want %q (own op_id), got %+v", wantFresh, freshOp.Idempotency)
 	}
 
-	env2 := newBuilderEnv()
-	soloReport := impact.ImpactReport{
-		Creates: []impact.Action{
-			sampleComponentCreate("spec_fresh", "m", "Fresh", nil),
-		},
+	var closeOp Op
+	for _, o := range cs.Ops {
+		if o.Type == OpClose {
+			closeOp = o
+			break
+		}
 	}
-	cs2, err := env2.build(soloReport, "p", "h")
-	if err != nil {
-		t.Fatalf("Build (solo): %v", err)
+	if closeOp.OpID == "" {
+		t.Fatal("no close op found for spexmachina-old")
 	}
-	soloFreshOp := findOp(t, cs2.Ops, "spec_fresh")
-	if soloFreshOp.Idempotency == nil || soloFreshOp.Idempotency.Label != freshOp.Idempotency.Label {
-		t.Errorf("fresh label changed with batch composition: with cleanup=%+v, alone=%+v", freshOp.Idempotency, soloFreshOp.Idempotency)
+	cleanupOp := findOp(t, cs.Ops, "spec_cleanup")
+	wantCleanup := "spex:h:" + closeOp.OpID
+	if cleanupOp.Idempotency == nil || cleanupOp.Idempotency.Label != wantCleanup {
+		t.Errorf("cleanup.idempotency.label: want %q (same-batch close op's id), got %+v", wantCleanup, cleanupOp.Idempotency)
+	}
+	if cleanupOp.Idempotency.Label == freshOp.Idempotency.Label {
+		t.Errorf("cleanup and fresh labels must not collide, both got %q", cleanupOp.Idempotency.Label)
 	}
 }
 
@@ -844,12 +943,12 @@ func TestBuild_BatchOpenBeadOverridesClosed(t *testing.T) {
 	}
 }
 
-// TestBuild_IdempotencyLabelsMatchOwnSpecNodeID covers the integration with
+// TestBuild_IdempotencyLabelsMatchOwnOpID covers the integration with
 // IdempotencyLabeler: every node-bearing create op's idempotency.label is
-// spex:<its own spec_node_id> — read off the op itself, independent of the
-// mapping store's NextRecordID. The synthesized epic is the one exception:
-// its label is spex:<eid> of the run's registration, not spex:<proposal>.
-func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
+// spex:<git_head>:<its own op_id> — read off the op itself. The synthesized
+// epic is the one exception: its label is spex:<eid> of the run's
+// registration, not derived from git_head/op_id at all.
+func TestBuild_IdempotencyLabelsMatchOwnOpID(t *testing.T) {
 	env := newBuilderEnv()
 	b := &Builder{
 		SpecGraph:    env.graph,
@@ -872,14 +971,13 @@ func TestBuild_IdempotencyLabelsMatchOwnSpecNodeID(t *testing.T) {
 	if len(cs.Ops) != 3 {
 		t.Fatalf("want 3 ops, got %d", len(cs.Ops))
 	}
-	want := []string{"spex:h:p", "spex:a", "spex:b"}
-	for i, op := range cs.Ops {
-		if op.Idempotency == nil {
-			t.Errorf("op %d: missing idempotency", i)
-			continue
-		}
-		if op.Idempotency.Label != want[i] {
-			t.Errorf("op %d label: want %s, got %s", i, want[i], op.Idempotency.Label)
+	if cs.Ops[0].Idempotency == nil || cs.Ops[0].Idempotency.Label != "spex:h:p" {
+		t.Errorf("epic label: want spex:h:p (registration eid), got %+v", cs.Ops[0].Idempotency)
+	}
+	for _, op := range cs.Ops[1:] {
+		want := "spex:h:" + op.OpID
+		if op.Idempotency == nil || op.Idempotency.Label != want {
+			t.Errorf("op %s label: want %s (own op_id), got %+v", op.OpID, want, op.Idempotency)
 		}
 	}
 }
@@ -964,8 +1062,8 @@ func crossComponentEnv() (*builderEnv, impact.ImpactReport) {
 // stores, fresh labelers — no shared in-memory state) over identical
 // inputs must serialize to byte-identical JSON. Resolver classifies both
 // v2 dep shapes, TopologicalSorter orders epic-first with lex tiebreak,
-// IdempotencyLabeler stamps each op's label from its own spec_node_id, and
-// ChangesetBuilder composes the canonical output.
+// IdempotencyLabeler stamps each op's label from its own (git_head, op_id),
+// and ChangesetBuilder composes the canonical output.
 func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 	env1, report1 := crossComponentEnv()
 	cs1, err := env1.build(report1, "prop", "deadbeefcafe")
@@ -1000,14 +1098,16 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 		t.Errorf("sort order: want aa1 < ab1 < y1 < x1, got indices %d %d %d %d", iAA, iAB, iY, iX)
 	}
 
-	// Labeler: each node-bearing op's label is spex:<its own spec_node_id>;
-	// the epic's is spex:<eid> of the run's registration
-	// (deadbeefcafe:prop, env.build's default). Matches the sorted op
-	// order (epic, aa1, ab1, y1, x1).
-	wantLabels := []string{"spex:deadbeefcafe:prop", "spex:aa1", "spex:ab1", "spex:y1", "spex:x1"}
-	for i, want := range wantLabels {
-		if cs1.Ops[i].Idempotency == nil || cs1.Ops[i].Idempotency.Label != want {
-			t.Errorf("op[%d] label: want %s, got %+v", i, want, cs1.Ops[i].Idempotency)
+	// Labeler: each node-bearing op's label is spex:<git_head>:<its own
+	// op_id>; the epic's is spex:<eid> of the run's registration
+	// (deadbeefcafe:prop, env.build's default).
+	if cs1.Ops[0].Idempotency == nil || cs1.Ops[0].Idempotency.Label != "spex:deadbeefcafe:prop" {
+		t.Errorf("epic label: want spex:deadbeefcafe:prop (registration eid), got %+v", cs1.Ops[0].Idempotency)
+	}
+	for _, op := range cs1.Ops[1:] {
+		want := "spex:deadbeefcafe:" + op.OpID
+		if op.Idempotency == nil || op.Idempotency.Label != want {
+			t.Errorf("op %s label: want %s (own op_id), got %+v", op.OpID, want, op.Idempotency)
 		}
 	}
 
@@ -1089,12 +1189,12 @@ func TestBuild_CrossComponent_UnresolvableDepAbortsWithNoPartialChangeset(t *tes
 // TestBuild_CrossComponent_LabelsPairWithTopoOrder covers the spec's
 // "idempotency label reservation paired with sort order" scenario, updated
 // for the store-free Labeler: an A → B → C in-batch chain labels the topo
-// order A, B, C as spex:cA/cB/cC. There is no store-derived cursor left to
-// vary — Labeler reads each label off its own op's spec_node_id — so two
-// independently constructed envs over identical inputs must still pair
-// identically, proving the label depends on the op alone. An existing
-// proposal epic keeps the epic op out of the batch, matching the spec's
-// three-label expectation.
+// order A, B, C as spex:<head>:op-1/op-2/op-3. There is no store-derived
+// cursor left to vary — Labeler reads each label off its own op's
+// (git_head, op_id) — so two independently constructed envs over identical
+// inputs must still pair identically, proving the label depends on the op
+// alone. An existing proposal epic keeps the epic op out of the batch,
+// matching the spec's three-label expectation.
 func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 	run := func() Changeset {
 		env := newBuilderEnv()
@@ -1123,7 +1223,7 @@ func TestBuild_CrossComponent_LabelsPairWithTopoOrder(t *testing.T) {
 			if cs.Ops[i].SpecNodeID != id {
 				t.Errorf("op[%d]: want %s (topo order A,B,C), got %s", i, id, cs.Ops[i].SpecNodeID)
 			}
-			want := "spex:" + id
+			want := "spex:deadbeefcafe:" + cs.Ops[i].OpID
 			if cs.Ops[i].Idempotency == nil || cs.Ops[i].Idempotency.Label != want {
 				t.Errorf("op[%d] label: want %s, got %+v", i, want, cs.Ops[i].Idempotency)
 			}
