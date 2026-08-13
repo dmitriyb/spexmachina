@@ -3,9 +3,7 @@ package ingest
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"sync"
@@ -762,11 +760,11 @@ type refreshReceiptLine struct {
 }
 
 // encodeLine renders one mapping.Event as the wire JSON its event kind
-// requires. Reconciler uses it, via checkInvariant5, to schema-validate a
-// batch before committing it through MappingStore's Append; RefreshHandler
-// uses it to both validate and write its own paired-commit batch. The two
-// components share this encoder so they can never drift apart on wire
-// shape.
+// requires. Reconciler and RefreshHandler each use it, via checkInvariant5,
+// to schema-validate a batch before committing it through MappingStore's
+// Append — the journal's one write path (see arch_reconciler.md "One write
+// path, no tracker"). The two components share this encoder so they can
+// never drift apart on wire shape.
 func encodeLine(ev mapping.Event) ([]byte, error) {
 	switch ev.Event {
 	case "added", "modified", "removed":
@@ -796,63 +794,6 @@ func encodeLine(ev mapping.Event) ([]byte, error) {
 	default:
 		return nil, fmt.Errorf("unknown journal line kind %q", ev.Event)
 	}
-}
-
-// appendJournal appends lines to the journal at path, preserving existing
-// bytes verbatim: read what is there, append the newly encoded lines,
-// write to a temp file and rename into place. A crash before rename
-// leaves the destination untouched, and a re-run that finds nothing new
-// to append never calls this at all — see Reconciler.Apply.
-func appendJournal(path string, lines []mapping.Event) error {
-	existing, err := os.ReadFile(path)
-	if err != nil {
-		if !errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("read %s: %w", path, err)
-		}
-		existing = nil
-	}
-
-	var buf bytes.Buffer
-	buf.Write(existing)
-	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
-		buf.WriteByte('\n')
-	}
-	for _, ev := range lines {
-		raw, err := encodeLine(ev)
-		if err != nil {
-			return err
-		}
-		buf.Write(raw)
-		buf.WriteByte('\n')
-	}
-
-	tmp := path + ".tmp"
-	f, err := os.Create(tmp)
-	if err != nil {
-		return err
-	}
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmp)
-		}
-	}()
-	if _, err := f.Write(buf.Bytes()); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Sync(); err != nil {
-		_ = f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	if err := os.Rename(tmp, path); err != nil {
-		return err
-	}
-	cleanup = false
-	return nil
 }
 
 func strPtr(s string) *string { return &s }

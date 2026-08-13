@@ -384,7 +384,7 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		journalExisted = false
 	}
 
-	if err := appendJournal(journalPath, batch); err != nil {
+	if err := store.Append(batch); err != nil {
 		return summary, fmt.Errorf("ingest: refresh: write journal: %w", err)
 	}
 
@@ -412,8 +412,8 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 }
 
 // restoreJournalBytes rewrites the journal at path back to original via
-// the same temp-file + rename sequence appendJournal uses, so a rollback
-// carries the same crash-safety guarantee as the write it undoes.
+// the same temp-file + rename sequence MappingStore.Append uses, so a
+// rollback carries the same crash-safety guarantee as the write it undoes.
 func restoreJournalBytes(path string, original []byte) error {
 	tmp := path + ".tmp"
 	if err := os.WriteFile(tmp, original, 0644); err != nil {

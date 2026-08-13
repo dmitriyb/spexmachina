@@ -70,7 +70,7 @@ func newTestReconciler(t *testing.T, graph SpecGraph) (*Reconciler, string) {
 // Reconciler.Apply would have produced.
 func seedJournal(t *testing.T, specDir string, lines ...mapping.Event) {
 	t.Helper()
-	if err := appendJournal(filepath.Join(specDir, ".history.jsonl"), lines); err != nil {
+	if err := mapping.NewMappingStore(specDir).Append(lines); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
 }
@@ -122,7 +122,7 @@ func TestApply_OkCreate_EventAndReceiptAppended(t *testing.T) {
 			Type:         emit.OpCreate,
 			SpecNodeKind: "component",
 			SpecNodeID:   "abc123def456",
-			Idempotency:  idem("spex:abc123def456"),
+			Idempotency:  idem("spex:cafe1234:op-1"),
 			Title:        "ingest: Reconciler",
 		}},
 	}
@@ -264,7 +264,7 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 		Ops: []emit.Op{
 			{
 				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
-				Idempotency: idem("spex:beadbead0002"),
+				Idempotency: idem("spex:cafe0002:op-1"),
 				Deps:        []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 			},
 			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
@@ -638,7 +638,7 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 		Ops: []emit.Op{
 			{
 				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
-				Idempotency: idem("spex:cleanup-" + hexGone), Labels: []string{"spex:cleanup"},
+				Idempotency: idem("spex:cafebeef:op-2"), Labels: []string{"spex:cleanup"},
 			},
 			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 		},
@@ -847,7 +847,7 @@ func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []emit.Op{{
 			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00",
-			Idempotency: idem("spex:cleanup-nosuchnode00"),
+			Idempotency: idem("spex:nosuchnode00"),
 		}},
 	}
 	rc := adapters.Receipts{
@@ -876,7 +876,7 @@ func TestApply_AtomicOnConstructionFailure(t *testing.T) {
 		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []emit.Op{
 			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:cleanup-nosuchnode00")},
+			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:nosuchnode00")},
 		},
 	}
 	rc := adapters.Receipts{
