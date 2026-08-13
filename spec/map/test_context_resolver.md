@@ -25,8 +25,9 @@ spec/
 - test_section `333333333333`: describes [`aabbccddeeff`, `ffeeddccbbaa`], content "test_components.md"
 - data_flow `444444444444`: uses [`aabbccddeeff`, `ffeeddccbbaa`], content "flow_pipeline.md"
 
-**Fixture journal:** an `added` event for each component with a `task_created` receipt
-(Parser → task `abc-123`, added at git_head `beef0001`), and for the removed-node cases a node
+**Fixture journal:** an `added` event for each component, with a `task_created` receipt for
+Parser alone (Parser → task `abc-123`, added at git_head `beef0001`) — Builder's `added` event is
+named by no receipt, which is the state S1c reads — and for the removed-node cases a node
 `999999999999` (Widget, component, module alpha) with `added` (git_head `beef0001`),
 `task_created` (task `abc-777`), then `removed`
 (proposal `2026-08-01-task-journal`, git_head `cafe1234`).
@@ -61,7 +62,9 @@ reconstructing the delta by hand.
 
 ### S1c: Live node with no task-bearing event serves a null bracket
 
-**Given** the Builder component present in module.json but absent from the journal.
+**Given** the Builder component present in module.json and added in the journal, but never named
+by a `task_created` receipt — the fixture's `added` event for it carries no pairing, so the node
+has journal history and no task-bearing event.
 
 **When** `ResolveContext(specDir, "ffeeddccbbaa")` is called.
 

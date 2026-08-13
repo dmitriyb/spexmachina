@@ -14,7 +14,7 @@ implementation bead.
 ## Setup
 
 - Use the in-code fixtures described under Fixtures below: a builder environment wrapping a fake
-  journal fold and a fake spec graph.
+  journal fold, a per-scenario registration (an eid, or absent) and a fake spec graph.
 - Set `--git-head` to a fixed SHA string for byte-identical output assertions.
 
 ## Scenarios
@@ -29,16 +29,24 @@ implementation bead.
 
 ### Proposal epic parents every non-epic create
 
-- Impact report with one proposal, one component create, one data_flow create; the journal holds
-  the proposal's `registered` event (`eid: "<reg-head>:<slug>"`). Assert: first op is
-  `type: create` with `spec_node_kind: proposal_epic` and
-  `idempotency.label: "spex:<reg-head>:<slug>"` — the registered event's eid, not the changeset's
-  own git_head; following two creates' `parent` fields are `{"ref":"op","op_id":"<epic op_id>"}`.
+- Impact report with one proposal, one component create, one data_flow create; the run's
+  registration carries the proposal's `registered` event (`eid: "<reg-head>:<slug>"`) and the fold
+  pairs no epic task with it. Assert: first op is `type: create` with
+  `spec_node_kind: proposal_epic` and `idempotency.label: "spex:<reg-head>:<slug>"` — the
+  registered event's eid, not the changeset's own git_head; following two creates' `parent` fields
+  are `{"ref":"op","op_id":"<epic op_id>"}`.
 - With the journal fold already pairing an epic task with the registered event, no epic create is
   emitted and every create's parent is `{"ref":"bead","bead_id":"<epic task>"}`.
-- With no `registered` event in the journal for the proposal, `Builder.Build()` returns an error
+- With the fold pairing an epic task and **no registration at all** — the legacy shape, an epic
+  whose lifecycle predates the `registered` event — the same assertion holds: parents are
+  `{"ref":"bead","bead_id":"<epic task>"}` and no error is raised. The fold is asked first, so a
+  live epic task settles the question before the registration is consulted.
+- With no epic pairing and no registration for the proposal, `Builder.Build()` returns an error
   naming the slug — registration opens the lifecycle, so emit refuses to synthesize an epic
   referent.
+- The first and last cases share an empty fold and differ only in the registration, which is the
+  point of asserting them as a pair: an absent epic pairing means "no epic task yet" and never
+  "never registered", so the fold's silence alone must not decide either verdict.
 
 ### In-batch dep chain resolves to ref:op
 
@@ -160,8 +168,9 @@ implementation bead.
 
 In-code Go fixtures, no on-disk testdata (the package convention). The tests in
 `emit/builder_test.go` compose a builder environment (a fake journal-fold double plus a fake spec
-graph), sample impact actions, and per-scenario fold states — mixes of open, closed, and absent
-task pairings seeded directly on the fake fold. Canonical-output and determinism scenarios assert
+graph), sample impact actions, per-scenario fold states — mixes of open, closed, and absent
+task pairings seeded directly on the fake fold — and per-scenario registrations, seeded
+independently of the fold so the two epic verdicts can be told apart. Canonical-output and determinism scenarios assert
 against JSON marshalled in-test rather than a golden file.
 
 ## Edge cases

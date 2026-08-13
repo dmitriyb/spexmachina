@@ -28,7 +28,7 @@ digraph bead_mapping {
     "spex register"       -> "205e67ca4aad"        [label="append registered event"];
     "spex diff"           -> "spex impact"         [label="diff report"];
     "spex impact"         -> "spex emit"           [label="impact report"];
-    "205e67ca4aad"        -> "spex emit"           [label="fold lookup, read only"];
+    "205e67ca4aad"        -> "spex emit"           [label="fold + registration lookup, read only"];
     "spex emit"           -> "changeset.json"      [label="idempotency.label = spex:<eid>"];
     "changeset.json"      -> "scripts/apply-br.sh";
     "scripts/apply-br.sh" -> "receipts.json"       [label="br create --labels spex:<eid>"];
@@ -40,8 +40,9 @@ digraph bead_mapping {
 ```
 
 [[205e67ca4aad|MappingStore]] sits on both sides of the journal on purpose: it answers every read
-and it owns the one append primitive every writer uses. Emit's parent-resolution fold reads it
-before the changeset exists; the map query surface reads it after ingest has appended; `spex
+and it owns the one append primitive every writer uses. Emit's parent resolution reads it before
+the changeset exists — the fold for pairings, the parsed events for the run's registration; the
+map query surface reads it after ingest has appended; `spex
 ingest` and registration append through it. Everything between emit
 and ingest is the label doing the travelling: `spex` itself never invokes a tracker CLI, so every
 tracker mutation happens inside the adapter and every journal mutation happens inside the store.
@@ -110,9 +111,11 @@ dangling reference: its task id resolves through the journal to the removed node
 
 An epic create is synthesized by emit, not born from a diff entry. Its referent is the
 `registered` event registration appended when the proposal's lifecycle opened: emit reads that
-event's eid (`<git_head>:<slug>`) from the fold, labels the op `spex:<eid>`, and the epic's
-`task_created` references the registered event through `for` like every other receipt. The fold
-lists the epic keyed by the slug the registered event carries. Legacy epic receipts that carry
+event's eid (`<git_head>:<slug>`) from the parsed journal, labels the op `spex:<eid>`, and the
+epic's `task_created` references the registered event through `for` like every other receipt.
+The read is on the events, not on the fold, because until that receipt lands the registration
+pairs with no task and the fold — a list of task-bearing pairings — carries nothing for it. Once
+it lands, the fold lists the epic keyed by the slug the registered event carries. Legacy epic receipts that carry
 `proposal: <slug>` in place of `for` remain readable behind the fold's read-only legacy branch.
 
 ## Invariants

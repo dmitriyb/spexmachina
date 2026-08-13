@@ -49,19 +49,31 @@ into spex's own files.
 
 The proposal epic is the parent of every non-epic create in the run, and [[79c821e01654|the
 journal fold is consulted first for which epic that is]]. The epic's identity is the proposal's
-`registered` event — the fold answers both that event and any epic task already paired to it:
+`registered` event, and two distinct journal reads answer for it together: the run's
+**registration** — the `registered` event the journal holds for the proposal ref, if it holds one
+— and the **fold**, which answers only whether an epic task is already paired to that event. The
+fold cannot answer the first question on its own: it lists task-bearing pairings, so a proposal
+registered but not yet epic'd and a proposal never registered miss it identically. Registration
+is therefore read from the journal's events directly. The two answers combine in one order: the
+fold is asked first, and the registration decides only what its silence means.
 
-- If the proposal has a registered event but **no epic task** paired to it, the epic is a new
-  create op (the first op), labeled with the registered event's eid. Each subsequent create's
-  `parent` is `{ref:op,op_id:"<epic op>"}`.
-- If the fold **already pairs an epic task** with the registered event (re-run of a partial run,
-  or idempotent re-emit — including legacy epics whose pairing reaches the fold through its
+- If the fold **already pairs an epic task** with the proposal (re-run of a partial run, or
+  idempotent re-emit — including legacy epics whose pairing reaches the fold through its
   read-only legacy branch), the epic op is skipped; each create's `parent` is
   `{ref:bead,bead_id:"<existing epic task>"}`. An epic that already exists wins over an in-batch
   one, so a re-run that misread the epic as new still parents its creates under the task that is
-  already there.
-- If the journal holds **no registered event** for the proposal, that is an emit error naming the
-  slug: registration opens the lifecycle, so the fix is `spex register`, not a synthesized epic.
+  already there. This branch is checked before the registration is consulted at all, which is
+  what keeps a legacy epic — paired to a proposal whose lifecycle predates the `registered` event
+  entirely — resolvable rather than an error: a live epic task is proof enough that the lifecycle
+  is open.
+- If the fold pairs no epic task and the run **has a registration**, the epic is a new create op
+  (the first op), labeled with the registered event's eid. Each subsequent create's `parent` is
+  `{ref:op,op_id:"<epic op>"}`.
+- If the fold pairs no epic task and the journal holds **no registered event** for the proposal,
+  that is an emit error naming the slug: registration opens the lifecycle, so the fix is
+  `spex register`, not a synthesized epic. The fold's silence alone never decides this — it says
+  only that no epic task exists yet, and it is the registration read that separates "not epic'd
+  yet" from "never registered".
 
 The epic's own `spec_node_id` is synthetic: no node in the spec tree corresponds to it, so the
 value carried in `changeset.json` is the proposal ref itself rather than a 12-hex identity hash,
@@ -87,15 +99,19 @@ upstream chain completeness.
 
 ## Interface
 
-Resolver is set up with three things — the spec graph, the journal fold, and the batch map of
-spec_node_id to op_id — and answers three questions per create action: what refs its deps become,
-what ref its parent becomes, and what priority number it carries.
+Resolver is set up with four things — the spec graph, the journal fold, the run's registration,
+and the batch map of spec_node_id to op_id — and answers three questions per create action: what
+refs its deps become, what ref its parent becomes, and what priority number it carries.
 
 Its read surface on the spec graph is deliberately narrow. It reads the implements → preq_id →
 priority chain and nothing else, so nothing about a component's name, description or `uses` edges
 can reach a ref or a priority. The command adapts the parsed spec directory onto that surface;
 tests substitute a stand-in — and the fold is an equally narrow surface: node key in, latest
-task-bearing pairing out.
+task-bearing pairing out. The registration is narrower still: one fact for the run, the eid of
+the proposal's `registered` event or nothing at all, resolved by the command from the journal's
+parsed events before the builder is assembled. It is a separate input precisely because the fold
+does not carry it: a registration with no epic task yet is not a pairing and has no place in a
+list of pairings.
 
 The batch map must be complete before any dep is resolved. TopologicalSorter runs first for
 exactly that reason: it fixes the order the op_ids are handed out in, and ChangesetBuilder hands

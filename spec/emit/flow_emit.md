@@ -55,7 +55,8 @@ One invocation, `spex emit --proposal <ref> --git-head <sha> [--impact <file>]`,
 runs six steps in this order and writes one file:
 
 1. **Load the inputs.** [[cbe835d38c3e|EmitCommand]] reads the impact report
-   from stdin or `--impact`, folds the task journal, loads the spec
+   from stdin or `--impact`, parses the task journal — folding it and, from
+   the same events, resolving the run's registration — loads the spec
    directory, and takes the git HEAD SHA from `--git-head` rather than asking
    git for it.
 2. **Partition the create actions by tier.** Tier 0 is the proposal epic, tier 1
@@ -68,9 +69,10 @@ runs six steps in this order and writes one file:
 4. **Label them.** [[6f4b6dd8928f|IdempotencyLabeler]] answers with one label
    per create action — `spex:<eid>` of the journal event the op's `task_created`
    will reference: fresh and modify-pair creates key the change event derived
-   from `(git_head, op_id)`, a cleanup keys the removal event its same-batch
-   close implies, and an epic keys the proposal's `registered` event read from
-   the fold.
+   from `(git_head, op_id)`, a cleanup keys the journal's latest `removed` event
+   for the node, read from the fold, when the removal already landed — else the
+   event its same-batch close implies — and an epic keys the proposal's
+   `registered` event read from the run's registration.
 5. **Resolve the references.** [[f7775ac5f1f3|Resolver]] writes each dep as
    `ref:op` or `ref:bead` — an unresolvable dep is an emit error, not a
    deferred shape — points every non-epic create's
@@ -98,13 +100,18 @@ of those names is written into the changeset.
 
 ### Journal reads (input)
 
-Emit folds the task journal here and writes nothing back to it:
+Emit reads the task journal here and writes nothing back to it:
 
 - the fold's pairing for a spec node, for the `ref:bead` classification and the
   closed-dep drop;
-- the proposal's `registered` event — the epic's label and referent — and any
-  epic task already paired to it, for parent resolution; no registered event is
-  an emit error naming the slug.
+- the fold's `removed` event for a spec node, for a cleanup create whose removal
+  landed in an earlier batch — the label it carries is that event's eid, so the
+  cleanup answers the same removal across runs;
+- the run's registration — the proposal's `registered` event, the epic's label
+  and referent — resolved from the parsed events rather than the fold, plus any
+  epic task the fold already pairs with it, for parent resolution; a proposal
+  with neither an epic pairing nor a registration is an emit error naming the
+  slug.
 
 Nothing else is read: every other label derives from the op itself, and
 appending to the journal is ingest's job once the adapter's receipts say a task

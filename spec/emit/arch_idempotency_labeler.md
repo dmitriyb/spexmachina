@@ -20,7 +20,7 @@ store write, no state.
 |--------------|---------------|--------------------------------------------|
 | Node-bearing | the action targets a spec node — fresh creates and modify-pair creates alike | the change event ingest will mint, eid derived from `(git_head, op_id)` |
 | Cleanup      | the action's reason starts with `"Code cleanup:"` | the `removed` event the cleanup answers: the journal's latest `removed` event for the node, read from the fold, when the removal already landed — else the event its same-batch close implies, eid derived from the close op's `(git_head, op_id)`. The same resolution order the reconciler pairs the receipt by, so label and referent stay one fact |
-| Epic         | `spec_node_kind` is `proposal_epic` | the proposal's `registered` event, eid (`<git_head>:<slug>`) read from the journal fold |
+| Epic         | `spec_node_kind` is `proposal_epic` | the proposal's `registered` event, eid (`<git_head>:<slug>`) read from the run's registration — not from the fold, which carries the epic only once its task exists |
 
 The label and the pairing are the same fact stated twice: whatever event the op's `task_created`
 will reference, that event's eid is the label. The retired scheme keyed labels on the *node*
@@ -58,8 +58,10 @@ new run mints for it.
 
 Labeler is asked for one label at a time and answers with one label, or with an error — for an
 action so malformed it has no referent to derive (no spec_node_id to key an event from), and for
-an epic whose proposal has no `registered` event in the fold, which means the proposal was never
-registered: the fix is `spex register`, not a guessed label. The builder passes either error
+an epic whose proposal has no registration in the journal, which means the proposal was never
+registered: the fix is `spex register`, not a guessed label. That second error and Resolver's
+missing-parent error are one verdict read twice — both decided on the run's registration, so a
+changeset can never carry an epic op whose label is a guess and whose parent is a synthesis. The builder passes either error
 straight up, so `spex emit` fails without writing a changeset rather than emitting an op whose
 idempotency key is a guess.
 
