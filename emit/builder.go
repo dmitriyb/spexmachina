@@ -63,7 +63,22 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 		}
 	}
 
-	labeler := &Labeler{}
+	// closeOpIDs maps a to-be-closed bead_id to the op_id its close op
+	// will carry — numbered right after the creates, per "Op ids are
+	// op-<n>, numbered from 1 in that order — the creates first, then one
+	// per close" (arch_changeset_builder.md). Computed up front so a
+	// cleanup create can key its label off the same-batch close op that
+	// answers its removal, before that close Op is actually assembled.
+	closeOpIDs := make(map[string]string, len(report.Obsoletes))
+	for i, ob := range report.Obsoletes {
+		closeOpIDs[ob.BeadID] = fmt.Sprintf("op-%0*d", pad, len(ordered)+i+1)
+	}
+
+	labeler := &Labeler{
+		GitHead:    b.GitHead,
+		Fold:       b.Fold,
+		CloseOpIDs: closeOpIDs,
+	}
 
 	resolver := &Resolver{
 		SpecGraph:    b.SpecGraph,
@@ -74,13 +89,12 @@ func (b *Builder) Build(report impact.ImpactReport) (Changeset, error) {
 
 	ops := make([]Op, 0, totalOps)
 	for _, oc := range ordered {
-		// Per-action labelling: node-bearing creates (fresh and
-		// modify-pair alike) format spex:<spec_node_id>; cleanup creates
-		// format spex:cleanup-<spec_node_id>; the epic create formats
-		// spex:<eid> of the run's registration. Pure function of the
-		// action and the registration — no cursor, no store read. See
+		// Per-action labelling: spex:<eid> of the journal event the op's
+		// task_created will reference — the run's own (git_head, op_id)
+		// for node-bearing creates, the removal event for cleanups, the
+		// registration's eid for the epic. See
 		// spec/emit/arch_idempotency_labeler.md.
-		label, err := labeler.LabelFor(oc.Action, b.Registration)
+		label, err := labeler.LabelFor(oc.Action, oc.OpID, b.Registration)
 		if err != nil {
 			return Changeset{}, fmt.Errorf("emit: build: %w", err)
 		}

@@ -98,8 +98,8 @@ type Changeset struct {
 // Reason is preserved because emit uses it to detect cleanup actions
 // (Reason starts with "Code cleanup:") — the same isCleanup discriminator
 // pre-decouple apply/bead_creator.go used. Builder branches on this to
-// produce cleanup op shape; Labeler branches on it for the
-// spex:cleanup-<spec_node_id> label format.
+// produce cleanup op shape; Labeler branches on it to pick the removal
+// referent — the fold's removed event, else the same-batch close op's eid.
 type CreateAction struct {
 	SpecNodeID     string
 	NodeType       string

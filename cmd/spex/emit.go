@@ -310,7 +310,11 @@ func (f journalFold) Entry(key string) (emit.FoldEntry, bool) {
 	if !ok {
 		return emit.FoldEntry{}, false
 	}
-	return emit.FoldEntry{TaskID: e.TaskID, Removed: e.Removed}, true
+	entry := emit.FoldEntry{TaskID: e.TaskID, Removed: e.Removed}
+	if e.Removed {
+		entry.RemovedEID = e.Source.EID
+	}
+	return entry, true
 }
 
 // resolveRegistration finds the run's registration: the eid of the latest

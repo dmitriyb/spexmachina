@@ -537,6 +537,85 @@ func TestEmitCommand_OutOfBatchDep_ResolvesToRefBead(t *testing.T) {
 	}
 }
 
+// TestEmitCommand_CleanupPriorBatchRemoval_LabelsFromRealJournalFold pins
+// the production journalFold adapter (newJournalFold's Entry method): a
+// cleanup create answering a removal that already landed in an earlier
+// batch must label off the fold's real removed-event eid, not a same-batch
+// close op. emit's own package tests exercise this branch through a fake
+// fold that seeds RemovedEID directly — only this adapter proves
+// mapping.FoldEntry.Source.EID actually reaches emit.FoldEntry.RemovedEID
+// in the shipped binary.
+func TestEmitCommand_CleanupPriorBatchRemoval_LabelsFromRealJournalFold(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	removedID := schema.IdentityHash("alpha", "component", "Removed")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-emit",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": []
+	}`)
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"removed","eid":"e-removed","node":"` + removedID + `","name":"Removed","node_type":"component","module":"alpha","before":"h-old","after":null,"git_head":"cafe0000","proposal":"earlier-proposal"}`,
+		`{"event":"registered","eid":"cafe0000:2026-04-18-decouple-spex-from-br","proposal":"2026-04-18-decouple-spex-from-br","git_head":"cafe0000"}`,
+	})
+
+	report := impact.ImpactReport{
+		Creates: []impact.Action{
+			{
+				Type:       "create",
+				Module:     "alpha",
+				Node:       "Removed",
+				NodeType:   "component",
+				SpecNodeID: removedID,
+				OldBeadID:  "spexmachina-old",
+				Reason:     "Code cleanup: alpha/Removed",
+			},
+		},
+		Obsoletes: []impact.Action{},
+		Summary:   impact.Summary{CreateCount: 1, ObsoleteCount: 0},
+	}
+	data, err := json.Marshal(report)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runEmit(t, string(data),
+		"--proposal", "2026-04-18-decouple-spex-from-br",
+		"--git-head", "deadbeefface",
+		"--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("emit failed: %v\nstderr: %s", err, stderr)
+	}
+
+	var cs emit.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+
+	var cleanupOp *emit.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeID == removedID {
+			cleanupOp = &cs.Ops[i]
+		}
+	}
+	if cleanupOp == nil {
+		t.Fatalf("want a cleanup op for the removed node, got ops: %+v", cs.Ops)
+	}
+	if cleanupOp.Idempotency == nil || cleanupOp.Idempotency.Label != "spex:e-removed" {
+		t.Errorf("idempotency.label: want spex:e-removed (real journal fold's removed event, not a same-batch close), got %+v", cleanupOp.Idempotency)
+	}
+}
+
 // TestEmitCommand_MalformedJournal_Errors rounds out the exit-code
 // contract for the emit.go:62 journal read: a journal line that fails
 // schema validation must surface as a validation error (exit 1), same
