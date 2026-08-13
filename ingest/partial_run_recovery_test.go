@@ -43,9 +43,9 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 	)
 
 	run1CS := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-		{OpID: "op-3", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
+		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
+		{OpID: "op-3", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
 		{OpID: "op-4", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/Old"},
 	}}
 	run1RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
@@ -83,7 +83,7 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 	// Run 2: emit re-emits C fresh (a new commit head, same identity
 	// hash). Adapter creates it, status complete.
 	run2CS := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run2head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run2head:op-1")},
 	}}
 	run2RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: false},
@@ -123,36 +123,62 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 }
 
 // TestPartialRunRecovery_AdapterSideDuplicate covers "Partial with
-// Adapter-Side Duplicates": the dead Run 1 adapter created C in the
-// tracker but never wrote a receipt, so no journal entry for C exists at
-// all going into Run 2. Run 2's adapter matches the pre-existing tracker
-// task and reports was_existing=true; the reconciler must materialise
-// C's pairing normally rather than refuse the run.
+// Adapter-Side Duplicates": the dead Run 1 adapter created A, B and C in
+// the tracker but died before writing receipts.json at all, so no
+// receipts file exists and Run 1 never reached ingest. The discipline is
+// re-run the adapter with the SAME changeset (never re-emit) — its op
+// ids and labels are byte-identical to the dead run's, so the adapter's
+// exact-match probe finds all three pre-existing tasks and reports
+// was_existing=true "for C, and for A and B alike". The reconciler must
+// materialise all three pairings normally rather than refuse the run or
+// duplicate any of them.
 func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 	specDir := setupSpecDir(t)
 	snapPath := filepath.Join(specDir, ".snapshot.json")
 
 	graph := newFakeSpecGraph()
-	graph.nodes[hexC] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "hC", NodeType: "component"}
+	for _, id := range []string{hexA, hexB, hexC} {
+		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "h" + id, NodeType: "component"}
+	}
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run2head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+	// This scenario's own dead Run 1 emitted only these three creates (it
+	// never touched br-old, unlike TwoRunSequence's four-op Run 1); this
+	// is a re-run of the adapter with that identical changeset, not a
+	// fresh emit, so op ids and labels match exactly.
+	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []emit.Op{
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
+		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
+		{OpID: "op-3", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: true},
+		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA", WasExisting: true},
+		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "brB", WasExisting: true},
+		{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: true},
 	}}
 
 	_, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
 
 	journal := readJournal(t, specDir)
-	if len(journal) != 2 {
-		t.Fatalf("journal has %d lines, want 2: %+v", len(journal), journal)
+	if len(journal) != 6 {
+		t.Fatalf("journal has %d lines, want 6: %+v", len(journal), journal)
 	}
-	if journal[0].Event != "added" || journal[0].Node != hexC {
-		t.Errorf("line 1 = %+v, want added event for C", journal[0])
+	if journal[0].Event != "added" || journal[0].Node != hexA {
+		t.Errorf("line 1 = %+v, want added event for A", journal[0])
 	}
-	if journal[1].Event != "task_created" || journal[1].TaskID != "brC" {
-		t.Errorf("line 2 = %+v, want task_created for brC", journal[1])
+	if journal[1].Event != "task_created" || journal[1].TaskID != "brA" {
+		t.Errorf("line 2 = %+v, want task_created for brA", journal[1])
+	}
+	if journal[2].Event != "added" || journal[2].Node != hexB {
+		t.Errorf("line 3 = %+v, want added event for B", journal[2])
+	}
+	if journal[3].Event != "task_created" || journal[3].TaskID != "brB" {
+		t.Errorf("line 4 = %+v, want task_created for brB", journal[3])
+	}
+	if journal[4].Event != "added" || journal[4].Node != hexC {
+		t.Errorf("line 5 = %+v, want added event for C", journal[4])
+	}
+	if journal[5].Event != "task_created" || journal[5].TaskID != "brC" {
+		t.Errorf("line 6 = %+v, want task_created for brC", journal[5])
 	}
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")
@@ -171,7 +197,7 @@ func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 	graph.nodes[hexC] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "hC", NodeType: "component"}
 
 	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:g:op-1")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC"},
