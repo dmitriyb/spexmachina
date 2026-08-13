@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -90,9 +89,13 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 	}
 
 	existingEIDs := make(map[string]bool, len(existing))
+	registeredByStem := map[string]string{}
 	for _, ev := range existing {
 		if ev.EID != "" {
 			existingEIDs[ev.EID] = true
+		}
+		if ev.Event == "registered" {
+			registeredByStem[ev.Proposal] = ev.EID
 		}
 	}
 	batchEIDs := map[string]bool{}
@@ -161,7 +164,7 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 			switch opRC.Status {
 			case adapters.OpStatusOk:
 				sum.OkCreates++
-				lines, err := r.buildCreate(cs, op, opRC, fold, modifiedHandled, removals, hasEID)
+				lines, err := r.buildCreate(cs, op, opRC, fold, modifiedHandled, removals, registeredByStem, hasEID)
 				if err != nil {
 					return ReconcileSummary{}, err
 				}
@@ -217,7 +220,7 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 		if err := checkInvariant5(batch); err != nil {
 			return ReconcileSummary{}, err
 		}
-		if err := appendJournal(r.journalPath(), batch); err != nil {
+		if err := store.Append(batch); err != nil {
 			return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: commit: %w", err)
 		}
 	}
@@ -233,18 +236,14 @@ func (r *Reconciler) Apply(cs emit.Changeset, rc adapters.Receipts) (ReconcileSu
 	return sum, nil
 }
 
-func (r *Reconciler) journalPath() string {
-	return filepath.Join(r.SpecDir, ".history.jsonl")
-}
-
 // buildCreate discriminates a create op's spec_node_kind before anything
 // else, per arch_reconciler.md — a proposal-epic's spec_node_id is a
 // proposal stem, not an identity hash, and a cleanup's spec_node_id names
 // an already-removed node; neither may reach the spec graph.
-func (r *Reconciler) buildCreate(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, modifiedHandled map[string]bool, removals map[string]string, hasEID func(string) bool) ([]mapping.Event, error) {
+func (r *Reconciler) buildCreate(cs emit.Changeset, op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, modifiedHandled map[string]bool, removals map[string]string, registeredByStem map[string]string, hasEID func(string) bool) ([]mapping.Event, error) {
 	switch op.SpecNodeKind {
 	case "proposal_epic":
-		return buildEpicCreate(op, opRC, fold), nil
+		return buildEpicCreate(op, opRC, fold, registeredByStem)
 	case "cleanup":
 		return buildCleanupCreate(op, opRC, fold, removals)
 	default:
@@ -293,18 +292,26 @@ func sameBatchRemovals(cs emit.Changeset, receiptsByOp map[string]adapters.OpRec
 }
 
 // buildEpicCreate builds the one-line receipt a proposal-epic create
-// implies. Dedup is fold-based, not eid-based: an epic's task_created has
-// no change event to key an eid off, so a re-run recognises an existing
-// epic by its slug already appearing in the fold. See arch_reconciler.md
-// "Proposal-Epic Ops".
-func buildEpicCreate(op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold) []mapping.Event {
+// implies: a task_created whose for names the proposal's registered event.
+// Dedup is fold-based, not eid-based: an epic's task_created has no change
+// event of its own to key an eid off, so a re-run recognises an existing
+// epic by its slug already appearing in the fold, keyed there off the
+// registered event's referent. A stem with no registered event in the
+// journal is a malformed changeset — emit refuses to build such an op, so
+// its arrival here is an invariant failure, not a fallback. See
+// arch_reconciler.md "Proposal-Epic Ops".
+func buildEpicCreate(op emit.Op, opRC adapters.OpReceipt, fold mapping.Fold, registeredByStem map[string]string) ([]mapping.Event, error) {
 	stem := op.SpecNodeID
 	for _, e := range fold.Entries {
 		if e.Key == stem {
-			return nil // idempotent no-op: the epic already exists
+			return nil, nil // idempotent no-op: the epic already exists
 		}
 	}
-	return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, Proposal: stem}}
+	eid, ok := registeredByStem[stem]
+	if !ok {
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: proposal-epic %s: no registered event in journal", op.OpID, stem)
+	}
+	return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: eid}}, nil
 }
 
 // buildCleanupCreate builds the one-line receipt a cleanup create implies:
@@ -583,11 +590,14 @@ func deriveEID(gitHead, opID string) string {
 
 // checkInvariant1 asserts that every task_created line — across the
 // existing journal and the batch under construction — pairs with exactly
-// one referent: no two task_created lines may share a for-eid or a
-// proposal slug. Missing-referent failures are caught earlier, during
-// construction (a cleanup with no matching removed event, a close-removed
-// with no journal entry for its bead) — this pass catches the aggregate
-// double-pairing case construction cannot see one op at a time.
+// one referent: no two task_created lines may share a for-eid. The
+// proposal-slug arm guards only legacy lines already on disk (see
+// arch_reconciler.md "Proposal-Epic Ops") — new epic receipts always
+// carry for, never proposal. Missing-referent failures are caught earlier,
+// during construction (a cleanup with no matching removed event, an epic
+// with no registered event, a close-removed with no journal entry for its
+// bead) — this pass catches the aggregate double-pairing case construction
+// cannot see one op at a time.
 func checkInvariant1(existing, batch []mapping.Event) error {
 	seenFor := map[string]bool{}
 	seenProposal := map[string]bool{}
@@ -702,11 +712,16 @@ func getLineSchema() (*jsonschema.Schema, error) {
 	return lineSchema, lineSchemaErr
 }
 
-// changeEventLine and taskReceiptLine mirror the two journal-line shapes
-// in schema/bead-map.schema.json exactly — changeEventLine always
-// serialises its ten required keys (before/after admit null);
-// taskReceiptLine omits whichever of for/proposal does not apply, since
-// additionalProperties is false on both shapes.
+// changeEventLine, registeredEventLine and taskReceiptLine mirror the
+// journal-line shapes in schema/bead-map.schema.json exactly —
+// changeEventLine always serialises its ten required keys (before/after
+// admit null); taskReceiptLine omits whichever of for/proposal does not
+// apply, since additionalProperties is false on every shape.
+// registeredEventLine has no writer in this package — the proposal
+// Registrar appends it through MappingStore directly — but Reconciler's
+// tests seed one to exercise the epic-create referent lookup, and
+// checkInvariant5 must be able to validate one if it ever appeared in a
+// batch.
 type changeEventLine struct {
 	Event    string  `json:"event"`
 	EID      string  `json:"eid"`
@@ -728,6 +743,13 @@ type taskReceiptLine struct {
 	Proposal string `json:"proposal,omitempty"`
 }
 
+type registeredEventLine struct {
+	Event    string `json:"event"`
+	EID      string `json:"eid"`
+	Proposal string `json:"proposal"`
+	GitHead  string `json:"git_head"`
+}
+
 // refreshReceiptLine mirrors the refreshReceipt journal-line shape exactly:
 // git_head is nullable (a refresh run with no --git-head records the
 // absence as JSON null, not empty string) and absorbed always serialises
@@ -740,10 +762,11 @@ type refreshReceiptLine struct {
 }
 
 // encodeLine renders one mapping.Event as the wire JSON its event kind
-// requires. It is used both to append new lines and, via checkInvariant5,
-// to schema-validate them before the append commits. Reconciler and
-// RefreshHandler are the journal format's only writers and share this
-// encoder so the two components can never drift apart on wire shape.
+// requires. Reconciler uses it, via checkInvariant5, to schema-validate a
+// batch before committing it through MappingStore's Append; RefreshHandler
+// uses it to both validate and write its own paired-commit batch. The two
+// components share this encoder so they can never drift apart on wire
+// shape.
 func encodeLine(ev mapping.Event) ([]byte, error) {
 	switch ev.Event {
 	case "added", "modified", "removed":
@@ -751,6 +774,10 @@ func encodeLine(ev mapping.Event) ([]byte, error) {
 			Event: ev.Event, EID: ev.EID, Node: ev.Node, Name: ev.Name,
 			NodeType: ev.NodeType, Module: ev.Module, Before: ev.Before, After: ev.After,
 			GitHead: ev.GitHead, Proposal: ev.Proposal, Path: ev.Path,
+		})
+	case "registered":
+		return json.Marshal(registeredEventLine{
+			Event: ev.Event, EID: ev.EID, Proposal: ev.Proposal, GitHead: ev.GitHead,
 		})
 	case "task_created", "task_closed":
 		return json.Marshal(taskReceiptLine{
