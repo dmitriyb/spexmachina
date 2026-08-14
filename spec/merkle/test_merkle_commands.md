@@ -49,7 +49,7 @@ requirement, meta) as `added`
 validate` on a fresh project. `SnapshotStore.Load` returns the empty tree when
 the snapshot file is absent (per the contract in `flow_hash_computation.md`),
 so the diff reports the entire spec as new. This drives the first
-impact → emit → adapter → ingest cycle that creates the initial journal and
+plan → adapter → ingest cycle that creates the initial journal and
 writes the first snapshot. Replaces what an earlier draft of the pipeline
 attempted with a separate `spex hash` step. Exercises Hasher, TreeBuilder,
 SnapshotStore, DiffEngine, and ImpactClassifier end-to-end.
@@ -63,10 +63,10 @@ SnapshotStore, DiffEngine, and ImpactClassifier end-to-end.
 **And** the JSON is an object with `changes`, `errors` and `summary` keys, the
 `changes` array carrying one entry per leaf with `path`, `type`, `impact`,
 `module` and `node_type` fields
-**And** the structure is suitable for piping to `spex impact` or `jq`
+**And** the structure is suitable for piping to `spex plan` or `jq`
 
 **Rationale**: Validates the `--json` flag for machine-readable output, which
-is the contract `spex impact` consumes. Also covers the bootstrap-with-JSON
+is the contract `spex plan` consumes. Also covers the bootstrap-with-JSON
 scenario — the same flag works whether the diff is empty, fully added, or
 mixed.
 
@@ -139,7 +139,7 @@ per-module impact views.
 
 **Given** a clean fixture directory with no snapshot
 **When** `runDiff(tmpdir)` is called (reports everything as added)
-**And** the impact + emit + adapter + ingest cycle runs against that diff
+**And** the plan + adapter + ingest cycle runs against that diff
 (simulated by writing a complete-status receipts file and invoking
 `spex ingest`, which causes SnapshotSaver to write the first snapshot)
 **And** `alpha/test_comp1.md` and `alpha/arch_comp1.md` are modified
@@ -209,7 +209,7 @@ with each line prefixed `error:` — never `warning:`
 **Rationale**: Both "changes found" and "no changes" are successful outcomes.
 Non-zero exit codes are reserved for actual errors. CompletenessChecker
 findings are errors (per `arch_completeness_checker.md`), and the pipeline
-contract is that downstream steps (`spex impact`) refuse a diff with errors —
+contract is that the downstream step (`spex plan`) refuses a diff with errors —
 so the exit code MUST signal that refusal. Aligning text labels with JSON
 labels (both call them errors) prevents the "looks like a warning, must be
 advisory" trap that masks pipeline halts.

@@ -16,15 +16,15 @@ RootCommand is what [[0d7b10a39eb0|Root command and subcommand registration]] as
 
 ## Subcommand Registration Pattern
 
-Every subcommand is defined in the `cmd/spex` package — one file per command (`cmd/spex/diff.go`, `cmd/spex/emit.go`, `cmd/spex/ingest.go`, and so on), each exporting nothing and providing an unexported constructor of its own. The worker packages hold no command definitions at all.
+Every subcommand is defined in the `cmd/spex` package — one file per command (`cmd/spex/diff.go`, `cmd/spex/plan.go`, `cmd/spex/ingest.go`, and so on), each exporting nothing and providing an unexported constructor of its own. The worker packages hold no command definitions at all.
 
-Wiring happens in `cmd/spex/main.go`, which builds the root and attaches all thirteen constructors in a single registration call, in this order: `hash-id`, `diff`, `validate`, `impact`, `map`, `register`, `log`, `template`, `version`, `render`, `emit`, `ingest`, `upgrade`.
+Wiring happens in `cmd/spex/main.go`, which builds the root and attaches all twelve constructors in a single registration call, in this order: `hash-id`, `diff`, `validate`, `plan`, `map`, `register`, `log`, `template`, `version`, `render`, `ingest`, `upgrade`.
 
 The root command imports no worker package; `cmd/spex` imports both the root and the workers, and is the only place the two meet. Keeping the constructors unexported in a `main` package is what makes that boundary unforgeable — nothing outside the binary can reach a subcommand constructor, so no worker package can grow a CLI dependency by accident.
 
 ## Where the surface is declared
 
-Each of those thirteen invocations is declared as an api node, and it is declared in the module that owns the subcommand's entry-point component — not here. `spex diff` belongs to merkle, `spex validate` to validator, `spex map` and its three children to map, and so on; this module declares only the three whose entry points it owns, `spex hash-id`, `spex version`, and `spex upgrade`. That placement is what makes the graph agree with the wiring above: the registration list is flat, but the ownership is not. Declaring all sixteen here would attach every surface to the module whose components exist precisely to hold no worker logic, and `provided_by` — module-local by design — would have no component to point at for thirteen of them.
+Each of those twelve invocations is declared as an api node, and it is declared in the module that owns the subcommand's entry-point component — not here. `spex diff` belongs to merkle, `spex validate` to validator, `spex map` and its three children to map, and so on; this module declares only the three whose entry points it owns, `spex hash-id`, `spex version`, and `spex upgrade`. That placement is what makes the graph agree with the wiring above: the registration list is flat, but the ownership is not. Declaring all fifteen here would attach every surface to the module whose components exist precisely to hold no worker logic, and `provided_by` — module-local by design — would have no component to point at for twelve of them.
 
 The api names are globally unique across every module.json, so two modules cannot both claim an invocation — the check that would otherwise be impossible to state, because every other uniqueness rule in the spec is scoped to a single array in a single file.
 
@@ -32,9 +32,9 @@ The api names are globally unique across every module.json, so two modules canno
 
 There is no api node for `spex` itself, and the omission is a decision rather than an oversight.
 
-An api node names an invocation with a contract behind it. Bare `spex` has none: with no args it prints cobra's help and exits, and every operation the binary performs is reached through one of the sixteen declared surfaces. What the root does own — the persistent `--spec-dir` flag, the "did you mean?" suggestions, the `completion` subcommand — is either a flag or a cobra built-in, and a flag is never part of an api name, so a `spex` node would carry no identity that any of the sixteen does not already carry as its first word.
+An api node names an invocation with a contract behind it. Bare `spex` has none: with no args it prints cobra's help and exits, and every operation the binary performs is reached through one of the fifteen declared surfaces. What the root does own — the persistent `--spec-dir` flag, the "did you mean?" suggestions, the `completion` subcommand — is either a flag or a cobra built-in, and a flag is never part of an api name, so a `spex` node would carry no identity that any of the fifteen does not already carry as its first word.
 
-The second reason is that the name would be unremovable. The removal-time name check searches the spec corpus for a removed api's declared name, longest-match-first, discarding hits a longer live name already covers. `spex` is one token and it prefixes all sixteen live names, so the subtraction clears only the mentions that are part of a longer invocation. Every other mention survives it, and the corpus is full of them: "the `spex` CLI", "the spex binary", the project's own name. Retiring such a node would report all of those, every one of them correct prose that must stay. A name the gate can never clear is worse than no node at all, because it teaches readers to override the check.
+The second reason is that the name would be unremovable. The removal-time name check searches the spec corpus for a removed api's declared name, longest-match-first, discarding hits a longer live name already covers. `spex` is one token and it prefixes all fifteen live names, so the subtraction clears only the mentions that are part of a longer invocation. Every other mention survives it, and the corpus is full of them: "the `spex` CLI", "the spex binary", the project's own name. Retiring such a node would report all of those, every one of them correct prose that must stay. A name the gate can never clear is worse than no node at all, because it teaches readers to override the check.
 
 ## Global Flags
 
@@ -56,7 +56,7 @@ cobra is the only third-party CLI framework in the binary. No second command lib
 cobra is confined to exactly two packages — `cli` and `cmd/spex`. Under the Subcommand Registration Pattern above, no other package imports it. What [[293b27f73924|Bounded third-party CLI surface]] fixes is both *which* third-party module may be reached for and *how far* it reaches:
 
 - `cli/root.go` imports cobra and nothing else — no standard library, no internal package.
-- cobra stops at command construction, all of which happens under `cmd/spex`. The packages that do the work — validator, merkle, impact, emit, ingest, mapping, proposal, render, schema — import no CLI framework at all; a subcommand's run function reads flags into plain Go values before calling into them, and hands back nothing a CLI framework would recognise.
+- cobra stops at command construction, all of which happens under `cmd/spex`. The packages that do the work — validator, merkle, plan, ingest, mapping, proposal, render, schema — import no CLI framework at all; a subcommand's run function reads flags into plain Go values before calling into them, and hands back nothing a CLI framework would recognise.
 - pflag and mousetrap arrive transitively through cobra and are never imported directly.
 
 A subcommand needing something cobra does not provide uses the standard library; anything else amends the project's `Declared stack` requirement first, which enumerates the permitted modules against which `go.mod`'s direct requires are read.

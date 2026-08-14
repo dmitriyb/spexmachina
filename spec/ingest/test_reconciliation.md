@@ -35,7 +35,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 - Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0002`.
 - Changeset: create op for `beadbead0002` labeled `spex:<git_head>:<its op_id>` (the pair's
   `modified` eid) and a `blocks` dep on
-  `br-old`, then close op for `br-old` — emit's real ordering (creates before closes).
+  `br-old`, then close op for `br-old` — plan's real ordering (creates before closes).
 - Receipts: both ok; create's `bead_id: "br-new"`, `was_existing: false`.
 - Expected: a `modified` change event for `beadbead0002`, a `task_closed` for `br-old`, a `task_created`
   for `br-new` — all built while processing the create, off its `blocks` dep, without waiting for
@@ -65,7 +65,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 ### Mixed ops: one batch, ordered append
 
 - Changeset: [create for node X replacing A (modified lineage), create for new node Y, close br-A
-  (modified), close br-B (removed)] — emit's real ordering (creates before closes).
+  (modified), close br-B (removed)] — plan's real ordering (creates before closes).
 - Receipts: all ok.
 - Expected: the journal gains, in op order, the modified event for X with its two receipts, the
   added event for Y with its task_created, and the removed event for B's node with its
@@ -88,7 +88,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 ### Proposal-epic create without a registered event → invariant failure
 
 - Same changeset as above, but the journal holds no `registered` event for the slug.
-- Expected: a structured error naming the slug and the missing referent; nothing appended. Emit
+- Expected: a structured error naming the slug and the missing referent; nothing appended. Plan
   refuses to build such an op, so its arrival marks a malformed changeset.
 
 ### Cleanup create → receipt pairs with the prior removed event
@@ -104,7 +104,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 - Initial journal: `added` + `task_created` (task `br-gone`) for the still-live node being
   cleaned up.
-- Changeset: [cleanup create for that node's hash, then close `br-gone` (removed)] — emit's real
+- Changeset: [cleanup create for that node's hash, then close `br-gone` (removed)] — plan's real
   ordering, the cleanup create before the close that performs its removal.
 - Receipts: both ok.
 - Expected: same shape as the prior-removal scenario, but the referent is resolved from the
@@ -125,7 +125,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 - Initial journal: `added` + `task_created` (task `br-old`) for a `test_section` node.
 - Changeset: one close op, reason starting "Spec node modified", targeting `br-old`; no create op
-  in the batch claims `br-old` via a `blocks` dep — the shape `impact/action_classifier.go` emits
+  in the batch claims `br-old` via a `blocks` dep — the shape the classifier emits
   for a coupled `test_section` edit (obsolete with no replacement create).
 - Receipts: close op `status: "ok"`.
 - Expected: a `modified` change event for the node (identity and prior hash from the journal's live
@@ -142,6 +142,52 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
   `task_closed` for `br-old`) — the errored create leaves its pair incomplete, which is not a
   malformed changeset. The unrelated create's `added` event and `task_created` still land; the run
   reports success.
+
+### Ok retarget → modified event and task_retargeted appended
+
+- Initial journal: `added` + `task_created` (task `br-open`) for node `beadbead0003`.
+- Changeset: one retarget op targeting `br-open`, `spec_node_id: "beadbead0003"`, its new content
+  hash, `labels: ["spex:cafe1234:<op_id>"]` — the eid of the `modified` event below.
+- Receipts: op receipt `status: "ok"`, `bead_id: "br-open"`.
+- Expected: the journal gains a `modified` change event for `beadbead0003` (eid derived from
+  `(cafe1234, <op_id>)`, name/kind/module from the spec graph) and a `task_retargeted` receipt
+  with `for` naming that eid and `task_id: "br-open"`. No `task_closed`, no `task_created` — the
+  task neither died nor was born. The fold now answers `beadbead0003 → br-open` sourced from the
+  new event.
+
+### Retarget re-run → idempotent no-op
+
+- Initial journal already holds the retarget's `modified` event and its `task_retargeted` line.
+- The same changeset+receipts pair is reconciled again.
+- Expected: nothing appended — both lines dedup by derived event id, like every other batch.
+
+### Retarget with error receipt → nothing appended
+
+- Same retarget changeset; receipt `status: "error"`.
+- Expected: no event, no receipt, no error from the reconciler.
+
+### Absorbed entry → modified event and refresh receipt appended
+
+- Changeset: empty `ops`, one `absorbed` entry — node `beadbead0004`, before `aaa`, after `bbb`,
+  reason "typo sweep". Receipts: empty `ops`, status complete.
+- Expected: the journal gains one `modified` change event for `beadbead0004` — eid derived from
+  `(node, before, after)`, hashes off the entry, name/kind/module from the spec graph — and one
+  `refresh` receipt whose `absorbed` list names exactly that eid. No task receipt of any kind: the
+  node's existing pairing keeps its sourcing event.
+
+### Absorbed entries land on partial runs too
+
+- Changeset: one create op plus one `absorbed` entry; receipts: the create `status: "error"`,
+  top-level status partial.
+- Expected: nothing for the errored create; the absorbed entry's `modified` event and the
+  `refresh` receipt still land — absorption describes spec state, not tracker work, and is not
+  receipt-gated.
+
+### Absorbed re-run → idempotent no-op
+
+- The same changeset+receipts pair reconciled again over the journal the prior scenario left.
+- Expected: nothing appended — the `(node, before, after)` derivation finds the event present, and
+  an empty remainder appends no second `refresh` receipt.
 
 ### Receipt referencing nothing → refused before append
 
@@ -160,5 +206,5 @@ counter, and nothing is spent by a re-run.
 ## Fixtures
 
 In-code Go fixtures, no on-disk testdata. `ingest/reconciler_test.go` builds each scenario's
-`emit.Changeset` and `adapters.Receipts` as Go values, seeds the journal with a test helper, and
+`plan.Changeset` and `adapters.Receipts` as Go values, seeds the journal with a test helper, and
 supplies spec metadata with a fake spec graph.

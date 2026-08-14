@@ -48,8 +48,8 @@ verbatim, so a foreign or hand-edited snapshot can carry a type no spec director
 
 ImpactClassifier is invoked from `spex diff` only. The diff command builds
 the classified-changes list once per invocation and writes it under the
-top-level `changes` array of the diff JSON output. Downstream consumers
-(`spex impact`, `spex emit`) read the classification through that JSON;
+top-level `changes` array of the diff JSON output. The downstream consumer
+(`spex plan`) reads the classification through that JSON;
 ImpactClassifier itself has no separate CLI surface and is not called
 during snapshot persistence (`spex ingest`'s SnapshotSaver only rebuilds
 the tree, not the classification).

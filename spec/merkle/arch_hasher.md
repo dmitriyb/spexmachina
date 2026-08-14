@@ -72,7 +72,7 @@ only the snapshot pipeline:
   hashes it writes into the journal's change events.
 - `spex validate` — the link check builds a tree to collect the leaf keys an
   inline spec link has to resolve against.
-- `spex impact` — the spec graph it loads carries a tree built the same way.
+- `spex plan` — the spec graph it loads carries a tree built the same way.
 
 There is no standalone `spex hash` command. A separate CLI step that built
 and persisted the tree on demand would either write a snapshot matching

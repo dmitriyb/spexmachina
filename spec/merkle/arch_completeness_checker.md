@@ -2,15 +2,15 @@
 
 [[6f8284df92a2|Validates that a changed requirement leaf brought its
 implementing components' content leaves with it]]. Ensures that spec edits are
-complete before the impact pipeline processes them.
+complete before the plan pipeline processes them.
 
 Findings from CompletenessChecker are **errors**, not warnings. They land in
 the top-level `errors` array of the diff JSON output and DiffCommand
 propagates them as a non-zero exit code. The terminology is consistent end to
 end: the JSON field is `errors`, and any text-output rendering must label each
 line with `error:` (never `warning:`). The
-distinction matters because downstream pipeline steps (`spex impact`, `spex
-emit`) refuse to consume a diff with a non-empty `errors` array — a "warning"
+distinction matters because the downstream pipeline step (`spex plan`)
+refuses to consume a diff with a non-empty `errors` array — a "warning"
 label suggests advisory output that can be ignored, which is the opposite of
 the contract.
 

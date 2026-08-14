@@ -59,10 +59,10 @@ pairing references that removal event, a `git show` away from full context.
 ```
 $ spex map context a1b2c3d4e5f6
 {
-  "arch_file": "spec/impact/arch_action_classifier.md",
-  "test_files": ["spec/impact/test_classification_reporting.md"],
-  "flow_files": ["spec/impact/flow_impact_analysis.md"],
-  "module_file": "spec/impact/module.json",
+  "arch_file": "spec/plan/arch_action_classifier.md",
+  "test_files": ["spec/plan/test_classification.md"],
+  "flow_files": ["spec/plan/flow_plan.md"],
+  "module_file": "spec/plan/module.json",
   "eid": "cafe1234:op-7",
   "event": "modified",
   "before_head": "beef5678",

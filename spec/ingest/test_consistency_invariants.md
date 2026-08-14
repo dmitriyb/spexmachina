@@ -10,8 +10,9 @@ complete run leaves `spec/.history.jsonl` AND the snapshot both updated and sche
 
 1. Every ok create pairs exactly one `task_created` receipt with exactly one referent event — a
    change event, the `removed` event the cleanup answers (prior-batch or same-batch), or the
-   proposal's `registered` event (epic creates). A `proposal`-keyed receipt with no `for` is a
-   legacy line read as inert history, never constructed anew.
+   proposal's `registered` event (epic creates) — and every ok retarget pairs exactly one
+   `task_retargeted` receipt with its own `modified` event. A `proposal`-keyed receipt with no
+   `for` is a legacy line read as inert history, never constructed anew.
 2. No receipt references an event id the journal does not contain.
 3. Re-running the same changeset+receipts pair appends nothing — event ids derive from
    `(git_head, op_id)`.
@@ -87,6 +88,23 @@ writes.
 - Expected: the journal holds both pairings — old task closed, new task created — and the fold
   answers with the new task only. No assertion anywhere demands the old line be gone; asserting
   its presence IS the test.
+
+### Invariant 1: retarget pairing
+
+- Run an ok retarget to completion; then construct a batch where a `task_retargeted` receipt's
+  `for` names an eid absent from journal and batch alike.
+- Expected: the clean run appends exactly the `modified` event plus its `task_retargeted` — no
+  `task_closed`, no `task_created` — and the dangling variant is refused naming the eid, nothing
+  appended. Invariants 3 and 5 hold unchanged over the pair: a re-run appends nothing, and both
+  lines validate against the journal-line schema before the write.
+
+### Invariant 1: absorbed batch closes under one refresh receipt
+
+- Run a batch with two absorbed entries to completion; then construct a batch whose `refresh`
+  receipt names an eid no absorbed event carries.
+- Expected: the clean run appends two `modified` events and exactly one `refresh` receipt naming
+  both eids and nothing else; the dangling variant is refused before the write. Invariant 2's
+  no-unknown-referent rule covers the `absorbed` list exactly as it covers `for`.
 
 ## Happy Path
 

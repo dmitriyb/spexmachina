@@ -14,7 +14,7 @@ Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing
 
 | Flag | Required | Description |
 |---|---|---|
-| `--module` | for module-scoped nodes | Module name (e.g., `impact`). Omit for project-level nodes. |
+| `--module` | for module-scoped nodes | Module name (e.g., `plan`). Omit for project-level nodes. |
 | `--type` | yes | Node type: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
 | `--name` | yes | Node name or title (the human-readable identifier) |
 
@@ -37,7 +37,7 @@ For `--type api` the `--name` is the exact external surface string a caller type
 ## Examples
 
 ```
-$ spex hash-id --module impact --type component --name NodeMatcher
+$ spex hash-id --module plan --type component --name NodeMatcher
 a1b2c3d4e5f6
 
 $ spex hash-id --type module --name schema

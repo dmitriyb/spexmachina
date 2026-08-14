@@ -7,7 +7,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Read changeset v1",
-      "description": "The adapter parses changeset.json v2 and refuses earlier or later versions with a clear error. It reads ops in the order given and processes them sequentially — order matters because later ops may forward-reference earlier op results."
+      "description": "The adapter parses changeset.json v3 and refuses earlier or later versions with a clear error — refusal is the whole point of the version field, because a consumer that silently dropped ops it does not know (v2 meeting a retarget) would report a complete run over an incomplete one. It reads ops in the order given and processes them sequentially — order matters because later ops may forward-reference earlier op results. The top-level absorbed array is not the adapter's: it is ignored entirely and consumed by ingest. The title's version is identity-bearing legacy; three is the contract."
     },
     {
       "id": "2f0a1f1152a0",
@@ -21,7 +21,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Resolve three ref shapes",
-      "description": "For each ref field in parent and deps: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} resolves as-is; {\"ref\":\"op\",\"op_id\":\"<id>\"} resolves via the substitution table. Changeset v2 carries no third shape — emit resolves spec-node references in-process before the adapter runs, so the adapter reads no spex-owned file. The title's count is identity-bearing legacy; two shapes is the contract."
+      "description": "For each ref field in parent, deps and a retarget's target: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} resolves as-is; {\"ref\":\"op\",\"op_id\":\"<id>\"} resolves via the substitution table. The changeset carries no third shape — plan resolves spec-node references in-process before the adapter runs, so the adapter reads no spex-owned file. The title's count is identity-bearing legacy; two shapes is the contract."
     },
     {
       "id": "b8d894dff9b5",
@@ -57,13 +57,20 @@
       "type": "non_functional",
       "title": "Reference implementation scope",
       "description": "scripts/apply-br.sh is explicitly marked as a reference implementation — vet before production use. It demonstrates the required adapter contract but does not aspire to handle every tracker misconfiguration. Users wanting production-grade adapters for their environment should fork and adapt. The contract (this module's functional requirements) is the authoritative specification that any adapter must meet."
+    },
+    {
+      "id": "fcb32354630e",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Apply retarget ops",
+      "description": "A retarget op names an existing task in its target ref and the adapter translates it to the tracker's update surface — for br, br update: add the op's spex:<eid> event label to the task, and add any deps the task does not already carry. Deps are add-only; nothing is removed, because stale deps are closed by their own lifecycle. Update operations are naturally idempotent, so retarget needs no pre-create probe: re-applying the same retarget adds nothing new. The receipt records op_id, status and the target bead_id; was_existing does not apply to retargets."
     }
   ],
   "components": [
     {
       "id": "7f2e76cecab3",
       "name": "BrReferenceAdapter",
-      "description": "Bash + jq implementation of the adapter contract targeting br (beads_rust). Ships at scripts/apply-br.sh. Reads changeset.json, resolves refs via the substitution table, runs br create/list/show/update/close for each op, and writes receipts.json. Integration-tested against a real br sandbox via scripts/apply-br_test.sh.",
+      "description": "Bash + jq implementation of the adapter contract targeting br (beads_rust). Ships at scripts/apply-br.sh. Reads changeset.json, resolves refs via the substitution table, runs br create/list/show/update/close for each op — a retarget op becomes br update adding the new event label and any missing deps — and writes receipts.json. Integration-tested against a real br sandbox via scripts/apply-br_test.sh.",
       "content": "arch_br_reference_adapter.md",
       "implements": [
         "4277dbd90063",
@@ -73,7 +80,8 @@
         "7bad082a34b6",
         "3486b44f4f64",
         "970260050e3e",
-        "7c2fea6b1963"
+        "7c2fea6b1963",
+        "fcb32354630e"
       ]
     }
   ],

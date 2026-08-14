@@ -10,10 +10,12 @@ tracker minted, and the store turns that log into answers.
 
 - Parse the journal into typed events, in file order — change events (`added`, `removed`,
   `modified`), the `registered` event, and receipt events (`task_created`, `task_closed`,
-  `refresh`)
+  `task_retargeted`, `refresh`)
 - Compute the fold: the latest task-bearing event per node, which is the current node-to-task
   linkage every consumer derives on demand — there is no materialized map file to maintain or
-  drift
+  drift. [[76fe608c3a40|`task_retargeted` is task-bearing exactly as `task_created` is]]:
+  latest-wins moves the pairing's sourcing event forward to the retargeted event's referent
+  while the task id stays put, so the fold always answers with the newest state a task owes
 - Provide lookup by identity hash or by task id — the two keys are interchangeable ways to reach
   one node, distinguished by shape (12-hex is a node, anything else is a task)
 - Answer for removed nodes: a node's biography survives its removal, so name, node type, module,
@@ -42,7 +44,7 @@ One JSON object per line. Change events record what a baselining absorbed:
 ```json
 {"event": "removed", "eid": "cafe1234:op-7", "node": "a1b2c3d4e5f6", "name": "ActionClassifier",
  "node_type": "component", "module": "impact", "before": "e3b0c44298fc", "after": null,
- "path": "impact/arch_action_classifier.md", "git_head": "cafe1234", "proposal": "2026-08-02-merge-impact-emit"}
+ "path": "impact/arch_action_classifier.md", "git_head": "cafe1234", "proposal": "2026-08-13-plan-module-task-per-change"}
 ```
 
 The registered event records the opening of a proposal's lifecycle — appended at registration,
@@ -57,20 +59,21 @@ Receipt events record what the tracker did:
 
 ```json
 {"event": "task_created", "for": "cafe1234:op-7", "task_id": "spexmachina-abc"}
+{"event": "task_retargeted", "for": "cafe1234:op-9", "task_id": "spexmachina-abc"}
 {"event": "refresh", "git_head": "cafe1234", "absorbed": ["cafe1234:op-7"]}
 ```
 
 | Field | On | Description |
 |-------|----|-------------|
-| `event` | all | `added`, `removed`, `modified`, `registered`, `task_created`, `task_closed`, `refresh` |
-| `eid` | change, registered | Event id — deterministic so ingest re-runs append nothing new and emit can derive it at changeset-build time. Op-born events derive it from `(git_head, op_id)`; refresh-born events, which have no op, derive it from `(node, before, after)`; the registered event's is `<git_head>:<slug>` |
+| `event` | all | `added`, `removed`, `modified`, `registered`, `task_created`, `task_closed`, `task_retargeted`, `refresh` |
+| `eid` | change, registered | Event id — deterministic so ingest re-runs append nothing new and plan can derive it at changeset-build time. Op-born events derive it from `(git_head, op_id)`; refresh-born and absorb-born events, which have no create op, derive it from `(node, before, after)`; the registered event's is `<git_head>:<slug>` |
 | `node` | change | Identity hash of the spec node — byte-identical to the merkle tree key, so every pipeline stage joins on it with no translation |
 | `name`, `node_type`, `module` | change | The node's declared identity at event time — the journal is the only record of these once the node is removed |
 | `before`, `after` | change | Leaf hashes bracketing the change; `null` marks absence (an add has no before, a removal no after) |
 | `git_head` | change, registered, refresh | The commit the changeset carried; registration records the head at register time; refresh records its own when given `--git-head` and its absence otherwise |
 | `path` | change, optional | The node's content-leaf path relative to the spec directory, present when the node has one — what makes `git show <head>:<path>` runnable for a removed node. Requirement and api events carry none |
 | `proposal` | change, registered | The proposal that drove the change, or — on the registered event — the slug whose lifecycle opened. A `task_created` carrying a slug instead of `for` is a legacy pre-migration shape, read but never appended anew |
-| `for` | receipts | The `eid` of the event this receipt answers. A modify pair's `task_closed` and `task_created` both reference the pair's `modified` event; a removal's `task_closed` references the `removed` event; an epic's `task_created` references the `registered` event |
+| `for` | receipts | The `eid` of the event this receipt answers. A modify pair's `task_closed` and `task_created` both reference the pair's `modified` event; a removal's `task_closed` references the `removed` event; an epic's `task_created` references the `registered` event; a `task_retargeted` references the retarget's own `modified` event |
 | `task_id` | receipts | The tracker's id, applied by the adapter, reported in receipts |
 
 A pointer discipline holds throughout: the journal stores identity, names, hashes and commit refs —
@@ -126,7 +129,7 @@ that projection.
 The label is `spex:<eid>` — event ids are deterministic, derived from the op (`git_head`,
 `op_id`), from the drift itself (`node`, `before`, `after`) for refresh-born events, or as
 `<git_head>:<slug>` for the registered event. Determinism serves two consumers at once: ingest
-re-runs derive the same eids and append nothing, and emit derives every eid at changeset-build
+re-runs derive the same eids and append nothing, and plan derives every eid at changeset-build
 time to mint the op's label — so idempotency needs no counter, no reservation read, and no
 coordination. Legacy `spex:<int>`, `spex:<spec_node_id>` and `spex:cleanup-<hash>` labels on
 existing tasks are inert history: the backfill seeded the journal with every pairing that ever

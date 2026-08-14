@@ -31,7 +31,7 @@ Tests for the op_id → bead_id substitution table that resolves `{"ref":"op","o
 
 ### Mixed refs in one op's deps
 
-- op has deps: `[{ref:op,op_id:op-0003}, {ref:bead,bead_id:br-77}]` — the two shapes v2 admits.
+- op has deps: `[{ref:op,op_id:op-0003}, {ref:bead,bead_id:br-77}]` — the two shapes the changeset admits.
 - Simulated: op-0003 → br-200.
 - Expected: `br create ... --deps blocked-by:br-200 --deps blocked-by:br-77`.
 

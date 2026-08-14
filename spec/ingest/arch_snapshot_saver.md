@@ -1,6 +1,6 @@
 # SnapshotSaver
 
-[[cf47671793fa|Writes `spec/.snapshot.json` with the current merkle tree **iff** the receipts' top-level status is `complete`]]. Partial runs leave the snapshot file untouched so the next emit recomputes against the same baseline.
+[[cf47671793fa|Writes `spec/.snapshot.json` with the current merkle tree **iff** the receipts' top-level status is `complete`]]. Partial runs leave the snapshot file untouched so the next plan run recomputes against the same baseline.
 
 ## Responsibilities
 
@@ -28,8 +28,8 @@ That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so 
 ## Why the Gate
 
 - A partial run means some ops succeeded and some didn't. The journal reflects the partial state (pairings for ok creates, nothing for error creates).
-- If we wrote the snapshot on partial, the next `spex emit` would diff against the new (partial) baseline and miss the ops that still need to run.
-- Leaving the snapshot untouched means the next emit diffs the spec against the ORIGINAL baseline. The resulting impact report re-includes only the ops whose pairings never landed — the journal already pairs everything that succeeded, so nothing landed is re-created. Adapter re-runs. Ingest reconciles — appending nothing for lines already present. If the second run is complete, snapshot gets saved.
+- If we wrote the snapshot on partial, the next `spex plan` run would diff against the new (partial) baseline and miss the ops that still need to run.
+- Leaving the snapshot untouched means the next run diffs the spec against the ORIGINAL baseline. The resulting changeset re-includes only the ops whose pairings never landed — the journal already pairs everything that succeeded, so nothing landed is re-created. Adapter re-runs. Ingest reconciles — appending nothing for lines already present. If the second run is complete, snapshot gets saved.
 
 This is the "unfinished operations resurface through the idempotency path" mechanism described in the proposal.
 

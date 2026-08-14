@@ -1,6 +1,6 @@
 # Bead Matching Tests
 
-Integration and acceptance tests for BeadReader (component 1) and NodeMatcher (component 2). These tests verify that bead metadata is correctly read from the tracker listing the caller supplies as a file, never from a tracker command this binary runs, and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
+Integration and acceptance tests for BeadReader and NodeMatcher. These tests verify that bead metadata is correctly read from the tracker listing the caller supplies as a file, never from a tracker command this binary runs, and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
 
 ## Setup
 
@@ -48,13 +48,13 @@ Where:
 ]
 ```
 
-The `node_type` field is now part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, and emit's ChangesetBuilder via the action's `NodeType`) read it from this field.
+The `node_type` field is part of the change record because identity hashes do not embed type information; downstream consumers (ActionClassifier, and ChangesetBuilder via the action's `NodeType`) read it from this field.
 
 ## Scenarios
 
 ### S1: BeadReader carries id and status, parses no labels
 
-Parse the tracker listing above. Assert each entry carries the two fields the interface promises (`ID`, `Status`), in input order, and that no entry exposes anything derived from a label — the linkage lives in the journal fold, and status joins onto it by task id.
+Parse the tracker listing above. Assert each entry carries the two fields the interface promises (`ID`, `Status`), in input order, and that no entry exposes anything derived from a label — the linkage lives in the journal fold, and status joins onto it by task id. The `in_progress` status on `spex-002` is carried through verbatim: the retarget/refuse split downstream reads it exactly as the input spelled it.
 
 ### S2: BeadReader returns empty slice on empty input
 
@@ -71,6 +71,10 @@ Call `MatchNodes(changes, pairings)` with the fixture data. Expected:
 ### S4: NodeMatcher handles multiple beads per spec node
 
 Append a modify pair for `SCHK_HASH` (second `task_created` after a `task_closed`). Assert the match carries the node's current pairing, with the lineage reachable through the journal history.
+
+### S4b: A retargeted pairing matches like any other
+
+Append a `modified` event for `SCHK_HASH` plus a `task_retargeted` receipt naming spex-001. Assert the match still pairs `SCHK_HASH` with spex-001 — the fold moved the pairing's sourcing event forward, the task id did not change, and NodeMatcher sees one current pairing exactly as before. Retargeting is invisible to matching; only the sourcing event's `after` hash (consulted downstream by the already-tracked cell) moved.
 
 ### S5: NodeMatcher uses direct identity-hash comparison
 
@@ -107,7 +111,7 @@ Assert that only the leaf-level change (`SCHK_HASH`) produces a match. The two s
 
 ### S9: No rekeying — pairings and changes share one format
 
-Confirm that no helper exists to rewrite a pairing's node key into a different shape before matching, and no helper exists to rewrite `change.Key` into a different shape before lookup. The `index[change.Key]` lookup is performed against the raw node keys as they appear in the journal. This is a regression guard for the deleted `buildMerkleIndex` function — re-introducing it would mean the dual-format problem has crept back in.
+Confirm that no helper exists to rewrite a pairing's node key into a different shape before matching, and no helper exists to rewrite `change.Key` into a different shape before lookup. The lookup is performed against the raw node keys as they appear in the journal. This is a regression guard for the deleted `buildMerkleIndex` function — re-introducing it would mean the dual-format problem has crept back in.
 
 ## Edge Cases
 

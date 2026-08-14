@@ -13,7 +13,7 @@ bead.
 - `tmpdir/` containing a complete fixture spec (project.json + module.json files + content
   leaves), a pre-seeded journal with pairings for the fixture's bead-producing nodes, and a
   pre-seeded `spec/.snapshot.json` matching some earlier state of the fixture spec.
-- An empty changeset (`version: 2`, empty `ops`) and an empty receipts file (`version: 1`,
+- An empty changeset (`version: 3`, empty `ops`) and an empty receipts file (`version: 1`,
   empty `ops`, `status: "complete"`).
 - Helper `runIngest(args ...string) (stdout, stderr string, exitCode int)` wraps
   `IngestCommand.Run`.

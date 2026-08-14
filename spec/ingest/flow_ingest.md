@@ -40,11 +40,14 @@ disk or a stream.
 
 ## Mode: normal (default)
 
-1. **Pre-flight.** Parse both files, check the changeset carries version 2 and the receipts
+1. **Pre-flight.** Parse both files, check the changeset carries version 3 and the receipts
    version 1, and confirm the two name exactly the same set of op ids.
 2. **Reconcile.** [[2b5158af774b|Reconciler]] constructs the batch's journal lines in memory —
    change events and task receipts, with event ids derived from `(git_head, op_id)` — dropping any
-   line whose eid the journal already contains as it builds them. Only once the batch is complete
+   line whose eid the journal already contains as it builds them. The changeset's top-level
+   `absorbed` array is constructed in the same pass: one `modified` event per entry, eids derived
+   from `(node, before, after)`, closed by one `refresh` receipt naming them — not receipt-gated,
+   so absorbed entries land on partial runs too. Only once the batch is complete
    does it assert the journal invariants over what remains, and only then commits the append
    atomically.
 3. **Save the snapshot.** [[f85bd2f94aeb|SnapshotSaver]] is handed the receipts' top-level
@@ -100,7 +103,7 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
       "op_id": "op-0003",
       "status": "error",
       "bead_id": "",
-      "error": "bead_cli exited 1: invalid priority"
+      "error": "br create exited 1: invalid priority"
     }
   ]
 }
@@ -161,6 +164,9 @@ For the full construction table, see `arch_reconciler.md`. Summary:
 - ok close / reason="Spec node removed" → `removed` event plus `task_closed`.
 - ok close / reason starts "Spec node modified" → `task_closed` only; the paired create owns the
   `modified` event.
+- ok retarget → `modified` event plus `task_retargeted`.
+- absorbed entry (no receipt exists for one) → `modified` event, eid from `(node, before, after)`;
+  the batch's absorbed events close under one `refresh` receipt naming them.
 - error / skipped → nothing.
 
 ## Per-Entry Construction (mode: refresh)

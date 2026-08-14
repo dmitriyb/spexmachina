@@ -66,6 +66,20 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 - Changeset close op targets `br-xyz`. Tracker has no such bead.
 - Expected: receipt `status=error`, error message includes the bead_id and tracker response.
 
+### Retarget: first run
+
+- Changeset retarget op targeting bead `br-open` with `labels: ["spex:cafe1234:op-4"]` and two
+  deps resolving to `br-dep1` (which `br-open` already carries) and `br-dep2` (which it does not).
+- Expected: no probe — no `br list` precedes the update; `br show br-open --format json` reads
+  current deps; `br update br-open --add-label spex:cafe1234:op-4` and one dep-add for `br-dep2`
+  only; nothing removed. Receipt `status=ok`, `bead_id=br-open`, no `was_existing` field.
+
+### Retarget: re-run converges
+
+- Same changeset again. `br-open` now carries the event label and both deps.
+- Expected: the update adds nothing new and errors nothing — `status=ok`, tracker state identical
+  before and after. Idempotency here is the update's own convergence, not a label probe.
+
 ### Full idempotent round-trip
 
 - Changeset with 3 creates (2 new, 1 matching existing) and 2 closes (1 open, 1 already-obsoleted).

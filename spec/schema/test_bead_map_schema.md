@@ -18,10 +18,11 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}
 ```
 
-**Fixture: valid task receipt:**
+**Fixture: valid task receipts:**
 
 ```json
 {"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}
+{"event":"task_retargeted","for":"cafe1234:op-9","task_id":"spexmachina-abc"}
 ```
 
 **Fixture: valid registered event:**
@@ -47,7 +48,7 @@ The JSON Schema validator is initialized with the journal-line schema loaded fro
 
 ### S1: Each fixture line passes validation
 
-**Input:** the five fixtures above, validated one line at a time.
+**Input:** the six fixtures above, validated one line at a time.
 **Expected:** all pass. Every fixture is a complete, self-contained object — the legacy epic
 receipt included, because pre-migration lines validate as inert history.
 
@@ -55,7 +56,8 @@ receipt included, because pre-migration lines validate as inert history.
 
 **Input:** the change-event fixture with `"event": "renamed"`.
 **Expected:** validation fails naming the enum constraint — the admitted values are exactly
-`added`, `removed`, `modified`, `registered`, `task_created`, `task_closed`, `refresh`.
+`added`, `removed`, `modified`, `registered`, `task_created`, `task_closed`, `task_retargeted`,
+`refresh`.
 
 ### S3: Change event missing `node` fails
 
@@ -81,6 +83,13 @@ omitting the key fails.
 **Input:** a `task_created` with both `for` and `proposal`; another with neither.
 **Expected:** both fail. A receipt answers exactly one referent — an event's `eid` via `for`, or
 (legacy shape only, never appended anew) a proposal slug.
+
+### S6c: task_retargeted takes the strict shape only
+
+**Input:** the `task_retargeted` fixture; a variant omitting `for`; a variant carrying `proposal`
+in place of `for`.
+**Expected:** the fixture passes; both variants fail — the legacy slug arm belongs to
+`task_created` alone, because no `task_retargeted` line predates the `for` field.
 
 ### S6b: Registered event shape
 

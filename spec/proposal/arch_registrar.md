@@ -39,7 +39,7 @@ What it reports back is the **basename** the proposal was written under: a bare
 a caller that names a directory names one of its own.
 
 Reporting the filename is what makes the caller's next step possible: its stem *is* the proposal
-reference threaded through the rest of the pipeline (`spex emit --proposal <ref>`), and the
+reference threaded through the rest of the pipeline (`spex plan --proposal <ref>`), and the
 registrar is the component that decides it, since it may rename the file to satisfy the
 `YYYY-MM-DD-<name>.md` convention. A caller that only learned success or failure would have to
 re-derive the reference by guessing at the same naming rules.

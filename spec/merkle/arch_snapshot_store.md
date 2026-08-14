@@ -112,8 +112,8 @@ Reads and writes reach this component from different commands:
   subcommand that persists the tree.
 - `Save` therefore has no production caller. It stays for callers that
   want a snapshot on disk without ingest's invariant, which today means
-  the test suites of this module (16 calls), of `spex diff` (15) and of
-  `spex impact` (7) seeding a baseline to diff against, plus
+  the test suites of this module, of `spex diff` and of
+  `spex plan` seeding a baseline to diff against, plus
   `ingest/snapshot_format_test.go`, which pins that Save and the ingest
   writer emit the same bytes.
 

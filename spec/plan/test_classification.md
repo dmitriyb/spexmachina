@@ -1,0 +1,126 @@
+# Classification Tests
+
+Integration and acceptance tests for ActionClassifier and Resolver. These tests verify that matched, unmatched, and orphaned node results are correctly classified into create, obsolete and retarget actions, and that the Resolver turns each action's spec-graph references into refs and priorities consistently with what the classifier decided — the retarget path in particular is a two-component contract: the classifier decides that a task moves, the Resolver recomputes what it now depends on.
+
+## Setup
+
+All scenarios build on the output of NodeMatcher. Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HUNK_HASH`, etc.) so the test data stays readable. A change identifies its node by the identity hash in `Key`, not by a content path, and a matched pairing repeats that hash as its node key — the join NodeMatcher already made. Each pairing carries the live `bead_status` BeadReader joined onto it; the status values `open`, `in_progress` and `closed` are what the transition table splits on.
+
+**Matched entries (modified spec nodes with existing beads), one per status:**
+
+- `SCHK_HASH`, modified, pairing spex-001 with `bead_status: "closed"` — the recreate path
+- `HUNK_HASH`, modified, pairing spex-003 with `bead_status: "open"` — the retarget path
+- `CLMD_HASH`, modified, pairing spex-007 with `bead_status: "in_progress"` — the refusal path
+
+**Unmatched entries (new spec nodes without pairings):** one `added` component `CSCH_HASH`.
+
+**Orphaned entries (pairings whose spec node was removed):** one pairing `LEGACY_HASH` / spex-010 carrying `NodeType: "component"` — an orphan carries the node type alongside the pairing, preserved from the removed change, because an identity hash does not embed the node type and ActionClassifier needs it downstream.
+
+## Scenarios
+
+### S1: The status split — one modified fixture, three verdicts
+
+Classify the three matched entries above (statuses `closed`, `open`, `in_progress`) with the unmatched and orphaned entries removed:
+
+- `SCHK_HASH` (closed pairing): **obsolete** spex-001 + **create** successor — lineage as before, the successor's `old_bead_id` is spex-001.
+- `HUNK_HASH` (open pairing): one **retarget** action targeting spex-003, carrying the node's identity hash, its new content hash, and freshly recomputed `DepSpecNodeIDs`. No obsolete, no create.
+- `CLMD_HASH` (in_progress pairing): classification refuses the whole run with an error naming spex-007 — a claimed task's target never moves under it. No action list is returned at all; a partial classification never leaks.
+
+The refusal is total, not per-entry: rerun with `CLMD_HASH` and a second in_progress entry, and assert the error names **every** claimed task whose node changed, so the operator sees the full set at once.
+
+### S2: Already-tracked change yields no action, checked before the status split
+
+A matched `added` or `modified` change whose open pairing's sourcing event records an `after` hash equal to the change's current hash yields no action — the journal already pairs a live task with exactly this state, and the change resurfaced only because a partial run left the snapshot unsaved. Vary the fixture: the same pairing with a differing `after` produces the retarget (open) or the obsolete+create pair (closed). The no-action cell is consulted first — an already-tracked node is never retargeted, whatever its status.
+
+### S3: Added node with an existing bead follows the same split
+
+A Match entry whose change type is `added` but whose pairing records a different tracked hash behaves exactly as a modified one: open pairing → retarget, closed → obsolete+create, in_progress → refuse. The change type does not bypass the status split.
+
+### S4: Unmatched and orphaned paths are untouched by retargeting
+
+- Unmatched `added` component `CSCH_HASH` → one **create**, as before.
+- Unmatched `removed` change → no action (nothing to obsolete).
+- Orphaned pairing with `bead_status: "open"` → **obsolete** only; with `"closed"` → **obsolete** + cleanup **create** with reason `Code cleanup: <module>/<node>`. Retarget never applies to a removed node — there is no new state to move the task to.
+
+### S5: Node-type gate is unchanged
+
+An unmatched `added` api yields zero actions; a test_section with `len(describes) == 1` is skipped; a data_flow always produces a task action. The retarget split lives inside the matched path only and the gate in front of the unmatched path is exactly what it was.
+
+### S6: Resolver recomputes a retarget's deps add-only
+
+Given a retarget action for component X whose `uses` now names Y (in-batch create) and Z (open task in the fold):
+
+- The retarget op's `deps` carries `{"ref":"op","op_id":"<Y op>"}` and `{"ref":"bead","bead_id":"<Z's task>"}` — the same two shapes create ops use, classified by the same precedence (in-batch wins over fold).
+- A dep whose fold pairing is closed is dropped, exactly as on a create.
+- A dep that is neither in-batch nor in the fold is a plan error naming the spec_node_id — the retarget path gets no laxer resolution than the create path.
+- Nothing in the op expresses dep removal: deps the task already carries in the tracker and no longer needs are untouched (add-only is the adapter's application rule, and the op simply lists the current set).
+
+### S7: Retarget carries the run's modified-event label
+
+The retarget op's `labels` array holds exactly one entry: `spex:<eid>` of this run's `modified` event for the node, derived from `(git_head, op_id)` exactly as a node-bearing create's `idempotency.label` is. Assert the eid embeds this op's own op_id — two retargets in one batch carry distinct labels.
+
+### S8: Priority and parent do not apply to retargets
+
+A retarget op carries no `parent` and no `priority` — the task already sits under its epic with its priority; only its target state and deps move. Assert both fields are absent from the op, and that create ops in the same batch still resolve parent and priority exactly as before (minimum across the implements → preq_id → priority chain, fallback 3).
+
+### S9: Deterministic classification
+
+Classify the full fixture twice, shuffling pairing order between runs. Assert the action lists are identical in content and order — the sort by (Type, Module, Node, BeadID) now covers three action types, with retargets ordered inside the same scheme.
+
+## Dependency Collection Scenarios
+
+For each create or retarget action, ActionClassifier walks the spec graph and records identity hashes of spec nodes the task will depend on in `DepSpecNodeIDs`. No journal lookup and no bead-status filtering happens here — the Resolver classifies each identity hash into a `ref:op` or `ref:bead` at changeset-build time, with full knowledge of the batch's op ids.
+
+### D1: Component `uses` edge collects the sibling's identity hash
+
+Component X `uses: [Y]` in the same module: X's `DepSpecNodeIDs` contains `id_Y`. A self-reference is filtered out. Holds identically when X's action is a retarget.
+
+### D2: Bead status is irrelevant to collection
+
+The fold shows Y's task closed: X's `DepSpecNodeIDs` still contains `id_Y`. Filtering already-satisfied deps is the Resolver's responsibility, not the classifier's.
+
+### D3: Transitive `requires_module` collects every reachable module's components
+
+A `requires_module: [B]`, B `requires_module: [C]`: a create in A collects both `id_CompB` and `id_CompC`. Cycles in `requires_module` terminate via visited-set tracking and collect each reachable module once.
+
+### D4: Component `uses` edges are NOT transitive
+
+X `uses: [Y]`, Y `uses: [Z]`: X collects only `id_Y`. Only `requires_module` is walked transitively.
+
+### D5: Mixed `uses` and `requires_module` are merged and deduplicated
+
+Duplicates collapse to one entry; the output is a set.
+
+### D6: No edges yields empty `DepSpecNodeIDs`
+
+Length zero, on creates and retargets alike.
+
+### D7: Data_flow add-on — component gains the flow's identity hash when both are in the same batch
+
+Data_flow F with `uses: [X]`, both F and X in the batch: X's `DepSpecNodeIDs` contains `id_F`, so the sorter places F's op first and X gains a `ref:op` dep on it. Components the flow does not list gain nothing, and a flow outside the batch adds nothing — pre-existing flow deps resolve to `ref:bead` from the fold.
+
+### D8: Non-component creates do not walk `uses` / `requires_module`
+
+Data_flow and test_section creates carry no spec-graph deps from classification; their ordering inside the batch is driven by the data_flow add-on applied to the components on the other side.
+
+### D9: Obsolete actions never carry `DepSpecNodeIDs`
+
+Dependency information belongs on creates and retargets only — an obsolete describes work on an existing bead and inherits its graph position.
+
+## Edge Cases
+
+### E1: Empty inputs produce an empty action list
+
+Classify with all three lists empty. Assert an empty action list, not an error.
+
+### E2: Duplicate entries are preserved, not deduplicated
+
+If the same spec node change appears in both `matches` and `unmatched` due to upstream bugs, both entries produce actions. Deduplication is not the classifier's responsibility — it faithfully translates its inputs.
+
+### E3: Refusal is total over what the classifier receives
+
+A batch holding one in_progress-claimed change and several cleanly classifiable ones refuses entirely — the claimed task's error is not deferred while the rest proceeds. Marked cosmetic changes never appear in the classifier's input at all: PlanCommand withholds them from matching before any pairing is consulted, so no absorb rule exists at this layer to test — that path is covered in the plan command tests, where the absorb file lives.
+
+### E4: Fold-back beats the status split
+
+A matched `modified` test_section whose current `describes` holds one component, with a pairing whose `bead_status` is `open` — and, in a second variant, `in_progress`. Assert both variants yield exactly one **obsolete** action, no retarget, no refusal, no successor create: the fold-back is consulted before the status split, because the node no longer owes a task of its own. A third variant with `describes` still ≥ 2 and status `open` yields the retarget, proving the precedence is the describes length, not the node type.

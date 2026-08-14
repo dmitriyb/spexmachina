@@ -1,6 +1,6 @@
 {
   "name": "ingest",
-  "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events to spec/.history.jsonl (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
+  "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events to spec/.history.jsonl (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next plan run via the idempotency path.",
   "requirements": [
     {
       "id": "539030e8c5a4",
@@ -14,21 +14,21 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Partial receipts tolerance",
-      "description": "When top-level receipts status is partial (adapter stopped mid-run), ingest appends events for all ok-status ops and leaves skipped/error ops untouched. The partial state is internally consistent: successful creates have journal pairings, failed ones do not. The next spex emit recomputes against the unchanged snapshot baseline and resurfaces the unfinished work."
+      "description": "When top-level receipts status is partial (adapter stopped mid-run), ingest appends events for all ok-status ops and leaves skipped/error ops untouched. The partial state is internally consistent: successful creates have journal pairings, failed ones do not. The next spex plan run recomputes against the unchanged snapshot baseline and resurfaces the unfinished work."
     },
     {
       "id": "cf47671793fa",
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Snapshot save gated on complete status",
-      "description": "In normal mode spec/.snapshot.json is overwritten only when receipts.json top-level status is complete; partial status leaves the snapshot untouched. This makes the next emit comparison pick up unfinished ops through the idempotency path. Refresh mode has its own gate: it requires both an empty changeset and an empty receipts file, and writes the snapshot only when the refresh succeeds and something actually drifted — a refresh over an already-current spec succeeds with snapshot_saved false, appends nothing to the journal, and leaves both files untouched."
+      "description": "In normal mode spec/.snapshot.json is overwritten only when receipts.json top-level status is complete; partial status leaves the snapshot untouched. This makes the next plan comparison pick up unfinished ops through the idempotency path. Refresh mode has its own gate: it requires both an empty changeset and an empty receipts file, and writes the snapshot only when the refresh succeeds and something actually drifted — a refresh over an already-current spec succeeds with snapshot_saved false, appends nothing to the journal, and leaves both files untouched."
     },
     {
       "id": "ee28b5d190ae",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Mapping consistency invariants",
-      "description": "After ingest runs, the journal satisfies: (1) every ok create has exactly one task_created receipt paired to exactly one referent event — a change event, the removal event for cleanups, or the registered event for epics; (2) every task_created references an existing event — the retired \"or proposal\" arm survives only in legacy lines already on disk, read behind the fold's read-only legacy branch and never appended anew; (3) re-running the same changeset+receipts pair appends nothing, because event ids derive from git_head and op_id; (4) the snapshot is saved iff receipts are complete, so journal and snapshot describe the same point-in-time state; (5) every appended line validates against the journal-line schema before the write. The retired store invariants — one record per node, modify rebinds the record — are void by construction over an append-only log: lineage replaces them. Ingest asserts these invariants and returns a structured error if any fails."
+      "description": "After ingest runs, the journal satisfies: (1) every ok create has exactly one task_created receipt paired to exactly one referent event — a change event, the removal event for cleanups, or the registered event for epics — every ok retarget has exactly one task_retargeted receipt paired to its own modified event, and a batch's absorbed events are closed by exactly one refresh receipt naming them; (2) every receipt — task_created, task_closed, task_retargeted, and each eid in a refresh receipt's absorbed list — references an existing event; the retired \"or proposal\" arm survives only in legacy task_created lines already on disk, read behind the fold's read-only legacy branch and never appended anew; (3) re-running the same changeset+receipts pair appends nothing, because op-born event ids derive from git_head and op_id and absorb-born ones from (node, before, after); (4) the snapshot is saved iff receipts are complete, so journal and snapshot describe the same point-in-time state; (5) every appended line validates against the journal-line schema before the write. The retired store invariants — one record per node, modify rebinds the record — are void by construction over an append-only log: lineage replaces them. Ingest asserts these invariants and returns a structured error if any fails."
     },
     {
       "id": "ffab5d1337ac",
@@ -49,7 +49,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Re-run idempotency",
-      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id) — the same derivation emit uses to mint spex:<eid> labels — so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Idempotency is deterministic eids journal-side and receipts (op_id → bead_id) adapter-side: the label guards re-runs of one changeset, the receipts pair whatever landed. No duplication, no unexpected obsoletion."
+      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id) — the same derivation plan uses to mint spex:<eid> labels — so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Idempotency is deterministic eids journal-side and receipts (op_id → bead_id) adapter-side: the label guards re-runs of one changeset, the receipts pair whatever landed. No duplication, no unexpected obsoletion."
     },
     {
       "id": "e68653819f38",
@@ -57,19 +57,35 @@
       "type": "functional",
       "title": "Refresh mode for impl_only drift",
       "description": "Refresh mode is a parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering bead lifecycle. Content modifications are never gated, whatever leaf they land on. Structural additions and removals are absorbed only for an explicitly declared allow-list: requirements and apis in either direction, and component removals but not component additions. The first two produce no bead in either direction, so baselining one costs nothing. Components do produce beads, and a component removal is absorbable only while the journal fold holds no live task pairing for the removed node — retire the pairing first through the normal pipeline. An added component is a bead that was never created, so it is refused. Every other structural entry is refused — data_flow and test_section in either direction, because both produce beads, and the module and envelope node types, because baselining one would hide from every downstream tool a change that spex diff or spex validate rejects. RefreshHandler's absorbable table is the authoritative list; it is written out rather than derived by negation. Activation is the --mode refresh flag on spex ingest and nothing else. The pathway accepts an empty changeset and an empty receipts file, walks the current spec graph, re-hashes every content leaf off the rebuilt merkle tree, appends one change event per absorbed drift entry, and closes with a refresh receipt naming those events — stamped with --git-head when given and its recorded absence otherwise. After a successful refresh the journal and the snapshot move under one atomic commit boundary. Same spec state plus same snapshot input always produces the same refresh output: a second run rewrites neither file and appends nothing."
+    },
+    {
+      "id": "7191a50f7447",
+      "preq_id": "9120788210c9",
+      "type": "functional",
+      "title": "Reconcile retarget receipts",
+      "description": "A retarget op's ok receipt yields a pair: the modified change event for the node — eid derived from (git_head, op_id) exactly as create-op events are — plus a task_retargeted receipt (for: that event's eid, task_id: the existing task the op targeted). Reconciler constructs both from the retarget op and its receipt; no bead is closed and none created, so neither a task_closed nor a task_created line accompanies the pair. Re-running the same changeset+receipts pair appends nothing, because both lines dedup by derived event id like every other journal append."
+    },
+    {
+      "id": "7900dcd38c4a",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "title": "Absorb entries reach the journal",
+      "description": "The changeset's top-level absorbed array is ingest's input, not the adapter's: for each entry, Reconciler constructs one modified change event — eid derived from (node, before, after) exactly as refresh-born events are, hashes off the entry itself — and closes the batch's absorbed events with one refresh receipt naming them. Absorbed entries are not receipt-gated: they describe spec state, not tracker work, so they append on partial runs too; the eid derivation makes re-absorption after a partial run dedup to nothing, and a batch with an empty absorbed array appends no refresh receipt. This is the per-node counterpart of the whole-run refresh mode, riding a normal run through the same event and receipt shapes."
     }
   ],
   "components": [
     {
       "id": "2b5158af774b",
       "name": "Reconciler",
-      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, the removal event the cleanup answers (cleanups) or the registered event (epics), task_closed for closes; every receipt references an event. Appends through MappingStore's writer-owner primitive, dedups the epic's receipt by eid like every other line, and asserts the journal invariants before the append commits — the append is idempotent by derived event id, so re-processing a batch changes nothing.",
+      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, the removal event the cleanup answers (cleanups) or the registered event (epics), task_closed for closes, task_retargeted pairing a retarget op's modified event with the existing task it moved; every receipt references an event. Appends through MappingStore's writer-owner primitive, dedups the epic's receipt by eid like every other line, and asserts the journal invariants before the append commits — the append is idempotent by derived event id, so re-processing a batch changes nothing.",
       "content": "arch_reconciler.md",
       "implements": [
         "539030e8c5a4",
         "16dbbee94e88",
         "ee28b5d190ae",
-        "fd6f08ef34fa"
+        "fd6f08ef34fa",
+        "7191a50f7447",
+        "7900dcd38c4a"
       ]
     },
     {

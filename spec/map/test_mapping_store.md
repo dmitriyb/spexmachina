@@ -6,8 +6,8 @@
 - Write `spec/.history.jsonl` line by line as each scenario requires: change events
   (`added`/`removed`/`modified` with `eid`, `node`, `name`, `node_type`, `module`, `before`,
   `after`, `git_head`, `proposal`), `registered` events (`eid` of the form `<git_head>:<slug>`,
-  `proposal`, `git_head`), and receipt events (`task_created`/`task_closed` with `for` and
-  `task_id` — plus the legacy shape carrying `proposal` in place of `for`, for the
+  `proposal`, `git_head`), and receipt events (`task_created`/`task_closed`/`task_retargeted`
+  with `for` and `task_id` — plus the legacy shape carrying `proposal` in place of `for`, for the
   legacy-branch scenarios)
 - Construct a MappingStore instance pointing at the temp directory. Read scenarios go through
   its parse/fold surface; append scenarios go through its append primitive — the journal's one
@@ -24,6 +24,11 @@
 
 - **Input**: node X with `added` + `task_created` (task A), then `modified` + `task_created` (task B); node Y with `added` and no receipt
 - **Expected**: the fold maps X → task B (not A — lineage, latest wins) and contains no entry for Y (no task-bearing event)
+
+### task_retargeted is task-bearing and moves the sourcing event
+
+- **Input**: node W with `added` + `task_created` (task C), then `modified` + `task_retargeted` (same task C)
+- **Expected**: the fold maps W → task C sourced from the `modified` event — the task id is unchanged and the sourcing event moved forward, so the pairing's `after` hash is the retargeted state's. A second `modified` + `task_retargeted` pair moves it again: latest wins across `task_created` and `task_retargeted` alike. A `refresh` receipt over the same node moves nothing — it is not task-bearing
 
 ### Lookup by identity hash
 

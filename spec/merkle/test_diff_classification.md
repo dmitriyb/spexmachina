@@ -132,7 +132,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 **Then** both changes carry Module=`"Alpha"`
 **And** the test_section change is classified `impl_only` and the component change `arch_impl` — one classification per change, no aggregation
 
-**Rationale**: The merkle module only classifies individual changes; per-module propagation belongs to the downstream Impact module. If a caller needs the module's max impact it computes it locally over the per-change results using the full order `structural > arch_impl > contract > impl_only`.
+**Rationale**: The merkle module only classifies individual changes; per-module propagation belongs to the downstream plan module. If a caller needs the module's max impact it computes it locally over the per-change results using the full order `structural > arch_impl > contract > impl_only`.
 
 ### S13: Per-change classification — structural present alongside lower impacts
 
@@ -212,7 +212,7 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 **When** `Classify(changes, moduleNames)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
-**Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (impact module) skips structural changes, so requirement leaf changes do not produce bead actions.
+**Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (plan module) skips structural changes, so requirement leaf changes do not produce bead actions.
 
 ### R2: Classify project requirement change as structural
 

@@ -53,10 +53,10 @@ pipe.
 ## `spex register` interface
 
 [[2b62ad5e8ef2|Register proposal]] at the command layer. The command carries a `--git-head <sha>`
-flag — the caller supplies `$(git rev-parse HEAD)` from their shell, exactly as for `spex emit`,
+flag — the caller supplies `$(git rev-parse HEAD)` from their shell, exactly as for `spex plan`,
 because spex never calls git; the head feeds the registered event's `<git_head>:<slug>` eid.
 
-The flag is **required**, and required in the same shape `spex emit` requires it: a pre-flight checks
+The flag is **required**, and required in the same shape `spex plan` requires it: a pre-flight checks
 that the value matches `^[0-9a-f]{7,40}$`, and a head that is absent or malformed is refused there —
 before the proposal file is read, before Registrar is reached, so neither the journal append nor the
 copy can happen. The exit is non-zero and the error names the flag. There is no headless path: an

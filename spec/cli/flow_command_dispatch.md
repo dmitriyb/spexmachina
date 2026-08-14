@@ -4,7 +4,7 @@ How user input flows from argv through cobra to the correct subcommand handler.
 
 ## Flow
 
-Dispatch is one pass with no branching until a subcommand has been chosen. Taking `spex hash-id --module impact --type component --name NodeMatcher` as the worked example:
+Dispatch is one pass with no branching until a subcommand has been chosen. Taking `spex hash-id --module plan --type component --name NodeMatcher` as the worked example:
 
 1. The binary receives the argument list exactly as the operating system supplied it — the program name, then `hash-id`, then the six flag words.
 2. [[b6758cdfabc4|RootCommand]] parses the persistent flags it owns and matches the first non-flag word against its registered children, selecting [[a338e50fec70|HashIDCommand]].
@@ -51,7 +51,7 @@ The input is the raw argument list. Parsing splits it into four things, and noth
 
 The subcommand is handed its parsed local flags, the root's persistent flags and the leftover positional arguments. No spec state and no shared object crosses with them: the subcommand opens the spec directory itself if it needs one.
 
-The process's standard input crosses too, and for three subcommands it is where the payload arrives rather than an incidental channel. `spex impact` reads the merkle diff there whenever `--diff` names no file, `spex emit` reads the impact report there whenever `--impact` names none, and `spex log` reads the bead JSON there always — it declares no flag to read it from a file, and the root's own help line for it says so.
+The process's standard input crosses too, and for two subcommands it is where the payload arrives rather than an incidental channel. `spex plan` reads the merkle diff there whenever `--diff` names no file, and `spex log` reads the bead JSON there always — it declares no flag to read it from a file, and the root's own help line for it says so.
 
 ### Subcommand → stderr / stdout (exit contract)
 
