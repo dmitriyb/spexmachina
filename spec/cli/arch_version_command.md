@@ -37,4 +37,4 @@ A build that injects none of them therefore reports `dev` with `unknown` twice, 
 
 ## Registration
 
-VersionCommand is a child of [[b6758cdfabc4|RootCommand]] — one of the thirteen constructors attached in the binary's single registration call — and it inherits the root's persistent flags while reading none of them, so `--spec-dir` changes nothing about its output.
+VersionCommand is a child of [[b6758cdfabc4|RootCommand]] — one of the twelve constructors attached in the binary's single registration call — and it inherits the root's persistent flags while reading none of them, so `--spec-dir` changes nothing about its output.

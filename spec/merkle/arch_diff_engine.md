@@ -44,7 +44,7 @@ Renaming the *node* is the opposite case. Changing a `name` changes the identity
 project where `spec/.snapshot.json` does not exist, `spex diff` loads no
 snapshot at all. DiffEngine is handed the populated current tree and nothing
 against it, and reports every leaf as `added`. That is the
-diff input the rest of the pipeline (impact → emit → adapter → ingest)
+diff input the rest of the pipeline (plan → adapter → ingest)
 consumes to produce the first journal pairings and the first snapshot. There is no
 "prime the snapshot" step beforehand — bootstrap and steady-state share
 the same DiffEngine call.

@@ -60,6 +60,20 @@ and its `task_created` receipt.
 consumer can run `git diff beef0001 cafe9999 -- spec/alpha/arch_parser.md` instead of
 reconstructing the delta by hand.
 
+### S1d: Retargeted task widens the bracket
+
+**Given** the fixture journal extended with a `modified` event for Parser (git_head `cafe9999`)
+and a `task_retargeted` receipt naming task `abc-123`, then a second `modified` (git_head
+`feed0002`) with another `task_retargeted` for the same task.
+
+**When** `ResolveContext(specDir, "aabbccddeeff")` — or `"abc-123"` — is called.
+
+**Then:** the file set is unchanged from S1; the bracket spans the whole accumulated change —
+`BeforeHead` is null (the change event preceding the task's original `task_created` was an
+`added`, so the task was born with no predecessor), `AfterHead` is `feed0002` (the latest
+retargeted event's git_head), `Eid` and `Event` are that latest event's. Consecutive retargets
+extend one bracket; the second does not shrink it to the `cafe9999`→`feed0002` increment.
+
 ### S1c: Live node with no task-bearing event serves a null bracket
 
 **Given** the Builder component present in module.json and added in the journal, but never named

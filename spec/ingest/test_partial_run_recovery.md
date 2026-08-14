@@ -21,10 +21,10 @@ run completes the work.
 
 ## Run 2 Scenario
 
-1. User re-runs the pipeline: impact → emit → adapter → ingest.
-2. The new impact run folds the journal and drops A and B as already tracked — their open
+1. User re-runs the pipeline: diff → plan → adapter → ingest.
+2. The new plan run folds the journal and drops A and B as already tracked — their open
    pairings' events record the same after hashes the unchanged leaves still carry — so the
-   report, and therefore emit, carries only C's create.
+   changeset carries only C's create.
    Its label is `spex:<git_head>:<C's op_id in this batch>` — a fresh derivation, and nothing
    requires it to match Run 1's: C's Run-1 create errored, so no task and no pairing exist for
    the old label to find. No counter, no reserved range, nothing to recompute.
@@ -49,9 +49,9 @@ run's, so the adapter's exact-match probe (any status) finds the task the dead r
 responds `was_existing: true` — the correct idempotent match — for C, and for A and B alike.
 Receipts land complete; ingest appends every pairing, C's carrying the pre-existing task id.
 
-The same-changeset discipline is what the label guards; a *fresh* emit would mint fresh labels
+The same-changeset discipline is what the label guards; a *fresh* plan run would mint fresh labels
 (different op ids), miss the orphaned task, and duplicate it — which is why an aborted adapter
-run is re-run, not re-emitted, exactly as the adapters module's receipts contract states.
+run is re-run, not re-planned, exactly as the adapters module's receipts contract states.
 
 ### Assertion
 
@@ -70,6 +70,6 @@ from the spec tree.
 
 Inline Go fixtures, no on-disk testdata. The shipped tests in
 `ingest/partial_run_recovery_test.go` build the run1/run2 changesets and receipts (including the
-adapter-duplicate variant) directly from the `emit` and `adapters` types, and reuse the package's
+adapter-duplicate variant) directly from the `plan` and `adapters` types, and reuse the package's
 shared helpers: the fake spec graph and journal seeder from `reconciler_test.go`, and
 `setupSpecDir` from `snapshot_saver_test.go`.

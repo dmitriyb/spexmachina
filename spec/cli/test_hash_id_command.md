@@ -10,9 +10,9 @@ Tests invoke the compiled `spex` binary (or the cobra command directly via Go te
 
 ### S1: Component hash matches schema.IdentityHash
 
-Run `spex hash-id --module impact --type component --name NodeMatcher`.
+Run `spex hash-id --module plan --type component --name NodeMatcher`.
 
-Assert stdout equals `schema.IdentityHash("impact", "component", "NodeMatcher")` and exit code is 0.
+Assert stdout equals `schema.IdentityHash("plan", "component", "NodeMatcher")` and exit code is 0.
 
 ### S2: Module hash (no --module flag)
 
@@ -60,7 +60,7 @@ Assert every output line matches `^[a-f0-9]{12}$` — exactly 12 lowercase hex c
 
 ### S9: Deterministic — same input produces same output
 
-Run `spex hash-id --module impact --type component --name NodeMatcher` twice.
+Run `spex hash-id --module plan --type component --name NodeMatcher` twice.
 
 Assert both outputs are identical.
 

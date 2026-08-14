@@ -90,7 +90,7 @@ hash from a deterministic serialization of their JSON fields.
 
 ## Why this keying scheme
 
-Earlier versions used path-style keys like `module/3/component/2` built from integer module and node IDs. Two problems followed: (1) integer collisions on parallel branches forced manual coordination, and (2) the mapping store used a different format (`<module-name>/<node_type>/<id>`), so the impact command had to translate between the two via `buildMerkleIndex` and `deriveSpecNodeID`. Both translations are deleted now: the merkle tree and the task journal use the same identity hashes as keys, so impact looks up changed merkle nodes directly in the journal fold with no rewriting.
+Earlier versions used path-style keys like `module/3/component/2` built from integer module and node IDs. Two problems followed: (1) integer collisions on parallel branches forced manual coordination, and (2) the mapping store used a different format (`<module-name>/<node_type>/<id>`), so the matching stage had to translate between the two via `buildMerkleIndex` and `deriveSpecNodeID`. Both translations are deleted now: the merkle tree and the task journal use the same identity hashes as keys, so plan looks up changed merkle nodes directly in the journal fold with no rewriting.
 
 ## Requirement Leaf Hashing
 
@@ -125,7 +125,7 @@ reach past the merkle pipeline:
 - `spex validate` — the link check builds a tree to collect the leaf keys an
   inline spec link has to resolve against, which is why a module node is not a
   link target and a component with no content file is not one either.
-- `spex impact` — the spec graph it loads carries a tree built the same way.
+- `spex plan` — the spec graph it loads carries a tree built the same way.
 
 There is no standalone tree-building CLI. The first `spex diff` on a fresh
 project builds the current tree and compares it against no snapshot at

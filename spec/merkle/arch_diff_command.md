@@ -13,7 +13,7 @@ CLI entry point for [[d487fc9c4fa5|`spex diff`]]. It [[f223179a540a|compares the
 - Run the removal-name sweep over the same classified list, and append what it finds to that error list, its disclosures to a separate notes list
 - Emit changes, errors and any notes together as one report, and let the errors decide the exit code
 
-The fourth impact level `contract` appears on `data_flow` and `api` leaf changes. DiffCommand passes classified changes through unchanged; downstream consumers (impact module) are responsible for acting on the level. Anything asserting impact strings must accept the full enum.
+The fourth impact level `contract` appears on `data_flow` and `api` leaf changes. DiffCommand passes classified changes through unchanged; the downstream consumer (the plan module) is responsible for acting on the level. Anything asserting impact strings must accept the full enum.
 
 ## Interface
 
@@ -49,8 +49,8 @@ Their findings live under the top-level `errors` array (never `warnings`) and
 the per-entry `type` says which gate raised it: `incomplete_change` from
 CompletenessChecker, and `surviving_name` from the removal-name sweep, raised
 when a node the diff reports as removed is still named somewhere in the spec
-corpus. Downstream pipeline steps (`spex impact`, `spex
-emit`) treat a non-empty `errors` array as a halt signal — the pipeline does
+corpus. The downstream pipeline step (`spex plan`) treats a non-empty
+`errors` array as a halt signal — the pipeline does
 not advance until errors clear.
 
 A run may also carry a `notes` array alongside those three keys. Notes are
@@ -73,7 +73,7 @@ formats.
   malformed JSON).
 - `2` — diff completed but the `errors` array is non-empty. The full diff
   (changes + errors) is still emitted on stdout so the caller can read it,
-  but the non-zero exit signals "do not pipe this into `spex impact`."
+  but the non-zero exit signals "do not pipe this into `spex plan`."
 
 A run with a non-empty `errors` array MUST exit non-zero. The bare-output
 "changes found" case still exits 0 — only errors gate the exit code, not

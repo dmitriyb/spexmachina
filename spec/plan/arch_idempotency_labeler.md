@@ -1,11 +1,11 @@
 # IdempotencyLabeler
 
-Assigns each create op the `idempotency.label` [[0d468e176aaf|the adapter matches against the
+Assigns each create op the `idempotency.label` [[885096d4941c|the adapter matches against the
 tracker before it creates anything]], so a re-run of the same changeset re-attaches to the task
 the last run made instead of making a second one. One rule covers every action class: the label
 is `spex:<eid>` of the journal event the op's `task_created` will reference. Event ids are
-deterministic, which is what lets emit know them before ingest mints the events: no cursor, no
-store write, no state.
+deterministic, which is what lets the builder know them before ingest mints the events: no
+cursor, no store write, no state.
 
 ## Responsibilities
 
@@ -31,28 +31,35 @@ label is unique per change, which is what a task is, so cleanup and ordinary tas
 node carry different labels because they reference different events, and the epic keys the event
 its lifecycle opened with.
 
-## Why label-at-emit-time, not adapter-time
+A retarget op carries the same derivation with a different destination: `spex:<eid>` of this
+run's `modified` event, derived from `(git_head, op_id)` exactly as a node-bearing create's, but
+placed in the op's `labels` array rather than under `idempotency` — the adapter applies it as an
+added label on the existing task, and never probes for it, because an update is naturally
+idempotent. The eid the label carries is the eid the op's `task_retargeted` receipt will
+reference, so the one-fact rule holds across all four shapes.
+
+## Why label-at-build-time, not adapter-time
 
 The label is the adapter's idempotency key — it checks the tracker for a task carrying this label
-before creating. Computing labels deterministically at emit time keeps them stable: the same
+before creating. Computing labels deterministically at build time keeps them stable: the same
 changeset re-run derives byte-identical labels, so the adapter's exact-match probe re-attaches to
-whatever the earlier run already made. A failed emit that never reaches ingest changes nothing
-anywhere; re-emitting from the same inputs — the same impact report, journal and `--git-head` —
+whatever the earlier run already made. A failed plan run that never reaches ingest changes nothing
+anywhere; re-running from the same inputs — the same diff, journal and `--git-head` —
 produces the same labels.
 
 The label guards re-runs of one changeset; receipts guard recovery across changesets. An eid
-embeds the run's `git_head`, so a *fresh* emit at a moved HEAD mints fresh labels — which is
-correct, because that emit describes a new run — and the discipline for an aborted adapter run is
-already re-run-the-same-changeset, never re-emit-and-ingest-the-gap: the adapter that dies before
+embeds the run's `git_head`, so a *fresh* plan run at a moved HEAD mints fresh labels — which is
+correct, because that run describes a new batch — and the discipline for an aborted adapter run is
+already re-run-the-same-changeset, never re-plan-and-ingest-the-gap: the adapter that dies before
 writing receipts leaves nothing for ingest, and its receipts (`op_id → bead_id`), once written,
 are what pair every landed task. Journal-side, deterministic eids make ingest re-runs append
 nothing; adapter-side, receipts are the recovery mechanism.
 
-Partial runs compose the same way. Emit three fresh creates; the adapter lands the first two and
+Partial runs compose the same way. Plan three fresh creates; the adapter lands the first two and
 fails the third; ingest appends the two pairings and — because the run was partial — writes no
-snapshot. The next diff recomputes against the same baseline, and the impact report carries only
-the op whose pairing never landed, so nothing already journaled is re-created whatever label the
-new run mints for it.
+snapshot. The next diff recomputes against the same baseline, and the resulting changeset carries
+only the op whose pairing never landed, so nothing already journaled is re-created whatever label
+the new run mints for it.
 
 ## Interface
 
@@ -62,7 +69,7 @@ an epic whose proposal has no registration in the journal, which means the propo
 registered: the fix is `spex register`, not a guessed label. That second error and Resolver's
 missing-parent error are one verdict read twice — both decided on the run's registration, so a
 changeset can never carry an epic op whose label is a guess and whose parent is a synthesis. The builder passes either error
-straight up, so `spex emit` fails without writing a changeset rather than emitting an op whose
+straight up, so `spex plan` fails without writing a changeset rather than emitting an op whose
 idempotency key is a guess.
 
 An earlier design reserved a flat block of N integer labels up front. It could not express
@@ -74,8 +81,10 @@ prefix, or desynchronize.
 
 ## Conflict Avoidance
 
-- A label is only assigned to a *new* create op. Close ops, label ops, and tag ops do not get
-  `spex:<...>` assigned (they reference existing tasks by `bead_id` or target spec_node_id).
+- An `idempotency.label` is only assigned to a *new* create op. Close ops, label ops, tag ops and
+  retarget ops do not get one (they reference existing tasks by `bead_id` or target
+  spec_node_id); a retarget's event label rides in `labels` and guards nothing, because updates
+  need no guard.
 - An eid has exactly one spelling, so a label comparison is a string comparison — the adapter's
   probe matches exact strings with no parsing.
 - Two create ops can never share a label, because no two ops reference the same event: eids embed
@@ -91,4 +100,4 @@ IdempotencyLabeler has no public API surface independent of `ChangesetBuilder` �
 consumes it. Cross-component integration coverage (Labeler paired with Sorter and Builder,
 exercising the three label shapes through `Builder.Build()`'s public API) lives in
 `test_changeset_builder`'s `describes` array. Per-method unit tests for the per-action LabelFor
-branches live in `emit/labeler_test.go` and ship with this component's implementation bead.
+branches live in `plan/labeler_test.go` and ship with this component's implementation bead.

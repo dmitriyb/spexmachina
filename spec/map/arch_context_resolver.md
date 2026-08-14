@@ -17,6 +17,10 @@ to be handed in — the key is the whole of the input.
   `after_head` — off the node's latest task-bearing journal event, so a consumer can turn the
   answer into `git diff <before_head> <after_head> -- <leaves>` instead of reconstructing the
   delta by hand
+- For a retargeted task, [[76fe608c3a40|widen that bracket to the whole accumulated change]]:
+  `before_head` from the sourcing event of the task's original `task_created`, `after_head` from
+  its latest `task_retargeted` event, so the implementer sees the full delta the task owes, not
+  the last increment
 - For a removed node: return the journal's biography — name, node type, module, removing proposal,
   last task — alongside that bracket
 - Return all of it as one structured result
@@ -45,7 +49,11 @@ run `git show` on the retired leaf.
    `module.json`. The bracket comes from the journal: `eid` and `event` are the node's latest
    task-bearing event, `after_head` that event's `git_head`, `before_head` the `git_head` of the
    node's preceding change event — null when the latest event is an `added` or the journal holds
-   no prior. A live node with no task-bearing event yet serves a null bracket; the file set does
+   no prior. When that latest event is a `task_retargeted`, the bracket widens instead:
+   `before_head` comes from the change event preceding the task's original `task_created` — the
+   same value the task was born with — while `after_head` is the retargeted event's `git_head`,
+   so consecutive retargets keep extending one bracket rather than each shrinking it to its own
+   increment. A live node with no task-bearing event yet serves a null bracket; the file set does
    not depend on the journal
 4. If declared nowhere live: consult the journal for the hash's latest `removed` event and return
    the biography with the same bracket shape. The leaf path comes off the event's `path` field;

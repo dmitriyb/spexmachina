@@ -29,17 +29,25 @@
       "type": "functional",
       "title": "Resolve full spec context from record",
       "description": "Given an identity hash or a task id, deterministically resolve all spec files needed to implement the node, plus the event bracket that locates its latest change in git — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone: the arch file from the component's declared content, test_sections whose describes array contains the component ID, data_flows whose uses array contains it, and the module file — all derived, nothing read from a cache; its bracket comes from the journal: the latest task-bearing event's git_head against the git_head of the node's preceding change event, before_head null when the latest event is an added, the whole bracket null when the node has no task-bearing event yet. A removed node resolves from the journal: its name, node_type, module, the proposal that removed it, and the same bracket off its removed event. Returns a single JSON blob."
+    },
+    {
+      "id": "76fe608c3a40",
+      "preq_id": "9120788210c9",
+      "type": "functional",
+      "title": "Fold and bracket retargeted tasks",
+      "description": "task_retargeted is task-bearing: MappingStore's fold treats it exactly as it treats task_created — latest-wins moves the pairing's sourcing event forward to the retargeted event's referent, so the current linkage always points at the newest state the task owes. ContextResolver widens the context bracket for a retargeted task: before_head comes from the sourcing event of the task's original task_created, after_head from its latest task_retargeted event, so the implementer sees the full accumulated diff rather than the last increment. Because open tasks are no longer recreated when their node changes, no blocks lineage edge exists between generations on this path — the accumulation lives in the journal and this fold-and-bracket rule is what surfaces it."
     }
   ],
   "components": [
     {
       "id": "205e67ca4aad",
       "name": "MappingStore",
-      "description": "Owner of the task journal: parse, scan, fold and append spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store owns the journal's one append primitive — atomic write-and-rename, each line schema-validated before the write commits; ingest's reconciliation and refresh batches and the proposal Registrar's registered event all write through it, and nothing writes around it.",
+      "description": "Owner of the task journal: parse, scan, fold and append spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node, task_created and task_retargeted alike — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store owns the journal's one append primitive — atomic write-and-rename, each line schema-validated before the write commits; ingest's reconciliation and refresh batches and the proposal Registrar's registered event all write through it, and nothing writes around it.",
       "content": "arch_mapping_store.md",
       "implements": [
         "934d627f0e90",
-        "4aee62bd3c15"
+        "4aee62bd3c15",
+        "76fe608c3a40"
       ]
     },
     {
@@ -58,10 +66,11 @@
     {
       "id": "6b79188dff4c",
       "name": "ContextResolver",
-      "description": "Given an identity hash or a task id, resolves all spec files for the node plus its event bracket — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone by matching the hash against ids declared in module.json — the arch file, the test_sections and data_flows that name it, and the module file itself; nothing is read from a cache. Its bracket comes from the journal: the latest task-bearing event's git_head against the preceding change event's, before_head null for an added, the whole bracket null when no task-bearing event exists. A removed node resolves from the journal: name, node_type, module, removing proposal, and the same bracket off its removed event. Pure function over spec directory plus journal — deterministic and cacheable.",
+      "description": "Given an identity hash or a task id, resolves all spec files for the node plus its event bracket — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone by matching the hash against ids declared in module.json — the arch file, the test_sections and data_flows that name it, and the module file itself; nothing is read from a cache. Its bracket comes from the journal: the latest task-bearing event's git_head against the preceding change event's, before_head null for an added, the whole bracket null when no task-bearing event exists. A retargeted task's bracket widens: before_head from the sourcing event of its original task_created, after_head from its latest task_retargeted event, so the whole accumulated change is in view. A removed node resolves from the journal: name, node_type, module, removing proposal, and the same bracket off its removed event. Pure function over spec directory plus journal — deterministic and cacheable.",
       "content": "arch_context_resolver.md",
       "implements": [
-        "40a3d3155131"
+        "40a3d3155131",
+        "76fe608c3a40"
       ],
       "uses": [
         "205e67ca4aad"
@@ -72,7 +81,7 @@
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "How a task pairs with the event that spawned it. Emit derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, the adapter applies that label to the task it creates, and ingest appends the change event and its task_created receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
+      "description": "How a task pairs with the event that spawned it. Plan derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, the adapter applies that label to the task it creates — or, for a retarget op, adds the new modified event's label to the existing task — and ingest appends the change event and its task_created (or task_retargeted) receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",

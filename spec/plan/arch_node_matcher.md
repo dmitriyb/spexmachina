@@ -1,18 +1,18 @@
 # NodeMatcher
 
-[[d165e2fe215e|Correlating changed spec nodes with the beads that already track them]] is a single equality test here: the merkle diff and the journal fold name a node with the same identity hash, so a match is a direct lookup and nothing else — the fold supplies every pairing, and no bead label is ever consulted.
+[[acc550bb0e73|Correlating changed spec nodes with the beads that already track them]] is a single equality test here: the merkle diff and the journal fold name a node with the same identity hash, so a match is a direct lookup and nothing else — the fold supplies every pairing, and no bead label is ever consulted.
 
 ## Responsibilities
 
 - Take classified changes (from merkle diff) and the journal fold's pairings
 - Match each changed spec node to the bead(s) that reference its identity hash
-- Return **every** pairing that stores a matched node's identity hash, not just the first — the lookup yields a list and the whole list is carried forward. The fold answers with one current pairing per node (latest task-bearing event wins), so in practice the list holds a single entry; matching neither relies on that nor enforces it
+- Return **every** pairing that stores a matched node's identity hash, not just the first — the lookup yields a list and the whole list is carried forward. The fold answers with one current pairing per node (latest task-bearing event wins, `task_created` and `task_retargeted` alike), so in practice the list holds a single entry; matching neither relies on that nor enforces it
 - Identify unmatched changes (new spec nodes without beads)
 - Identify orphaned pairings (a live pairing whose spec node the diff reports removed)
 - Skip structural changes — they do not participate in matching
-- Order matched pairings and orphaned pairings alike by bead id: the orphan list is collected out of a lookup keyed by pairing, so the sort is what keeps [[755ded242c8a|the same diff over the same bead state]] returning the same three lists in the same order on every run
+- Order matched pairings and orphaned pairings alike by bead id: the orphan list is collected out of a lookup keyed by pairing, so the sort is what keeps [[5369b5ae363c|the same diff over the same bead state]] returning the same three lists in the same order on every run
 
-The pairings arriving here have already had each bead's live status joined onto them from [[bec96486c6b2|BeadReader]]'s output. Matching neither reads that status nor alters it; it is carried through untouched, for ActionClassifier's cleanup gate to consult further down.
+The pairings arriving here have already had each bead's live status joined onto them from [[9f1578d7af6d|BeadReader]]'s output. Matching neither reads that status nor alters it; it is carried through untouched, for ActionClassifier's cleanup gate and retarget split to consult further down.
 
 ## Interface
 
@@ -24,11 +24,13 @@ The key merkle puts on a changed leaf and the node key a journal pairing stores 
 
 A worked example: a component's `id` field is `abc123def456`. The merkle tree builds a leaf under that same key, the journal pairs that same hash with the component's task, and when the component's content file changes the diff reports the change under it. The pairing is found by asking for that one string. There is no intermediate format and nothing to translate.
 
+A retargeted task changes nothing here: the fold moves the pairing's sourcing event forward while the task id and the node key stay put, so the same lookup finds the same pairing — now carrying a newer `after` hash for the already-tracked cell downstream to compare against.
+
 ### Structural changes are skipped
 
 Changes with `impact: "structural"` (the synthetic `meta/project` and `meta/<module-hash>` leaves from the merkle tree) are not matched against journal pairings. They produce no matches, no unmatched entries, and no orphans. They are filtered out before any lookup runs.
 
-Structural changes signal that the JSON envelope changed (a requirement was added, a module dependency was modified, etc.). Bead impact comes from leaf-level changes — components, test_sections, data_flows — which merkle detects independently as `arch_impl` or `impl_only` changes. When requirements change, affected components are expected to be updated too, and those component-level changes are the actual triggers for bead obsolete+create.
+Structural changes signal that the JSON envelope changed (a requirement was added, a module dependency was modified, etc.). Bead impact comes from leaf-level changes — components, test_sections, data_flows — which merkle detects independently as `arch_impl` or `impl_only` changes. When requirements change, affected components are expected to be updated too, and those component-level changes are the actual triggers for bead actions.
 
 The consistency between structural and leaf changes is enforced upstream by `spex validate` (state checks) and `spex diff` (change completeness checks). By the time matching runs, structural consistency is already guaranteed.
 

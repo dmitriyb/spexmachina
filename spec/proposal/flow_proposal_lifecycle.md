@@ -8,7 +8,7 @@ digraph proposal_lifecycle {
     "24180f55c0b4"            [label="Registrar\n24180f55"];
     "spec/proposals/<ref>.md" [style=dashed];
     "spec change"             [style=dashed];
-    "impact report"           [style=dashed];
+    "merkle diff"             [style=dashed];
     "changeset.json"          [style=dashed];
     "receipts.json"           [style=dashed];
     "tracker beads"           [style=dashed];
@@ -20,8 +20,8 @@ digraph proposal_lifecycle {
     "24180f55c0b4"            -> "spec/.history.jsonl"     [label="append registered event"];
     "24180f55c0b4"            -> "spec/proposals/<ref>.md" [label="validate sections, copy"];
     "spec/proposals/<ref>.md" -> "spec change"             [label="/spec"];
-    "spec change"             -> "impact report"           [label="spex validate, diff, impact"];
-    "impact report"           -> "changeset.json"          [label="spex emit --proposal <ref>"];
+    "spec change"             -> "merkle diff"             [label="spex validate, diff"];
+    "merkle diff"             -> "changeset.json"          [label="spex plan --proposal <ref>"];
     "changeset.json"          -> "tracker beads"           [label="scripts/apply-br.sh"];
     "changeset.json"          -> "receipts.json"           [label="scripts/apply-br.sh"];
     "receipts.json"           -> "spec/.history.jsonl"     [label="spex ingest"];
@@ -33,7 +33,7 @@ digraph proposal_lifecycle {
 Only the two solid nodes are spec nodes: [[24180f55c0b4|Registrar]] opens the lifecycle and
 [[97f73ced5a02|HistoryViewer]] closes it. Everything dashed sits outside this module — the proposal
 a human or an LLM authored, the spec files `/spec` edits (`project.json`, `module.json`, `*.md`),
-the reports and receipts the middle of the pipeline writes, and the beads themselves, which live in
+the diff, changeset and receipts the middle of the pipeline writes, and the beads themselves, which live in
 whatever tracker the user runs. Two of those artifacts carry more than their name says:
 `changeset.json` leads with the proposal-epic create op and follows it with the ordered bead ops,
 and `receipts.json` carries a bead id for every op the adapter actually executed. Two steps leave
@@ -52,10 +52,10 @@ it.
 ## Key Insight
 
 The proposal module is a bookend: registration happens before the spec change,
-history viewing happens after. The middle steps — spec authoring, diff, impact,
-emit, adapter execution, ingest — are handled by other modules and by the
+history viewing happens after. The middle steps — spec authoring, diff, plan,
+adapter execution, ingest — are handled by other modules and by the
 adapter outside the binary. The proposal reference threads through the entire
-chain: `spex emit --proposal <ref>` stamps it on the changeset, the changeset's
+chain: `spex plan --proposal <ref>` stamps it on the changeset, the changeset's
 first op creates the proposal epic bead, and every other op in the batch is
 parented under that epic. That parentage is what HistoryViewer walks back.
 
@@ -68,10 +68,9 @@ Each step is derived from the one before it, and each derivation is recorded:
    event opening the lifecycle.
 3. The proposal drives a spec change.
 4. The spec change produces a merkle diff.
-5. The diff produces an impact report.
-6. The impact report produces a changeset.
-7. The changeset, executed, produces receipts.
-8. The receipts produce beads and their journal events.
+5. The diff produces a changeset.
+6. The changeset, executed, produces receipts.
+7. The receipts produce beads and their journal events.
 
 Any point in this chain can be traced forward or backward. The proposal is the
 anchor point that explains "why" a change was made; the changeset and receipts
@@ -109,7 +108,7 @@ coupled only by a filesystem naming convention on the proposal's stem
 ### Proposal reference (pipeline-wide contract)
 
 - string of the form `YYYY-MM-DD-name` (matches the filename stem)
-- Passed as the required `--proposal <ref>` flag to `spex emit`, which copies it
+- Passed as the required `--proposal <ref>` flag to `spex plan`, which copies it
   into the changeset's top-level `proposal` field
 - Carried by the proposal-epic create op: `spec_node_kind = "proposal_epic"`,
   `spec_node_id` = the reference itself (not an identity hash), title

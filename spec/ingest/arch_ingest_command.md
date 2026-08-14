@@ -14,7 +14,7 @@ Flags:
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--changeset` | yes | Path to changeset.json (the one produced by `spex emit`). For refresh mode, this is an empty changeset (`"ops": []`). |
+| `--changeset` | yes | Path to changeset.json (the one produced by `spex plan`). For refresh mode, this is an empty changeset (`"ops": []`). |
 | `--receipts`  | yes | Path to receipts.json (the one produced by the adapter). For refresh mode, this is an empty receipts file. |
 | `--mode`      | no  | `normal` (default) or `refresh`. Selects the dispatch pathway. Any other value is an input error. |
 | `--git-head`  | no  | Refresh mode only: the commit to stamp on the refresh receipt. Normal mode ignores it — the changeset already carries its own `git_head`. |
@@ -109,7 +109,7 @@ comes back into one JSON summary and one exit code.
 
 ### Both modes
 
-- Both files must parse successfully as JSON with their declared versions — `version: 2` on the changeset, `version: 1` on the receipts.
+- Both files must parse successfully as JSON with their declared versions — `version: 3` on the changeset, `version: 1` on the receipts.
 - The changeset and the receipts must cover exactly the same set of op ids: every receipt's op
   present in the changeset, and every op receipted. In refresh mode both files are empty, so the
   check passes trivially.
@@ -155,7 +155,7 @@ computes against a stale baseline while the journal already moved forward.
 
 ## Composability
 
-- Normal mode: `spex emit ... > changeset.json && adapter changeset.json > receipts.json &&
+- Normal mode: `spex plan ... > changeset.json && adapter changeset.json > receipts.json &&
   spex ingest --changeset changeset.json --receipts receipts.json` is the full local pipeline.
 - Refresh mode: `spex ingest --mode refresh --changeset empty-changeset.json --receipts
   empty-receipts.json` — the flag is the only activation path; nothing inside `spex` reads
@@ -164,9 +164,9 @@ computes against a stale baseline while the journal already moved forward.
 
 ## Non-Responsibilities
 
-- Does NOT run emit or the adapter — ingest assumes both have run (normal mode) or that the
+- Does NOT run plan or the adapter — ingest assumes both have run (normal mode) or that the
   author has chosen refresh mode (no adapter needed).
-- Does NOT retry failed ops — that's the user's job via re-running emit→adapter→ingest (normal
+- Does NOT retry failed ops — that's the user's job via re-running plan→adapter→ingest (normal
   mode) or fixing the underlying drift and re-running refresh.
 - Does NOT repair a journal it cannot read. Each line is checked against the journal-line schema
   on the way in as well as before every append, so a file that violates the schema ends the run

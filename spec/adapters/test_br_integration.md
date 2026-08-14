@@ -43,8 +43,8 @@ fi
 
 ### Both ref shapes
 
-- Changeset mixing ref:op (new-to-new) and ref:bead (existing open) — the two shapes v2 admits; a dep emit could not resolve never reaches the adapter.
-- Assertions: each new bead's `--deps depends:<>` is correct per the ref resolution.
+- Changeset mixing ref:op (new-to-new) and ref:bead (existing open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
+- Assertions: each new bead's `--deps blocked-by:<>` is correct per the ref resolution.
 
 ## Harness
 
@@ -91,7 +91,7 @@ echo "ok"
 - `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh:172` runs `seed.sh` only when the case supplies one.
 - `scripts/testdata/integration/close_obsolete/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
 
-The partial-run, re-run-idempotency and three-ref-shape scenarios above have no integration fixture; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.
+The partial-run, re-run-idempotency and both-ref-shape scenarios above have no integration fixture, and neither does the retarget path; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.
 
 ## Non-Responsibilities
 

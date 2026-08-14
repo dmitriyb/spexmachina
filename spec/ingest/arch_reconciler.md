@@ -4,8 +4,10 @@ Consumes `changeset.json` + `receipts.json` and turns each op's receipt into jou
 [[539030e8c5a4|an ok create appends a change event and the task_created receipt pairing it, an ok
 close on a removed node appends the removed event and its task_closed, and a receipt reporting an
 error appends nothing]]. Cleanup creates pair with the removal event they answer — prior-batch or
-same-batch — instead of a fresh one; epic creates pair with the proposal's `registered` event —
-every receipt references an event. Nothing reaches disk until
+same-batch — instead of a fresh one; epic creates pair with the proposal's `registered` event; an
+ok retarget appends [[7191a50f7447|the `modified` change event plus its `task_retargeted` receipt]];
+the changeset's `absorbed` array appends [[7900dcd38c4a|one `modified` event per entry, closed by
+one `refresh` receipt naming them]] — every receipt references an event. Nothing reaches disk until
 [[ee28b5d190ae|the journal invariants this component checks]] hold over the batch.
 
 ## Responsibilities
@@ -45,14 +47,48 @@ events and receipts.
 | close   | —              | ok (reason starts "Spec node modified"), bead's create errored/skipped in this batch | nothing — partial run, see "The Modified-Node Pair" |
 | close   | —              | ok (reason starts "Spec node modified"), bead claimed by no create in this batch | the `modified` change event plus a `task_closed`, built from the close alone — no `task_created` (see "The Modified-Node Pair") |
 | close   | —              | error          | nothing |
+| retarget | —             | ok             | the `modified` change event plus a `task_retargeted` with the receipt's bead id (see Retarget Ops) |
+| retarget | —             | error/skipped  | nothing |
 | label   | —              | any            | nothing (labels don't reach the journal) |
 | tag     | —              | any            | nothing |
 
+## Retarget Ops
+
+A retarget op is what plan emits for a modified node whose open, unclaimed task moves to the new
+state instead of being recreated. Its ok receipt constructs a pair: the `modified` change event —
+eid derived from `(git_head, op_id)` exactly as a create op's event is, node identity and hashes
+from the op, name/kind/module from the spec graph — plus a `task_retargeted` receipt whose `for`
+is that event's eid and whose `task_id` is the existing task the op targeted. No `task_closed`
+and no `task_created` accompany the pair: nothing died and nothing was born. The old pairing
+stays in the journal as history, and the fold answers with the retargeted event because
+`task_retargeted` is task-bearing and later in the file. Both lines dedup by derived event id, so
+re-processing the batch appends nothing.
+
+## Absorbed Entries
+
+The changeset's top-level `absorbed` array is processed alongside the ops, from the changeset
+alone — no receipt corresponds to an absorbed entry, because the adapter ignores the array and no
+tracker work happened. For each entry, Reconciler constructs one `modified` change event: node
+identity and before/after hashes off the entry itself, name/kind/module from the spec graph, the
+event's `git_head` and `proposal` from the changeset's own top-level fields — exactly as op-born
+events take them — and its eid derived from `(node, before, after)` exactly as refresh-born events
+are, because an absorbed entry has no create op to key from. The batch's absorbed events are closed by one `refresh` receipt naming
+exactly their eids, the same shape a whole-run refresh appends, so a reader of the journal cannot
+tell per-node absorption from refresh-mode absorption except by what else the run appended. No
+task receipt is constructed — a `refresh` receipt is not task-bearing, so the node's pairing keeps
+its sourcing event and the task owes nothing.
+
+Absorbed entries are not receipt-gated: they describe spec state, not tracker work, so they append
+on partial runs too. Re-absorption is harmless by construction — after a partial run the snapshot
+is unsaved, the next diff re-reports the node, the operator marks it again, and the re-derived
+eids find their lines already present and append nothing. An empty `absorbed` array constructs
+nothing, not an empty receipt.
+
 ## The Modified-Node Pair
 
-Emit generates two ops for a modified node: a create op labeled `spex:<eid>` of the pair's
-`modified` event — the very event this component will mint from the create op's
-`(git_head, op_id)` — plus a close op for the old task, in that
+Plan generates two ops for a modified node whose pairing's task is closed: a create op labeled
+`spex:<eid>` of the pair's `modified` event — the very event this component will mint from the
+create op's `(git_head, op_id)` — plus a close op for the old task, in that
 order (see "Ordering"). The create op alone carries everything the pair needs: its `blocks` dep
 names the old bead directly, and the node's current live fold entry supplies the prior content
 hash for `before`. Reconciler builds the whole pair while processing the create — one `modified`
@@ -73,8 +109,8 @@ on receipt order:
   This is a partial run (`scripts/apply-br.sh` routinely continues past a failed create to close
   the old task anyway): the pair constructs nothing, same as any other errored/skipped create, and
   the rest of the batch still lands.
-- **No create op for the bead exists in the changeset at all.** This is the shape
-  `impact/action_classifier.go` emits for a coupled `test_section` edit: an `obsolete` action with
+- **No create op for the bead exists in the changeset at all.** This is the shape the classifier
+  emits for a coupled `test_section` edit: an `obsolete` action with
   no replacement create, because the section's bead is folded into its owning component going
   forward rather than replaced. The node itself still exists — only its hash changed — so the close
   builds the `modified` event and its `task_closed` on its own: identity and prior hash come from
@@ -95,7 +131,7 @@ the same lines, finds them present, and appends nothing. The interesting case is
 `was_existing = true` with no pairing in the journal: the signature of a previous run where the
 adapter created the task and then died before its receipt reached disk. The batch's lines are
 genuinely new, so they land now, pairing the event with the task the dead run made — and the next
-emit's fold sees the node as taken. See `test_partial_run_recovery.md`, "Partial with Adapter-Side
+plan run's fold sees the node as taken. See `test_partial_run_recovery.md`, "Partial with Adapter-Side
 Duplicates".
 
 ## Proposal-Epic Ops
@@ -116,7 +152,7 @@ The Reconciler MUST treat them as a distinct case:
   diff entry; it is born from a registration, and the registered event is that fact on the
   record.
 - An epic op for a proposal with no `registered` event in the journal is an invariant failure —
-  emit refuses to build such an op, so its arrival marks a malformed changeset.
+  plan refuses to build such an op, so its arrival marks a malformed changeset.
 
 Legacy epic receipts carrying `proposal: <stem>` and no `for` are read as inert history behind
 the fold's read-only legacy branch; none is ever constructed anew. The fold lists epic tasks
@@ -139,7 +175,7 @@ The Reconciler MUST treat them as a distinct case:
   label resolvable from day one. If the journal holds no removed event for the hash (the removal
   is in this same batch), the referent is the removal's eid, resolved from the whole batch's ok
   removal closes before any op is processed — not from a scan of lines already appended to the
-  batch. Emit lists the cleanup create before the close that performs its removal (see
+  batch. The changeset lists the cleanup create before the close that performs its removal (see
   "Ordering"), so at the point the create is processed neither the on-disk fold nor the
   batch-so-far shows the node as removed yet; only a batch-wide, order-independent resolution
   gets the referent right.
@@ -153,8 +189,11 @@ disk, in numeric order, so the first message a caller sees names the most upstre
 
 1. Every ok create pairs exactly one `task_created` with exactly one referent event — a change
    event in journal or batch, the removal event for cleanups, or the registered event for epics.
+   Every ok retarget pairs exactly one `task_retargeted` with its own `modified` event, and the
+   batch's absorbed events are closed by exactly one `refresh` receipt naming them.
    The retired "or a proposal slug" arm survives only in legacy lines already on disk.
-2. No receipt references an eid that neither the journal nor the batch contains.
+2. No receipt references an eid that neither the journal nor the batch contains — `for` fields
+   and the entries of a `refresh` receipt's `absorbed` list alike.
 3. The batch minus already-present lines is what lands — re-running the same pair appends nothing,
    because eids derive from `(git_head, op_id)`.
 4. Not checked here: snapshot-saved-iff-complete is SnapshotSaver's gate.
@@ -179,9 +218,9 @@ completing re-run, and only in that direction.
 
 Reconciler (with RefreshHandler, its refresh-mode sibling) appends through the map module's
 MappingStore — the journal's writer-owner, whose one primitive also serves the proposal
-Registrar's `registered` event. Emit folds the journal — parent resolution, epic recognition — and never
-writes it. That asymmetry is deliberate: a failed emit that never reaches ingest must leave the
-journal byte-identical, so the next emit re-derives the same view and the run is retryable.
+Registrar's `registered` event. Plan folds the journal — parent resolution, epic recognition — and never
+writes it. That asymmetry is deliberate: a failed plan run that never reaches ingest must leave the
+journal byte-identical, so the next run re-derives the same view and is retryable.
 
 Reconciler also never contacts a tracker. It learns what happened solely from the
 `(changeset, receipts)` pair — which is why a receipt's `bead_id` and `was_existing` are
@@ -197,9 +236,9 @@ changeset's git_head rather than off tracker state that may have moved underneat
 ## Ordering
 
 Within a run, ops are processed in the order they appear in changeset.json — same order the
-adapter executed them, same order their lines land in the journal. Emit orders every changeset
-create-before-close: all create ops first, in `Sorter`'s topological order, then one close op per
-obsolete (`arch_changeset_builder.md`, "Op ids"). The modified-node pair and a cleanup create with
+adapter executed them, same order their lines land in the journal. Plan orders every changeset
+create-before-close: all create ops first, in the sorter's topological order, then the retargets,
+then one close op per obsolete (`arch_changeset_builder.md`, "Canonical Output"). The modified-node pair and a cleanup create with
 its own removal both arrive in that order — the create before the close naming the same bead or
 node. Reconciler does not depend on seeing the close first for either: the modified-node pair is
 built entirely from the create op's own `blocks` dep and the pre-batch fold (see "The Modified-Node

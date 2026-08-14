@@ -16,12 +16,16 @@ Defines the JSON Schema for one journal line, covering:
 - **Registered event**: `event: "registered"`, plus `eid` (of the form `<git_head>:<slug>`),
   `proposal` (the slug), and `git_head`. No `node` field — registration opens a proposal's
   lifecycle before any spec change exists, and the epic's `task_created` references this event.
-- **Task receipts**: `event` drawn from `task_created` / `task_closed`, plus `task_id` and a
-  `for` (an `eid`). A `task_created` carrying a `proposal` slug instead of `for` remains
-  admitted as a legacy shape: pre-migration epic lines validate as inert history, but no new
-  append uses it.
+- **Task receipts**: `event` drawn from `task_created` / `task_closed` / `task_retargeted`, plus
+  `task_id` and a `for` (an `eid`). `task_retargeted` records a task whose target moved to a new
+  state without lifecycle: its `for` references the retarget's own `modified` event, and the fold
+  treats it as task-bearing exactly as it treats `task_created`. A `task_created` carrying a
+  `proposal` slug instead of `for` remains admitted as a legacy shape: pre-migration epic lines
+  validate as inert history, but no new append uses it.
 - **Refresh receipts**: `event: "refresh"`, `git_head` (admitting recorded absence), `absorbed`
-  (an array of `eid`s).
+  (an array of `eid`s). One shape serves both producers: whole-run refresh batches and the
+  per-node absorptions a normal run's changeset carries in its `absorbed` array close their
+  `modified` events with the same receipt.
 - **Format constraints**: `node` is constrained to the 12-character identity-hash pattern; a
   *legacy* epic receipt's `proposal` carries the slug-shaped reference instead — current epic
   receipts reference the registered event through `for` like every other receipt. `node_type` is the closed

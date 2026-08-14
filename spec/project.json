@@ -31,7 +31,7 @@
       "id": "0a0f49f9be9b",
       "type": "functional",
       "title": "Compute impact",
-      "description": "Given changed spec nodes, find all affected beads and classify actions (create/obsolete).",
+      "description": "Given changed spec nodes, find all affected beads and classify actions (create/obsolete/retarget).",
       "depends_on": [
         "e291989b1599",
         "9120788210c9"
@@ -42,7 +42,7 @@
       "id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply changes",
-      "description": "Turn an impact report into applied tracker state through emit, an external adapter, and ingest. Emit composes a tool-agnostic changeset carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label read off the op's own spec node identity. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest appends the run's change events and task receipts to the task journal from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
+      "description": "Turn a merkle diff into applied tracker state through plan, an external adapter, and ingest. Plan composes a tool-agnostic changeset — create, close and retarget operations plus the absorbed entries of marked cosmetic modifications — carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label keyed to the journal event the op's receipt will reference. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest appends the run's change events and task receipts to the task journal from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
       "depends_on": [
         "0a0f49f9be9b"
       ],
@@ -189,22 +189,12 @@
       ]
     },
     {
-      "id": "725a083f66a1",
-      "name": "impact",
-      "path": "impact",
-      "description": "Maps merkle diff to affected beads: reads bead metadata, matches changed nodes, classifies actions (create/obsolete).",
+      "id": "67c525e9288d",
+      "name": "plan",
+      "path": "plan",
+      "description": "Decides the next bead-action changeset deterministically, in one pass from the merkle diff: reads bead metadata, matches changed nodes against the task journal, classifies actions (create, obsolete, retarget), and composes changeset.json v3 \u2014 an ordered, tool-agnostic operation list with forward-reference encoding \u2014 that an external adapter consumes. Pure function over the diff, the caller-supplied tracker listing, the task journal, the spec directory, an optional absorb list, and a caller-supplied git HEAD SHA.",
       "requires_module": [
         "085966b6bfa1",
-        "fb20a21b62f1"
-      ]
-    },
-    {
-      "id": "742ff18345ed",
-      "name": "emit",
-      "path": "emit",
-      "description": "Decides the next bead-action changeset deterministically. Pure function over the impact report, the task journal, the spec directory, and a caller-supplied git HEAD SHA. Emits changeset.json \u2014 an ordered, tool-agnostic list of create and close operations, drawn from the wider label/create/close/tag vocabulary, with forward-reference encoding \u2014 that an external adapter consumes.",
-      "requires_module": [
-        "725a083f66a1",
         "fb20a21b62f1"
       ]
     },
@@ -212,9 +202,9 @@
       "id": "1374b24a3086",
       "name": "ingest",
       "path": "ingest",
-      "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next emit via the idempotency path.",
+      "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next plan run via the idempotency path.",
       "requires_module": [
-        "742ff18345ed",
+        "67c525e9288d",
         "fb20a21b62f1",
         "085966b6bfa1",
         "585284979da9"

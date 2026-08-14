@@ -46,16 +46,15 @@ On a fresh project there is no `spec/.snapshot.json`. The pipeline is:
 1. `spex validate` — the spec has to be valid before anything hashes it.
 2. `spex diff` — Hasher and TreeBuilder build the current tree; the command finds no snapshot file,
    never calls SnapshotStore at all, and every leaf is reported as `added`.
-3. `spex impact` — the "everything added" diff becomes bead actions.
-4. `spex emit` — those actions become a changeset.
-5. The adapter applies the changeset and writes receipts.
-6. `spex ingest` — the Reconciler appends the first journal events and the SnapshotSaver writes the *first*
+3. `spex plan` — the "everything added" diff becomes a changeset.
+4. The adapter applies the changeset and writes receipts.
+5. `spex ingest` — the Reconciler appends the first journal events and the SnapshotSaver writes the *first*
    `spec/.snapshot.json`, in the same baselining step.
 
 The first `spex diff` invocation builds the current tree (Hasher → TreeBuilder)
 and compares it against no snapshot at all, because the command skips the
 SnapshotStore load when the file is absent. The "everything added" diff feeds the
-standard impact → emit → adapter → ingest cycle. That ingest run's
+standard plan → adapter → ingest cycle. That ingest run's
 `SnapshotSaver` is what creates `spec/.snapshot.json`, alongside the first
 batch of journal pairings, so snapshot and journal are born consistent. It is
 also the only thing that can create it: `spex ingest` is the only command that
@@ -75,7 +74,7 @@ Each subsequent change cycle uses the same composition:
 1. A spec edit changes one or more content files or JSON envelopes.
 2. `spex diff` — TreeBuilder rebuilds the tree from the current files, SnapshotStore loads the
    previous snapshot, and DiffEngine compares the two.
-3. `spex impact` → `spex emit` → the adapter, exactly as in bootstrap.
+3. `spex plan` → the adapter, exactly as in bootstrap.
 4. `spex ingest` — in a normal-mode run the SnapshotSaver overwrites `spec/.snapshot.json` only when
    the receipts' top-level status is `complete`; see the ingest module for that gate.
 

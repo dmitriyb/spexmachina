@@ -74,3 +74,84 @@ Removing the two apis and three unsucceeded components triggers the removal-time
 - `ReportGenerator`
 - `--bead-cli`
 - `changeset.json v2`
+
+## Spec-review amendments (2026-08-14)
+
+A full /spec-review audit of the authored (un-baselined) tree found both gates green but eight
+internal inconsistencies; the corrections below were applied to the same pending spec state and
+are part of this epic. Three amend contracts this proposal left undecided or unowned:
+
+1. **Absorption is decided upstream of classification.** This proposal did not decide the
+   cosmetic-mark × claimed-task cell, and as first authored the absorb list reached only
+   ChangesetBuilder — after ActionClassifier's in_progress refusal would already have killed the
+   run. Amended: PlanCommand validates marks in pre-flight, withholds marked changes from
+   matching/classification, and composes the absorbed entries; the builder only writes them. A
+   marked node is absorbed whatever its pairing's status — open or claimed — because cosmetic
+   means the task owes nothing and never moves. §3's "implemented by PlanCommand and
+   ChangesetBuilder" stands, with this division of labor.
+2. **The test_section fold-back precedes the status split.** A matched test_section whose
+   `describes` dropped to one component is obsoleted with no successor whatever its task's status
+   — the node no longer owes a task, so §2's retarget cell never applies to it. Pre-retarget
+   behavior, now stated.
+3. **Ingest owns the absorbed array.** §3 said "ingest appends the modified events" without an
+   owner; no ingest requirement or leaf carried it. Amended: new ingest module requirement
+   *Absorb entries reach the journal* (`7900dcd38c4a`, preq `81f8102ae1b5`), implemented by
+   Reconciler — one `modified` event per entry, eid from `(node, before, after)`, closed by one
+   `refresh` receipt; not receipt-gated, idempotent by derivation.
+
+Two scope decisions changed: the project requirement descriptions of `81f8102ae1b5` and
+`0a0f49f9be9b` were re-worded to the five-stage, three-action reality — reversing this proposal's
+"No project requirement is edited", which existed to avoid completeness obligations that this
+epic's own leaf edits now satisfy anyway; ids, titles, priorities and depends_on are byte-identical.
+The rest were consistency sweeps: two `version: 2` stragglers in ingest leaves moved to 3, seven
+merkle prose sites re-routed from the dissolved modules to plan, one stale constructor count in
+`arch_version_command.md`, and the retarget op's `spec_hash` assertion added to the changeset
+builder tests.
+
+### Label length constraint discovered at pipeline time (2026-08-14)
+
+br rejects labels over 50 characters, and the epic label `spex:<git_head>:<slug>` overflows for
+long proposal stems: the original stem `2026-08-13-plan-module-task-per-change` (38 chars) exceeds
+the cap even with a 7-character short SHA. The proposal was renamed to `2026-08-13-plan-module`
+and the operator convention is a short SHA for `--git-head`. The plan-era implementer should keep
+this in view: the labeler contract inherits the same shape, so either the stem budget stays an
+operator discipline or registration learns to enforce it.
+
+### Pre-pipeline cosmetic absorption (2026-08-14)
+
+Before this epic's pipeline run, the sweep-only leaf modifications below were baselined with
+`spex ingest --mode refresh` from an intermediate spec state (main plus exactly these files at
+this branch's content), so the epic's changeset carries only genuine work. This hand-simulates
+the per-node absorb mechanism this proposal itself introduces — the declaration the `--absorb`
+file will later carry is recorded here instead, one reason per node, for the PR reviewer to
+validate. Contract-bearing leaves (Reconciler, IngestCommand's v3 pre-flight, MappingStore,
+ContextResolver, BrReferenceAdapter, BeadMapSchema, the ingest/map/adapters flows and the
+invariants/idempotency tests) were deliberately not marked and keep their beads.
+
+Absorbed, with reasons — all are pipeline re-routing prose whose code-side work is owned by the
+plan-module creates and the cleanup beads:
+
+- merkle CompletenessChecker, DiffCommand, DiffEngine, Hasher, ImpactClassifier, SnapshotStore,
+  TreeBuilder; Hash computation flow, Diff and classification flow; Diff and classification
+  tests, Merkle command tests — downstream-consumer naming moved from the dissolved modules to
+  plan; no merkle contract or code changes.
+- cli RootCommand, VersionCommand, HashIDCommand; Command Dispatch flow; Root command tests,
+  Hash ID command tests — constructor list/counts and worked examples re-keyed to plan; the
+  cmd/spex registration change is owned by the plan-module and cleanup beads.
+- proposal ProposalCommands, Registrar, Proposal lifecycle flow, Proposal command tests —
+  `--git-head` cross-references and the lifecycle chain re-pointed from the retired seam to
+  `spex plan`; no proposal-module behavior changes.
+- map MapCommand — worked-example context paths re-keyed from spec/impact/ to spec/plan/; the
+  command's own contract is untouched.
+- ingest Partial run recovery tests — pipeline wording and fixture type names re-routed; the
+  recovery semantics under test are unchanged.
+
+A second review round (same date) settled three more contracts and swept the last stragglers: the
+changeset's op order is pinned as creates, then retargets, then closes — each block in the
+classifier's deterministic action order — because "retargets and closes follow the creates" left
+byte-identical output underdetermined; the ingest invariants (`ee28b5d190ae` and the Reconciler
+leaf) now name the retarget pairing and the refresh-receipt closure of absorbed events, and
+absorb-born events take `git_head` and `proposal` from the changeset's top-level fields; the
+adapter's subprocess-count table gained the retarget invocations. Sweeps:
+`test_partial_run_recovery.md` re-routed from the retired pipeline to plan, and the adapter test
+leaves lost their "v2 admits"/"three-ref-shape" wording plus a stray `depends:` edge spelling.

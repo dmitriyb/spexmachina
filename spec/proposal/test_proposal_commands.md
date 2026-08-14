@@ -262,6 +262,6 @@ same day.
 and a value shorter than 7 characters).
 **Then:**
 - Exit code is 1.
-- Stderr carries the pre-flight message naming the expected form, as `spex emit` does for the same
+- Stderr carries the pre-flight message naming the expected form, as `spex plan` does for the same
   flag.
 - No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl`.
