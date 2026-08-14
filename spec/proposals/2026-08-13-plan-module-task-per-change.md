@@ -108,6 +108,35 @@ merkle prose sites re-routed from the dissolved modules to plan, one stale const
 `arch_version_command.md`, and the retarget op's `spec_hash` assertion added to the changeset
 builder tests.
 
+### Pre-pipeline cosmetic absorption (2026-08-14)
+
+Before this epic's pipeline run, the sweep-only leaf modifications below were baselined with
+`spex ingest --mode refresh` from an intermediate spec state (main plus exactly these files at
+this branch's content), so the epic's changeset carries only genuine work. This hand-simulates
+the per-node absorb mechanism this proposal itself introduces — the declaration the `--absorb`
+file will later carry is recorded here instead, one reason per node, for the PR reviewer to
+validate. Contract-bearing leaves (Reconciler, IngestCommand's v3 pre-flight, MappingStore,
+ContextResolver, BrReferenceAdapter, BeadMapSchema, the ingest/map/adapters flows and the
+invariants/idempotency tests) were deliberately not marked and keep their beads.
+
+Absorbed, with reasons — all are pipeline re-routing prose whose code-side work is owned by the
+plan-module creates and the cleanup beads:
+
+- merkle CompletenessChecker, DiffCommand, DiffEngine, Hasher, ImpactClassifier, SnapshotStore,
+  TreeBuilder; Hash computation flow, Diff and classification flow; Diff and classification
+  tests, Merkle command tests — downstream-consumer naming moved from the dissolved modules to
+  plan; no merkle contract or code changes.
+- cli RootCommand, VersionCommand, HashIDCommand; Command Dispatch flow; Root command tests,
+  Hash ID command tests — constructor list/counts and worked examples re-keyed to plan; the
+  cmd/spex registration change is owned by the plan-module and cleanup beads.
+- proposal ProposalCommands, Registrar, Proposal lifecycle flow, Proposal command tests —
+  `--git-head` cross-references and the lifecycle chain re-pointed from the retired seam to
+  `spex plan`; no proposal-module behavior changes.
+- map MapCommand — worked-example context paths re-keyed from spec/impact/ to spec/plan/; the
+  command's own contract is untouched.
+- ingest Partial run recovery tests — pipeline wording and fixture type names re-routed; the
+  recovery semantics under test are unchanged.
+
 A second review round (same date) settled three more contracts and swept the last stragglers: the
 changeset's op order is pinned as creates, then retargets, then closes — each block in the
 classifier's deterministic action order — because "retargets and closes follow the creates" left
