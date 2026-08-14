@@ -1,5 +1,10 @@
 # Change Proposal: One `plan` module — merge `impact` and `emit`
 
+**Status:** superseded, never registered. Carried forward in full as §1 of
+`spec/proposals/2026-08-13-plan-module.md`, which extends it with the retarget and
+cosmetic-absorption riders and ran as epic `spexmachina-f6eh`. Kept for the record; nothing in the
+spec or the journal references this draft.
+
 ## Context
 
 `spex impact` and `spex emit` are two pipeline stages with one consumer between them: the `ImpactReport` JSON that `impact` writes is read by `emit` and by nothing else — it is internal plumbing wearing the costume of a stable contract. The split predates the decouple migration, when an impact report still drove in-binary bead creation; post-decouple, and especially post-task-journal — where `Resolver` `f7775ac5f1f3` folds the journal on the emit side while `ActionClassifier` `76d72cbe00f3` consumes its pairings on the impact side — the two modules are one computation artificially halved: *(diff + tracker view + spec graph + git_head + proposal) → changeset*.
