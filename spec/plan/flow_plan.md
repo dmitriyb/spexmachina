@@ -224,16 +224,16 @@ was actually made or moved.
 {
   "version": 3,
   "git_head": "deadbeef...",
-  "proposal": "2026-08-13-plan-module-task-per-change",
+  "proposal": "2026-08-13-plan-module",
   "ops": [
     {
       "op_id": "op-1",
       "type": "create",
       "spec_node_kind": "proposal_epic",
-      "spec_node_id": "2026-08-13-plan-module-task-per-change",
-      "idempotency": { "label": "spex:beef0001:2026-08-13-plan-module-task-per-change" },
+      "spec_node_id": "2026-08-13-plan-module",
+      "idempotency": { "label": "spex:beef0001:2026-08-13-plan-module" },
       "priority": 3,
-      "title": "Proposal: 2026-08-13-plan-module-task-per-change"
+      "title": "Proposal: 2026-08-13-plan-module"
     },
     {
       "op_id": "op-2",

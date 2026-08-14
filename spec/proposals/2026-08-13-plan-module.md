@@ -108,6 +108,15 @@ merkle prose sites re-routed from the dissolved modules to plan, one stale const
 `arch_version_command.md`, and the retarget op's `spec_hash` assertion added to the changeset
 builder tests.
 
+### Label length constraint discovered at pipeline time (2026-08-14)
+
+br rejects labels over 50 characters, and the epic label `spex:<git_head>:<slug>` overflows for
+long proposal stems: the original stem `2026-08-13-plan-module-task-per-change` (38 chars) exceeds
+the cap even with a 7-character short SHA. The proposal was renamed to `2026-08-13-plan-module`
+and the operator convention is a short SHA for `--git-head`. The plan-era implementer should keep
+this in view: the labeler contract inherits the same shape, so either the stem budget stays an
+operator discipline or registration learns to enforce it.
+
 ### Pre-pipeline cosmetic absorption (2026-08-14)
 
 Before this epic's pipeline run, the sweep-only leaf modifications below were baselined with

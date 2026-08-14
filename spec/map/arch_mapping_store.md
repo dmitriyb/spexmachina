@@ -44,7 +44,7 @@ One JSON object per line. Change events record what a baselining absorbed:
 ```json
 {"event": "removed", "eid": "cafe1234:op-7", "node": "a1b2c3d4e5f6", "name": "ActionClassifier",
  "node_type": "component", "module": "impact", "before": "e3b0c44298fc", "after": null,
- "path": "impact/arch_action_classifier.md", "git_head": "cafe1234", "proposal": "2026-08-13-plan-module-task-per-change"}
+ "path": "impact/arch_action_classifier.md", "git_head": "cafe1234", "proposal": "2026-08-13-plan-module"}
 ```
 
 The registered event records the opening of a proposal's lifecycle — appended at registration,
