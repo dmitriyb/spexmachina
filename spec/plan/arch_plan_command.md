@@ -25,7 +25,7 @@ The root's persistent `--spec-dir` is read too: it is what the spec graph is loa
 
 `spex plan` is this module's only external entry point, declared as an api node in `spec/plan/module.json` with `provided_by` naming PlanCommand. The declared name is the invocation string alone — the flags above are not part of it.
 
-That boundary decides what the pipeline can see. Renaming the subcommand changes the api's identity hash and so reads as a removal plus an addition, and the removal-time name check then reports every place in the spec corpus that still says `spex plan`. Changing a flag — adding one, renaming one, changing what `--out` accepts — moves no name and no hash, and the diff cannot see it. Flag-level contract changes are therefore documented here, in the table above, and are caught by review rather than by the tool. The retired seam's `--json` flag and the deprecated `--bead-cli` no-op died with their commands: neither is parsed, and supplying either is an unknown-flag error.
+That boundary decides what the pipeline can see. Renaming the subcommand changes the api's identity hash and so reads as a removal plus an addition, and the removal-time name check then reports every place in the spec corpus that still says `spex plan`. Changing a flag — adding one, renaming one, changing what `--out` accepts — moves no name and no hash, and the diff cannot see it. Flag-level contract changes are therefore documented here, in the table above, and are caught by review rather than by the tool. The `--json` flag died with the machine report it rendered, and the deprecated `--bead-cli` no-op died with the tracker-CLI seam: neither is parsed, and supplying either is an unknown-flag error.
 
 ## Pre-flight
 
