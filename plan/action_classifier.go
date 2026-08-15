@@ -68,8 +68,8 @@ func classifyMatch(m Match, graph SpecGraph) (actions []Action, claimed []string
 			continue
 		}
 
-		if rec.BeadStatus == "open" && rec.After == change.NewHash {
-			continue // already tracked: partial-run resurfacing, not new work
+		if rec.After != "" && rec.After == change.NewHash {
+			continue // already tracked: partial-run resurfacing, not new work — whatever the pairing's status
 		}
 
 		switch rec.BeadStatus {

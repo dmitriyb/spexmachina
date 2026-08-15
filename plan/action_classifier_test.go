@@ -208,6 +208,26 @@ func TestClassifyUnmatched_GateDropsNonAdmittedNodeTypes(t *testing.T) {
 	}
 }
 
+// TestClassifyUnmatched_ApiYieldsNoActions pins the api invariant (arch_action_classifier.md,
+// "That invariant lives only in the absence of an `api` entry in the bead-producing set, so it
+// is pinned by a dedicated test rather than by the shape of the code") over both change types
+// the gate is what makes the difference for: added and modified.
+func TestClassifyUnmatched_ApiYieldsNoActions(t *testing.T) {
+	f := newClassifierFixture()
+	for _, ct := range []merkle.ChangeType{merkle.Added, merkle.Modified} {
+		t.Run(ct.String(), func(t *testing.T) {
+			u := Unmatched{Change: change("api-1", "plan", "api", ct, "old", "new")}
+			actions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if len(actions) != 0 {
+				t.Fatalf("want 0 actions for an api change, got %+v", actions)
+			}
+		})
+	}
+}
+
 func TestClassifyUnmatched_DataFlowAndMultiComponentTestSectionAdmitted(t *testing.T) {
 	f := newClassifierFixture()
 	u := []Unmatched{
@@ -337,14 +357,19 @@ func TestClassifyMatched_RefusalIsTotal_NamesEveryClaimedTask(t *testing.T) {
 
 func TestClassifyMatched_AlreadyTrackedYieldsNoAction(t *testing.T) {
 	f := newClassifierFixture()
-	c := change(f.CompX, "plan", "component", merkle.Modified, "old", "same")
-	m := Match{Change: c, Records: []Pairing{{TaskID: "spex-003", BeadStatus: "open", After: "same"}}}
-	actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
-	if err != nil {
-		t.Fatalf("err: %v", err)
-	}
-	if len(actions) != 0 {
-		t.Fatalf("want 0 actions, got %+v", actions)
+	statuses := []string{"open", "in_progress", "closed", ""}
+	for _, status := range statuses {
+		t.Run("status_"+status, func(t *testing.T) {
+			c := change(f.CompX, "plan", "component", merkle.Modified, "old", "same")
+			m := Match{Change: c, Records: []Pairing{{TaskID: "spex-003", BeadStatus: status, After: "same"}}}
+			actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if len(actions) != 0 {
+				t.Fatalf("want 0 actions, got %+v", actions)
+			}
+		})
 	}
 }
 
