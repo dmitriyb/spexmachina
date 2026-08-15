@@ -226,7 +226,7 @@ for suite in idempotency substitution; do
 done
 
 # ---- Pre-flight rejection tests --------------------------------------------
-# These exercise the changeset.json v2 gate (version + required fields).
+# These exercise the changeset.json v3 gate (version + required fields).
 # The adapter must exit non-zero AND print a recognizable error to stderr
 # WITHOUT writing receipts.
 
@@ -258,16 +258,16 @@ run_reject_case() {
 
 echo "== reject =="
 run_reject_case version_mismatch \
-    '{"version":3,"git_head":"x","proposal":"p","ops":[]}' \
-    "unsupported changeset version: 3"
+    '{"version":2,"git_head":"x","proposal":"p","ops":[]}' \
+    "unsupported changeset version: 2"
 run_reject_case missing_git_head \
-    '{"version":2,"proposal":"p","ops":[]}' \
+    '{"version":3,"proposal":"p","ops":[]}' \
     "missing required field: git_head"
 run_reject_case missing_proposal \
-    '{"version":2,"git_head":"x","ops":[]}' \
+    '{"version":3,"git_head":"x","ops":[]}' \
     "missing required field: proposal"
 run_reject_case missing_ops \
-    '{"version":2,"git_head":"x","proposal":"p"}' \
+    '{"version":3,"git_head":"x","proposal":"p"}' \
     "missing or malformed required field: ops"
 run_reject_case invalid_json \
     'not json at all' \

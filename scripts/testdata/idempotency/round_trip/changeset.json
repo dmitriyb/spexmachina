@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "git_head": "feedface00000001",
   "proposal": "test/round-trip",
   "ops": [
