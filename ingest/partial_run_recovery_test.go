@@ -7,9 +7,9 @@ import (
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 )
 
 // Tests for spec/ingest/test_partial_run_recovery.md. These drive the
@@ -42,11 +42,11 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed-Old"},
 	)
 
-	run1CS := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
-		{OpID: "op-3", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
-		{OpID: "op-4", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/Old"},
+	run1CS := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
+		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
+		{OpID: "op-3", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
+		{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/Old"},
 	}}
 	run1RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
@@ -80,10 +80,10 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 	}
 	run1Bytes := journalBytes(t, specDir)
 
-	// Run 2: emit re-emits C fresh (a new commit head, same identity
+	// Run 2: plan re-emits C fresh (a new commit head, same identity
 	// hash). Adapter creates it, status complete.
-	run2CS := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run2head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run2head:op-1")},
+	run2CS := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "run2head", Proposal: "p1", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run2head:op-1")},
 	}}
 	run2RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: false},
@@ -144,11 +144,11 @@ func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 	// This scenario's own dead Run 1 emitted only these three creates (it
 	// never touched br-old, unlike TwoRunSequence's four-op Run 1); this
 	// is a re-run of the adapter with that identical changeset, not a
-	// fresh emit, so op ids and labels match exactly.
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
-		{OpID: "op-3", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
+	// fresh plan run, so op ids and labels match exactly.
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "run1head", Proposal: "p1", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
+		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
+		{OpID: "op-3", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA", WasExisting: true},
@@ -196,8 +196,8 @@ func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 	graph := newFakeSpecGraph()
 	graph.nodes[hexC] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "hC", NodeType: "component"}
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:g:op-1")},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:g:op-1")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC"},
