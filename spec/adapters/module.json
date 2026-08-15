@@ -63,14 +63,14 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply retarget ops",
-      "description": "A retarget op names an existing task in its target ref and the adapter translates it to the tracker's update surface — for br, br update: add the op's spex:<eid> event label to the task, and add any deps the task does not already carry. Deps are add-only; nothing is removed, because stale deps are closed by their own lifecycle. Update operations are naturally idempotent, so retarget needs no pre-create probe: re-applying the same retarget adds nothing new. The receipt records op_id, status and the target bead_id; was_existing does not apply to retargets."
+      "description": "A retarget op names an existing task in its target ref and the adapter translates it to the tracker's mutation surface: add the op's spex:<eid> event label to the task, and add any deps the task does not already carry. The two halves need not be one call — for br the label goes through br update and each dep through br dep add, because br update carries no dep flag — and a dep edge is named in the tracker's own dep-type vocabulary, not the changeset's spelling. Deps are add-only; nothing is removed, because stale deps are closed by their own lifecycle. Both calls are naturally idempotent, so retarget needs no pre-create probe: re-applying the same retarget adds nothing new. The receipt records op_id, status and the target bead_id; was_existing does not apply to retargets."
     }
   ],
   "components": [
     {
       "id": "7f2e76cecab3",
       "name": "BrReferenceAdapter",
-      "description": "Bash + jq implementation of the adapter contract targeting br (beads_rust). Ships at scripts/apply-br.sh. Reads changeset.json, resolves refs via the substitution table, runs br create/list/show/update/close for each op — a retarget op becomes br update adding the new event label and any missing deps — and writes receipts.json. Integration-tested against a real br sandbox via scripts/apply-br_test.sh.",
+      "description": "Bash + jq implementation of the adapter contract targeting br (beads_rust). Ships at scripts/apply-br.sh. Reads changeset.json, resolves refs via the substitution table, runs br create/list/show/update/dep add/close for each op — a retarget op becomes a br update adding the new event label plus one br dep add per missing dep — and writes receipts.json. Integration-tested against a real br sandbox via scripts/apply-br_test.sh.",
       "content": "arch_br_reference_adapter.md",
       "implements": [
         "4277dbd90063",
