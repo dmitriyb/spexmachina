@@ -200,8 +200,10 @@ func latestTaskBearingBracket(history []Event) (eid, event, before, after string
 	if receipt.Event == "task_retargeted" {
 		if orig, ok := origTaskCreated[receipt.TaskID]; ok {
 			for i, ce := range changeEvents {
-				if ce.EID == orig.For && i > 0 {
-					before = changeEvents[i-1].GitHead
+				if ce.EID == orig.For {
+					if i > 0 && ce.Event != "added" {
+						before = changeEvents[i-1].GitHead
+					}
 					break
 				}
 			}

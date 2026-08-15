@@ -205,6 +205,41 @@ func TestREQ_76fe608c3a40_S1d_RetargetedTaskWidensBracket(t *testing.T) {
 	}
 }
 
+// --- S1d resurrected: a retargeted task born on a resurrection add still
+// has a null before_head, not the prior removal's git_head ---
+
+func TestREQ_76fe608c3a40_S1d_RetargetedResurrectedAdd_BeforeHeadNull(t *testing.T) {
+	specDir := buildContextFixture(t,
+		changeLine("added", "e1g", "112233445566", "Ghost", "component", "alpha", "", "g1", "beefg001", ""),
+		changeLine("removed", "e5g", "112233445566", "Ghost", "component", "alpha", "g1", "", "cafe1111", "some-proposal"),
+		changeLine("added", "e6g", "112233445566", "Ghost", "component", "alpha", "", "g6", "cafe2222", ""),
+		taskCreatedLine("e6g", "", "abc-999"),
+		changeLine("modified", "e7g", "112233445566", "Ghost", "component", "alpha", "g6", "g7", "cafe3333", ""),
+		taskRetargetedLine("e7g", "abc-999"),
+	)
+
+	result, err := ResolveContext(specDir, "112233445566")
+	if err != nil {
+		t.Fatalf("ResolveContext: %v", err)
+	}
+	if result.Removed {
+		t.Fatalf("want live result (re-added), got Removed=true: %+v", result)
+	}
+
+	if result.Eid != "e7g" {
+		t.Errorf("Eid = %q, want e7g (the latest retargeted event)", result.Eid)
+	}
+	if result.Event != "modified" {
+		t.Errorf("Event = %q, want modified", result.Event)
+	}
+	if result.AfterHead != "cafe3333" {
+		t.Errorf("AfterHead = %q, want cafe3333", result.AfterHead)
+	}
+	if result.BeforeHead != "" {
+		t.Errorf("BeforeHead = %q, want empty — abc-999 was born on the resurrection add (e6g), which has no predecessor regardless of its position in the lineage", result.BeforeHead)
+	}
+}
+
 // --- S1c: live node with no task-bearing event serves a null bracket ---
 
 func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
