@@ -8,10 +8,10 @@
 // # Mode: normal (default)
 //
 // Reconciles the task journal from a paired changeset.json (typed by
-// emit) + receipts.json (typed by adapters). Pure function over local
+// plan) + receipts.json (typed by adapters). Pure function over local
 // files — no subprocesses, no tracker calls, no git calls:
 //
-//  1. Pre-flight: parse both files, changeset version == 2 / receipts
+//  1. Pre-flight: parse both files, changeset version == 3 / receipts
 //     version == 1 check, op_id set equality between changeset and
 //     receipts.
 //  2. Reconciler.Apply: construct the batch's journal lines in memory —
@@ -25,8 +25,8 @@
 //     SnapshotSaver's gate), then commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
-//     leave the snapshot untouched so the next emit recomputes against
-//     the unchanged baseline.
+//     leave the snapshot untouched so the next spex plan recomputes
+//     against the unchanged baseline.
 //  4. Emit a JSON Summary to stdout.
 //
 // # Mode: refresh
@@ -62,7 +62,7 @@
 // A partial top-level status means some ops succeeded and some did not.
 // The journal reflects the partial state (events and receipts for ok
 // ops, nothing for error ops). The snapshot is intentionally NOT
-// written so the next `spex emit` diffs the spec against the original
+// written so the next `spex plan` diffs the spec against the original
 // baseline and resurfaces the unfinished ops through the idempotency
 // path. This is the "unfinished operations resurface" mechanism.
 //

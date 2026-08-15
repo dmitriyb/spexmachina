@@ -11,9 +11,9 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -102,7 +102,7 @@ type RefreshHandler struct {
 	SnapshotPath string
 	// Changeset and Receipts are the (required, empty) artifacts the
 	// caller parsed. Any ops present refuse the run.
-	Changeset *emit.Changeset
+	Changeset *plan.Changeset
 	Receipts  *adapters.Receipts
 	// GitHead is the optional --git-head value. Nil records the value's
 	// absence (a JSON null on the refresh receipt); a non-nil value is
