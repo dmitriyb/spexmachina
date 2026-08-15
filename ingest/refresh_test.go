@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 )
 
 // refreshFixture bundles the state a RefreshHandler test needs: a spec
@@ -129,7 +129,7 @@ func buildFixtureTree(t *testing.T, specDir string) *merkle.Node {
 func (fx refreshFixture) handler() *RefreshHandler {
 	return &RefreshHandler{
 		SnapshotPath: fx.snapPath,
-		Changeset:    &emit.Changeset{Version: emit.ChangesetVersion},
+		Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
 		Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
 		Now:          refreshClock,
 	}
@@ -893,7 +893,7 @@ func TestRefresh_NonEmptyArtifactsRefused(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
 	h := fx.handler()
-	h.Changeset = &emit.Changeset{Version: emit.ChangesetVersion, Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate}}}
+	h.Changeset = &plan.Changeset{Version: plan.ChangesetVersion, Ops: []plan.Op{{OpID: "op-1", Type: plan.OpCreate}}}
 	if _, err := h.Apply(fx.specDir); !errors.Is(err, ErrRefreshNonEmptyArtifacts) {
 		t.Fatalf("non-empty changeset: want ErrRefreshNonEmptyArtifacts, got %v", err)
 	}
@@ -1169,7 +1169,7 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 
 			h := &RefreshHandler{
 				SnapshotPath: snapPath,
-				Changeset:    &emit.Changeset{Version: emit.ChangesetVersion},
+				Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
 				Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
 				Now:          refreshClock,
 			}

@@ -11,10 +11,10 @@ import (
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/cli"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/ingest"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -85,16 +85,16 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
 
-	cs := emit.Changeset{
-		Version:  emit.ChangesetVersion,
+	cs := plan.Changeset{
+		Version:  plan.ChangesetVersion,
 		GitHead:  "deadbeefcafe",
 		Proposal: "test-proposal",
-		Ops: []emit.Op{{
+		Ops: []plan.Op{{
 			OpID:         "op-0001",
-			Type:         emit.OpCreate,
+			Type:         plan.OpCreate,
 			SpecNodeKind: "component",
 			SpecNodeID:   compID,
-			Idempotency:  &emit.Idem{Label: "spex:1"},
+			Idempotency:  &plan.Idem{Label: "spex:1"},
 			Title:        "Comp1",
 		}},
 	}
@@ -340,9 +340,9 @@ func TestIngestCommand_MalformedReceiptsJSON_Exits1(t *testing.T) {
 func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
-	cs := emit.Changeset{
+	cs := plan.Changeset{
 		Version: 99,
-		Ops:     []emit.Op{},
+		Ops:     []plan.Op{},
 	}
 	writeJSON(t, f.changesetPath, cs)
 
@@ -371,23 +371,23 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
-	cs := emit.Changeset{
-		Version:  emit.ChangesetVersion,
+	cs := plan.Changeset{
+		Version:  plan.ChangesetVersion,
 		GitHead:  "deadbeefcafe",
 		Proposal: "test-proposal",
-		Ops: []emit.Op{
+		Ops: []plan.Op{
 			{
 				OpID:         "op-0001",
-				Type:         emit.OpCreate,
+				Type:         plan.OpCreate,
 				SpecNodeKind: "component",
 				SpecNodeID:   f.compID,
-				Idempotency:  &emit.Idem{Label: "spex:" + f.compID},
+				Idempotency:  &plan.Idem{Label: "spex:" + f.compID},
 				Title:        "Comp1",
 			},
 			{
 				OpID:   "op-0002",
-				Type:   emit.OpClose,
-				Target: &emit.Ref{Kind: emit.RefBead, BeadID: "bead-ghost"},
+				Type:   plan.OpClose,
+				Target: &plan.Ref{Kind: plan.RefBead, BeadID: "bead-ghost"},
 				Reason: "Spec node removed: alpha/Ghost",
 			},
 		},
@@ -519,7 +519,7 @@ func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 
 	dir := filepath.Dir(f.changesetPath)
 	emptyCS := filepath.Join(dir, "refresh-changeset.json")
-	writeJSON(t, emptyCS, emit.Changeset{Version: emit.ChangesetVersion})
+	writeJSON(t, emptyCS, plan.Changeset{Version: plan.ChangesetVersion})
 	emptyRC := filepath.Join(dir, "refresh-receipts.json")
 	writeJSON(t, emptyRC, adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete})
 	return f, emptyCS, emptyRC
@@ -682,7 +682,7 @@ func TestIngestCommand_RefreshMode_MissingSnapshotExits1(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 	dir := filepath.Dir(f.changesetPath)
 	emptyCS := filepath.Join(dir, "refresh-changeset.json")
-	writeJSON(t, emptyCS, emit.Changeset{Version: emit.ChangesetVersion})
+	writeJSON(t, emptyCS, plan.Changeset{Version: plan.ChangesetVersion})
 	emptyRC := filepath.Join(dir, "refresh-receipts.json")
 	writeJSON(t, emptyRC, adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete})
 

@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/ingest"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
@@ -125,21 +124,10 @@ Exit codes:
 // non-empty artifacts) and IO errors map to input-error exit code 1,
 // per arch_ingest_command.md. An empty gitHead records the refresh
 // receipt's git_head as absent, per RefreshHandler's GitHead contract.
-//
-// RefreshHandler still takes *emit.Changeset — it only ever inspects
-// len(Changeset.Ops) to enforce the empty-artifacts precondition, so a
-// same-length stand-in preserves that check exactly. TODO(bead:spexmachina-f6eh.31):
-// drop this bridge once IngestCommand loads changeset.json as
-// plan.Changeset (v3) end to end, including RefreshHandler's own field.
 func runRefreshMode(cmd *cobra.Command, specDir string, cs plan.Changeset, rc adapters.Receipts, gitHead string) error {
 	h := &ingest.RefreshHandler{
-		Changeset: &emit.Changeset{
-			Version:  cs.Version,
-			GitHead:  cs.GitHead,
-			Proposal: cs.Proposal,
-			Ops:      make([]emit.Op, len(cs.Ops)),
-		},
-		Receipts: &rc,
+		Changeset: &cs,
+		Receipts:  &rc,
 	}
 	if gitHead != "" {
 		h.GitHead = &gitHead
@@ -159,12 +147,9 @@ func runRefreshMode(cmd *cobra.Command, specDir string, cs plan.Changeset, rc ad
 	return enc.Encode(sum)
 }
 
-// loadChangeset parses changeset.json as plan.Changeset — Reconciler's
-// input type. IngestCommand still gates on emit.ChangesetVersion (2) in
-// preflightPair below rather than plan.ChangesetVersion (3): full v3
-// acceptance (retarget ops, the absorbed array) is IngestCommand's own
-// migration, not this bead's. plan.Op's wire shape is a superset of
-// emit.Op's, so a v2 document unmarshals into it identically either way.
+// loadChangeset parses changeset.json as plan.Changeset (v3) — the same
+// type Reconciler and RefreshHandler consume, so no bridging conversion
+// sits between the file and either pathway.
 func loadChangeset(path string) (plan.Changeset, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -194,8 +179,8 @@ func loadReceipts(path string) (adapters.Receipts, error) {
 // Either side missing an op is a contract violation by plan or the
 // adapter — input error, not invariant failure.
 func preflightPair(cs plan.Changeset, rc adapters.Receipts) error {
-	if cs.Version != emit.ChangesetVersion {
-		return fmt.Errorf("ingest: changeset version must be %d, got %d", emit.ChangesetVersion, cs.Version)
+	if cs.Version != plan.ChangesetVersion {
+		return fmt.Errorf("ingest: changeset version must be %d, got %d", plan.ChangesetVersion, cs.Version)
 	}
 	if rc.Version != adapters.ReceiptsVersion {
 		return fmt.Errorf("ingest: receipts version must be %d, got %d", adapters.ReceiptsVersion, rc.Version)
