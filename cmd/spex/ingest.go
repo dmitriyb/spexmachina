@@ -21,7 +21,7 @@ func newIngestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ingest",
 		Short: "Reconcile the task journal and save snapshot from a changeset+receipts pair",
-		Long: `Ingest reads a changeset.json (produced by spex emit) and the
+		Long: `Ingest reads a changeset.json (produced by spex plan) and the
 receipts.json an adapter wrote after applying it, reconciles the task
 journal (spec/.history.jsonl), and writes spec/.snapshot.json when the
 run is complete.
