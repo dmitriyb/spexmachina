@@ -50,6 +50,8 @@ const (
 
 	fixtureTaskReceipt = `{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}`
 
+	fixtureTaskRetargeted = `{"event":"task_retargeted","for":"cafe1234:op-9","task_id":"spexmachina-abc"}`
+
 	fixtureRegisteredEvent = `{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage",
  "proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234"}`
 
@@ -69,6 +71,7 @@ func TestFR7_S1_FixturesPass(t *testing.T) {
 	}{
 		{"change event", fixtureChangeEvent},
 		{"task receipt", fixtureTaskReceipt},
+		{"task retargeted receipt", fixtureTaskRetargeted},
 		{"registered event", fixtureRegisteredEvent},
 		{"epic receipt", fixtureEpicReceipt},
 		{"refresh receipt", fixtureRefreshReceipt},
@@ -168,6 +171,32 @@ func TestFR7_S6_TaskReceiptExactlyOneReferent(t *testing.T) {
 		doc := `{"event":"task_created","task_id":"spexmachina-abc"}`
 		if err := validateLine(t, sch, doc); err == nil {
 			t.Fatal("expected validation error when neither for nor proposal is present")
+		}
+	})
+}
+
+// --- S6c: task_retargeted takes the strict shape only ---
+
+func TestFR7_S6c_TaskRetargetedStrictShape(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	t.Run("fixture passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureTaskRetargeted); err != nil {
+			t.Fatalf("task_retargeted fixture should pass: %v", err)
+		}
+	})
+
+	t.Run("omitting for fails", func(t *testing.T) {
+		doc := `{"event":"task_retargeted","task_id":"spexmachina-abc"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for task_retargeted omitting for")
+		}
+	})
+
+	t.Run("proposal in place of for fails", func(t *testing.T) {
+		doc := `{"event":"task_retargeted","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-abc"}`
+		if err := validateLine(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for task_retargeted carrying proposal instead of for")
 		}
 	})
 }
@@ -394,8 +423,8 @@ func TestFR7_BeadMapSchemaSelfContainedRefs(t *testing.T) {
 	}
 
 	oneOf, ok := raw["oneOf"].([]any)
-	if !ok || len(oneOf) != 4 {
-		t.Fatalf("top-level oneOf should list 4 line shapes, got %v", raw["oneOf"])
+	if !ok || len(oneOf) != 5 {
+		t.Fatalf("top-level oneOf should list 5 line shapes, got %v", raw["oneOf"])
 	}
 	for _, entry := range oneOf {
 		m := entry.(map[string]any)
