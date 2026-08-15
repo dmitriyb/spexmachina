@@ -19,6 +19,10 @@ import "github.com/dmitriyb/spexmachina/schema"
 type SpecGraph struct {
 	byName map[string]moduleEntry
 	byID   map[string]moduleEntry
+	// projectReqs indexes project.json's requirements by id — Resolver's
+	// priority walk (implements -> preq_id -> priority) is the only reader;
+	// nothing else in the package needs a project requirement's fields.
+	projectReqs map[string]schema.Requirement
 }
 
 // moduleEntry pairs a module's project.json declaration (id, name,
@@ -31,11 +35,14 @@ type moduleEntry struct {
 // NewSpecGraph indexes a parsed project and its modules' specs, keyed by
 // module identity hash exactly as the caller reads modules off disk.
 func NewSpecGraph(proj schema.Project, specs map[string]schema.ModuleSpec) SpecGraph {
-	g := SpecGraph{byName: map[string]moduleEntry{}, byID: map[string]moduleEntry{}}
+	g := SpecGraph{byName: map[string]moduleEntry{}, byID: map[string]moduleEntry{}, projectReqs: map[string]schema.Requirement{}}
 	for _, mod := range proj.Modules {
 		entry := moduleEntry{Module: mod, Spec: specs[mod.ID]}
 		g.byID[mod.ID] = entry
 		g.byName[mod.Name] = entry
+	}
+	for _, req := range proj.Requirements {
+		g.projectReqs[req.ID] = req
 	}
 	return g
 }
@@ -48,6 +55,13 @@ func (g SpecGraph) moduleByName(name string) (moduleEntry, bool) {
 func (g SpecGraph) moduleByID(id string) (moduleEntry, bool) {
 	e, ok := g.byID[id]
 	return e, ok
+}
+
+// projectRequirement resolves one project.json requirement by id — the
+// last link in Resolver's implements -> preq_id -> priority chain.
+func (g SpecGraph) projectRequirement(id string) (schema.Requirement, bool) {
+	r, ok := g.projectReqs[id]
+	return r, ok
 }
 
 func findComponent(spec schema.ModuleSpec, id string) (schema.Component, bool) {
@@ -75,4 +89,13 @@ func findTestSection(spec schema.ModuleSpec, id string) (schema.TestSection, boo
 		}
 	}
 	return schema.TestSection{}, false
+}
+
+func findModuleRequirement(spec schema.ModuleSpec, id string) (schema.ModuleRequirement, bool) {
+	for _, r := range spec.Requirements {
+		if r.ID == id {
+			return r, true
+		}
+	}
+	return schema.ModuleRequirement{}, false
 }
