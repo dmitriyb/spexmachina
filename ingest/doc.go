@@ -25,8 +25,8 @@
 //     SnapshotSaver's gate), then commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
-//     leave the snapshot untouched so the next emit recomputes against
-//     the unchanged baseline.
+//     leave the snapshot untouched so the next spex plan recomputes
+//     against the unchanged baseline.
 //  4. Emit a JSON Summary to stdout.
 //
 // # Mode: refresh

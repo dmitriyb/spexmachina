@@ -12,8 +12,8 @@ import (
 
 // Saver writes spec/.snapshot.json from the current merkle tree, gated
 // on the receipts top-level status. Partial runs leave the snapshot
-// untouched so the next emit diffs against the original baseline and
-// resurfaces unfinished ops through the idempotency path.
+// untouched so the next spex plan diffs against the original baseline
+// and resurfaces unfinished ops through the idempotency path.
 type Saver struct {
 	// SpecDir is the spec root passed to merkle.BuildTree. Defaults to
 	// "./spec" when empty.
