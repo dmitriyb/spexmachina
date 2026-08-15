@@ -145,6 +145,22 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 	}
 }
 
+// TestResolveDeps_RetargetUnresolvableDepIsError pins S6's last bullet: "the
+// retarget path gets no laxer resolution than the create path." ResolveDeps
+// is the identical function call for a retarget's freshly recomputed deps as
+// for a create's (see Builder.retargetOp), so a dep neither in-batch nor
+// tracked by the fold is a plan error regardless of which action shape
+// produced the DepSpecNodeIDs list.
+func TestResolveDeps_RetargetUnresolvableDepIsError(t *testing.T) {
+	_, err := ResolveDeps([]string{"ghost"}, map[string]string{}, fakeFold{})
+	if err == nil {
+		t.Fatal("want error for a retarget dep that is neither in-batch nor tracked by the fold")
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Fatalf("error should name the spec_node_id: %v", err)
+	}
+}
+
 // --- ResolveEpicAction: fold vs. registration precedence ---
 
 func TestResolveEpicAction_FoldPairingSkipsCreate(t *testing.T) {
