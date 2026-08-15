@@ -347,6 +347,42 @@ func TestBuild_UnresolvableDepIsError(t *testing.T) {
 	}
 }
 
+// --- Retarget dep unresolvable is a plan error (S6) ---
+
+// TestBuild_RetargetUnresolvableDepIsError pins S6's last bullet: "the
+// retarget path gets no laxer resolution than the create path." retargetOp
+// routes a retarget's freshly recomputed deps through the same ResolveDeps
+// call a create uses, so a dep neither in-batch nor tracked by the fold
+// must abort the whole build, exactly as TestBuild_UnresolvableDepIsError
+// pins for a create.
+func TestBuild_RetargetUnresolvableDepIsError(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		{
+			Type:           ActionRetarget,
+			BeadID:         "spexmachina-hun",
+			Module:         "m",
+			Node:           "X",
+			NodeType:       KindComponent,
+			SpecNodeID:     "x-node",
+			SpecHash:       "new-hash",
+			DepSpecNodeIDs: []string{"ghost"},
+			Reason:         "Spec node modified (retarget): m/X",
+		},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err == nil {
+		t.Fatal("want error for unresolvable retarget dep ghost, got nil")
+	}
+	if !strings.Contains(err.Error(), "ghost") {
+		t.Errorf("error must name the unresolvable spec_node_id ghost: %v", err)
+	}
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset: got %d ops", len(cs.Ops))
+	}
+}
+
 // --- Retarget op shape ---
 
 func TestBuild_RetargetOpShape(t *testing.T) {

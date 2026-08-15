@@ -90,9 +90,16 @@ func classifyMatch(m Match, graph SpecGraph) (actions []Action, claimed []string
 
 // classifyUnmatched applies the node-type gate to an added or modified
 // change with no existing pairing, admitting it as a fresh create or
-// dropping it silently.
+// dropping it silently. An unmatched removed change never yields an action
+// (arch_action_classifier.md's state transition table, "removed | no | no
+// action") — nothing tracks the node, so there is nothing to obsolete.
+// MatchNodes never routes a removed change into the unmatched list, but the
+// guard holds here too rather than resting on that upstream invariant alone.
 func classifyUnmatched(u Unmatched, graph SpecGraph) (Action, bool) {
 	change := u.Change
+	if change.Type == merkle.Removed {
+		return Action{}, false
+	}
 	if !gateAdmits(change, graph) {
 		return Action{}, false
 	}
