@@ -44,6 +44,35 @@ const (
 	RefOp   = "op"
 )
 
+// Action type vocabulary — ActionClassifier's answer for what happened to
+// a spec node (see spec/plan/arch_action_classifier.md, "State Transition
+// Table"). Distinct from the Op type vocabulary above: an ActionObsolete
+// becomes an OpClose at the builder, never an op literally named
+// "obsolete".
+const (
+	ActionCreate   = "create"
+	ActionObsolete = "obsolete"
+	ActionRetarget = "retarget"
+)
+
+// Type tiers control create-op ordering (spec/plan/flow_plan.md, step 5;
+// spec/plan/arch_topological_sorter.md, "Ordering Rules"). Within each
+// tier TopologicalSorter applies Kahn's algorithm with a lex-spec_node_id
+// tiebreak. Lower tiers emit first: the proposal epic, then components and
+// data_flows together, then multi-component test sections.
+const (
+	TierProposalEpic  = 0
+	TierFeatureOrFlow = 1
+	TierMultiCompTest = 2
+)
+
+// FallbackPriority is the priority a create op carries when the
+// implements -> preq_id -> priority chain cannot be walked
+// (spec/plan/flow_plan.md, "Error Paths": "Missing project requirement in
+// priority chain -> default priority 3, silently"). No error, no warning,
+// and nothing in the changeset marks the op.
+const FallbackPriority = 3
+
 // Label vocabulary the changeset and the external adapter agree on.
 // IdempotencyLabelPrefix names the eid-keyed label an adapter matches
 // before creating a bead; ObsoleteLabel and CommitLabelPrefix mark a
@@ -135,4 +164,43 @@ type Changeset struct {
 	Proposal string          `json:"proposal"`
 	Ops      []Op            `json:"ops"`
 	Absorbed []AbsorbedEntry `json:"absorbed"`
+}
+
+// Action is ActionClassifier's per-node verdict — the classifier ->
+// builder-chain shape spec/plan/flow_plan.md's "ActionClassifier -> the
+// builder chain" section names, tabulated in full by
+// spec/plan/arch_action_classifier.md's "Interface" table. It carries
+// spec-graph ids, never bead ids: Resolver classifies DepSpecNodeIDs into
+// Ref shapes three steps later in the same process, so this type crosses
+// no file boundary and no command seam.
+//
+// BeadID is the existing bead on an obsolete or retarget, empty on a
+// create. SpecHash is set on a create or retarget; OldBeadID is set on a
+// create that replaces an obsoleted bead. ChangeType ("modified" or
+// "removed") is set on an obsolete only. DepSpecNodeIDs is collected for
+// create and retarget actions only — an obsolete inherits its bead's
+// existing graph position.
+type Action struct {
+	Type           string
+	BeadID         string
+	Module         string
+	Node           string
+	NodeType       string
+	SpecNodeID     string
+	SpecHash       string
+	OldBeadID      string
+	DepSpecNodeIDs []string
+	ChangeType     string
+	Reason         string
+}
+
+// OrderedOp pairs an Action with the provisional op_id TopologicalSorter
+// assigns it (spec/plan/arch_topological_sorter.md, "Interface").
+// IdempotencyLabeler and Resolver consume []OrderedOp plus the sorter's
+// spec_node_id-to-op_id map; ChangesetBuilder keeps the order and
+// discards both, renumbering every op itself once the retarget and close
+// ops are counted.
+type OrderedOp struct {
+	OpID   string
+	Action Action
 }

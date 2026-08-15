@@ -52,9 +52,11 @@
 //
 // This package is intentionally minimal at this stage: the wire-format
 // Changeset / Op / Ref / Idem / AbsorbedEntry types — the JSON
-// changeset.json v3 composes and the external adapter reads — plus the
-// op-kind, spec_node_kind, ref-kind and label vocabularies, and the schema
-// version constant. Component-level behavior — BeadReader, NodeMatcher,
+// changeset.json v3 composes and the external adapter reads — the
+// classifier -> builder-chain Action / OrderedOp shapes, plus the op-kind,
+// action-type, spec_node_kind, ref-kind and label vocabularies, the tier
+// and fallback-priority constants, and the schema version constant.
+// Component-level behavior — BeadReader, NodeMatcher,
 // ActionClassifier, TopologicalSorter, IdempotencyLabeler, Resolver,
 // ChangesetBuilder, PlanCommand — is owned by the per-component beads
 // (spexmachina-f6eh.19/.20/.21/.22/.23/.25/.26/.27), which list this bead

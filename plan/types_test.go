@@ -168,12 +168,13 @@ func TestOp_RetargetCanonicalFieldOrder(t *testing.T) {
 		Reason:     "Spec node modified (retarget): plan/BeadReader",
 	}
 	got := encode(t, op)
-	// Canonical order per arch_changeset_builder.md's "Canonical Output"
-	// section is fixed across every op kind (op_id, type, spec_node_kind,
-	// spec_node_id, spec_hash, idempotency, parent, deps, priority, title,
-	// body, target, labels, reason) — deps precedes target for a retarget
-	// op even though the informal "Retarget op shape" table lists target
-	// first.
+	// Field order follows arch_changeset_builder.md's "Canonical Output"
+	// section, which fixes one order across every op kind (op_id, type,
+	// spec_node_kind, spec_node_id, spec_hash, idempotency, parent, deps,
+	// priority, title, body, target, labels, reason) — deps precedes
+	// target. Other renderings of a retarget op in spec/plan disagree with
+	// each other on target-vs-deps ordering; see
+	// drifts/drift-spexmachina-f6eh.13.json.
 	fieldOrder(t, got, "retarget op",
 		"op_id", "type", "spec_node_id", "spec_hash", "deps", "target", "labels", "reason",
 	)
@@ -339,5 +340,79 @@ func TestIdem_OmittedOnOpWithoutOne(t *testing.T) {
 	got := encode(t, op)
 	if strings.Contains(got, `"idempotency"`) {
 		t.Fatalf("op without an Idem must omit idempotency: %s", got)
+	}
+}
+
+func TestActionTypeConstants(t *testing.T) {
+	want := map[string]string{
+		"ActionCreate":   "create",
+		"ActionObsolete": "obsolete",
+		"ActionRetarget": "retarget",
+	}
+	got := map[string]string{
+		"ActionCreate":   ActionCreate,
+		"ActionObsolete": ActionObsolete,
+		"ActionRetarget": ActionRetarget,
+	}
+	for k, v := range want {
+		if got[k] != v {
+			t.Fatalf("%s: got %q want %q", k, got[k], v)
+		}
+	}
+}
+
+func TestTierConstants_Ordered(t *testing.T) {
+	if !(TierProposalEpic < TierFeatureOrFlow && TierFeatureOrFlow < TierMultiCompTest) {
+		t.Fatalf("tiers must be strictly ascending: epic=%d feature_or_flow=%d multi_comp_test=%d",
+			TierProposalEpic, TierFeatureOrFlow, TierMultiCompTest)
+	}
+	if TierProposalEpic != 0 {
+		t.Fatalf("TierProposalEpic must be 0 (first tier emitted), got %d", TierProposalEpic)
+	}
+}
+
+func TestFallbackPriority_IsThree(t *testing.T) {
+	if FallbackPriority != 3 {
+		t.Fatalf("FallbackPriority: got %d want 3", FallbackPriority)
+	}
+}
+
+// TestAction_PreservesDepOrder pins DepSpecNodeIDs as a value slice, not a
+// set or map — Resolver and TopologicalSorter both rely on the order an
+// upstream step emitted being preserved.
+func TestAction_PreservesDepOrder(t *testing.T) {
+	a := Action{
+		Type:           ActionCreate,
+		SpecNodeID:     "x",
+		DepSpecNodeIDs: []string{"c", "a", "b"},
+	}
+	if got := a.DepSpecNodeIDs; got[0] != "c" || got[1] != "a" || got[2] != "b" {
+		t.Fatalf("DepSpecNodeIDs order not preserved: %v", got)
+	}
+}
+
+// TestAction_ObsoleteCarriesBeadIDAndChangeType matches
+// arch_action_classifier.md's Interface table: bead id is set on an
+// obsolete or retarget, empty on a create; change_type is set on an
+// obsolete only.
+func TestAction_ObsoleteCarriesBeadIDAndChangeType(t *testing.T) {
+	a := Action{
+		Type:       ActionObsolete,
+		BeadID:     "spexmachina-abc",
+		ChangeType: "removed",
+		Reason:     "Spec node removed: plan/BeadReader",
+	}
+	if a.BeadID == "" || a.ChangeType == "" {
+		t.Fatalf("obsolete action must carry bead id and change type: %+v", a)
+	}
+}
+
+func TestOrderedOp_PairsActionWithOpID(t *testing.T) {
+	o := OrderedOp{
+		OpID:   "op-0007",
+		Action: Action{SpecNodeID: "x"},
+	}
+	if o.OpID != "op-0007" || o.Action.SpecNodeID != "x" {
+		t.Fatalf("OrderedOp wiring wrong: %+v", o)
 	}
 }
