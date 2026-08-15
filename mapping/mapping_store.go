@@ -26,9 +26,10 @@ var ErrNotFound = errors.New("map: not found")
 var nodeHashPattern = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
 // Event is one line of the task journal (spec/.history.jsonl): a change
-// event (added/removed/modified), a task receipt (task_created/task_closed)
-// or a refresh receipt. Fields are populated according to the line's shape —
-// see spec/map/arch_mapping_store.md for the full field table.
+// event (added/removed/modified), a task receipt
+// (task_created/task_closed/task_retargeted) or a refresh receipt. Fields
+// are populated according to the line's shape — see
+// spec/map/arch_mapping_store.md for the full field table.
 type Event struct {
 	Event    string   `json:"event"`
 	EID      string   `json:"eid,omitempty"`
@@ -213,8 +214,12 @@ func (s *MappingStore) Parse() ([]Event, error) {
 // folds the epic keyed by the slug the registered event carries, sourced
 // from that event. Legacy proposal-epic receipts (task_created carrying
 // proposal instead of for) fold the same way without any change or
-// registered event to reference. A task_created whose for names no known
-// eid is reported as a dangling receipt rather than dropped or failed on.
+// registered event to reference. task_retargeted is task-bearing exactly as
+// task_created is: latest-wins moves the pairing's sourcing event forward
+// to the retargeted event's referent while the task id stays put — a
+// refresh receipt is not task-bearing and moves nothing. A task_created or
+// task_retargeted whose for names no known eid is reported as a dangling
+// receipt rather than dropped or failed on.
 func fold(events []Event) Fold {
 	byEID := make(map[string]Event, len(events))
 	entries := make(map[string]FoldEntry)
@@ -229,7 +234,7 @@ func fold(events []Event) Fold {
 			}
 		case "registered":
 			byEID[ev.EID] = ev
-		case "task_created":
+		case "task_created", "task_retargeted":
 			if ev.Proposal != "" {
 				entries[ev.Proposal] = FoldEntry{Key: ev.Proposal, TaskID: ev.TaskID, Source: ev}
 				continue
@@ -314,7 +319,7 @@ func (s *MappingStore) History(node string) ([]Event, error) {
 				eids[ev.EID] = true
 				history = append(history, ev)
 			}
-		case "task_created", "task_closed":
+		case "task_created", "task_closed", "task_retargeted":
 			if ev.For != "" && eids[ev.For] {
 				history = append(history, ev)
 			}
@@ -399,7 +404,7 @@ func encodeLine(ev Event) ([]byte, error) {
 		return json.Marshal(registeredEventLine{
 			Event: ev.Event, EID: ev.EID, Proposal: ev.Proposal, GitHead: ev.GitHead,
 		})
-	case "task_created", "task_closed":
+	case "task_created", "task_closed", "task_retargeted":
 		return json.Marshal(taskReceiptLine{
 			Event: ev.Event, TaskID: ev.TaskID, For: ev.For, Proposal: ev.Proposal,
 		})

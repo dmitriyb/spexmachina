@@ -56,6 +56,23 @@ func taskClosedLine(forEID, taskID string) string {
 	return fmt.Sprintf(`{"event":"task_closed","for":%q,"task_id":%q}`, forEID, taskID)
 }
 
+// taskRetargetedLine builds a task_retargeted receipt pairing to the
+// retarget's own modified event.
+func taskRetargetedLine(forEID, taskID string) string {
+	return fmt.Sprintf(`{"event":"task_retargeted","for":%q,"task_id":%q}`, forEID, taskID)
+}
+
+// refreshLine builds a refresh receipt naming the eids of the change
+// events absorbed. gitHead of "" serialises as JSON null (a run with no
+// --git-head).
+func refreshLine(gitHead string, absorbed []string) string {
+	items := make([]string, len(absorbed))
+	for i, a := range absorbed {
+		items[i] = fmt.Sprintf("%q", a)
+	}
+	return fmt.Sprintf(`{"event":"refresh","git_head":%s,"absorbed":[%s]}`, jsonField(gitHead), strings.Join(items, ","))
+}
+
 // registeredLine builds a registered event opening a proposal's lifecycle.
 func registeredLine(eid, proposal, gitHead string) string {
 	return fmt.Sprintf(`{"event":"registered","eid":%q,"proposal":%q,"git_head":%q}`, eid, proposal, gitHead)
@@ -183,6 +200,36 @@ func TestREQ_934d627f0e90_LookupByTaskID(t *testing.T) {
 	}
 	if !reflect.DeepEqual(byHash, byTask) {
 		t.Fatalf("hash and task-id lookups diverged: %+v vs %+v", byHash, byTask)
+	}
+}
+
+// --- task_retargeted is task-bearing and moves the sourcing event ---
+
+func TestREQ_76fe608c3a40_FoldTaskRetargetedMovesSourcingEvent(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "eeeeeeeeeeee", "CompW", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-C"),
+		changeLine("modified", "e2", "eeeeeeeeeeee", "CompW", "component", "modA", "h1", "h2", "g2", "p2"),
+		taskRetargetedLine("e2", "task-C"),
+		changeLine("modified", "e3", "eeeeeeeeeeee", "CompW", "component", "modA", "h2", "h3", "g3", "p3"),
+		taskRetargetedLine("e3", "task-C"),
+		refreshLine("g4", []string{"e3"}),
+	})
+
+	store := NewMappingStore(dir)
+	entry, err := store.Get("eeeeeeeeeeee")
+	if err != nil {
+		t.Fatalf("Get: %v", err)
+	}
+	if entry.TaskID != "task-C" {
+		t.Fatalf("TaskID: want task-C unchanged across retargets, got %s", entry.TaskID)
+	}
+	if entry.Source.EID != "e3" {
+		t.Fatalf("Source: want sourcing event moved forward to the latest modified e3, got eid %s", entry.Source.EID)
+	}
+	if entry.Source.After == nil || *entry.Source.After != "h3" {
+		t.Fatalf("Source.After: want h3 (the retargeted state's hash), got %+v", entry.Source.After)
 	}
 }
 
@@ -447,6 +494,29 @@ func TestREQ_934d627f0e90_AppendLandsOnNonEmptyJournal(t *testing.T) {
 	}
 }
 
+func TestREQ_76fe608c3a40_AppendTaskRetargeted(t *testing.T) {
+	dir := t.TempDir()
+	store := NewMappingStore(dir)
+
+	batch := []Event{
+		{Event: "added", EID: "e1", Node: "ffffffffffff", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
+		{Event: "task_created", For: "e1", TaskID: "task-r"},
+		{Event: "modified", EID: "e2", Node: "ffffffffffff", Name: "Foo", NodeType: "component", Module: "modA", Before: strPtr("h1"), After: strPtr("h2"), GitHead: "g2", Proposal: "p1"},
+		{Event: "task_retargeted", For: "e2", TaskID: "task-r"},
+	}
+	if err := store.Append(batch); err != nil {
+		t.Fatalf("Append: %v", err)
+	}
+
+	f, err := store.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(f.Entries) != 1 || f.Entries[0].TaskID != "task-r" || f.Entries[0].Source.EID != "e2" {
+		t.Fatalf("want 1 entry TaskID task-r sourced from e2, got %+v", f.Entries)
+	}
+}
+
 // --- Deterministic order ---
 
 func TestREQ_934d627f0e90_DeterministicOrder(t *testing.T) {
@@ -628,6 +698,31 @@ func TestREQ_934d627f0e90_HistoryOldestFirst(t *testing.T) {
 		t.Fatalf("want 4 events (added, task_created, modified, task_created), got %d: %+v", len(history), history)
 	}
 	wantEvents := []string{"added", "task_created", "modified", "task_created"}
+	for i, want := range wantEvents {
+		if history[i].Event != want {
+			t.Fatalf("event %d: want %s, got %s", i, want, history[i].Event)
+		}
+	}
+}
+
+func TestREQ_76fe608c3a40_HistoryIncludesTaskRetargeted(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "eeeeeeeeeeee", "CompW", "component", "modA", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-C"),
+		changeLine("modified", "e2", "eeeeeeeeeeee", "CompW", "component", "modA", "h1", "h2", "g2", "p2"),
+		taskRetargetedLine("e2", "task-C"),
+	})
+
+	store := NewMappingStore(dir)
+	history, err := store.History("eeeeeeeeeeee")
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	wantEvents := []string{"added", "task_created", "modified", "task_retargeted"}
+	if len(history) != len(wantEvents) {
+		t.Fatalf("want %d events, got %d: %+v", len(wantEvents), len(history), history)
+	}
 	for i, want := range wantEvents {
 		if history[i].Event != want {
 			t.Fatalf("event %d: want %s, got %s", i, want, history[i].Event)
