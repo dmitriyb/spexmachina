@@ -2,16 +2,14 @@ package plan
 
 import "fmt"
 
-// Pairing is the fold's answer for one key — a spec node's identity hash, or
-// the proposal slug for the epic. Resolver's dep and parent resolution reads
-// the same shape either way: TaskID (and, for a dep, whether BeadStatus is
-// "closed") is all it consults.
-//
 // FoldLookup is Resolver's narrow view onto the journal fold
 // (spec/plan/arch_resolver.md, "Interface": "the fold is an equally narrow
 // surface: node key in, latest task-bearing pairing out"). PlanCommand
 // adapts the parsed journal fold onto this surface; tests substitute a
-// stand-in.
+// stand-in. Lookup's key is a spec node's identity hash, or the proposal
+// slug for the epic; of the returned Pairing, Resolver's dep and parent
+// resolution consults only TaskID (and, for a dep, whether BeadStatus is
+// "closed").
 type FoldLookup interface {
 	Lookup(key string) (Pairing, bool)
 }

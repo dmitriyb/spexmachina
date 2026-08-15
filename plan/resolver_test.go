@@ -413,22 +413,3 @@ func TestResolvePriority_DeterministicRegardlessOfImplementsOrder(t *testing.T) 
 		t.Errorf("got %d, want 1 regardless of implements order", got)
 	}
 }
-
-// --- Retarget takes no parent, no priority (S8) — a documentation test: the
-// two functions above are simply never called for a retarget action; assert
-// that omitting parent/priority resolution leaves the corresponding Op
-// fields at their zero value, which omitempty then elides from the JSON.
-
-func TestOp_RetargetShapeOmitsParentAndPriority(t *testing.T) {
-	op := Op{
-		OpID:       "op-3",
-		Type:       OpRetarget,
-		SpecNodeID: "abc123",
-	}
-	if op.Parent != nil {
-		t.Errorf("retarget op should carry no parent, got %+v", op.Parent)
-	}
-	if op.Priority != 0 {
-		t.Errorf("retarget op should carry no priority, got %d", op.Priority)
-	}
-}
