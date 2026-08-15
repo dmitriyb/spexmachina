@@ -1,0 +1,17 @@
+{
+  "version": 3,
+  "git_head": "cafe1234",
+  "proposal": "test/idempotency",
+  "ops": [
+    {
+      "op_id": "op-0004",
+      "type": "retarget",
+      "target": {"ref": "bead", "bead_id": "br-open"},
+      "labels": ["spex:cafe1234:op-4"],
+      "deps": [
+        {"ref": "bead", "bead_id": "br-dep1"},
+        {"ref": "bead", "bead_id": "br-dep2"}
+      ]
+    }
+  ]
+}

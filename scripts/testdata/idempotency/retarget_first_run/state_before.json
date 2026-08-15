@@ -1,0 +1,8 @@
+{
+  "issues": [
+    {"id":"br-open","title":"target task","status":"open","issue_type":"task","labels":[],"dependencies":[{"id":"br-dep1","dependency_type":"blocks"}]},
+    {"id":"br-dep1","title":"dep already carried","status":"open","issue_type":"task","labels":[]},
+    {"id":"br-dep2","title":"dep not yet carried","status":"open","issue_type":"task","labels":[]}
+  ],
+  "create_ids": []
+}

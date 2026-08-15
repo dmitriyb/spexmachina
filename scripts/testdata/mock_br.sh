@@ -17,8 +17,12 @@
 #                                        {"id":"<minted>"}.
 #   show <id> --format json            → echoes [issue] for matching .issues,
 #                                        else exits 1 with "not found".
-#   update <id> --add-label <l>        → mutates .issues[<id>].labels.
+#   update <id> --add-label <l>        → mutates .issues[<id>].labels
+#                                        (deduped, matching real br).
 #   close <id> [...]                   → marks status=closed.
+#   dep add <id> <dep> --type <t>      → appends {id,dependency_type} to
+#                                        .issues[<id>].dependencies (deduped
+#                                        by dep id, matching real br).
 #
 # The mock is intentionally NOT a faithful br emulator — it covers the calls
 # the adapter makes and lets tests assert exact flag sequences via the log.
@@ -150,11 +154,40 @@ case "$sub" in
                 *) shift ;;
             esac
         done
-        # Build a jq filter that appends each label.
+        # Build a jq filter that appends each label, preserving insertion
+        # order. Deduped, same as real br: adding a label the issue already
+        # carries is a no-op.
         for l in "${add_labels[@]}"; do
-            _mutate_state "(.issues |= map(if .id == \"$id\" then .labels += [\"$l\"] else . end))"
+            _mutate_state "(.issues |= map(if .id == \"$id\" then .labels = (if ((.labels // []) | index(\"$l\")) then (.labels // []) else ((.labels // []) + [\"$l\"]) end) else . end))"
         done
         echo "ok"
+        ;;
+    dep)
+        subsub="${1:-}"; shift || true
+        case "$subsub" in
+            add)
+                id="$1"; shift || true
+                dep_id="$1"; shift || true
+                dtype="blocks"
+                while [[ $# -gt 0 ]]; do
+                    case "$1" in
+                        --type|-t) dtype="$2"; shift 2 ;;
+                        --metadata) shift 2 ;;
+                        --json) shift ;;
+                        *) shift ;;
+                    esac
+                done
+                # Appended, preserving insertion order. Deduped by dep id,
+                # same as real br: re-adding an edge the issue already
+                # carries is a no-op.
+                _mutate_state "(.issues |= map(if .id == \"$id\" then .dependencies = (if ((.dependencies // []) | any(.id == \"$dep_id\")) then (.dependencies // []) else ((.dependencies // []) + [{id: \"$dep_id\", dependency_type: \"$dtype\"}]) end) else . end))"
+                echo "ok"
+                ;;
+            *)
+                echo "mock_br: unsupported dep subcommand: $subsub" >&2
+                exit 2
+                ;;
+        esac
         ;;
     close)
         id="$1"; shift || true

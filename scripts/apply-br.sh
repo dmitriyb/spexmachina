@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# apply-br.sh — Reference adapter consuming spex changeset.json v2 and invoking br.
+# apply-br.sh — Reference adapter consuming spex changeset.json v3 and invoking br.
 #
 # REFERENCE IMPLEMENTATION. Vet before production use. See spec/adapters/ for the
 # adapter contract that any implementation (this one or your own) must satisfy.
@@ -66,8 +66,8 @@ if [[ -z "$VERSION" ]]; then
     echo "error: changeset missing required field: version" >&2
     exit 1
 fi
-if [[ "$VERSION" != "2" ]]; then
-    echo "error: unsupported changeset version: $VERSION (expected 2)" >&2
+if [[ "$VERSION" != "3" ]]; then
+    echo "error: unsupported changeset version: $VERSION (expected 3)" >&2
     exit 1
 fi
 
@@ -122,6 +122,14 @@ append_receipt_skipped() {
         '{op_id: $op, status: "skipped", bead_id: $bid, was_existing: $we, reason: $r}')")
 }
 
+append_receipt_ok_no_existing() {
+    local op_id="$1" bead_id="$2"
+    OP_STATUS["$op_id"]="ok"
+    RECEIPTS+=("$(jq -cn \
+        --arg op "$op_id" --arg bid "$bead_id" \
+        '{op_id: $op, status: "ok", bead_id: $bid}')")
+}
+
 append_receipt_error() {
     local op_id="$1" bead_id="$2" err="$3"
     OP_STATUS["$op_id"]="error"
@@ -131,7 +139,7 @@ append_receipt_error() {
 }
 
 # resolve_ref echoes the resolved bead_id (or sentinel) for a ref JSON object.
-# Changeset v2 admits exactly two ref shapes — emit resolves spec-node
+# Changeset v3 admits exactly two ref shapes — plan resolves spec-node
 # references in-process before the adapter ever runs, so the adapter reads
 # no spex-owned file. Sentinels:
 #   __UNRESOLVED_OP__<op_id>     ref:op pointed at an op_id with no SUB_TABLE entry.
@@ -200,6 +208,23 @@ dep_edge_type() {
         echo "$t"
     else
         echo "blocked-by"
+    fi
+}
+
+# retarget_dep_edge_type is dep_edge_type's counterpart for retarget ops.
+# `br dep add --type` speaks the tracker's own dep-type vocabulary and
+# rejects the "blocked-by" alias `br create --deps` accepts, so the default
+# here is "blocks" — the same edge, spelled the way `br dep add` requires.
+# A ref's explicit "type" field is already tracker vocabulary and passes
+# through unchanged, same as dep_edge_type.
+retarget_dep_edge_type() {
+    local ref_json="$1"
+    local t
+    t=$(jq -r '.type // empty' <<< "$ref_json")
+    if [[ -n "$t" ]]; then
+        echo "$t"
+    else
+        echo "blocks"
     fi
 }
 
@@ -391,6 +416,80 @@ process_close() {
     fi
 }
 
+process_retarget() {
+    local op="$1"
+    local op_id="$2"
+    local target
+    target=$(jq -c '.target // empty' <<< "$op")
+    if [[ -z "$target" || "$target" == "null" ]]; then
+        append_receipt_error "$op_id" "" "retarget op missing target"
+        return
+    fi
+
+    local bead_id ref_err
+    bead_id=$(resolve_ref "$target")
+    ref_err=$(ref_error_for "$bead_id")
+    if [[ -n "$ref_err" ]]; then
+        append_receipt_error "$op_id" "" "target ref: $ref_err"
+        return
+    fi
+
+    # Resolve dep refs up front — a ref that fails to resolve stops the op
+    # before any br call that would change tracker state, same as create.
+    local -a dep_beads=() dep_edges=()
+    local dep_ref dep_bead dep_err edge
+    while IFS= read -r dep_ref; do
+        [[ -z "$dep_ref" || "$dep_ref" == "null" ]] && continue
+        dep_bead=$(resolve_ref "$dep_ref")
+        dep_err=$(ref_error_for "$dep_bead")
+        if [[ -n "$dep_err" ]]; then
+            append_receipt_error "$op_id" "$bead_id" "dep ref: $dep_err"
+            return
+        fi
+        edge=$(retarget_dep_edge_type "$dep_ref")
+        dep_beads+=("$dep_bead")
+        dep_edges+=("$edge")
+    done < <(jq -c '(.deps // [])[]' <<< "$op")
+
+    # No idempotency probe — br update and br dep add both converge when
+    # applied twice. Read current deps once, up front, per
+    # arch_br_reference_adapter.md "retarget op → br update + br dep add".
+    local show_out
+    if ! show_out=$("$BR_BIN" show "$bead_id" --format json 2>&1); then
+        append_receipt_error "$op_id" "$bead_id" "br show failed: $show_out"
+        return
+    fi
+
+    # Event label(s) — br update carries no dep flag of any name, so the
+    # label half stays on the update surface.
+    local lbl out rc
+    while IFS= read -r lbl; do
+        [[ -z "$lbl" ]] && continue
+        if ! out=$("$BR_BIN" update "$bead_id" --add-label "$lbl" 2>&1); then
+            rc=$?
+            append_receipt_error "$op_id" "$bead_id" "br update --add-label $lbl exited $rc: $out"
+            return
+        fi
+    done < <(jq -r '(.labels // [])[]' <<< "$op")
+
+    # Missing deps only — add-only by contract, nothing removed.
+    local n="${#dep_beads[@]}" idx db de
+    for ((idx = 0; idx < n; idx++)); do
+        db="${dep_beads[$idx]}"
+        de="${dep_edges[$idx]}"
+        if jq -e --arg id "$db" '(.[0].dependencies // .dependencies // []) | any(.id == $id)' <<< "$show_out" >/dev/null 2>&1; then
+            continue
+        fi
+        if ! out=$("$BR_BIN" dep add "$bead_id" "$db" --type "$de" 2>&1); then
+            rc=$?
+            append_receipt_error "$op_id" "$bead_id" "br dep add $db --type $de exited $rc: $out"
+            return
+        fi
+    done
+
+    append_receipt_ok_no_existing "$op_id" "$bead_id"
+}
+
 process_label() {
     local op="$1"
     local op_id="$2"
@@ -436,11 +535,12 @@ while [[ "$i" -lt "$OP_COUNT" ]]; do
         append_receipt_error "${op_id:-$synth}" "" "malformed op: missing op_id or type"
     else
         case "$op_type" in
-            create) process_create "$op" "$op_id" ;;
-            close)  process_close  "$op" "$op_id" ;;
-            label)  process_label  "$op" "$op_id" ;;
-            tag)    process_label  "$op" "$op_id" ;;  # tag and label are structurally identical for br.
-            *)      append_receipt_error "$op_id" "" "unknown op type: $op_type" ;;
+            create)   process_create   "$op" "$op_id" ;;
+            close)    process_close    "$op" "$op_id" ;;
+            retarget) process_retarget "$op" "$op_id" ;;
+            label)    process_label    "$op" "$op_id" ;;
+            tag)      process_label    "$op" "$op_id" ;;  # tag and label are structurally identical for br.
+            *)        append_receipt_error "$op_id" "" "unknown op type: $op_type" ;;
         esac
     fi
     debug_sub_table "$op_id"
