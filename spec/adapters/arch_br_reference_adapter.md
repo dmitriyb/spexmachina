@@ -7,7 +7,7 @@ Bash + jq script at `scripts/apply-br.sh`. Reads `changeset.json` on stdin (or `
 - Parse changeset v3. The top-level `absorbed` array is ignored entirely — it is ingest's input, not the adapter's, and no tracker call ever comes of it.
 - For each op in order:
   - Resolve every ref field (`parent`, `deps`, `target`) to a concrete bead id, per [[a2645b77b8bc|the ref shapes]]: a `bead` ref passes through literally and an `op` ref is looked up in the substitution table. The changeset carries no third shape — plan resolves node references before the adapter ever runs, so the adapter reads no spex-owned file.
-  - Check idempotency before create/close — for a create that check runs before any of the op's refs are resolved, for a close after the target ref is resolved. A retarget op needs no check at all: updates are naturally idempotent.
+  - Check idempotency before create/close — for a create that check runs before any of the op's refs are resolved, for a close after the target ref is resolved. A retarget op needs no check at all: every call it makes — the update and each dep add — is naturally idempotent.
   - Invoke the appropriate `br` subcommand with correct flags.
   - Write a receipt entry.
 - Emit a top-level status field: `complete` when every op ended `ok` or was intentionally skipped, `partial` as soon as one op ends `error`. A skip is not a failure — it means the adapter deliberately did nothing. If the adapter dies before the file is written at all, no `receipts.json` exists: `spex ingest` fails with `ingest: read receipts: …`, exits 1, and the run must be re-run rather than ingested — it is never read as `partial`.
@@ -22,7 +22,7 @@ scripts/apply-br.sh [<changeset.json>] [<receipts.json>]
 
 ## Dependencies
 
-- `br` — any version that supports `create`, `list --json`, `show <id> --format json`, `update`, `close`. No minimum version is enforced: the pre-flight only checks that `$BR_BIN --version` exits 0, discarding its output.
+- `br` — any version that supports `create`, `list --json`, `show <id> --format json`, `update`, `dep add`, `close`. Dependency mutation is a subcommand of its own: `update` carries label and parent flags but nothing that touches deps, so a retarget's dep half cannot ride on the same call as its label half. No minimum version is enforced: the pre-flight only checks that `$BR_BIN --version` exits 0, discarding its output.
 - `jq` — 1.6+.
 - Bash 4.0+ (for associative arrays used by the substitution table).
 
@@ -49,7 +49,7 @@ Ops are dispatched on their `type` field, one at a time, in the order the change
 |---|---|
 | `create` | Create a bead, subject to the create-idempotency check below. |
 | `close` | Close a bead, subject to the close-idempotency check below. |
-| `retarget` | Update the target bead: add the op's event label, add its missing deps. See "retarget op" below. |
+| `retarget` | Update the target bead: add the op's event label, add its missing deps — the label through `br update`, each dep through `br dep add`. See "retarget op" below. |
 | `label` | Add the op's labels to the target bead. |
 | `tag` | Add the op's labels to the target bead; `br` draws no distinction between the two. |
 | anything else | No tracker call at all. The op gets an `error` receipt reading `unknown op type: <type>`. |
@@ -117,9 +117,9 @@ The `idempotency.label` is applied separately and earlier: the adapter queries f
 
 Each entry of an op's `deps` becomes its own `--deps <edge>:<bead-id>` flag, in the order the changeset lists them — never one flag carrying a joined list. `<edge>` is the dep ref's own `type` when it carries one and `blocked-by` otherwise, since the default reading of a dep is that this bead is blocked by that one. `parent` is a separate `--parent <bead-id>` flag and is never expressed as a dep edge.
 
-### retarget op → `br update`
+### retarget op → `br update` + `br dep add`
 
-[[fcb32354630e|A retarget op is applied through the tracker's update surface]] and touches nothing else: the target ref resolves like any other (a `bead` ref literally, an `op` ref through the substitution table), then one `br update --add-label <label>` per entry of `op.Labels` — the run's `spex:<eid>` event label — followed by one `br update --add-dep <edge>:<bead-id>` per resolved dep the bead does not already carry, read off a single `br show <bead_id> --format json` of its current deps. Deps are add-only by contract: nothing is removed, because a stale dep is closed by its own lifecycle and a removal here would make re-runs diverge. No probe precedes any of it — an update applied twice converges on the same state, so re-running a retarget adds nothing and errors nothing. The receipt records `op_id`, `status` and the target `bead_id`; `was_existing` does not apply. A `br show` or `br update` that exits non-zero ends the op with an `error` receipt like any other failed invocation.
+[[fcb32354630e|A retarget op is applied through the tracker's mutation surface]] and touches nothing else: the target ref resolves like any other (a `bead` ref literally, an `op` ref through the substitution table), then one `br update --add-label <label>` per entry of `op.Labels` — the run's `spex:<eid>` event label — followed by one `br dep add <bead-id> <dep-bead-id> --type <edge>` per resolved dep the bead does not already carry, read off a single `br show <bead_id> --format json` of its current deps. The two halves cannot share a call: `br update` carries no dep flag of any name, so the dep half is the one part of a retarget that leaves the update surface. `<edge>` is the tracker's own dep-type vocabulary rather than the changeset's spelling — the default dep is `blocks` here, the same edge the create path names `blocked-by`, because `br create --deps` takes that alias and records `blocks` while `br dep add --type` rejects it outright; both paths therefore land the identical edge under different names, and an edge the tracker does not know exits non-zero. Deps are add-only by contract: nothing is removed, because a stale dep is closed by its own lifecycle and a removal here would make re-runs diverge. No probe precedes any of it — an update applied twice converges on the same state, and re-adding an edge the bead already carries is itself a no-op, so re-running a retarget adds nothing and errors nothing. The receipt records `op_id`, `status` and the target `bead_id`; `was_existing` does not apply. A `br show`, `br update` or `br dep add` that exits non-zero ends the op with an `error` receipt like any other failed invocation.
 
 ## Idempotency
 
