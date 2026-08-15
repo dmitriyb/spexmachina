@@ -243,6 +243,25 @@ func TestClassifyUnmatched_DataFlowAndMultiComponentTestSectionAdmitted(t *testi
 	}
 }
 
+// TestClassifyUnmatched_RemovedYieldsNoAction pins S4's second bullet:
+// "Unmatched removed change -> no action (nothing to obsolete)" — also
+// arch_action_classifier.md:51's "removed | no | no action" row.
+// MatchNodes never actually routes a removed change into the unmatched
+// list (TestE3_RemovedChangeNoRecord pins that upstream invariant), but
+// ClassifyActions must not depend on that alone: fed one directly, it must
+// still refuse to synthesize a create.
+func TestClassifyUnmatched_RemovedYieldsNoAction(t *testing.T) {
+	f := newClassifierFixture()
+	u := Unmatched{Change: change(f.CompX, "plan", "component", merkle.Removed, "old", "")}
+	actions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 0 {
+		t.Fatalf("want 0 actions for an unmatched removed change, got %+v", actions)
+	}
+}
+
 // --- Matched path: the state transition table's status split (S1) ---
 
 func TestClassifyMatched_StatusSplit(t *testing.T) {
@@ -304,12 +323,15 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 
 	t.Run("in_progress_refuses_the_run", func(t *testing.T) {
 		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-007", BeadStatus: "in_progress"}}}
-		_, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
 		if err == nil {
 			t.Fatalf("want refusal error")
 		}
 		if !strings.Contains(err.Error(), "spex-007") {
 			t.Errorf("error must name the claimed task: %v", err)
+		}
+		if len(actions) != 0 {
+			t.Errorf("no action list is returned at all on refusal, got %+v", actions)
 		}
 	})
 
@@ -339,7 +361,7 @@ func TestClassifyMatched_RefusalIsTotal_NamesEveryClaimedTask(t *testing.T) {
 		Change:  change(f.CompZ, "merkle", "component", merkle.Modified, "a", "b"),
 		Records: []Pairing{{TaskID: "spex-009", BeadStatus: "closed"}},
 	}
-	_, err := ClassifyActions([]Match{m1, m2, m3}, nil, nil, f.Graph)
+	actions, err := ClassifyActions([]Match{m1, m2, m3}, nil, nil, f.Graph)
 	if err == nil {
 		t.Fatalf("want error")
 	}
@@ -350,6 +372,9 @@ func TestClassifyMatched_RefusalIsTotal_NamesEveryClaimedTask(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "spex-009") {
 		t.Errorf("error must not name a non-claimed task: %v", err)
+	}
+	if len(actions) != 0 {
+		t.Errorf("no action list is returned at all on refusal — m3's cleanly classifiable entry must not leak, got %+v", actions)
 	}
 }
 
@@ -530,6 +555,43 @@ func TestDeps_ComponentUsesDirectAndSelfFiltered(t *testing.T) {
 	}
 }
 
+// TestDeps_UsesAndRequiresModuleOverlapCollapsesToOne pins D5: "duplicates
+// collapse to one entry." newClassifierFixture's CompX.Uses ([CompY], same
+// module) never overlaps its requires_module-transitive contributions
+// ([CompZ, CompS], from other modules), so no fixture path there produces a
+// literal duplicate to collapse — this builds one where a component's uses
+// edge names a component its own module's transitive requires_module walk
+// also reaches.
+func TestDeps_UsesAndRequiresModuleOverlapCollapsesToOne(t *testing.T) {
+	planMod := schema.IdentityHash("module", "plan")
+	merkleMod := schema.IdentityHash("module", "merkle")
+	compX := schema.IdentityHash("plan", "component", "CompX")
+	compZ := schema.IdentityHash("merkle", "component", "CompZ")
+
+	proj := schema.Project{
+		Modules: []schema.Module{
+			{ID: planMod, Name: "plan", RequiresModule: []string{merkleMod}},
+			{ID: merkleMod, Name: "merkle"},
+		},
+	}
+	specs := map[string]schema.ModuleSpec{
+		planMod: {
+			Name:       "plan",
+			Components: []schema.Component{{ID: compX, Name: "CompX", Uses: []string{compZ}}},
+		},
+		merkleMod: {
+			Name:       "merkle",
+			Components: []schema.Component{{ID: compZ, Name: "CompZ"}},
+		},
+	}
+	graph := NewSpecGraph(proj, specs)
+
+	deps := collectDeps("plan", compX, graph)
+	if len(deps) != 1 || deps[0] != compZ {
+		t.Fatalf("want CompZ named by both uses and the transitive requires_module walk collapsed to one entry, got %v", deps)
+	}
+}
+
 func TestDeps_RequiresModuleTransitiveAcrossTwoHops(t *testing.T) {
 	f := newClassifierFixture()
 	deps := collectDeps("merkle", f.CompZ, f.Graph)
@@ -605,6 +667,44 @@ func TestDeps_RetargetRecomputesFreshDeps(t *testing.T) {
 	want := sortedStrings(f.CompY, f.CompZ, f.CompS)
 	if !reflect.DeepEqual(actions[0].DepSpecNodeIDs, want) {
 		t.Fatalf("retarget deps: got %v want %v", actions[0].DepSpecNodeIDs, want)
+	}
+}
+
+// --- Bead status is irrelevant to collection (D2) ---
+
+func TestDeps_ClassifierIgnoresDependencyBeadStatus(t *testing.T) {
+	f := newClassifierFixture()
+	// CompX (unmatched, added) uses CompY directly. CompY itself is
+	// matched with a closed pairing in the same run, so Y gets its own
+	// obsolete+create pair — but that must not filter Y out of X's
+	// DepSpecNodeIDs: filtering already-satisfied deps belongs to the
+	// Resolver, not the classifier.
+	unmatched := Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")}
+	yMatch := Match{
+		Change:  change(f.CompY, "plan", "component", merkle.Modified, "old", "new"),
+		Records: []Pairing{{TaskID: "spex-y", BeadStatus: "closed"}},
+	}
+	actions, err := ClassifyActions([]Match{yMatch}, []Unmatched{unmatched}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	var xAction *Action
+	for i := range actions {
+		if actions[i].SpecNodeID == f.CompX {
+			xAction = &actions[i]
+		}
+	}
+	if xAction == nil {
+		t.Fatalf("CompX action missing: %+v", actions)
+	}
+	found := false
+	for _, d := range xAction.DepSpecNodeIDs {
+		if d == f.CompY {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("D2: dependency collection must ignore Y's closed bead status, got deps=%v", xAction.DepSpecNodeIDs)
 	}
 }
 
