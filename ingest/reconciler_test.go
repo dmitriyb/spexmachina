@@ -8,8 +8,8 @@ import (
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/plan"
 )
 
 // Fixed 12-hex-char identity hashes for test node ids — the journal-line
@@ -27,6 +27,9 @@ const (
 	hexMod1 = "666666666666"
 	hexMod2 = "777777777777"
 	hexGone = "888888888888"
+	hexR    = "999999999999"
+	hexAbs1 = "aaaaaaaaaaaa"
+	hexAbs2 = "bbbbbbbbbbbb"
 )
 
 // fakeSpecGraph satisfies SpecGraph from a flat metadata table. Every
@@ -53,8 +56,8 @@ type nodeNotFoundError struct{ id string }
 
 func (e *nodeNotFoundError) Error() string { return "fake spec graph: no node " + e.id }
 
-// idem builds the *Idem struct emit attaches to create ops.
-func idem(label string) *emit.Idem { return &emit.Idem{Label: label} }
+// idem builds the *Idem struct plan attaches to create ops.
+func idem(label string) *plan.Idem { return &plan.Idem{Label: label} }
 
 // newTestReconciler creates a Reconciler over a fresh temp spec dir with
 // no journal on disk yet — the "bootstrap" state every scenario starts
@@ -113,13 +116,13 @@ func TestApply_OkCreate_EventAndReceiptAppended(t *testing.T) {
 	}
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version:  emit.ChangesetVersion,
+	cs := plan.Changeset{
+		Version:  plan.ChangesetVersion,
 		GitHead:  "cafe1234",
 		Proposal: "p",
-		Ops: []emit.Op{{
+		Ops: []plan.Op{{
 			OpID:         "op-1",
-			Type:         emit.OpCreate,
+			Type:         plan.OpCreate,
 			SpecNodeKind: "component",
 			SpecNodeID:   "abc123def456",
 			Idempotency:  idem("spex:cafe1234:op-1"),
@@ -190,12 +193,12 @@ func TestApply_OkClose_RemovedAppendsRemovedEventAndTaskClosed(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafe5678", Proposal: "p2",
-		Ops: []emit.Op{{
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe5678", Proposal: "p2",
+		Ops: []plan.Op{{
 			OpID:   "op-1",
-			Type:   emit.OpClose,
-			Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"},
+			Type:   plan.OpClose,
+			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"},
 			Reason: "Spec node removed: m/Widget",
 		}},
 	}
@@ -259,15 +262,15 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafe0002", Proposal: "p3",
-		Ops: []emit.Op{
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe0002", Proposal: "p3",
+		Ops: []plan.Op{
 			{
-				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
+				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
 				Idempotency: idem("spex:cafe0002:op-1"),
-				Deps:        []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
+				Deps:        []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 			},
-			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
+			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -349,9 +352,9 @@ func TestApply_WasExisting_IdempotentNoOp(t *testing.T) {
 	)
 	before := journalBytes(t, dir)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: gitHead, Proposal: "p",
-		Ops: []emit.Op{{OpID: opID, Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)}},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: gitHead, Proposal: "p",
+		Ops: []plan.Op{{OpID: opID, Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
@@ -377,9 +380,9 @@ func TestApply_ErrorStatus_NothingAppended(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")}},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial,
@@ -404,9 +407,9 @@ func TestApply_SkippedStatus_NothingAppended(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")}},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
@@ -441,13 +444,13 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-B", For: "seedZ"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafe9999", Proposal: "p4",
-		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-A", EdgeType: "blocks"}}},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
-			{OpID: "op-3", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-A"}, Reason: "Spec node modified: m/X"},
-			{OpID: "op-4", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-B"}, Reason: "Spec node removed: m/Z"},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe9999", Proposal: "p4",
+		Ops: []plan.Op{
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-A", EdgeType: "blocks"}}},
+			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-A"}, Reason: "Spec node modified: m/X"},
+			{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-B"}, Reason: "Spec node removed: m/Z"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -512,10 +515,10 @@ func TestApply_ProposalEpicCreate_ReferencesRegisteredEvent(t *testing.T) {
 	registeredEID := "beef0001:" + stem
 	seedJournal(t, dir, mapping.Event{Event: "registered", EID: registeredEID, Proposal: stem, GitHead: "beef0001"})
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: stem,
-		Ops: []emit.Op{{
-			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "proposal_epic",
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: stem,
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "proposal_epic",
 			SpecNodeID: stem, Idempotency: idem("spex:" + registeredEID), Title: "Proposal: " + stem,
 		}},
 	}
@@ -544,17 +547,17 @@ func TestApply_ProposalEpicCreate_ReferencesRegisteredEvent(t *testing.T) {
 
 // TestApply_ProposalEpicCreate_NoRegisteredEvent_InvariantFailure covers
 // "Proposal-epic create without a registered event → invariant failure":
-// emit refuses to build such an op, so its arrival marks a malformed
+// plan refuses to build such an op, so its arrival marks a malformed
 // changeset and nothing is appended.
 func TestApply_ProposalEpicCreate_NoRegisteredEvent_InvariantFailure(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
 	stem := "2026-04-29-decouple-contract-gaps"
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: stem,
-		Ops: []emit.Op{{
-			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "proposal_epic",
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: stem,
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "proposal_epic",
 			SpecNodeID: stem, Idempotency: idem("spex:beef0001:" + stem), Title: "Proposal: " + stem,
 		}},
 	}
@@ -583,10 +586,10 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 		Module: "m", Before: strPtr("h"), GitHead: "seedhead", Proposal: "seed-p", Path: "m/old.md",
 	})
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{{
-			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "abc123def456",
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "abc123def456",
 			Idempotency: idem("spex:E1"), Labels: []string{"spex:cleanup"},
 		}},
 	}
@@ -614,9 +617,9 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 }
 
 // TestApply_CleanupCreate_PairsWithSameBatchRemoval covers the case real
-// emit output actually produces: the cleanup create and the close that
+// plan output actually produces: the cleanup create and the close that
 // removes its node land in the SAME batch, with the create ordered before
-// the close (emit/builder.go orders every changeset create-before-close).
+// the close (plan/builder.go orders every changeset create-before-close).
 // At the time the cleanup create is processed, neither the journal's fold
 // nor the batch-so-far shows the node as removed yet — the referent has
 // to come from the precomputed same-batch removal map, not a scan of
@@ -633,14 +636,14 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "E1"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafebeef", Proposal: "p",
-		Ops: []emit.Op{
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafebeef", Proposal: "p",
+		Ops: []plan.Op{
 			{
-				OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
+				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
 				Idempotency: idem("spex:cafebeef:op-2"), Labels: []string{"spex:cleanup"},
 			},
-			{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -685,10 +688,10 @@ func TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-orphan"}, Reason: "Spec node modified: m/Orphan"},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{
+			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-orphan"}, Reason: "Spec node modified: m/Orphan"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -729,10 +732,10 @@ func TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone(t *test
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafeeeee", Proposal: "p5",
-		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Section"},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafeeeee", Proposal: "p5",
+		Ops: []plan.Op{
+			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Section"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -785,12 +788,12 @@ func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "seedA"},
 	)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "cafe4321", Proposal: "p6",
-		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-			{OpID: "op-3", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/A"},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe4321", Proposal: "p6",
+		Ops: []plan.Op{
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/A"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -843,10 +846,10 @@ func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{{
-			OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00",
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00",
 			Idempotency: idem("spex:nosuchnode00"),
 		}},
 	}
@@ -872,11 +875,11 @@ func TestApply_AtomicOnConstructionFailure(t *testing.T) {
 	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{
-			{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-			{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:nosuchnode00")},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: "nosuchnode00", Idempotency: idem("spex:nosuchnode00")},
 		},
 	}
 	rc := adapters.Receipts{
@@ -904,9 +907,9 @@ func TestApply_Idempotent_RerunAppendsNothing(t *testing.T) {
 	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 	r, dir := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{
-		Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p",
-		Ops: []emit.Op{{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)}},
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
@@ -937,9 +940,9 @@ func TestApply_RejectsMissingReceipt(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, _ := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "B", Idempotency: idem("spex:B")},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")},
+		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "B", Idempotency: idem("spex:B")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
@@ -957,8 +960,8 @@ func TestApply_RejectsExtraReceipt(t *testing.T) {
 	graph.nodes["A"] = NodeMetadata{Module: "m", Component: "A"}
 	r, _ := newTestReconciler(t, graph)
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
@@ -981,6 +984,280 @@ func TestDeriveEID_DeterministicAndDistinct(t *testing.T) {
 	}
 	if deriveEID("g1", "op-1") == deriveEID("g1", "op-2") {
 		t.Error("deriveEID ignores op_id")
+	}
+}
+
+// TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended covers "Ok
+// retarget → modified event and task_retargeted receipt appended": no
+// task_closed, no task_created — the task neither died nor was born, and
+// the fold answers with the new event's task id.
+func TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexR] = NodeMetadata{Module: "m", Component: "R", ContentFile: "r.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{Event: "added", EID: "seedR", Node: hexR, Name: "R", NodeType: "component", Module: "m", After: strPtr("old-r"), GitHead: "seedhead", Proposal: "seed-p", Path: "r.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-open", For: "seedR"},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe1234", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
+			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Labels: []string{"spex:cafe1234:op-1"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 4 {
+		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
+	}
+	modified := journal[2]
+	if modified.Event != "modified" || modified.Node != hexR {
+		t.Fatalf("line 3 = %+v, want modified event for %s", modified, hexR)
+	}
+	if modified.Before == nil || *modified.Before != "old-r" {
+		t.Errorf("modified before = %v, want old-r", modified.Before)
+	}
+	if modified.After == nil || *modified.After != "new-r" {
+		t.Errorf("modified after = %v, want new-r", modified.After)
+	}
+	retargeted := journal[3]
+	if retargeted.Event != "task_retargeted" || retargeted.TaskID != "br-open" || retargeted.For != modified.EID {
+		t.Errorf("task_retargeted = %+v, want for=%s task_id=br-open", retargeted, modified.EID)
+	}
+
+	fold, err := mapping.NewMappingStore(dir).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	found := false
+	for _, e := range fold.Entries {
+		if e.Key == hexR {
+			found = true
+			if e.TaskID != "br-open" {
+				t.Errorf("fold entry task_id = %q, want br-open", e.TaskID)
+			}
+			if e.Source.EID != modified.EID {
+				t.Errorf("fold entry sourced from %q, want the new modified event %q", e.Source.EID, modified.EID)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no fold entry for retargeted node")
+	}
+}
+
+// TestApply_Retarget_ReRun_Idempotent covers "Retarget re-run →
+// idempotent no-op": both lines dedup by derived event id.
+func TestApply_Retarget_ReRun_Idempotent(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexR] = NodeMetadata{Module: "m", Component: "R", ContentFile: "r.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
+			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Labels: []string{"spex:g:op-1"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+	}
+
+	if _, err := r.Apply(cs, rc); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+	before := journalBytes(t, dir)
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("second Apply: %v", err)
+	}
+	if sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("second Apply summary = %+v, want zero appends", sum)
+	}
+	after := journalBytes(t, dir)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("re-run mutated the journal:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+// TestApply_Retarget_ErrorReceipt_NothingAppended covers "Retarget with
+// error receipt → nothing appended".
+func TestApply_Retarget_ErrorReceipt_NothingAppended(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
+			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Labels: []string{"spex:g:op-1"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusError, Error: "tracker boom"}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.Errors != 1 || sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("summary = %+v, want 1 error / zero appends", sum)
+	}
+	if len(readJournal(t, dir)) != 0 {
+		t.Error("errored retarget appended lines")
+	}
+}
+
+// TestApply_Absorbed_ModifiedEventAndRefreshReceiptAppended covers
+// "Absorbed entry → modified event and refresh receipt appended": an
+// empty-ops changeset carrying one absorbed entry.
+func TestApply_Absorbed_ModifiedEventAndRefreshReceiptAppended(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexAbs1] = NodeMetadata{Module: "m", Component: "Abs1", ContentFile: "abs1.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafeabs1", Proposal: "p",
+		Absorbed: []plan.AbsorbedEntry{{Node: hexAbs1, Before: "aaa", After: "bbb", Reason: "typo sweep"}},
+	}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 2 {
+		t.Fatalf("journal has %d lines, want 2: %+v", len(journal), journal)
+	}
+	modified := journal[0]
+	if modified.Event != "modified" || modified.Node != hexAbs1 {
+		t.Fatalf("line 1 = %+v, want modified event for %s", modified, hexAbs1)
+	}
+	if modified.Before == nil || *modified.Before != "aaa" || modified.After == nil || *modified.After != "bbb" {
+		t.Errorf("modified before/after = %v/%v, want aaa/bbb", modified.Before, modified.After)
+	}
+	refresh := journal[1]
+	if refresh.Event != "refresh" || len(refresh.Absorbed) != 1 || refresh.Absorbed[0] != modified.EID {
+		t.Errorf("refresh receipt = %+v, want absorbed=[%s]", refresh, modified.EID)
+	}
+}
+
+// TestApply_Absorbed_EmptyArray_ConstructsNothing covers "An empty
+// absorbed array constructs nothing, not an empty receipt."
+func TestApply_Absorbed_EmptyArray_ConstructsNothing(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p"}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("summary = %+v, want zero appends", sum)
+	}
+	if len(readJournal(t, dir)) != 0 {
+		t.Error("empty absorbed array appended lines")
+	}
+}
+
+// TestApply_Absorbed_LandOnPartialRuns covers "Absorbed entries land on
+// partial runs too": an errored create alongside an absorbed entry still
+// lands the absorbed entry — absorption is not receipt-gated.
+func TestApply_Absorbed_LandOnPartialRuns(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexAbs1] = NodeMetadata{Module: "m", Component: "Abs1", ContentFile: "abs1.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops:      []plan.Op{{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)}},
+		Absorbed: []plan.AbsorbedEntry{{Node: hexAbs1, Before: "aaa", After: "bbb", Reason: "typo sweep"}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusError, Error: "tracker boom"}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.Errors != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 error, 1 event / 1 receipt (absorbed only)", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 2 {
+		t.Fatalf("journal has %d lines, want 2 (absorbed only): %+v", len(journal), journal)
+	}
+	if journal[0].Event != "modified" || journal[0].Node != hexAbs1 {
+		t.Errorf("line 1 = %+v, want modified event for %s", journal[0], hexAbs1)
+	}
+	if journal[1].Event != "refresh" {
+		t.Errorf("line 2 = %+v, want refresh receipt", journal[1])
+	}
+}
+
+// TestApply_Absorbed_ReRun_Idempotent covers "Absorbed re-run →
+// idempotent no-op": the (node, before, after) derivation finds the event
+// present, and an empty remainder appends no second refresh receipt.
+func TestApply_Absorbed_ReRun_Idempotent(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexAbs1] = NodeMetadata{Module: "m", Component: "Abs1", ContentFile: "abs1.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Absorbed: []plan.AbsorbedEntry{{Node: hexAbs1, Before: "aaa", After: "bbb", Reason: "typo sweep"}},
+	}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete}
+
+	if _, err := r.Apply(cs, rc); err != nil {
+		t.Fatalf("first Apply: %v", err)
+	}
+	before := journalBytes(t, dir)
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("second Apply: %v", err)
+	}
+	if sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("second Apply summary = %+v, want zero appends", sum)
+	}
+	after := journalBytes(t, dir)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("re-run mutated the journal:\nbefore: %s\nafter:  %s", before, after)
 	}
 }
 
@@ -1012,10 +1289,50 @@ func TestCheckInvariant1_ProposalDoublePairing(t *testing.T) {
 	}
 }
 
+// TestCheckInvariant1_RetargetDoublePairing covers the retarget analogue:
+// two task_retargeted receipts pairing with the same modified event.
+func TestCheckInvariant1_RetargetDoublePairing(t *testing.T) {
+	batch := []mapping.Event{
+		{Event: "task_retargeted", TaskID: "t1", For: "eid-1"},
+		{Event: "task_retargeted", TaskID: "t2", For: "eid-1"},
+	}
+	err := checkInvariant1(nil, batch)
+	if err == nil || !strings.Contains(err.Error(), "invariant 1") {
+		t.Fatalf("checkInvariant1: got %v, want invariant 1 error", err)
+	}
+}
+
 // TestCheckInvariant2_DanglingReference covers "Invariant 2: dangling
 // receipt reference".
 func TestCheckInvariant2_DanglingReference(t *testing.T) {
 	batch := []mapping.Event{{Event: "task_created", TaskID: "t1", For: "missing-eid"}}
+	err := checkInvariant2(nil, batch)
+	want := "ingest: receipt references unknown event missing-eid"
+	if err == nil || err.Error() != want {
+		t.Fatalf("checkInvariant2: got %v, want %q", err, want)
+	}
+}
+
+// TestCheckInvariant2_RetargetDanglingReference covers the retarget
+// analogue: a task_retargeted receipt's for names an eid neither the
+// journal nor the batch contains.
+func TestCheckInvariant2_RetargetDanglingReference(t *testing.T) {
+	batch := []mapping.Event{{Event: "task_retargeted", TaskID: "t1", For: "missing-eid"}}
+	err := checkInvariant2(nil, batch)
+	want := "ingest: receipt references unknown event missing-eid"
+	if err == nil || err.Error() != want {
+		t.Fatalf("checkInvariant2: got %v, want %q", err, want)
+	}
+}
+
+// TestCheckInvariant2_AbsorbedDanglingReference covers "Invariant 2's
+// no-unknown-referent rule covers the absorbed list exactly as it covers
+// for": a refresh receipt naming an eid no absorbed event carries.
+func TestCheckInvariant2_AbsorbedDanglingReference(t *testing.T) {
+	batch := []mapping.Event{
+		{Event: "modified", EID: "e1"},
+		{Event: "refresh", GitHead: "g", Absorbed: []string{"e1", "missing-eid"}},
+	}
 	err := checkInvariant2(nil, batch)
 	want := "ingest: receipt references unknown event missing-eid"
 	if err == nil || err.Error() != want {
@@ -1053,6 +1370,21 @@ func TestCheckInvariant5_ValidLinePasses(t *testing.T) {
 	batch := []mapping.Event{
 		{Event: "added", EID: "e1", Node: "aabbccddeeff", Name: "x", NodeType: "component", Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p"},
 		{Event: "task_created", TaskID: "t1", For: "e1"},
+	}
+	if err := checkInvariant5(batch); err != nil {
+		t.Fatalf("checkInvariant5: unexpected error %v", err)
+	}
+}
+
+// TestCheckInvariant5_RetargetAndRefreshLinesValidate covers the two line
+// kinds this bead adds: a well-formed task_retargeted receipt and a
+// well-formed refresh receipt must both validate cleanly.
+func TestCheckInvariant5_RetargetAndRefreshLinesValidate(t *testing.T) {
+	batch := []mapping.Event{
+		{Event: "modified", EID: "e1", Node: "aabbccddeeff", Name: "x", NodeType: "component", Module: "m", Before: strPtr("h0"), After: strPtr("h1"), GitHead: "g", Proposal: "p"},
+		{Event: "task_retargeted", TaskID: "t1", For: "e1"},
+		{Event: "modified", EID: "e2", Node: "112233445566", Name: "y", NodeType: "component", Module: "m", Before: strPtr("h2"), After: strPtr("h3"), GitHead: "g", Proposal: "p"},
+		{Event: "refresh", GitHead: "g", Absorbed: []string{"e2"}},
 	}
 	if err := checkInvariant5(batch); err != nil {
 		t.Fatalf("checkInvariant5: unexpected error %v", err)

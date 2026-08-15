@@ -1,15 +1,16 @@
 package ingest
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/adapters"
-	"github.com/dmitriyb/spexmachina/emit"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 )
 
 // Tests for spec/ingest/test_consistency_invariants.md. Invariants 1, 2,
@@ -26,7 +27,7 @@ import (
 
 // runWithSnapshot drives Reconciler.Apply followed by SnapshotSaver.Save
 // against shared on-disk state, mirroring the order IngestCommand wires.
-func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath string, cs emit.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
+func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath string, cs plan.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
 	t.Helper()
 	r := &Reconciler{SpecDir: specDir, SpecGraph: graph}
 	sum, err := r.Apply(cs, rc)
@@ -67,15 +68,15 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
 	)
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []emit.Op{
-		{OpID: "op-01", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
-		{OpID: "op-02", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
-		{OpID: "op-03", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-		{OpID: "op-04", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-		{OpID: "op-05", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
-		{OpID: "op-06", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
-		{OpID: "op-07", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
-		{OpID: "op-08", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []plan.Op{
+		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
+		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
+		{OpID: "op-03", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-04", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+		{OpID: "op-05", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
+		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
+		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-new1"},
@@ -158,9 +159,9 @@ func TestConsistencyInvariants_Invariant4_PartialLeavesSnapshotUntouched(t *test
 	graph := newFakeSpecGraph()
 	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-		{OpID: "op-2", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
@@ -205,8 +206,8 @@ func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 	graph := newFakeSpecGraph()
 	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "h", NodeType: "component"}
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
@@ -249,9 +250,9 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "E1"},
 	)
 
-	cs := emit.Changeset{Version: emit.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []emit.Op{
-		{OpID: "op-1", Type: emit.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []emit.Ref{{Kind: emit.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
-		{OpID: "op-2", Type: emit.OpClose, Target: &emit.Ref{Kind: emit.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+		{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"},
@@ -281,5 +282,106 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 		if e.Key == hexM && e.TaskID != "br-new" {
 			t.Errorf("fold[M].TaskID = %q, want br-new", e.TaskID)
 		}
+	}
+}
+
+// TestConsistencyInvariants_Invariant1_RetargetPairing covers "Invariant
+// 1: retarget pairing": a clean ok retarget appends exactly the modified
+// event plus its task_retargeted — no task_closed, no task_created — and
+// a hand-built dangling variant (a task_retargeted whose for names an eid
+// absent from journal and batch alike) is refused before anything is
+// written.
+func TestConsistencyInvariants_Invariant1_RetargetPairing(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexR] = NodeMetadata{Module: "m", Component: "R", ContentFile: "r.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
+			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Labels: []string{"spex:g:op-1"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
+	}
+	journal := readJournal(t, dir)
+	if len(journal) != 2 || journal[0].Event != "modified" || journal[1].Event != "task_retargeted" {
+		t.Fatalf("journal = %+v, want exactly [modified, task_retargeted]", journal)
+	}
+
+	// Invariant 3 holds unchanged: a re-run appends nothing.
+	before := journalBytes(t, dir)
+	if _, err := r.Apply(cs, rc); err != nil {
+		t.Fatalf("re-run Apply: %v", err)
+	}
+	if after := journalBytes(t, dir); !bytes.Equal(before, after) {
+		t.Fatalf("re-run mutated the journal:\nbefore: %s\nafter:  %s", before, after)
+	}
+
+	// The dangling variant: a task_retargeted whose for names an eid
+	// neither the journal nor the batch contains.
+	dangling := []mapping.Event{{Event: "task_retargeted", TaskID: "br-open", For: "no-such-eid"}}
+	if err := checkInvariant2(journal, dangling); err == nil {
+		t.Fatal("checkInvariant2: want error for dangling task_retargeted referent, got nil")
+	}
+}
+
+// TestConsistencyInvariants_Invariant1_AbsorbedBatchClosesUnderOneRefreshReceipt
+// covers "Invariant 1: absorbed batch closes under one refresh receipt":
+// a clean run with two absorbed entries appends two modified events and
+// exactly one refresh receipt naming both eids and nothing else; a
+// hand-built refresh receipt naming an eid no absorbed event carries is
+// refused before the write, per invariant 2's no-unknown-referent rule.
+func TestConsistencyInvariants_Invariant1_AbsorbedBatchClosesUnderOneRefreshReceipt(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexAbs1] = NodeMetadata{Module: "m", Component: "Abs1", ContentFile: "abs1.md", NodeType: "component"}
+	graph.nodes[hexAbs2] = NodeMetadata{Module: "m", Component: "Abs2", ContentFile: "abs2.md", NodeType: "component"}
+	r, dir := newTestReconciler(t, graph)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
+		Absorbed: []plan.AbsorbedEntry{
+			{Node: hexAbs1, Before: "aaa", After: "bbb", Reason: "typo sweep"},
+			{Node: hexAbs2, Before: "ccc", After: "ddd", Reason: "typo sweep"},
+		},
+	}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 2 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 2 events / 1 receipt", sum)
+	}
+	journal := readJournal(t, dir)
+	if len(journal) != 3 {
+		t.Fatalf("journal has %d lines, want 3 (2 modified + 1 refresh): %+v", len(journal), journal)
+	}
+	refresh := journal[2]
+	if refresh.Event != "refresh" || len(refresh.Absorbed) != 2 {
+		t.Fatalf("refresh receipt = %+v, want exactly 2 absorbed eids", refresh)
+	}
+	if refresh.Absorbed[0] != journal[0].EID || refresh.Absorbed[1] != journal[1].EID {
+		t.Errorf("refresh.Absorbed = %v, want [%s, %s]", refresh.Absorbed, journal[0].EID, journal[1].EID)
+	}
+
+	// The dangling variant: a refresh receipt naming an eid no absorbed
+	// event carries.
+	dangling := []mapping.Event{{Event: "refresh", GitHead: "g", Absorbed: []string{journal[0].EID, "no-such-eid"}}}
+	if err := checkInvariant2(journal, dangling); err == nil {
+		t.Fatal("checkInvariant2: want error for dangling absorbed referent, got nil")
 	}
 }
