@@ -22,6 +22,7 @@ func main() {
 		newVersionCmd(),
 		newRenderCmd(),
 		newEmitCmd(),
+		newPlanCmd(),
 		newIngestCmd(),
 		newUpgradeCmd(),
 	)

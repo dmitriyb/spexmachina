@@ -1,0 +1,1038 @@
+package main
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
+	"github.com/dmitriyb/spexmachina/schema"
+)
+
+// runPlan executes spex plan via cobra and returns stdout, stderr, and the
+// command-level error. stdinData feeds the command's stdin.
+func runPlan(t *testing.T, stdinData string, args ...string) (string, string, error) {
+	t.Helper()
+	rootCmd := cli.NewRootCmd()
+	rootCmd.AddCommand(newPlanCmd())
+
+	in := strings.NewReader(stdinData)
+	outBuf := new(bytes.Buffer)
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetIn(in)
+	rootCmd.SetOut(outBuf)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(append([]string{"plan"}, args...))
+
+	err := rootCmd.Execute()
+	return outBuf.String(), errBuf.String(), err
+}
+
+func parsePlanChangeset(t *testing.T, stdout string) plan.Changeset {
+	t.Helper()
+	var cs plan.Changeset
+	if err := json.Unmarshal([]byte(stdout), &cs); err != nil {
+		t.Fatalf("invalid changeset JSON: %v\nstdout: %s", err, stdout)
+	}
+	return cs
+}
+
+func writePlanDiff(t *testing.T, dir, name string, changes []diffChange, errs []merkle.DiffError) string {
+	t.Helper()
+	if changes == nil {
+		changes = []diffChange{}
+	}
+	if errs == nil {
+		errs = []merkle.DiffError{}
+	}
+	doc := struct {
+		Changes []diffChange       `json:"changes"`
+		Errors  []merkle.DiffError `json:"errors"`
+	}{Changes: changes, Errors: errs}
+	data, err := json.Marshal(doc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writePlanBeads(t *testing.T, dir, name string, statuses map[string]string) string {
+	t.Helper()
+	type bead struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	issues := make([]bead, 0, len(statuses))
+	for id, status := range statuses {
+		issues = append(issues, bead{ID: id, Status: status})
+	}
+	data, err := json.Marshal(struct {
+		Issues []bead `json:"issues"`
+	}{Issues: issues})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func writePlanAbsorb(t *testing.T, dir, name string, entries []map[string]string) string {
+	t.Helper()
+	type absorbEntry struct {
+		Node   string `json:"node"`
+		Reason string `json:"reason"`
+	}
+	list := make([]absorbEntry, 0, len(entries))
+	for _, e := range entries {
+		list = append(list, absorbEntry{Node: e["node"], Reason: e["reason"]})
+	}
+	data, err := json.Marshal(list)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+// setupMinimalPlanSpec writes a spec tree with one empty module — enough
+// structure for scenarios that don't exercise ActionClassifier's node
+// lookups (an empty diff, a diff carrying only errors).
+func setupMinimalPlanSpec(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{"name":"alpha"}`)
+	return specDir
+}
+
+// planFixture is the shared on-disk state for the Plan command tests
+// (spec/plan/test_plan_command.md, "Setup"): a spec tree with three current
+// components (Existing, Existing2, New) plus a fourth (Removed) that only
+// survives in the journal, a journal seeding one added event + task_created
+// per tracked node and a registered event for the fixture's proposal, a
+// diff reporting Existing/Existing2 modified, New added and Removed
+// removed, and three --beads variants driving the cleanup gate and the
+// claimed-task refusal.
+type planFixture struct {
+	specDir     string
+	proposal    string
+	gitHead     string
+	existingID  string
+	existing2ID string
+	newID       string
+	removedID   string
+	diffPath    string
+
+	beadsAllOpen       string
+	beadsOneClosed     string
+	beadsOneInProgress string
+}
+
+func setupPlanFixture(t *testing.T) planFixture {
+	t.Helper()
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	modID := schema.IdentityHash("module", "alpha")
+	existingID := schema.IdentityHash("alpha", "component", "Existing")
+	existing2ID := schema.IdentityHash("alpha", "component", "Existing2")
+	newID := schema.IdentityHash("alpha", "component", "New")
+	removedID := schema.IdentityHash("alpha", "component", "Removed")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{
+		"name": "test-plan",
+		"modules": [{"id": "`+modID+`", "name": "alpha", "path": "alpha"}]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+existingID+`", "name": "Existing", "content": "arch_existing.md"},
+			{"id": "`+existing2ID+`", "name": "Existing2", "content": "arch_existing2.md"},
+			{"id": "`+newID+`", "name": "New", "content": "arch_new.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_existing.md", "# Existing\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_existing2.md", "# Existing2\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_new.md", "# New\n")
+
+	proposal := "2026-08-14-plan-fixture"
+	gitHead := "deadbeefcafe"
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"added","eid":"e-existing","node":"` + existingID + `","name":"Existing","node_type":"component","module":"alpha","before":null,"after":"h0","git_head":"cafe0000","proposal":"` + proposal + `"}`,
+		`{"event":"task_created","for":"e-existing","task_id":"task-existing"}`,
+		`{"event":"added","eid":"e-existing2","node":"` + existing2ID + `","name":"Existing2","node_type":"component","module":"alpha","before":null,"after":"h0b","git_head":"cafe0000","proposal":"` + proposal + `"}`,
+		`{"event":"task_created","for":"e-existing2","task_id":"task-existing2"}`,
+		`{"event":"added","eid":"e-removed","node":"` + removedID + `","name":"Removed","node_type":"component","module":"alpha","before":null,"after":"h-removed","git_head":"cafe0000","proposal":"` + proposal + `"}`,
+		`{"event":"task_created","for":"e-removed","task_id":"task-removed"}`,
+		`{"event":"registered","eid":"cafe0000:` + proposal + `","proposal":"` + proposal + `","git_head":"cafe0000"}`,
+	})
+
+	changes := []diffChange{
+		{Path: existingID, Type: "modified", Impact: "arch_impl", Module: "alpha", NodeType: "component", OldHash: "h0", NewHash: "h1"},
+		{Path: existing2ID, Type: "modified", Impact: "arch_impl", Module: "alpha", NodeType: "component", OldHash: "h0b", NewHash: "h1b"},
+		{Path: newID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-new"},
+		{Path: removedID, Type: "removed", Impact: "arch_impl", Module: "alpha", NodeType: "component", OldHash: "h-removed"},
+	}
+	diffPath := writePlanDiff(t, dir, "diff.json", changes, nil)
+
+	beadsAllOpen := writePlanBeads(t, dir, "beads-all-open.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open", "task-removed": "open",
+	})
+	beadsOneClosed := writePlanBeads(t, dir, "beads-one-closed.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open", "task-removed": "closed",
+	})
+	beadsOneInProgress := writePlanBeads(t, dir, "beads-one-in-progress.json", map[string]string{
+		"task-existing": "in_progress", "task-existing2": "in_progress", "task-removed": "open",
+	})
+
+	return planFixture{
+		specDir: specDir, proposal: proposal, gitHead: gitHead,
+		existingID: existingID, existing2ID: existing2ID, newID: newID, removedID: removedID,
+		diffPath:           diffPath,
+		beadsAllOpen:       beadsAllOpen,
+		beadsOneClosed:     beadsOneClosed,
+		beadsOneInProgress: beadsOneInProgress,
+	}
+}
+
+// --- S1: Full pipeline — diff file to changeset on stdout ---
+
+func TestPlanCommand_S1_FullPipeline_DiffFileToChangesetStdout(t *testing.T) {
+	f := setupPlanFixture(t)
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan failed: %v\nstderr: %s", err, stderr)
+	}
+
+	cs := parsePlanChangeset(t, stdout)
+	if cs.Version != plan.ChangesetVersion {
+		t.Errorf("version: want %d, got %d", plan.ChangesetVersion, cs.Version)
+	}
+	if cs.GitHead != f.gitHead {
+		t.Errorf("git_head: want %s, got %s", f.gitHead, cs.GitHead)
+	}
+	if cs.Proposal != f.proposal {
+		t.Errorf("proposal: want %s, got %s", f.proposal, cs.Proposal)
+	}
+	if len(cs.Ops) == 0 {
+		t.Fatal("want a non-empty ops array")
+	}
+	if cs.Ops[0].SpecNodeKind != plan.KindProposalEpic {
+		t.Errorf("want the epic first, got %+v", cs.Ops[0])
+	}
+
+	lastCreate, firstClose := -1, -1
+	for i, op := range cs.Ops {
+		if op.Type == plan.OpCreate {
+			lastCreate = i
+		}
+		if op.Type == plan.OpClose && firstClose == -1 {
+			firstClose = i
+		}
+	}
+	if firstClose == -1 {
+		t.Fatal("want at least one close op (the one-closed beads variant obsoletes the removed node)")
+	}
+	if lastCreate > firstClose {
+		t.Errorf("want every create before every close, got ops: %+v", cs.Ops)
+	}
+}
+
+// --- S2: Diff input from stdin (pipe), and --diff - ---
+
+func TestPlanCommand_S2_DiffFromStdinAndDashFlag(t *testing.T) {
+	f := setupPlanFixture(t)
+	diffData, err := os.ReadFile(f.diffPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("file form: %v\n%s", err, stderr)
+	}
+
+	stdinOut, stderr, err := runPlan(t, string(diffData),
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("stdin form: %v\n%s", err, stderr)
+	}
+	if stdinOut != want {
+		t.Errorf("stdin form differs from file form\nfile:  %s\nstdin: %s", want, stdinOut)
+	}
+
+	dashOut, stderr, err := runPlan(t, string(diffData),
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", "-", "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("--diff - form: %v\n%s", err, stderr)
+	}
+	if dashOut != want {
+		t.Errorf("--diff - form differs from file form\nfile: %s\n-:    %s", want, dashOut)
+	}
+}
+
+// --- S3: Pipeline composition — spex diff piped into spex plan ---
+
+func TestPlanCommand_S3_PipelineComposition_DiffIntoPlan(t *testing.T) {
+	dir := setupTestSpec(t)
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(dir, ".snapshot.json")
+	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	comp1ID := schema.IdentityHash("alpha", "component", "Comp1")
+	newID := schema.IdentityHash("alpha", "component", "New")
+	test1ID := schema.IdentityHash("alpha", "test_section", "Comp1 tests")
+	writeTestFile(t, filepath.Join(dir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+comp1ID+`", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "`+newID+`", "name": "New", "content": "arch_new.md"}
+		],
+		"test_sections": [
+			{"id": "`+test1ID+`", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["`+comp1ID+`"]}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(dir, "alpha"), "arch_new.md", "# New\n")
+	// Touching Comp1's own content leaf too satisfies the completeness
+	// checker's rule that a module meta change (triggered by adding New to
+	// module.json) requires every existing component's leaf to change as
+	// well — unrelated to what this scenario is actually testing.
+	writeTestFile(t, filepath.Join(dir, "alpha"), "arch_comp1.md", "# Comp1 architecture, updated\n")
+
+	diffOut, err := runSpex(t, "diff", "--json", "--snapshot", snapshotPath, "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("diff: %v", err)
+	}
+
+	writeTestJournal(t, dir, []string{
+		`{"event":"registered","eid":"cafe0000:pipeline-prop","proposal":"pipeline-prop","git_head":"cafe0000"}`,
+	})
+
+	stdout, stderr, err := runPlan(t, diffOut,
+		"--proposal", "pipeline-prop", "--git-head", "deadbeefcafe", "--spec-dir", dir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\nstderr: %s\ndiff output: %s", err, stderr, diffOut)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	if cs.Version != plan.ChangesetVersion {
+		t.Errorf("version: want %d, got %d", plan.ChangesetVersion, cs.Version)
+	}
+	if len(cs.Ops) == 0 {
+		t.Fatal("want at least the epic + New create op")
+	}
+}
+
+// --- S4: Empty diff produces an epic-only or empty changeset ---
+
+func TestPlanCommand_S4_EmptyDiff_SynthesizesEpicWhenUnregisteredInFold(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"cafe:prop-a","proposal":"prop-a","git_head":"cafe0000"}`,
+	})
+	diffPath := writePlanDiff(t, t.TempDir(), "empty.json", nil, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "prop-a", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	if len(cs.Ops) != 1 || cs.Ops[0].SpecNodeKind != plan.KindProposalEpic {
+		t.Fatalf("want a single synthesized epic op, got %+v", cs.Ops)
+	}
+}
+
+func TestPlanCommand_S4_EmptyDiff_NoOpsWhenEpicAlreadyPaired(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	writeTestJournal(t, specDir, []string{
+		`{"event":"task_created","proposal":"prop-b","task_id":"existing-epic"}`,
+	})
+	diffPath := writePlanDiff(t, t.TempDir(), "empty.json", nil, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "prop-b", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	if len(cs.Ops) != 0 {
+		t.Fatalf("want an empty op list when an epic task is already paired, got %+v", cs.Ops)
+	}
+	if cs.Ops == nil {
+		t.Error("ops must marshal as an empty array, not null")
+	}
+}
+
+// --- S5: Diff input containing errors refuses to proceed ---
+
+func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", nil, []merkle.DiffError{
+		{Type: "incomplete_change", Message: "structural change lacks corresponding leaf changes", Path: "abcdef012345", Related: []string{"abcdef012345"}},
+	})
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error when the diff carries errors")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout, got %q", stdout)
+	}
+	if !strings.Contains(stderr, "incomplete_change") || !strings.Contains(stderr, "structural change lacks corresponding leaf changes") {
+		t.Errorf("want stderr to carry the diff error, got %q", stderr)
+	}
+}
+
+// --- S6: --beads drives the cleanup gate ---
+
+func TestPlanCommand_S6_BeadsFlagDrivesCleanupGate(t *testing.T) {
+	f := setupPlanFixture(t)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("with beads: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+
+	var cleanupOp *plan.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeID == f.removedID && cs.Ops[i].SpecNodeKind == plan.KindCleanup {
+			cleanupOp = &cs.Ops[i]
+		}
+	}
+	if cleanupOp == nil {
+		t.Fatalf("want a cleanup create for the removed node, got ops: %+v", cs.Ops)
+	}
+	if cleanupOp.Title != "Code cleanup: alpha/Removed" {
+		t.Errorf("cleanup title: got %q", cleanupOp.Title)
+	}
+	for _, id := range []string{f.existingID, f.existing2ID} {
+		found := false
+		for _, op := range cs.Ops {
+			if op.SpecNodeID == id && op.Type == plan.OpRetarget {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("want a retarget op for open pairing %s", id)
+		}
+	}
+
+	stdout2, stderr2, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("without beads: %v\n%s", err, stderr2)
+	}
+	cs2 := parsePlanChangeset(t, stdout2)
+
+	for _, op := range cs2.Ops {
+		if op.SpecNodeKind == plan.KindCleanup {
+			t.Errorf("want no cleanup create without --beads, got %+v", op)
+		}
+		if op.Type == plan.OpRetarget {
+			t.Errorf("want no retarget without --beads (unjoined status defaults closed), got %+v", op)
+		}
+	}
+	wantClosed := map[string]bool{"task-existing": false, "task-existing2": false}
+	for _, op := range cs2.Ops {
+		if op.Type == plan.OpClose && op.Target != nil {
+			if _, ok := wantClosed[op.Target.BeadID]; ok {
+				wantClosed[op.Target.BeadID] = true
+			}
+		}
+	}
+	for bead, found := range wantClosed {
+		if !found {
+			t.Errorf("want a close op for %s without --beads (defaults to obsolete+create)", bead)
+		}
+	}
+	wantCreates := map[string]bool{f.existingID: false, f.existing2ID: false}
+	for _, op := range cs2.Ops {
+		if op.Type == plan.OpCreate && op.SpecNodeKind == plan.KindComponent {
+			if _, ok := wantCreates[op.SpecNodeID]; ok {
+				wantCreates[op.SpecNodeID] = true
+			}
+		}
+	}
+	for id, found := range wantCreates {
+		if !found {
+			t.Errorf("want a successor create for %s without --beads", id)
+		}
+	}
+}
+
+// --- S7: A claimed task refuses the run — exit 2 ---
+
+func TestPlanCommand_S7_ClaimedTaskRefusesRun(t *testing.T) {
+	f := setupPlanFixture(t)
+	outPath := filepath.Join(t.TempDir(), "changeset.json")
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--spec-dir", f.specDir,
+		"--out", outPath,
+	)
+	if err == nil {
+		t.Fatal("want error when a claimed task's node changed")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit 2, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout, got %q", stdout)
+	}
+	msg := err.Error() + stderr
+	if !strings.Contains(msg, "task-existing") || !strings.Contains(msg, "task-existing2") {
+		t.Errorf("want the error to name both claimed tasks, got %q", msg)
+	}
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Errorf("want no --out file written on refusal")
+	}
+}
+
+// --- S8: --absorb marks a node out of the op stream ---
+
+func TestPlanCommand_S8_AbsorbMarksNodeOutOfStream(t *testing.T) {
+	f := setupPlanFixture(t)
+	absorbPath := writePlanAbsorb(t, t.TempDir(), "absorb.json", []map[string]string{
+		{"node": f.existingID, "reason": "cosmetic rewording"},
+	})
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", absorbPath, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+
+	for _, op := range cs.Ops {
+		if op.SpecNodeID == f.existingID {
+			t.Errorf("want no op for the absorbed node, got %+v", op)
+		}
+	}
+	if len(cs.Absorbed) != 1 || cs.Absorbed[0].Node != f.existingID || cs.Absorbed[0].Reason != "cosmetic rewording" {
+		t.Fatalf("want one absorbed entry for %s, got %+v", f.existingID, cs.Absorbed)
+	}
+	if cs.Absorbed[0].Before != "h0" || cs.Absorbed[0].After != "h1" {
+		t.Errorf("want before/after hashes copied from the diff, got %+v", cs.Absorbed[0])
+	}
+}
+
+func TestPlanCommand_S8_AbsorbInvalidMarks_Exit2(t *testing.T) {
+	f := setupPlanFixture(t)
+	cases := []struct {
+		name string
+		node string
+	}{
+		{"added node", f.newID},
+		{"removed node", f.removedID},
+		{"absent node", "aaaaaaaaaaaa"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			absorbPath := writePlanAbsorb(t, t.TempDir(), "absorb.json", []map[string]string{
+				{"node": tc.node, "reason": "bogus"},
+			})
+			stdout, _, err := runPlan(t, "",
+				"--proposal", f.proposal, "--git-head", f.gitHead,
+				"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", absorbPath, "--spec-dir", f.specDir,
+			)
+			if err == nil {
+				t.Fatalf("want error marking %s", tc.name)
+			}
+			if code := exitCodeOf(err); code != 2 {
+				t.Errorf("want exit 2, got %d (%v)", code, err)
+			}
+			if !strings.Contains(err.Error(), tc.node) {
+				t.Errorf("want error naming %s, got %v", tc.node, err)
+			}
+			if stdout != "" {
+				t.Errorf("want empty stdout, got %q", stdout)
+			}
+		})
+	}
+}
+
+func TestPlanCommand_S8_AbsorbBypassesClaimedTaskRefusal(t *testing.T) {
+	f := setupPlanFixture(t)
+	absorbPath := writePlanAbsorb(t, t.TempDir(), "absorb.json", []map[string]string{
+		{"node": f.existingID, "reason": "cosmetic"},
+		{"node": f.existing2ID, "reason": "cosmetic2"},
+	})
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--absorb", absorbPath, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("with absorb marks on both in_progress nodes: want exit 0, got %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	if len(cs.Absorbed) != 2 {
+		t.Fatalf("want 2 absorbed entries, got %+v", cs.Absorbed)
+	}
+
+	_, _, err2 := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--spec-dir", f.specDir,
+	)
+	if err2 == nil {
+		t.Fatal("want the same fixture, unmarked, to refuse — proving the mark is what makes the difference")
+	}
+	if code := exitCodeOf(err2); code != 2 {
+		t.Errorf("want exit 2 without the mark, got %d", code)
+	}
+}
+
+// --- S9: Missing required flags are errors ---
+
+func TestPlanCommand_S9_MissingRequiredFlags(t *testing.T) {
+	f := setupPlanFixture(t)
+	cases := []struct {
+		name     string
+		args     []string
+		wantFlag string
+	}{
+		{"missing proposal", []string{"--git-head", f.gitHead, "--diff", f.diffPath, "--spec-dir", f.specDir}, "proposal"},
+		{"missing git-head", []string{"--proposal", f.proposal, "--diff", f.diffPath, "--spec-dir", f.specDir}, "git-head"},
+		{"malformed git-head", []string{"--proposal", f.proposal, "--git-head", "not-a-sha", "--diff", f.diffPath, "--spec-dir", f.specDir}, "git-head"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stdout, stderr, err := runPlan(t, "", tc.args...)
+			if err == nil {
+				t.Fatalf("want error for %s", tc.name)
+			}
+			if stdout != "" {
+				t.Errorf("want no partial output, got %q", stdout)
+			}
+			msg := err.Error() + stderr
+			if !strings.Contains(msg, tc.wantFlag) {
+				t.Errorf("want error naming %s, got %q", tc.wantFlag, msg)
+			}
+		})
+	}
+}
+
+// --- S10: --out writes atomically ---
+
+func TestPlanCommand_S10_OutWritesAtomically(t *testing.T) {
+	f := setupPlanFixture(t)
+	outPath := filepath.Join(t.TempDir(), "changeset.json")
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--out", outPath, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout when --out is set, got %q", stdout)
+	}
+	data, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read --out file: %v", err)
+	}
+
+	stdoutForm, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("stdout form: %v", err)
+	}
+	if string(data) != stdoutForm {
+		t.Fatalf("--out file does not match stdout form\nfile: %s\nstdout: %s", data, stdoutForm)
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(outPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("want no leftover temp file, found %s", e.Name())
+		}
+	}
+
+	prior := string(data)
+	_, _, err2 := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--out", outPath, "--spec-dir", f.specDir,
+	)
+	if err2 == nil {
+		t.Fatal("want the claimed-task fixture to refuse")
+	}
+	after, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read --out file after refused run: %v", err)
+	}
+	if string(after) != prior {
+		t.Errorf("want the --out target untouched after a refused run")
+	}
+}
+
+// --- S11: Deterministic output across runs ---
+
+func TestPlanCommand_S11_DeterministicAcrossRuns(t *testing.T) {
+	f := setupPlanFixture(t)
+	var first string
+	for i := 0; i < 5; i++ {
+		stdout, stderr, err := runPlan(t, "",
+			"--proposal", f.proposal, "--git-head", f.gitHead,
+			"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		)
+		if err != nil {
+			t.Fatalf("run %d: %v\n%s", i, err, stderr)
+		}
+		if i == 0 {
+			first = stdout
+			continue
+		}
+		if stdout != first {
+			t.Fatalf("run %d differs from run 0\nrun0: %s\nrun%d: %s", i, first, i, stdout)
+		}
+	}
+}
+
+// --- S12: Exit codes ---
+
+func TestPlanCommand_S12_MalformedJournalLine_Exit1(t *testing.T) {
+	f := setupPlanFixture(t)
+	if err := os.WriteFile(filepath.Join(f.specDir, ".history.jsonl"), []byte("not-json\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead, "--diff", f.diffPath, "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a malformed journal line")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "read journal") {
+		t.Errorf("want error mentioning 'read journal', got %v", err)
+	}
+}
+
+func TestPlanCommand_S12_UnresolvableDep_Exit2(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	aID := schema.IdentityHash("alpha", "component", "A")
+	ghostID := schema.IdentityHash("alpha", "component", "Ghost")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+aID+`", "name": "A", "content": "arch_a.md", "uses": ["`+ghostID+`"]}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"cafe:p","proposal":"p","git_head":"cafe0000"}`,
+	})
+	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", []diffChange{
+		{Path: aID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-a"},
+	}, nil)
+
+	_, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for an unresolvable dep")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit 2, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), ghostID) {
+		t.Errorf("want error naming the unresolvable spec_node_id %s, got %v", ghostID, err)
+	}
+}
+
+// --- E1: --beads names a file that does not exist ---
+
+func TestPlanCommand_E1_BeadsFileMissing(t *testing.T) {
+	f := setupPlanFixture(t)
+	stdout, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", filepath.Join(t.TempDir(), "does-not-exist.json"), "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a missing --beads file")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "plan: read beads:") {
+		t.Errorf("want error prefixed 'plan: read beads:', got %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout, got %q", stdout)
+	}
+}
+
+// --- E2: Bead file parses but names no bead the fold knows ---
+
+func TestPlanCommand_E2_BeadsFileNamesUnknownBead_MatchesOmitted(t *testing.T) {
+	f := setupPlanFixture(t)
+	beadsPath := writePlanBeads(t, t.TempDir(), "beads.json", map[string]string{"task-unknown": "open"})
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", beadsPath, "--spec-dir", f.specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+
+	stdout2, _, err2 := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--spec-dir", f.specDir,
+	)
+	if err2 != nil {
+		t.Fatalf("plan (no beads): %v", err2)
+	}
+	if stdout != stdout2 {
+		t.Errorf("want output identical to --beads omitted\nwith:    %s\nwithout: %s", stdout, stdout2)
+	}
+}
+
+func TestPlanCommand_E2_BeadWithNoID_Exit1(t *testing.T) {
+	f := setupPlanFixture(t)
+	path := filepath.Join(t.TempDir(), "beads.json")
+	if err := os.WriteFile(path, []byte(`{"issues":[{"status":"open"}]}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", path, "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a bead with no id")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "index 0") {
+		t.Errorf("want error naming the offending index, got %v", err)
+	}
+}
+
+// --- E3: Malformed absorb file ---
+
+func TestPlanCommand_E3_MalformedAbsorbJSON_Exit1(t *testing.T) {
+	f := setupPlanFixture(t)
+	path := filepath.Join(t.TempDir(), "absorb.json")
+	if err := os.WriteFile(path, []byte(`{"broken":`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	_, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--absorb", path, "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for malformed absorb JSON")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("want error naming the file, got %v", err)
+	}
+}
+
+func TestPlanCommand_E3_AbsorbEntryNotHex_Exit2(t *testing.T) {
+	f := setupPlanFixture(t)
+	path := writePlanAbsorb(t, t.TempDir(), "absorb.json", []map[string]string{
+		{"node": "not-a-hex-id", "reason": "x"},
+	})
+	_, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", path, "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a non-hex absorb entry")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit 2, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "not-a-hex-id") {
+		t.Errorf("want error naming the entry, got %v", err)
+	}
+}
+
+// --- E4: Concurrent invocations are safe ---
+
+func TestPlanCommand_E4_ConcurrentInvocationsSafe(t *testing.T) {
+	f := setupPlanFixture(t)
+	binPath := buildSpexBinary(t)
+
+	const n = 3
+	var wg sync.WaitGroup
+	outs := make([]string, n)
+	errs := make([]error, n)
+	for i := 0; i < n; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			cmd := exec.Command(binPath, "plan",
+				"--proposal", f.proposal, "--git-head", f.gitHead,
+				"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir)
+			out, err := cmd.Output()
+			outs[i] = string(out)
+			errs[i] = err
+		}(i)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Fatalf("run %d failed: %v", i, err)
+		}
+	}
+	for i := 1; i < n; i++ {
+		if outs[i] != outs[0] {
+			t.Errorf("run %d output differs from run 0", i)
+		}
+	}
+}
+
+// --- E5: Large diff ---
+
+func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping large-diff performance test in -short mode")
+	}
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	const numModules = 20
+	const compsPerModule = 25 // 500 total
+
+	var modulesJSON strings.Builder
+	modulesJSON.WriteString("[")
+	var changes []diffChange
+	for m := 0; m < numModules; m++ {
+		modName := fmt.Sprintf("mod%d", m)
+		modID := schema.IdentityHash("module", modName)
+		if m > 0 {
+			modulesJSON.WriteString(",")
+		}
+		modulesJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","path":"%s"}`, modID, modName, modName))
+
+		if err := os.MkdirAll(filepath.Join(specDir, modName), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		var compsJSON strings.Builder
+		compsJSON.WriteString("[")
+		for c := 0; c < compsPerModule; c++ {
+			compName := fmt.Sprintf("Comp%d", c)
+			compID := schema.IdentityHash(modName, "component", compName)
+			if c > 0 {
+				compsJSON.WriteString(",")
+			}
+			content := fmt.Sprintf("arch_%d.md", c)
+			compsJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","content":"%s"}`, compID, compName, content))
+			writeTestFile(t, filepath.Join(specDir, modName), content, "# "+compName+"\n")
+			changes = append(changes, diffChange{Path: compID, Type: "added", Impact: "arch_impl", Module: modName, NodeType: "component", NewHash: "h-" + compID})
+		}
+		compsJSON.WriteString("]")
+		writeTestFile(t, filepath.Join(specDir, modName), "module.json", `{"name":"`+modName+`","components":`+compsJSON.String()+`}`)
+	}
+	modulesJSON.WriteString("]")
+	writeTestFile(t, specDir, "project.json", `{"name":"large","modules":`+modulesJSON.String()+`}`)
+
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"cafe:large-prop","proposal":"large-prop","git_head":"cafe0000"}`,
+	})
+
+	beadStatus := make(map[string]string, 300)
+	for i := 0; i < 300; i++ {
+		beadStatus[fmt.Sprintf("task-unrelated-%d", i)] = "open"
+	}
+	beadsPath := writePlanBeads(t, dir, "beads.json", beadStatus)
+	diffPath := writePlanDiff(t, dir, "diff.json", changes, nil)
+
+	start := time.Now()
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "large-prop", "--git-head", "deadbeefcafe", "--diff", diffPath, "--beads", beadsPath, "--spec-dir", specDir,
+	)
+	elapsed := time.Since(start)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	if elapsed > 5*time.Second {
+		t.Errorf("want completion under 5s, took %s", elapsed)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	wantOps := numModules*compsPerModule + 1 // + epic
+	if len(cs.Ops) != wantOps {
+		t.Errorf("want %d ops, got %d", wantOps, len(cs.Ops))
+	}
+}
