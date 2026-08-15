@@ -167,6 +167,44 @@ func TestREQ_40a3d3155131_S1b_BracketFollowsLatestEvent(t *testing.T) {
 	}
 }
 
+// --- S1d: retargeted task widens the bracket ---
+
+func TestREQ_76fe608c3a40_S1d_RetargetedTaskWidensBracket(t *testing.T) {
+	specDir := buildContextFixture(t,
+		changeLine("modified", "e5", "aabbccddeeff", "Parser", "component", "alpha", "h1", "h5", "cafe9999", ""),
+		taskRetargetedLine("e5", "abc-123"),
+		changeLine("modified", "e8", "aabbccddeeff", "Parser", "component", "alpha", "h5", "h8", "feed0002", ""),
+		taskRetargetedLine("e8", "abc-123"),
+	)
+
+	for _, key := range []string{"aabbccddeeff", "abc-123"} {
+		t.Run(key, func(t *testing.T) {
+			result, err := ResolveContext(specDir, key)
+			if err != nil {
+				t.Fatalf("ResolveContext(%q): %v", key, err)
+			}
+
+			wantArch := filepath.Join(specDir, "alpha", "arch_parser.md")
+			if result.ArchFile != wantArch {
+				t.Errorf("ArchFile = %q, want %q (file set unchanged from S1)", result.ArchFile, wantArch)
+			}
+
+			if result.Eid != "e8" {
+				t.Errorf("Eid = %q, want e8 (the latest retargeted event)", result.Eid)
+			}
+			if result.Event != "modified" {
+				t.Errorf("Event = %q, want modified", result.Event)
+			}
+			if result.AfterHead != "feed0002" {
+				t.Errorf("AfterHead = %q, want feed0002 (the latest retargeted event's git_head)", result.AfterHead)
+			}
+			if result.BeforeHead != "" {
+				t.Errorf("BeforeHead = %q, want empty — the task's original task_created was born from an added, which has no predecessor", result.BeforeHead)
+			}
+		})
+	}
+}
+
 // --- S1c: live node with no task-bearing event serves a null bracket ---
 
 func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
@@ -190,9 +228,9 @@ func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
 	}
 }
 
-// --- S1d: a resurrected node's before_head is null for the add, not the prior removal ---
+// --- a resurrected node's before_head is null for the add, not the prior removal ---
 
-func TestREQ_40a3d3155131_S1d_BeforeHeadNullForResurrectedAdd(t *testing.T) {
+func TestREQ_40a3d3155131_ResurrectedAdd_BeforeHeadNull(t *testing.T) {
 	specDir := buildContextFixture(t,
 		changeLine("added", "e6", "112233445566", "Ghost", "component", "alpha", "", "g6", "cafeaaa1", ""),
 		taskCreatedLine("e6", "", "task-001"),

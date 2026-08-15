@@ -149,28 +149,43 @@ func liveResult(store *MappingStore, specDir, modRelPath, modPath, hash, content
 }
 
 // latestTaskBearingBracket scans a node's history for its latest
-// task-bearing change event — one a task_created receipt names via `for` —
-// and returns the bracket anchored on it: that event's own eid and kind,
+// task-bearing change event — one a task_created or task_retargeted receipt
+// names via `for`, the two folding identically — and returns the bracket
+// anchored on it: that event's own eid and kind, and its own git_head as
+// AfterHead. ok is false when the node has no task-bearing event yet.
+//
+// When the latest task-bearing event was named by task_created, before is
 // the git_head of the change event immediately preceding it in the node's
-// lineage (empty for an added, or when none precedes), and its own
-// git_head. ok is false when the node has no task-bearing event yet.
+// lineage — empty for an added, or when none precedes. When it was named by
+// task_retargeted, the bracket widens instead: before comes from the change
+// event preceding the task's *original* task_created referent, so
+// consecutive retargets keep extending one bracket rather than each
+// shrinking it to its own increment.
 func latestTaskBearingBracket(history []Event) (eid, event, before, after string, ok bool) {
 	var changeEvents []Event
-	taskBearing := map[string]bool{}
+	receiptFor := map[string]Event{}
+	origTaskCreated := map[string]Event{}
 	for _, ev := range history {
 		switch ev.Event {
 		case "added", "modified", "removed":
 			changeEvents = append(changeEvents, ev)
 		case "task_created":
 			if ev.For != "" {
-				taskBearing[ev.For] = true
+				receiptFor[ev.For] = ev
+				if _, exists := origTaskCreated[ev.TaskID]; !exists {
+					origTaskCreated[ev.TaskID] = ev
+				}
+			}
+		case "task_retargeted":
+			if ev.For != "" {
+				receiptFor[ev.For] = ev
 			}
 		}
 	}
 
 	idx := -1
 	for i := len(changeEvents) - 1; i >= 0; i-- {
-		if taskBearing[changeEvents[i].EID] {
+		if _, named := receiptFor[changeEvents[i].EID]; named {
 			idx = i
 			break
 		}
@@ -180,9 +195,21 @@ func latestTaskBearingBracket(history []Event) (eid, event, before, after string
 	}
 
 	latest := changeEvents[idx]
-	if idx > 0 && latest.Event != "added" {
+	receipt := receiptFor[latest.EID]
+
+	if receipt.Event == "task_retargeted" {
+		if orig, ok := origTaskCreated[receipt.TaskID]; ok {
+			for i, ce := range changeEvents {
+				if ce.EID == orig.For && i > 0 {
+					before = changeEvents[i-1].GitHead
+					break
+				}
+			}
+		}
+	} else if idx > 0 && latest.Event != "added" {
 		before = changeEvents[idx-1].GitHead
 	}
+
 	return latest.EID, latest.Event, before, latest.GitHead, true
 }
 
