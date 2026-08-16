@@ -69,8 +69,11 @@ This is the step that must never be automated. Look at what the fix changed:
 - **No work is born** (prose-only correction; code already complies): refresh —
   `bin/spex ingest --mode refresh --changeset <empty-v3> --receipts <empty-v1>` (both artifacts
   required and must be empty: `{"version":3,...,"ops":[],"absorbed":[]}` /
-  `{"version":1,"status":"complete","receipts":[]}`), optionally `--git-head <sha>`. Absorbs the
-  correction into the baseline with journal events.
+  `{"version":1,"status":"complete","ops":[]}`), optionally `--git-head <sha>`. Absorbs the
+  correction into the baseline with journal events. Both artifacts key their array `ops` —
+  receipts included, per `adapters/types.go` — and an unknown key is silently ignored rather
+  than rejected, so a misspelling reads as an empty array and passes the empty case while losing
+  every entry in a non-empty one.
 - Mixed changes: mint — the pipeline computes both sides; refresh is only for the pure-correction
   case. Mark the pure-correction nodes in an `--absorb` file so the mint does not open beads that
   owe nothing.
