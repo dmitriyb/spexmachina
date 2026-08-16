@@ -416,6 +416,7 @@ func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
 	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", nil, []merkle.DiffError{
 		{Type: "incomplete_change", Message: "structural change lacks corresponding leaf changes", Path: "abcdef012345", Related: []string{"abcdef012345"}},
+		{Type: "surviving_name", Message: "removed node's name is claimed by a surviving node", Path: "fedcba987654", Related: []string{"fedcba987654"}},
 	})
 
 	stdout, stderr, err := runPlan(t, "",
@@ -431,7 +432,10 @@ func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
 		t.Errorf("want empty stdout, got %q", stdout)
 	}
 	if !strings.Contains(stderr, "incomplete_change") || !strings.Contains(stderr, "structural change lacks corresponding leaf changes") {
-		t.Errorf("want stderr to carry the diff error, got %q", stderr)
+		t.Errorf("want stderr to carry the first diff error, got %q", stderr)
+	}
+	if !strings.Contains(stderr, "surviving_name") || !strings.Contains(stderr, "removed node's name is claimed by a surviving node") {
+		t.Errorf("want stderr to carry the second diff error, not merely the first, got %q", stderr)
 	}
 }
 
@@ -984,7 +988,12 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 		if m > 0 {
 			modulesJSON.WriteString(",")
 		}
-		modulesJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","path":"%s"}`, modID, modName, modName))
+		requiresModuleJSON := "[]"
+		if m > 0 {
+			prevModID := schema.IdentityHash("module", fmt.Sprintf("mod%d", m-1))
+			requiresModuleJSON = fmt.Sprintf(`["%s"]`, prevModID)
+		}
+		modulesJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","path":"%s","requires_module":%s}`, modID, modName, modName, requiresModuleJSON))
 
 		if err := os.MkdirAll(filepath.Join(specDir, modName), 0o755); err != nil {
 			t.Fatal(err)
@@ -997,8 +1006,13 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 			if c > 0 {
 				compsJSON.WriteString(",")
 			}
+			usesJSON := "[]"
+			if c > 0 {
+				prevCompID := schema.IdentityHash(modName, "component", fmt.Sprintf("Comp%d", c-1))
+				usesJSON = fmt.Sprintf(`["%s"]`, prevCompID)
+			}
 			content := fmt.Sprintf("arch_%d.md", c)
-			compsJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","content":"%s"}`, compID, compName, content))
+			compsJSON.WriteString(fmt.Sprintf(`{"id":"%s","name":"%s","content":"%s","uses":%s}`, compID, compName, content, usesJSON))
 			writeTestFile(t, filepath.Join(specDir, modName), content, "# "+compName+"\n")
 			changes = append(changes, diffChange{Path: compID, Type: "added", Impact: "arch_impl", Module: modName, NodeType: "component", NewHash: "h-" + compID})
 		}
@@ -1090,9 +1104,11 @@ func TestPlanCommand_S13_BareArrayDiff_Exit1(t *testing.T) {
 	if err := os.WriteFile(diffPath, []byte(`[{"path":"abcdef012345","type":"added"}]`), 0644); err != nil {
 		t.Fatal(err)
 	}
+	outPath := filepath.Join(t.TempDir(), "changeset.json")
 
 	stdout, _, err := runPlan(t, "",
 		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--out", outPath,
 	)
 	if err == nil {
 		t.Fatal("want error for a bare array rather than a diff document object")
@@ -1102,6 +1118,9 @@ func TestPlanCommand_S13_BareArrayDiff_Exit1(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Errorf("want no --out file written on a refused run")
 	}
 }
 
