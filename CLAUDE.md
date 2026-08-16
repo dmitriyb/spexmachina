@@ -8,17 +8,16 @@ Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-
 
 ## Module Hierarchy
 
-The pipeline is `spex validate → diff → impact → emit → <adapter> → ingest`.
+The pipeline is `spex validate → diff → plan → <adapter> → ingest`.
 
 | Module | Purpose | Depends On |
 |--------|---------|------------|
 | Schema | JSON Schema for project.json + module.json + the journal line format | — |
 | Validator | Spec directory validation (DAG, refs, coverage) | Schema |
 | Merkle | Hash tree, snapshots, diff, impact classification | Schema |
-| Impact | Map merkle diff to bead actions | Merkle |
-| Emit | Compose a tool-agnostic changeset from an impact report | Impact, Mapping |
-| Adapters | Contract for external adapters (`scripts/apply-br.sh` is the reference) that apply a changeset and write receipts | Emit |
-| Ingest | Append journal events + save the snapshot from changeset+receipts; `--mode refresh` absorbs no-bead-work drift | Emit, Adapters, Merkle |
+| Plan | Decide the bead-action changeset in one pass from the merkle diff — match, classify, order, label, resolve, compose | Merkle, Mapping |
+| Adapters | Contract for external adapters (`scripts/apply-br.sh` is the reference) that apply a changeset and write receipts | Plan |
+| Ingest | Append journal events + save the snapshot from changeset+receipts; `--mode refresh` absorbs no-bead-work drift | Plan, Adapters, Merkle |
 | Mapping | Task journal (`spec/.history.jsonl`) linking spec nodes to tasks (`spex map context`) | Schema |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |

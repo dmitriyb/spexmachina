@@ -215,8 +215,9 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 - Does the prose describe the shapes and contracts moving between the components in `uses`, naming
   each one correctly?
 - `uses` is not a decorative reference list. Every component listed in it gains the data_flow as a
-  dependency so emit sequences the flow's op ahead of theirs (`impact/action_classifier.go`,
-  `attachDepSpecNodeIDs`). A component the narrative walks through but `uses` omits is a real defect.
+  dependency so the sorter sequences the flow's op ahead of theirs (`plan/action_classifier.go`,
+  the data_flow add-on beside `depsFor`). A component the narrative walks through but `uses` omits
+  is a real defect.
 
 **Test section (`test_*.md`)**
 
@@ -240,7 +241,7 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 ## Step 6: Bucket findings by lifecycle
 
 Bead-producing node types are **`component`, `data_flow`, and `test_section` with `describes >= 2`**
-(contract in `spec/impact/arch_action_classifier.md`). Everything else produces no bead: `requirement`
+(contract in `spec/plan/arch_action_classifier.md`). Everything else produces no bead: `requirement`
 (project or module), **`api`**, `test_section` with `describes == 1`, `meta`, and
 **`module`**. A module is not a leaf, so no change ever reaches the classifier carrying node type
 `module`; a `module.json` edit surfaces as that module's `meta/<hash>` leaf, and `meta` produces no
@@ -259,7 +260,7 @@ structural additions and removals of an explicit type list (`ingest/refresh.go`,
 
 So:
 
-- Findings on bead-producing leaves → normal pipeline (`diff → impact → emit → <adapter> → ingest`).
+- Findings on bead-producing leaves → normal pipeline (`diff → plan → <adapter> → ingest`).
 - Findings on both kinds → normal pipeline. The bead-producing changes drive the lifecycle; refresh
   mode would be wrong.
 - Findings confined to the absorbable set → the proposal declares `mode: refresh` in its frontmatter.
@@ -306,11 +307,11 @@ the user the file path and remind them to review and commit to git.`
 ## Step 8: Exit plan mode and write the proposal file
 
 After user approval, write to `spec/proposals/YYYY-MM-DD-spec-review-<scope>.md` — today's date and a
-slug from the audit scope (`spec-review-emit` for one module, `spec-review-all` for a full audit).
+slug from the audit scope (`spec-review-plan` for one module, `spec-review-all` for a full audit).
 
 Tell the user the file path and remind them to review + commit + run `/spec` on it to apply.
 
-**STOP after writing the file.** Do not run `/spec`. Do not run `spex emit`, `spex ingest` or an
+**STOP after writing the file.** Do not run `/spec`. Do not run `spex plan`, `spex ingest` or an
 adapter. The author reviews first.
 
 ## Step 9: No-findings exit
