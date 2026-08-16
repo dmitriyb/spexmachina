@@ -42,8 +42,18 @@
 
 ### Removed node retains its biography
 
-- **Input**: node Z with `added`, `task_created`, then `removed`
-- **Expected**: the fold marks Z removed; a lookup still returns its name, node_type, module and the removing event's `proposal` and `git_head` — the journal is the only surviving name record for Z
+- **Input**: node Z with `added`, `task_created` (task D), then `removed`
+- **Expected**: the fold marks Z removed; a lookup **by Z's identity hash** still returns its name, node_type, module and the removing event's `proposal` and `git_head` — the journal is the only surviving name record for Z. The entry carries no task id: the removal superseded task D's pairing, and no cleanup task has answered the removal yet. Task D's id no longer resolves to Z through the fold — the lineage is reachable through Z's event history instead
+
+### Removed node is reachable by its cleanup task id
+
+- **Input**: node Z as above, plus a `task_created` (task E) whose `for` references the `removed` event
+- **Expected**: the entry stays removed and now carries task E; **both keys reach it** — Z's identity hash and task E's id resolve to the same biography, which is what keeps a cleanup task from being born pointing at nothing. The superseded task D still does not resolve
+
+### A receipt pairs by eid wherever it sits in the file
+
+- **Input**: the same journal as the scenario above, with the cleanup's `task_created` line written **before** the `removed` event it references
+- **Expected**: identical fold to the in-order journal — the pairing is found, the entry carries task E, and nothing is reported dangling. Pairing is by eid alone; file position carries no meaning. A receipt whose `for` names an eid the file carries nowhere is the dangling case, and that is the only dangling case
 
 ### Registered event folds the epic
 

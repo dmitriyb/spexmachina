@@ -23,8 +23,16 @@ implementation bead.
 
 - Build a changeset from a single-create action batch. Assert the output has `"version": 3` at
   the top, `git_head` set to the fixed SHA, and canonical field order on every op (`op_id`,
-  `type`, `spec_node_kind`, `spec_node_id`, `idempotency`, `parent`, `deps`, `priority`, `title`,
-  `body`, `target`, `labels`, `reason`).
+  `type`, `spec_node_kind`, `spec_node_id`, `spec_hash`, `idempotency`, `parent`, `deps`,
+  `priority`, `title`, `body`, `target`, `labels`, `reason`) — the one sequence every op kind
+  writes its own subset of, `spec_hash` included, since creates carry it as well as retargets.
+- Run the same assertion over a batch carrying one create, one retarget and one close, and assert
+  the retarget's `deps` are serialized **before** its `target`: one order governs every kind, and
+  a retarget is where a per-kind order would show itself.
+- Assert each ref object's own key names on the wire — `{"ref":"op","op_id":…}`,
+  `{"ref":"bead","bead_id":…}`, and `type` on a lineage edge. The adapter reads `.op_id` off an
+  in-batch dep to resolve it against the ops it has already applied, so renaming the key silently
+  resolves every in-batch dep to nothing rather than failing loudly.
 - Same inputs produce byte-identical output across two runs.
 
 ### Proposal epic parents every non-epic create
@@ -79,13 +87,14 @@ implementation bead.
   DepSpecNodeIDs name one in-batch create and one fold-paired open task. Assert the resulting op
   carries:
   - `type: "retarget"`.
-  - `target: {"ref":"bead","bead_id":"spexmachina-hun"}`.
   - `spec_node_id`: X's identity hash.
   - `spec_hash`: X's new content hash — the state the task now targets.
+  - `deps`: the two recomputed refs, one `ref:op` and one `ref:bead`.
+  - `target: {"ref":"bead","bead_id":"spexmachina-hun"}` — serialized after `deps`, per the one
+    canonical order.
   - `labels: ["spex:<git_head>:<its op_id>"]` — the eid of this run's `modified` event for X,
     derived from `(git_head, op_id)` like every node-bearing create's label; no
     `idempotency` field, because updates need no probe.
-  - `deps`: the two recomputed refs, one `ref:op` and one `ref:bead`.
   - no `parent`, no `priority`, no `body` — the task already sits where it sits.
 - Two retargets in one batch carry distinct labels (each embeds its own op_id).
 - A batch of only retargets emits no close ops and no epic op when the fold already pairs one.
@@ -108,6 +117,11 @@ implementation bead.
   create op's `priority` is `1` (lowest wins).
 - Component implements a module requirement with no priority chain (no preq_id found upstream).
   Assert priority defaults per the documented fallback (`plan.FallbackPriority`).
+- Component implements three requirements where one is broken — its `preq_id` names no project
+  requirement — and the other two resolve to `2` and `4`. Assert `priority` is `2`: the minimum
+  runs over the reachable requirements, so one unreachable entry is skipped rather than
+  collapsing the whole walk to the fallback. The fallback answers only when *no* entry is
+  reachable, which is the case the scenario above pins.
 
 ### Obsolete + create lineage
 
@@ -150,6 +164,19 @@ implementation bead.
   - `deps: [{"ref":"bead","bead_id":"spexmachina-old","type":"blocks"}]` — lineage from the
     closed task being cleaned up.
   - `priority: 3` (`plan.FallbackPriority`).
+
+### Op id numbering across a batch mixing every kind
+
+- One batch carrying all of it together: two conventional creates, one cleanup create for a
+  removed node, one retarget, and two closes — one of them the removal close the cleanup answers.
+- Assert op ids run from `op-1` in creates → retargets → closes order, with no gap and no reuse,
+  zero-padded to the digit width of the total op count across all three kinds.
+- Assert the cleanup create's `idempotency.label` is `spex:<git_head>:<the removal close's op_id>`,
+  reading that close's actual `op_id` out of the emitted document rather than recomputing the
+  arithmetic the builder used. The cleanup's label is derived before the close ops are numbered,
+  so it rests on a prediction of where the closes will start — and the retarget block sitting
+  between the creates and the closes is exactly what that prediction has to account for. A batch
+  of creates and closes alone satisfies both a correct rule and one blind to retargets.
 
 ### Cross-component scenario: Resolver + Sorter + Labeler + Builder produce byte-identical output across runs
 

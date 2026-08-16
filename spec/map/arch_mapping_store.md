@@ -19,7 +19,12 @@ tracker minted, and the store turns that log into answers.
 - Provide lookup by identity hash or by task id — the two keys are interchangeable ways to reach
   one node, distinguished by shape (12-hex is a node, anything else is a task)
 - Answer for removed nodes: a node's biography survives its removal, so name, node type, module,
-  the removing proposal and the bracketing `git_head` refs stay resolvable forever
+  the removing proposal and the bracketing `git_head` refs stay resolvable forever. Both keys
+  reach it: the identity hash, and the id of the cleanup task born to answer the removal
+- Carry, on a removed entry, the cleanup task's id and not the one the node held while it was
+  live — the removal supersedes the pre-removal pairing, which stays in the journal as lineage
+  and is reachable through the event history rather than through the fold. A removal no cleanup
+  task answers carries no task id at all
 - [[4aee62bd3c15|Check each line against the journal-line schema]] on the way in, naming the line
   number on violation
 
@@ -76,6 +81,14 @@ Receipt events record what the tracker did:
 | `for` | receipts | The `eid` of the event this receipt answers. A modify pair's `task_closed` and `task_created` both reference the pair's `modified` event; a removal's `task_closed` references the `removed` event; an epic's `task_created` references the `registered` event; a `task_retargeted` references the retarget's own `modified` event |
 | `task_id` | receipts | The tracker's id, applied by the adapter, reported in receipts |
 
+A receipt pairs with the event its `for` names by eid alone, never by file position. Ingest lands
+a batch whole and is free to write a receipt on either side of the event it references: the
+journal really does carry a cleanup's `task_created` ahead of the `removed` event that receipt
+answers. Folding therefore indexes every event by eid before it walks them — an index built
+during the walk would meet that receipt early, find nothing, and report a pairing that exists as
+dangling. Dangling means the journal carries no such event anywhere in the file, which is a fact
+about the file and not about the order two lines happen to sit in.
+
 A pointer discipline holds throughout: the journal stores identity, names, hashes and commit refs —
 never leaf content. Showing a change is `git diff <before-head> <after-head> -- <leaf>`, derived
 from the refs, so the journal cannot drift from the bytes git already owns.
@@ -88,8 +101,9 @@ which it does not contact. A caller can
 - parse the journal and receive every event in file order;
 - ask for the fold and receive one entry per task-bearing node — hash, current task id, and the
   sourcing event;
-- resolve one key, hash or task id, to its fold entry — including removed nodes, whose entries
-  carry the biography instead of a live task;
+- resolve one key, hash or task id, to its fold entry — including removed nodes, which answer to
+  both keys alike: the hash reaches the biography, and so does the cleanup task id, since that
+  task is what the entry now carries in place of a live one;
 - ask for a node's full event history, oldest first, which is how lineage questions ("which tasks
   has this node had?") are answered without any stored back-pointers;
 - append events — the store validates each line against the journal-line schema and lands the
@@ -134,6 +148,17 @@ time to mint the op's label — so idempotency needs no counter, no reservation 
 coordination. Legacy `spex:<int>`, `spex:<spec_node_id>` and `spex:cleanup-<hash>` labels on
 existing tasks are inert history: the backfill seeded the journal with every pairing that ever
 existed, so nothing old became unresolvable.
+
+### Why a removed entry carries the cleanup task, not the one it had alive
+
+Both readings of "the entry carries a biography instead of a live task" are defensible on their
+own — the journal holds the pre-removal pairing either way, as lineage — so the choice is settled
+here rather than left to whoever implements next. The narrow reading wins because ingest depends
+on it: the reconciler reads a fold entry that is `removed` and already carries a task id as
+"this removal's cleanup has landed", and mints nothing further. Under the broad reading every
+removed node that ever had a task would present that signal, and no genuine cleanup receipt would
+ever be recognised as new. Cleanup idempotency therefore rests on this sentence, not on a
+convention, and a future implementer who broadens it breaks that silently.
 
 ### Why one writer-owner?
 

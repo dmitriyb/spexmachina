@@ -60,14 +60,16 @@ Declaring, describing or retiring a surface therefore produces an empty changese
 
 A retarget action — a modified node whose live pairing's task is open — is emitted as its own op type:
 
+Rows are in the canonical field order "Canonical Output" fixes below, as they are in every shape table on this page — one order governs every op kind, and a table that enumerated its fields in some other order would read as a second, competing rule.
+
 | Field | Retarget op value |
 |-------|-------------------|
 | `type` | `"retarget"` |
-| `target` | `{ref:bead, bead_id:"<the open task>"}` — the task whose target moves |
 | `spec_node_id` | the identity hash of the modified node |
 | `spec_hash` | the node's new content hash |
-| `labels` | `["spex:<eid>"]` of this run's `modified` event, derived from `(git_head, op_id)` like every node-bearing create's label. It rides in `labels`, not under `idempotency`: updates are naturally idempotent, so there is nothing to probe for |
 | `deps` | the recomputed refs from Resolver — applied add-only by the adapter; nothing here expresses removal |
+| `target` | `{ref:bead, bead_id:"<the open task>"}` — the task whose target moves |
+| `labels` | `["spex:<eid>"]` of this run's `modified` event, derived from `(git_head, op_id)` like every node-bearing create's label. It rides in `labels`, not under `idempotency`: updates are naturally idempotent, so there is nothing to probe for |
 | `reason` | the action's reason verbatim |
 
 No `parent`, no `priority`, no `title`, no `body`: the task already exists with all four, and a retarget moves only its target state and deps. No close accompanies it and no `blocks` lineage dep is minted — the generations that lineage edge used to connect no longer exist as separate beads, and the accumulation is readable from the journal's `task_retargeted` receipts instead.
@@ -86,8 +88,8 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `deps`            | one `bead` ref to the removed node's old bead, edge type `blocks` — lineage                 |
 | `priority`        | `3`, the fallback                                                                           |
 | `title`           | the action's reason verbatim (e.g. `"Code cleanup: m/X"`) — NOT `"<module>: <node>"`         |
-| `labels`          | `["spex:cleanup"]` — so the adapter can stamp the discriminator label on the bead as it creates it. Close ops and retargets carry labels too; conventional creates do not. |
 | `body`            | empty                                                                                       |
+| `labels`          | `["spex:cleanup"]` — so the adapter can stamp the discriminator label on the bead as it creates it. Close ops and retargets carry labels too; conventional creates do not. |
 
 Modify-pair creates — a create paired with the close of the bead it replaces, minted only when the old pairing is closed, with no cleanup reason — keep the conventional shape, and their `idempotency.label` is `spex:<eid>` of this run's `modified` event, distinct from the closed predecessor's label by construction — each change in a node's lineage references its own event, so no lookup and no reuse rule is needed and the old label can never collide. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
 
@@ -129,7 +131,7 @@ Close ops omit `deps`/`parent` and add `target` + `labels`:
 }
 ```
 
-Retarget ops carry `target`, `spec_node_id`, `spec_hash`, `labels`, `deps` and `reason` per the shape table above.
+Retarget ops carry `spec_node_id`, `spec_hash`, `deps`, `target`, `labels` and `reason` per the shape table above — `deps` ahead of `target`, as the canonical order has it for every op kind alike.
 
 ## Title and body
 
@@ -148,7 +150,7 @@ The body is the spec context a reader of the bead needs and nothing beyond it: t
 
 ## Canonical Output
 
-- Field order inside every op is fixed (op_id, type, spec_node_kind, spec_node_id, spec_hash, idempotency, parent, deps, priority, title, body / target, labels, reason).
+- Field order inside every op is fixed — op_id, type, spec_node_kind, spec_node_id, spec_hash, idempotency, parent, deps, priority, title, body, target, labels, reason. It is one sequence, not a per-kind choice: each op writes the fields its kind carries and omits the rest, in that order, so a retarget's `deps` precede its `target` exactly as a create's `deps` precede a close's `target`. No op kind reorders, and no shape table on this page states an order of its own.
 - `ops` array preserves the order produced by TopologicalSorter — never re-sorted at write time; the retarget ops follow the creates, and the close ops follow the retargets, each block in the classifier's deterministic action order.
 - Op ids are `op-<n>`, numbered from 1 in that order — the creates first, then the retargets, then the closes — and zero-padded to the digit width of the changeset's total op count. Nine ops number `op-1` through `op-9`; forty number `op-01` through `op-40`; a changeset reaching four digits numbers `op-0001` upward. The width is computed here, over every op kind together — TopologicalSorter is handed the creates alone and so cannot compute it.
 - JSON is indented 2 spaces, LF-only newlines, no trailing whitespace.

@@ -70,7 +70,9 @@ Call `MatchNodes(changes, pairings)` with the fixture data. Expected:
 
 ### S4: NodeMatcher handles multiple beads per spec node
 
-Append a modify pair for `SCHK_HASH` (second `task_created` after a `task_closed`). Assert the match carries the node's current pairing, with the lineage reachable through the journal history.
+Append a modify pair for `SCHK_HASH` (second `task_created` after a `task_closed`). Assert the match carries the node's current pairing, with the lineage reachable through the journal history — the fold answers latest-wins, so one pairing is what it hands over here.
+
+Then assert the interface contract directly, independent of what the fold happens to produce: hand `MatchNodes` two pairings that both store `SCHK_HASH` and assert the match carries **both**, in bead-id order, not the first alone. The fold's latest-wins rule is why the list holds one entry in practice, and matching is specified to neither rely on that nor enforce it — so the plural case has to be constructed to be tested at all, and a matcher that returned the first entry would pass every fold-derived fixture.
 
 ### S4b: A retargeted pairing matches like any other
 
