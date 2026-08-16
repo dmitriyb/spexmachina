@@ -1,9 +1,11 @@
 package plan
 
 import (
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -142,6 +144,98 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 		if refs[i] != want[i] {
 			t.Fatalf("index %d: got %+v, want %+v", i, refs[i], want[i])
 		}
+	}
+}
+
+// --- Retarget-path pairing with ActionClassifier (S6) ---
+//
+// arch_resolver.md's "Test surface" carves this specific pairing out of
+// test_changeset_builder's Builder.Build()-level coverage: "the
+// retarget-path pairing with ActionClassifier lives in test_classification".
+// These feed ActionClassifier's real, graph-derived DepSpecNodeIDs straight
+// into ResolveDeps — not hand-written dep lists — so the two components'
+// contract is exercised together, not just each one's shape in isolation.
+
+// TestRetargetDeps_ClassifierOutputResolvesViaResolver pins S6's first two
+// bullets: a retarget action's DepSpecNodeIDs, as ActionClassifier actually
+// computes them from CompX's real uses/requires_module edges, resolve
+// through Resolver with the same in-batch-wins-over-fold precedence and the
+// same drop-if-closed rule a create's deps use.
+func TestRetargetDeps_ClassifierOutputResolvesViaResolver(t *testing.T) {
+	f := newClassifierFixture()
+	c := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
+	m := Match{Change: c, Records: []Pairing{{TaskID: "spex-003", BeadStatus: "open", After: "old"}}}
+
+	actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Type != ActionRetarget {
+		t.Fatalf("want 1 retarget action, got %+v", actions)
+	}
+	retarget := actions[0]
+
+	// CompX's real DepSpecNodeIDs (collectDeps): CompY (direct uses), plus
+	// CompZ and CompS (transitive requires_module, plan -> merkle -> schema).
+	// Y is an in-batch create, Z is open in the fold, S is closed in the
+	// fold and must drop.
+	batch := map[string]string{f.CompY: "op-y"}
+	fold := fakeFold{
+		f.CompZ: {TaskID: "spexmachina-z", BeadStatus: "open"},
+		f.CompS: {TaskID: "spexmachina-s", BeadStatus: "closed"},
+	}
+
+	refs, err := ResolveDeps(retarget.DepSpecNodeIDs, batch, fold)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var want []Ref
+	for _, id := range retarget.DepSpecNodeIDs {
+		switch id {
+		case f.CompY:
+			want = append(want, Ref{Kind: RefOp, OpID: "op-y"})
+		case f.CompZ:
+			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-z"})
+		case f.CompS:
+			// closed in the fold: dropped, no ref.
+		default:
+			t.Fatalf("unexpected dep in retarget.DepSpecNodeIDs: %s", id)
+		}
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("got %+v, want %+v", refs, want)
+	}
+}
+
+// TestRetargetDeps_ClassifierOutputUnresolvedIsError pins S6's third
+// bullet: the retarget path gets no laxer resolution than the create path —
+// a dep that is neither in-batch nor in the fold is a plan error naming the
+// spec_node_id, even when the dep list came from the classifier rather than
+// a hand-written fixture.
+func TestRetargetDeps_ClassifierOutputUnresolvedIsError(t *testing.T) {
+	f := newClassifierFixture()
+	c := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
+	m := Match{Change: c, Records: []Pairing{{TaskID: "spex-003", BeadStatus: "open", After: "old"}}}
+
+	actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	retarget := actions[0]
+
+	_, err = ResolveDeps(retarget.DepSpecNodeIDs, map[string]string{}, fakeFold{})
+	if err == nil {
+		t.Fatal("want a plan error when a retarget's dep is neither in-batch nor in the fold")
+	}
+	named := false
+	for _, id := range retarget.DepSpecNodeIDs {
+		if strings.Contains(err.Error(), id) {
+			named = true
+		}
+	}
+	if !named {
+		t.Errorf("error should name the unresolvable spec_node_id, got: %v", err)
 	}
 }
 
