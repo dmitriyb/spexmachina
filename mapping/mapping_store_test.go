@@ -293,6 +293,94 @@ func TestREQ_934d627f0e90_RemovedNodeWithCleanupTaskStaysRemoved(t *testing.T) {
 	}
 }
 
+// TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID keys a removed
+// node by its cleanup task id — the half of "the two keys are
+// interchangeable ways to reach one node" that removed nodes were missing.
+// Both file orders are exercised because pairing is by eid, not by
+// position: ingest lands a batch in which a cleanup's task_created can sit
+// either side of the removal event it names, and the fold must answer the
+// same either way.
+func TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID(t *testing.T) {
+	removal := changeLine("removed", "e9", "ffffffffffff", "CompV", "component", "modE", "h1", "", "g-removed", "remove-prop")
+	cleanup := taskCreatedLine("e9", "", "task-cleanup")
+
+	orders := map[string][]string{
+		"receipt after removal":  {removal, cleanup},
+		"receipt before removal": {cleanup, removal},
+	}
+
+	for name, lines := range orders {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			writeJournal(t, dir, lines)
+			store := NewMappingStore(dir)
+
+			f, err := store.List()
+			if err != nil {
+				t.Fatalf("List: %v", err)
+			}
+			if len(f.Dangling) != 0 {
+				t.Fatalf("cleanup receipt names a removal the journal carries; want no dangling, got %+v", f.Dangling)
+			}
+
+			byTask, err := store.Get("task-cleanup")
+			if err != nil {
+				t.Fatalf("Get by cleanup task id: %v", err)
+			}
+			byHash, err := store.Get("ffffffffffff")
+			if err != nil {
+				t.Fatalf("Get by hash: %v", err)
+			}
+			if !reflect.DeepEqual(byTask, byHash) {
+				t.Fatalf("keys must be interchangeable: by task %+v, by hash %+v", byTask, byHash)
+			}
+			if byTask.Key != "ffffffffffff" || byTask.TaskID != "task-cleanup" {
+				t.Fatalf("want key ffffffffffff / task-cleanup, got %+v", byTask)
+			}
+			if !byTask.Removed {
+				t.Fatal("want Removed=true")
+			}
+			if byTask.Source.Name != "CompV" || byTask.Source.NodeType != "component" ||
+				byTask.Source.Module != "modE" || byTask.Source.Proposal != "remove-prop" ||
+				byTask.Source.GitHead != "g-removed" {
+				t.Fatalf("cleanup task must answer with the biography, got %+v", byTask.Source)
+			}
+		})
+	}
+}
+
+// TestREQ_934d627f0e90_HistoryPairsReceiptAheadOfItsEvent covers the same
+// position-independence on the lineage side: a receipt naming an eid that
+// appears later in the file still belongs to that node's history.
+func TestREQ_934d627f0e90_HistoryPairsReceiptAheadOfItsEvent(t *testing.T) {
+	dir := t.TempDir()
+	writeJournal(t, dir, []string{
+		changeLine("added", "e1", "ffffffffffff", "CompV", "component", "modE", "", "h1", "g1", "p1"),
+		taskCreatedLine("e1", "", "task-V"),
+		taskCreatedLine("e9", "", "task-cleanup"),
+		changeLine("removed", "e9", "ffffffffffff", "CompV", "component", "modE", "h1", "", "g-removed", "remove-prop"),
+		taskClosedLine("e9", "task-V"),
+	})
+
+	store := NewMappingStore(dir)
+	history, err := store.History("ffffffffffff")
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	wantEvents := []string{"added", "task_created", "task_created", "removed", "task_closed"}
+	if len(history) != len(wantEvents) {
+		t.Fatalf("want %d events, got %d: %+v", len(wantEvents), len(history), history)
+	}
+	for i, want := range wantEvents {
+		if history[i].Event != want {
+			t.Fatalf("event %d: want %s, got %s", i, want, history[i].Event)
+		}
+	}
+	if history[2].TaskID != "task-cleanup" {
+		t.Fatalf("cleanup receipt missing from lineage, got %+v", history[2])
+	}
+}
+
 // --- Epic receipts fold without a change event ---
 
 func TestREQ_934d627f0e90_EpicReceiptFoldsWithoutChangeEvent(t *testing.T) {
