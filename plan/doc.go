@@ -45,20 +45,24 @@
 //     implements -> preq_id -> priority for each create's priority number.
 //  8. ChangesetBuilder assembles the create ops, appends the retarget ops
 //     and one close op per obsoleted bead, writes the absorbed array, and
-//     writes changeset.json v3 in canonical field order to stdout or
-//     --out.
+//     answers with the finished changeset.json v3 in canonical field
+//     order. PlanCommand writes that answer to stdout, or atomically to
+//     --out — the builder composes the document, the command owns the
+//     sink.
 //
 // # Contract surface
 //
-// This package is intentionally minimal at this stage: the wire-format
-// Changeset / Op / Ref / Idem / AbsorbedEntry types — the JSON
-// changeset.json v3 composes and the external adapter reads — the
+// The wire-format Changeset / Op / Ref / Idem / AbsorbedEntry types — the
+// JSON changeset.json v3 composes and the external adapter reads — the
 // classifier -> builder-chain Action / OrderedOp shapes, plus the op-kind,
 // action-type, spec_node_kind, ref-kind and label vocabularies, the tier
-// and fallback-priority constants, and the schema version constant.
-// Component-level behavior — BeadReader, NodeMatcher,
-// ActionClassifier, TopologicalSorter, IdempotencyLabeler, Resolver,
-// ChangesetBuilder, PlanCommand — is owned by the per-component beads
-// (spexmachina-f6eh.19/.20/.21/.22/.23/.25/.26/.27), which list this bead
-// as a blocker.
+// and fallback-priority constants, and the schema version constant, are
+// all public. Each step of the flow above ships as a component in this
+// package: ReadBeads/ReadBeadsBytes (BeadReader), MatchNodes
+// (NodeMatcher), ClassifyActions (ActionClassifier), Sort
+// (TopologicalSorter), Labeler (IdempotencyLabeler),
+// ResolveDeps/ResolveEpicAction/ResolveParent/ResolvePriority (Resolver),
+// and Builder.Build (ChangesetBuilder). PlanCommand, the orchestrator that
+// calls them in the order above, lives in cmd/spex/plan.go, outside this
+// package.
 package plan
