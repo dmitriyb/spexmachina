@@ -113,6 +113,42 @@ func findClose(t *testing.T, ops []Op, beadID string) Op {
 
 // --- Canonical schema and field order ---
 
+// canonicalOpFieldOrder is the wire field order the Op struct's tags pin
+// (types.go): op_id, type, spec_node_kind, spec_node_id, spec_hash,
+// idempotency, parent, deps, priority, title, body, target, labels,
+// reason. A create, retarget or close op each surface only the subset of
+// fields their shape uses — assertCanonicalFieldOrder checks that
+// whichever fields are present appear in this relative order, since one
+// order governs every op kind.
+var canonicalOpFieldOrder = []string{
+	`"op_id"`, `"type"`, `"spec_node_kind"`, `"spec_node_id"`, `"spec_hash"`,
+	`"idempotency"`, `"parent"`, `"deps"`, `"priority"`, `"title"`, `"body"`,
+	`"target"`, `"labels"`, `"reason"`,
+}
+
+// assertCanonicalFieldOrder marshals op and checks that whichever of
+// canonicalOpFieldOrder's fields the wire JSON carries appear in that
+// relative order; fields the op's shape omits are skipped, not required.
+func assertCanonicalFieldOrder(t *testing.T, op Op) {
+	t.Helper()
+	raw, err := json.Marshal(op)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(raw)
+	prev, prevField := -1, ""
+	for _, f := range canonicalOpFieldOrder {
+		idx := strings.Index(got, f)
+		if idx < 0 {
+			continue
+		}
+		if idx <= prev {
+			t.Errorf("field %s out of order (want after %s) in op JSON:\n%s", f, prevField, got)
+		}
+		prev, prevField = idx, f
+	}
+}
+
 func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
@@ -129,24 +165,7 @@ func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 		t.Errorf("git_head: want deadbeefcafe1234, got %q", cs.GitHead)
 	}
 
-	raw, err := json.MarshalIndent(cs.Ops[0], "", "  ")
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	got := string(raw)
-	fields := []string{`"op_id"`, `"type"`, `"spec_node_kind"`, `"spec_node_id"`, `"idempotency"`, `"parent"`, `"priority"`, `"title"`}
-	prev := -1
-	for _, f := range fields {
-		idx := strings.Index(got, f)
-		if idx < 0 {
-			t.Errorf("field %s missing in op JSON:\n%s", f, got)
-			continue
-		}
-		if idx <= prev {
-			t.Errorf("field %s out of order in op JSON:\n%s", f, got)
-		}
-		prev = idx
-	}
+	assertCanonicalFieldOrder(t, cs.Ops[0])
 }
 
 // TestBuild_CanonicalFieldOrderMixedBatch runs the field-order assertion
@@ -177,6 +196,12 @@ func TestBuild_CanonicalFieldOrderMixedBatch(t *testing.T) {
 	cs, err := env.build(actions, "p", "deadbeef")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
+	}
+	if len(cs.Ops) != 3 {
+		t.Fatalf("want 3 ops (create, retarget, close), got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+	for _, op := range cs.Ops {
+		assertCanonicalFieldOrder(t, op)
 	}
 
 	retarget := findOp(t, cs.Ops, "x-node")
