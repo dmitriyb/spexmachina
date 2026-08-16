@@ -3,6 +3,7 @@ package plan
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -112,6 +113,42 @@ func findClose(t *testing.T, ops []Op, beadID string) Op {
 
 // --- Canonical schema and field order ---
 
+// canonicalOpFieldOrder is the wire field order the Op struct's tags pin
+// (types.go): op_id, type, spec_node_kind, spec_node_id, spec_hash,
+// idempotency, parent, deps, priority, title, body, target, labels,
+// reason. A create, retarget or close op each surface only the subset of
+// fields their shape uses — assertCanonicalFieldOrder checks that
+// whichever fields are present appear in this relative order, since one
+// order governs every op kind.
+var canonicalOpFieldOrder = []string{
+	`"op_id"`, `"type"`, `"spec_node_kind"`, `"spec_node_id"`, `"spec_hash"`,
+	`"idempotency"`, `"parent"`, `"deps"`, `"priority"`, `"title"`, `"body"`,
+	`"target"`, `"labels"`, `"reason"`,
+}
+
+// assertCanonicalFieldOrder marshals op and checks that whichever of
+// canonicalOpFieldOrder's fields the wire JSON carries appear in that
+// relative order; fields the op's shape omits are skipped, not required.
+func assertCanonicalFieldOrder(t *testing.T, op Op) {
+	t.Helper()
+	raw, err := json.Marshal(op)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(raw)
+	prev, prevField := -1, ""
+	for _, f := range canonicalOpFieldOrder {
+		idx := strings.Index(got, f)
+		if idx < 0 {
+			continue
+		}
+		if idx <= prev {
+			t.Errorf("field %s out of order (want after %s) in op JSON:\n%s", f, prevField, got)
+		}
+		prev, prevField = idx, f
+	}
+}
+
 func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
@@ -128,23 +165,107 @@ func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 		t.Errorf("git_head: want deadbeefcafe1234, got %q", cs.GitHead)
 	}
 
-	raw, err := json.MarshalIndent(cs.Ops[0], "", "  ")
+	assertCanonicalFieldOrder(t, cs.Ops[0])
+}
+
+// TestBuild_CanonicalFieldOrderMixedBatch runs the field-order assertion
+// over a batch carrying one create, one retarget and one close, and pins
+// that the retarget's deps are serialized before its target: one order
+// governs every op kind, and a retarget is where a per-kind order would
+// show itself (test_changeset_builder.md, "Canonical schema and field
+// order").
+func TestBuild_CanonicalFieldOrderMixedBatch(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	env.fold.fakeFold["w-open"] = Pairing{TaskID: "spexmachina-w", BeadStatus: "open"}
+	actions := []Action{
+		sampleComponentCreate("c1", "m", "C1", nil),
+		{
+			Type:           ActionRetarget,
+			BeadID:         "spexmachina-hun",
+			Module:         "m",
+			Node:           "X",
+			NodeType:       KindComponent,
+			SpecNodeID:     "x-node",
+			SpecHash:       "new-hash",
+			DepSpecNodeIDs: []string{"w-open"},
+			Reason:         "Spec node modified (retarget): m/X",
+		},
+		{Type: ActionObsolete, BeadID: "spexmachina-old", Module: "m", Node: "B", NodeType: KindComponent, Reason: "removed"},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(cs.Ops) != 3 {
+		t.Fatalf("want 3 ops (create, retarget, close), got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+	for _, op := range cs.Ops {
+		assertCanonicalFieldOrder(t, op)
+	}
+
+	retarget := findOp(t, cs.Ops, "x-node")
+	raw, err := json.Marshal(retarget)
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}
 	got := string(raw)
-	fields := []string{`"op_id"`, `"type"`, `"spec_node_kind"`, `"spec_node_id"`, `"idempotency"`, `"parent"`, `"priority"`, `"title"`}
-	prev := -1
-	for _, f := range fields {
-		idx := strings.Index(got, f)
-		if idx < 0 {
-			t.Errorf("field %s missing in op JSON:\n%s", f, got)
-			continue
-		}
-		if idx <= prev {
-			t.Errorf("field %s out of order in op JSON:\n%s", f, got)
-		}
-		prev = idx
+	depsIdx := strings.Index(got, `"deps"`)
+	targetIdx := strings.Index(got, `"target"`)
+	if depsIdx < 0 || targetIdx < 0 || depsIdx >= targetIdx {
+		t.Errorf("retarget: want deps serialized before target, got %s", got)
+	}
+}
+
+// TestBuild_RefWireKeyNames pins each ref object's own key names on the
+// wire: the adapter reads .op_id off an in-batch dep to resolve it against
+// the ops it has already applied, so renaming the key silently resolves
+// every in-batch dep to nothing rather than failing loudly
+// (test_changeset_builder.md, "Canonical schema and field order").
+func TestBuild_RefWireKeyNames(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	env.fold.fakeFold["y-open"] = Pairing{TaskID: "spexmachina-y", BeadStatus: "open"}
+	actions := []Action{
+		sampleComponentCreate("a1", "m", "A", nil),
+		sampleComponentCreate("b1", "m", "B", []string{"a1", "y-open"}),
+		{
+			Type:       ActionCreate,
+			Module:     "m",
+			Node:       "Q",
+			NodeType:   KindComponent,
+			SpecNodeID: "q1",
+			SpecHash:   "h-q1",
+			OldBeadID:  "spexmachina-abc",
+			Reason:     "Spec node modified (new): m/Q",
+		},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	b := findOp(t, cs.Ops, "b1")
+	raw, err := json.Marshal(b)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got := string(raw)
+	if !strings.Contains(got, `{"ref":"op","op_id":"`) {
+		t.Errorf("in-batch dep: want literal {\"ref\":\"op\",\"op_id\":...} on the wire, got %s", got)
+	}
+	if !strings.Contains(got, `{"ref":"bead","bead_id":"spexmachina-y"}`) {
+		t.Errorf("existing-task dep: want literal {\"ref\":\"bead\",\"bead_id\":...} on the wire, got %s", got)
+	}
+
+	q := findOp(t, cs.Ops, "q1")
+	raw2, err := json.Marshal(q)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	got2 := string(raw2)
+	if !strings.Contains(got2, `{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}`) {
+		t.Errorf("lineage dep: want type naming the edge on the wire, got %s", got2)
 	}
 }
 
@@ -577,6 +698,60 @@ func TestBuild_PriorityFallback(t *testing.T) {
 	x := findOp(t, cs.Ops, "X")
 	if x.Priority != FallbackPriority {
 		t.Errorf("priority: want fallback %d, got %d", FallbackPriority, x.Priority)
+	}
+}
+
+// TestBuild_PrioritySkipsUnreachableRequirement pins that one broken
+// implements entry (a preq_id naming no project requirement) is skipped
+// rather than collapsing the whole walk to the fallback: the minimum runs
+// over the reachable requirements only, so the two that do resolve (2 and
+// 4) still produce priority 2 (test_changeset_builder.md, "Priority
+// propagation").
+func TestBuild_PrioritySkipsUnreachableRequirement(t *testing.T) {
+	modID := schema.IdentityHash("module", "m")
+	compID := schema.IdentityHash("m", "component", "X")
+	reqBroken := schema.IdentityHash("m", "requirement", "ReqBroken")
+	reqB := schema.IdentityHash("m", "requirement", "ReqB")
+	reqC := schema.IdentityHash("m", "requirement", "ReqC")
+	preqGhost := schema.IdentityHash("project", "requirement", "GhostPreq") // named by reqBroken, absent from proj.Requirements
+	preqB := schema.IdentityHash("project", "requirement", "PreqB")
+	preqC := schema.IdentityHash("project", "requirement", "PreqC")
+
+	p2 := 2
+	p4 := 4
+	proj := schema.Project{
+		Modules: []schema.Module{{ID: modID, Name: "m"}},
+		Requirements: []schema.Requirement{
+			{ID: preqB, Priority: &p2},
+			{ID: preqC, Priority: &p4},
+		},
+	}
+	specs := map[string]schema.ModuleSpec{
+		modID: {
+			Name: "m",
+			Requirements: []schema.ModuleRequirement{
+				{ID: reqBroken, PreqID: preqGhost},
+				{ID: reqB, PreqID: preqB},
+				{ID: reqC, PreqID: preqC},
+			},
+			Components: []schema.Component{
+				{ID: compID, Name: "X", Implements: []string{reqBroken, reqB, reqC}},
+			},
+		},
+	}
+
+	env := newBuilderEnv()
+	env.graph = NewSpecGraph(proj, specs)
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{sampleComponentCreate(compID, "m", "X", nil)}
+
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	x := findOp(t, cs.Ops, compID)
+	if x.Priority != 2 {
+		t.Errorf("priority: want min(2,4)=2 skipping the unreachable ReqBroken, got %d", x.Priority)
 	}
 }
 
@@ -1107,5 +1282,121 @@ func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
 	}
 	if cs.Ops[0].OpID != "op-01" || cs.Ops[9].OpID != "op-10" {
 		t.Errorf("10 total ops: want zero-padded ids op-01..op-10, got %s .. %s", cs.Ops[0].OpID, cs.Ops[9].OpID)
+	}
+}
+
+// --- Op id numbering across a batch mixing every kind ---
+
+// TestBuild_OpIDNumberingAcrossMixedBatch mixes every op kind in one batch —
+// five conventional creates, one cleanup create for a removed node, one
+// retarget, and three closes, one of them the removal close the cleanup
+// answers — and asserts op ids run from op-01 in creates -> retargets ->
+// closes order with no gap and no reuse. The batch is sized to ten ops
+// total, and only reaches ten when the retarget is counted alongside the
+// creates and closes: six creates plus three closes alone is nine, which a
+// pad rule blind to retargets (test_changeset_builder.md, "Op id numbering
+// across a batch mixing every kind") would leave unpadded at op-1..op-9;
+// counting the retarget crosses the batch to ten and forces op-01..op-10.
+// It also pins that the cleanup's idempotency.label reads the removal
+// close's actual op_id out of the emitted document: the label is derived
+// before the close ops are numbered, so it rests on a prediction of where
+// the closes will start, and the retarget block sitting between the
+// creates and the closes is exactly what that prediction has to account
+// for.
+func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		sampleComponentCreate("c1", "m", "C1", nil),
+		sampleComponentCreate("c2", "m", "C2", nil),
+		sampleComponentCreate("c3", "m", "C3", nil),
+		sampleComponentCreate("c4", "m", "C4", nil),
+		sampleComponentCreate("c5", "m", "C5", nil),
+		{
+			Type:       ActionCreate,
+			Module:     "m",
+			Node:       "X",
+			NodeType:   KindComponent,
+			SpecNodeID: "cleanup-node",
+			OldBeadID:  "spexmachina-old",
+			Reason:     "Code cleanup: m/X",
+		},
+		{
+			Type:       ActionRetarget,
+			BeadID:     "spexmachina-hun",
+			Module:     "m",
+			Node:       "R",
+			NodeType:   KindComponent,
+			SpecNodeID: "r-node",
+			SpecHash:   "new-hash",
+			Reason:     "Spec node modified (retarget): m/R",
+		},
+		{
+			Type:       ActionObsolete,
+			BeadID:     "spexmachina-old",
+			Module:     "m",
+			Node:       "X",
+			NodeType:   KindComponent,
+			ChangeType: "removed",
+			Reason:     "Spec node removed: m/X",
+		},
+		{
+			Type:       ActionObsolete,
+			BeadID:     "spexmachina-other",
+			Module:     "m",
+			Node:       "Y",
+			NodeType:   KindComponent,
+			ChangeType: "removed",
+			Reason:     "Spec node removed: m/Y",
+		},
+		{
+			Type:       ActionObsolete,
+			BeadID:     "spexmachina-third",
+			Module:     "m",
+			Node:       "Z",
+			NodeType:   KindComponent,
+			ChangeType: "removed",
+			Reason:     "Spec node removed: m/Z",
+		},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(cs.Ops) != 10 {
+		t.Fatalf("want 10 ops, got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+
+	seen := make(map[string]bool, len(cs.Ops))
+	for i, op := range cs.Ops {
+		want := fmt.Sprintf("op-%02d", i+1)
+		if op.OpID != want {
+			t.Errorf("op[%d]: want id %s, got %s", i, want, op.OpID)
+		}
+		if seen[op.OpID] {
+			t.Errorf("op id %s reused", op.OpID)
+		}
+		seen[op.OpID] = true
+	}
+
+	for i := 0; i < 6; i++ {
+		if cs.Ops[i].Type != OpCreate {
+			t.Errorf("op[%d]: want create (creates come first), got %s", i, cs.Ops[i].Type)
+		}
+	}
+	if cs.Ops[6].Type != OpRetarget {
+		t.Errorf("op[6]: want retarget (after creates, before closes), got %s", cs.Ops[6].Type)
+	}
+	for i := 7; i < 10; i++ {
+		if cs.Ops[i].Type != OpClose {
+			t.Errorf("op[%d]: want close (closes come last), got %s", i, cs.Ops[i].Type)
+		}
+	}
+
+	cleanup := findOp(t, cs.Ops, "cleanup-node")
+	removalClose := findClose(t, cs.Ops, "spexmachina-old")
+	wantLabel := "spex:deadbeef:" + removalClose.OpID
+	if cleanup.Idempotency == nil || cleanup.Idempotency.Label != wantLabel {
+		t.Errorf("cleanup idempotency.label: want %s (the removal close's actual op_id), got %+v", wantLabel, cleanup.Idempotency)
 	}
 }
