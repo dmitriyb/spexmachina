@@ -59,18 +59,37 @@ verdict: record why in the PR description, delete the report, change nothing els
 This is the step that must never be automated. Look at what the fix changed:
 
 - **Work is born** (a node added/removed, a contract change that owed code): run the mint —
-  `diff → impact → emit → apply-br → ingest`. New beads join the epic's remainder; if the fix
+  `diff → plan → <adapter> → ingest`, the adapter being `scripts/apply-br.sh` or another
+  implementation of the adapter contract. `spex plan` takes `--proposal`, `--git-head` and
+  `--beads`: the SHA is the commit carrying the spec edits, so the corrections are committed
+  before the mint runs against them, and the tracker listing (`br list --json`) is what the
+  cleanup gate and the retarget split read live status from — omitting it silently sends every
+  modified node down the obsolete+create path. New beads join the epic's remainder; if the fix
   reshaped contracts of still-open beads, the mint legitimately updates or replaces them.
 - **No work is born** (prose-only correction; code already complies): refresh —
-  `bin/spex ingest --mode refresh --changeset <empty-v2> --receipts <empty-v1>` (both artifacts
-  required and must be empty: `{"version":2,...,"ops":[]}` / `{"version":1,"status":"complete",
-  "receipts":[]}`), optionally `--git-head <sha>`. Absorbs the correction into the baseline with
-  journal events.
+  `bin/spex ingest --mode refresh --changeset <empty-v3> --receipts <empty-v1>` (both artifacts
+  required and must be empty: `{"version":3,...,"ops":[],"absorbed":[]}` /
+  `{"version":1,"status":"complete","ops":[]}`), optionally `--git-head <sha>`. Absorbs the
+  correction into the baseline with journal events. Both artifacts key their array `ops` —
+  receipts included, per `adapters/types.go` — and an unknown key is silently ignored rather
+  than rejected, so a misspelling reads as an empty array and passes the empty case while losing
+  every entry in a non-empty one.
 - Mixed changes: mint — the pipeline computes both sides; refresh is only for the pure-correction
-  case.
+  case. Mark the pure-correction nodes in an `--absorb` file so the mint does not open beads that
+  owe nothing.
 
-State the decision and its reason in the PR description. A refresh without a stated reason is
-the "bezdumny refresh" failure mode this skill exists to prevent.
+`--absorb` takes a git-committed JSON list of `{node, reason}`. A marked node's change is
+withheld before matching, so it yields no op at all — no retarget, no obsolete+create, no
+claimed-task refusal, whatever the state of the task tracking it — and rides in the changeset's
+`absorbed` array instead; ingest mints its `modified` event and closes it with a non-task-bearing
+`refresh` receipt. It is the per-node form of the refresh decision above and carries the same
+obligation: one authored reason per mark, reviewed in the PR. Two bounds worth knowing — `spex
+plan` refuses a mark on an `added` or `removed` node, or on one absent from the diff, exit 2, so
+absorb can only ever touch a `modified` node; and "git-committed and reviewed" is doctrine, not a
+gate, so the audit rests on the PR review alone.
+
+State the decision and its reason in the PR description. A refresh without a stated reason — or
+an absorb mark without one — is the "bezdumny refresh" failure mode this skill exists to prevent.
 
 ## Step 5: Clear and hand over
 

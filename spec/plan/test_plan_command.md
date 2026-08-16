@@ -44,7 +44,7 @@ A diff with `{"changes": [], "errors": []}` exits 0. The changeset carries the p
 
 ### S5: Diff input containing errors refuses to proceed
 
-A diff JSON with a non-empty `errors` array (an `incomplete_change` entry, path and related as identity hashes). Assert exit 1, stderr carries each error message, stdout is empty, and no matching, classification or composition ran. This is the pipeline's one gate on the diff — there is no second command downstream to re-check it.
+A diff JSON with a non-empty `errors` array carrying **two** entries (an `incomplete_change` and a `surviving_name`, paths and related as identity hashes). Assert exit 1, stderr carries *every* error message and not merely the first, stdout is empty, and no matching, classification or composition ran. Two entries are what makes the assertion mean anything: a single-entry fixture is satisfied by a command that prints one and stops. This is the pipeline's one gate on the diff — there is no second command downstream to re-check it.
 
 ### S6: `--beads` drives the cleanup gate
 
@@ -83,6 +83,21 @@ Run S1 five times. All five stdout captures are byte-for-byte identical: same di
 - Unreadable or malformed inputs (missing diff file, malformed JSON, unreadable `--beads`, malformed journal line) → 1, stderr naming the input.
 - Contract refusals (claimed task's node changed, invalid absorb entry, unresolvable dep, dep cycle) → 2, stderr naming the spec_node_ids or tasks implicated.
 
+### S13: The diff document itself is malformed or empty
+
+The `malformed JSON` case S12 lists, aimed at the diff specifically — the one input that arrives on stdin and so has no filename to blame:
+
+- A diff file holding `{"changes": [` → exit 1, stderr names the diff as the input that failed, stdout empty.
+- A diff file holding a bare array rather than a document object (`[{…}]`) → exit 1: a bare array is not a diff document, per Setup.
+- A **zero-length** diff file, and separately zero bytes piped on stdin → exit 1. Empty input is not an empty diff: `{"changes": [], "errors": []}` is the empty diff, exits 0, and S4 covers it. Nothing is written in any of these cases, `--out` included, per the Exit Codes contract that failure modes never write a partial changeset.
+
+### S14: A removed node's tombstone participates in nothing
+
+The journal's fold carries an entry for every removed node. Neither projection the run builds may include it:
+
+- **Re-added under the same name.** Seed the journal with a node's `added` + `task_created`, then its `removed` + `task_closed`; the diff now reports that same identity hash as `added` again (a re-add carries the same hash, since the hash is a function of module, kind and name). Assert the changeset carries exactly one plain create for it — no close against the already-closed task, and no `old_bead_id`/`blocks` lineage dep to it. Matching never saw the tombstone, so the re-add is new work and nothing else.
+- **A dead epic never parents.** Seed a `registered` event and its epic `task_created`, then a `removed` event whose entry would collide with the epic's key in the lookup. Assert the run still resolves its epic normally — the epic create is emitted (or the live epic task parents the ops, whichever the fold state calls for) and no op is parented at a closed task id. This is the PR #217 regression: a removed tombstone reaching the Resolver lookup makes every op in the run a child of a dead task, and the run still exits 0, so only an assertion on the parent refs catches it.
+
 ## Edge Cases
 
 ### E1: `--beads` names a file that does not exist
@@ -103,4 +118,4 @@ Two simultaneous runs over the same spec directory, journal and inputs both exit
 
 ### E5: Large diff
 
-500 changed nodes across 20 modules, 300 beads: completes in under 5 seconds, valid JSON, correct op counts, exit 0.
+500 changed nodes across 20 modules, 300 beads: completes in under 5 seconds, valid JSON, correct op counts, exit 0. The fixture's modules must declare `requires_module` edges and its components `uses` edges — a spec graph with none reduces dep collection to a walk over nothing, and the run would be timed doing the one thing the scenario exists to time. No leaf promises a complexity bound, so this is a smoke test on a realistic shape rather than a performance contract; it fails only when something has become pathological.

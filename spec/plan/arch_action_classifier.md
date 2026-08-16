@@ -128,7 +128,9 @@ One call, over the three lists [[972faea162a6|NodeMatcher]] returned together wi
 | change type | `modified` or `removed`, on an obsolete; absent otherwise |
 | reason | one human-readable sentence, per the table below |
 
-The node type travels as its own field because an identity hash does not embed one; neither the change nor the action can recover it from the hash alone.
+The node type travels as its own field because an identity hash does not embed one; neither the change nor the action can recover it from the hash alone. It travels on every action, matched and unmatched paths alike — the gate above is only the first reader, and the builder reads the same field later to fill `spec_node_kind`, so an action that reached classification with a type must leave it carrying that type unchanged.
+
+The name is resolved, not carried: the diff names a node by identity hash only, so the classifier looks the hash up in the current spec graph — among the module's components, its data flows or its test sections, according to the node type — and takes the declared name it finds. Two cases resolve to nothing and both fall back to printing the identity hash itself: a module the graph does not hold, and a hash the module declares under no section of that type. That fallback is deliberate and is why reasons are never blank; it is reached in normal operation by a removed node, whose declaration is gone from the graph by the time the run reads it, which is why an orphaned pairing supplies the name from the journal instead of asking the graph for one.
 
 ## Reason Generation
 

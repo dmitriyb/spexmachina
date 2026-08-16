@@ -63,6 +63,22 @@ The retarget op's `labels` array holds exactly one entry: `spex:<eid>` of this r
 
 A retarget op carries no `parent` and no `priority` — the task already sits under its epic with its priority; only its target state and deps move. Assert both fields are absent from the op, and that create ops in the same batch still resolve parent and priority exactly as before (minimum across the implements → preq_id → priority chain, fallback 3).
 
+### S8b: Names are resolved from the graph, node types are carried through
+
+- A matched component, a matched data_flow and a matched test_section, each classified with the
+  graph declaring all three. Assert every resulting action's reason names the node's **declared
+  name**, not its identity hash, for all three kinds — one arm per kind, since a resolver that
+  handled components alone would satisfy a component-only fixture.
+- Assert each action's node type equals the change's node type on the matched path, not only on
+  the unmatched path where the gate reads it: the builder fills `spec_node_kind` from this field
+  later, so a matched create that lost its type would file the node under the wrong bead type.
+- Two fallback cases, both resolving to the identity hash itself and neither an error: a change
+  whose module the graph does not hold, and a change whose hash that module declares under no
+  section of its type. Assert the reason reads `<module>/<hash>` and classification continues.
+- An orphaned pairing takes its module and name from the **journal pairing**, never from the
+  graph — the removed node is gone from the graph by the time the run reads it, so a cleanup's
+  `Code cleanup: <module>/<node>` reason stays legible where a graph lookup would print a hash.
+
 ### S9: Deterministic classification
 
 Classify the full fixture twice, shuffling pairing order between runs. Assert the action lists are identical in content and order — the sort by (Type, Module, Node, BeadID) now covers three action types, with retargets ordered inside the same scheme.

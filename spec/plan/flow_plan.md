@@ -73,15 +73,17 @@ digraph plan_internals {
     "changeset.json" [style=dashed];
 
     "beads.json"     -> "9f1578d7af6d"  [label="--beads"];
-    "merkle diff"    -> "972faea162a6"  [label="classified changes, stdin or --diff"];
-    "spec/.history.jsonl" -> "972faea162a6"  [label="journal fold, read only"];
-    "9f1578d7af6d"   -> "972faea162a6"  [label="live status, joined by task id"];
+    "9f1578d7af6d"   -> "92ae9dab6d6d"  [label="live status, joined by task id"];
+    "merkle diff"    -> "92ae9dab6d6d"  [label="stdin or --diff"];
+    "spec/.history.jsonl" -> "92ae9dab6d6d"  [label="parse + fold, read only"];
+    "92ae9dab6d6d"   -> "972faea162a6"  [label="changes + enriched pairings;\nmarked and tombstones withheld"];
     "972faea162a6"   -> "8aa1ab5ac102"  [label="matched, unmatched, orphaned"];
     "spec dir"       -> "8aa1ab5ac102"  [label="uses, requires_module, describes"];
     "8aa1ab5ac102"   -> "659abe167891"  [label="create actions"];
     "659abe167891"   -> "6efd7f8ebdb2"  [label="ordered batch"];
     "6efd7f8ebdb2"   -> "e9a3b1b85953"  [label="labeled ops"];
     "e9a3b1b85953"   -> "4c1146bb7287"  [label="resolved refs"];
+    "4c1146bb7287"   -> "92ae9dab6d6d"  [label="composed changeset"];
     "absorb.json"    -> "92ae9dab6d6d"  [label="--absorb"];
     "92ae9dab6d6d"   -> "changeset.json" [label="stdout or --out"];
 }
@@ -132,8 +134,9 @@ digraph plan_internals {
    create ops, appends the retarget ops and one close op per obsoleted bead
    carrying the `spex:obsolete` and `commit:<HEAD>` labels, writes the
    absorbed entries PlanCommand composed into the top-level `absorbed` array,
-   and writes `changeset.json` v3 in canonical field order to stdout or to
-   `--out`.
+   and answers with the finished v3 changeset in canonical field order.
+   [[92ae9dab6d6d|PlanCommand]] writes that answer to stdout, or atomically to
+   `--out` — the builder composes the document, the command owns the sink.
 
 Steps 5 and 6 come before step 7 for a reason: a dep can only be written as
 `ref:op` once the op it points at has an op_id — and a label can only be derived
@@ -187,6 +190,8 @@ Gating rules applied by ActionClassifier to unmatched changes:
 | api | no — declared external surface; the components in its `provided_by` array carry the work |
 | test_section, len(describes) >= 2 | yes (task) |
 | test_section, len(describes) == 1 | no (bundled with that component's feature bead) |
+| test_section, coupling not establishable | yes — no graph reached the gate, the module name does not resolve, or the section is not declared in the module it resolves to; coupling that cannot be established is admitted rather than dropped |
+| meta, requirement | no — filtered upstream by NodeMatcher's `structural` skip, so the gate never sees one |
 
 ### ActionClassifier → the builder chain
 
@@ -204,7 +209,10 @@ The run reads the task journal and writes nothing back to it:
 
 - the fold's pairing for a spec node — the matching join key, the `ref:bead`
   classification, the closed-dep drop, and the open/in_progress/closed status
-  split once the `--beads` join has run;
+  split once the `--beads` join has run. A removed node's entry is not one of
+  these: it is withheld from matching and from the Resolver's lookup alike, per
+  [[92ae9dab6d6d|PlanCommand]]'s pre-flight, so no tombstone can match a re-added
+  node or parent a live op;
 - the fold's `removed` event for a spec node, for a cleanup create whose
   removal landed in an earlier batch — the label it carries is that event's
   eid, so the cleanup answers the same removal across runs;
@@ -251,9 +259,9 @@ was actually made or moved.
       "type": "retarget",
       "spec_node_id": "9f1578d7af6d",
       "spec_hash": "bbb...",
+      "deps": [ { "ref": "op", "op_id": "op-2" } ],
       "target": { "ref": "bead", "bead_id": "spexmachina-hun" },
       "labels": ["spex:deadbeef:op-3"],
-      "deps": [ { "ref": "op", "op_id": "op-2" } ],
       "reason": "Spec node modified (retarget): plan/BeadReader"
     }
   ],
