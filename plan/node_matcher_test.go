@@ -128,6 +128,39 @@ func TestS4_MultipleBeadsPerNode(t *testing.T) {
 	}
 }
 
+// S4 (interface contract): independent of what the fold happens to produce,
+// MatchNodes carries every pairing that stores a matched node's identity
+// hash, not just the first. The fold's latest-wins rule is why the list
+// holds one entry in practice; matching neither relies on nor enforces that,
+// so the plural case is constructed here directly — a matcher that returned
+// only the first entry would pass every fold-derived fixture above.
+func TestS4_MatchCarriesAllPairingsForOneNode(t *testing.T) {
+	h := newFixture()
+	pairings := []Pairing{
+		{SpecNodeID: h.SCHK, TaskID: "spex-999", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
+	}
+	changes := []merkle.ClassifiedChange{
+		{
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Impact: merkle.ArchImpl,
+			Module: "validator",
+		},
+	}
+
+	matched, _, _ := MatchNodes(changes, pairings)
+
+	if len(matched) != 1 {
+		t.Fatalf("want 1 match, got %d", len(matched))
+	}
+	if len(matched[0].Records) != 2 {
+		t.Fatalf("want both pairings carried, got %d: %+v", len(matched[0].Records), matched[0].Records)
+	}
+	if matched[0].Records[0].TaskID != "spex-001" || matched[0].Records[1].TaskID != "spex-999" {
+		t.Errorf("want records in bead-id order (spex-001, spex-999), got %+v", matched[0].Records)
+	}
+}
+
 // S4b: A retargeted pairing matches like any other. The fold moves the
 // pairing's sourcing event forward while the task id stays put, so the same
 // lookup finds the same pairing — now carrying a newer After hash for the
