@@ -76,8 +76,13 @@ type FoldEntry struct {
 	// Key is the identity hash for a node entry, or the proposal slug for
 	// a proposal-epic entry.
 	Key string
-	// TaskID is the current task id. Empty when Removed is true: a removed
-	// node's fold entry carries its biography instead of a live task.
+	// TaskID is the current task id — the key by which this entry is
+	// reachable from the task side, interchangeably with Key. A removed
+	// node's entry carries its cleanup task, the one paired to the removal
+	// event itself, so the cleanup task reaches the biography it was born
+	// for; it is empty only when the removal has no cleanup task, since
+	// the removal supersedes the node's pre-removal pairing rather than
+	// keeping it alive.
 	TaskID string
 	// Removed is true once the node's latest journal state is a removal.
 	Removed bool
@@ -219,21 +224,36 @@ func (s *MappingStore) Parse() ([]Event, error) {
 // to the retargeted event's referent while the task id stays put — a
 // refresh receipt is not task-bearing and moves nothing. A task_created or
 // task_retargeted whose for names no known eid is reported as a dangling
-// receipt rather than dropped or failed on.
+// receipt rather than dropped or failed on — "no known eid" means the
+// journal carries no such event at all, which is why the eid index is
+// built in full before the walk: a receipt may precede the event it names,
+// and receipt-before-referent is a position, not a dangling pairing.
 func fold(events []Event) Fold {
 	byEID := make(map[string]Event, len(events))
+	for _, ev := range events {
+		switch ev.Event {
+		case "added", "modified", "removed", "registered":
+			byEID[ev.EID] = ev
+		}
+	}
+
 	entries := make(map[string]FoldEntry)
 	var dangling []DanglingReceipt
 
 	for _, ev := range events {
 		switch ev.Event {
-		case "added", "modified", "removed":
-			byEID[ev.EID] = ev
-			if ev.Event == "removed" {
-				entries[ev.Node] = FoldEntry{Key: ev.Node, Removed: true, Source: ev}
+		case "removed":
+			// The removal supersedes the node's pre-removal pairing: the
+			// entry becomes the biography, carrying no live task. What it
+			// must not discard is a cleanup receipt already paired to this
+			// very removal — that receipt folds the same biography plus the
+			// task id that keeps the removed node reachable from the task
+			// side, and it is free to sit either side of its own event in
+			// the file.
+			if prior, ok := entries[ev.Node]; ok && prior.Source.EID == ev.EID {
+				continue
 			}
-		case "registered":
-			byEID[ev.EID] = ev
+			entries[ev.Node] = FoldEntry{Key: ev.Node, Removed: true, Source: ev}
 		case "task_created", "task_retargeted":
 			if ev.Proposal != "" {
 				entries[ev.Proposal] = FoldEntry{Key: ev.Proposal, TaskID: ev.TaskID, Source: ev}
@@ -275,8 +295,9 @@ func (s *MappingStore) List() (Fold, error) {
 // entry. The two keys are interchangeable ways to reach one node,
 // distinguished by shape: a 12-character lowercase hex string is treated
 // as a node identity hash and looked up directly; anything else is treated
-// as a task id and matched against each entry's current TaskID. Backs
-// `spex map get`.
+// as a task id and matched against each entry's current TaskID. Removed
+// nodes answer to both keys alike — a cleanup task id resolves to the
+// biography of the node it was born for. Backs `spex map get`.
 func (s *MappingStore) Get(key string) (FoldEntry, error) {
 	f, err := s.List()
 	if err != nil {
@@ -303,7 +324,10 @@ func (s *MappingStore) Get(key string) (FoldEntry, error) {
 // History returns every event touching one node — the change events where
 // it is the subject, plus the receipts paired to those events — oldest
 // first. This is how lineage questions ("which tasks has this node had?")
-// are answered without any stored back-pointers.
+// are answered without any stored back-pointers. The node's eids are
+// collected in full before the walk, for the same reason fold indexes them
+// up front: a receipt may sit ahead of the event it names, and pairing is
+// by eid, never by file position.
 func (s *MappingStore) History(node string) ([]Event, error) {
 	events, err := s.Parse()
 	if err != nil {
@@ -311,12 +335,20 @@ func (s *MappingStore) History(node string) ([]Event, error) {
 	}
 
 	eids := map[string]bool{}
-	var history []Event
 	for _, ev := range events {
 		switch ev.Event {
 		case "added", "modified", "removed":
 			if ev.Node == node {
 				eids[ev.EID] = true
+			}
+		}
+	}
+
+	var history []Event
+	for _, ev := range events {
+		switch ev.Event {
+		case "added", "modified", "removed":
+			if ev.Node == node {
 				history = append(history, ev)
 			}
 		case "task_created", "task_closed", "task_retargeted":
