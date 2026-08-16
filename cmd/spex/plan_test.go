@@ -1036,3 +1036,56 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 		t.Errorf("want %d ops, got %d", wantOps, len(cs.Ops))
 	}
 }
+
+// --- Malformed diff input refuses to proceed ---
+//
+// arch_plan_command.md's "Exit Codes" section owes exit 1 for "malformed
+// JSON" and states that failure modes never write a partial changeset.
+// test_plan_command.md's scenario list does not enumerate either case, so
+// these two pin a contract the arch leaf declares but the test leaf omits;
+// the gap is reported in drifts/drift-spexmachina-f6eh.3.json.
+
+func TestPlanCommand_DiffFileMalformedJSON_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	diffPath := filepath.Join(t.TempDir(), "bad_diff.json")
+	if err := os.WriteFile(diffPath, []byte(`[{"path": "foo"`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for malformed diff JSON")
+	}
+	if !strings.Contains(err.Error(), "parse diff JSON") {
+		t.Errorf("want error referencing diff parsing, got %v", err)
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
+
+func TestPlanCommand_DiffFileEmpty_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	diffPath := filepath.Join(t.TempDir(), "empty.json")
+	if err := os.WriteFile(diffPath, nil, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a zero-length diff file")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
