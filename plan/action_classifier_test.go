@@ -798,6 +798,139 @@ func TestNonComponentCreates_CarryNoSpecGraphDeps(t *testing.T) {
 	}
 }
 
+// --- Names resolved from the graph; node types carried through (S8b) ---
+
+// TestClassifyMatched_NamesResolvedFromGraph_AllNodeKinds pins S8b's first
+// bullet over all three node kinds the matched path can carry — a
+// component-only fixture would pass even if the resolver only ever handled
+// components. Each subtest classifies a closed pairing (obsolete + create
+// successor) so both actions' Node and NodeType are checked at once.
+func TestClassifyMatched_NamesResolvedFromGraph_AllNodeKinds(t *testing.T) {
+	f := newClassifierFixture()
+	tests := []struct {
+		name     string
+		nodeID   string
+		nodeType string
+		wantName string
+	}{
+		{"component", f.CompX, "component", "CompX"},
+		{"data_flow", f.FlowF, "data_flow", "FlowF"},
+		{"test_section", f.TSMany, "test_section", "TSMany"}, // describes 2 components: no fold-back
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := change(tt.nodeID, "plan", tt.nodeType, merkle.Modified, "old", "new")
+			m := Match{Change: c, Records: []Pairing{{TaskID: "spex-100", BeadStatus: "closed"}}}
+			actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			if len(actions) != 2 {
+				t.Fatalf("want obsolete+create, got %+v", actions)
+			}
+			for _, a := range actions {
+				if a.Node != tt.wantName {
+					t.Errorf("%s action: Node = %q, want declared name %q, not the identity hash", a.Type, a.Node, tt.wantName)
+				}
+				if a.NodeType != tt.nodeType {
+					t.Errorf("%s action: NodeType = %q, want %q", a.Type, a.NodeType, tt.nodeType)
+				}
+			}
+		})
+	}
+}
+
+// TestClassifyUnmatched_NameFallback_UnresolvedModule and
+// TestClassifyUnmatched_NameFallback_UnresolvedHash pin S8b's fallback
+// bullet: a change whose module the graph does not hold, and a change
+// whose hash that module declares under no section of its type, both
+// resolve the reason to "<module>/<hash>" rather than erroring, and
+// classification continues (an action is still produced).
+
+func TestClassifyUnmatched_NameFallback_UnresolvedModule(t *testing.T) {
+	f := newClassifierFixture()
+	u := Unmatched{Change: change("some-hash", "no-such-module", "component", merkle.Added, "", "h")}
+	actions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("want classification to continue with 1 action, got %+v", actions)
+	}
+	if actions[0].Node != "some-hash" {
+		t.Errorf("Node fallback: got %q, want the identity hash itself", actions[0].Node)
+	}
+	if want := "New spec node: no-such-module/some-hash"; actions[0].Reason != want {
+		t.Errorf("reason: got %q, want %q", actions[0].Reason, want)
+	}
+}
+
+func TestClassifyUnmatched_NameFallback_UnresolvedHashInKnownModule(t *testing.T) {
+	f := newClassifierFixture()
+	u := Unmatched{Change: change("unknown-hash", "plan", "component", merkle.Added, "", "h")}
+	actions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("want classification to continue with 1 action, got %+v", actions)
+	}
+	if want := "New spec node: plan/unknown-hash"; actions[0].Reason != want {
+		t.Errorf("reason: got %q, want %q", actions[0].Reason, want)
+	}
+}
+
+// TestClassifyOrphaned_NameAndModuleFromJournalNotGraph pins S8b's last
+// bullet: an orphaned pairing's module and name come from the journal
+// pairing, never from the graph. The graph fixture holds a real node at
+// f.CompX's identity hash named "CompX" in module "plan" — the orphaned
+// pairing claims the same identity hash but a different module and name,
+// and the classified action must still read the journal's values, proving
+// the removed node's absence from the graph is not silently patched over
+// by a lookup that happens to still resolve.
+func TestClassifyOrphaned_NameAndModuleFromJournalNotGraph(t *testing.T) {
+	f := newClassifierFixture()
+	o := Orphaned{
+		Record:   Pairing{SpecNodeID: f.CompX, TaskID: "spex-020", Module: "legacy-module", Name: "LegacyName", BeadStatus: "open"},
+		NodeType: "component",
+	}
+	actions, err := ClassifyActions(nil, nil, []Orphaned{o}, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %+v", actions)
+	}
+	if actions[0].Module != "legacy-module" || actions[0].Node != "LegacyName" {
+		t.Errorf("want module/name from the journal pairing, got module=%q node=%q", actions[0].Module, actions[0].Node)
+	}
+}
+
+// TestClassifyOrphaned_NodeTypeCarriedFromPairingRecord confirms the
+// orphaned NodeType field (carried alongside the pairing because an
+// identity hash does not embed a node type — test_classification.md's
+// Setup section) reaches every resulting action unchanged, using a kind
+// other than "component" so the assertion cannot pass on a coincidental
+// default.
+func TestClassifyOrphaned_NodeTypeCarriedFromPairingRecord(t *testing.T) {
+	o := Orphaned{
+		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-010", Module: "plan", Name: "Legacy", BeadStatus: "closed"},
+		NodeType: "data_flow",
+	}
+	actions, err := ClassifyActions(nil, nil, []Orphaned{o}, SpecGraph{})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 2 {
+		t.Fatalf("want obsolete+cleanup create, got %+v", actions)
+	}
+	for _, a := range actions {
+		if a.NodeType != "data_flow" {
+			t.Errorf("%s action: NodeType = %q, want %q carried from the pairing record", a.Type, a.NodeType, "data_flow")
+		}
+	}
+}
+
 // --- Determinism (S9), empty inputs (E1), duplicate preservation (E2) ---
 
 func TestClassifyActions_DeterministicAcrossShuffledInput(t *testing.T) {
