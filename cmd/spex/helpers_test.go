@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +11,16 @@ import (
 	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// exitCodeOf extracts the process exit code an error carries via the
+// ExitCode interface main.go honors. Zero means no code attached.
+func exitCodeOf(err error) int {
+	var ec interface{ ExitCode() int }
+	if errors.As(err, &ec) {
+		return ec.ExitCode()
+	}
+	return 0
+}
 
 func setupTestSpec(t *testing.T) string {
 	t.Helper()
@@ -88,7 +99,6 @@ func runSpex(t *testing.T, args ...string) (string, error) {
 	rootCmd.AddCommand(
 		newDiffCmd(),
 		newValidateCmd(),
-		newImpactCmd(),
 		newMapCmd(),
 		newRenderCmd(),
 	)
