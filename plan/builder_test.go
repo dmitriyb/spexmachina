@@ -1288,22 +1288,30 @@ func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
 // --- Op id numbering across a batch mixing every kind ---
 
 // TestBuild_OpIDNumberingAcrossMixedBatch mixes every op kind in one batch —
-// two conventional creates, one cleanup create for a removed node, one
-// retarget, and two closes, one of them the removal close the cleanup
-// answers — and asserts op ids run from op-1 in creates -> retargets ->
-// closes order with no gap and no reuse. It also pins that the cleanup's
-// idempotency.label reads the removal close's actual op_id out of the
-// emitted document: the label is derived before the close ops are
-// numbered, so it rests on a prediction of where the closes will start, and
-// the retarget block sitting between the creates and the closes is exactly
-// what that prediction has to account for (test_changeset_builder.md, "Op
-// id numbering across a batch mixing every kind").
+// five conventional creates, one cleanup create for a removed node, one
+// retarget, and three closes, one of them the removal close the cleanup
+// answers — and asserts op ids run from op-01 in creates -> retargets ->
+// closes order with no gap and no reuse. The batch is sized to ten ops
+// total, and only reaches ten when the retarget is counted alongside the
+// creates and closes: six creates plus three closes alone is nine, which a
+// pad rule blind to retargets (test_changeset_builder.md, "Op id numbering
+// across a batch mixing every kind") would leave unpadded at op-1..op-9;
+// counting the retarget crosses the batch to ten and forces op-01..op-10.
+// It also pins that the cleanup's idempotency.label reads the removal
+// close's actual op_id out of the emitted document: the label is derived
+// before the close ops are numbered, so it rests on a prediction of where
+// the closes will start, and the retarget block sitting between the
+// creates and the closes is exactly what that prediction has to account
+// for.
 func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
 		sampleComponentCreate("c1", "m", "C1", nil),
 		sampleComponentCreate("c2", "m", "C2", nil),
+		sampleComponentCreate("c3", "m", "C3", nil),
+		sampleComponentCreate("c4", "m", "C4", nil),
+		sampleComponentCreate("c5", "m", "C5", nil),
 		{
 			Type:       ActionCreate,
 			Module:     "m",
@@ -1341,18 +1349,27 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 			ChangeType: "removed",
 			Reason:     "Spec node removed: m/Y",
 		},
+		{
+			Type:       ActionObsolete,
+			BeadID:     "spexmachina-third",
+			Module:     "m",
+			Node:       "Z",
+			NodeType:   KindComponent,
+			ChangeType: "removed",
+			Reason:     "Spec node removed: m/Z",
+		},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(cs.Ops) != 6 {
-		t.Fatalf("want 6 ops, got %d: %+v", len(cs.Ops), cs.Ops)
+	if len(cs.Ops) != 10 {
+		t.Fatalf("want 10 ops, got %d: %+v", len(cs.Ops), cs.Ops)
 	}
 
 	seen := make(map[string]bool, len(cs.Ops))
 	for i, op := range cs.Ops {
-		want := fmt.Sprintf("op-%d", i+1)
+		want := fmt.Sprintf("op-%02d", i+1)
 		if op.OpID != want {
 			t.Errorf("op[%d]: want id %s, got %s", i, want, op.OpID)
 		}
@@ -1362,15 +1379,15 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 		seen[op.OpID] = true
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < 6; i++ {
 		if cs.Ops[i].Type != OpCreate {
 			t.Errorf("op[%d]: want create (creates come first), got %s", i, cs.Ops[i].Type)
 		}
 	}
-	if cs.Ops[3].Type != OpRetarget {
-		t.Errorf("op[3]: want retarget (after creates, before closes), got %s", cs.Ops[3].Type)
+	if cs.Ops[6].Type != OpRetarget {
+		t.Errorf("op[6]: want retarget (after creates, before closes), got %s", cs.Ops[6].Type)
 	}
-	for i := 4; i < 6; i++ {
+	for i := 7; i < 10; i++ {
 		if cs.Ops[i].Type != OpClose {
 			t.Errorf("op[%d]: want close (closes come last), got %s", i, cs.Ops[i].Type)
 		}
