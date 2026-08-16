@@ -2,14 +2,86 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// The wire spellings `spex diff --json` writes map onto merkle's enums one
+// for one. A swapped pair here would misclassify every change of that kind
+// downstream without any parse error, so each arm is pinned by value rather
+// than merely exercised.
+func TestParseDiffJSON_EnumSpellings(t *testing.T) {
+	changeTypes := map[string]merkle.ChangeType{
+		"added":    merkle.Added,
+		"removed":  merkle.Removed,
+		"modified": merkle.Modified,
+	}
+	for spelling, want := range changeTypes {
+		got, err := parseChangeType(spelling)
+		if err != nil {
+			t.Fatalf("parseChangeType(%q): %v", spelling, err)
+		}
+		if got != want {
+			t.Errorf("parseChangeType(%q) = %v, want %v", spelling, got, want)
+		}
+	}
+
+	impactLevels := map[string]merkle.ImpactLevel{
+		"impl_only":  merkle.ImplOnly,
+		"contract":   merkle.Contract,
+		"arch_impl":  merkle.ArchImpl,
+		"structural": merkle.Structural,
+	}
+	for spelling, want := range impactLevels {
+		got, err := parseImpactLevel(spelling)
+		if err != nil {
+			t.Fatalf("parseImpactLevel(%q): %v", spelling, err)
+		}
+		if got != want {
+			t.Errorf("parseImpactLevel(%q) = %v, want %v", spelling, got, want)
+		}
+	}
+}
+
+// parseDiffJSON rejects a change type outside merkle's enum rather than
+// defaulting it. The default arm is the only thing standing between a
+// typo'd diff document and a changeset built over a silently wrong change
+// type, so it is pinned directly.
+func TestParseDiffJSON_UnknownChangeType(t *testing.T) {
+	input := `{"changes": [{"path": "x", "type": "bogus", "impact": "impl_only", "module": "m"}]}`
+	_, _, err := parseDiffJSON([]byte(input))
+	if err == nil || !strings.Contains(err.Error(), "unknown change type") {
+		t.Fatalf("want error about unknown change type, got %v", err)
+	}
+}
+
+// parseDiffJSON rejects an impact level outside merkle's enum, for the same
+// reason as the change type above.
+func TestParseDiffJSON_UnknownImpactLevel(t *testing.T) {
+	input := `{"changes": [{"path": "x", "type": "added", "impact": "bogus", "module": "m"}]}`
+	_, _, err := parseDiffJSON([]byte(input))
+	if err == nil || !strings.Contains(err.Error(), "unknown impact level") {
+		t.Fatalf("want error about unknown impact level, got %v", err)
+	}
+}
+
+// exitCodeOf extracts the process exit code an error carries via the
+// ExitCode interface main.go honors. Zero means no code attached.
+func exitCodeOf(err error) int {
+	var ec interface{ ExitCode() int }
+	if errors.As(err, &ec) {
+		return ec.ExitCode()
+	}
+	return 0
+}
 
 func setupTestSpec(t *testing.T) string {
 	t.Helper()
@@ -88,7 +160,6 @@ func runSpex(t *testing.T, args ...string) (string, error) {
 	rootCmd.AddCommand(
 		newDiffCmd(),
 		newValidateCmd(),
-		newImpactCmd(),
 		newMapCmd(),
 		newRenderCmd(),
 	)
