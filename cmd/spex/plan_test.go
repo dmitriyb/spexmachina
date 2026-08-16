@@ -1037,13 +1037,7 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 	}
 }
 
-// --- Malformed diff input refuses to proceed ---
-//
-// arch_plan_command.md's "Exit Codes" section owes exit 1 for "malformed
-// JSON" and states that failure modes never write a partial changeset.
-// test_plan_command.md's scenario list does not enumerate either case, so
-// these two pin a contract the arch leaf declares but the test leaf omits;
-// the gap is reported in drifts/drift-spexmachina-f6eh.3.json.
+// --- S13: The diff document itself is malformed or empty ---
 
 func TestPlanCommand_DiffFileMalformedJSON_Exit1(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
@@ -1087,5 +1081,210 @@ func TestPlanCommand_DiffFileEmpty_Exit1(t *testing.T) {
 	}
 	if stdout != "" {
 		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
+
+func TestPlanCommand_S13_BareArrayDiff_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	diffPath := filepath.Join(t.TempDir(), "bare_array.json")
+	if err := os.WriteFile(diffPath, []byte(`[{"path":"abcdef012345","type":"added"}]`), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a bare array rather than a diff document object")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
+
+func TestPlanCommand_S13_ZeroBytesOnStdin_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for zero bytes piped on stdin")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
+
+// --- S14: A removed node's tombstone participates in nothing ---
+
+// TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate seeds the journal with a
+// node's added + task_created, then its removed + task_closed, then presents
+// a diff reporting that same identity hash as added again — a re-add carries
+// the same hash, since the hash is a function of module, kind and name. The
+// tombstone must be withheld from the pairings NodeMatcher sees, so the
+// re-add matches nothing and yields exactly one plain create: no close
+// against the already-closed task, and no lineage dep to it
+// (spec/plan/arch_plan_command.md, pre-flight step 3).
+func TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	ghostID := schema.IdentityHash("alpha", "component", "Ghost")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+ghostID+`", "name": "Ghost", "content": "arch_ghost.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_ghost.md", "# Ghost\n")
+
+	proposal := "2026-08-15-readd"
+	writeTestJournal(t, specDir, []string{
+		`{"event":"added","eid":"e1","node":"` + ghostID + `","name":"Ghost","node_type":"component","module":"alpha","before":null,"after":"h1","git_head":"cafe0000","proposal":"` + proposal + `"}`,
+		`{"event":"task_created","for":"e1","task_id":"task-ghost"}`,
+		`{"event":"removed","eid":"e2","node":"` + ghostID + `","name":"Ghost","node_type":"component","module":"alpha","before":"h1","after":null,"git_head":"cafe1111","proposal":"` + proposal + `"}`,
+		`{"event":"task_closed","for":"e2","task_id":"task-ghost"}`,
+		`{"event":"registered","eid":"cafe0000:` + proposal + `","proposal":"` + proposal + `","git_head":"cafe0000"}`,
+	})
+
+	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
+		{Path: ghostID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h2"},
+	}, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+
+	var creates, closes int
+	var ghostOp *plan.Op
+	for i := range cs.Ops {
+		op := &cs.Ops[i]
+		if op.Type == plan.OpClose {
+			closes++
+			t.Errorf("want no close op at all for a plain re-add (nothing tracks the pre-tombstone task), got %+v", op)
+		}
+		if op.SpecNodeID == ghostID && op.Type == plan.OpCreate {
+			creates++
+			ghostOp = op
+		}
+	}
+	if creates != 1 {
+		t.Fatalf("want exactly one plain create for the re-added node, got %d: %+v", creates, cs.Ops)
+	}
+	if ghostOp.SpecNodeKind != plan.KindComponent {
+		t.Errorf("want a plain component create, got kind %q", ghostOp.SpecNodeKind)
+	}
+	for _, dep := range ghostOp.Deps {
+		if dep.EdgeType == "blocks" {
+			t.Errorf("want no old_bead_id/blocks lineage dep on the re-add, got %+v", ghostOp.Deps)
+		}
+	}
+	if len(ghostOp.Labels) > 0 {
+		for _, l := range ghostOp.Labels {
+			if l == plan.CleanupLabel {
+				t.Errorf("want no cleanup label on a plain re-add create, got %v", ghostOp.Labels)
+			}
+		}
+	}
+}
+
+// TestPlanCommand_S14_DeadEpicTombstoneNeverParents recreates the PR #217
+// regression: a removed event whose node key collides with the epic's own
+// key in the journal fold — the "registered"+task_created epic pairing gets
+// overwritten by a later "removed" tombstone sharing that same key. Per
+// arch_plan_command.md's tombstone rule, the removed entry must be withheld
+// from the lookup Resolver reads for epic and parent resolution, so the run
+// still resolves its epic normally (from the registration this command
+// resolves independently of the fold) and no op is parented at a dead task.
+func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	newID := schema.IdentityHash("alpha", "component", "New")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+newID+`", "name": "New", "content": "arch_new.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_new.md", "# New\n")
+
+	// The proposal slug is itself a 12-hex identity hash — a legal shape for
+	// both a registeredEvent's proposal field (any non-empty string) and a
+	// changeEvent's node field (schema-constrained to 12-hex). That lets the
+	// removed event below name it as the node it removes, so the two events
+	// share one key in the journal fold's latest-wins map — the exact
+	// collision the PR #217 regression exploited: the epic pairing gets
+	// overwritten by this tombstone in the raw journal fold.
+	proposal := schema.IdentityHash("alpha", "component", "EpicKeyCollision")
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"e-reg","proposal":"` + proposal + `","git_head":"cafe0000"}`,
+		`{"event":"task_created","for":"e-reg","task_id":"epic-task-1"}`,
+		`{"event":"removed","eid":"e-rm","node":"` + proposal + `","name":"Ghost","node_type":"component","module":"alpha","before":"h1","after":null,"git_head":"cafe1111","proposal":"other-proposal"}`,
+	})
+
+	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
+		{Path: newID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-new"},
+	}, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("plan: %v\n%s", err, stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+
+	var epicOpID string
+	for _, op := range cs.Ops {
+		if op.SpecNodeKind == plan.KindProposalEpic {
+			epicOpID = op.OpID
+		}
+	}
+
+	var newOp *plan.Op
+	for i := range cs.Ops {
+		if cs.Ops[i].SpecNodeID == newID && cs.Ops[i].Type == plan.OpCreate {
+			newOp = &cs.Ops[i]
+		}
+	}
+	if newOp == nil {
+		t.Fatalf("want a create op for the new component, got ops: %+v", cs.Ops)
+	}
+	if newOp.Parent == nil {
+		t.Fatal("want the create op to carry a parent ref")
+	}
+	switch newOp.Parent.Kind {
+	case plan.RefOp:
+		if epicOpID == "" || newOp.Parent.OpID != epicOpID {
+			t.Errorf("want the parent ref to point at this run's synthesized epic op, got %+v (epic op id %q)", newOp.Parent, epicOpID)
+		}
+	case plan.RefBead:
+		if newOp.Parent.BeadID != "epic-task-1" {
+			t.Errorf("want the parent ref to point at the live epic task, got %+v", newOp.Parent)
+		}
+	default:
+		t.Errorf("want a bead or op parent ref, got %+v", newOp.Parent)
 	}
 }
