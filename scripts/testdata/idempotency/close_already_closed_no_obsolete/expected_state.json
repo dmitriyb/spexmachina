@@ -1,5 +1,0 @@
-{
-  "issues": [
-    {"id":"br-abc","title":"closed earlier by another lifecycle","status":"closed","issue_type":"feature","labels":["spex:55","spex:obsolete","commit:deadbeefcafe1234"]}
-  ]
-}

@@ -11,7 +11,6 @@
       "idempotency": {"label": "spex:cafe1234:op-9"},
       "priority": 3,
       "title": "Code cleanup: m/X",
-      "labels": ["spex:cleanup"],
       "deps": [
         {"ref": "bead", "bead_id": "spexmachina-old", "type": "blocks"}
       ]

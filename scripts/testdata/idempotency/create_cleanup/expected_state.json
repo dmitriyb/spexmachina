@@ -1,6 +1,6 @@
 {
   "issues": [
-    {"id":"mock-cleanup-001","title":"Code cleanup: m/X","status":"open","issue_type":"task","parent":"","labels":["spex:cafe1234:op-9","spex:cleanup"]},
+    {"id":"mock-cleanup-001","title":"Code cleanup: m/X","status":"open","issue_type":"task","parent":"","labels":["spex:cafe1234:op-9"]},
     {"id":"spexmachina-old","title":"the closed bead being cleaned up","status":"closed","issue_type":"feature","labels":[]}
   ]
 }

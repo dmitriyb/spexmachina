@@ -1,4 +1,3 @@
 br --version
 br list --json --all --limit 0 --label spex:cafe1234:op-9
 br create --title Code\ cleanup:\ m/X --labels spex:cafe1234:op-9 --type task --json --priority 3 --deps blocks:spexmachina-old
-br update mock-cleanup-001 --add-label spex:cleanup

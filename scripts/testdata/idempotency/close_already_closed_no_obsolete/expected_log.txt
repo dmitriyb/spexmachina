@@ -1,4 +1,0 @@
-br --version
-br show br-abc --format json
-br update br-abc --add-label spex:obsolete
-br update br-abc --add-label commit:deadbeefcafe1234

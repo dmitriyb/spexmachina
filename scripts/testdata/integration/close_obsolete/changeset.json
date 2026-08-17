@@ -3,6 +3,6 @@
   "git_head": "deadbeefcafef00d",
   "proposal": "test/integration",
   "ops": [
-    {"op_id":"op-0001","type":"close","target":{"ref":"bead","bead_id":"__VICTIM__"},"labels":["spex:obsolete","commit:deadbeefcafef00d"],"reason":"superseded"}
+    {"op_id":"op-0001","type":"close","target":{"ref":"bead","bead_id":"__VICTIM__"},"reason":"superseded"}
   ]
 }
