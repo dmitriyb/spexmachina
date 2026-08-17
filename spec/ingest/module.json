@@ -49,7 +49,7 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Re-run idempotency",
-      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id) — the same derivation plan uses to mint spex:<eid> labels — so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Idempotency is deterministic eids journal-side and receipts (op_id → bead_id) adapter-side: the label guards re-runs of one changeset, the receipts pair whatever landed. No duplication, no unexpected obsoletion."
+      "description": "Running ingest twice against the same changeset+receipts pair produces the same final state. Event ids derive from (git_head, op_id) — the same derivation plan uses to mint spex:<eid> labels — so a second run finds every event and receipt already present and appends nothing; the snapshot is already written. Idempotency is deterministic eids journal-side and receipts (op_id → bead_id) adapter-side: the receipts pair whatever landed, and the optional label probe — where an adapter implements it — additionally guards re-runs of one changeset. No duplication, no unexpected obsoletion."
     },
     {
       "id": "e68653819f38",

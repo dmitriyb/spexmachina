@@ -1,0 +1,54 @@
+[
+  {
+    "node": "6efd7f8ebdb2",
+    "reason": "drift-fix spexmachina-f6eh.20: the labeler leaf gains the optionality framing — the label is the eid's tracker-side carrier, insurance an adapter MAY honor, while the eid stays mandatory journal identity. plan/labeler.go's LabelFor derivation is untouched by the correction: same referent rules, same eids, same errors. No behaviour owed."
+  },
+  {
+    "node": "e9a3b1b85953",
+    "reason": "drift-fix spexmachina-f6eh.20: arch_resolver's adapter-minimum sentence aligns with 77f5182ac5f7 (create, close, a stable identifier; labels optional). Resolver resolves refs and never touched the label surface. No behaviour owed."
+  },
+  {
+    "node": "92ae9dab6d6d",
+    "reason": "drift-fix spexmachina-f6eh.20: the --git-head flag row now states the SHA's real consumers (eid derivation, adapter pre-flight provenance) instead of the retired commit:<HEAD> close marker. No CLI string mentions the marker (checked cmd/ and cli/); the flag's parsing and threading are unchanged. No behaviour owed."
+  },
+  {
+    "node": "2b5158af774b",
+    "reason": "drift-fix spexmachina-f6eh.20: arch_reconciler states was_existing=true can only arrive from an adapter implementing the optional label probe and that the reconciler asks no questions either way. The pairing logic is already receipt-driven and label-blind. No behaviour owed."
+  },
+  {
+    "node": "db90eb607bcb",
+    "reason": "drift-fix spexmachina-f6eh.20: the partial-run sentence drops retired 'skipped' vocabulary (no documented path produces a skipped receipt after the close path re-keyed on status); the command's receipt accounting is status-generic already. No behaviour owed."
+  },
+  {
+    "node": "dfe1467b7a4b",
+    "reason": "drift-fix spexmachina-f6eh.20: drops the stale claim that identity hashes are 'the bead labels' payload' — that described the retired spex:<spec_node_id> scheme; labels are spex:<eid> now. Tree keying and hashing are untouched. No behaviour owed."
+  },
+  {
+    "node": "205e67ca4aad",
+    "reason": "drift-fix spexmachina-f6eh.20: one clause naming the op label as the eid's optional tracker-side carrier; the store's eid derivation and fold are untouched. No behaviour owed."
+  },
+  {
+    "node": "08909d62930b",
+    "reason": "drift-fix spexmachina-f6eh.20: the receipt-origin sentence now notes a receipt pairs the task whether or not the adapter stamped any label; the command reads the journal only. No behaviour owed."
+  },
+  {
+    "node": "6b79188dff4c",
+    "reason": "drift-fix spexmachina-f6eh.20: states that no tracker label is consulted or accepted as a key. mapping/context_resolver.go already resolves only identity hashes and task ids — verified this session: an eid handed as key is rejected with not-found, a bead id resolves. The leaf catches up to shipped behaviour; no behaviour owed."
+  },
+  {
+    "node": "38b6d99f08bf",
+    "reason": "drift-fix spexmachina-f6eh.20: flow narrative re-frames the label as optional adapter insurance and the eid as travelling in changeset and receipts; map code is untouched by the correction. No behaviour owed."
+  },
+  {
+    "node": "6fd1f0cbb76c",
+    "reason": "drift-fix spexmachina-f6eh.20: the receipts example replaces a 'skipped / already labeled' entry — a receipt no documented path produces — with an ok/was_existing=true re-match, and the summary counts follow. Documentation example correction; ingest code paths unchanged. No behaviour owed."
+  },
+  {
+    "node": "878c885a2517",
+    "reason": "drift-fix spexmachina-f6eh.20: the plan-flow narrative tracks ChangesetBuilder's corrected close shape (target and reason, no labels). The owing code change lands under 4c1146bb7287, which is minted rather than absorbed; no additional behaviour is owed by the flow leaf."
+  },
+  {
+    "node": "703128d3ebd6",
+    "reason": "drift-fix spexmachina-f6eh.20: the adapter-flow label-application enumeration and invocation-count formula track the adapter's status-keyed close path. The owing change lands under 7f2e76cecab3, which is minted rather than absorbed; no additional behaviour is owed by the flow leaf."
+  }
+]

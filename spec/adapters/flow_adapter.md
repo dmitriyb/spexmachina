@@ -15,11 +15,11 @@ The adapter forks:
 - `br list --json` once per create op (idempotency check). Could be optimized by caching a single initial listing, but the reference impl takes the simple path.
 - `br show <id> --format json` once per close op (idempotency check) and once per retarget op (current-deps read).
 - `br create` once per non-existing create.
-- `br update --add-label` once per label attached: one per entry of a create op's `labels`, one per label on a close or retarget, and one per label on a `label` or `tag` op.
+- `br update --add-label` once per label attached: one per entry of a retarget's `labels`, and one per label on a `label` or `tag` op — creates and closes carry no `labels` to attach.
 - `br dep add` once per dep a retarget's target does not already carry.
 - `br close` once per non-existing close.
 
-For a changeset with N creates (M fresh), K closes (J fresh) and R retargets (D missing deps across them), the adapter makes approximately `N + K + M + 2J + 2R + D` br invocations. On a 10-op changeset, ~10-20 invocations.
+For a changeset with N creates (M fresh), K closes (J fresh) and R retargets (D missing deps across them), the adapter makes approximately `N + K + M + J + 2R + D` br invocations. On a 10-op changeset, ~10-20 invocations.
 
 ## Data Shapes
 

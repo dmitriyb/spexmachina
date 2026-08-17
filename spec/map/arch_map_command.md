@@ -117,7 +117,8 @@ tracker.
 
 This is not a scope decision that could be revisited subcommand by subcommand — it follows from
 where journal events come from. A change event is born from a changeset op at baselining; a receipt
-is born from the adapter's report of what the tracker did; a `registered` event is born from a
+is born from the adapter's report of what the tracker did — and pairs the task whether or not that
+adapter stamped any label on it; a `registered` event is born from a
 registration. An event written by `spex map` would
 have no op behind it, no receipt, and no lifecycle it opens — a forged line in a file whose
 whole value is that every line traces to a pipeline run or a registration. So MapCommand is the

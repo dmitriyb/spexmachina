@@ -8,9 +8,9 @@ Composes `changeset.json` v3 from the classified actions, the spec graph, the ta
 - **Detect cleanup actions** by the `"Code cleanup:"` prefix on the action's reason. Cleanup actions get a distinct op shape — see "Cleanup op shape" below.
 - Resolve each create action's parent and deps — and each retarget action's deps — via Resolver into the two ref shapes.
 - Order the create ops via TopologicalSorter so in-batch deps come before dependents.
-- **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** Every label is `spex:<eid>` of the op's referent journal event; which event that is depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the referent rules.
+- **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** Every label is `spex:<eid>` of the op's referent journal event; which event that is depends on what the action is (a modify-pair, a cleanup, or a fresh create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the referent rules. Eids embed [[26b2fdc6e7ea|the SHA the caller passed in]] — the builder never asks git for it.
 - Emit retarget ops for retarget actions — target ref, new content hash, the run's `modified`-event label, recomputed deps — per "Retarget op shape" below.
-- Emit close ops carrying the obsolete labels: `spex:obsolete`, and `commit:<git_head>` built from [[26b2fdc6e7ea|the SHA the caller passed in]] — the builder never asks git for it.
+- Emit close ops as target and reason alone — no labels. The retired `spex:obsolete` / `commit:<HEAD>` markers are not emitted: close idempotency keys on the tracker's own status, and a run's provenance lives in the changeset's top-level `git_head`, not on individual ops.
 - Write the absorbed entries PlanCommand composed into the top-level `absorbed` array — see "Absorbed array" below.
 - Write the final v3 changeset with canonical field order and stable key ordering inside every nested object.
 
@@ -27,7 +27,7 @@ Five op kinds flow through the builder:
 | Op type | Emitted for | Adapter action |
 |---------|-------------|----------------|
 | `create` | new or replacement spec node | create a bead in the tracker |
-| `close`  | obsoleted bead (old modified-with-closed-pairing, or removed) | close the bead with labels |
+| `close`  | obsoleted bead (old modified-with-closed-pairing, or removed) | close the bead |
 | `retarget` | a modified node whose open task moves to the new state | update the bead: add the event label, add missing deps |
 | `label`  | standalone label additions | add labels without create/close |
 | `tag`    | proposal tagging on existing beads | add `spec_proposal:<ref>` label |
@@ -89,7 +89,7 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `priority`        | `3`, the fallback                                                                           |
 | `title`           | the action's reason verbatim (e.g. `"Code cleanup: m/X"`) — NOT `"<module>: <node>"`         |
 | `body`            | empty                                                                                       |
-| `labels`          | `["spex:cleanup"]` — so the adapter can stamp the discriminator label on the bead as it creates it. Close ops and retargets carry labels too; conventional creates do not. |
+| `labels`          | not populated — the retired `spex:cleanup` discriminator is gone. What marks the op as cleanup is its `spec_node_kind`, and what answers "is this bead cleanup?" afterwards is the journal: its `task_created` references a `removed` event. `Op.Labels` is populated only on retarget ops. |
 
 Modify-pair creates — a create paired with the close of the bead it replaces, minted only when the old pairing is closed, with no cleanup reason — keep the conventional shape, and their `idempotency.label` is `spex:<eid>` of this run's `modified` event, distinct from the closed predecessor's label by construction — each change in a node's lineage references its own event, so no lookup and no reuse rule is needed and the old label can never collide. Every create that replaces an obsoleted bead, cleanup and modify-pair alike, also carries one extra dep naming that old bead with edge type `blocks`, so the replacement's lineage survives in the tracker after the close op runs.
 
@@ -119,14 +119,13 @@ The marking rules are enforced upstream too: PlanCommand refuses, exit 2, a mark
 }
 ```
 
-Close ops omit `deps`/`parent` and add `target` + `labels`:
+Close ops omit `deps`/`parent` and add `target`; they carry no `labels`:
 
 ```json
 {
   "op_id": "op-0042",
   "type": "close",
   "target": { "ref": "bead", "bead_id": "spexmachina-tjs" },
-  "labels": ["spex:obsolete", "commit:deadbeefcafe1234"],
   "reason": "Spec node modified: apply/ApplyCommand"
 }
 ```

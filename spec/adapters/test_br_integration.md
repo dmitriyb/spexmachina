@@ -21,7 +21,7 @@ fi
   - All 5 ops land as receipts.
   - `br list --json` output matches expected beads (count, statuses, labels).
   - `spex:<eid>` labels present on new beads — each op's referent event id, `<git_head>:<op_id>`.
-  - `spex:obsolete` + `commit:<HEAD>` labels present on the closed beads.
+  - the closed beads carry no new labels — close ops apply none; their `status` is the whole record of the close.
   - Receipts top-level status: complete.
 
 ### Partial run (injected failure)
@@ -38,7 +38,7 @@ fi
 - Run the happy-path changeset once. Capture the br state.
 - Run it again with the same changeset.
 - Assertions:
-  - Second run's receipts all show `was_existing=true` on creates, `status=skipped` with reason "already obsoleted" on closes.
+  - Second run's receipts all show `status=ok` — `was_existing=true` on creates, the status-keyed skip branch on closes.
   - br state after second run is byte-identical to state after first run.
 
 ### Both ref shapes

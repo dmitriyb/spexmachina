@@ -119,8 +119,8 @@ comes back into one JSON summary and one exit code.
 - The op-id check above is what rejects a truncated receipts file. No partial receipts are
   allowed: the ADAPTER writes one receipt per op, so a missing receipt means it crashed before
   that op and wrote `partial` in the top-level status. That is an input error, not a partial run
-  to reconcile — a genuine partial run still carries one receipt per op, most of them `skipped`
-  or `error`.
+  to reconcile — a genuine partial run still carries one receipt per op, the failed ones
+  `error`.
 
 ### Mode: refresh
 

@@ -28,14 +28,14 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotent create via label",
-      "description": "Before creating a bead for a create op, the adapter queries the tracker for an existing bead carrying the op's idempotency.label — an exact string match, in any bead status; the adapter treats the label as opaque and does not parse it. The open-only filter of the node-keyed label era is gone with the collisions it existed to dodge: a label is spex:<eid>, unique per change, so any bead carrying it — open or closed — can only be the product of this same op's earlier run. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
+      "description": "The create-idempotency probe is an optional adapter capability: the changeset's idempotency.label is insurance, not a conformance bar, and an adapter for a tracker without label support omits the probe entirely — accepting that a run crashed between a create and its receipt can duplicate that create on a blind re-run. The reference adapter implements it: before creating a bead for a create op, it queries the tracker for an existing bead carrying the op's idempotency.label — an exact string match, in any bead status; the adapter treats the label as opaque and does not parse it. The open-only filter of the node-keyed label era is gone with the collisions it existed to dodge: a label is spex:<eid>, unique per change, so any bead carrying it — open or closed — can only be the product of this same op's earlier run. On match: skip the create, record was_existing=true with the existing bead_id in the receipt. On no match: create the bead, record was_existing=false with the new bead_id. Re-runs of a partial changeset are safe: already-created beads are not duplicated."
     },
     {
       "id": "7bad082a34b6",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotent close via label",
-      "description": "Before closing a bead for a close op, the adapter checks whether the target bead already carries the spex:obsolete label. If yes: skip the close, record status=skipped with reason=\"already obsoleted\". If no: close the bead with the spex:obsolete and commit:<HEAD> labels. This guards against the crash-between-close-and-receipt scenario — a second run sees the bead is already labeled and records the skip correctly."
+      "description": "Close idempotency keys on the tracker's own status, not on any label — the spex:obsolete and commit:<HEAD> markers are retired, and close ops carry no labels (the title's via-label wording is identity-bearing legacy). Before closing a bead for a close op, the adapter reads the target's current state. Already closed: skip the transition, record status=ok — whichever run closed it, a close op against a closed bead converges. Open: close it, carrying the op's reason when one is present. This guards the crash-between-close-and-receipt scenario the same way the label did: a second run sees the closed bead and records the skip correctly."
     },
     {
       "id": "3486b44f4f64",
@@ -63,7 +63,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Apply retarget ops",
-      "description": "A retarget op names an existing task in its target ref and the adapter translates it to the tracker's mutation surface: add the op's spex:<eid> event label to the task, and add any deps the task does not already carry. The two halves need not be one call — for br the label goes through br update and each dep through br dep add, because br update carries no dep flag — and a dep edge is named in the tracker's own dep-type vocabulary, not the changeset's spelling. Deps are add-only; nothing is removed, because stale deps are closed by their own lifecycle. Both calls are naturally idempotent, so retarget needs no pre-create probe: re-applying the same retarget adds nothing new. The receipt records op_id, status and the target bead_id; was_existing does not apply to retargets."
+      "description": "A retarget op names an existing task in its target ref and the adapter translates it to the tracker's mutation surface: add the op's spex:<eid> event label to the task where the tracker supports labels — the label half is optional linkage an adapter without labels skips — and add any deps the task does not already carry. The two halves need not be one call — for br the label goes through br update and each dep through br dep add, because br update carries no dep flag — and a dep edge is named in the tracker's own dep-type vocabulary, not the changeset's spelling. Deps are add-only; nothing is removed, because stale deps are closed by their own lifecycle. Both calls are naturally idempotent, so retarget needs no pre-create probe: re-applying the same retarget adds nothing new. The receipt records op_id, status and the target bead_id; was_existing does not apply to retargets."
     }
   ],
   "components": [

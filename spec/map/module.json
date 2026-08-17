@@ -81,7 +81,7 @@
     {
       "id": "38b6d99f08bf",
       "name": "Bead creation mapping flow",
-      "description": "How a task pairs with the event that spawned it. Plan derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, the adapter applies that label to the task it creates — or, for a retarget op, adds the new modified event's label to the existing task — and ingest appends the change event and its task_created (or task_retargeted) receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
+      "description": "How a task pairs with the event that spawned it. Plan derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, an adapter that implements the optional label surface applies that label to the task it creates — or, for a retarget op, adds the new modified event's label to the existing task — and ingest appends the change event and its task_created (or task_retargeted) receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
       "content": "flow_bead_mapping.md",
       "uses": [
         "205e67ca4aad",

@@ -144,8 +144,8 @@ The label is `spex:<eid>` — event ids are deterministic, derived from the op (
 `op_id`), from the drift itself (`node`, `before`, `after`) for refresh-born events, or as
 `<git_head>:<slug>` for the registered event. Determinism serves two consumers at once: ingest
 re-runs derive the same eids and append nothing, and plan derives every eid at changeset-build
-time to mint the op's label — so idempotency needs no counter, no reservation read, and no
-coordination. Legacy `spex:<int>`, `spex:<spec_node_id>` and `spex:cleanup-<hash>` labels on
+time to mint the op's label — the eid's optional tracker-side carrier — so idempotency needs no
+counter, no reservation read, and no coordination. Legacy `spex:<int>`, `spex:<spec_node_id>` and `spex:cleanup-<hash>` labels on
 existing tasks are inert history: the backfill seeded the journal with every pairing that ever
 existed, so nothing old became unresolvable.
 

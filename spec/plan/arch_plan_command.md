@@ -13,7 +13,7 @@ Flags:
 | Flag | Required | Description |
 |------|----------|-------------|
 | `--proposal` | yes | Proposal ref (filename stem, e.g., `2026-04-18-decouple-spex-from-br`). Embedded in the changeset and used for the proposal epic's title. |
-| `--git-head` | yes | Git HEAD SHA. Threaded into changeset.json as `git_head`; used by the adapter for `commit:<HEAD>` labels on obsoleted beads. |
+| `--git-head` | yes | Git HEAD SHA. Threaded into changeset.json as `git_head`; half of every eid the run derives, and required by the adapter's pre-flight as document provenance. |
 | `--diff`     | no (stdin default) | Path to the diff document `spex diff --json` writes; `-` selects stdin explicitly. |
 | `--beads`    | no | Tracker listing (the JSON of `br list --json` or a compatible shape), parsed by BeadReader. |
 | `--absorb`   | no | Git-committed JSON list of `{node, reason}` entries marking cosmetic modifications to absorb. |

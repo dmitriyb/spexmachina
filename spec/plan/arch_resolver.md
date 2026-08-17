@@ -41,8 +41,9 @@ propagation" is actually decided, and it decides all three **without knowing wha
 execute the result**. A ref names an op or a task — never a `br` flag. The translation to
 `--parent`, `--deps <edge>:<id>` and `--priority` happens in the adapter, which is the only
 component permitted to know a tracker's command surface. That separation is what lets a second
-adapter target a different tracker against an unchanged changeset: an adapter needs create, close,
-update, a label and an identifier, and never a view into spex's own files.
+adapter target a different tracker against an unchanged changeset: an adapter needs create, close
+and a stable identifier — the rest of the surface, labels included, is optional capability — and
+never a view into spex's own files.
 
 ## Retarget deps
 

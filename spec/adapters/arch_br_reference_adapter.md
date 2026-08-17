@@ -39,7 +39,7 @@ scripts/apply-br.sh [<changeset.json>] [<receipts.json>]
 | `proposal` absent | `changeset missing required field: proposal` |
 | `ops` absent, or present and not an array | `changeset missing or malformed required field: ops` |
 
-`git_head` and `proposal` are required even though op processing never reads either one. The adapter checks that both are present and non-empty and then makes no further use of them: the `commit:<HEAD>` label on a close op reaches the adapter already assembled inside that op's own `labels` array, so nothing here builds a label out of `git_head`. Requiring the two fields is a check on the document's provenance, not an input to any `br` invocation — a changeset that omits either is refused before the first op runs, so no tracker state is ever produced by a run whose commit and proposal are unrecorded.
+`git_head` and `proposal` are required even though op processing never reads either one. The adapter checks that both are present and non-empty and then makes no further use of them: no label is built from `git_head` here — the retired `commit:<HEAD>` close marker is gone, and the eids inside op labels reach the adapter already assembled. Requiring the two fields is a check on the document's provenance, not an input to any `br` invocation — a changeset that omits either is refused before the first op runs, so no tracker state is ever produced by a run whose commit and proposal are unrecorded.
 
 ## Op Processing Loop
 
@@ -109,9 +109,9 @@ The `cleanup → task` mapping carries forward pre-decouple `apply/bead_creator.
 
 ### `op.Labels` → `br update --add-label`
 
-Each entry of `op.Labels` must reach the bead a create op produces, in the order the changeset lists them. `br create` has no `--add-label` flag — its `--labels` carries the idempotency label alone — so the adapter attaches them immediately after the create returns, one `br update --add-label <label>` per entry, and an update that exits non-zero ends the op with an `error` receipt naming the label it was applying. Cleanup creates are the first create-op consumer of this pre-existing field: without it the discriminator label `spex:cleanup` never reaches the tracker, and cleanup beads become indistinguishable from ordinary work in any tracker-side query. Close ops and `label`/`tag` ops apply their labels through the same `br update` call.
+Each entry of `op.Labels` must reach the target bead, in the order the changeset lists them. `br create` has no `--add-label` flag — its `--labels` carries the idempotency label alone — so on a create the adapter would attach them immediately after the create returns, one `br update --add-label <label>` per entry, and an update that exits non-zero ends the op with an `error` receipt naming the label it was applying. In current plan output only retarget ops populate the field — creates and closes carry no `labels` at all, the retired `spex:cleanup` discriminator and `spex:obsolete`/`commit:<HEAD>` markers with them — but the application path stays generic: `label`/`tag` ops apply theirs through the same `br update` call.
 
-The `idempotency.label` is applied separately and earlier: the adapter queries for a bead carrying it (any status), and on no match hands it to `br create` as `--labels <label>`, so it is on the bead from the moment the bead exists. This is independent of `op.Labels`; cleanup creates carry both `idempotency.label = "spex:<eid>"` (the implied removal event's) AND `Labels = ["spex:cleanup"]` — the linkage key and the state discriminator — and both end up on the bead.
+The `idempotency.label` is applied separately and earlier: the adapter queries for a bead carrying it (any status), and on no match hands it to `br create` as `--labels <label>`, so it is on the bead from the moment the bead exists. This is independent of `op.Labels`, and it is this adapter's implementation of an *optional* capability: the label surface is insurance the contract offers, not a bar it sets — an adapter for a tracker without label support skips the probe and every label application and stays conformant, accepting that a run crashed between a create and its receipt can duplicate that create on a blind re-run.
 
 ### `op.deps` → `br create --deps`
 
@@ -129,17 +129,16 @@ The retired open-only filter existed solely to dodge node-key collisions: under 
 
 Plan produces one label shape for every action class; the adapter just looks up whatever label the op carries, treating it as opaque. Beads wearing legacy shapes (`spex:<spec_node_id>`, `spex:cleanup-<hash>`, `spex:<proposal-slug>`, `spex:<int>`) are inert to this check, because plan never mints those shapes again and exact matching means they can never capture a new create.
 
-Before every `br close`, [[7bad082a34b6|the close-idempotency check]] reads the target's current state with a single `br show <bead_id> --format json`, taking both `labels` and `status` from that one response. The three branches below are decided from that combined state, and nothing is re-queried between the decision and the action:
+Before every `br close`, [[7bad082a34b6|the close-idempotency check]] reads the target's current `status` with a single `br show <bead_id> --format json`. The two branches below are decided from that one response, and nothing is re-queried between the decision and the action — no label is read or written anywhere on this path, because close idempotency keys on the tracker's own status and close ops carry no labels:
 
-| Pre-state                                  | Action                                                       | Receipt |
-|--------------------------------------------|--------------------------------------------------------------|---------|
-| `labels` contain `spex:obsolete`           | Skip — already obsoleted in a prior run.                     | `status=skipped`, reason `"already obsoleted"` |
-| `status == "closed"` (no `spex:obsolete`)  | Apply labels via `br update --add-label …` only; do NOT call `br close` (it exits 3 on already-closed targets). | `status=ok` |
-| `status == "open"` (no `spex:obsolete`)    | Apply labels via `br update --add-label …`, then `br close --force --reason …`. | `status=ok` |
+| Pre-state             | Action                                                                          | Receipt |
+|-----------------------|---------------------------------------------------------------------------------|---------|
+| `status == "closed"`  | Skip — do NOT call `br close` (it exits 3 on already-closed targets).            | `status=ok` |
+| `status == "open"`    | `br close --force --reason …`, the reason present when the op carries one.       | `status=ok` |
 
-Pre-decouple's binary split this into two phases (`LabelObsoletes` then `CloseBeads` with `cli.Status` check between them). Post-decouple, the adapter does the same status check internally; the contract from plan is unchanged (one close op per obsoleted bead with labels and reason). The status branch is purely adapter-internal.
+Pre-decouple's binary split this into two phases (`LabelObsoletes` then `CloseBeads` with `cli.Status` check between them). Post-decouple, the adapter does the status check internally; the contract from plan is one close op per obsoleted bead with target and reason. The status branch is purely adapter-internal.
 
-The label-only branch matters because `br close` exits 3 on already-closed targets even though the labels DO get applied. Treating that exit as `status=error` would push top-level receipts to `partial` and block ingest from saving the snapshot — every modify-pair close on a previously-shipped bead would fail this way.
+Both branches converge on `status=ok` deliberately: whichever run — or the bead's own lifecycle — closed the target first, a close op against a closed bead is complete, and the journal's eid-deduped receipts absorb a re-run without a second `task_closed` line. The skip branch matters because `br close` exits 3 on already-closed targets; treating that exit as `status=error` would push top-level receipts to `partial` and block ingest from saving the snapshot — every modify-pair close on a previously-shipped bead would fail this way.
 
 ## Receipt Atomicity
 

@@ -34,10 +34,10 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Create: cleanup-bead production
 
-- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cafe1234:op-9"` (the eid of the removal event the same-batch close op `op-9` implies), `title: "Code cleanup: m/X"`, `labels: ["spex:cleanup"]`, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
+- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:cafe1234:op-9"` (the eid of the removal event the same-batch close op `op-9` implies), `title: "Code cleanup: m/X"`, no `labels` key, `deps: [{ref:bead, bead_id:"spexmachina-old", type:"blocks"}]`, `priority: 3`.
 - br sandbox empty.
-- Expected: idempotency check via `br list --json --all --limit 0 --label spex:cafe1234:op-9` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:cafe1234:op-9 --type task --json --priority 3 --deps blocks:spexmachina-old`, then `br update <new> --add-label spex:cleanup`. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains both `spex:cleanup` and `spex:cafe1234:op-9`.
-- Rationale: cleanup beads carry distinct shape per the pre-decouple `apply/bead_creator.go::createCleanupBead` contract. The discriminator label `spex:cleanup` is what marks a bead as cleanup bookkeeping — its journal receipt pairs with the removal event it answers rather than a fresh change event, and any tracker-side query for cleanup work keys off it; the idempotency label is that removal event's own eid, so the linkage key and the receipt's referent are one fact. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
+- Expected: idempotency check via `br list --json --all --limit 0 --label spex:cafe1234:op-9` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:cafe1234:op-9 --type task --json --priority 3 --deps blocks:spexmachina-old` and no `br update` — a cleanup create carries no `op.Labels` to apply, the retired `spex:cleanup` discriminator with them. Receipt `status=ok`, `was_existing=false`, `bead_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task` and `labels` contains exactly `spex:cafe1234:op-9`.
+- Rationale: what marks the bead as cleanup bookkeeping is the journal, not a tracker label — its receipt pairs with the removal event it answers rather than a fresh change event, and "is this bead cleanup?" is answered by the `removed` event its `task_created` references; the idempotency label is that removal event's own eid, so the linkage key and the receipt's referent are one fact. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
 
 ### Create: cleanup-bead re-run is idempotent
 
@@ -47,19 +47,14 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Close: first run
 
-- Changeset close op targeting bead `br-abc`. `br-abc` exists and is open.
-- Expected: `br update br-abc --add-label spex:obsolete` then `br update br-abc --add-label commit:<HEAD>` (one call per label), then `br close br-abc --force`, plus `--reason <op.reason>` when the op carries one — the `close_first_run` fixture does — invoked; receipt `status=ok`.
+- Changeset close op targeting bead `br-abc`, no `labels` key. `br-abc` exists and is open.
+- Expected: `br show br-abc --format json` reads the status; no `br update` of any kind — close ops carry no labels, the retired `spex:obsolete`/`commit:<HEAD>` markers with them; `br close br-abc --force` invoked, plus `--reason <op.reason>` when the op carries one — the `close_first_run` fixture does; receipt `status=ok`.
 
-### Close: re-run of already-obsoleted bead
+### Close: re-run against an already-closed bead
 
-- Changeset close op targeting bead `br-abc`. `br-abc` already has label `spex:obsolete`.
-- Expected: `br close` NOT invoked; receipt `status=skipped`, reason `"already obsoleted"`.
-
-### Close: bead is already closed without `spex:obsolete`
-
-- Changeset close op targeting bead `br-abc`. `br-abc` is `status=closed` (closed by an earlier bead-lifecycle run, after a previous PR shipped) but its `labels` array does NOT contain `spex:obsolete`.
-- Expected: `br update --add-label spex:obsolete --add-label commit:HEAD` invoked (the labels apply); `br close` NOT invoked (the close transition is a no-op against an already-closed target — `br close` exits 3 in that case); receipt `status=ok`.
-- Rationale: this is the third branch of the close-op idempotency table in `arch_br_reference_adapter.md`. Without it, every modify-pair close on a previously-shipped component records `status=error`, top-level receipts go `partial`, and ingest's atomicity gate refuses to save the snapshot — blocking the whole run.
+- Changeset close op targeting bead `br-abc`. `br-abc` is `status=closed` — whether an earlier run of this changeset closed it or its own bead lifecycle did after a previous PR shipped; the two are indistinguishable and the branch treats them identically.
+- Expected: `br close` NOT invoked (the close transition is a no-op against an already-closed target — `br close` exits 3 in that case); no `br update`; receipt `status=ok`.
+- Rationale: this is the skip branch of the close-op idempotency table in `arch_br_reference_adapter.md`, keyed on the tracker's own status and nothing else. Without it, every modify-pair close on a previously-shipped component records `status=error`, top-level receipts go `partial`, and ingest's atomicity gate refuses to save the snapshot — blocking the whole run. Convergence on `status=ok` (not `skipped`) is deliberate: the journal's eid-deduped receipts absorb a re-run without a second `task_closed` line.
 
 ### Close: bead doesn't exist
 
@@ -87,10 +82,10 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Full idempotent round-trip
 
-- Changeset with 3 creates (2 new, 1 matching existing) and 2 closes (1 open, 1 already-obsoleted).
+- Changeset with 3 creates (2 new, 1 matching existing) and 2 closes (1 open, 1 already closed).
 - Run adapter once. Assert all 5 receipts match expectations.
 - Run adapter AGAIN with the same inputs.
-- Expected: second run's receipts show `status=ok` with `was_existing=true` on every create and `status=skipped` (`"already obsoleted"`) on every close; tracker state is identical before and after the second run.
+- Expected: second run's receipts show `status=ok` on every op — `was_existing=true` on every create, the status-keyed skip branch on every close; tracker state is identical before and after the second run.
 
 ## Fixtures
 
