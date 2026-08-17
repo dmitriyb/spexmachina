@@ -166,6 +166,14 @@ func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 	}
 
 	assertCanonicalFieldOrder(t, cs.Ops[0])
+
+	raw, err := json.Marshal(cs.Ops[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), `"spec_hash"`) {
+		t.Errorf("create op: want no spec_hash key (only retargets populate it), got %s", raw)
+	}
 }
 
 // TestBuild_CanonicalFieldOrderMixedBatch runs the field-order assertion
