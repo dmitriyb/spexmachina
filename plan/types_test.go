@@ -100,23 +100,16 @@ func TestRefKindConstants(t *testing.T) {
 func TestLabelConstants(t *testing.T) {
 	want := map[string]string{
 		"IdempotencyLabelPrefix": "spex:",
-		"ObsoleteLabel":          "spex:obsolete",
-		"CommitLabelPrefix":      "commit:",
 		"CleanupLabel":           "spex:cleanup",
 	}
 	got := map[string]string{
 		"IdempotencyLabelPrefix": IdempotencyLabelPrefix,
-		"ObsoleteLabel":          ObsoleteLabel,
-		"CommitLabelPrefix":      CommitLabelPrefix,
 		"CleanupLabel":           CleanupLabel,
 	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Fatalf("%s: got %q want %q", k, got[k], v)
 		}
-	}
-	if !strings.HasPrefix(ObsoleteLabel, IdempotencyLabelPrefix) {
-		t.Fatalf("ObsoleteLabel %q must carry the spex: prefix", ObsoleteLabel)
 	}
 	if !strings.HasPrefix(CleanupLabel, IdempotencyLabelPrefix) {
 		t.Fatalf("CleanupLabel %q must carry the spex: prefix", CleanupLabel)
@@ -187,27 +180,31 @@ func TestOp_RetargetCanonicalFieldOrder(t *testing.T) {
 
 // TestOp_CloseMatchesArchSpecExample pins byte-identical output against
 // the literal close-op example in arch_changeset_builder.md's "Op Shape"
-// section.
+// section: target and reason alone, no labels — close idempotency keys on
+// the tracker's own status, and a run's provenance lives in the
+// changeset's top-level git_head, not on individual ops.
 func TestOp_CloseMatchesArchSpecExample(t *testing.T) {
 	op := Op{
 		OpID:   "op-0042",
 		Type:   OpClose,
 		Target: &Ref{Kind: RefBead, BeadID: "spexmachina-tjs"},
-		Labels: []string{ObsoleteLabel, CommitLabelPrefix + "deadbeefcafe1234"},
 		Reason: "Spec node modified: apply/ApplyCommand",
 	}
 	got := encode(t, op)
-	want := `{"op_id":"op-0042","type":"close","target":{"ref":"bead","bead_id":"spexmachina-tjs"},"labels":["spex:obsolete","commit:deadbeefcafe1234"],"reason":"Spec node modified: apply/ApplyCommand"}`
+	want := `{"op_id":"op-0042","type":"close","target":{"ref":"bead","bead_id":"spexmachina-tjs"},"reason":"Spec node modified: apply/ApplyCommand"}`
 	if got != want {
 		t.Fatalf("close op mismatch:\n got %s\nwant %s", got, want)
+	}
+	if strings.Contains(got, `"labels"`) {
+		t.Fatalf("close op must carry no labels key: %s", got)
 	}
 }
 
 // TestOp_CleanupCreateShape matches arch_changeset_builder.md's "Cleanup
 // op shape" table: spec_node_kind "cleanup", the reason verbatim as
-// title, a single blocks-edge dep to the old bead, and the
-// "spex:cleanup" discriminator label riding on the create itself (not
-// just on closes).
+// title, a single blocks-edge dep to the old bead, and no labels key —
+// the retired spex:cleanup discriminator is not emitted; what marks the
+// op as cleanup is its SpecNodeKind alone.
 func TestOp_CleanupCreateShape(t *testing.T) {
 	op := Op{
 		OpID:         "op-9",
@@ -219,21 +216,20 @@ func TestOp_CleanupCreateShape(t *testing.T) {
 		Deps:         []Ref{{Kind: RefBead, BeadID: "spexmachina-old", EdgeType: "blocks"}},
 		Priority:     3,
 		Title:        "Code cleanup: m/X",
-		Labels:       []string{CleanupLabel},
 	}
 	got := encode(t, op)
 	if op.SpecNodeKind != KindCleanup {
 		t.Fatalf("cleanup create must carry spec_node_kind=cleanup: %s", got)
 	}
-	if !strings.Contains(got, `"labels":["spex:cleanup"]`) {
-		t.Fatalf("cleanup create must carry the spex:cleanup label: %s", got)
+	if strings.Contains(got, `"labels"`) {
+		t.Fatalf("cleanup create must carry no labels key: %s", got)
 	}
 	if !strings.Contains(got, `"type":"blocks"`) {
 		t.Fatalf("cleanup create's dep must carry edge type blocks: %s", got)
 	}
 	fieldOrder(t, got, "cleanup create",
 		"op_id", "type", "spec_node_kind", "spec_node_id",
-		"idempotency", "parent", "deps", "priority", "title", "labels",
+		"idempotency", "parent", "deps", "priority", "title",
 	)
 }
 
