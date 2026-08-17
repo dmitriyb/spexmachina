@@ -94,10 +94,9 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
     },
     {
       "op_id": "op-0002",
-      "status": "skipped",
-      "bead_id": "",
-      "was_existing": false,
-      "reason": "already labeled"
+      "status": "ok",
+      "bead_id": "spexmachina-def",
+      "was_existing": true
     },
     {
       "op_id": "op-0003",
@@ -128,11 +127,11 @@ or receipts file is a configuration error — see `arch_refresh.md`.
 
 ```json
 {
-  "ok": 10,
-  "skipped": 1,
+  "ok": 11,
+  "skipped": 0,
   "errors": 0,
   "events_appended": 8,
-  "receipts_appended": 10,
+  "receipts_appended": 11,
   "snapshot_saved": true,
   "status": "complete"
 }

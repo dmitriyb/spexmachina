@@ -5,7 +5,9 @@ or review that node, plus the event bracket that locates its latest change in gi
 is what it means to hold [[40a3d3155131|the full spec context of a record]]: for a live node, the
 spec graph answers the files and the [[205e67ca4aad|journal fold]] answers the bracket; for a
 removed node, the journal carries the biography that outlives the node. No mapping record exists
-to be handed in — the key is the whole of the input.
+to be handed in — the key is the whole of the input. No tracker label is consulted or accepted as
+a key either: identity hashes and task ids resolve entirely through the journal, so resolution
+works unchanged against a tracker that carries no labels at all.
 
 ## Responsibilities
 

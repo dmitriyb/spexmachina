@@ -125,7 +125,10 @@ build from and is refused as a malformed changeset. "Spec node removed" closes c
 ## Adapter-Side Recovery
 
 `was_existing = true` means the adapter found a task already carrying the op's exact label, in
-any status.
+any status — a receipt only an adapter that implements the optional label probe can produce; an
+adapter without label support never reports it, and the reconciler asks no questions either way:
+receipts are the adapter-side half of re-run idempotency, the probe merely narrows how often a
+crashed run's task gets a duplicate.
 Usually the journal already holds the pairing and the derived eid matches — the batch constructs
 the same lines, finds them present, and appends nothing. The interesting case is
 `was_existing = true` with no pairing in the journal: the signature of a previous run where the

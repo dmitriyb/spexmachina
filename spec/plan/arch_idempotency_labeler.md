@@ -7,6 +7,14 @@ is `spex:<eid>` of the journal event the op's `task_created` will reference. Eve
 deterministic, which is what lets the builder know them before ingest mints the events: no
 cursor, no store write, no state.
 
+The label is the eid's tracker-side carrier and nothing more — insurance an adapter MAY honor,
+not a conformance bar. The eid itself is mandatory either way: it is the identity the journal's
+`task_created` pairing rests on, which is why the epic's missing-registration error below is
+fatal regardless of what any tracker does with labels. An adapter for a tracker without label
+support ignores the field entirely and stays conformant, at the stated cost that a run which
+died between a create and its receipt can duplicate that create on a blind re-run; receipts,
+once written, remain the pairing mechanism either way.
+
 ## Responsibilities
 
 - For each create action, return `spex:<eid>` of the op's referent event, per the referent rules

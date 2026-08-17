@@ -25,7 +25,9 @@ implementation bead.
   the top, `git_head` set to the fixed SHA, and canonical field order on every op (`op_id`,
   `type`, `spec_node_kind`, `spec_node_id`, `spec_hash`, `idempotency`, `parent`, `deps`,
   `priority`, `title`, `body`, `target`, `labels`, `reason`) — the one sequence every op kind
-  writes its own subset of, `spec_hash` included, since creates carry it as well as retargets.
+  writes its own subset of. `spec_hash`'s position in the sequence is fixed, but no create shape
+  populates it — only retarget ops do; assert the single create's JSON carries no `spec_hash`
+  key.
 - Run the same assertion over a batch carrying one create, one retarget and one close, and assert
   the retarget's `deps` are serialized **before** its `target`: one order governs every kind, and
   a retarget is where a per-kind order would show itself.
@@ -127,8 +129,9 @@ implementation bead.
 
 - Modified component Q with a **closed** pairing: old task `spexmachina-abc`, new create op.
   Assert:
-  - Close op carries `target: {"ref":"bead","bead_id":"spexmachina-abc"}` and
-    `labels: ["spex:obsolete","commit:<git-head>"]`.
+  - Close op carries `target: {"ref":"bead","bead_id":"spexmachina-abc"}` and no `labels`
+    key — a close op is target and reason alone; the retired `spex:obsolete` / `commit:<HEAD>`
+    markers are not emitted, because close idempotency keys on the tracker's own status.
   - Create op for the replacement includes `deps: [{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}]`
     for lineage.
   - Create op's `idempotency.label` is `spex:<git_head>:<its op_id>` — the eid of this run's
@@ -147,8 +150,10 @@ implementation bead.
   - `spec_node_kind: "cleanup"`.
   - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"`
     form).
-  - `labels: ["spex:cleanup"]` on the create op (the discriminator label; the builder populates
-    `Op.Labels` on cleanup creates and retargets, not just on closes).
+  - no `labels` key — the retired `spex:cleanup` discriminator is not emitted; what marks the
+    task as cleanup tracker-side is nothing at all, because cleanup classification is answered by
+    the journal (the task's `task_created` references a `removed` event), and `Op.Labels` is
+    populated only on retargets.
   - `idempotency.label: "spex:<git_head>:<close op_id>"` — the eid of the `removed` event the
     same-batch close implies, so the cleanup's `task_created` referent and its label are the same
     event.

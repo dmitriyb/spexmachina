@@ -8,8 +8,9 @@ executed a changeset against the tracker, and by registration when a proposal's 
 The journal event id travels ahead of the pairing: plan derives each create op's eid from
 `(git_head, op_id)` — the same derivation ingest will use to mint the event — and stamps it on
 the op as the `spex:<eid>` idempotency label; a retarget op carries the same derivation's eid as
-a plain label for the task it moves. The adapter applies the label to the task it creates or
-updates, and ingest appends the change event and its receipt to the journal at baselining.
+a plain label for the task it moves. An adapter that implements the optional label surface
+applies it to the task it creates or updates — insurance, not linkage — and ingest appends the
+change event and its receipt to the journal at baselining.
 
 ```dot
 digraph bead_mapping {
@@ -43,7 +44,8 @@ and it owns the one append primitive every writer uses. Plan's parent resolution
 the changeset exists — the fold for pairings, the parsed events for the run's registration; the
 map query surface reads it after ingest has appended; `spex
 ingest` and registration append through it. Everything between plan
-and ingest is the label doing the travelling: `spex` itself never invokes a tracker CLI, so every
+and ingest is the eid doing the travelling — in the changeset and receipts always, on tracker
+labels only where an adapter applies them: `spex` itself never invokes a tracker CLI, so every
 tracker mutation happens inside the adapter and every journal mutation happens inside the store.
 Skills read the settled result through [[08909d62930b|MapCommand]] (`spex map get` / `list` /
 `context`), a query face that never writes.

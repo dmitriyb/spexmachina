@@ -12,7 +12,7 @@ Builds the merkle tree from the parsed spec graph. [[3ada6b800cc5|Each node's ke
 
 ## Tree Structure
 
-Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also the task journal's node key and the bead labels' payload — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
+Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also the task journal's node key — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
 
 Every entry in the tree is one of the following, and its key, level and hash source are fixed by which one it is:
 

@@ -124,14 +124,14 @@
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Idempotency label construction",
-      "description": "Every create op's idempotency.label is spex:<eid> of the journal event its task_created will reference — one rule for every action class. Node-bearing creates (fresh and modify-pair alike) key the change event ingest will mint from (git_head, op_id); cleanup creates key the removal event they answer — the journal's latest removed event for the node when the removal already landed, otherwise the event their same-batch close implies, derived from the close op's (git_head, op_id) — the same resolution order the reconciler pairs them by; epic creates key the proposal's registered event, read from the journal fold. Event ids are deterministic, so plan knows every eid at changeset-build time: no counter, no cursor, no store write. A label is unique per change — which is what a task is — so no cleanup- prefix, no slug shape, and no collision rationale survive. The adapter matches the label against the tracker before creating; a pre-existing match produces a was_existing=true receipt rather than a duplicate bead."
+      "description": "Every create op's idempotency.label is spex:<eid> of the journal event its task_created will reference — one rule for every action class. Node-bearing creates (fresh and modify-pair alike) key the change event ingest will mint from (git_head, op_id); cleanup creates key the removal event they answer — the journal's latest removed event for the node when the removal already landed, otherwise the event their same-batch close implies, derived from the close op's (git_head, op_id) — the same resolution order the reconciler pairs them by; epic creates key the proposal's registered event, read from the journal fold. Event ids are deterministic, so plan knows every eid at changeset-build time: no counter, no cursor, no store write. A label is unique per change — which is what a task is — so no cleanup- prefix, no slug shape, and no collision rationale survive. The label is the eid's tracker-side carrier, offered to adapters as optional insurance: the reference adapter matches it against the tracker before creating, so a pre-existing match produces a was_existing=true receipt rather than a duplicate bead; an adapter for a tracker without label support ignores the field and stays conformant, at the stated cost that a run crashed between a create and its receipt can duplicate that create on a blind re-run."
     },
     {
       "id": "26b2fdc6e7ea",
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "title": "Git HEAD threaded from caller",
-      "description": "spex plan accepts --git-head <sha> and embeds the SHA into changeset.json under the top-level git_head field. The adapter uses this value to build commit:<HEAD> labels on obsoleted beads. spex never calls git rev-parse; the caller supplies $(git rev-parse HEAD) from their shell."
+      "description": "spex plan accepts --git-head <sha> and embeds the SHA into changeset.json under the top-level git_head field. The SHA is half of every eid the run derives — (git_head, op_id) — and the adapter's pre-flight requires the field as document provenance without reading it further. spex never calls git rev-parse; the caller supplies $(git rev-parse HEAD) from their shell."
     },
     {
       "id": "7f275787df34",
@@ -149,7 +149,7 @@
       "preq_id": "91f6f338de19",
       "type": "functional",
       "title": "Tool-agnostic operation vocabulary",
-      "description": "Operations are label, create, close, tag, and retarget — abstract over any bead tracker. No tracker-specific flags or subcommand names appear in changeset.json. Adapters for br, bd, GitHub Issues, or Jira consume the same vocabulary."
+      "description": "Operations are label, create, close, tag, and retarget — abstract over any bead tracker. No tracker-specific flags or subcommand names appear in changeset.json. Adapters for br, bd, GitHub Issues, or Jira consume the same vocabulary. The label surface is optional throughout: idempotency.label and every labels array are insurance and linkage an adapter MAY apply, so a tracker without label support hosts a conformant adapter — the minimum a tracker must offer is create, close, and a stable identifier — and an adapter without labels answers label and tag ops with an ok no-op receipt."
     },
     {
       "id": "7d45c20bd0f7",

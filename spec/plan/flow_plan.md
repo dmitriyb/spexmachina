@@ -131,8 +131,8 @@ digraph plan_internals {
    parent at the proposal epic, and walks implements → preq_id → priority for
    each create's priority number.
 8. **Compose and write.** [[4c1146bb7287|ChangesetBuilder]] assembles the
-   create ops, appends the retarget ops and one close op per obsoleted bead
-   carrying the `spex:obsolete` and `commit:<HEAD>` labels, writes the
+   create ops, appends the retarget ops and one close op per obsoleted bead —
+   target and reason alone, no labels — writes the
    absorbed entries PlanCommand composed into the top-level `absorbed` array,
    and answers with the finished v3 changeset in canonical field order.
    [[92ae9dab6d6d|PlanCommand]] writes that answer to stdout, or atomically to
