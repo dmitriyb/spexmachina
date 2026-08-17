@@ -17,9 +17,11 @@ const (
 
 // Per-op status vocabulary. ok = the op executed and produced its intended
 // effect, or was a no-op due to an idempotent create match (was_existing
-// match on create — ingest still needs the journal line); skipped = the op
-// was a no-op because the tracker state was already-obsolete on close;
-// error = the op failed and no state was changed.
+// match on create — ingest still needs the journal line) or an idempotent
+// close against an already-closed target; skipped = an op the adapter
+// deliberately did nothing for — the reference adapter no longer produces
+// this status, since its already-closed close now converges on ok; error =
+// the op failed and no state was changed.
 const (
 	OpStatusOk      = "ok"
 	OpStatusSkipped = "skipped"
