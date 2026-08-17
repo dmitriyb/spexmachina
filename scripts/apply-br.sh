@@ -91,7 +91,7 @@ fi
 # ---- State -----------------------------------------------------------------
 
 declare -A SUB_TABLE   # op_id → bead_id (created or matched)
-declare -A OP_STATUS   # op_id → ok|skipped|error (for ref:op resolution diagnostics)
+declare -A OP_STATUS   # op_id → ok|error (for ref:op resolution diagnostics)
 RECEIPTS=()
 
 # ---- Helpers ---------------------------------------------------------------
@@ -112,14 +112,6 @@ append_receipt_ok() {
     RECEIPTS+=("$(jq -cn \
         --arg op "$op_id" --arg bid "$bead_id" --argjson we "$was_existing" \
         '{op_id: $op, status: "ok", bead_id: $bid, was_existing: $we}')")
-}
-
-append_receipt_skipped() {
-    local op_id="$1" bead_id="$2" was_existing="$3" reason="$4"
-    OP_STATUS["$op_id"]="skipped"
-    RECEIPTS+=("$(jq -cn \
-        --arg op "$op_id" --arg bid "$bead_id" --argjson we "$was_existing" --arg r "$reason" \
-        '{op_id: $op, status: "skipped", bead_id: $bid, was_existing: $we, reason: $r}')")
 }
 
 append_receipt_ok_no_existing() {
@@ -328,10 +320,10 @@ process_create() {
 
     # op.Labels → post-create `br update --add-label` calls. `br create`
     # has no --add-label flag (only the comma-joined --labels for the
-    # idempotency label); the spex:cleanup discriminator and any other
-    # op.Labels entry attaches via update, mirroring pre-decouple
-    # createCleanupBead's pattern (create + cli.Update). See
-    # arch_br_reference_adapter.md "Op Translation".
+    # idempotency label). In current plan output only retarget ops
+    # populate op.Labels — creates carry none, the retired spex:cleanup
+    # discriminator with them — but the application path stays generic.
+    # See arch_br_reference_adapter.md "Op Translation".
     local extra_label upd_out
     while IFS= read -r extra_label; do
         [[ -z "$extra_label" ]] && continue
@@ -363,47 +355,32 @@ process_close() {
         return
     fi
 
-    # Idempotency + already-closed branching per spec/adapters/arch_br_reference_adapter.md
-    # "Idempotency". Read both labels AND status from the same `br show`
-    # JSON; pick branch by combined state:
-    #   - labels contain spex:obsolete → skip, status=skipped
-    #   - status="closed" no spex:obsolete → label-only path, status=ok
-    #   - status="open" no spex:obsolete → label + close, status=ok
+    # Idempotency per spec/adapters/arch_br_reference_adapter.md
+    # "Idempotency". Close ops carry no labels — the retired spex:obsolete
+    # and commit:<HEAD> markers with them — so this keys purely on the
+    # tracker's own status, read with a single `br show`. Nothing is
+    # re-queried between the decision and the action.
     local show_out
     if ! show_out=$("$BR_BIN" show "$bead_id" --format json 2>&1); then
         append_receipt_error "$op_id" "$bead_id" "br show failed: $show_out"
         return
     fi
-    if jq -e '(.[0].labels // .labels // []) | any(. == "spex:obsolete")' <<< "$show_out" >/dev/null 2>&1; then
-        append_receipt_skipped "$op_id" "$bead_id" false "already obsoleted"
-        return
-    fi
     local current_status
     current_status=$(jq -r '(.[0].status // .status // "")' <<< "$show_out")
 
-    # Apply labels regardless of branch (typically spex:obsolete + commit:<HEAD>).
-    local lbl out rc
-    while IFS= read -r lbl; do
-        [[ -z "$lbl" ]] && continue
-        if ! out=$("$BR_BIN" update "$bead_id" --add-label "$lbl" 2>&1); then
-            rc=$?
-            append_receipt_error "$op_id" "$bead_id" "br update --add-label $lbl exited $rc: $out"
-            return
-        fi
-    done < <(jq -r '(.labels // [])[]' <<< "$op")
-
     if [[ "$current_status" == "closed" ]]; then
-        # Label-only branch: bead is already closed (e.g. from an
-        # earlier bead-lifecycle run). Skip the close call — `br close`
-        # exits 3 on already-closed targets even though the labels
-        # apply. Receipt is ok; downstream Reconciler treats this
-        # identically to the close+label branch in applyClose.
+        # Skip branch: whichever run — or the bead's own lifecycle —
+        # closed the target first, a close op against a closed bead is
+        # complete. `br close` exits 3 on already-closed targets, so the
+        # call is skipped rather than attempted. Converges on status=ok
+        # (not skipped) deliberately: the journal's eid-deduped receipts
+        # absorb a re-run without a second task_closed line.
         append_receipt_ok "$op_id" "$bead_id" false
         return
     fi
 
-    # Close+label branch: bead is open.
-    local reason
+    # Open branch: close it.
+    local reason out rc
     reason=$(jq -r '.reason // empty' <<< "$op")
     local -a close_flags
     close_flags=("$bead_id" --force)

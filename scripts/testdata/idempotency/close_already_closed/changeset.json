@@ -7,8 +7,7 @@
       "op_id": "op-0001",
       "type": "close",
       "target": {"ref": "bead", "bead_id": "br-abc"},
-      "labels": ["spex:obsolete", "commit:deadbeefcafe1234"],
-      "reason": "second close attempt"
+      "reason": "obsoleted by spec change"
     }
   ]
 }

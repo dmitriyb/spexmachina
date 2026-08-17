@@ -17,26 +17,25 @@ const (
 
 // Per-op status vocabulary. ok = the op executed and produced its intended
 // effect, or was a no-op due to an idempotent create match (was_existing
-// match on create — ingest still needs the journal line); skipped = the op
-// was a no-op because the tracker state was already-obsolete on close;
-// error = the op failed and no state was changed.
+// match on create — ingest still needs the journal line) or an idempotent
+// close against an already-closed target; skipped = an op the adapter
+// deliberately did nothing for — the reference adapter no longer produces
+// this status, since its already-closed close now converges on ok; error =
+// the op failed and no state was changed.
 const (
 	OpStatusOk      = "ok"
 	OpStatusSkipped = "skipped"
 	OpStatusError   = "error"
 )
 
-// Adapter label vocabulary. These literals are part of the adapter
-// contract — emit and the reference adapter both rely on them, and ingest
-// recognizes them when reconciling state.
+// Adapter label vocabulary. This literal is part of the adapter
+// contract — emit and the reference adapter both rely on it, and ingest
+// recognizes it when reconciling state. Close ops carry no labels: the
+// reference adapter keys close idempotency on the tracker's own status.
 //
 //	IdempotencyLabelPrefix + <record-id> on every create (emit)
-//	ObsoleteLabel                       on every close   (adapter)
-//	CommitLabelPrefix      + <git HEAD>  on every close   (adapter)
 const (
 	IdempotencyLabelPrefix = "spex:"
-	ObsoleteLabel          = "spex:obsolete"
-	CommitLabelPrefix      = "commit:"
 )
 
 // OpReceipt is the per-op record an adapter writes after attempting one

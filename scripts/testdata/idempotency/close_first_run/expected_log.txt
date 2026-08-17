@@ -1,0 +1,3 @@
+br --version
+br show br-abc --format json
+br close br-abc --force --reason obsoleted\ by\ spec\ change

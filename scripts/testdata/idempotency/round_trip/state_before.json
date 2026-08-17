@@ -2,7 +2,7 @@
   "issues": [
     {"id":"existing-already","title":"Existing bead matching spex:3","status":"open","issue_type":"feature","labels":["spex:3"]},
     {"id":"existing-open","title":"open bead to be closed","status":"open","issue_type":"feature","labels":["spex:99"]},
-    {"id":"existing-closed","title":"already obsoleted bead","status":"closed","issue_type":"feature","labels":["spex:88","spex:obsolete","commit:beef"]}
+    {"id":"existing-closed","title":"already closed bead","status":"closed","issue_type":"feature","labels":["spex:88"]}
   ],
   "create_ids": ["mock-001","mock-002"]
 }

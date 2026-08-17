@@ -213,17 +213,11 @@ func TestReceipts_RoundTrip(t *testing.T) {
 }
 
 func TestIdempotencyLabelConstants(t *testing.T) {
-	// These literals are part of the adapter contract: emit writes
-	// idempotency.label = "spex:<n>"; the reference adapter applies
-	// "spex:obsolete" and "commit:<HEAD>" labels on close.
+	// This literal is part of the adapter contract: emit writes
+	// idempotency.label = "spex:<n>". Close ops carry no labels — the
+	// reference adapter keys close idempotency on the tracker's own status.
 	if IdempotencyLabelPrefix != "spex:" {
 		t.Fatalf("IdempotencyLabelPrefix: got %q want %q", IdempotencyLabelPrefix, "spex:")
-	}
-	if ObsoleteLabel != "spex:obsolete" {
-		t.Fatalf("ObsoleteLabel: got %q want %q", ObsoleteLabel, "spex:obsolete")
-	}
-	if CommitLabelPrefix != "commit:" {
-		t.Fatalf("CommitLabelPrefix: got %q want %q", CommitLabelPrefix, "commit:")
 	}
 }
 
