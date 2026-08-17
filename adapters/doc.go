@@ -25,15 +25,15 @@
 // produce the same final tracker state. Already-created beads are
 // detected via the IdempotencyLabelPrefix label and recorded as
 // was_existing=true status=ok receipts, so ingest still constructs a
-// journal line for them; already-closed beads are detected via the
-// ObsoleteLabel and recorded as status=skipped with reason
-// "already obsoleted".
+// journal line for them; already-closed beads are detected by reading
+// the tracker's own status (close ops carry no labels) and likewise
+// recorded as status=ok.
 //
 // # Contract surface
 //
 // This package is intentionally minimal: the wire-format types
-// (Receipts, OpReceipt) and the label vocabulary (IdempotencyLabelPrefix,
-// ObsoleteLabel, CommitLabelPrefix) plus version and status constants.
+// (Receipts, OpReceipt) and the label vocabulary (IdempotencyLabelPrefix)
+// plus version and status constants.
 // Component-level behavior — substitution table, ref resolution, br
 // subprocess invocation — lives in the bash reference adapter and in
 // per-component beads under spexmachina-0lk.1.

@@ -26,17 +26,14 @@ const (
 	OpStatusError   = "error"
 )
 
-// Adapter label vocabulary. These literals are part of the adapter
-// contract — emit and the reference adapter both rely on them, and ingest
-// recognizes them when reconciling state.
+// Adapter label vocabulary. This literal is part of the adapter
+// contract — emit and the reference adapter both rely on it, and ingest
+// recognizes it when reconciling state. Close ops carry no labels: the
+// reference adapter keys close idempotency on the tracker's own status.
 //
 //	IdempotencyLabelPrefix + <record-id> on every create (emit)
-//	ObsoleteLabel                       on every close   (adapter)
-//	CommitLabelPrefix      + <git HEAD>  on every close   (adapter)
 const (
 	IdempotencyLabelPrefix = "spex:"
-	ObsoleteLabel          = "spex:obsolete"
-	CommitLabelPrefix      = "commit:"
 )
 
 // OpReceipt is the per-op record an adapter writes after attempting one
