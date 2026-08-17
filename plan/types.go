@@ -73,16 +73,16 @@ const (
 // and nothing in the changeset marks the op.
 const FallbackPriority = 3
 
-// Label vocabulary the changeset and the external adapter agree on.
 // IdempotencyLabelPrefix names the eid-keyed label an adapter matches
-// before creating a bead; ObsoleteLabel and CommitLabelPrefix mark a
-// close op's target as superseded as of the given git HEAD; CleanupLabel
-// discriminates a cleanup create so the adapter and the reconciler can
-// key off it without depending on SpecNodeKind alone.
+// before creating a bead. The obsolete-close markers (spex:obsolete,
+// commit:<HEAD>) and the spex:cleanup discriminator are retired: a close
+// op carries no labels at all — close idempotency keys on the tracker's
+// own status — and a cleanup create is distinguished by its
+// SpecNodeKind, never by a label. CleanupLabel is kept as a historical
+// constant for callers outside this package that still reference its
+// literal value; ChangesetBuilder no longer emits it.
 const (
 	IdempotencyLabelPrefix = "spex:"
-	ObsoleteLabel          = "spex:obsolete"
-	CommitLabelPrefix      = "commit:"
 	CleanupLabel           = "spex:cleanup"
 )
 
@@ -119,9 +119,12 @@ type Idem struct {
 //
 // Conventional creates use SpecNodeKind through Body; a cleanup or
 // modify-pair create additionally carries Deps (lineage, edge type
-// "blocks") and Labels ("spex:cleanup" on cleanup only). Retarget ops use
-// SpecNodeID, SpecHash, Target, Labels, Deps and Reason. Close ops use
-// Target, Labels and Reason. Every other field is elided via omitempty.
+// "blocks") but no Labels — creates never populate Labels. Retarget ops
+// use SpecNodeID, SpecHash, Target, Labels, Deps and Reason: Labels is
+// the one field only a retarget populates, carrying this run's
+// modified-event label. Close ops use Target and Reason alone, no
+// Labels — close idempotency keys on the tracker's own status. Every
+// other field is elided via omitempty.
 type Op struct {
 	OpID         string   `json:"op_id"`
 	Type         string   `json:"type"`

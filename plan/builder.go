@@ -119,7 +119,6 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 			OpID:   fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1),
 			Type:   OpClose,
 			Target: &Ref{Kind: RefBead, BeadID: a.BeadID},
-			Labels: []string{ObsoleteLabel, CommitLabelPrefix + b.GitHead},
 			Reason: a.Reason,
 		})
 	}
@@ -140,11 +139,11 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 
 // createOp builds a single create Op: the epic shortcut (no parent, no
 // deps, fixed priority, title = its Reason verbatim), the cleanup shape
-// (distinct spec_node_kind, title = Reason, labels = [spex:cleanup],
-// fallback priority, empty body), or the conventional component/data_flow/
-// test_section shape — otherwise delegating parent, deps and priority to
-// Resolver (spec/plan/arch_changeset_builder.md, "Cleanup op shape",
-// "Title and body").
+// (distinct spec_node_kind, title = Reason, no labels, fallback priority,
+// empty body), or the conventional component/data_flow/test_section
+// shape — otherwise delegating parent, deps and priority to Resolver
+// (spec/plan/arch_changeset_builder.md, "Cleanup op shape", "Title and
+// body").
 func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) (Op, error) {
 	a := oo.Action
 
@@ -187,7 +186,6 @@ func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) 
 			Deps:         deps,
 			Priority:     FallbackPriority,
 			Title:        a.Reason,
-			Labels:       []string{CleanupLabel},
 		}, nil
 	}
 

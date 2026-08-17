@@ -799,9 +799,8 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	}
 
 	closeOp := findClose(t, cs.Ops, "spexmachina-abc")
-	wantLabels := []string{"spex:obsolete", "commit:deadbeef"}
-	if len(closeOp.Labels) != 2 || closeOp.Labels[0] != wantLabels[0] || closeOp.Labels[1] != wantLabels[1] {
-		t.Errorf("close labels: want %v, got %v", wantLabels, closeOp.Labels)
+	if len(closeOp.Labels) != 0 {
+		t.Errorf("close labels: want none (retired spex:obsolete/commit:<HEAD> markers), got %v", closeOp.Labels)
 	}
 	if closeOp.Reason != "Spec node modified: m/Q" {
 		t.Errorf("close reason: got %q", closeOp.Reason)
@@ -908,8 +907,8 @@ func TestBuild_CleanupBeadCreate(t *testing.T) {
 	if op.Title != "Code cleanup: m/X" {
 		t.Errorf("title: want Reason verbatim, got %q", op.Title)
 	}
-	if len(op.Labels) != 1 || op.Labels[0] != CleanupLabel {
-		t.Errorf("labels: want [%s], got %+v", CleanupLabel, op.Labels)
+	if len(op.Labels) != 0 {
+		t.Errorf("labels: want none (retired spex:cleanup discriminator), got %+v", op.Labels)
 	}
 	closeOp := findClose(t, cs.Ops, "spexmachina-old")
 	wantLabel := "spex:deadbeef:" + closeOp.OpID
