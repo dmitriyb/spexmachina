@@ -16,6 +16,10 @@ The build cross-compiles linux and darwin on amd64 and arm64 — four archives, 
 
 A failed signing step aborts the release; unsigned archives are never published.
 
+## Pre-release tags
+
+A tag carrying a semver pre-release suffix (`v0.1.0-rc.1`) publishes a GitHub pre-release: `release.prerelease: auto` derives the mark from the tag itself, so there is no release-time input to remember. That mark is what keeps a candidate out of everyone's upgrade path — GitHub's latest-release endpoint returns the most recent non-prerelease, non-draft release, and that endpoint is how the install script resolves a version on both first install and `--upgrade`. The manifest records the same distinction independently, deriving its `status` from the tag-derived version, so a consumer reading the manifest alone sees it too.
+
 ## Release assets
 
 Beyond the archives, the release carries the checksum files, the signatures, the manifest produced by the manifest generator, and the canonical install script with its signature — the verified download path the README documents.

@@ -25,4 +25,5 @@ Acceptance coverage for [[649f5268a2b2|ReleasePipeline]] and [[5f9a7e641c09|Rele
 
 ## Edge cases
 
+- A pre-release tag's release is marked a pre-release on GitHub: the latest-release endpoint keeps resolving the previous stable release, and the manifest for that tag records the prerelease status.
 - A failed signing step aborts the release rather than publishing unsigned archives.
