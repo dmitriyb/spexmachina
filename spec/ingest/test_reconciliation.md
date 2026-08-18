@@ -136,7 +136,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 - Initial journal: `added` + `task_created` (task `br-old`) for a node.
 - Changeset: [modify-pair create for that node with a `blocks` dep on `br-old`, an unrelated fresh
-  create, close of `br-old` (modified)] — emit's real ordering (creates before closes).
+  create, close of `br-old` (modified)] — plan's real ordering (creates before closes).
 - Receipts: the modify-pair create `status: "error"`; the unrelated create and the close both `ok`.
 - Expected: nothing constructed for the modify-pair (neither the `modified` event nor the
   `task_closed` for `br-old`) — the errored create leaves its pair incomplete, which is not a

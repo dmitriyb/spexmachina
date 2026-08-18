@@ -39,8 +39,8 @@ Defines the JSON Schema for one journal line, covering:
 ### Single key format across the pipeline
 
 A change event's `node` is that node's identity hash. The merkle tree keys its leaves by the same
-identity hash, so impact analysis joins a changed merkle node against the journal fold with no key
-translation anywhere. Tracker labels carry the *event* id instead (`spex:<eid>`) — an
+identity hash, so plan's node matching joins a changed merkle node against the journal fold with no
+key translation anywhere. Tracker labels carry the *event* id instead (`spex:<eid>`) — an
 adapter-facing idempotency key spex reads nothing from, so no label ever needs parsing back into a
 node key. Earlier formats used `<module>/<node_type>/<integer_id>` keys
 that required rekeying between merkle and the retired bead-map; that translation layer died when

@@ -69,8 +69,8 @@ any entry whose `content` field is the empty string. The skip is silent: no leaf
 is created, nothing is logged, and no error is returned.
 
 The consequence is total, not partial. A skipped node has no leaf, so it has no
-hash; with no hash it can never appear in a diff, so impact never sees it, emit
-never emits an op for it, and it never acquires a bead. It is declared in
+hash; with no hash it can never appear in a diff, so plan never sees it, never
+emits an op for it, and it never acquires a bead. It is declared in
 `module.json` and invisible to every stage of the pipeline — and because its
 absence is also stable across runs, no diff ever reports it as missing. The
 failure mode is a spec node that exists to a reader and does not exist to the

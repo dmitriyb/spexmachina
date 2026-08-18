@@ -36,7 +36,7 @@ Or for all proposals:
 br list --json | spex log
 ```
 
-The input shape is the same as impact's `--beads` input: a JSON array (or `{"issues": [...]}` wrapper) of bead objects with `id`, `status`, `labels`, and `title`. ProposalCommands parses it into bead records and hands them to HistoryViewer.
+The input shape is the same as `spex plan`'s `--beads` input: a JSON array (or `{"issues": [...]}` wrapper) of bead objects with `id`, `status`, `labels`, and `title`. ProposalCommands parses it into bead records and hands them to HistoryViewer.
 
 `--proposal <ref>` narrows the set before the hand-off, keeping only beads whose `spec_proposal:`
 label matches the reference given. A trailing `.md` is tolerated on either side of that comparison,
