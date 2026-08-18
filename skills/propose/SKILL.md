@@ -296,6 +296,7 @@ After the user approves:
 
 1. Create `spec/proposals/` directory if it does not exist.
 2. Write the approved draft to `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
+   **The slug is capped at 26 characters**, making the stem (`YYYY-MM-DD-<name>`) at most 37. `spex register` keys the proposal's `registered` event as `<git_head>:<stem>`, and that eid becomes the epic bead's idempotency label, `spex:<git_head>:<stem>`; br rejects any label over 50 characters (`Error: Validation failed: label: exceeds 50 characters`) — with the 7-character short SHA the pipeline uses, 37 is exactly the budget left for the stem. An over-long slug does not degrade: it fails the `br create` partway through the mint, long after this session ended. Shorten it here: if the slug the user gave (or the one the title implies) is longer, propose a shortened one and say why — never trim it silently.
 3. Tell the user the file path.
 4. Remind them to review and commit to git.
 
