@@ -57,3 +57,11 @@ signs:
 
 release:
   mode: replace
+  # A pre-release tag must not become GitHub's "latest": install.sh resolves
+  # the version to install — first-install and --upgrade alike — from
+  # /releases/latest, which returns the most recent non-prerelease, non-draft
+  # release, so it skips an rc only if that release is marked a pre-release.
+  # `auto` derives the mark from the tag's own pre-release suffix
+  # (v0.1.0-rc.1), so no release-time input has to be remembered. Same
+  # setting as the faber and portitor pipelines this one is adopted from.
+  prerelease: auto

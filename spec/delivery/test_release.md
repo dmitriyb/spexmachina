@@ -25,4 +25,5 @@ Acceptance coverage for [[649f5268a2b2|ReleasePipeline]] and [[5f9a7e641c09|Rele
 
 ## Edge cases
 
+- A pre-release tag publishes a GitHub pre-release: the release configuration declares the automatic pre-release mark, and the manifest built for that tag records the prerelease status.
 - A failed signing step aborts the release rather than publishing unsigned archives.
