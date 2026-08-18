@@ -566,7 +566,7 @@ spex plan --proposal <ref> --git-head <sha> [--diff <file>] [--beads <file>] [--
 | `--proposal` | yes | the proposal stem, without `.md`. The run's epic is resolved through it: a live epic task in the journal fold answers first, else a `registered` event carrying the same stem. With neither, the run fails — `plan: build: plan: resolve: proposal "…" has no registered event in the journal and no existing epic task` |
 | `--git-head` | yes | the commit carrying the spec edits; 7–40 hex characters |
 | `--diff` | no | the document `spex diff --json` writes; stdin by default, `-` selects stdin explicitly |
-| `--beads` | no | tracker listing (`br list --json` or a compatible shape). Omitting it means no pairing is known-open, so nothing retargets and every *matched* modified node — one the journal already pairs with a task — goes down the obsolete+create path instead |
+| `--beads` | no | tracker listing (`br list --json` or a compatible shape). Omitting it means no pairing is known-open and the cleanup gate defaults closed: nothing retargets, no cleanup task is minted for a removed node, and a *matched* modified node — one the journal already pairs with a task — goes down the obsolete+create path unless the journal already records its new hash or it is a test section folding back |
 | `--absorb` | no | git-committed JSON list of `{node, reason}` cosmetic marks (below) |
 | `--out` | no | changeset path; stdout by default |
 

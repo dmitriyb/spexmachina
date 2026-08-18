@@ -98,7 +98,7 @@ session, never by a box.
               │
            /spec ──▶ spec/ written ──▶ spex validate
                                           │
-                        spex diff → impact → emit → adapter → ingest
+                        spex diff → plan → adapter → ingest
                                           │
                             implementation happens; defects found
                             become drifts/drift-<task-id>.json

@@ -213,7 +213,7 @@ func applyAbsorb(entries []absorbInput, changes []merkle.ClassifiedChange) ([]pl
 // module.json into a plan.SpecGraph, keyed by module identity hash exactly
 // as plan.NewSpecGraph expects (spec/plan/arch_plan_command.md, pre-flight
 // step 4). A module.json that does not exist on disk is skipped rather than
-// treated as fatal, mirroring the emit command's spec graph loader.
+// treated as fatal, inherited from the spec graph loader this command replaced.
 func loadPlanSpecGraph(specDir string) (plan.SpecGraph, error) {
 	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
 	if err != nil {
@@ -245,8 +245,8 @@ func loadPlanSpecGraph(specDir string) (plan.SpecGraph, error) {
 
 // resolvePlanRegistration finds the run's registration: the eid of the
 // latest `registered` event in the journal whose proposal matches proposal,
-// or plan.Registration{} if the journal holds none — mirroring emit's
-// resolveRegistration, read from the journal's parsed events rather than
+// or plan.Registration{} if the journal holds none — read from the
+// journal's parsed events rather than
 // the fold, since a `registered` event with no task_created yet has no
 // task-bearing pairing to appear in the fold as.
 func resolvePlanRegistration(events []mapping.Event, proposal string) plan.Registration {

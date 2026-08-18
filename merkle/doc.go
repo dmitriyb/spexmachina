@@ -19,7 +19,7 @@
 // The composition has no standalone CLI surface: a separate "compute and
 // persist" step would either write a snapshot matching the current spec
 // (next spex diff sees zero changes, pipeline stalls) or desync the
-// snapshot from .bead-map.json (breaking the snapshot+bead-map atomicity
+// snapshot from the task journal (breaking the snapshot+journal atomicity
 // invariant). Both fail modes are avoided by running the composition
 // inside spex diff (read path) and inside spex ingest's SnapshotSaver
 // (write path).
@@ -28,17 +28,16 @@
 //
 // On a fresh project, spec/.snapshot.json does not exist. SnapshotStore
 // callers receive EmptyTree as the baseline; DiffEngine reports every
-// current leaf as "added"; impact → emit → adapter → ingest then create
-// the first beads, and SnapshotSaver writes the first snapshot atomically
-// with the bead-map records. See spec/merkle/flow_hash_computation.md.
+// current leaf as "added"; plan → adapter → ingest then create the first
+// beads, and SnapshotSaver writes the first snapshot once the journal's
+// events are committed. See spec/merkle/flow_hash_computation.md.
 //
 // # Steady state
 //
 // Each subsequent change cycle uses the same composition: spec edit →
 // spex diff (TreeBuilder rebuilds; SnapshotStore loads the stored
-// snapshot; DiffEngine compares) → spex impact → spex emit → adapter →
-// spex ingest (SnapshotSaver overwrites the snapshot iff receipts are
-// "complete").
+// snapshot; DiffEngine compares) → spex plan → adapter → spex ingest
+// (SnapshotSaver overwrites the snapshot iff receipts are "complete").
 //
 // # Cross-component contract
 //

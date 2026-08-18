@@ -29,7 +29,7 @@ Scope decisions, recorded here because the output is the migration:
 - PREMAP_PAIRINGS seeds nodes implemented before the map existed and therefore
   absent from every map version. Each entry is evidence-backed: the cited commit
   created the component's source file and names the bead in its message. Without
-  these, emit's resolver hard-errors on any dep reaching such a node.
+  these, plan's Resolver hard-errors on any dep reaching such a node.
 - Epic pairings (task_created keyed by proposal slug) are seeded only where an
   epic-type bead is confidently attributable to a proposal stem; each such
   inference is printed for review.

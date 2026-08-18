@@ -353,11 +353,11 @@ func TestREQ_6f8284df92a2_OnlyAPIAndComponentNamesSearched(t *testing.T) {
 // corpus phrases is the only way their names can be recovered at all.
 func TestREQ_6f8284df92a2_RemovedAPINameSurvives(t *testing.T) {
 	dir := newRemovalFixture().
-		withAPI("emit", "spex emit").
-		withFile("emit/arch_emit_command.md", "Legacy callers still run spex apply after emit.\n").
+		withAPI("plan", "spex plan").
+		withFile("plan/arch_plan_command.md", "Legacy callers still run spex apply after plan.\n").
 		build(t)
 
-	found := mustCheck(t, dir, removedChange("emit", "api", "spex apply"))
+	found := mustCheck(t, dir, removedChange("plan", "api", "spex apply"))
 
 	if len(found) != 1 {
 		t.Fatalf("want 1 finding, got %d: %+v", len(found), found)

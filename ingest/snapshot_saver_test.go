@@ -96,7 +96,7 @@ func TestSaver_Partial_SkipsWrite(t *testing.T) {
 func TestSaver_Partial_LeavesExistingSnapshotUntouched(t *testing.T) {
 	// This is invariant 6 from test_consistency_invariants.md: partial
 	// status must leave spec/.snapshot.json byte-for-byte unchanged so
-	// the next emit diffs against the original baseline.
+	// the next spex plan diffs against the original baseline.
 	specDir := setupSpecDir(t)
 	snapPath := filepath.Join(specDir, ".snapshot.json")
 
