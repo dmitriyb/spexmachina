@@ -82,6 +82,21 @@ func TestReleaseConfig_TrustChain(t *testing.T) {
 	}
 }
 
+// A pre-release tag must not become GitHub's "latest": the latest-release
+// endpoint skips a release only when it is marked a pre-release, and
+// install.sh resolves through that endpoint on both first install and
+// --upgrade. GoReleaser's default is prerelease: false, so the mark is a
+// declaration this config has to carry — the endpoint's own behaviour, and
+// the mark GitHub applies from it, are outside what any local test can
+// exercise.
+func TestReleaseConfig_PrereleaseAuto(t *testing.T) {
+	cfg := readRepoFile(t, ".goreleaser.yaml")
+
+	if !strings.Contains(cfg, "prerelease: auto") {
+		t.Error(".goreleaser.yaml: release block does not declare prerelease: auto, so a pre-release tag would publish as latest")
+	}
+}
+
 func TestReleaseWorkflow_TagTriggered(t *testing.T) {
 	wf := readRepoFile(t, ".github/workflows/release.yml")
 
