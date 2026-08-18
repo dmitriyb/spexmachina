@@ -1,0 +1,26 @@
+# lens-dissolved-modules.allow — hits that are correct as written.
+#
+# Format: <path-relative-to-spec-dir><TAB><substring>. Both must match, so a new stale reference in
+# an already-listed file still fires. Every entry needs a reason above it: this
+# file is where the judgment is recorded, not where it is hidden.
+#
+# Reviewed 2026-08-18 in the spexmachina-kfem drift triage.
+
+# The journal is append-only and answers for nodes that no longer exist, so a
+# removal record names the module the removed node lived in — permanently. A
+# leaf documenting that format has to quote such a record; rewriting these
+# examples to name a live module would make them describe events that cannot
+# occur. Verified against spec/.history.jsonl, which holds exactly this shape.
+map/arch_mapping_store.md	"module": "impact"
+map/arch_mapping_store.md	"path": "impact/arch_action_classifier.md"
+map/arch_map_command.md	"module":"impact"
+schema/test_bead_map_schema.md	"module":"impact"
+schema/test_bead_map_schema.md	the change-event fixture with `"path": "impact/
+
+# A close op's reason carries the module the removed node lived in, for the
+# same reason. Sample output of a real changeset.
+plan/arch_changeset_builder.md	"reason": "Spec node modified: apply/ApplyCommand"
+
+# An explicitly historical sentence naming a pre-decouple Go path. The word
+# "pre-decouple" is doing the work; the path is not a live location.
+adapters/arch_br_reference_adapter.md	pre-decouple `apply/bead_creator.go

@@ -137,7 +137,7 @@ comm -3 /tmp/declared /tmp/ondisk   # empty output = clean
 
 This is LLM judgment: every question below is one neither gate can answer.
 
-### Mandatory lenses — run all six, count what you check
+### Mandatory lenses — run all seven, count what you check
 
 These lenses exist because implementation keeps catching what linear reading misses. Each is a
 forced enumeration: build the pair list first, then check every pair. The final report must state
@@ -156,6 +156,7 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 4. **Retired lexicon sweep** — `scripts/lens-lexicon.sh` (deterministic, exit 1 on hits): every
    term declared under a proposal's "## Retired vocabulary" heading, swept across the corpus
    outside `spec/proposals/`. The PR #201 class: sibling fields the migration never updated.
+   Its blind spot is the bare name of a dissolved module — lens 7.
 5. **New surfaces vs project constraints** — every api or component added or materially changed
    in the audit scope, checked against every project-level non-functional requirement (the
    no-subprocess-vs-`spex upgrade` class: a new surface that collides with a standing constraint
@@ -163,6 +164,23 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 6. **Intersection cells** — for every leaf declaring two or more modes or interacting flags:
    enumerate the mode/flag pairs and confirm the leaf decides each intersection (the
    `--check`-during-anomaly class: two sections each valid alone, contradictory on one cell).
+7. **Dissolved module names** — `scripts/lens-dissolved-modules.sh` (deterministic, exit 1 on
+   hits, exit 2 if it cannot sweep): the class lens 4 cannot cover, because declaring a bare
+   module name as a retired term would match every ordinary use of the word. It derives its own
+   terms — every module a `removed` event names that `project.json` no longer lists — and matches
+   only forms in which the name is an actor or a location: possessive, arrow chain (including the
+   `\u2192` escape a `module.json` string carries), parenthesised qualifier, path fragment,
+   `"module": "<name>"`, and "the <name> module", each tolerating backticks around the name.
+   Precision over recall by design: a clean run does **not** mean the corpus is free of stale
+   module references. A module named as a bare subject ("so impact never sees it"), as an
+   adjectival compound ("impact analysis"), or in a `<module>: <Component>` bead title matches
+   nothing and must still be read for. The kfem class: nine sites lens 4 reported clean over.
+   A hit that is *correct* — a leaf documenting the journal must quote a removal record, and a
+   removal record names the dead module permanently — is excused by name in
+   `scripts/lens-dissolved-modules.allow` (`<path-relative-to-spec-dir><TAB><substring>`, with the
+   reason as a comment), never by rewriting the example into something that could not occur.
+   Both halves must match, so a new stale reference in an already-listed file still fires;
+   suppressions are counted in the output and a dead entry is reported.
 
 **Component (`arch_*.md`)**
 
@@ -327,6 +345,7 @@ spec-review: no actionable findings (N nodes audited across M modules)
   lens 4 lexicon: <terms swept> (script exit 0)
   lens 5 surfaces-vs-constraints: <surface x constraint pairs>
   lens 6 intersections: <cells checked>
+  lens 7 dissolved-modules: <modules swept> (script exit 0)
 ```
 
 Where N and M come from the audit scope. A clean verdict asserts only "nothing found at these
