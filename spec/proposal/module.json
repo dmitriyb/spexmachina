@@ -90,7 +90,7 @@
     {
       "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 impact \u2192 bead actions \u2192 history query.",
+      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 plan \u2192 bead actions \u2192 history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
         "24180f55c0b4",

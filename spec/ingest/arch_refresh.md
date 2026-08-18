@@ -104,7 +104,7 @@ following is true:
 | `component`     | **refused** | absorbed |
 | `data_flow`, `test_section`, `meta`, `module` | refused | refused |
 
-The set is written out explicitly rather than derived by negating impact's bead-producing types.
+The set is written out explicitly rather than derived by negating plan's bead-producing types.
 That negation would also admit `meta` — the `project.json` / `module.json` envelope leaf — and
 refresh runs neither `spex validate` nor the completeness checker: baselining a meta addition or
 removal would hide a whole module appearing or vanishing from every downstream tool.

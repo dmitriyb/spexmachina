@@ -34,7 +34,7 @@ For each component whose content leaf did NOT change, report an error:
 ```json
 {
   "type": "incomplete_change",
-  "message": "requirement 'Match changed nodes to beads' (impact) description changed but component NodeMatcher content leaf unchanged",
+  "message": "requirement 'Match changed nodes to beads' (plan) description changed but component NodeMatcher content leaf unchanged",
   "path": "7c5e2fa1b3d8",
   "related": ["a1b2c3d4e5f6"]
 }
