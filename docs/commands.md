@@ -16,7 +16,7 @@ spex [command] [flags]
 | `-h`, `--help` | | Help for any command |
 
 Unless a command documents otherwise, **0** means success and **1** means
-failure. `spex diff`, `spex emit` and `spex ingest` add a distinct **2**; each
+failure. `spex diff`, `spex plan` and `spex ingest` add a distinct **2**; each
 is described below.
 
 ---
@@ -59,58 +59,52 @@ project reports the whole spec as added.
 
 ```sh
 spex diff                 # human summary
-spex diff --json          # machine-readable, the form `spex impact` consumes
+spex diff --json          # machine-readable, the form `spex plan` consumes
 ```
 
 | Exit | Meaning |
 |---|---|
 | 0 | diff produced, no completeness errors |
 | 1 | input error |
-| 2 | completeness errors found — chiefly the removed-name check, which flags prose still referring to a node that just disappeared. The full diff is still on stdout; the non-zero status tells you **not** to pipe it into `spex impact` |
+| 2 | completeness errors found — chiefly the removed-name check, which flags prose still referring to a node that just disappeared. The full diff is still on stdout; the non-zero status tells you **not** to pipe it into `spex plan`, which refuses such a diff anyway |
 
-### `spex impact`
+### `spex plan`
 
-Maps a diff onto task actions.
+Decides the whole bead-action changeset from a diff in one pass — match,
+classify, order, label, resolve, compose — and writes `changeset.json` (v3):
+an ordered, tool-agnostic list of `create` / `close` / `retarget` operations
+with forward references encoded, plus a top-level `absorbed` array for the
+nodes marked cosmetic, ready for an adapter.
 
 | Flag | Default | Purpose |
 |---|---|---|
-| `--diff <path>` | stdin | Diff JSON to read |
-| `--beads <path>` | — | Tracker list JSON (e.g. `br list --json` output), supplying live task status for cleanup classification |
-| `--json` | on | Emit JSON. Currently the only supported format |
-| `--bead-cli <name>` | `br` | Deprecated; use `--beads` |
+| `--proposal <stem>` | — | Proposal filename stem, e.g. `2026-08-13-plan-module`. Required |
+| `--git-head <sha>` | — | Caller-supplied git HEAD SHA, 7–40 hex characters. Required |
+| `--diff <path>` | stdin | Diff JSON to read; `-` selects stdin explicitly |
+| `--beads <path>` | — | Tracker list JSON (e.g. `br list --json` output), supplying live task status |
+| `--absorb <path>` | — | Git-committed JSON list of `{node, reason}` marks; a marked node's change yields no op and rides in `absorbed` instead |
+| `--out <path>` | stdout | Changeset output path |
 
-Without `--beads`, classification can only reason from the task journal.
+Without `--beads` no pairing is known-open and the cleanup gate defaults
+closed: nothing is retargeted, and no cleanup task is minted for a removed
+node.
+
+Prefer a short `--git-head`: a node-bearing create's idempotency label is
+`spex:<git-head>:op-NN`, and `br` rejects a label over 50 characters. (The
+proposal epic's label is fixed earlier, at `spex register`.)
 
 ```sh
 br list --all --json > beads.json
-spex diff --json | spex impact --beads beads.json > impact.json
-```
-
-### `spex emit`
-
-Composes `changeset.json` (v2) from an impact report: an ordered,
-tool-agnostic list of `create` / `close` / `label` / `tag` operations with
-forward references encoded, ready for an adapter.
-
-| Flag | Default | Purpose |
-|---|---|---|
-| `--impact <path>` | stdin | Impact report JSON |
-| `--proposal <stem>` | — | Proposal filename stem, e.g. `2026-04-18-decouple-spex-from-br` |
-| `--git-head <sha>` | — | Caller-supplied git HEAD SHA, 7–40 hex characters |
-| `--out <path>` | stdout | Changeset output path |
-
-```sh
-spex emit --impact impact.json \
-          --proposal 2026-04-18-decouple-spex-from-br \
-          --git-head "$(git rev-parse HEAD)" \
-          --out changeset.json
+spex diff --json | spex plan --proposal 2026-08-13-plan-module \
+                             --git-head "$(git rev-parse --short HEAD)" \
+                             --beads beads.json --out changeset.json
 ```
 
 | Exit | Meaning |
 |---|---|
 | 0 | changeset written |
-| 1 | input or validation error (bad flags, malformed JSON, bad SHA) |
-| 2 | changeset could not be built from otherwise valid input |
+| 1 | input error: bad flags, malformed JSON, bad SHA, unreadable `--beads` or journal, or a diff that still carries completeness errors |
+| 2 | contract refusal: a claimed (`in_progress`) task's node changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent |
 
 ### `spex ingest`
 
@@ -260,7 +254,7 @@ The command's exit status is the installer script's own.
 
 ## Adapters
 
-Everything past `spex emit` is outside the binary. An adapter reads a
+Everything past `spex plan` is outside the binary. An adapter reads a
 changeset, applies it to a tracker, and writes receipts.
 `scripts/apply-br.sh` is the reference implementation for `br` (beads_rust):
 

@@ -44,7 +44,7 @@ type refreshDirections struct {
 // refused in both directions.
 //
 // The list is deliberately written out rather than derived by negating
-// impact's bead-producing set. Relative to that negation, the only type
+// the classifier's bead-producing set. Relative to that negation, the only type
 // the explicit list excludes is "meta", the project.json / module.json
 // envelope leaf: absorbing an added or removed meta leaf would baseline
 // a whole module appearing or vanishing without any gate seeing it.

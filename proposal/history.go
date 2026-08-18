@@ -219,7 +219,7 @@ func (h *HistoryViewer) writeJSON(entries []proposalEntry) error {
 //
 //	2026-02-23-spex-machina.md (project proposal)
 //	  Created: spexmachina-abc (open)     schema: ProjectSchema
-//	  Closed:  spexmachina-old (closed)   emit: ChangesetBuilder
+//	  Closed:  spexmachina-old (closed)   plan: ChangesetBuilder
 func (h *HistoryViewer) writeText(entries []proposalEntry, meta []proposalDisplay) error {
 	for i, entry := range entries {
 		if _, err := fmt.Fprintf(h.Out, "%s (%s)\n", entry.Filename, meta[i].label); err != nil {

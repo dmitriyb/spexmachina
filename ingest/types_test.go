@@ -57,8 +57,8 @@ func TestReasonPrefixConstants(t *testing.T) {
 }
 
 func TestReasonPrefixes_DiscriminateClassifierOutput(t *testing.T) {
-	// Impact's action_classifier.go produces close-op Reason strings as
-	// "<prefix>: <module>/<node>" — see impl_action_classification.md.
+	// plan/action_classifier.go produces close-op Reason strings as
+	// "<prefix>: <module>/<node>" — see spec/plan/arch_action_classifier.md.
 	// The reconciler discriminates on prefix-match, so the prefixes must
 	// be left-anchored substrings of the full reason text.
 	removed := "Spec node removed: merkle/LegacyHasher"

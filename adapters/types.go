@@ -29,11 +29,11 @@ const (
 )
 
 // Adapter label vocabulary. This literal is part of the adapter
-// contract — emit and the reference adapter both rely on it, and ingest
+// contract — plan and the reference adapter both rely on it, and ingest
 // recognizes it when reconciling state. Close ops carry no labels: the
 // reference adapter keys close idempotency on the tracker's own status.
 //
-//	IdempotencyLabelPrefix + <record-id> on every create (emit)
+//	IdempotencyLabelPrefix + <eid> on every create (plan)
 const (
 	IdempotencyLabelPrefix = "spex:"
 )

@@ -6,19 +6,19 @@ A CLI (`spex`) that owns the structural half of spec-driven development.
 You define your project as a typed DAG — a JSON skeleton with markdown content leaves — and `spex` tracks it with a merkle tree, computes which tasks a change invalidates, and emits a tool-agnostic changeset an adapter applies to your tracker.
 
 ```
-spec change → validate → diff → impact → emit → adapter → ingest
-                 │         │      │        │        │        │
-                 │         │      │        │        │        └─ appends the journal,
-                 │         │      │        │        │           writes the snapshot
-                 │         │      │        │        └─ executes task actions
-                 │         │      │        │           against the tracker
-                 │         │      │        └─ composes the next changeset
-                 │         │      └─ maps changed nodes to affected tasks
+spec change → validate → diff → plan → adapter → ingest
+                 │         │      │       │         │
+                 │         │      │       │         └─ appends the journal,
+                 │         │      │       │            writes the snapshot
+                 │         │      │       └─ executes task actions
+                 │         │      │          against the tracker
+                 │         │      └─ decides the changeset: which tasks the
+                 │         │         change creates, closes and retargets
                  │         └─ compares the merkle tree against the snapshot
                  └─ confirms the spec is a valid DAG
 ```
 
-**No LLM in the loop** — just deterministic graph operations: the same spec state plus the same snapshot always produce the same diff, impact and changeset.
+**No LLM in the loop** — just deterministic graph operations: the same spec state plus the same snapshot always produce the same diff, actions and changeset.
 Every subcommand reads stdin or files, writes stdout or files, and exits with documented codes, so the pipeline above is literally a pipeline.
 Snapshots, proposals and the task journal are files committed to git; there is no external state and no database.
 Nothing in that pipeline shells out — the git SHA is caller-supplied and the tracker is reached only through an external adapter — which is why `spex` stays a single static binary with no runtime dependencies (`spex upgrade` is the one exception: it runs its own embedded, signed installer under `bash`).
@@ -117,14 +117,13 @@ See [`docs/commands.md`](docs/commands.md) for the full flag reference.
 
 ```sh
 spex validate                                   # DAG, refs, coverage — before anything else
-spex diff --json | spex impact --beads beads.json > impact.json
-spex emit --impact impact.json --proposal <stem> --git-head "$(git rev-parse HEAD)" \
-  > changeset.json
+spex diff --json | spex plan --proposal <stem> --git-head "$(git rev-parse --short HEAD)" \
+  --beads beads.json > changeset.json
 scripts/apply-br.sh changeset.json > receipts.json   # the adapter — outside the binary
 spex ingest --changeset changeset.json --receipts receipts.json
 ```
 
-That is one full cycle: validate the spec, find what changed since the snapshot, decide which tasks it invalidates, compose the changeset, let an adapter apply it, then record the result and move the baseline.
+That is one full cycle: validate the spec, find what changed since the snapshot, decide in one pass which tasks it creates, closes and retargets, let an adapter apply the changeset, then record the result and move the baseline.
 `spex map context <node-id>` answers the other everyday question — the full spec context behind one task, live or long removed.
 Everything is pipeable and every subcommand documents its exit codes; see [`docs/commands.md`](docs/commands.md).
 

@@ -213,8 +213,8 @@ func TestReceipts_RoundTrip(t *testing.T) {
 }
 
 func TestIdempotencyLabelConstants(t *testing.T) {
-	// This literal is part of the adapter contract: emit writes
-	// idempotency.label = "spex:<n>". Close ops carry no labels — the
+	// This literal is part of the adapter contract: plan writes
+	// idempotency.label = "spex:<eid>". Close ops carry no labels — the
 	// reference adapter keys close idempotency on the tracker's own status.
 	if IdempotencyLabelPrefix != "spex:" {
 		t.Fatalf("IdempotencyLabelPrefix: got %q want %q", IdempotencyLabelPrefix, "spex:")

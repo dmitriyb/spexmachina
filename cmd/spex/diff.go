@@ -103,7 +103,8 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 
 	// A non-empty errors array is a pipeline halt signal: the full diff is
 	// already on stdout, but the non-zero exit tells callers not to pipe this
-	// into `spex impact`. See arch_diff_command.md "Exit codes".
+	// into `spex plan`, which refuses such a diff itself. See
+	// arch_diff_command.md "Exit codes".
 	if len(completenessErrors) > 0 {
 		return &diffError{
 			code: 2,

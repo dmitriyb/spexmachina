@@ -93,7 +93,7 @@ durable artifact is `spec/.snapshot.json`.
 ## The pipeline
 
 ```
-validate → diff → impact → emit → <adapter> → ingest
+validate → diff → plan → <adapter> → ingest
 ```
 
 ### validate
@@ -127,34 +127,46 @@ for prose that still refers to it. Findings are *completeness errors*, and
 they set exit status 2 — the diff is still written to stdout, but the non-zero
 status says do not pipe this onward.
 
-### impact
+### plan
 
-Maps changed nodes onto tasks by walking the graph outward from each change
-and consulting the task journal for what already exists. It emits exactly two
-action types (`impact/action_classifier.go`):
+Decides the whole bead-action changeset in one pass: it matches changed nodes
+against the task journal's pairings, classifies each into an action,
+topologically orders them, assigns idempotency labels, resolves references,
+and composes the changeset. Three action types
+(`plan/action_classifier.go`):
 
 - **create** — this node needs work that does not exist yet. When it replaces
-  a task that is being obsoleted, the action carries `old_bead_id`, which is
-  what preserves the chain across a rename.
-- **obsolete** — an existing task no longer corresponds to anything in the
-  spec.
+  a task being obsoleted, the action carries `old_bead_id`, which is what
+  preserves the chain across a rename.
+- **obsolete** — the task must go: its node left the spec, or the node
+  changed and its task is closed (or its status unknown), or a test section
+  folded back to a single component. It reaches the adapter as a `close` op,
+  never an op named "obsolete".
+- **retarget** — the node changed and its task is still open, so the task's
+  target moves rather than being closed and recreated. A node whose task is
+  `in_progress` refuses the run instead: a claimed task's target never moves
+  under the implementer holding it. A closed task is not retargeted either —
+  it takes obsolete+create, like an unknown status.
 
 Pass `--beads <file>` (the tracker's own `list --json` output) so live task
-status participates in the classification; without it, `spex` can only reason
-from the journal.
+status participates in the classification. Without it no pairing is
+known-open and the cleanup gate defaults closed: nothing is retargeted, no
+cleanup task is minted for a removed node, and a matched modified node takes
+the obsolete+create path unless the journal already records that new hash or it is
+a test section folding back.
 
-### emit
-
-Turns the impact report into `changeset.json` — an ordered, tool-agnostic list
-of operations drawn from a `create` / `close` / `label` / `tag` vocabulary,
-with forward references encoded so an adapter can apply them in order without
-resolving IDs itself. `emit` is a pure function of the impact report, the task
-journal, the spec graph, and a caller-supplied git HEAD SHA. It is the last
-step that knows anything about specs.
+The output is `changeset.json` (v3) — an ordered, tool-agnostic list of
+operations drawn from a `create` / `close` / `retarget` vocabulary, with
+forward references encoded so an adapter can apply them in order without
+resolving IDs itself, plus a top-level `absorbed` array carrying the nodes
+`--absorb` marked as cosmetic, which yield no operation at all. `plan` is a
+pure function of the diff, the tracker listing, the task journal, the spec
+graph, the absorb list, a proposal ref and a caller-supplied git HEAD SHA. It
+is the last step that knows anything about specs.
 
 ### adapter
 
-Everything past `emit` is deliberately outside the binary. An adapter reads a
+Everything past `plan` is deliberately outside the binary. An adapter reads a
 changeset, applies it to whatever tracker you actually use, and writes
 `receipts.json` — one receipt per operation, recording what really happened.
 `scripts/apply-br.sh` is the reference implementation, targeting `br`
@@ -194,10 +206,9 @@ when it was alive.
 | **Schema** | JSON Schema for `project.json`, `module.json`, the journal line format; identity hashing | — |
 | **Validator** | Spec directory validation: schema, DAG, refs, coverage, name consistency | Schema |
 | **Merkle** | Hash tree, snapshots, diff, change classification | Schema |
-| **Impact** | Maps a merkle diff to task actions | Merkle |
-| **Emit** | Composes a tool-agnostic changeset from an impact report | Impact, Mapping |
-| **Adapters** | The contract external adapters implement, and the receipts they return | Emit |
-| **Ingest** | Appends journal events and saves the snapshot from changeset + receipts | Emit, Adapters, Merkle |
+| **Plan** | Decides the bead-action changeset from a merkle diff in one pass | Merkle, Mapping |
+| **Adapters** | The contract external adapters implement, and the receipts they return | Plan |
+| **Ingest** | Appends journal events and saves the snapshot from changeset + receipts | Plan, Mapping, Adapters, Merkle |
 | **Mapping** | The task journal and its queries (`spex map`) | Schema |
 | **Proposal** | Proposal lifecycle: registration, templates, history | — |
 | **Render** | Generates markdown, Graphviz DOT and JSON from the spec | Schema |
@@ -212,7 +223,7 @@ These are contracts, not preferences — each is a requirement in
 - **Go standard library first.** The permitted third-party modules are named
   in the "Declared stack" requirement. Adding a direct dependency is a spec
   change made there first.
-- **Deterministic.** Same spec state and snapshot ⇒ same diff, impact and
+- **Deterministic.** Same spec state and snapshot ⇒ same diff, actions and
   changeset. No model calls, no clocks in the hot path, no network.
 - **Composable.** Every subcommand reads stdin or files, writes stdout or
   files, and exits with documented codes.

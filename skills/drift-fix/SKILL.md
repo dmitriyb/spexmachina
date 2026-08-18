@@ -63,8 +63,9 @@ This is the step that must never be automated. Look at what the fix changed:
   implementation of the adapter contract. `spex plan` takes `--proposal`, `--git-head` and
   `--beads`: the SHA is the commit carrying the spec edits, so the corrections are committed
   before the mint runs against them, and the tracker listing (`br list --json`) is what the
-  cleanup gate and the retarget split read live status from — omitting it silently sends every
-  *matched* modified node (one the journal already pairs with a task) down the obsolete+create path.
+  cleanup gate and the retarget split read live status from — omitting it defaults the cleanup gate
+  closed and sends each *matched* modified node (one the journal already pairs with a task, whose
+  new hash the journal does not already record) down the obsolete+create path.
   Hand `--git-head` a **7-character short SHA**: every node-bearing create's idempotency label is
   `spex:<git_head>:op-NN`, br rejects any label over 50 characters (`Error: Validation failed:
   label: exceeds 50 characters`, exit 4), and the label rides in the same `br create` as the bead,

@@ -710,7 +710,7 @@ func TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend(t *testing.T) {
 
 // TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone
 // covers the shape ActionClassifier emits for a coupled test_section edit:
-// an "obsolete" action with no replacement create (impact/action_classifier.go
+// an "obsolete" action with no replacement create (plan/action_classifier.go
 // "coupled" branch). No create in the batch claims the bead via a `blocks`
 // dep, but the bead is live in the journal, so the close alone must build
 // the modified event and its task_closed — no task_created, since there is

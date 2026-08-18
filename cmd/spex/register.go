@@ -43,7 +43,7 @@ func runRegisterE(cmd *cobra.Command, args []string, gitHead string) error {
 	return nil
 }
 
-// validateRegisterGitHead applies the same pre-flight `spex emit` uses for
+// validateRegisterGitHead applies the same pre-flight `spex plan` uses for
 // --git-head: required, matching gitHeadRe. It runs before the proposal
 // file is read and before Registrar is reached, so a missing or malformed
 // head leaves neither the journal append nor the copy behind.

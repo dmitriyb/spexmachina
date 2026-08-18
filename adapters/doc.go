@@ -2,7 +2,7 @@
 // adapter implementation must produce.
 //
 // Adapters live outside the spex binary. They consume changeset.json
-// (typed by the emit package), execute the listed operations against a
+// (typed by the plan package), execute the listed operations against a
 // bead tracker (br, bd, GitHub Issues, Jira, …), and write receipts.json.
 // ingest then reads receipts.json to reconcile the mapping store and gate
 // the merkle snapshot write.

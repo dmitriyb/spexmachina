@@ -490,7 +490,7 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing(
 }
 
 // TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta is the direct
-// guard on writing the allow-list as the complement of impact's
+// guard on writing the allow-list as the complement of the classifier's
 // bead-producing set: "meta" is not bead-producing, so that negation
 // would silently baseline a whole new module — envelope leaf and all —
 // into the snapshot. Refresh runs neither `spex validate` nor the

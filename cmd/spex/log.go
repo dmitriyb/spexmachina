@@ -57,7 +57,7 @@ func runLogE(cmd *cobra.Command, args []string) error {
 
 // parseBeadRecords accepts either the {"issues": [...]} envelope produced by
 // `br list --json` or a bare JSON array of bead records and returns the slice
-// in proposal.BeadRecord shape. Stays in lockstep with impact.ReadBeadsBytes
+// in proposal.BeadRecord shape. Stays in lockstep with plan.ReadBeadsBytes
 // so the same tracker output drives both pipelines.
 func parseBeadRecords(data []byte) ([]proposal.BeadRecord, error) {
 	var wrap struct {
