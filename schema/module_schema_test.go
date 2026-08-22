@@ -448,6 +448,19 @@ func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	})
 }
 
+func TestFR2_S26_DerivationFieldRejected(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{
+		"name": "m",
+		"requirements": [
+			{"id": "aabbccddee01", "type": "functional", "title": "R", "preq_id": "aabbccddee00", "derivation": "pending"}
+		]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error for derivation on a module requirement, got nil")
+	}
+}
+
 func TestFR2_E1_EmptyOptionalArraysValid(t *testing.T) {
 	sch := compileModuleSchema(t)
 	err := validateModule(t, sch, `{

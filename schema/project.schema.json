@@ -75,6 +75,11 @@
           "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
           "items": { "$ref": "#/$defs/identityHash" },
           "uniqueItems": true
+        },
+        "derivation": {
+          "type": "string",
+          "enum": ["pending"],
+          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."
         }
       }
     },
