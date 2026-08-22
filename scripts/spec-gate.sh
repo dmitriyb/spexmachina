@@ -72,6 +72,7 @@ if [[ "$valid" != "true" || "$error_count" != "0" || "$warning_count" != "0" ]];
     exit 1
 fi
 echo "spec gate: structural pass clean"
+print_notes "$validate_out"
 rm -f "$validate_out"
 
 # ---- Completeness pass --------------------------------------------------
