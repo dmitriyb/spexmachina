@@ -11,7 +11,7 @@ import (
 // must be implemented by at least one component.
 
 func TestREQ14_AllCovered(t *testing.T) {
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_all_covered"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_all_covered"))
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
@@ -19,7 +19,7 @@ func TestREQ14_AllCovered(t *testing.T) {
 
 func TestREQ14_UncoveredProjectRequirement(t *testing.T) {
 	// Project req 2 "Feature B" has no module requirement with preq_id=2.
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_project_req"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_project_req"))
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -43,7 +43,7 @@ func TestREQ14_UncoveredProjectRequirement(t *testing.T) {
 
 func TestREQ14_UncoveredModuleRequirement(t *testing.T) {
 	// Module req 2 "Mod Feat B" has no component with implements containing 2.
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_module_req"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_module_req"))
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -61,7 +61,7 @@ func TestREQ14_UncoveredModuleRequirement(t *testing.T) {
 
 func TestREQ14_BothUncovered(t *testing.T) {
 	// Project req 2 uncovered + module req 2 uncovered = 2 errors.
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_both_uncovered"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_both_uncovered"))
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
 	}
@@ -80,7 +80,7 @@ func TestREQ14_BothUncovered(t *testing.T) {
 
 func TestREQ14_MultiModuleCoverage(t *testing.T) {
 	// Two modules together cover both project requirements.
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_multi_module"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_multi_module"))
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
@@ -88,14 +88,14 @@ func TestREQ14_MultiModuleCoverage(t *testing.T) {
 
 func TestREQ14_NoRequirements(t *testing.T) {
 	// No project requirements → nothing to check → zero errors.
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_no_requirements"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_no_requirements"))
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
 }
 
 func TestREQ14_ErrorMessageContainsReqID(t *testing.T) {
-	errs := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_project_req"))
+	errs, _ := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_project_req"))
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d", len(errs))
 	}
@@ -106,7 +106,7 @@ func TestREQ14_ErrorMessageContainsReqID(t *testing.T) {
 
 func TestREQ14_SelfValidateRequirementCoverage(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
-	errs := CheckRequirementCoverage(specDir)
+	errs, _ := CheckRequirementCoverage(specDir)
 	for _, e := range errs {
 		t.Logf("uncovered requirement: %s — %s", e.Path, e.Message)
 	}
