@@ -156,6 +156,19 @@ if [[ -x /usr/bin/env ]] && "$MOCK_SPEX" validate >/dev/null 2>&1; then
     MOCK_DIFF_EXIT=0 \
         assert_case "diff notes are disclosures and do not gate the verdict" \
             "$MOCK_SPEX" "unused" 0 "cannot verify removed module beta"
+
+    # Notes are disclosures on both passes, not just the completeness one: a
+    # `derivation: pending` requirement surfaces as the structural pass's own
+    # `pending_derivation` note, printed the same way diff notes are, and the
+    # job stays green since a structural pass whose only finding is a note is
+    # still zero findings — see arch_spec_gate.md's "Notes are disclosures"
+    # paragraph.
+    MOCK_VALIDATE_STDOUT='{"valid":true,"error_count":0,"warning_count":0,"errors":[],"notes":[{"type":"pending_derivation","message":"project requirement a65bbd37c7ec declares derivation pending","related":["a65bbd37c7ec"]}]}' \
+    MOCK_VALIDATE_EXIT=0 \
+    MOCK_DIFF_STDOUT='{"changes":[],"errors":[],"summary":{"total":0,"by_type":{},"by_impact":{}}}' \
+    MOCK_DIFF_EXIT=0 \
+        assert_case "structural pass notes are disclosures and do not gate the verdict" \
+            "$MOCK_SPEX" "unused" 0 "project requirement a65bbd37c7ec declares derivation pending"
 else
     echo "skip - mock-binary cases: /usr/bin/env unusable in this sandbox"
 fi
