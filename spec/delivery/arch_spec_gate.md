@@ -14,4 +14,4 @@ Two implementation constraints, both learned the hard way:
 - **Never pipe the diff into a JSON filter.** The pipe discards the diff's own exit status, and on a build failure the diff writes nothing to stdout — the filter then dies with an opaque parse error naming no file, while a hypothetical clean-but-broken run would pass. The gate captures output to a file, preserves the status, and branches on all three cases.
 - **"Required for merge" is a branch-protection rule, not something the workflow can declare.** The status check marked required is the gate's job name; without the rule, a red gate is advisory.
 
-Diff notes are disclosures, not violations: they never gate the verdict and are left visible in the log.
+Notes are disclosures, not violations, and both passes may carry them: the completeness pass in the diff document, and the structural pass in the validate report's `notes` array — a declared derivation gap surfaces there. The gate prints each pass's notes into the job log the same way and they never gate the verdict; a structural pass whose only finding is a note is still zero findings, and the job stays green.

@@ -4,7 +4,7 @@ Integration and acceptance test scenarios for NameConsistencyChecker (component 
 
 ## Setup
 
-Each scenario reads one checked-in fixture directory under `validator/testdata/` (`name_*` for NameConsistencyChecker, `coverage_*` for TestCoverageChecker, `reqcov_*` for RequirementCoverageChecker). This leaf carries no RequirementCoverageChecker scenario yet; its eight tests live in `validator/requirement_coverage_checker_test.go`. Node ids are 12-character identity hashes, written in these fixtures as `000000000001`, `000000000002`, … — the scenario text below numbers components 1, 2, 3 as shorthand for those hashes, never as literal JSON values.
+Each scenario reads one checked-in fixture directory under `validator/testdata/` (`name_*` for NameConsistencyChecker, `coverage_*` for TestCoverageChecker, `reqcov_*` for RequirementCoverageChecker). The RequirementCoverageChecker's eight pre-existing tests live in `validator/requirement_coverage_checker_test.go`; the scenarios this leaf carries for it are the derivation-pending ones below, which cover the checker's skip-and-note path and its unchanged error path. Node ids are 12-character identity hashes, written in these fixtures as `000000000001`, `000000000002`, … — the scenario text below numbers components 1, 2, 3 as shorthand for those hashes, never as literal JSON values.
 
 ### Fixture Structure
 
@@ -159,6 +159,43 @@ tmp/spec/
 **Given** alpha has a test_section with `describes: [99]` but no component 99 exists. Component 1 exists and is not covered.
 **When** `CheckTestCoverage(specDir)` is called.
 **Then** one error for uncovered component 1. The dangling reference `99` is an IDValidator concern, not a TestCoverageChecker concern. TestCoverageChecker only checks that each component ID appears in at least one `describes` set.
+
+---
+
+### RequirementCoverageChecker Scenarios
+
+#### RC1: Underived requirement without the field is still an error
+
+**Given** `project.json` declares a requirement with no `derivation` field, and no module requirement in any module carries its id as `preq_id`.
+**When** the requirement-coverage check runs.
+**Then** one error at path `project.json`, message `project requirement <hash> "<title>" is not derived into any module requirement` — byte-for-byte the pre-existing message — and zero notes.
+
+#### RC2: Pending requirement produces a note, not an error
+
+**Given** the same fixture, with the underived requirement declaring `derivation: "pending"`.
+**When** the requirement-coverage check runs.
+**Then** zero errors and one note with:
+- `type`: `"pending_derivation"`
+- `message`: `project requirement <hash> "<title>" declares derivation pending and is not derived into any module requirement`
+- `related` containing exactly that requirement's identity hash
+
+#### RC3: Derived pending requirement produces neither
+
+**Given** a requirement declaring `derivation: "pending"` that a module requirement nevertheless derives via `preq_id`.
+**When** the requirement-coverage check runs.
+**Then** zero errors and zero notes for it. The note stands strictly in the error's place, so a covered requirement emits nothing; the stale field is inert.
+
+#### RC4: The module-level link admits no pending state
+
+**Given** a module requirement not implemented by any component, in a spec whose project requirements all declare `derivation: "pending"`.
+**When** the requirement-coverage check runs.
+**Then** the `<module> requirement <hash> "<title>" is not implemented by any component` error is reported unchanged. The pending state exempts only the project-to-module link.
+
+#### RC5: Notes are deterministic and ordered
+
+**Given** three underived pending requirements declared in a fixed order in `project.json`.
+**When** the check runs twice.
+**Then** both runs return the same three notes in declaration order.
 
 ---
 

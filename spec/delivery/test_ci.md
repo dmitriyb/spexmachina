@@ -29,4 +29,4 @@ The gate job builds the binary, runs `spex validate`, then runs `spex diff` capt
 
 - A spec-only PR (no Go change) still runs the gate — the paths filter must not exclude `spec/`, since the gate exists precisely for spec changes.
 - `spex validate` reporting `valid` with a non-zero finding count anywhere must fail the job — the gate asserts on the JSON verdict, not on exit status alone.
-- Diff notes (disclosures) do not fail the gate; only entries in the errors array do.
+- Notes (disclosures) do not fail the gate; only entries in the errors array do. That holds for both passes: a PR whose spec declares a `derivation: pending` requirement gets the structural pass's `pending_derivation` note printed in the job log — visible on every PR without gating — and the check stays green, exactly as the completeness pass's diff notes already behave.

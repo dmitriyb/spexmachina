@@ -96,8 +96,9 @@ ImpactClassifier labels it correctly.
 **Then** stdout reports `alpha/arch_comp1.md` as `modified` with impact `arch_impl`
 
 **Rationale**: Architecture changes have a higher impact level. Validates the
-filename-pattern + node-metadata classification in ImpactClassifier wired
-through DiffCommand.
+node-metadata classification in ImpactClassifier wired through DiffCommand —
+the classifier reads the node type and module carried on each change, never a
+filename or path.
 
 ### S5: `spex diff` after structural change
 

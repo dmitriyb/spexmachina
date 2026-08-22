@@ -7,7 +7,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define project schema",
-      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4), and module declarations with inter-module dependencies. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4, and an optional derivation field whose only permitted value is 'pending', declaring a requirement not yet derived into any module), and module declarations with inter-module dependencies. The derivation field is project-scoped only: a module requirement derives by construction through its required preq_id, so the module schema carries no such field. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
     },
     {
       "id": "eed2cf85d5c3",

@@ -60,11 +60,13 @@ name in `project.json` against the name its own `module.json` declares.
 
 [[ed7a40b68995|TestCoverageChecker]] reports a component that no `test_section` describes,
 and [[c7d0282b0e05|RequirementCoverageChecker]] reports a project requirement nothing derives
-from and a module requirement nothing implements.
-[[e36112523589|CoupledSectionChecker]] validates the `sections` envelope and hands a coupled
-section's freeform content to the coupled module's own section schema. Last,
-[[0f98ca780873|ErrorReporter]] checks nothing at all: it takes the accumulated entries, sorts
-them by path, and writes the single JSON document that reaches stdout.
+from and a module requirement nothing implements — except a project requirement declaring
+`derivation: pending`, whose underived state it emits as a disclosure note in the error's
+place. [[e36112523589|CoupledSectionChecker]] validates the `sections` envelope and hands a
+coupled section's freeform content to the coupled module's own section schema. Last,
+[[0f98ca780873|ErrorReporter]] checks nothing at all: it takes the accumulated entries and the
+accumulated notes, sorts the entries by path, and writes the single JSON document that reaches
+stdout.
 
 ## Execution Order
 
@@ -75,6 +77,8 @@ Schema validation leads because the structural checks are meaningless on unparse
 ## Error Accumulation
 
 Each check appends its entries to one shared list. No check short-circuits on entries from previous checks. The final report contains all violations found across all checks.
+
+Disclosure notes travel beside that list, never in it: `requirement_coverage` is today the only check that emits any, and its notes are accumulated separately and handed to ErrorReporter with the entries. A note is not a validation entry — it carries no severity, is counted by nothing, and moves no exit code.
 
 ## Data Shapes
 
@@ -108,13 +112,19 @@ information travels in `path` and `message`.
 
 ### ErrorReporter → stdout
 
-- The report has exactly four fields, and no others:
-  - valid: boolean — true when the sorted entry list is empty
+- The report has four fixed fields, plus one that appears only when it has
+  content:
+  - valid: boolean — true when the sorted entry list is empty. Notes play no
+    part in it
   - error_count: integer — the length of that list. Every entry counts,
-    because every entry is an error
-  - warning_count: integer — always `0`. Nothing can produce a warning; the
-    field stays in the contract because gates and CI assert on it
+    because every entry is an error; a note is not an entry and counts nowhere
+  - warning_count: integer — always `0`. Nothing can produce a warning — a
+    note is not a warning — and the field stays in the contract because gates
+    and CI assert on it
   - errors: list of validation entries, sorted by path and by nothing else
+  - notes: list of disclosures, present only when non-empty — a clean run
+    emits the four-key document exactly as before. Each note carries `type`,
+    `message` and `related`, the same three keys a `spex diff` note carries
 
 There is no separate `warnings` list, no `checked_files` and no
 `schema_version`.

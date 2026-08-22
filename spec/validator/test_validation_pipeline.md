@@ -6,6 +6,8 @@ Integration and acceptance test scenarios for ErrorReporter and ValidateCommand.
 
 These tests exercise the aggregation and orchestration layers. They use a temporary spec directory and invoke the full validation pipeline (or individual components in isolation for ErrorReporter unit scenarios). The fixture builder can inject specific errors at each checker level.
 
+The reporter takes the aggregated entries, the run's disclosure notes, the writer, and the terminal flag. Scenarios below written as `Report(errors, w, false)` predate the notes input and stand for a call passing an empty note list; only R10–R12 exercise a non-empty one.
+
 ### Fixture Structure
 
 ```
@@ -84,6 +86,24 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **Given** the caller passes `isTTY: true`. The reporter does not detect the terminal itself — the flag is the only input that changes formatting, so the writer can still be a `bytes.Buffer` for assertion purposes.
 **When** `Report(errors, w, true)` is called.
 **Then** the output uses 2-space indentation for human readability.
+
+#### R10: Notes appear alongside errors without touching the verdict
+
+**Given** an empty error list and one disclosure note (`type: "pending_derivation"`, a message, one related hash).
+**When** the report is composed.
+**Then** the output carries `valid: true`, `error_count: 0`, `warning_count: 0`, an empty `errors` array, and a `notes` array with exactly that note. The note carries no `severity` and is not counted anywhere.
+
+#### R11: Notes key omitted when there are none
+
+**Given** any combination of errors and an empty note list.
+**When** the report is composed.
+**Then** the serialized document has no `notes` key at all — a run without disclosures emits exactly the four-key document R1 shows, so no existing consumer observes a change.
+
+#### R12: Errors and notes coexist
+
+**Given** one validation error and one disclosure note.
+**When** the report is composed.
+**Then** `valid: false`, `error_count: 1`, the error in `errors`, the note in `notes`. Neither array leaks into the other.
 
 ---
 
@@ -172,6 +192,12 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **Given** alpha has a component with no test_section coverage and no other errors.
 **When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `"test_coverage"` check error identifying the uncovered component.
+
+#### V16: A declared derivation gap exits 0
+
+**Given** an otherwise valid spec whose `project.json` carries one requirement declaring `derivation: "pending"` that no module requirement derives.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
+**Then** exit code is 0. Stdout JSON has `valid: true`, `error_count: 0`, `warning_count: 0`, and a `notes` array with one `pending_derivation` entry naming the requirement. Removing the `derivation` field from the same fixture flips the run to exit 1 with the `requirement_coverage` error — the pair of runs is what proves the field, and only the field, downgrades the finding.
 
 ---
 

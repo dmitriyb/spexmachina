@@ -13,10 +13,12 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 {
   "name": "minimal",
   "modules": [
-    { "id": 1, "name": "core", "path": "core" }
+    { "id": "000000000001", "name": "core", "path": "core" }
   ]
 }
 ```
+
+All ids in these fixtures are 12-character lowercase hex identity-hash strings, written as `000000000001`, `000000000002`, … for readability — an integer id fails the pattern (S10), so a fixture asserting "passes" can never carry one.
 
 **minimal_module.json** — the smallest valid module.json:
 ```json
@@ -34,37 +36,42 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
   "description": "A project with all fields populated.",
   "version": "1.0.0",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "Req A", "description": "Details." },
-    { "id": 2, "type": "non_functional", "title": "Req B", "depends_on": [1] }
+    { "id": "000000000001", "type": "functional", "title": "Req A", "description": "Details." },
+    { "id": "000000000002", "type": "non_functional", "title": "Req B", "depends_on": ["000000000001"] }
   ],
   "modules": [
-    { "id": 1, "name": "Alpha", "path": "alpha", "description": "First module." },
-    { "id": 2, "name": "Beta", "path": "beta", "requires_module": [1] }
+    { "id": "000000000001", "name": "Alpha", "path": "alpha", "description": "First module." },
+    { "id": "000000000002", "name": "Beta", "path": "beta", "requires_module": ["000000000001"] }
   ]
 }
 ```
 
-**valid_module.json** — exercises every optional field and edge type including `test_sections`:
+**valid_module.json** — exercises every optional field and edge type including `test_sections` and `apis`:
 ```json
 {
   "name": "validator",
   "description": "Full module fixture.",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R1", "preq_id": 1 },
-    { "id": 2, "type": "non_functional", "title": "R2", "depends_on": [1] }
+    { "id": "000000000001", "type": "functional", "title": "R1", "preq_id": "000000000001" },
+    { "id": "000000000002", "type": "non_functional", "title": "R2", "preq_id": "000000000001", "depends_on": ["000000000001"] }
   ],
   "components": [
-    { "id": 1, "name": "C1", "content": "arch_c1.md", "implements": [1] },
-    { "id": 2, "name": "C2", "uses": [1], "implements": [2] }
+    { "id": "000000000001", "name": "C1", "content": "arch_c1.md", "implements": ["000000000001"] },
+    { "id": "000000000002", "name": "C2", "content": "arch_c2.md", "uses": ["000000000001"], "implements": ["000000000002"] }
   ],
   "data_flows": [
-    { "id": 1, "name": "Flow1", "description": "Data flow.", "content": "flow_main.md", "uses": [1, 2] }
+    { "id": "000000000001", "name": "Flow1", "description": "Data flow.", "content": "flow_main.md", "uses": ["000000000001", "000000000002"] }
   ],
   "test_sections": [
-    { "id": 1, "name": "Test coverage for C1 and C2", "content": "test_components.md", "describes": [1, 2] }
+    { "id": "000000000001", "name": "Test coverage for C1 and C2", "content": "test_components.md", "describes": ["000000000001", "000000000002"] }
+  ],
+  "apis": [
+    { "id": "000000000001", "name": "validator run", "description": "Entry point.", "provided_by": ["000000000001"], "group": "cli" }
   ]
 }
 ```
+
+Every module-context requirement fixture below carries a `preq_id` unless the scenario is about its absence — `preq_id` is required (S20), so an input omitting it incidentally would draw an error the scenario does not assert on.
 
 ### Preconditions
 
@@ -101,7 +108,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:**
 ```json
-{ "modules": [{ "id": 1, "name": "m", "path": "m/" }] }
+{ "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }] }
 ```
 **Expected:** Validation fails. Error path points to root object, message references missing `name`.
 
@@ -125,7 +132,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input:**
 ```json
-{ "components": [{ "id": 1, "name": "C" }] }
+{ "components": [{ "id": "000000000001", "name": "C", "content": "arch_c.md" }] }
 ```
 **Expected:** Validation fails. Error references missing `name` at root.
 
@@ -135,7 +142,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "bad-req",
-  "requirements": [{ "id": 1, "title": "No type field" }]
+  "requirements": [{ "id": "000000000001", "title": "No type field", "preq_id": "000000000001" }]
 }
 ```
 **Expected:** Validation fails. Error references missing `type` in `requirements/0`.
@@ -144,7 +151,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "bad-req",
-  "requirements": [{ "type": "functional", "title": "No id" }]
+  "requirements": [{ "type": "functional", "title": "No id", "preq_id": "000000000001" }]
 }
 ```
 **Expected:** Validation fails. Error references missing `id` in `requirements/0`.
@@ -164,10 +171,10 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "components": [{ "id": 1.5, "name": "C" }]
+  "components": [{ "id": 1.5, "name": "C", "content": "arch_c.md" }]
 }
 ```
-**Expected:** Validation fails. Error references `components/0/id` — JSON Schema integer type rejects non-whole numbers.
+**Expected:** Validation fails. Error references `components/0/id` — the field is a string, so any number fails on type; there is no numeric leniency to reach.
 
 ### S11: Invalid requirement type enum fails
 
@@ -175,7 +182,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "requirements": [{ "id": 1, "type": "performance", "title": "R" }]
+  "requirements": [{ "id": "000000000001", "type": "performance", "title": "R", "preq_id": "000000000001" }]
 }
 ```
 **Expected:** Validation fails. Error references `requirements/0/type` — value `"performance"` is not in enum `["functional", "non_functional"]`.
@@ -186,7 +193,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "author": "unknown"
 }
 ```
@@ -196,7 +203,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/", "priority": "high" }]
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/", "priority": "high" }]
 }
 ```
 **Expected:** Validation fails. Error references `modules/0`, additional property `priority` not allowed.
@@ -205,7 +212,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "components": [{ "id": 1, "name": "C", "status": "done" }]
+  "components": [{ "id": "000000000001", "name": "C", "content": "arch_c.md", "status": "done" }]
 }
 ```
 **Expected:** Validation fails. Error references `components/0`, additional property `status` not allowed.
@@ -214,7 +221,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "test_sections": [{ "id": 1, "name": "T", "priority": "P1" }]
+  "test_sections": [{ "id": "000000000001", "name": "T", "content": "test_t.md", "priority": "P1" }]
 }
 ```
 **Expected:** Validation fails. Error references `test_sections/0`, additional property `priority` not allowed.
@@ -225,7 +232,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "components": [{ "id": 0, "name": "C" }]
+  "components": [{ "id": 0, "name": "C", "content": "arch_c.md" }]
 }
 ```
 **Expected:** Validation fails. Error references `components/0/id` — `0` is not a string matching `^[a-f0-9]{12}$` (module.schema.json spells the class in that order; project.schema.json's `$defs/identityHash` spells it `^[0-9a-f]{12}$`).
@@ -243,13 +250,13 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 
 **Input (project):**
 ```json
-{ "name": "", "modules": [{ "id": 1, "name": "m", "path": "m/" }] }
+{ "name": "", "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }] }
 ```
 **Expected:** Validation fails. Error references `name` — empty string violates `minLength: 1`.
 
 **Input (module name within project):**
 ```json
-{ "name": "p", "modules": [{ "id": 1, "name": "", "path": "m/" }] }
+{ "name": "p", "modules": [{ "id": "000000000001", "name": "", "path": "m/" }] }
 ```
 **Expected:** Validation fails. Error references `modules/0/name`.
 
@@ -260,8 +267,8 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 {
   "name": "m",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R1" },
-    { "id": 2, "type": "functional", "title": "R2", "depends_on": [1, 1] }
+    { "id": "000000000001", "type": "functional", "title": "R1", "preq_id": "000000000001" },
+    { "id": "000000000002", "type": "functional", "title": "R2", "preq_id": "000000000001", "depends_on": ["000000000001", "000000000001"] }
   ]
 }
 ```
@@ -273,11 +280,11 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "milestones": []
 }
 ```
-**Expected:** Validation fails with an unknown-property error at the root: `milestones` and `test_plan` were removed from the project schema along with their `$defs`, and root-level `additionalProperties: false` rejects either one. Same for `"test_plan": {}`. This fixture draws a second, independent error from its `"id": 1`, since a module id is an identity hash string — so the assertion is on the unknown-property error, not on the error count.
+**Expected:** Validation fails with an unknown-property error at the root: `milestones` and `test_plan` were removed from the project schema along with their `$defs`, and root-level `additionalProperties: false` rejects either one. Same for `"test_plan": {}`.
 
 ### S17: test_sections validates correctly in module.json
 
@@ -286,7 +293,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 {
   "name": "m",
   "test_sections": [
-    { "id": 1, "name": "Unit tests", "content": "test_unit.md", "describes": [1, 2] }
+    { "id": "000000000001", "name": "Unit tests", "content": "test_unit.md", "describes": ["000000000001", "000000000002"] }
   ]
 }
 ```
@@ -296,7 +303,7 @@ All scenarios below assume a JSON Schema validator is available (e.g., `santhosh
 ```json
 {
   "name": "m",
-  "test_sections": [{ "id": 1 }]
+  "test_sections": [{ "id": "000000000001", "content": "test_t.md" }]
 }
 ```
 **Expected:** Validation fails. Error references `test_sections/0`, missing required `name`.
@@ -323,7 +330,7 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "requirements": []
 }
 ```
@@ -346,27 +353,27 @@ Same pattern for `schema.ModuleSpec` with `valid_module.json`:
 **Input:** Any node with `"id": "aabbccddeeff"` — passes. Any node with `"id": "aabbccddeef"` (11 chars) — fails.
 This is the boundary test for the 12-hex-character identity pattern every ID field carries — `^[0-9a-f]{12}$` at `project.schema.json`'s `$defs/identityHash`, spelled `^[a-f0-9]{12}$` at each of the 12 pattern sites in `module.schema.json`.
 
-### E3: Large ID values
+### E3: Numeric ID of any magnitude fails on type
 
 **Input:**
 ```json
 {
   "name": "m",
-  "components": [{ "id": 2147483647, "name": "MaxInt" }]
+  "components": [{ "id": 2147483647, "name": "MaxInt", "content": "arch_maxint.md" }]
 }
 ```
-**Expected:** Validation passes. JSON Schema integer has no upper bound by default. The Go `int` type on the struct will also accept this value.
+**Expected:** Validation fails. Error references `components/0/id` — the field is a string matching the identity-hash pattern, so a number fails on type whatever its magnitude. There is no integer id anywhere in the format for a bound to apply to.
 
-### E4: Non-integer number in ID field
+### E4: Whole-number float in ID field fails the same way
 
 **Input:**
 ```json
 {
   "name": "m",
-  "components": [{ "id": 1.0, "name": "C" }]
+  "components": [{ "id": 1.0, "name": "C", "content": "arch_c.md" }]
 }
 ```
-**Expected:** Behavior depends on validator. In JSON Schema draft 2020-12, `1.0` is a valid integer (it has no fractional part). Most validators accept this. Go's `json.Unmarshal` into `int` also accepts `1.0`. This is an edge case to be aware of, not necessarily a failure.
+**Expected:** Validation fails on `components/0/id`. Draft 2020-12's rule that `1.0` counts as an integer is unreachable here: the field's type is string, so the number never gets as far as an integer-vs-float judgement.
 
 ### E5: Null values for optional fields
 
@@ -374,7 +381,7 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "description": null
 }
 ```
@@ -395,11 +402,11 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 {
   "name": "m",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R1", "depends_on": [999] }
+    { "id": "000000000001", "type": "functional", "title": "R1", "preq_id": "000000000001", "depends_on": ["deadbeefdead"] }
   ]
 }
 ```
-**Expected:** Validation passes at the schema level. JSON Schema does not enforce referential integrity — that is the validator module's responsibility. This edge case documents the boundary between schema validation and structural validation.
+**Expected:** Validation passes at the schema level: `deadbeefdead` is a well-formed identity hash that references nothing, and JSON Schema does not enforce referential integrity — that is the validator module's responsibility. This edge case documents the boundary between schema validation and structural validation.
 
 ### S19: Priority field accepted on project requirements
 
@@ -407,9 +414,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R", "priority": 1 }
+    { "id": "000000000001", "type": "functional", "title": "R", "priority": 1 }
   ]
 }
 ```
@@ -419,9 +426,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R", "priority": 5 }
+    { "id": "000000000001", "type": "functional", "title": "R", "priority": 5 }
   ]
 }
 ```
@@ -431,9 +438,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R", "priority": -1 }
+    { "id": "000000000001", "type": "functional", "title": "R", "priority": -1 }
   ]
 }
 ```
@@ -446,7 +453,7 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 {
   "name": "m",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R" }
+    { "id": "000000000001", "type": "functional", "title": "R" }
   ]
 }
 ```
@@ -457,7 +464,7 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 {
   "name": "m",
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R", "preq_id": 1 }
+    { "id": "000000000001", "type": "functional", "title": "R", "preq_id": "000000000001" }
   ]
 }
 ```
@@ -469,9 +476,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "requirements": [
-    { "id": 1, "type": "functional", "title": "R", "preq_id": 5 }
+    { "id": "000000000001", "type": "functional", "title": "R", "preq_id": "000000000005" }
   ]
 }
 ```
@@ -483,9 +490,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "sections": [
-    { "id": 1, "name": "delivery", "type": "coupled", "versioning": { "scheme": "semver" } }
+    { "id": "000000000001", "name": "delivery", "type": "coupled", "versioning": { "scheme": "semver" } }
   ]
 }
 ```
@@ -497,9 +504,9 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "sections": [
-    { "id": 1, "type": "coupled" }
+    { "id": "000000000001", "type": "coupled" }
   ]
 }
 ```
@@ -511,13 +518,13 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "sections": [
     { "id": "one", "name": "delivery", "type": "coupled" }
   ]
 }
 ```
-**Expected:** Validation fails. Error references `sections/0/id` — expected integer, got string.
+**Expected:** Validation fails. Error references `sections/0/id` — `"one"` does not match the identity-hash pattern `^[0-9a-f]{12}$`.
 
 ### S24: Empty sections array passes
 
@@ -525,11 +532,44 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "sections": []
 }
 ```
 **Expected:** Validation passes. Empty sections array is valid.
+
+### S25: Derivation field accepted on project requirements, pending only
+
+**Input:**
+```json
+{
+  "name": "p",
+  "modules": [{ "id": "aabbccddeeff", "name": "m", "path": "m/" }],
+  "requirements": [
+    { "id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "pending" }
+  ]
+}
+```
+**Expected:** Validation passes. `derivation` is an optional property on a project requirement, and `"pending"` is its only permitted value.
+
+**Input (unknown value):** the same document with `"derivation": "done"`.
+**Expected:** Validation fails. Error references `requirements/0/derivation` — the value is not in the single-entry enum. Same for `"derivation": ""` and any other string.
+
+**Input (wrong type):** the same document with `"derivation": true`.
+**Expected:** Validation fails on `requirements/0/derivation`.
+
+### S26: Derivation field rejected on module requirements
+
+**Input:**
+```json
+{
+  "name": "m",
+  "requirements": [
+    { "id": "aabbccddee01", "type": "functional", "title": "R", "preq_id": "aabbccddee00", "derivation": "pending" }
+  ]
+}
+```
+**Expected:** Validation fails. The module-level requirement definition does not include `derivation` — a module requirement derives by construction through its required `preq_id` — and `additionalProperties: false` rejects it. Like E8 in the opposite direction, this verifies the two requirement definitions stay correctly separated.
 
 ### E11: Section with arbitrary content properties passes schema validation
 
@@ -537,10 +577,10 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```json
 {
   "name": "p",
-  "modules": [{ "id": 1, "name": "m", "path": "m/" }],
+  "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }],
   "sections": [
     {
-      "id": 1,
+      "id": "000000000001",
       "name": "performance",
       "type": "coupled",
       "budgets": [{ "metric": "p99_latency", "threshold_ms": 200 }],

@@ -5,12 +5,13 @@ Validates that every requirement in the spec is covered by implementation: proje
 ## Responsibilities
 
 - Check that every project requirement has at least one module requirement with a matching `preq_id`
+- Skip a project requirement that declares `derivation: pending` and emit a disclosure note in its place — a declared gap, never an error
 - Check that every module requirement has at least one component with a matching `implements` entry
 - Report uncovered requirements as validation errors with the requirement ID, title, and what's missing
 
 ## Interface
 
-Given the path to a spec directory, the checker returns a flat list of validation entries — empty when both links of the chain hold. If the spec cannot be loaded, the load failures are returned under this checker's own name and no coverage is computed. The project-level pass walks `project.json`'s requirements in declaration order; the module-level pass visits modules in sorted name order and, within a module, requirements in declaration order. The same spec therefore produces the same entries in the same sequence.
+Given the path to a spec directory, the checker returns a flat list of validation entries — empty when both links of the chain hold — together with a list of disclosure notes, one per underived project requirement declaring `derivation: pending`, empty when no requirement is in that state. If the spec cannot be loaded, the load failures are returned under this checker's own name and no coverage is computed. The project-level pass walks `project.json`'s requirements in declaration order; the module-level pass visits modules in sorted name order and, within a module, requirements in declaration order. The same spec therefore produces the same entries and the same notes in the same sequence.
 
 ## Checks
 
@@ -21,6 +22,14 @@ For each project requirement ID, scan all module requirements across all modules
 ```
 project requirement a65bbd37c7ec "Coupled sections" is not derived into any module requirement
 ```
+
+A project requirement declaring `derivation: pending` is exempt from this link: no entry is reported for it, and a disclosure note of type `pending_derivation` takes its place, in the same shape the error uses. Were `a65bbd37c7ec` declared pending, the note's message would read:
+
+```
+project requirement a65bbd37c7ec "Coupled sections" declares derivation pending and is not derived into any module requirement
+```
+
+The note stands strictly in the error's place: it is emitted exactly where the error would have been, so a pending requirement that has in fact gained a deriver produces neither — it is covered like any other, and its `derivation` field is simply stale, inert until removed. The whole of what the field buys is the downgrade from error to note on the underived case; a requirement without it goes down the error path above unchanged.
 
 ### Module requirement → component coverage
 

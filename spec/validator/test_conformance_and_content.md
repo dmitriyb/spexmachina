@@ -57,11 +57,11 @@ tmp/spec/
 **Then** it returns at least two errors, one for each file.
 **Rationale** Validates the "report all violations" requirement (requirement 1).
 
-### S5: module.json with invalid field type (string where number expected)
+### S5: module.json with malformed identity-hash id
 
-**Given** `alpha/module.json` where `requirements[0].id` is the string `"one"` instead of a number.
+**Given** `alpha/module.json` where `requirements[0].id` is the string `"one"`.
 **When** `CheckSchema(specDir)` is called.
-**Then** it returns one error whose `message` references a type mismatch.
+**Then** it returns one error referencing `requirements/0/id` — `"one"` does not match the identity-hash pattern `^[a-f0-9]{12}$`. Every id field is a string constrained by that pattern, so there is no number type anywhere for a mismatch against.
 
 ### S6: project.json with unknown extra field (strict mode)
 

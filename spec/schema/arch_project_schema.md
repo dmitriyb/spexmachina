@@ -16,6 +16,7 @@ The project.json JSON Schema (`schema/project.schema.json`) defines the top-leve
       "title": "Validate spec structure",
       "description": "...",
       "priority": 2,
+      "derivation": "pending",
       "depends_on": ["<identity hash>"]
     }
   ],
@@ -39,7 +40,7 @@ The project.json JSON Schema (`schema/project.schema.json`) defines the top-leve
 }
 ```
 
-`name` and `modules` are the schema's only top-level required properties, and `modules` must carry at least one entry. Inside the arrays the required sets are small: `id`, `type` and `title` on a requirement; `id`, `name` and `path` on a module; `id`, `name` and `type` on a section. `priority` is an integer 0–4; the schema leaves it optional — deliberately, so requirements can gain priorities in stages — while `spex validate` reports a project requirement that carries none. `$defs` holds exactly four definitions: `identityHash`, `requirement`, `module` and `section`. There is no `milestones` array and no `test_plan` — both node types were retired from `schema/project.schema.json` along with their `$defs`.
+`name` and `modules` are the schema's only top-level required properties, and `modules` must carry at least one entry. Inside the arrays the required sets are small: `id`, `type` and `title` on a requirement; `id`, `name` and `path` on a module; `id`, `name` and `type` on a section. `priority` is an integer 0–4; the schema leaves it optional — deliberately, so requirements can gain priorities in stages — while `spex validate` reports a project requirement that carries none. `derivation` is optional too, and `"pending"` is its only permitted value: the property declares a requirement not yet derived into any module, so the requirement can be named honestly before its decomposition exists, and any other value fails schema conformance. A requirement without the field is an ordinary requirement that must be derived — the state is opt-in, never a default. What declaring it buys is decided in the validator, not here; the schema only admits the declaration. `$defs` holds exactly four definitions: `identityHash`, `requirement`, `module` and `section`. There is no `milestones` array and no `test_plan` — both node types were retired from `schema/project.schema.json` along with their `$defs`.
 
 All `id` and cross-reference fields carry [[237fd8ffb610|the same 12-character lowercase hex identity hash]], matched here by the pattern `^[a-f0-9]{12}$`. The pattern is all this schema can enforce: that a value has the shape of an identity hash, not that it is the right one for the node carrying it. Distinctness is out of its reach too — two entries of one array may repeat an id as far as this schema is concerned, and `spex validate` is what reports the duplicate. Derivation, the identity string each node type hashes from, and the check that a declared id equals it all live with `arch_schema_loader.md`.
 
@@ -67,6 +68,6 @@ The small required set at the project level is what supports incremental spec au
 
 `additionalProperties: false` ensures strict conformance at the project level — no extra top-level fields allowed. However, section entries within the `sections` array allow additional properties to support freeform content validated externally.
 
-The requirement definition is duplicated in `module.schema.json` rather than shared through a cross-file `$ref`, and each copy carries a `$comment` naming the other. Each document stays self-contained, so no `$ref` has to resolve across files. The price is one definition kept in step by hand. The two are not identical, and the differences are the point: a project requirement may carry `priority`, a module requirement must carry `preq_id`.
+The requirement definition is duplicated in `module.schema.json` rather than shared through a cross-file `$ref`, and each copy carries a `$comment` naming the other. Each document stays self-contained, so no `$ref` has to resolve across files. The price is one definition kept in step by hand. The two are not identical, and the differences are the point: a project requirement may carry `priority` and `derivation`, a module requirement must carry `preq_id`. `derivation` belongs to the project copy alone because a module requirement derives by construction — its required `preq_id` is the derivation — so a pending state has no meaning there, and the module copy stays untouched.
 
 Collections are JSON arrays rather than objects keyed by id. This preserves ordering, which matters for rendering and consistent output, and the `id` field within each item provides lookup by identifier.
