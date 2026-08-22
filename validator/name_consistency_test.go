@@ -123,6 +123,38 @@ func TestREQ10_TrailingWhitespace(t *testing.T) {
 	}
 }
 
+func TestREQ10_SchemaFailureDoesNotBlockNameCheck(t *testing.T) {
+	// E1: alpha/module.json fails schema validation (component missing
+	// required "content") but has a name mismatch against project.json.
+	// Both SchemaChecker and NameConsistencyChecker must independently
+	// produce errors — extracting "name" from parseable JSON does not
+	// require schema validity.
+	dir := filepath.Join("testdata", "name_schema_invalid")
+
+	schemaErrs := CheckSchema(dir)
+	if len(schemaErrs) == 0 {
+		t.Fatalf("expected schema errors for missing required component field, got none")
+	}
+
+	nameErrs := CheckNameConsistency(dir)
+	if len(nameErrs) != 1 {
+		t.Fatalf("expected 1 name consistency error, got %d: %v", len(nameErrs), nameErrs)
+	}
+	if !strings.Contains(nameErrs[0].Message, "alpha") || !strings.Contains(nameErrs[0].Message, "widget") {
+		t.Fatalf("expected both names in message, got: %s", nameErrs[0].Message)
+	}
+}
+
+func TestREQ10_EmptyModuleName(t *testing.T) {
+	// E4: project.json and module.json both declare name "" — the names
+	// match, so the name-comparison itself reports zero errors. Whether an
+	// empty name is otherwise valid is the schema checker's concern.
+	errs := CheckNameConsistency(filepath.Join("testdata", "name_empty"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for matching empty names, got %d: %v", len(errs), errs)
+	}
+}
+
 func TestREQ10_PathDiffersFromName(t *testing.T) {
 	// E3: Module path "core" differs from name "core-lib" — comparison is name-to-name, not path.
 	errs := CheckNameConsistency(filepath.Join("testdata", "name_path_differs"))

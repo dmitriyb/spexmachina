@@ -1,9 +1,15 @@
 package validator
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // REQ-12: Test coverage checking — every component must be described by at
@@ -132,6 +138,71 @@ func TestREQ12_ErrorMessageContainsComponentID(t *testing.T) {
 	}
 	if !strings.Contains(errs[0].Message, "id:000000000002") {
 		t.Fatalf("expected component ID in message, got: %s", errs[0].Message)
+	}
+}
+
+func TestREQ12_LargeModuleCountPerformance(t *testing.T) {
+	// E5: 100 modules, each with 10 fully-covered components, completes
+	// within the 1-second performance budget and returns zero errors.
+	const numModules = 100
+	const numComponents = 10
+
+	dir := t.TempDir()
+	proj := schema.Project{Name: "perf-test"}
+
+	for m := 0; m < numModules; m++ {
+		modName := fmt.Sprintf("module%03d", m)
+		proj.Modules = append(proj.Modules, schema.Module{
+			ID:   schema.IdentityHash("module", modName),
+			Name: modName,
+			Path: modName,
+		})
+
+		mod := schema.ModuleSpec{Name: modName}
+		var describes []string
+		for c := 0; c < numComponents; c++ {
+			compName := fmt.Sprintf("comp%03d", c)
+			id := schema.IdentityHash(modName, "component", compName)
+			mod.Components = append(mod.Components, schema.Component{
+				ID:      id,
+				Name:    compName,
+				Content: "arch_" + compName + ".md",
+			})
+			describes = append(describes, id)
+		}
+		mod.TestSections = []schema.TestSection{{
+			ID:        schema.IdentityHash(modName, "test_section", "all"),
+			Name:      "all tests",
+			Content:   "test_all.md",
+			Describes: describes,
+		}}
+
+		modDir := filepath.Join(dir, modName)
+		if err := os.MkdirAll(modDir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		modData, err := json.Marshal(mod)
+		if err != nil {
+			t.Fatalf("marshal module: %v", err)
+		}
+		writeFile(t, modDir, "module.json", string(modData))
+	}
+
+	projData, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatalf("marshal project: %v", err)
+	}
+	writeProject(t, dir, string(projData))
+
+	start := time.Now()
+	errs := CheckTestCoverage(dir)
+	elapsed := time.Since(start)
+
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("expected completion within 1 second, took %s", elapsed)
 	}
 }
 
