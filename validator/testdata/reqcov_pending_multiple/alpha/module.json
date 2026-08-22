@@ -1,0 +1,10 @@
+{
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "CompA"
+    }
+  ],
+  "name": "alpha",
+  "requirements": []
+}
