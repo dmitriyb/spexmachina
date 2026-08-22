@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/dmitriyb/spexmachina/validator"
@@ -475,23 +476,28 @@ func TestFR7_ValidateCommand_EmptyDirNoProjectJSON(t *testing.T) {
 	_ = parseReport(t, out) // must still be valid JSON, not a panic trace
 }
 
-// E2: project.json with zero modules is structurally valid — no nodes to
-// check, nothing else can fail. Per the spec, whether the empty array itself
-// is schema-legal is a call the (separately owned) project.json schema
-// makes; today it enforces modules minItems:1, so the run is rejected there
-// and nowhere else. Either way the command must degrade gracefully: valid
-// JSON, and the exit status must agree with report.Valid.
+// E2: project.json with zero modules. test_validation_pipeline.md's E2 says
+// this exits 0, but schema/project.schema.json puts minItems:1 on modules,
+// so today's shipped schema rejects the array before any other check runs.
+// That contradiction is filed as drifts/drift-spexmachina-okib.7.json rather
+// than resolved here; this test pins the behavior the current schema
+// actually produces — exit 1, rejected by the schema check alone — so it
+// fails if either the schema or the checker pipeline changes that outcome
+// without the drift being triaged first.
 func TestFR7_ValidateCommand_ZeroModules(t *testing.T) {
 	dir := t.TempDir()
 	writeTestFile(t, dir, "project.json", `{"name": "empty-project", "modules": []}`)
 
 	out, err := runSpex(t, "validate", "--spec-dir", dir)
-	report := parseReport(t, out)
-	if report.Valid != (err == nil) {
-		t.Fatalf("report.valid=%v but exit error=%v; the two must agree", report.Valid, err)
+	if err == nil {
+		t.Fatal("want error for zero modules under the current schema's minItems:1, got nil")
 	}
-	if !report.Valid && !hasCheck(report, "schema") {
-		t.Fatalf("zero modules should only ever be rejected by the schema check, got: %v", report.Errors)
+	report := parseReport(t, out)
+	if report.Valid {
+		t.Fatal("want valid=false")
+	}
+	if !hasCheck(report, "schema") {
+		t.Fatalf("zero modules should be rejected by the schema check, got: %v", report.Errors)
 	}
 }
 
@@ -606,6 +612,119 @@ func TestFR7_ValidateCommand_SpecialCharactersInMessage(t *testing.T) {
 	if !found {
 		t.Fatalf("want a name_consistency error mentioning the quoted name, got: %v", report.Errors)
 	}
+}
+
+// E7: a spec with 100 modules, 10 requirements, 5 components and 5
+// test_sections per module (2000 module-scoped nodes plus the 100 module
+// declarations) validates in under a second, per requirement b42c5cdf874b
+// (fast validation).
+func TestFR7_ValidateCommand_PerformanceBudget(t *testing.T) {
+	dir := buildLargeValidSpec(t, 100, 10, 5, 5)
+
+	start := time.Now()
+	out, err := runSpex(t, "validate", "--spec-dir", dir)
+	elapsed := time.Since(start)
+
+	if err != nil {
+		t.Fatalf("want no error for a valid large spec, got %v\noutput: %s", err, out)
+	}
+	report := parseReport(t, out)
+	if !report.Valid {
+		t.Fatalf("want valid=true, got errors: %v", report.Errors)
+	}
+	if elapsed > time.Second {
+		t.Fatalf("want the full pipeline under 1s for 100 modules / 2000 module-scoped nodes, took %s", elapsed)
+	}
+}
+
+// buildLargeValidSpec writes a fully valid spec with the given number of
+// modules, each carrying reqsPerModule requirements, compsPerModule
+// components (each implementing two requirements) and testsPerModule test
+// sections (each describing one component). compsPerModule*2 must equal
+// reqsPerModule, and testsPerModule must equal compsPerModule, so every
+// requirement is implemented and every component is covered.
+func buildLargeValidSpec(t *testing.T, modules, reqsPerModule, compsPerModule, testsPerModule int) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	proj := schema.Project{Name: "large-project"}
+	for m := 0; m < modules; m++ {
+		modName := fmt.Sprintf("module%d", m)
+		modID := fmt.Sprintf("%012x", m+1)
+		preqID := fmt.Sprintf("%012x", 0x100000+m)
+		priority := 1
+
+		proj.Modules = append(proj.Modules, schema.Module{ID: modID, Name: modName, Path: modName})
+		proj.Requirements = append(proj.Requirements, schema.Requirement{
+			ID:       preqID,
+			Type:     "functional",
+			Title:    fmt.Sprintf("Project requirement %d", m),
+			Priority: &priority,
+		})
+
+		modDir := filepath.Join(dir, modName)
+		if err := os.MkdirAll(modDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		modSpec := schema.ModuleSpec{Name: modName}
+		reqIDs := make([]string, reqsPerModule)
+		for r := 0; r < reqsPerModule; r++ {
+			title := fmt.Sprintf("Req%d", r)
+			id := schema.IdentityHash(modName, "requirement", title)
+			reqIDs[r] = id
+			modSpec.Requirements = append(modSpec.Requirements, schema.ModuleRequirement{
+				ID:     id,
+				PreqID: preqID,
+				Type:   "functional",
+				Title:  title,
+			})
+		}
+
+		reqsPerComp := reqsPerModule / compsPerModule
+		compIDs := make([]string, compsPerModule)
+		for c := 0; c < compsPerModule; c++ {
+			name := fmt.Sprintf("Comp%d", c)
+			id := schema.IdentityHash(modName, "component", name)
+			compIDs[c] = id
+			content := fmt.Sprintf("arch_comp%d.md", c)
+			modSpec.Components = append(modSpec.Components, schema.Component{
+				ID:         id,
+				Name:       name,
+				Content:    content,
+				Implements: reqIDs[c*reqsPerComp : (c+1)*reqsPerComp],
+			})
+			writeTestFile(t, modDir, content, fmt.Sprintf("# %s architecture\n", name))
+		}
+
+		compsPerTest := compsPerModule / testsPerModule
+		for ts := 0; ts < testsPerModule; ts++ {
+			name := fmt.Sprintf("Test%d", ts)
+			id := schema.IdentityHash(modName, "test_section", name)
+			content := fmt.Sprintf("test_comp%d.md", ts)
+			modSpec.TestSections = append(modSpec.TestSections, schema.TestSection{
+				ID:        id,
+				Name:      name,
+				Content:   content,
+				Describes: compIDs[ts*compsPerTest : (ts+1)*compsPerTest],
+			})
+			writeTestFile(t, modDir, content, fmt.Sprintf("# %s tests\n", name))
+		}
+
+		modBytes, err := json.Marshal(modSpec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, modDir, "module.json", string(modBytes))
+	}
+
+	projBytes, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, dir, "project.json", string(projBytes))
+
+	return dir
 }
 
 // setupInvalidTestSpec creates a spec with a missing content file.
