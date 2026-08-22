@@ -48,7 +48,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Structured error output",
-      "description": "Exit 0 if valid. Exit 1 with structured JSON errors listing every violation found."
+      "description": "Exit 0 if valid. Exit 1 with structured JSON errors listing every violation found. The report may additionally carry a notes array of disclosures, mirroring the channel spex diff publishes; notes never affect validity, the counts, or the exit code, and the array is omitted when empty so a clean run emits the same document it always has."
     },
     {
       "id": "b42c5cdf874b",
@@ -100,7 +100,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Requirement coverage validation",
-      "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors."
+      "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors. One declared exemption: a project requirement carrying derivation 'pending' is skipped by the first link and reported as a disclosure note naming its identity hash and quoted title, never as an error. The module-requirement-to-component link admits no such state."
     },
     {
       "id": "d99ef6b9b776",

@@ -8,8 +8,8 @@ CLI entry point for [[528f91e5fb7d|`spex validate`]]. Orchestrates the checks th
 - Hand that path to each check and nothing else; every check loads `project.json` and the `module.json` files it needs for itself
 - Run ten checks in a fixed order, appending each one's entries to a single list
 - Run all ten whatever the earlier ones found — no check short-circuits the sequence, so one run produces the full report rather than one failure at a time
-- Aggregate the entries through [[0f98ca780873|ErrorReporter]], which sorts by path and writes the report to stdout
-- Read the exit status off the report ErrorReporter returns rather than re-inspecting the list: 0 if valid, 1 otherwise. That pairing of a machine-readable report with a branchable status is what [[608f8ca2e1b0|structured error output]] asks for
+- Aggregate the entries — and the disclosure notes a check emits alongside them; today `requirement_coverage` is the only source — through [[0f98ca780873|ErrorReporter]], which sorts entries by path and writes the report to stdout
+- Read the exit status off the report ErrorReporter returns rather than re-inspecting the list: 0 if valid, 1 otherwise. Notes play no part in that status — a run whose only finding is a disclosure exits 0. That pairing of a machine-readable report with a branchable status is what [[608f8ca2e1b0|structured error output]] asks for
 
 ## Check Order
 

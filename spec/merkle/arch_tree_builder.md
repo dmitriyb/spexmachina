@@ -98,11 +98,11 @@ Requirements do not have content files. Their content hash is computed from a de
 
 For module-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `preq_id`, `title`, `type`.
 
-For project-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `priority`, `title`, `type`.
+For project-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `priority`, `title`, `type`. A project requirement's `derivation` field is deliberately not among them, and the serialization is an allowlist, so the exclusion asks for no branch: a field the enumeration does not name is simply never serialized. The rationale: graduating a requirement from pending to derived must produce no content change — no diff entry, no impact, no absorb entry to write — because the derivation itself is already visible as the added module requirements and components that carry the work. Hashing the field would mint a modification on the parent requirement every time a module is decomposed: noise on a node that did not change in substance.
 
 The `id` field is now a 12-character hex string rather than an integer, but it is still serialized as part of the leaf so that a node which is moved between modules (and therefore gets a new identity hash) is detected as a content change too — not just a key change.
 
-This ensures that any change to a requirement's text, type, dependencies, or derivation produces a different content hash, making it visible as an individual change in the diff.
+This ensures that any change to a requirement's text, type, dependencies, or `preq_id` derivation edge produces a different content hash, making it visible as an individual change in the diff.
 
 ## API Leaf Hashing
 

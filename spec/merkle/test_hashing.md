@@ -103,6 +103,15 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 
 **Rationale**: Ensures the tree builder correctly handles the real-world case of multiple modules in a project, and that module hashes are combined in sorted order at the root level.
 
+### S9: Project requirement leaf hash is invariant under derivation graduation
+
+**Given** three copies of the fixture identical except for one project requirement: in the first it carries no `derivation` field, in the second it carries `"derivation": "pending"`, in the third the field has been removed again (the graduation edit)
+**When** `BuildTree` is called on each
+**Then** that requirement's leaf hash is identical across all three trees
+**And** the root hashes of all three trees are identical
+
+**Rationale**: `derivation` is deliberately absent from the project-requirement field allowlist in `arch_tree_builder.md`, so declaring a gap and later graduating out of it must produce no diff entry, no impact, and no absorb entry. This is the scenario that fails if the exclusion is implemented wrongly — a serializer that hashes whatever fields it finds would move the leaf on both edits.
+
 ## Edge Cases
 
 ### E1: HashFile on non-existent file
