@@ -3,8 +3,10 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -376,5 +378,63 @@ func TestREQ7_ReportDoesNotMutateInput(t *testing.T) {
 
 	if errs[0] != origFirst {
 		t.Error("Report mutated the input slice")
+	}
+}
+
+// E3: a future parallel-checker implementation must be able to aggregate
+// into a shared slice from multiple goroutines and hand the result to
+// Report without data races. Report itself runs sequentially here — what
+// this pins is that the aggregation pattern a parallel caller would use
+// (append under a mutex, then call Report once) is race-free end to end.
+// Run with `go test -race` to catch a regression that reintroduces one.
+func TestREQ7_ReportConcurrentAggregation(t *testing.T) {
+	const numCheckers = 20
+
+	var (
+		mu   sync.Mutex
+		wg   sync.WaitGroup
+		errs []ValidationError
+	)
+
+	for i := 0; i < numCheckers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			entry := ValidationError{
+				Check:    fmt.Sprintf("checker%d", i),
+				Severity: "error",
+				Path:     fmt.Sprintf("path%02d", i),
+				Message:  "concurrent error",
+			}
+			mu.Lock()
+			errs = append(errs, entry)
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+
+	var buf bytes.Buffer
+	if _, err := Report(errs, nil, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+
+	if report.ErrorCount != numCheckers {
+		t.Fatalf("want error_count=%d, got %d", numCheckers, report.ErrorCount)
+	}
+	if len(report.Errors) != numCheckers {
+		t.Fatalf("want %d entries, got %d", numCheckers, len(report.Errors))
+	}
+
+	seen := make(map[string]bool)
+	for _, e := range report.Errors {
+		seen[e.Check] = true
+	}
+	if len(seen) != numCheckers {
+		t.Fatalf("want %d distinct checkers represented, got %d: %v", numCheckers, len(seen), report.Errors)
 	}
 }
