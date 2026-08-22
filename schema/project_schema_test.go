@@ -215,6 +215,18 @@ func TestNFR4_S13_InvalidIDPatternProject(t *testing.T) {
 	}
 }
 
+// TestNFR4_S13_NegativeIDProject pins the project-side half of S13: a
+// negative numeric ID fails the same way as any other number, since
+// project.schema.json constrains module ids by pattern (a string), not by
+// numeric range.
+func TestNFR4_S13_NegativeIDProject(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{"name": "p", "modules": [{"id": -1, "name": "m", "path": "m/"}]}`)
+	if err == nil {
+		t.Fatal("expected validation error for id: -1, got nil")
+	}
+}
+
 func TestFR1_S14_EmptyStringNameFails(t *testing.T) {
 	sch := compileProjectSchema(t)
 
@@ -281,6 +293,92 @@ func TestFR6_S16_RetiredProjectKeysRejected(t *testing.T) {
 				t.Fatalf("%q was retired but still validates", tt.name)
 			}
 		})
+	}
+}
+
+// TestFR6_S21_SectionsFullFieldsPasses pins that the sections array accepts
+// an entry with additional freeform properties beyond the required envelope
+// (id, name, type) — the envelope is validated, the rest is delegated to the
+// coupled module's own section.schema.json.
+func TestFR6_S21_SectionsFullFieldsPasses(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"sections": [
+			{"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
+		]
+	}`)
+	if err != nil {
+		t.Fatalf("section with envelope + freeform content should pass: %v", err)
+	}
+}
+
+// TestFR6_S22_SectionMissingNameFails pins that the section envelope's
+// required fields (id, name, type) are enforced like any other node.
+func TestFR6_S22_SectionMissingNameFails(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"sections": [{"id": "000000000001", "type": "coupled"}]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error for section missing name, got nil")
+	}
+	if !strings.Contains(err.Error(), "name") {
+		t.Fatalf("error should reference 'name', got: %v", err)
+	}
+}
+
+// TestFR6_S23_SectionInvalidIDTypeFails pins that section ids follow the
+// same identity-hash pattern as every other node type.
+func TestFR6_S23_SectionInvalidIDTypeFails(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"sections": [{"id": "one", "name": "delivery", "type": "coupled"}]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error for section with non-hex id, got nil")
+	}
+}
+
+// TestFR6_S24_EmptySectionsArrayPasses pins that sections, like every other
+// optional array, has no minItems constraint.
+func TestFR6_S24_EmptySectionsArrayPasses(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"sections": []
+	}`)
+	if err != nil {
+		t.Fatalf("empty sections array should pass: %v", err)
+	}
+}
+
+// TestFR6_E11_SectionArbitraryContentPasses pins the boundary between schema
+// validation and the coupled module's own section.schema.json: the project
+// schema validates only the envelope and allows any additional properties.
+func TestFR6_E11_SectionArbitraryContentPasses(t *testing.T) {
+	sch := compileProjectSchema(t)
+	err := validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"sections": [
+			{
+				"id": "000000000001",
+				"name": "performance",
+				"type": "coupled",
+				"budgets": [{"metric": "p99_latency", "threshold_ms": 200}],
+				"monitoring": {"dashboard": "grafana.internal/perf"}
+			}
+		]
+	}`)
+	if err != nil {
+		t.Fatalf("section with arbitrary content properties should pass: %v", err)
 	}
 }
 

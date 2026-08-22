@@ -130,6 +130,10 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 			"integer ID in requirement",
 			`{"name": "m", "requirements": [{"id": 1, "type": "functional", "title": "R", "preq_id": "aabbccddeeff"}]}`,
 		},
+		{
+			"float ID in component",
+			`{"name": "m", "components": [{"id": 1.5, "name": "C", "content": "arch_c.md"}]}`,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -138,6 +142,63 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 				t.Fatal("expected validation error for wrong ID type, got nil")
 			}
 		})
+	}
+}
+
+// TestNFR4_S13_IDBelowMinimumModule pins the module-side half of S13: a
+// numeric zero ID fails the same way any other number does, since the field
+// is a string matching the identity-hash pattern with no numeric range to
+// violate.
+func TestNFR4_S13_IDBelowMinimumModule(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{"name": "m", "components": [{"id": 0, "name": "C", "content": "arch_c.md"}]}`)
+	if err == nil {
+		t.Fatal("expected validation error for id: 0, got nil")
+	}
+}
+
+// TestNFR4_E2_BoundaryIDValueModule mirrors the project-side boundary test:
+// module.schema.json spells the identity-hash pattern as ^[a-f0-9]{12}$, and
+// the 12-vs-11-character boundary must hold there too.
+func TestNFR4_E2_BoundaryIDValueModule(t *testing.T) {
+	sch := compileModuleSchema(t)
+
+	t.Run("12-char hex passes", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "components": [{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md"}]}`)
+		if err != nil {
+			t.Fatalf("12-char hex should pass: %v", err)
+		}
+	})
+
+	t.Run("11-char hex fails", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "components": [{"id": "aabbccddeef", "name": "C", "content": "arch_c.md"}]}`)
+		if err == nil {
+			t.Fatal("11-char hex should fail")
+		}
+	})
+}
+
+// TestNFR4_E3_NumericIDAnyMagnitudeFailsModule pins that a component ID is a
+// string matching the identity-hash pattern, so a number fails on type
+// regardless of magnitude — there is no integer-id path in the format for a
+// bound to apply to.
+func TestNFR4_E3_NumericIDAnyMagnitudeFailsModule(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{"name": "m", "components": [{"id": 2147483647, "name": "MaxInt", "content": "arch_maxint.md"}]}`)
+	if err == nil {
+		t.Fatal("expected validation error for large numeric id, got nil")
+	}
+}
+
+// TestNFR4_E4_WholeNumberFloatIDFailsModule pins that draft 2020-12's
+// integer-vs-float leniency for whole-number floats like 1.0 never becomes
+// reachable here: the id field's type is string, so any number fails before
+// that judgement would apply.
+func TestNFR4_E4_WholeNumberFloatIDFailsModule(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{"name": "m", "components": [{"id": 1.0, "name": "C", "content": "arch_c.md"}]}`)
+	if err == nil {
+		t.Fatal("expected validation error for whole-number float id, got nil")
 	}
 }
 
