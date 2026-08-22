@@ -1,0 +1,19 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "reqcov-pending-derived",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Feature A",
+      "type": "functional",
+      "derivation": "pending"
+    }
+  ]
+}

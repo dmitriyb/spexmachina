@@ -111,3 +111,99 @@ func TestREQ14_SelfValidateRequirementCoverage(t *testing.T) {
 		t.Logf("uncovered requirement: %s — %s", e.Path, e.Message)
 	}
 }
+
+// RC1: an underived project requirement with no derivation field is still an
+// error, byte-for-byte the pre-existing message, and produces zero notes.
+func TestREQ14_RC1_UnderivedWithoutFieldIsError(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_uncovered_project_req"))
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `project requirement 000000000002 "Feature B" is not derived into any module requirement`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "project.json" {
+		t.Fatalf("expected path=project.json, got %q", errs[0].Path)
+	}
+}
+
+// RC2: a requirement declaring derivation "pending" that nothing derives
+// produces a disclosure note instead of an error.
+func TestREQ14_RC2_PendingUnderivedProducesNote(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_pending_note"))
+	if len(errs) != 0 {
+		t.Fatalf("expected 0 errors, got %d: %v", len(errs), errs)
+	}
+	if len(notes) != 1 {
+		t.Fatalf("expected 1 note, got %d: %v", len(notes), notes)
+	}
+	n := notes[0]
+	if n.Type != "pending_derivation" {
+		t.Fatalf("expected type=pending_derivation, got %q", n.Type)
+	}
+	want := `project requirement 000000000002 "Feature B" declares derivation pending and is not derived into any module requirement`
+	if n.Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", n.Message, want)
+	}
+	if len(n.Related) != 1 || n.Related[0] != "000000000002" {
+		t.Fatalf("expected related=[000000000002], got %v", n.Related)
+	}
+}
+
+// RC3: a requirement declaring derivation "pending" that IS derived by a
+// module requirement produces neither an error nor a note — the stale field
+// is inert once the requirement is covered.
+func TestREQ14_RC3_DerivedPendingProducesNeither(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_pending_derived"))
+	if len(errs) != 0 {
+		t.Fatalf("expected 0 errors, got %d: %v", len(errs), errs)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+}
+
+// RC4: the module-requirement-to-component link admits no pending state —
+// an uncovered module requirement is still reported even when every project
+// requirement declares derivation "pending".
+func TestREQ14_RC4_ModuleLevelLinkAdmitsNoPending(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_pending_module_uncovered"))
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `alpha requirement 000000000001 "Mod Feat A" is not implemented by any component`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "alpha/module.json" {
+		t.Fatalf("expected path=alpha/module.json, got %q", errs[0].Path)
+	}
+}
+
+// RC5: notes are deterministic and ordered — three underived pending
+// requirements declared in a fixed order produce the same three notes in
+// declaration order across repeated runs.
+func TestREQ14_RC5_NotesDeterministicAndOrdered(t *testing.T) {
+	wantIDs := []string{"000000000003", "000000000001", "000000000002"}
+	for run := 0; run < 2; run++ {
+		errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_pending_multiple"))
+		if len(errs) != 0 {
+			t.Fatalf("run %d: expected 0 errors, got %d: %v", run, len(errs), errs)
+		}
+		if len(notes) != len(wantIDs) {
+			t.Fatalf("run %d: expected %d notes, got %d: %v", run, len(wantIDs), len(notes), notes)
+		}
+		for i, id := range wantIDs {
+			if len(notes[i].Related) != 1 || notes[i].Related[0] != id {
+				t.Fatalf("run %d: note %d expected related=[%s], got %v", run, i, id, notes[i].Related)
+			}
+		}
+	}
+}
