@@ -15,3 +15,15 @@ type ValidationError struct {
 	Message    string `json:"message"`               // human-readable description
 	SchemaPath string `json:"schema_path,omitempty"` // JSON Schema path that was violated
 }
+
+// ValidationNote is a disclosure a checker files alongside its validation
+// entries. It carries no severity, is never counted in error_count, and never
+// touches the exit code: it stands where an error would have been on a
+// declared gap, not a synonym for one. It mirrors the three-key shape a
+// `spex diff` note carries, so the two commands publish one disclosure
+// vocabulary.
+type ValidationNote struct {
+	Type    string   `json:"type"`    // the disclosure kind, e.g. "pending_derivation"
+	Message string   `json:"message"` // human-readable disclosure
+	Related []string `json:"related,omitempty"` // identity hashes the note concerns
+}

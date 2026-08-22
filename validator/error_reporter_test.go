@@ -15,7 +15,7 @@ func TestREQ7_ReportSortsErrorsByPath(t *testing.T) {
 	}
 
 	var buf bytes.Buffer
-	if _, err := Report(errs, &buf, false); err != nil {
+	if _, err := Report(errs, nil, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -47,7 +47,7 @@ func TestREQ7_ReportSortsErrorsByPath(t *testing.T) {
 
 func TestREQ7_ReportEmptyErrors(t *testing.T) {
 	var buf bytes.Buffer
-	if _, err := Report(nil, &buf, false); err != nil {
+	if _, err := Report(nil, nil, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -89,7 +89,7 @@ func TestREQ7_ReportReturnsTheReportItWrote(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			got, err := Report(tt.errs, &buf, false)
+			got, err := Report(tt.errs, nil, &buf, false)
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -131,7 +131,7 @@ func TestREQ7_ReportAlwaysEmitsWarningCountKey(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var buf bytes.Buffer
-			if _, err := Report(tt.errs, &buf, false); err != nil {
+			if _, err := Report(tt.errs, nil, &buf, false); err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
 
@@ -156,12 +156,12 @@ func TestREQ7_ReportTTYIndentation(t *testing.T) {
 	}
 
 	var compact bytes.Buffer
-	if _, err := Report(errs, &compact, false); err != nil {
+	if _, err := Report(errs, nil, &compact, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	var pretty bytes.Buffer
-	if _, err := Report(errs, &pretty, true); err != nil {
+	if _, err := Report(errs, nil, &pretty, true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -181,7 +181,7 @@ func TestREQ7_ReportDoesNotMutateInput(t *testing.T) {
 
 	origFirst := errs[0]
 	var buf bytes.Buffer
-	if _, err := Report(errs, &buf, false); err != nil {
+	if _, err := Report(errs, nil, &buf, false); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 

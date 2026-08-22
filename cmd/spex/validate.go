@@ -26,6 +26,7 @@ func runValidateE(cmd *cobra.Command, args []string) error {
 	}
 
 	var errs []validator.ValidationError
+	var notes []validator.ValidationNote
 	errs = append(errs, validator.CheckSchema(specDir)...)
 	errs = append(errs, validator.CheckContentPaths(specDir)...)
 	errs = append(errs, validator.CheckLinks(specDir)...)
@@ -34,11 +35,13 @@ func runValidateE(cmd *cobra.Command, args []string) error {
 	errs = append(errs, validator.CheckDAG(specDir)...)
 	errs = append(errs, validator.CheckNameConsistency(specDir)...)
 	errs = append(errs, validator.CheckTestCoverage(specDir)...)
-	errs = append(errs, validator.CheckRequirementCoverage(specDir)...)
+	reqCovErrs, reqCovNotes := validator.CheckRequirementCoverage(specDir)
+	errs = append(errs, reqCovErrs...)
+	notes = append(notes, reqCovNotes...)
 	errs = append(errs, validator.CheckCoupledSections(specDir)...)
 
 	isTTY := term.IsTerminal(int(os.Stdout.Fd()))
-	report, err := validator.Report(errs, os.Stdout, isTTY)
+	report, err := validator.Report(errs, notes, os.Stdout, isTTY)
 	if err != nil {
 		return fmt.Errorf("validate: %w", err)
 	}
