@@ -307,6 +307,60 @@ func TestREQ6_BuildTree_Deterministic(t *testing.T) {
 	}
 }
 
+// collectHashesByKey walks a tree and returns a map from every node's key to
+// its hash, so two trees can be compared node-by-node regardless of child
+// ordering.
+func collectHashesByKey(n *Node, out map[string]string) {
+	out[n.Key] = n.Hash
+	for _, c := range n.Children {
+		collectHashesByKey(c, out)
+	}
+}
+
+// TestS7_BuildTree_DeterministicAcrossSeparateDirs covers test_hashing.md S7:
+// the fixture directory built twice in independent temp directories with
+// identical file contents produces equal root hashes and equal hashes at
+// every corresponding key — not merely a stable hash from rebuilding the same
+// directory, which TestREQ6_BuildTree_Deterministic already covers.
+func TestS7_BuildTree_DeterministicAcrossSeparateDirs(t *testing.T) {
+	dirA := setupSpecDir(t)
+	dirB := setupSpecDir(t)
+	if dirA == dirB {
+		t.Fatalf("fixture dirs must be distinct temp directories, both got %s", dirA)
+	}
+
+	rootA, err := BuildTree(dirA)
+	if err != nil {
+		t.Fatalf("BuildTree(dirA): %v", err)
+	}
+	rootB, err := BuildTree(dirB)
+	if err != nil {
+		t.Fatalf("BuildTree(dirB): %v", err)
+	}
+
+	if rootA.Hash != rootB.Hash {
+		t.Fatalf("root hash: dirA=%s dirB=%s", rootA.Hash, rootB.Hash)
+	}
+
+	hashesA := map[string]string{}
+	hashesB := map[string]string{}
+	collectHashesByKey(rootA, hashesA)
+	collectHashesByKey(rootB, hashesB)
+
+	if len(hashesA) != len(hashesB) {
+		t.Fatalf("node count: dirA=%d dirB=%d", len(hashesA), len(hashesB))
+	}
+	for key, hashA := range hashesA {
+		hashB, ok := hashesB[key]
+		if !ok {
+			t.Fatalf("key %s present in dirA tree but not dirB tree", key)
+		}
+		if hashA != hashB {
+			t.Fatalf("key %s: dirA=%s dirB=%s", key, hashA, hashB)
+		}
+	}
+}
+
 func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -366,12 +420,15 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	writeFile(t, badDir, "module.json", badMod)
 	// arch_ghost.md does NOT exist
 
-	_, err := BuildTree(dir)
+	root, err := BuildTree(dir)
 	if err == nil {
 		t.Fatal("want error for missing content file, got nil")
 	}
 	if !strings.Contains(err.Error(), ghostComp) {
 		t.Fatalf("error should mention spec key %s, got: %v", ghostComp, err)
+	}
+	if root != nil {
+		t.Fatalf("want no partial tree on error, got: %+v", root)
 	}
 }
 

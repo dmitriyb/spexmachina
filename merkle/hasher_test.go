@@ -3,6 +3,7 @@ package merkle
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -39,6 +40,30 @@ func TestREQ1_HashFile_Deterministic(t *testing.T) {
 	}
 }
 
+// TestS1_HashFile_MatchesIndependentSHA256 covers test_hashing.md S1: the
+// hex string HashFile returns for a given file equals sha256Hex of that
+// file's exact content, and is exactly 64 characters long.
+func TestS1_HashFile_MatchesIndependentSHA256(t *testing.T) {
+	dir := t.TempDir()
+	content := "# Widget\nHandles widgets."
+	path := filepath.Join(dir, "arch_widget.md")
+	writeFile(t, dir, "arch_widget.md", content)
+
+	got, err := HashFile(path)
+	if err != nil {
+		t.Fatalf("HashFile: %v", err)
+	}
+
+	s := sha256.Sum256([]byte(content))
+	want := hex.EncodeToString(s[:])
+	if got != want {
+		t.Fatalf("want %s, got %s", want, got)
+	}
+	if len(got) != 64 {
+		t.Fatalf("hash length: want 64, got %d", len(got))
+	}
+}
+
 func TestREQ1_HashFile_DifferentContent(t *testing.T) {
 	dir := t.TempDir()
 	p1 := filepath.Join(dir, "a.txt")
@@ -71,6 +96,23 @@ func TestREQ1_HashFile_NonexistentFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "merkle: hash") {
 		t.Fatalf("want wrapped error, got: %v", err)
+	}
+}
+
+// TestE1_HashFile_NonexistentFile covers test_hashing.md E1: HashFile on a
+// missing path returns an error wrapping the OS error, and the message
+// contains the file path for debuggability.
+func TestE1_HashFile_NonexistentFile(t *testing.T) {
+	path := "/nonexistent/path/file.txt"
+	_, err := HashFile(path)
+	if err == nil {
+		t.Fatal("want error for nonexistent file, got nil")
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("want error wrapping os.ErrNotExist, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Fatalf("want error message to contain path %q, got: %v", path, err)
 	}
 }
 
@@ -157,6 +199,20 @@ func TestREQ6_HashChildren_DifferentSets(t *testing.T) {
 
 	if h1 == h2 {
 		t.Fatal("different child sets should produce different hashes")
+	}
+}
+
+// TestS4_HashChildren_SingleChild covers test_hashing.md S4: a single-element
+// child hash slice is a boundary case where sorting is a no-op and the
+// concatenation is trivial — the result must still equal sha256Hex of that
+// one hash.
+func TestS4_HashChildren_SingleChild(t *testing.T) {
+	got := HashChildren([]string{"abcdef1234"})
+
+	s := sha256.Sum256([]byte("abcdef1234"))
+	want := hex.EncodeToString(s[:])
+	if got != want {
+		t.Fatalf("want %s, got %s", want, got)
 	}
 }
 
