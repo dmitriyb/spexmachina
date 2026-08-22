@@ -1,6 +1,8 @@
 package merkle
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -1122,5 +1124,116 @@ func TestREQ7_BuildTree_IgnoresExtraneousFiles(t *testing.T) {
 	// Still 6 children (meta + 2 reqs + 2 comps + 1 impl), no notes.txt
 	if len(alpha.Children) != 6 {
 		t.Fatalf("alpha children: want 6, got %d (extraneous file included?)", len(alpha.Children))
+	}
+}
+
+func TestREQ2_BuildTree_ComponentWithEmptyContentFile(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	// arch_comp1.md exists but has zero bytes.
+	writeFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "")
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+	comp1Key := schema.IdentityHash("alpha", "component", "Comp1")
+	comp1 := findChild(t, alpha, comp1Key)
+
+	s := sha256.Sum256([]byte{})
+	want := hex.EncodeToString(s[:])
+	if comp1.Hash != want {
+		t.Fatalf("empty content file leaf hash: want %s, got %s", want, comp1.Hash)
+	}
+}
+
+// buildDerivationFixture builds a minimal spec directory whose single project
+// requirement carries derivationJSON verbatim after its other fields (empty
+// string for none, `, "derivation": "pending"` to add the field), and returns
+// the built tree plus the requirement's identity hash.
+func buildDerivationFixture(t *testing.T, derivationJSON string) (*Node, string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	reqID := schema.IdentityHash("project", "requirement", "Derivable req")
+	modID := schema.IdentityHash("module", "Alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+
+	proj := `{
+		"name": "test-project",
+		"requirements": [
+			{"id": "` + reqID + `", "type": "functional", "title": "Derivable req", "priority": 1` + derivationJSON + `}
+		],
+		"modules": [
+			{"id": "` + modID + `", "name": "Alpha", "path": "alpha"}
+		]
+	}`
+	writeFile(t, dir, "project.json", proj)
+
+	alphaDir := filepath.Join(dir, "alpha")
+	must(t, os.MkdirAll(alphaDir, 0755))
+	writeFile(t, alphaDir, "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+compID+`", "name": "Comp1", "content": "arch_comp1.md"}
+		]
+	}`)
+	writeFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+	return root, reqID
+}
+
+// TestREQ7_BuildTree_ProjectRequirementDerivationInvariant covers
+// test_hashing.md S9: a project requirement's leaf hash must not move when
+// `derivation` is added and later removed again (the graduation round trip),
+// because `derivation` is deliberately excluded from the project-requirement
+// field allowlist. The `meta/project` envelope leaf, hashed from
+// project.json's raw bytes, is the only key allowed to move on the
+// "pending" variant.
+func TestREQ7_BuildTree_ProjectRequirementDerivationInvariant(t *testing.T) {
+	rootNoDerivation, reqID := buildDerivationFixture(t, "")
+	rootPending, _ := buildDerivationFixture(t, `, "derivation": "pending"`)
+	rootGraduated, _ := buildDerivationFixture(t, "")
+
+	reqNoDerivation := findChild(t, rootNoDerivation, reqID)
+	reqPending := findChild(t, rootPending, reqID)
+	reqGraduated := findChild(t, rootGraduated, reqID)
+
+	if reqNoDerivation.Hash != reqPending.Hash {
+		t.Fatalf("requirement leaf hash must be invariant when derivation is added: %s != %s", reqNoDerivation.Hash, reqPending.Hash)
+	}
+	if reqNoDerivation.Hash != reqGraduated.Hash {
+		t.Fatalf("requirement leaf hash must be invariant when derivation is removed again: %s != %s", reqNoDerivation.Hash, reqGraduated.Hash)
+	}
+
+	// project.json is byte-identical before and after the graduation round
+	// trip, so every key — including the root — must match exactly.
+	if rootNoDerivation.Hash != rootGraduated.Hash {
+		t.Fatalf("root hash must match after the graduation round trip (byte-identical project.json): %s != %s", rootNoDerivation.Hash, rootGraduated.Hash)
+	}
+
+	// The "pending" variant's project.json bytes differ, so meta/project
+	// moves and carries the root with it — but nothing else does.
+	if rootNoDerivation.Hash == rootPending.Hash {
+		t.Fatal("root hash should change when derivation is added to project.json")
+	}
+	metaNoDerivation := findChild(t, rootNoDerivation, "meta/project")
+	metaPending := findChild(t, rootPending, "meta/project")
+	if metaNoDerivation.Hash == metaPending.Hash {
+		t.Fatal("meta/project leaf hash should differ when derivation is added")
+	}
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alphaNoDerivation := findChild(t, rootNoDerivation, alphaHash)
+	alphaPending := findChild(t, rootPending, alphaHash)
+	if alphaNoDerivation.Hash != alphaPending.Hash {
+		t.Fatal("alpha module hash should be unaffected by a project-level derivation field")
 	}
 }
