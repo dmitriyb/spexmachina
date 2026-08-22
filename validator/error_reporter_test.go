@@ -3,6 +3,7 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -170,6 +171,194 @@ func TestREQ7_ReportTTYIndentation(t *testing.T) {
 	}
 	if !strings.Contains(pretty.String(), "\n  ") {
 		t.Error("pretty output should contain indentation")
+	}
+}
+
+// TestREQ7_ReportSingleErrorStructure pins R2: a single ValidationError
+// round-trips through Report with every field intact.
+func TestREQ7_ReportSingleErrorStructure(t *testing.T) {
+	errs := []ValidationError{
+		{Check: "schema", Severity: "error", Path: "project.json:name", Message: "required field missing"},
+	}
+
+	var buf bytes.Buffer
+	if _, err := Report(errs, nil, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+
+	if report.Valid {
+		t.Error("want valid=false")
+	}
+	if report.ErrorCount != 1 {
+		t.Errorf("want error_count=1, got %d", report.ErrorCount)
+	}
+	if report.WarningCount != 0 {
+		t.Errorf("want warning_count=0, got %d", report.WarningCount)
+	}
+	if len(report.Errors) != 1 || report.Errors[0] != errs[0] {
+		t.Errorf("want errors=%v, got %v", errs, report.Errors)
+	}
+}
+
+// TestREQ7_ReportAggregatesMultipleCheckers pins R6: errors from every
+// checker survive aggregation, none dropped.
+func TestREQ7_ReportAggregatesMultipleCheckers(t *testing.T) {
+	checks := []string{"schema", "content", "dag", "id", "name_consistency", "test_coverage"}
+	errs := make([]ValidationError, len(checks))
+	for i, c := range checks {
+		errs[i] = ValidationError{Check: c, Severity: "error", Path: "x", Message: "bad"}
+	}
+
+	var buf bytes.Buffer
+	if _, err := Report(errs, nil, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+
+	if len(report.Errors) != len(checks) {
+		t.Fatalf("want %d entries, got %d", len(checks), len(report.Errors))
+	}
+	got := make(map[string]bool)
+	for _, e := range report.Errors {
+		got[e.Check] = true
+	}
+	for _, c := range checks {
+		if !got[c] {
+			t.Errorf("missing entry from checker %q", c)
+		}
+	}
+}
+
+// TestREQ7_ReportOutputValidJSONWithSpecialCharacters pins R7: messages
+// containing quotes, newlines and unicode still serialize as valid JSON.
+func TestREQ7_ReportOutputValidJSONWithSpecialCharacters(t *testing.T) {
+	errs := []ValidationError{
+		{Check: "schema", Severity: "error", Path: "x", Message: `has "quotes", a` + "\n" + `newline, and unicode: café 日本語`},
+	}
+
+	var buf bytes.Buffer
+	if _, err := Report(errs, nil, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("output is not valid JSON: %v", err)
+	}
+	if report.Errors[0].Message != errs[0].Message {
+		t.Errorf("want message %q, got %q", errs[0].Message, report.Errors[0].Message)
+	}
+}
+
+// TestREQ7_ReportNotesAlongsideEmptyErrors pins R10: a note with an empty
+// error list still yields valid=true and carries the note without touching
+// the verdict or counts.
+func TestREQ7_ReportNotesAlongsideEmptyErrors(t *testing.T) {
+	notes := []ValidationNote{
+		{Type: "pending_derivation", Message: "requirement pending", Related: []string{"a65bbd37c7ec"}},
+	}
+
+	var buf bytes.Buffer
+	if _, err := Report(nil, notes, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+
+	if !report.Valid {
+		t.Error("want valid=true")
+	}
+	if report.ErrorCount != 0 {
+		t.Errorf("want error_count=0, got %d", report.ErrorCount)
+	}
+	if report.WarningCount != 0 {
+		t.Errorf("want warning_count=0, got %d", report.WarningCount)
+	}
+	if len(report.Errors) != 0 {
+		t.Errorf("want empty errors, got %v", report.Errors)
+	}
+	if len(report.Notes) != 1 || !reflect.DeepEqual(report.Notes[0], notes[0]) {
+		t.Errorf("want notes=%v, got %v", notes, report.Notes)
+	}
+}
+
+// TestREQ7_ReportOmitsNotesKeyWhenEmpty pins R11: with no disclosure notes,
+// the serialized document has no "notes" key at all — a clean run emits
+// exactly the four-key document, so no existing consumer observes a change.
+func TestREQ7_ReportOmitsNotesKeyWhenEmpty(t *testing.T) {
+	tests := []struct {
+		name  string
+		errs  []ValidationError
+		notes []ValidationNote
+	}{
+		{"no errors, nil notes", nil, nil},
+		{"errors, nil notes", []ValidationError{{Check: "schema", Severity: "error", Path: "x", Message: "bad"}}, nil},
+		{"errors, empty notes slice", []ValidationError{{Check: "schema", Severity: "error", Path: "x", Message: "bad"}}, []ValidationNote{}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if _, err := Report(tt.errs, tt.notes, &buf, false); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			var raw map[string]json.RawMessage
+			if err := json.Unmarshal(buf.Bytes(), &raw); err != nil {
+				t.Fatalf("unmarshal report: %v", err)
+			}
+			if _, ok := raw["notes"]; ok {
+				t.Error("want no notes key in output, but it is present")
+			}
+			if len(raw) != 4 {
+				t.Errorf("want exactly 4 keys, got %d: %v", len(raw), raw)
+			}
+		})
+	}
+}
+
+// TestREQ7_ReportErrorsAndNotesCoexist pins R12: an error and a note in the
+// same run land in their own arrays without leaking into each other.
+func TestREQ7_ReportErrorsAndNotesCoexist(t *testing.T) {
+	errs := []ValidationError{
+		{Check: "requirement_coverage", Severity: "error", Path: "x", Message: "uncovered"},
+	}
+	notes := []ValidationNote{
+		{Type: "pending_derivation", Message: "requirement pending", Related: []string{"a65bbd37c7ec"}},
+	}
+
+	var buf bytes.Buffer
+	if _, err := Report(errs, notes, &buf, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var report ValidationReport
+	if err := json.Unmarshal(buf.Bytes(), &report); err != nil {
+		t.Fatalf("unmarshal report: %v", err)
+	}
+
+	if report.Valid {
+		t.Error("want valid=false")
+	}
+	if report.ErrorCount != 1 {
+		t.Errorf("want error_count=1, got %d", report.ErrorCount)
+	}
+	if len(report.Errors) != 1 || report.Errors[0] != errs[0] {
+		t.Errorf("want errors=%v, got %v", errs, report.Errors)
+	}
+	if len(report.Notes) != 1 || !reflect.DeepEqual(report.Notes[0], notes[0]) {
+		t.Errorf("want notes=%v, got %v", notes, report.Notes)
 	}
 }
 
