@@ -110,10 +110,31 @@ func TestFR7_ValidateCommand_ExitStatusMatchesReportValid(t *testing.T) {
 	}
 }
 
+// V12: a non-existent --spec-dir exits 1 with an error indicating
+// project.json was not found, and the output is still valid JSON.
 func TestFR7_ValidateCommand_NonexistentDir(t *testing.T) {
-	_, err := runSpex(t, "validate", "--spec-dir", "/nonexistent/spec/dir")
+	out, err := runSpex(t, "validate", "--spec-dir", "/nonexistent/spec/dir")
 	if err == nil {
 		t.Fatal("want error for nonexistent dir, got nil")
+	}
+
+	report := parseReport(t, out) // must still be valid JSON, not a panic trace
+	if report.Valid {
+		t.Fatal("want valid=false")
+	}
+	if !hasCheck(report, "schema") {
+		t.Fatalf("want a schema check error, got: %v", report.Errors)
+	}
+
+	var found bool
+	for _, e := range report.Errors {
+		if strings.Contains(e.Message, "project.json") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("want an error message indicating project.json was not found, got: %v", report.Errors)
 	}
 }
 
@@ -230,6 +251,23 @@ func TestFR7_ValidateCommand_SchemaErrorExit1(t *testing.T) {
 	}
 	if !hasCheck(report, "schema") {
 		t.Fatalf("want a schema check error, got: %v", report.Errors)
+	}
+}
+
+// V3: a component referencing a content file that does not exist exits 1
+// with a "content" check error.
+func TestFR7_ValidateCommand_ContentErrorExit1(t *testing.T) {
+	specDir := filepath.Join("..", "..", "validator", "testdata", "content_missing")
+	out, err := runSpex(t, "validate", "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error for missing content file, got nil")
+	}
+	report := parseReport(t, out)
+	if report.Valid {
+		t.Fatal("want valid=false")
+	}
+	if !hasCheck(report, "content") {
+		t.Fatalf("want a content check error, got: %v", report.Errors)
 	}
 }
 
