@@ -233,6 +233,23 @@ func TestFR7_ValidateCommand_SchemaErrorExit1(t *testing.T) {
 	}
 }
 
+// V3: a component referencing a content file that does not exist exits 1
+// with a "content" check error.
+func TestFR7_ValidateCommand_ContentErrorExit1(t *testing.T) {
+	specDir := filepath.Join("..", "..", "validator", "testdata", "content_missing")
+	out, err := runSpex(t, "validate", "--spec-dir", specDir)
+	if err == nil {
+		t.Fatal("want error for missing content file, got nil")
+	}
+	report := parseReport(t, out)
+	if report.Valid {
+		t.Fatal("want valid=false")
+	}
+	if !hasCheck(report, "content") {
+		t.Fatalf("want a content check error, got: %v", report.Errors)
+	}
+}
+
 // V4: a module dependency cycle exits 1 with a "dag" check error.
 func TestFR7_ValidateCommand_DAGCycleExit1(t *testing.T) {
 	specDir := filepath.Join("..", "..", "validator", "testdata", "dag_module_cycle")
