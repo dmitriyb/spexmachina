@@ -145,12 +145,12 @@ func TestREQ14_RC2_PendingUnderivedProducesNote(t *testing.T) {
 	if n.Type != "pending_derivation" {
 		t.Fatalf("expected type=pending_derivation, got %q", n.Type)
 	}
-	want := `project requirement 000000000001 "Feature A" declares derivation pending and is not derived into any module requirement`
+	want := `project requirement 000000000002 "Feature B" declares derivation pending and is not derived into any module requirement`
 	if n.Message != want {
 		t.Fatalf("message mismatch:\n got: %s\nwant: %s", n.Message, want)
 	}
-	if len(n.Related) != 1 || n.Related[0] != "000000000001" {
-		t.Fatalf("expected related=[000000000001], got %v", n.Related)
+	if len(n.Related) != 1 || n.Related[0] != "000000000002" {
+		t.Fatalf("expected related=[000000000002], got %v", n.Related)
 	}
 }
 
@@ -191,7 +191,7 @@ func TestREQ14_RC4_ModuleLevelLinkAdmitsNoPending(t *testing.T) {
 // requirements declared in a fixed order produce the same three notes in
 // declaration order across repeated runs.
 func TestREQ14_RC5_NotesDeterministicAndOrdered(t *testing.T) {
-	wantIDs := []string{"000000000001", "000000000002", "000000000003"}
+	wantIDs := []string{"000000000003", "000000000001", "000000000002"}
 	for run := 0; run < 2; run++ {
 		errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_pending_multiple"))
 		if len(errs) != 0 {

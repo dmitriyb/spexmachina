@@ -12,6 +12,12 @@
       "id": "000000000001",
       "priority": 1,
       "title": "Feature A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "priority": 2,
+      "title": "Feature B",
       "type": "functional",
       "derivation": "pending"
     }

@@ -9,6 +9,13 @@
   "name": "reqcov-pending-multiple",
   "requirements": [
     {
+      "id": "000000000003",
+      "priority": 3,
+      "title": "Feature C",
+      "type": "functional",
+      "derivation": "pending"
+    },
+    {
       "id": "000000000001",
       "priority": 1,
       "title": "Feature A",
@@ -19,13 +26,6 @@
       "id": "000000000002",
       "priority": 2,
       "title": "Feature B",
-      "type": "functional",
-      "derivation": "pending"
-    },
-    {
-      "id": "000000000003",
-      "priority": 3,
-      "title": "Feature C",
       "type": "functional",
       "derivation": "pending"
     }
