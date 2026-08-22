@@ -86,6 +86,17 @@ func exitCodeOf(err error) int {
 func setupTestSpec(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
+	writeValidSpecFiles(t, dir)
+	return dir
+}
+
+// writeValidSpecFiles writes a minimal fully-valid spec (one module, one
+// component, full test coverage) into an already-existing dir. Split out of
+// setupTestSpec so callers that need the spec at a specific path (e.g. under
+// a chosen working directory for default-spec-dir tests) can reuse the same
+// fixture without going through TempDir themselves.
+func writeValidSpecFiles(t *testing.T, dir string) {
+	t.Helper()
 
 	proj := `{
 		"name": "test-project",
@@ -113,8 +124,6 @@ func setupTestSpec(t *testing.T) string {
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_comp1.md", "# Comp1 architecture\n")
 	writeTestFile(t, alphaDir, "test_comp1.md", "# Comp1 tests\n")
-
-	return dir
 }
 
 func writeTestFile(t *testing.T, dir, name, content string) {
