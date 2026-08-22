@@ -650,17 +650,18 @@ func TestFR1_E8_PreqIDInProjectRequirementFails(t *testing.T) {
 	}
 }
 
-func TestFR1_E3_LargeIDValuePasses(t *testing.T) {
+// TestNFR4_E3_NumericIDAnyMagnitudeFailsProject pins that a module ID is a
+// string matching the identity-hash pattern, so a number fails on type
+// regardless of magnitude — there is no integer-id path in the format for a
+// bound to apply to.
+func TestNFR4_E3_NumericIDAnyMagnitudeFailsProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{
 		"name": "p",
-		"modules": [{"id": "002147483647", "name": "m", "path": "m/"}],
-		"requirements": [
-			{"id": "002147483647", "type": "functional", "title": "R"}
-		]
+		"modules": [{"id": 2147483647, "name": "m", "path": "m/"}]
 	}`)
-	if err != nil {
-		t.Fatalf("large ID value (2147483647) should pass validation: %v", err)
+	if err == nil {
+		t.Fatal("expected validation error for large numeric id, got nil")
 	}
 }
 
