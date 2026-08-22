@@ -389,6 +389,75 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 	})
 }
 
+func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
+	sch := compileProjectSchema(t)
+
+	t.Run("pending accepted", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
+			"requirements": [
+				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "pending"}
+			]
+		}`)
+		if err != nil {
+			t.Fatalf("derivation: \"pending\" should be accepted: %v", err)
+		}
+	})
+
+	t.Run("unknown value fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
+			"requirements": [
+				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "done"}
+			]
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for derivation: \"done\", got nil")
+		}
+	})
+
+	t.Run("empty string fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
+			"requirements": [
+				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": ""}
+			]
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for derivation: \"\", got nil")
+		}
+	})
+
+	t.Run("wrong type fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
+			"requirements": [
+				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": true}
+			]
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for derivation: true, got nil")
+		}
+	})
+
+	t.Run("field is optional", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
+			"requirements": [
+				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1}
+			]
+		}`)
+		if err != nil {
+			t.Fatalf("requirement without derivation should pass: %v", err)
+		}
+	})
+}
+
 func TestFR1_E1_EmptyOptionalArraysValidProject(t *testing.T) {
 	sch := compileProjectSchema(t)
 	err := validateProject(t, sch, `{

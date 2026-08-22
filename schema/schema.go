@@ -97,6 +97,9 @@ type Module struct {
 // Requirement represents a requirement node (used in both project.json and module.json).
 // PreqID is only used in module.json to trace derivation from project-level requirements.
 // Priority is only used in project.json (integer 0-4, optional).
+// Derivation is project-scoped only: "pending" declares a requirement not yet
+// derived into any module. A module requirement derives by construction
+// through its required preq_id, so it carries no such field.
 // IDs are 12-character hex identity hash strings.
 type Requirement struct {
 	ID          string   `json:"id"`
@@ -106,6 +109,7 @@ type Requirement struct {
 	Description string   `json:"description,omitempty"`
 	Priority    *int     `json:"priority,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`
+	Derivation  string   `json:"derivation,omitempty"`
 }
 
 // ModuleSpec represents a module.json file.
