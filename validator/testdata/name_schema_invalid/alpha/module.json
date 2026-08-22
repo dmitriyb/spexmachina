@@ -1,0 +1,9 @@
+{
+  "name": "widget",
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "Parser"
+    }
+  ]
+}
