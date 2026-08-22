@@ -108,9 +108,11 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 **Given** three copies of the fixture identical except for one project requirement: in the first it carries no `derivation` field, in the second it carries `"derivation": "pending"`, in the third the field has been removed again (the graduation edit)
 **When** `BuildTree` is called on each
 **Then** that requirement's leaf hash is identical across all three trees
-**And** the root hashes of all three trees are identical
+**And** the first and third trees are identical at every key — every leaf hash and the root — because their `project.json` files are byte-identical: the graduation round trip returns the tree it started from
+**And** the second tree differs from the first at exactly one key, `meta/project`, and therefore also at the root
+**And** every other leaf of the second tree, the requirement's own included, equals the first tree's
 
-**Rationale**: `derivation` is deliberately absent from the project-requirement field allowlist in `arch_tree_builder.md`, so declaring a gap and later graduating out of it must produce no diff entry, no impact, and no absorb entry. This is the scenario that fails if the exclusion is implemented wrongly — a serializer that hashes whatever fields it finds would move the leaf on both edits.
+**Rationale**: two rules meet in this fixture and the scenario pins both. `derivation` is deliberately absent from the project-requirement field allowlist in `arch_tree_builder.md`, so declaring a gap and later graduating out of it moves no requirement leaf — that is what fails if the exclusion is implemented wrongly, since a serializer that hashes whatever fields it finds would move the leaf on both edits. The `meta/project` envelope leaf is hashed from `project.json`'s literal bytes, so it necessarily *does* move on the `pending` variant; asserting that it is the only leaf that moves is what keeps the exclusion honest, because a `derivation` leaked into the requirement serialization would surface here as a second differing key. The root-hash equality is therefore asserted between the first and third trees rather than across all three: an assertion that all three roots agree would contradict the envelope's raw-bytes rule in the same leaf and cannot hold. What the exclusion buys is stated in `arch_tree_builder.md` — the envelope entry is `structural`, so it is filtered before matching and obliges nothing downstream.
 
 ## Edge Cases
 
