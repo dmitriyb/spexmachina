@@ -11,8 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -83,12 +85,32 @@ func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, test1Hash string) {
 	return dir, comp1Hash, test1Hash
 }
 
-func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
+// S1/S2: a freshly initialised project — the default snapshot location
+// seeded with the canonical empty tree, exactly what `spex init` writes —
+// reports every leaf as added, and the --json structure carries path,
+// type, impact, module and node_type on every entry, suitable for piping
+// to `spex plan` or `jq`. This is the only route to the everything-added
+// bootstrap output; a directory that merely lacks a snapshot file is E7's
+// not-a-project refusal, never this path.
+func TestFR4_S1_S2_DiffCommand_BootstrapAllAdded(t *testing.T) {
 	specDir := setupTestSpec(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	for _, key := range []string{"changes", "errors", "summary"} {
+		if _, ok := raw[key]; !ok {
+			t.Fatalf("JSON output missing top-level key %q, got: %s", key, out)
+		}
 	}
 
 	var result diffOutput
@@ -97,12 +119,21 @@ func TestFR4_DiffCommand_NoSnapshot_AllAdded(t *testing.T) {
 	}
 
 	if result.Summary.Total == 0 {
-		t.Fatal("expected changes when no snapshot exists")
+		t.Fatal("expected changes against an empty-tree snapshot")
 	}
 
 	for _, c := range result.Changes {
 		if c.Type != "added" {
-			t.Fatalf("all changes should be 'added' with no snapshot, got %q for %s", c.Type, c.Path)
+			t.Fatalf("all changes should be 'added' against an empty-tree snapshot, got %q for %s", c.Type, c.Path)
+		}
+		if c.Path == "" || c.Impact == "" || c.NodeType == "" {
+			t.Fatalf("every change must carry path/impact/node_type, got: %+v", c)
+		}
+		// Module is empty only for the project-level meta leaf
+		// (meta/project); every module-scoped leaf, meta/<module> included,
+		// carries a module name.
+		if c.Module == "" && c.Path != "meta/project" {
+			t.Fatalf("every change but the project-level meta leaf must carry a module, got: %+v", c)
 		}
 	}
 }
@@ -165,12 +196,19 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 		t.Fatal("expected changes after modifying a file")
 	}
 
+	if result.Summary.Total != 1 {
+		t.Fatalf("want no other leaves listed as changed, got %d: %+v", result.Summary.Total, result.Changes)
+	}
+
 	foundModified := false
 	for _, c := range result.Changes {
 		if c.Type == "modified" && c.Path == test1Hash {
 			foundModified = true
 			if c.NodeType != "test_section" {
 				t.Fatalf("want test_section node_type for %s, got %q", test1Hash, c.NodeType)
+			}
+			if c.Impact != "impl_only" {
+				t.Fatalf("want impl_only impact for %s, got %q", test1Hash, c.Impact)
 			}
 		}
 	}
@@ -332,11 +370,18 @@ func TestFR5_DiffCommand_ContractInHumanSummary(t *testing.T) {
 	}
 }
 
+// S6: --snapshot overrides the comparison target, but it does not bypass
+// the pre-flight — a custom baseline is a comparison choice, not an
+// exemption from being a project, so the default location must resolve to
+// an initialised project independent of what --snapshot points at.
 func TestFR4_DiffCommand_CustomSnapshotPath(t *testing.T) {
 	specDir := setupTestSpec(t)
 
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
 		t.Fatal(err)
 	}
 	customPath := filepath.Join(t.TempDir(), "custom-snapshot.json")
@@ -382,6 +427,9 @@ func TestFR4_DiffCommand_HumanOutput_NoChanges(t *testing.T) {
 
 func TestFR4_DiffCommand_HumanOutput_WithChanges(t *testing.T) {
 	specDir := setupTestSpec(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	out, err := runSpex(t, "diff", "--spec-dir", specDir)
 	if err != nil {
@@ -419,6 +467,9 @@ func TestFR4_E2_DiffCommand_CorruptedSnapshot(t *testing.T) {
 	}
 	if !strings.Contains(stderr, snapshotPath) {
 		t.Fatalf("stderr should name the snapshot path %q, got: %s", snapshotPath, stderr)
+	}
+	if !strings.Contains(stderr, "spex doctor") {
+		t.Fatalf("stderr should name 'spex doctor' for a broken project, got: %s", stderr)
 	}
 }
 
@@ -613,9 +664,13 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 
 func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
-	// With no snapshot, all nodes are "added" — requirements and their
-	// implementing components are both added, so no completeness errors.
+	// Against an empty-tree (bootstrap) snapshot, all nodes are "added" —
+	// requirements and their implementing components are both added, so no
+	// completeness errors.
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
 		t.Fatalf("want no error, got %v", err)
@@ -627,7 +682,7 @@ func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 	}
 
 	if result.Summary.Total == 0 {
-		t.Fatal("expected changes when no snapshot exists")
+		t.Fatal("expected changes against an empty-tree snapshot")
 	}
 	if len(result.Errors) != 0 {
 		t.Fatalf("expected no completeness errors when all nodes are added, got: %+v", result.Errors)
@@ -636,6 +691,9 @@ func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 
 func TestNFR6_DiffCommand_Deterministic(t *testing.T) {
 	specDir := setupTestSpec(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
 
 	out1, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	out2, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
@@ -1146,5 +1204,350 @@ func TestFR8_DiffCommand_MalformedJournalDegradesGently(t *testing.T) {
 	}
 	if len(result.Notes) != 1 || result.Notes[0].Type != "unverifiable_module" {
 		t.Fatalf("want exactly one unverifiable_module note, got: %+v", result.Notes)
+	}
+}
+
+// E1: a directory missing project.json is an input error (exit 1), not the
+// not-a-project refusal — the default snapshot location is present (an
+// initialised project), but the authored spec itself will not read.
+func TestFR4_E1_DiffCommand_MissingProjectJSON(t *testing.T) {
+	dir := t.TempDir()
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, exitCode := runDiff(t, "--spec-dir", dir)
+	if exitCode != 1 {
+		t.Fatalf("want exit 1 for a missing project.json, got %d\nstderr: %s", exitCode, stderr)
+	}
+	if !strings.Contains(stderr, "project.json") {
+		t.Fatalf("stderr should mention project.json, got: %s", stderr)
+	}
+}
+
+// E3: with no --spec-dir given, the root command's persistent flag default
+// ("spec/") resolves beneath the current working directory. spex diff takes
+// no positional directory argument.
+func TestFR4_E3_DiffCommand_DefaultSpecDir(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeValidSpecFiles(t, specDir)
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Chdir(tmp)
+	out, err := runSpex(t, "diff", "--json")
+	if err != nil {
+		t.Fatalf("want no error resolving the default spec/ dir, got %v\noutput: %s", err, out)
+	}
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	if result.Summary.Total != 0 {
+		t.Fatalf("expected 0 changes against the matching default-dir snapshot, got %d", result.Summary.Total)
+	}
+}
+
+// E4: --json output is pipeable — stdout carries only the JSON payload, no
+// ANSI escapes or interactive formatting.
+func TestFR4_E4_DiffCommand_Pipeable(t *testing.T) {
+	specDir := setupTestSpec(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if strings.Contains(out, "\x1b[") {
+		t.Fatalf("stdout must not contain ANSI escape codes, got: %q", out)
+	}
+	var result diffOutput
+	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
+		t.Fatalf("stdout must be exactly one JSON payload: %v\noutput: %q", err, out)
+	}
+}
+
+// E7: an uninitialised directory — no snapshot at the resolved default
+// location at all — is refused with the stable not-a-spex-project exit
+// code, distinct from 1 and 2, and reports nothing as added.
+func TestFR4_E7_DiffCommand_UninitialisedIsNotAProject(t *testing.T) {
+	specDir := setupTestSpec(t)
+
+	stdout, stderr, exitCode := runDiff(t, "--spec-dir", specDir)
+	if exitCode == 1 || exitCode == 2 {
+		t.Fatalf("want the not-a-project exit code distinct from 1 and 2, got %d", exitCode)
+	}
+	if exitCode == 0 {
+		t.Fatal("want a non-zero exit code for an uninitialised directory")
+	}
+	if exitCode != exitNotAProject {
+		t.Fatalf("want exitNotAProject (%d), got %d", exitNotAProject, exitCode)
+	}
+	if !strings.Contains(stderr, "spex init") {
+		t.Fatalf("stderr should name 'spex init', got: %s", stderr)
+	}
+	if strings.Contains(stdout, "added") {
+		t.Fatalf("nothing should be reported as added for an uninitialised directory, got: %s", stdout)
+	}
+}
+
+// writeCompleteIngestFixture writes a minimal changeset (one create op for
+// compID) and a matching complete-status receipt, so a test can drive
+// `spex ingest` the same way S8 describes: "writing a complete-status
+// receipts file and invoking spex ingest". Reconciler only processes the
+// ops it is given — it does not need to cover every leaf the diff reports
+// — so one op is enough to exercise SnapshotSaver's write path.
+func writeCompleteIngestFixture(t *testing.T, dir, compID string) (changesetPath, receiptsPath string) {
+	t.Helper()
+
+	cs := plan.Changeset{
+		Version:  plan.ChangesetVersion,
+		GitHead:  "deadbeefcafe",
+		Proposal: "test-proposal",
+		Ops: []plan.Op{{
+			OpID:         "op-0001",
+			Type:         plan.OpCreate,
+			SpecNodeKind: "component",
+			SpecNodeID:   compID,
+			Idempotency:  &plan.Idem{Label: "spex:1"},
+			Title:        "Comp1",
+		}},
+	}
+	changesetPath = filepath.Join(dir, "changeset.json")
+	writeJSON(t, changesetPath, cs)
+
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion,
+		Status:  adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{
+			OpID:        "op-0001",
+			Status:      adapters.OpStatusOk,
+			BeadID:      "bead-1",
+			WasExisting: false,
+		}},
+	}
+	receiptsPath = filepath.Join(dir, "receipts.json")
+	writeJSON(t, receiptsPath, rc)
+	return changesetPath, receiptsPath
+}
+
+// S8: the full bootstrap-then-steady-state cycle through diff alone. A
+// fresh diff reports everything added; a real ingest cycle (simulated with
+// a complete-status receipts file) writes the first snapshot; two edits
+// then show up as exactly two modified leaves; a second ingest converges
+// the snapshot; a third diff reports zero changes. Proves diff-then-ingest-
+// then-diff converges and that bootstrap and steady state share the same
+// component composition.
+func TestFR4_S8_DiffCommand_BootstrapThenSteadyStateCycle(t *testing.T) {
+	specDir, comp1Hash, _ := setupDiffTestSpec(t)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	// First diff: everything added.
+	out1, _, exit1 := runDiff(t, "--json", "--spec-dir", specDir)
+	if exit1 != 0 {
+		t.Fatalf("want exit 0 for the first (bootstrap) diff, got %d\noutput: %s", exit1, out1)
+	}
+	var r1 diffOutput
+	if err := json.Unmarshal([]byte(out1), &r1); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out1)
+	}
+	if r1.Summary.Total == 0 {
+		t.Fatal("want every leaf reported as added on the first diff")
+	}
+	for _, c := range r1.Changes {
+		if c.Type != "added" {
+			t.Fatalf("first diff should report only added changes, got %q for %s", c.Type, c.Path)
+		}
+	}
+
+	// First simulated complete ingest writes the first real snapshot.
+	runDir := t.TempDir()
+	csPath, rcPath := writeCompleteIngestFixture(t, runDir, comp1Hash)
+	if _, stderr, exit, err := runIngest(t, "--spec-dir", specDir, "--changeset", csPath, "--receipts", rcPath); err != nil {
+		t.Fatalf("first ingest: %v (exit %d)\nstderr: %s", err, exit, stderr)
+	}
+
+	// Modify both leaves.
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Changed tests\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Changed architecture\n")
+
+	// Second diff: exactly two modified leaves.
+	out2, _, exit2 := runDiff(t, "--json", "--spec-dir", specDir)
+	if exit2 != 0 {
+		t.Fatalf("want exit 0 for the second diff, got %d\noutput: %s", exit2, out2)
+	}
+	var r2 diffOutput
+	if err := json.Unmarshal([]byte(out2), &r2); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out2)
+	}
+	if r2.Summary.Total != 2 {
+		t.Fatalf("want exactly 2 modified leaves on the second diff, got %d: %+v", r2.Summary.Total, r2.Changes)
+	}
+	for _, c := range r2.Changes {
+		if c.Type != "modified" {
+			t.Fatalf("second diff should report only modified changes, got %q for %s", c.Type, c.Path)
+		}
+	}
+
+	// Second simulated complete ingest converges the snapshot.
+	if _, stderr, exit, err := runIngest(t, "--spec-dir", specDir, "--changeset", csPath, "--receipts", rcPath); err != nil {
+		t.Fatalf("second ingest: %v (exit %d)\nstderr: %s", err, exit, stderr)
+	}
+
+	// Third diff: zero changes, snapshot now matches current state.
+	out3, _, exit3 := runDiff(t, "--json", "--spec-dir", specDir)
+	if exit3 != 0 {
+		t.Fatalf("want exit 0 for the third diff, got %d\noutput: %s", exit3, out3)
+	}
+	var r3 diffOutput
+	if err := json.Unmarshal([]byte(out3), &r3); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out3)
+	}
+	if r3.Summary.Total != 0 {
+		t.Fatalf("want 0 changes on the third diff, got %d: %+v", r3.Summary.Total, r3.Changes)
+	}
+}
+
+// S5: modifying a module's module.json (the "meta" leaf) is a structural
+// change — the highest impact level. The completeness checker may also flag
+// the module's existing components as having an unchanged content leaf; that
+// is a separate concern from the impact classification this test verifies.
+func TestFR5_S5_DiffCommand_StructuralImpact(t *testing.T) {
+	specDir, _, _ := setupDiffTestSpec(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	modPath := filepath.Join(specDir, "alpha", "module.json")
+	data, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modPath, append(data, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, stderr, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 0 && exitCode != 2 {
+		t.Fatalf("want exit 0 or 2, got %d\nstdout: %s\nstderr: %s", exitCode, out, stderr)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	const metaKey = "meta/000000000001"
+	found := false
+	for _, c := range result.Changes {
+		if c.Path == metaKey {
+			found = true
+			if c.Type != "modified" {
+				t.Fatalf("want modified change for %s, got %q", metaKey, c.Type)
+			}
+			if c.Impact != "structural" {
+				t.Fatalf("want structural impact for %s, got %q", metaKey, c.Impact)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected modified change for %s, got: %+v", metaKey, result.Changes)
+	}
+}
+
+// S7: multiple leaves changed together — the JSON output lists both changes
+// individually, each carrying the owning module's name, and
+// summary.by_impact aggregates by impact level with no per-module aggregate
+// alongside it (a caller wanting a module's max impact computes it over the
+// changes array itself).
+func TestFR5_S7_DiffCommand_ModuleLevelAggregation(t *testing.T) {
+	specDir, comp1Hash, test1Hash := setupDiffTestSpec(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Changed tests\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Changed architecture\n")
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	for _, key := range []string{"changes", "errors", "summary"} {
+		if _, ok := raw[key]; !ok {
+			t.Fatalf("JSON output missing top-level key %q, got: %s", key, out)
+		}
+	}
+	for key := range raw {
+		if key != "changes" && key != "errors" && key != "summary" && key != "notes" {
+			t.Fatalf("unexpected top-level key %q — no per-module aggregate is emitted, got: %s", key, out)
+		}
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Summary.Total != 2 {
+		t.Fatalf("want exactly 2 changes, got %d: %+v", result.Summary.Total, result.Changes)
+	}
+
+	byPath := make(map[string]diffChange, len(result.Changes))
+	for _, c := range result.Changes {
+		byPath[c.Path] = c
+	}
+
+	testChange, ok := byPath[test1Hash]
+	if !ok {
+		t.Fatalf("expected change for test_section hash %s, got: %+v", test1Hash, result.Changes)
+	}
+	if testChange.Module != "alpha" {
+		t.Fatalf("want module %q for test_section change, got %q", "alpha", testChange.Module)
+	}
+
+	archChange, ok := byPath[comp1Hash]
+	if !ok {
+		t.Fatalf("expected change for component hash %s, got: %+v", comp1Hash, result.Changes)
+	}
+	if archChange.Module != "alpha" {
+		t.Fatalf("want module %q for component change, got %q", "alpha", archChange.Module)
+	}
+
+	if result.Summary.ByImpact["impl_only"] != 1 {
+		t.Fatalf("want 1 impl_only in summary.by_impact, got %+v", result.Summary.ByImpact)
+	}
+	if result.Summary.ByImpact["arch_impl"] != 1 {
+		t.Fatalf("want 1 arch_impl in summary.by_impact, got %+v", result.Summary.ByImpact)
 	}
 }

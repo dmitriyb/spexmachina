@@ -2,14 +2,25 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/validator"
 	"github.com/spf13/cobra"
 )
+
+// exitNotAProject is the stable, documented exit code for "this directory
+// was never initialised" — distinct from exit code 1 (IO/parse failure) and
+// exit code 2 (diff completed but the errors array is non-empty).
+// arch_diff_command.md assigns this finding to the lifecycle pre-flight
+// (ProjectResolver), a component that lands in a later bead of the same
+// epic (spexmachina-uiei.8); until then this command inlines the
+// uninitialised distinction against the resolved default snapshot location
+// so a never-initialised directory is refused rather than silently
+// reported as "everything added".
+const exitNotAProject = 3
 
 func newDiffCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -29,22 +40,35 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	current, err := merkle.BuildTree(specDir)
+	// Pre-flight: an uninitialised or broken project is refused before the
+	// --snapshot flag is even consulted — a custom baseline is a comparison
+	// choice, not an exemption from being a project. There is no
+	// stat-and-fall-back path: the default location is always loaded, and
+	// its absence is the uninitialised finding, never a bootstrap signal.
+	defaultSnapshotPath := filepath.Join(specDir, ".snapshot.json")
+	defaultSnapshot, err := merkle.Load(defaultSnapshotPath)
 	if err != nil {
-		return fmt.Errorf("diff: %w", err)
+		if errors.Is(err, merkle.ErrSnapshotAbsent) {
+			return &diffError{
+				code: exitNotAProject,
+				err:  fmt.Errorf("diff: not a spex project (no snapshot at %s); run 'spex init'", defaultSnapshotPath),
+			}
+		}
+		return fmt.Errorf("diff: %w; project state is broken, run 'spex doctor'", err)
 	}
 
-	snapshotPath, _ := cmd.Flags().GetString("snapshot")
-	if snapshotPath == "" {
-		snapshotPath = filepath.Join(specDir, ".snapshot.json")
-	}
-
-	var snapshot *merkle.Node
-	if _, statErr := os.Stat(snapshotPath); statErr == nil {
-		snapshot, err = merkle.Load(snapshotPath)
+	snapshotFlag, _ := cmd.Flags().GetString("snapshot")
+	snapshot := defaultSnapshot
+	if snapshotFlag != "" {
+		snapshot, err = merkle.Load(snapshotFlag)
 		if err != nil {
 			return fmt.Errorf("diff: %w", err)
 		}
+	}
+
+	current, err := merkle.BuildTree(specDir)
+	if err != nil {
+		return fmt.Errorf("diff: %w", err)
 	}
 
 	changes := merkle.Diff(current, snapshot)
