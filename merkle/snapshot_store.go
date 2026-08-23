@@ -72,20 +72,29 @@ func Save(tree *Node, path string, createdAt time.Time) error {
 	return nil
 }
 
+// ErrSnapshotAbsent is the typed error Load returns when the snapshot
+// file does not exist. It is distinguishable (via errors.Is) from every
+// other Load failure — parse errors, other I/O errors, a missing root
+// entry — so a caller can report "uninitialised or broken" rather than
+// "invalid". The empty tree that this branch once returned as a
+// forgiving default is now produced in exactly one place: the seed
+// snapshot `spex init` writes at project birth. See
+// spec/merkle/arch_snapshot_store.md, "Read vs. write call sites".
+var ErrSnapshotAbsent = errors.New("merkle: snapshot absent")
+
 // Load reads a snapshot file and reconstructs the merkle tree.
 //
-// When the snapshot file does not exist, Load returns the empty-tree
-// baseline (see EmptyTree) with a nil error. This is the contract from
-// spec/merkle/arch_snapshot_store.md: spex diff treats a missing
-// snapshot as the empty baseline so the first run on a fresh project
-// reports every leaf as "added" without a separate bootstrap step.
-// All other read failures (permission denied, I/O errors, malformed
-// JSON, missing root entry) still surface as errors.
+// Every failure is an error, absence included: when the snapshot file
+// does not exist, Load returns a nil tree and an error wrapping
+// ErrSnapshotAbsent — never a fallback tree. All other read failures
+// (permission denied, other I/O errors, malformed JSON, a missing root
+// entry, a child key with no defining entry) surface as their own
+// errors.
 func Load(path string) (*Node, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return EmptyTree(), nil
+			return nil, fmt.Errorf("merkle: load snapshot %s: %w", path, ErrSnapshotAbsent)
 		}
 		return nil, fmt.Errorf("merkle: load snapshot %s: %w", path, err)
 	}
