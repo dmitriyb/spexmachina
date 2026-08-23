@@ -29,8 +29,9 @@ func ModuleSchema() ([]byte, error) {
 	return schemaFS.ReadFile("module.schema.json")
 }
 
-// BeadMapSchema returns the raw JSON Schema bytes for one line of
-// spec/.history.jsonl, the task journal linking spec nodes to tasks.
+// BeadMapSchema returns the raw JSON Schema bytes for one line of the
+// task journal linking spec nodes to tasks, independent of where the
+// journal file lives.
 func BeadMapSchema() ([]byte, error) {
 	return schemaFS.ReadFile("bead-map.schema.json")
 }
