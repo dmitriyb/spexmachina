@@ -196,12 +196,19 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 		t.Fatal("expected changes after modifying a file")
 	}
 
+	if result.Summary.Total != 1 {
+		t.Fatalf("want no other leaves listed as changed, got %d: %+v", result.Summary.Total, result.Changes)
+	}
+
 	foundModified := false
 	for _, c := range result.Changes {
 		if c.Type == "modified" && c.Path == test1Hash {
 			foundModified = true
 			if c.NodeType != "test_section" {
 				t.Fatalf("want test_section node_type for %s, got %q", test1Hash, c.NodeType)
+			}
+			if c.Impact != "impl_only" {
+				t.Fatalf("want impl_only impact for %s, got %q", test1Hash, c.Impact)
 			}
 		}
 	}
@@ -1411,5 +1418,136 @@ func TestFR4_S8_DiffCommand_BootstrapThenSteadyStateCycle(t *testing.T) {
 	}
 	if r3.Summary.Total != 0 {
 		t.Fatalf("want 0 changes on the third diff, got %d: %+v", r3.Summary.Total, r3.Changes)
+	}
+}
+
+// S5: modifying a module's module.json (the "meta" leaf) is a structural
+// change — the highest impact level. The completeness checker may also flag
+// the module's existing components as having an unchanged content leaf; that
+// is a separate concern from the impact classification this test verifies.
+func TestFR5_S5_DiffCommand_StructuralImpact(t *testing.T) {
+	specDir, _, _ := setupDiffTestSpec(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	modPath := filepath.Join(specDir, "alpha", "module.json")
+	data, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modPath, append(data, '\n'), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	out, stderr, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 0 && exitCode != 2 {
+		t.Fatalf("want exit 0 or 2, got %d\nstdout: %s\nstderr: %s", exitCode, out, stderr)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	const metaKey = "meta/000000000001"
+	found := false
+	for _, c := range result.Changes {
+		if c.Path == metaKey {
+			found = true
+			if c.Type != "modified" {
+				t.Fatalf("want modified change for %s, got %q", metaKey, c.Type)
+			}
+			if c.Impact != "structural" {
+				t.Fatalf("want structural impact for %s, got %q", metaKey, c.Impact)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected modified change for %s, got: %+v", metaKey, result.Changes)
+	}
+}
+
+// S7: multiple leaves changed together — the JSON output lists both changes
+// individually, each carrying the owning module's name, and
+// summary.by_impact aggregates by impact level with no per-module aggregate
+// alongside it (a caller wanting a module's max impact computes it over the
+// changes array itself).
+func TestFR5_S7_DiffCommand_ModuleLevelAggregation(t *testing.T) {
+	specDir, comp1Hash, test1Hash := setupDiffTestSpec(t)
+
+	tree, err := merkle.BuildTree(specDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Changed tests\n")
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Changed architecture\n")
+
+	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(out), &raw); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+	for _, key := range []string{"changes", "errors", "summary"} {
+		if _, ok := raw[key]; !ok {
+			t.Fatalf("JSON output missing top-level key %q, got: %s", key, out)
+		}
+	}
+	for key := range raw {
+		if key != "changes" && key != "errors" && key != "summary" && key != "notes" {
+			t.Fatalf("unexpected top-level key %q — no per-module aggregate is emitted, got: %s", key, out)
+		}
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	if result.Summary.Total != 2 {
+		t.Fatalf("want exactly 2 changes, got %d: %+v", result.Summary.Total, result.Changes)
+	}
+
+	byPath := make(map[string]diffChange, len(result.Changes))
+	for _, c := range result.Changes {
+		byPath[c.Path] = c
+	}
+
+	testChange, ok := byPath[test1Hash]
+	if !ok {
+		t.Fatalf("expected change for test_section hash %s, got: %+v", test1Hash, result.Changes)
+	}
+	if testChange.Module != "alpha" {
+		t.Fatalf("want module %q for test_section change, got %q", "alpha", testChange.Module)
+	}
+
+	archChange, ok := byPath[comp1Hash]
+	if !ok {
+		t.Fatalf("expected change for component hash %s, got: %+v", comp1Hash, result.Changes)
+	}
+	if archChange.Module != "alpha" {
+		t.Fatalf("want module %q for component change, got %q", "alpha", archChange.Module)
+	}
+
+	if result.Summary.ByImpact["impl_only"] != 1 {
+		t.Fatalf("want 1 impl_only in summary.by_impact, got %+v", result.Summary.ByImpact)
+	}
+	if result.Summary.ByImpact["arch_impl"] != 1 {
+		t.Fatalf("want 1 arch_impl in summary.by_impact, got %+v", result.Summary.ByImpact)
 	}
 }

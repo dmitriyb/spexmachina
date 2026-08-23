@@ -12,13 +12,14 @@ import (
 )
 
 // exitNotAProject is the stable, documented exit code for "this directory
-// was never initialised, or its project state is broken" — distinct from
-// exitInputError (1) and exitDiffErrors (2). arch_diff_command.md assigns
-// this finding to the lifecycle pre-flight (ProjectResolver), a component
-// that lands in a later bead of the same epic (spexmachina-uiei.8); until
-// then this command inlines the uninitialised/broken distinction against
-// the resolved default snapshot location so a never-initialised directory
-// is refused rather than silently reported as "everything added".
+// was never initialised" — distinct from exit code 1 (IO/parse failure) and
+// exit code 2 (diff completed but the errors array is non-empty).
+// arch_diff_command.md assigns this finding to the lifecycle pre-flight
+// (ProjectResolver), a component that lands in a later bead of the same
+// epic (spexmachina-uiei.8); until then this command inlines the
+// uninitialised distinction against the resolved default snapshot location
+// so a never-initialised directory is refused rather than silently
+// reported as "everything added".
 const exitNotAProject = 3
 
 func newDiffCmd() *cobra.Command {
