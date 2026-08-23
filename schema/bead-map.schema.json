@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spexmachina.dev/schema/bead-map.json",
   "title": "Spex Machina Task Journal Line",
-  "description": "Schema for one line of spec/.history.jsonl, the task journal linking spec nodes to tasks. Each line is a self-contained object: a change event, the registered event that opens a proposal's lifecycle, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
+  "description": "Schema for one line of the task journal linking spec nodes to tasks, indifferent to where the journal file lives. Each line is a self-contained object: a change event, the registered event that opens a proposal's lifecycle, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
   "oneOf": [
     { "$ref": "#/$defs/changeEvent" },
     { "$ref": "#/$defs/registeredEvent" },
