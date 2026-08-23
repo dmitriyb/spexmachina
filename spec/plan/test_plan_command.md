@@ -10,7 +10,7 @@ Tests use a temporary directory containing:
 
 2. **A diff file** (or piped stdin) containing the merkle diff output — a JSON object with a `changes` array and an `errors` array, which is the document `spex diff --json` writes. A bare array is not a diff document and does not parse.
 
-3. **A journal** at `<spec-dir>/.history.jsonl`, seeding one `added` event plus `task_created` receipt per tracked node, and a `registered` event for the fixture proposal. It is the sole source of what ties a task to a spec node — the bead file below contributes status only. A malformed line is refused with `plan: read journal: map: journal line <n>: …` and exit 1.
+3. **A journal** at the fixture project's resolved location, seeding one `added` event plus `task_created` receipt per tracked node, and a `registered` event for the fixture proposal. It is the sole source of what ties a task to a spec node — the bead file below contributes status only. A malformed line is refused with `plan: read journal: map: journal line <n>: …` and exit 1.
 
 4. **A bead file** — the tracker listing, written to disk by the caller and handed over with `--beads`. There is no mock CLI and nothing on PATH: the command starts no process, so a fixture file is the whole harness. Either the wrapped envelope (`{"issues": [...]}`) or a bare array is accepted. Variants: all-open, one-closed (drives the cleanup gate), one-in_progress (drives the refusal).
 

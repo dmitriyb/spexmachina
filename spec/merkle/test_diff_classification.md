@@ -81,7 +81,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 **Then** every leaf in the current tree appears as Type=`added`
 **And** the number of changes equals the number of leaves in the current tree
 
-**Rationale**: Per `arch_diff_engine.md`, the first run (no previous snapshot) reports everything as added. This is the baseline for future diffs.
+**Rationale**: Per `arch_diff_engine.md`, the first run diffs against the empty tree and reports everything as added. The empty tree reaches the engine as an ordinary input — on a real project it is the snapshot `spex init` seeded, loaded like any other; the engine itself has no notion of a "missing" baseline, and `SnapshotStore.Load` no longer invents one.
 
 ### S7: Classify impl_only change
 

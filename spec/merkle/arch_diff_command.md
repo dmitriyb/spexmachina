@@ -4,7 +4,7 @@ CLI entry point for [[d487fc9c4fa5|`spex diff`]]. It [[f223179a540a|compares the
 
 ## Responsibilities
 
-- Resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, defaults to `<spec-dir>/.snapshot.json`), output format
+- Run the lifecycle pre-flight ([[a9aa93774cc2|ProjectResolver]]) to obtain the project context — the resolved snapshot and journal locations — refusing an uninitialised or broken project with the pre-flight's own error and exit code instead of guessing; resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, overriding the resolved location), output format
 - Build the current tree with TreeBuilder, and ask [[b2fcd9457a28|SnapshotStore]] for the previous one
 - Hand both trees to [[cb262b280963|DiffEngine]] and take back the list of changed leaves
 - Read the module identity hash → module name map off the tree TreeBuilder just built; without it the report would name each module by its identity hash instead
@@ -21,9 +21,9 @@ The fourth impact level `contract` appears on `data_flow` and `api` leaf changes
 spex diff [--snapshot path] [--json]
 ```
 
-The spec directory comes from the root command's persistent `--spec-dir`, not from a positional argument. `--snapshot` overrides where the previous snapshot is read from; left off, it is `<spec-dir>/.snapshot.json`.
+The spec directory comes from the root command's persistent `--spec-dir`, not from a positional argument. `--snapshot` overrides where the previous snapshot is read from; left off, it is the location the pre-flight resolved. The flag does not bypass the pre-flight: it replaces the baseline file within a resolved project, and an uninitialised or broken directory is refused before the flag is consulted — a custom baseline is a comparison choice, not an exemption from being a project. There is no stat-and-fall-back path: the snapshot is always loaded, and its absence surfaced as the pre-flight's uninitialised-or-broken refusal before any tree is built — the everything-added bootstrap output belongs exclusively to a project whose snapshot is the empty tree `spex init` seeded, never to a directory that merely lacks the file.
 
-The task journal at `<spec-dir>/.history.jsonl` is read and never written, and its absence is not an error — `spex diff` runs in trees that have never been ingested. It is the second identity-hash-to-name source for the removal checks: when a whole module is retired, the sweep first tries to recover the name from the spec corpus itself, and the name a journal event still carries is what answers when that recovery comes up empty. A malformed journal degrades this to `unverifiable` notes rather than failing the run — a deliberately gentler contract than the retired bead-map's hard error on a corrupt file, because the journal can strengthen detection but never block a gate. The corpus sweep skips dot-prefixed files, which is load-bearing here: the journal's own `removed` events carry exactly the names the sweep hunts, and must never count as survivors. The retired `--map` flag is gone with the file it pointed at. `--json` selects the machine-readable report; without it the same content is printed as text.
+The task journal, at its resolved location, is read and never written, and its absence is not an error — `spex diff` runs in trees that have never been ingested. It is the second identity-hash-to-name source for the removal checks: when a whole module is retired, the sweep first tries to recover the name from the spec corpus itself, and the name a journal event still carries is what answers when that recovery comes up empty. A malformed journal degrades this to `unverifiable` notes rather than failing the run — a deliberately gentler contract than the retired bead-map's hard error on a corrupt file, because the journal can strengthen detection but never block a gate. The corpus sweep skips dot-prefixed files, which is load-bearing here: the journal's own `removed` events carry exactly the names the sweep hunts, and must never count as survivors. The retired `--map` flag is gone with the file it pointed at. `--json` selects the machine-readable report; without it the same content is printed as text.
 
 ## Output
 
@@ -71,6 +71,8 @@ formats.
 - `0` — diff completed (with or without changes), no errors found.
 - `1` — IO/parse failure (missing project.json, corrupted snapshot,
   malformed JSON).
+- not a spex project — the pre-flight's own stable exit code, distinct
+  from both codes above, when the directory was never initialised.
 - `2` — diff completed but the `errors` array is non-empty. The full diff
   (changes + errors) is still emitted on stdout so the caller can read it,
   but the non-zero exit signals "do not pipe this into `spex plan`."

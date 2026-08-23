@@ -1,7 +1,7 @@
 # Bead Map Schema Tests
 
 Integration and acceptance tests for BeadMapSchema (component 4). These tests verify that the
-journal-line JSON Schema correctly accepts valid lines of `spec/.history.jsonl`, rejects invalid
+journal-line JSON Schema correctly accepts valid lines of the task journal, rejects invalid
 ones, and enforces all field constraints — one self-contained object at a time, because the
 journal has no envelope.
 

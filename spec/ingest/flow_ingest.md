@@ -17,8 +17,8 @@ digraph ingest_dispatch {
     "2b5158af774b"          [label="Reconciler\n2b5158af"];
     "f85bd2f94aeb"          [label="SnapshotSaver\nf85bd2f9"];
     "f9033352c13f"          [label="RefreshHandler\nf9033352"];
-    "spec/.history.jsonl"   [style=dashed];
-    "spec/.snapshot.json"   [style=dashed];
+    "journal (.spex/)"      [style=dashed];
+    "snapshot (.spex/)"     [style=dashed];
     "JSON summary"          [style=dashed];
 
     "changeset.json"  -> "db90eb607bcb"        [label="--changeset"];
@@ -27,10 +27,10 @@ digraph ingest_dispatch {
     "db90eb607bcb"    -> "2b5158af774b"        [label="mode: normal"];
     "db90eb607bcb"    -> "f85bd2f94aeb"        [label="mode: normal"];
     "db90eb607bcb"    -> "f9033352c13f"        [label="mode: refresh"];
-    "2b5158af774b"    -> "spec/.history.jsonl" [label="appends events + receipts"];
-    "f85bd2f94aeb"    -> "spec/.snapshot.json" [label="iff status == complete"];
-    "f9033352c13f"    -> "spec/.history.jsonl" [label="appends absorbed drift"];
-    "f9033352c13f"    -> "spec/.snapshot.json" [label="same commit"];
+    "2b5158af774b"    -> "journal (.spex/)"    [label="appends events + receipts"];
+    "f85bd2f94aeb"    -> "snapshot (.spex/)"   [label="iff status == complete"];
+    "f9033352c13f"    -> "journal (.spex/)"    [label="appends absorbed drift"];
+    "f9033352c13f"    -> "snapshot (.spex/)"   [label="same commit"];
     "db90eb607bcb"    -> "JSON summary"        [label="stdout"];
 }
 ```
@@ -52,7 +52,7 @@ disk or a stream.
    atomically.
 3. **Save the snapshot.** [[f85bd2f94aeb|SnapshotSaver]] is handed the receipts' top-level
    status. Anything but `complete` and it writes nothing and reports that it wrote nothing; on
-   `complete` it builds the current merkle tree and writes `spec/.snapshot.json` atomically.
+   `complete` it builds the current merkle tree and writes the snapshot atomically.
 4. **Report.** One JSON summary on stdout.
 
 ## Mode: refresh
@@ -62,9 +62,10 @@ additions and removals of the node types that produce no bead (requirements and 
 direction) and component *removals* — without any bead lifecycle running, and records the
 absorption in the journal. See `arch_refresh.md` for the refusal contract and the absorbable set.
 
-1. **Pre-flight.** Confirm the changeset and receipts carry no ops, and that
-   `spec/.snapshot.json` exists — it is the diff baseline, and without one every leaf would look
-   added.
+1. **Pre-flight.** Confirm the changeset and receipts carry no ops, and that the journal is
+   non-empty — the bootstrap guard: an empty journal means no cycle has ever completed, and the
+   first cycle belongs to the normal pipeline; `spex init` writes a snapshot at birth, so file
+   presence can no longer stand in for that fact.
 2. **Compute the diff.** [[f9033352c13f|RefreshHandler]] rebuilds the current merkle tree, loads
    the pre-refresh snapshot, and diffs one against the other.
 3. **Refusal gates.** Any added or removed entry the absorbable set does not cover refuses the
@@ -73,7 +74,7 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
 4. **Construct the absorption.** One change event per absorbed drift entry — before/after hashes
    off the two trees — closed by one `refresh` receipt naming those event ids, stamped with
    `--git-head` when given.
-5. **Commit.** Append to `spec/.history.jsonl` and write the new `spec/.snapshot.json` together;
+5. **Commit.** Append to the journal and write the new snapshot together;
    a failure of the second rolls the first back.
 6. **Report.** One JSON summary on stdout.
 

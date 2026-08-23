@@ -188,3 +188,23 @@ The checks that can actually fail: a resolver test asserting a legacy-layout pro
 Twenty-one beads under one epic: sixteen component leaves — thirteen modified, three new — and five test sections. No node is renamed, so nothing is delete-plus-create and no inbound link needs rewriting. Nothing is removed.
 
 Work outside the spec graph that rides with the epic: the `.gitignore` must be checked so `.spex/` is committed; `scripts/` and the CI gate resolve locations rather than naming them; and the repository documentation gains the first-run and read-only-path story described above. None of those are spec nodes, and none of them produce beads of their own.
+
+## Addendum (2026-08-22): the compatibility window is dropped
+
+Decided in the authoring session that turned this proposal into spec, before any commit or mint. The window defended a class of consumer that does not exist: the legacy layout has exactly one project on it — this repository — no binary carrying the new behaviour has been released, and the one legacy project can migrate itself inside the epic. A window nobody stands in buys nothing and costs a fallback path, a fifth requirement, and a permanent "which layout?" ambiguity in every leaf that names a location.
+
+What changes against the body above:
+
+- **"Legacy state path compatibility" is not authored.** `ProjectResolver` resolves `.spex/` and nothing else, and reports no layout. The two-absence contract — never initialised names `spex init`, broken names `spex doctor` — is unchanged; it never depended on the window. Lifecycle carries four module requirements, not five.
+- **The old paths become retired vocabulary in this change after all.** The body deferred their retirement to "the change that closes the window"; with no window, this is that change, and the sweep is owed here. That pulls into scope the leaves the body's tables deliberately excluded: `flow_hash_computation.md`'s bootstrap narrative changes for real — the Load-falls-back-to-empty-tree story it told is now false — which is one data_flow bead the body's count did not carry. The remaining mentions (three other flow leaves, a handful of test leaves, the proposal module's leaves) are path-spelling sweeps that owe no code and ride an absorb list, reviewed reason by reason in the PR.
+- **The open init-on-legacy question dissolves.** With no honoured legacy layout there is no populated legacy journal for an empty `.spex/` to shadow; the TODO recorded for it is withdrawn.
+- **Migration is a constraint on landing order, not a feature.** This repository's own state files (`spec/.snapshot.json`, `spec/.history.jsonl`, and the root `absorb.json` → `.spex/runs/`) move in the same PR that lands the no-fallback resolver: any main commit where the new binary exists but the files have not moved is self-broken. The mint for this epic still runs with the current binary against the current locations, which is fine — only the in-epic landing order matters.
+
+- **The Composable requirement is corrected in the same pass.** The spec-review over this amendment surfaced a standing contradiction the new exit code widens: project requirement `91f6f338de19` claimed "exits 0/1" while `spex diff` and `spex plan` have long exited 2 and the resolver adds the not-a-spex-project code. Its description now reads "a small set of documented codes", which obliges the implementors of its two deriving module requirements — plan's `ChangesetBuilder` (already in scope) and render's `SpecReader` and `RenderCommand` (two beads this addendum adds). The render edits also state the read-only boundary the lifecycle makes load-bearing: render reads authored spec only, never project state, and runs before `spex init` ever has.
+
+## Retired vocabulary
+
+Retired by the addendum, not the body: while the window stood, these spellings were legitimate compatibility mentions; with the window gone they are dead locations, and the lexicon sweep enforces their absence from the corpus.
+
+- `spec/.snapshot.json`
+- `spec/.history.jsonl`

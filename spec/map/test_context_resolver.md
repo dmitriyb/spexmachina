@@ -3,14 +3,15 @@
 ## Setup
 
 All scenarios use a temporary spec directory with module.json files containing components,
-test_sections, and data_flows, plus a `spec/.history.jsonl` journal for the removed-node cases.
+test_sections, and data_flows, plus a seeded journal for the removed-node cases.
 Resolution is keyed by identity hash or task id — there are no mapping records.
 
 **Fixture structure:**
 
 ```
+.spex/
+  <journal>
 spec/
-  .history.jsonl
   alpha/
     module.json       # 2 components, 1 test_section, 1 data_flow
     arch_parser.md

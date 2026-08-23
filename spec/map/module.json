@@ -1,13 +1,13 @@
 {
   "name": "map",
-  "description": "Spec-to-task correlation layer. Owns the task journal (spec/.history.jsonl), the append-only event log that links spec node identity hashes to tracker task ids — reads, folds, and the single append primitive every journal writer uses. Provides context resolution and the CLI query interface.",
+  "description": "Spec-to-task correlation layer. Owns the task journal, the append-only event log that links spec node identity hashes to tracker task ids — reads, folds, and the single append primitive every journal writer uses. Provides context resolution and the CLI query interface.",
   "requirements": [
     {
       "id": "934d627f0e90",
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Store mapping records",
-      "description": "Own the task journal (spec/.history.jsonl), one JSON object per line, append-only. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — the registered event records the opening of a proposal's lifecycle, and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). MappingStore is the journal's one writer-owner: every append — ingest's reconciliation and refresh batches, the Registrar's registered event — goes through its atomic, schema-validating append primitive; nothing writes around it. Current linkage is a fold, never a stored cache: the latest task-bearing event per node, with the epic's entry sourced from its registered event. No metadata is denormalized; names and modules are read from the event that carried them."
+      "description": "Own the task journal — one JSON object per line, append-only, living inside the .spex/ state directory at the location the lifecycle resolver answers. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — the registered event records the opening of a proposal's lifecycle, and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). MappingStore is the journal's one writer-owner: every append — ingest's reconciliation and refresh batches, the Registrar's registered event — goes through its atomic, schema-validating append primitive; nothing writes around it. Current linkage is a fold, never a stored cache: the latest task-bearing event per node, with the epic's entry sourced from its registered event. No metadata is denormalized; names and modules are read from the event that carried them."
     },
     {
       "id": "27c046dde129",
@@ -42,7 +42,7 @@
     {
       "id": "205e67ca4aad",
       "name": "MappingStore",
-      "description": "Owner of the task journal: parse, scan, fold and append spec/.history.jsonl. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node, task_created and task_retargeted alike — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store owns the journal's one append primitive — atomic write-and-rename, each line schema-validated before the write commits; ingest's reconciliation and refresh batches and the proposal Registrar's registered event all write through it, and nothing writes around it.",
+      "description": "Owner of the task journal: parse, scan, fold and append it at its resolved location. Change events and receipt events link spec node identity hashes to task ids; the fold — latest task-bearing event per node, task_created and task_retargeted alike — is the current linkage every consumer derives, never a stored cache. The node key is the same 12-char hex identity hash the merkle tree uses, so every pipeline stage looks events up by that hash with no translation. The store owns the journal's one append primitive — atomic write-and-rename, each line schema-validated before the write commits; ingest's reconciliation and refresh batches and the proposal Registrar's registered event all write through it, and nothing writes around it.",
       "content": "arch_mapping_store.md",
       "implements": [
         "934d627f0e90",

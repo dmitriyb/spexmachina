@@ -89,7 +89,7 @@
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "title": "Pure function over inputs",
-      "description": "spex plan reads the merkle diff (stdin or --diff), the tracker listing (--beads), the task journal, the spec directory, the --git-head SHA, the --proposal ref and an optional --absorb file; writes changeset.json to stdout or --out. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output. The invocation itself is a declared external surface — the api `spex plan`, provided by PlanCommand — and the declared name is the bare invocation, so the flags listed here sit behind it: adding, renaming or dropping one moves no name and is invisible to the diff. Nothing that reaches this function can carry an api node either, because an api produces no action, so no changeset op ever names one."
+      "description": "spex plan reads the merkle diff (stdin or --diff), the tracker listing (--beads), the task journal — at the location the lifecycle resolver answers — the spec directory, the --git-head SHA, the --proposal ref and an optional --absorb file, run scratch under the project state directory; writes changeset.json to stdout or --out. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output. The invocation itself is a declared external surface — the api `spex plan`, provided by PlanCommand — and the declared name is the bare invocation, so the flags listed here sit behind it: adding, renaming or dropping one moves no name and is invisible to the diff. Nothing that reaches this function can carry an api node either, because an api produces no action, so no changeset op ever names one."
     },
     {
       "id": "483fdc961d3e",
@@ -263,7 +263,7 @@
     {
       "id": "92ae9dab6d6d",
       "name": "PlanCommand",
-      "description": "CLI entry point: spex plan --proposal <ref> --git-head <sha> [--diff <file>] [--beads <file>] [--absorb <file>] [--out <file>]. Reads the merkle diff from stdin or --diff, refuses a diff that carries errors, folds the task journal at <spec-dir>/.history.jsonl and resolves the run's registration, loads the spec graph, parses the tracker listing via BeadReader and the absorb list, validates every absorb entry against the diff, withholds marked changes from matching and composes their absorbed entries, wires NodeMatcher + ActionClassifier + ChangesetBuilder, and writes changeset.json to stdout or --out. Exits 2 when a claimed (in_progress) task's node changed or an absorb entry is invalid.",
+      "description": "CLI entry point: spex plan --proposal <ref> --git-head <sha> [--diff <file>] [--beads <file>] [--absorb <file>] [--out <file>]. Reads the merkle diff from stdin or --diff, refuses a diff that carries errors, folds the task journal at its resolved location and resolves the run's registration, loads the spec graph, parses the tracker listing via BeadReader and the absorb list, validates every absorb entry against the diff, withholds marked changes from matching and composes their absorbed entries, wires NodeMatcher + ActionClassifier + ChangesetBuilder, and writes changeset.json to stdout or --out. Exits 2 when a claimed (in_progress) task's node changed or an absorb entry is invalid.",
       "content": "arch_plan_command.md",
       "implements": [
         "cf4f1ab8264a",

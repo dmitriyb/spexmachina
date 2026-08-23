@@ -12,20 +12,20 @@ digraph proposal_lifecycle {
     "changeset.json"          [style=dashed];
     "receipts.json"           [style=dashed];
     "tracker beads"           [style=dashed];
-    "spec/.history.jsonl"     [style=dashed];
-    "spec/.snapshot.json"     [style=dashed];
+    "journal (.spex/)"        [style=dashed];
+    "snapshot (.spex/)"       [style=dashed];
     "97f73ced5a02"            [label="HistoryViewer\n97f73ced"];
 
     "authored proposal"       -> "24180f55c0b4"            [label="spex register --git-head <sha>"];
-    "24180f55c0b4"            -> "spec/.history.jsonl"     [label="append registered event"];
+    "24180f55c0b4"            -> "journal (.spex/)"        [label="append registered event"];
     "24180f55c0b4"            -> "spec/proposals/<ref>.md" [label="validate sections, copy"];
     "spec/proposals/<ref>.md" -> "spec change"             [label="/spec"];
     "spec change"             -> "merkle diff"             [label="spex validate, diff"];
     "merkle diff"             -> "changeset.json"          [label="spex plan --proposal <ref>"];
     "changeset.json"          -> "tracker beads"           [label="scripts/apply-br.sh"];
     "changeset.json"          -> "receipts.json"           [label="scripts/apply-br.sh"];
-    "receipts.json"           -> "spec/.history.jsonl"     [label="spex ingest"];
-    "receipts.json"           -> "spec/.snapshot.json"     [label="spex ingest"];
+    "receipts.json"           -> "journal (.spex/)"        [label="spex ingest"];
+    "receipts.json"           -> "snapshot (.spex/)"       [label="spex ingest"];
     "tracker beads"           -> "97f73ced5a02"            [label="br list --json | spex log"];
 }
 ```
@@ -41,7 +41,7 @@ two marks rather than one. Registration writes the proposal copy and appends the
 event — through the map module's MappingStore, the journal's writer-owner — whose
 `<git_head>:<slug>` eid is what the epic's `task_created` will reference. And `spex ingest`
 appends to the task journal, and on a run the adapter
-reported complete it also rebaselines `spec/.snapshot.json` — the baseline the next `spex diff`
+reported complete it also rebaselines the snapshot — the baseline the next `spex diff`
 measures against, so a partial run deliberately leaves the old one standing.
 
 The closing edge is a pipe, not a file read. HistoryViewer never opens the journal or the

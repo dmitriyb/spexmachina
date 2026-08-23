@@ -16,7 +16,7 @@ CLI entry point for `spex render`. Generates human-readable or machine-readable 
 spex render [--format markdown|dot|json] [--slim]
 ```
 
-The spec directory comes from the root command's persistent `--spec-dir` flag; the subcommand declares no positional argument, and a stray one is a clean error rather than silently ignored. The format defaults to `markdown`. A rejected flag combination and a spec directory that will not read are the same outcome to a caller: the message goes to stderr, stdout stays empty, and the command exits 1.
+The spec directory comes from the root command's persistent `--spec-dir` flag; the subcommand declares no positional argument, and a stray one is a clean error rather than silently ignored. The format defaults to `markdown`. A rejected flag combination and a spec directory that will not read are the same outcome to a caller: the message goes to stderr, stdout stays empty, and the command exits 1. Those are the command's two documented codes — 0 success, 1 input error — and the whole of its exit surface: render reads only authored spec through SpecReader, touches no project state, and therefore never consults the lifecycle pre-flight and never emits the not-a-spex-project code. It is one of the commands that answer real questions before `spex init` has ever run.
 
 ## Declared surface
 

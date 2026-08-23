@@ -1,7 +1,9 @@
 # BeadMapSchema
 
-The journal-line JSON Schema definition. It validates each line of `spec/.history.jsonl` — the
-task journal linking spec nodes to tasks — and those line shapes are the whole of
+The journal-line JSON Schema definition. It validates each line of the task journal — the
+append-only log linking spec nodes to tasks, living in the `.spex/` state directory the lifecycle
+pre-flight resolves; the line format is the contract and is indifferent to the file's location —
+and those line shapes are the whole of
 [[f7ef8bef0ba1|what the journal may hold]]: change events, the registered event, receipt
 events, and nothing else.
 

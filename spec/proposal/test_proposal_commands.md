@@ -32,7 +32,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Exit code is 0.
 - `spec/proposals/` contains a new file with today's date and a slug derived from the proposal's H1 heading.
-- `spec/.history.jsonl` gains one `registered` event whose eid is `cafe1234:<slug>` — the flag's head feeds the eid; spex itself never calls git.
+- The journal gains one `registered` event whose eid is `cafe1234:<slug>` — the flag's head feeds the eid; spex itself never calls git.
 - Stdout reports the registered filename (e.g., `registered: spec/proposals/2026-03-10-new-change.md`).
 
 #### S2: Register with explicit spec directory
@@ -41,8 +41,8 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **When** `spex register --spec-dir /tmp/myspec input/new-change.md --git-head cafe1234` is executed.
 **Then:**
 - The proposal is copied to `/tmp/myspec/proposals/`.
-- `/tmp/myspec/.history.jsonl` gains the `registered` event — the journal follows `--spec-dir`
-  exactly as the proposals directory does.
+- That project's journal — at the location the lifecycle pre-flight resolves for it — gains the
+  `registered` event: state follows the project, exactly as the proposals directory does.
 - Exit code is 0.
 
 #### S3: Register with validation failure
@@ -52,7 +52,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Exit code is 1.
 - Stderr contains the validation error message: "proposal: cannot detect type from headings".
-- No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl`.
+- No file is created in `spec/proposals/`, and nothing is appended to the journal.
 
 #### S4: Register with missing file argument
 
@@ -252,7 +252,7 @@ same day.
 - Exit code is 1.
 - Stderr names the missing required flag; the pre-flight described in
   `arch_proposal_commands.md` refuses the run before Registrar is reached.
-- No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl` — a
+- No file is created in `spec/proposals/`, and nothing is appended to the journal — a
   headless `":<slug>"` eid never reaches the journal.
 
 ### E8: Register with a malformed `--git-head`
@@ -264,4 +264,4 @@ and a value shorter than 7 characters).
 - Exit code is 1.
 - Stderr carries the pre-flight message naming the expected form, as `spex plan` does for the same
   flag.
-- No file is created in `spec/proposals/`, and nothing is appended to `spec/.history.jsonl`.
+- No file is created in `spec/proposals/`, and nothing is appended to the journal.

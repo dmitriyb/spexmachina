@@ -4,7 +4,7 @@ Integration and acceptance tests for BeadReader and NodeMatcher. These tests ver
 
 ## Setup
 
-Scenarios split by what they exercise. S1 and S2 exercise BeadReader alone, against the shape it actually consumes: a tracker listing (`arch_bead_reader.md`'s "Input Shape"), not the task journal — BeadReader starts no process and contacts no tracker, and never touches `.history.jsonl`. S3 onward exercise NodeMatcher against journal-derived pairings, since folding the journal into pairings is `mapping.MappingStore`'s job (see `spec/map/test_mapping_store.md`), not BeadReader's.
+Scenarios split by what they exercise. S1 and S2 exercise BeadReader alone, against the shape it actually consumes: a tracker listing (`arch_bead_reader.md`'s "Input Shape"), not the task journal — BeadReader starts no process and contacts no tracker, and never touches the journal. S3 onward exercise NodeMatcher against journal-derived pairings, since folding the journal into pairings is `mapping.MappingStore`'s job (see `spec/map/test_mapping_store.md`), not BeadReader's.
 
 Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 

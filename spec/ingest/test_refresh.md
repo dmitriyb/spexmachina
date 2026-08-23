@@ -3,8 +3,8 @@
 Module integration tests for the `RefreshHandler` component (id `f9033352c13f`). Refresh mode is
 the parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering
 bead lifecycle. This test_section covers the RefreshHandler's contract end-to-end through
-`spex ingest --mode refresh`, exercised against a real fixture spec tree, a real
-`spec/.history.jsonl`, and a real `spec/.snapshot.json`. Per-method unit tests for internal
+`spex ingest --mode refresh`, exercised against a real fixture spec tree, with a real journal
+and a real snapshot at the fixture project's resolved locations. Per-method unit tests for internal
 helpers belong in `ingest/refresh_test.go` and are bundled with this component's implementation
 bead.
 
@@ -12,7 +12,7 @@ bead.
 
 - `tmpdir/` containing a complete fixture spec (project.json + module.json files + content
   leaves), a pre-seeded journal with pairings for the fixture's bead-producing nodes, and a
-  pre-seeded `spec/.snapshot.json` matching some earlier state of the fixture spec.
+  pre-seeded snapshot matching some earlier state of the fixture spec.
 - An empty changeset (`version: 3`, empty `ops`) and an empty receipts file (`version: 1`,
   empty `ops`, `status: "complete"`).
 - Helper `runIngest(args ...string) (stdout, stderr string, exitCode int)` wraps
@@ -33,7 +33,7 @@ from current files, and uses the diff between them to decide whether the run is 
 and after hashes, and one `refresh` receipt whose `absorbed` list names exactly those event ids
 **And** the receipt records the `--git-head` value when one was given, and its absence otherwise
 **And** no pre-existing journal line is altered
-**And** `spec/.snapshot.json` is rewritten to match the current spec state
+**And** the snapshot is rewritten to match the current spec state
 
 **Rationale**: the headline behavior — drift is absorbed without bead churn, and unlike the
 retired record-rewrite semantics, the absorption itself is now on the record: a refresh run is
@@ -47,7 +47,7 @@ component referenced from `alpha/module.json`) so the diff contains a non-absorb
 **Then** exit code is non-zero
 **And** stderr contains a structured error naming the added entries and the reason ("refresh mode
 does not absorb structural changes; use the normal pipeline")
-**And** `spec/.history.jsonl` and `spec/.snapshot.json` are unchanged byte-for-byte
+**And** the journal and the snapshot are unchanged byte-for-byte
 
 **Rationale**: structural changes that owe bead work must go through the normal Reconciler path.
 The fixture must add a `component`, `data_flow` or `test_section`; an added `requirement` or `api`
@@ -72,7 +72,7 @@ component whose journal pairing was already closed
 **Then** exit code is 0
 **And** the journal gains `added`/`removed` change events for each absorbed entry plus the
 `refresh` receipt naming them
-**And** `spec/.snapshot.json` is rewritten to match the current spec state
+**And** the snapshot is rewritten to match the current spec state
 
 **Rationale**: the refusal gate is a filter on node type and direction, not a blanket ban. A test
 that only exercises the refusal side would pass against an implementation that refused everything.
@@ -98,7 +98,7 @@ a state we want surfaced, not baselined.
 **Given** the fixture is byte-identical to the snapshot
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is 0, the journal is unchanged byte-for-byte (no events, and no empty refresh
-receipt either), `spec/.snapshot.json` is unchanged, and stdout indicates nothing was absorbed
+receipt either), the snapshot is unchanged, and stdout indicates nothing was absorbed
 
 **Rationale**: refresh is safe to run on a clean spec — a no-op rather than an error, a snapshot
 rewrite, or a noise line in the journal.
@@ -131,16 +131,22 @@ its receipt is what keeps that absorption accountable.
 
 ## Edge cases
 
-### Refresh against a missing pre-refresh snapshot
+### Refresh refuses on an empty journal — the bootstrap guard
 
-**Given** `spec/.snapshot.json` does not exist
+**Given** an initialised project whose snapshot is present — the empty tree init seeded, or any
+later state — but whose journal contains zero lines
 **When** `runIngest("--mode", "refresh", ...)` is called
-**Then** exit code is non-zero and stderr indicates refresh requires a pre-existing snapshot (use
-a normal-mode bootstrap run instead)
+**Then** exit code is non-zero and stderr indicates refresh requires a completed cycle (run the
+normal pipeline first)
+**And** both files are unchanged
 
-**Rationale**: refresh's diff baseline is the snapshot. Without one, every leaf looks added —
-including every component — so the structural gate would refuse anyway, but with an error naming
-the whole spec instead of the real problem.
+**Rationale**: this is the exact state the guard's re-key exists for. The guard used to ask
+"does a snapshot file exist?" as a proxy for "has a cycle ever completed?" — a proxy that
+`spex init` writing a snapshot at birth makes permanently true. It now keys on the fact it
+always wanted: the journal being empty. The stakes are modest and disclosed as such — refresh
+only absorbs added `requirement` and `api` leaves, so a real new project's added components
+would refuse the run at the structural gate regardless; the re-key turns that late refusal
+listing every added entry back into one early, clear refusal naming the real problem.
 
 ### Refresh with non-empty changeset or non-empty receipts
 
@@ -153,7 +159,7 @@ empty
 
 **Given** the snapshot write step fails (FS error simulated by an unwritable target)
 **When** `runIngest("--mode", "refresh", ...)` is called
-**Then** exit code is non-zero, `spec/.history.jsonl` is rolled back to its pre-refresh content
+**Then** exit code is non-zero, the journal is rolled back to its pre-refresh content
 (both writes are part of one atomic commit boundary), and stderr names which step failed
 
 **Rationale**: the snapshot+journal atomicity invariant must hold for refresh just as it does for

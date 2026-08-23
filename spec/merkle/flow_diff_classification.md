@@ -5,13 +5,13 @@
 ```dot
 digraph diff_classification {
     "current tree"        [style=dashed];
-    "spec/.snapshot.json" [style=dashed];
+    "snapshot (.spex/)"   [style=dashed];
     "b2fcd9457a28"        [label="SnapshotStore\nb2fcd945"];
     "cb262b280963"        [label="DiffEngine\ncb262b28"];
     "f1a672216ce9"        [label="ImpactClassifier\nf1a67221"];
     "stdout"              [style=dashed];
 
-    "spec/.snapshot.json" -> "b2fcd9457a28" [label="read"];
+    "snapshot (.spex/)"   -> "b2fcd9457a28" [label="read"];
     "b2fcd9457a28"        -> "cb262b280963" [label="stored tree"];
     "current tree"        -> "cb262b280963" [label="just built from the spec directory"];
     "cb262b280963"        -> "f1a672216ce9" [label="changed leaves, sorted by key"];
@@ -32,7 +32,7 @@ see `## Output` below.
 ## Input
 
 - Current merkle tree (just built from spec directory)
-- Stored snapshot (loaded from `spec/.snapshot.json`)
+- Stored snapshot (loaded from the snapshot file at its resolved location inside `.spex/`)
 
 ## Output
 

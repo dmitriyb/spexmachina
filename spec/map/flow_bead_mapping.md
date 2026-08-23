@@ -20,7 +20,7 @@ digraph bead_mapping {
     "scripts/apply-br.sh" [style=dashed];
     "receipts.json"       [style=dashed];
     "spex ingest"         [style=dashed];
-    ".history.jsonl"      [style=dashed];
+    "journal (.spex/)"    [style=dashed];
     "205e67ca4aad"        [label="MappingStore\n205e67ca"];
     "08909d62930b"        [label="MapCommand\n08909d62"];
 
@@ -34,7 +34,7 @@ digraph bead_mapping {
     "scripts/apply-br.sh" -> "receipts.json"       [label="br create --labels spex:<eid>"];
     "receipts.json"       -> "spex ingest"         [label="paired to its op by op_id"];
     "spex ingest"         -> "205e67ca4aad"        [label="append change events + receipts"];
-    "205e67ca4aad"        -> ".history.jsonl"      [label="atomic append; parse and fold"];
+    "205e67ca4aad"        -> "journal (.spex/)"    [label="atomic append; parse and fold"];
     "08909d62930b"        -> "205e67ca4aad"        [label="spex map get / list"];
 }
 ```
@@ -189,7 +189,7 @@ write-and-rename, so a refused batch changes nothing.
 - `was_existing`: boolean — true when the idempotency label already matched a task, in any
   status. Not applicable to retargets.
 
-### journal line shapes (spec/.history.jsonl)
+### journal line shapes (the task journal)
 
 - Change event: `event` (`added`|`removed`|`modified`), `eid`, `node`, `name`, `node_type`,
   `module`, `before`, `after`, `git_head`, `proposal`, and an optional `path` — the node's

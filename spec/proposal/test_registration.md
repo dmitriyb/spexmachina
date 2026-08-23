@@ -27,8 +27,8 @@ tmpdir/
 `valid-change.md` contains all three required change sections (Context, Proposed change, Impact expectation) with substantive placeholder content.
 
 Every `Register` call carries the fixture git head `cafe1234` — the caller-supplied head that
-feeds the registered event's eid; scenario prose omits the argument for brevity. The temp spec
-directory starts with no `spec/.history.jsonl`.
+feeds the registered event's eid; scenario prose omits the argument for brevity. The temp project
+starts freshly initialised: an empty journal, nothing registered.
 
 ## Scenarios
 
@@ -41,7 +41,7 @@ directory starts with no `spec/.history.jsonl`.
 - The slug is derived from the H1 heading of the proposal (lowercased, spaces replaced with hyphens, non-alphanumeric characters stripped).
 - The copied file's content is byte-for-byte identical to the source.
 - File permissions on the copy are 0644 (`copyFile` opens with that mode; no test asserts it).
-- `spec/.history.jsonl` gains exactly one line: a `registered` event with
+- The journal gains exactly one line: a `registered` event with
   `eid: "cafe1234:<slug>"`, `proposal: "<slug>"` (the copied file's stem), `git_head: "cafe1234"`.
 - Function returns nil error.
 

@@ -39,6 +39,8 @@ The markdown omission is worth naming plainly rather than leaving to be discover
 
 [[8d441659a190|Composable output]] is what makes handing an api on a contract rather than a courtesy. A renderer that walks only the content read from disk drops the module's entire external surface silently, which is the failure this section exists to prevent — the reader cannot signal the omission, because there is no missing file to report.
 
+The same requirement bounds what this reader may open: authored spec only — `project.json`, each `module.json`, and the content leaves they declare. SpecReader never reads the snapshot or the task journal, which is what keeps the render surface runnable in a directory `spex init` has never touched: every failure it can produce is a read or parse failure of an authored file, surfacing as the command's documented input-error exit, never as a project-state error.
+
 ## Sections Support
 
 [[d1a61942bc21|Render sections]] is served generically here: when `project.json` contains a `sections` array, SpecReader preserves both the typed envelope and the raw freeform content, and it does so without knowing any section type by name.
