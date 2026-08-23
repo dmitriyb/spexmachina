@@ -2,7 +2,7 @@
 
 Nothing in this flow is a command of its own. [[dfe1467b7a4b|TreeBuilder]] walks the spec directory
 and asks [[325f48728e04|Hasher]] for a digest at every node it creates; the tree that comes back is
-what `spex ingest` serializes into `spec/.snapshot.json`, and [[b2fcd9457a28|SnapshotStore]] is what
+what `spex ingest` serializes into the project's snapshot file, and [[b2fcd9457a28|SnapshotStore]] is what
 reads that file back. The composition is invoked *inside* `spex diff` (and inside `spex ingest`'s
 SnapshotSaver path) — there is
 no standalone `spex hash` command. This is intentional: a separate hash step
@@ -17,7 +17,7 @@ through `ingest` keeps both invariants intact.
 ```dot
 digraph hash_computation {
     "spec directory"      [style=dashed];
-    "spec/.snapshot.json" [style=dashed];
+    "snapshot (.spex/)"   [style=dashed];
     "dfe1467b7a4b"        [label="TreeBuilder\ndfe1467b"];
     "325f48728e04"        [label="Hasher\n325f4872"];
     "b2fcd9457a28"        [label="SnapshotStore\nb2fcd945"];
@@ -25,8 +25,8 @@ digraph hash_computation {
     "spec directory"      -> "dfe1467b7a4b" [label="project.json, module.json, content files"];
     "dfe1467b7a4b"        -> "325f48728e04" [label="a file path or serialized JSON fields per leaf; child digests per interior node"];
     "325f48728e04"        -> "dfe1467b7a4b" [label="leaf and interior digests"];
-    "dfe1467b7a4b"        -> "spec/.snapshot.json" [label="finished tree, serialized and written under spex ingest"];
-    "spec/.snapshot.json" -> "b2fcd9457a28" [label="read under spex diff and under spex ingest --mode refresh"];
+    "dfe1467b7a4b"        -> "snapshot (.spex/)" [label="finished tree, serialized and written under spex ingest"];
+    "snapshot (.spex/)"   -> "b2fcd9457a28" [label="read under spex diff and under spex ingest --mode refresh"];
 }
 ```
 
@@ -34,38 +34,39 @@ TreeBuilder is the one that knows the shape of the spec directory: it discovers 
 `project.json` and the leaves from each `module.json`, and it decides what gets hashed and how the
 results are grouped. Hasher is handed one file path, one byte string, or one set of child digests,
 and returns a digest — it never learns which node it just hashed. SnapshotStore is the reader of
-`spec/.snapshot.json`: `spex diff` loads the previous snapshot through it before comparing, and
+the snapshot file, at the location the lifecycle pre-flight resolves inside `.spex/`: `spex diff`
+loads the previous snapshot through it before comparing, and
 `spex ingest --mode refresh` loads it through the same path so a freshly built tree can be compared
 against it. The write is the other direction and belongs to `spex ingest`, which serializes the
 finished tree itself; no command outside `spex ingest` writes that file.
 
-## Bootstrap (no existing snapshot)
+## Bootstrap (project being born)
 
-On a fresh project there is no `spec/.snapshot.json`. The pipeline is:
+On a fresh project the snapshot exists before the first diff — `spex init`
+seeded it with the canonical empty tree. The pipeline is:
 
-1. `spex validate` — the spec has to be valid before anything hashes it.
-2. `spex diff` — Hasher and TreeBuilder build the current tree; the command finds no snapshot file,
-   never calls SnapshotStore at all, and every leaf is reported as `added`.
-3. `spex plan` — the "everything added" diff becomes a changeset.
-4. The adapter applies the changeset and writes receipts.
-5. `spex ingest` — the Reconciler appends the first journal events and the SnapshotSaver writes the *first*
-   `spec/.snapshot.json`, in the same baselining step.
+1. `spex init` — creates `.spex/` holding the empty-tree snapshot and the
+   empty journal; the one moment the empty tree is produced.
+2. `spex validate` — the spec has to be valid before anything hashes it.
+3. `spex diff` — Hasher and TreeBuilder build the current tree, SnapshotStore
+   loads the seeded empty tree, and every leaf is reported as `added`.
+4. `spex plan` — the "everything added" diff becomes a changeset.
+5. The adapter applies the changeset and writes receipts.
+6. `spex ingest` — the Reconciler appends the first journal events and the
+   SnapshotSaver writes the first *real* snapshot, in the same baselining step.
 
-The first `spex diff` invocation builds the current tree (Hasher → TreeBuilder)
-and compares it against no snapshot at all, because the command skips the
-SnapshotStore load when the file is absent. The "everything added" diff feeds the
-standard plan → adapter → ingest cycle. That ingest run's
-`SnapshotSaver` is what creates `spec/.snapshot.json`, alongside the first
-batch of journal pairings, so snapshot and journal are born consistent. It is
-also the only thing that can create it: `spex ingest` is the only command that
-writes the file at all, and its one other write path, `--mode refresh`, refuses
-to start without a pre-existing snapshot — so refresh can never be what
-bootstraps one.
+There is no skip-the-load branch anywhere in that sequence: the load always
+happens, and an uninitialised directory is refused by the lifecycle pre-flight
+before any tree is built, so the everything-added output can only mean a
+project that was deliberately born. Ingest's one other write path,
+`--mode refresh`, refuses while the journal is empty — so refresh can never be
+what completes a bootstrap.
 
-No standalone "compute and persist the tree" step is required or supported.
-Running such a step before the first ingest would write a snapshot that
-matches the current spec, which would make the next `spex diff` produce zero
-changes and the pipeline would never create the first beads.
+No standalone "compute and persist the tree" step is required or supported —
+and init deliberately is not one: it seeds the *empty* tree, never a snapshot
+of the current spec. A snapshot matching the current spec at birth would make
+the first `spex diff` produce zero changes and the pipeline would never create
+the first beads.
 
 ## Steady-state (snapshot exists)
 
@@ -75,7 +76,7 @@ Each subsequent change cycle uses the same composition:
 2. `spex diff` — TreeBuilder rebuilds the tree from the current files, SnapshotStore loads the
    previous snapshot, and DiffEngine compares the two.
 3. `spex plan` → the adapter, exactly as in bootstrap.
-4. `spex ingest` — in a normal-mode run the SnapshotSaver overwrites `spec/.snapshot.json` only when
+4. `spex ingest` — in a normal-mode run the SnapshotSaver overwrites the snapshot only when
    the receipts' top-level status is `complete`; see the ingest module for that gate.
 
 `Hasher`, `TreeBuilder`, and `SnapshotStore` are still the three components
@@ -128,10 +129,12 @@ The root Node has key `project`, type `project`, and children = [project
 envelope leaf, project requirement leaves, each module's subtree]. The root
 hash is the SHA-256 of the sorted concatenation of children hashes.
 
-### SnapshotStore.Load missing-file contract
+### SnapshotStore.Load absence contract
 
-When `spec/.snapshot.json` does not exist, `SnapshotStore.Load` returns the
-empty tree (root node with no children, root hash = SHA-256 of the empty
-string). No production caller exercises that branch: both call sites stat the
-path first, `spex diff` skipping the load and `spex ingest --mode refresh`
-refusing the run. The contract is held for library callers and for tests.
+When the snapshot file does not exist, `SnapshotStore.Load` returns a typed
+absence error — never a tree. The empty tree (root node with no children,
+root hash = SHA-256 of the empty string) is not a load-time fallback anywhere:
+it exists on disk only as the seed `spex init` writes, and it flows through
+this composition as ordinary snapshot content. A caller that meets the absence
+error is looking at an uninitialised or broken project, which is the lifecycle
+pre-flight's finding to report, not this flow's to repair.

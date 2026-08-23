@@ -21,7 +21,7 @@ root := &Node{
 }
 ```
 
-The snapshot file path is `<tmpdir>/.snapshot.json`; the production default is `<specDir>/.snapshot.json`. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so the byte-equality scenario passes a fixed `createdAt`; the rest pass `time.Now().UTC()` because they assert on decoded structure rather than bytes.
+The snapshot file path is `<tmpdir>/.snapshot.json`; in production the path is not a constant — it is the location inside `.spex/` that the lifecycle pre-flight ([[a9aa93774cc2|ProjectResolver]]) answers. `Save` takes an explicit timestamp — `Save(tree *Node, path string, createdAt time.Time)` — so the byte-equality scenario passes a fixed `createdAt`; the rest pass `time.Now().UTC()` because they assert on decoded structure rather than bytes.
 
 ## Scenarios
 
@@ -95,21 +95,22 @@ The snapshot file path is `<tmpdir>/.snapshot.json`; the production default is `
 
 ## Edge Cases
 
-### E1: Load on non-existent snapshot file returns the empty-tree baseline
+### E1: Load on non-existent snapshot file is an error
 
 **Given** a path to a snapshot file that does not exist
 **When** `Load(path)` is called
-**Then** it returns the empty-tree baseline — a root with key `project`, no children, and hash = SHA-256 of the empty input — with a nil error
+**Then** it returns a nil tree and an error identifying the snapshot as absent
+**And** the absence error is distinguishable from a parse failure, so a caller can report "uninitialised or broken" rather than "invalid"
 
-**Rationale**: The missing-file case is handled inside `Load` itself so `spex diff` can bootstrap on a fresh project without a pre-seeded snapshot: diffing the current tree against the empty baseline reports every leaf as "added". See `flow_hash_computation.md` for the full bootstrap flow.
+**Rationale**: Absence stopped meaning "empty baseline". The canonical empty tree is no longer produced inside `Load` as a forgiving default — it is produced in exactly one place, as the seed value [[f64995aaeb56|InitCommand]] writes at project birth. A missing file at read time therefore means the project was never initialised or its state is broken, and the pre-flight resolver, not a loader fallback, decides which. The first diff on a born project still reports everything as added — against the empty tree init *wrote*, not one Load invented.
 
-### E1b: Non-ENOENT read errors still fail
+### E1b: Other read errors also fail
 
 **Given** a snapshot path whose read fails for a reason other than file-not-found (e.g. permission denied)
 **When** `Load(path)` is called
 **Then** it returns a nil tree and an error wrapping the underlying I/O failure
 
-**Rationale**: Only `errors.Is(err, fs.ErrNotExist)` triggers the EmptyTree baseline. Any other read failure is a real fault that must surface, not silently degrade into a "everything added" diff. Pinned by `TestREQ3_Load_PermissionErrorStillFails`.
+**Rationale**: Every read failure surfaces; none degrades into an "everything added" diff. File-not-found yields the typed absence error of E1; any other failure wraps the underlying fault. Pinned by `TestREQ3_Load_PermissionErrorStillFails`.
 
 ### E2: Load on malformed JSON
 
@@ -139,8 +140,8 @@ The snapshot file path is `<tmpdir>/.snapshot.json`; the production default is `
 
 ### E5: Save creates parent directories if needed
 
-**Given** a snapshot path `<tmpdir>/spec/.snapshot.json` where `<tmpdir>/spec/` does not yet exist
+**Given** a snapshot path whose parent directory does not yet exist
 **When** `Save(tree, snapshotPath, createdAt)` is called
 **Then** the directory is created and the snapshot file is written successfully
 
-**Rationale**: On first run in a new project, the spec directory may exist but the snapshot subdirectory path may not. Save should not fail due to missing intermediate directories.
+**Rationale**: Save should not fail due to missing intermediate directories, whichever layout the resolved location points into.

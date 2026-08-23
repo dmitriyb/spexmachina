@@ -80,8 +80,8 @@ key is unknown to both spec and journal or a module.json is unreadable.
 its own and reads nothing, so it cannot fail for want of a journal; `get`, `list` and `context` hang
 off it and do all the work.
 
-The journal's location is a function of `--spec-dir` alone: each child reads
-`<spec-dir>/.history.jsonl` when it runs — not when the command tree is assembled — so `spex --help`
+The journal's location comes from the lifecycle pre-flight: each child resolves and reads
+the journal when it runs — not when the command tree is assembled — so `spex --help`
 touches no files and an unreadable journal is reported by the child that was asked to use it. The
 retired `--map-file` flag went with the file it pointed at; there is nothing left to point elsewhere.
 

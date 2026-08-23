@@ -19,9 +19,10 @@ Flags:
 | `--mode`      | no  | `normal` (default) or `refresh`. Selects the dispatch pathway. Any other value is an input error. |
 | `--git-head`  | no  | Refresh mode only: the commit to stamp on the refresh receipt. Normal mode ignores it — the changeset already carries its own `git_head`. |
 
-The root's persistent `--spec-dir` is read too: it is the tree the snapshot is computed from, and
-where both `spec/.snapshot.json` and the journal `spec/.history.jsonl` live. The retired `--map`
-flag is gone with the file it pointed at.
+The root's persistent `--spec-dir` is read too: it is the tree the snapshot is computed from. The
+snapshot and the journal themselves live inside the `.spex/` state directory, at the locations
+the lifecycle pre-flight ([[a9aa93774cc2|ProjectResolver]]) answers, and this command writes
+through those resolved locations rather than naming either path itself. The retired `--map` flag is gone with the file it pointed at.
 
 `--git-head` exists because refresh mode has no other source of provenance: a refresh runs on an
 empty changeset, so no `git_head` field rides in for the refresh receipt to record. The command is
@@ -89,12 +90,12 @@ Every run starts the same way and forks exactly once, on `--mode`:
    checked until both are in hand, so a changeset carrying the wrong version alongside an
    unreadable receipts path reports the receipts read failure, not the version.
 2. Run the pre-flight checks below over the loaded pair.
-3. Open the journal at `<spec-dir>/.history.jsonl` — nothing is read from it yet — then read
+3. Open the journal at its resolved location — nothing is read from it yet — then read
    `--mode` and take one of two paths. Whichever path runs performs the first read itself.
 
 **Normal.** Hand the changeset and receipts together to [[2b5158af774b|Reconciler]], which
 constructs and appends the batch's journal lines atomically; then hand the receipts' top-level
-status to [[f85bd2f94aeb|SnapshotSaver]], which writes `spec/.snapshot.json` only when that
+status to [[f85bd2f94aeb|SnapshotSaver]], which writes the snapshot only when that
 status is `complete`.
 
 **Refresh.** Hand the same journal and the two (empty) artifacts to
@@ -125,7 +126,10 @@ comes back into one JSON summary and one exit code.
 ### Mode: refresh
 
 - Both changeset and receipts must have an empty `ops` array.
-- `spec/.snapshot.json` must exist (refresh's diff baseline).
+- The journal must be non-empty — the bootstrap guard: refresh absorbs drift between cycles, and
+  an empty journal means no cycle has ever completed; the first cycle belongs to the normal
+  pipeline. The guard reads the journal, not snapshot presence, which `spex init` makes
+  permanently true.
 
 If any pre-flight check fails, exit 1 without touching the journal or snapshot.
 
@@ -172,8 +176,9 @@ computes against a stale baseline while the journal already moved forward.
   on the way in as well as before every append, so a file that violates the schema ends the run
   with the file untouched. Which exit code that is depends on where the read sits: in normal mode
   the first read happens inside reconciliation, so the failure takes the invariant code `2`; in
-  refresh mode it is an input error and exits `1`. An absent journal is not an error — it simply
-  starts empty.
+  refresh mode it is an input error and exits `1`. An absent journal file does not occur on a
+  resolved project — `spex init` creates it empty at birth, and a project whose journal has gone
+  missing is refused by the lifecycle pre-flight as broken, naming `spex doctor`.
 - [[20589ccf7072|Does NOT invoke git, a tracker, or any other subprocess in either mode]]. Both
   inputs and both file outputs are local files; besides them the run writes its JSON summary to
   stdout and, on failure, an error line to stderr.

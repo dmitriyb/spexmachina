@@ -1,6 +1,6 @@
 # SnapshotSaver
 
-[[cf47671793fa|Writes `spec/.snapshot.json` with the current merkle tree **iff** the receipts' top-level status is `complete`]]. Partial runs leave the snapshot file untouched so the next plan run recomputes against the same baseline.
+[[cf47671793fa|Writes the snapshot, at its resolved location, with the current merkle tree **iff** the receipts' top-level status is `complete`]]. Partial runs leave the snapshot file untouched so the next plan run recomputes against the same baseline.
 
 ## Responsibilities
 
@@ -11,15 +11,15 @@
 
 ## Interface
 
-The saver is configured with two paths: the spec directory it hashes, and the snapshot file it writes. Both carry defaults — the spec root when the directory is unset, and `.snapshot.json` inside that directory when the path is unset. The shipped command sets only the directory, to whatever `--spec-dir` resolved to, so the snapshot lands beside the spec it describes.
+The saver is configured with two paths: the spec directory it hashes, and the snapshot file it writes. The shipped command sets the snapshot path to the location inside `.spex/` that the lifecycle pre-flight resolved, so this writer computes no location of its own.
 
 One call hands it the run's top-level status. It answers whether it wrote, or it fails. It is never told *what* to write: the tree is computed from the spec directory as it stands at the moment of the call.
 
 ## Gate Logic
 
-Any status other than `complete` skips the write and reports that nothing was written. Nothing is read and no tree is built on that path — the previous `spec/.snapshot.json` is left byte-for-byte as it was. Only on `complete` does this component compute and write the current merkle tree.
+Any status other than `complete` skips the write and reports that nothing was written. Nothing is read and no tree is built on that path — the previous snapshot is left byte-for-byte as it was. Only on `complete` does this component compute and write the current merkle tree.
 
-That gate governs this write path, not the file. `spex ingest --mode refresh` reaches the same `spec/.snapshot.json` through [[f9033352c13f|RefreshHandler]], which never calls this component's status gate — though it does share the temp-file-plus-rename writer described under "Atomic Write" — and has a gate of its own: an empty changeset, an empty receipts file, and a pre-existing snapshot, after which it writes only if something drifted. A refresh over an already-current spec succeeds, reports `snapshot_saved` false, and leaves the file byte-identical. A reader tracing who moves the snapshot must count both paths.
+That gate governs this write path, not the file. `spex ingest --mode refresh` reaches the same snapshot file through [[f9033352c13f|RefreshHandler]], which never calls this component's status gate — though it does share the temp-file-plus-rename writer described under "Atomic Write" — and has a gate of its own: an empty changeset, an empty receipts file, and a non-empty journal (the bootstrap guard — a cycle must have completed), after which it writes only if something drifted. A refresh over an already-current spec succeeds, reports `snapshot_saved` false, and leaves the file byte-identical. A reader tracing who moves the snapshot must count both paths.
 
 The two paths also differ in where their provenance comes from. On this component's path the receipts answer to a changeset that carries its own `git_head`, so the saver needs no commit input of its own; the refresh path's empty changeset carries none, which is why the command surface grew a refresh-only `--git-head` for the operator to supply — stamped on the refresh receipt, never consumed here.
 
@@ -35,7 +35,7 @@ This is the "unfinished operations resurface through the idempotency path" mecha
 
 ## Atomic Write
 
-The snapshot is encoded in full by the `merkle` module, written to a temp file beside the destination, flushed, and only then renamed into place. Rename is atomic on POSIX filesystems for a same-device move, so a reader of `spec/.snapshot.json` sees either the previous snapshot or the new one and never a splice of the two. [[ffab5d1337ac|The destination is never opened for truncation and rewritten in place]].
+The snapshot is encoded in full by the `merkle` module, written to a temp file beside the destination, flushed, and only then renamed into place. Rename is atomic on POSIX filesystems for a same-device move, so a reader of the snapshot file sees either the previous snapshot or the new one and never a splice of the two. [[ffab5d1337ac|The destination is never opened for truncation and rewritten in place]].
 
 Flushing before the rename is what carries that guarantee across a crash: the bytes are on disk before the name points at them, so a crash immediately after the rename cannot leave a snapshot that is empty or half-written.
 
@@ -48,5 +48,5 @@ Inherited from the `merkle` module, and not just in shape: the bytes are the one
 ## Non-Responsibilities
 
 - Does NOT decide which ops to reconcile — that's `Reconciler`'s job.
-- Does NOT touch the journal `spec/.history.jsonl` — separate concern, appended by Reconciler and RefreshHandler.
+- Does NOT touch the journal — separate concern, appended by Reconciler and RefreshHandler.
 - Does NOT clean up stale `.tmp` files from prior crashes — startup-time cleanup is a separate operational concern (not tracked here).

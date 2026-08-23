@@ -42,7 +42,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Define bead-map schema",
-      "description": "JSON Schema for the task journal's line format (spec/.history.jsonl): change events (event drawn from added/removed/modified, eid, node, name, node_type, module, before/after leaf hashes admitting null, git_head, proposal), the registered event that opens a proposal's lifecycle (eid of the form <git_head>:<slug>, proposal slug, git_head — no node field, because registration precedes any spec change), and receipt events (task_created/task_closed/task_retargeted with task_id and a for referencing an eid; refresh with git_head and an absorbed list of eids). The node field is constrained to the 12-hex identity hash pattern — the same key the merkle tree files that node's leaf under, so the two sides need no translation. A task_created carrying a proposal slug instead of for is admitted as a legacy shape: pre-migration epic lines validate as inert history, but every newly appended task_created references an eid — epics reference their registered event. Each line validates independently; there is no envelope, no counter, and no integer id anywhere in the format."
+      "description": "JSON Schema for the task journal's line format — the format is the contract, indifferent to the file's location, which the lifecycle resolver answers: change events (event drawn from added/removed/modified, eid, node, name, node_type, module, before/after leaf hashes admitting null, git_head, proposal), the registered event that opens a proposal's lifecycle (eid of the form <git_head>:<slug>, proposal slug, git_head — no node field, because registration precedes any spec change), and receipt events (task_created/task_closed/task_retargeted with task_id and a for referencing an eid; refresh with git_head and an absorbed list of eids). The node field is constrained to the 12-hex identity hash pattern — the same key the merkle tree files that node's leaf under, so the two sides need no translation. A task_created carrying a proposal slug instead of for is admitted as a legacy shape: pre-migration epic lines validate as inert history, but every newly appended task_created references an eid — epics reference their registered event. Each line validates independently; there is no envelope, no counter, and no integer id anywhere in the format."
     },
     {
       "id": "581178718888",
@@ -108,7 +108,7 @@
     {
       "id": "d125b5e775b4",
       "name": "BeadMapSchema",
-      "description": "The journal-line JSON Schema definition for spec/.history.jsonl. Defines the change-event, registered-event and receipt-event shapes the task journal admits, one self-contained object per line.",
+      "description": "The journal-line JSON Schema definition for the task journal. Defines the change-event, registered-event and receipt-event shapes the journal admits, one self-contained object per line, independent of where the journal file lives.",
       "content": "arch_bead_map_schema.md",
       "implements": [
         "f7ef8bef0ba1"

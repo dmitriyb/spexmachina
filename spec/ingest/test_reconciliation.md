@@ -6,7 +6,7 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
 
 - In-code Go fixtures, no on-disk testdata: helpers in `ingest/reconciler_test.go` build each
   changeset/receipts pair and seed a temporary journal.
-- Tests write an initial `spec/.history.jsonl`, run reconciliation, and assert the appended lines
+- Tests write an initial journal file, run reconciliation, and assert the appended lines
   match expected — by parsing, never by byte comparison, since field order inside a line is the
   encoder's business.
 

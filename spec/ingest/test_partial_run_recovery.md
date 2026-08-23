@@ -16,7 +16,7 @@ run completes the work.
    - The journal holds change events and `task_created` receipts for A and B, and the removed
      node's `removed` event with its `task_closed`.
    - No event or receipt for C — an error-status op appends nothing.
-   - `spec/.snapshot.json` is unchanged (partial → not saved).
+   - The snapshot is unchanged (partial → not saved).
    - Exit code 0 (partial is not a failure, it's just a status to record).
 
 ## Run 2 Scenario
@@ -60,7 +60,7 @@ re-run. Expected: the pairing lands normally; no error; no duplicate task in the
 
 ## Snapshot Correctness
 
-Invariant: after Run 2 (complete), `spec/.snapshot.json` corresponds EXACTLY to the spec tree
+Invariant: after Run 2 (complete), the snapshot — at its resolved location — corresponds EXACTLY to the spec tree
 state at that moment. Nothing stale from Run 1.
 
 Assertion: parse the written snapshot, compare merkle root hash to an independently-computed value

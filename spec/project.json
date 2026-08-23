@@ -83,7 +83,7 @@
       "id": "91f6f338de19",
       "type": "non_functional",
       "title": "Composable",
-      "description": "Every subcommand reads stdin or files, writes stdout or files, exits 0/1. Pipeable.",
+      "description": "Every subcommand reads stdin or files, writes stdout or files, and exits with a small set of documented codes: 0 is success, and every non-zero code is documented by the surface that owns it — input error, contract refusal, diff errors present, not a spex project. A caller branches on the code, never by grepping a message. Pipeable.",
       "priority": 2
     },
     {
@@ -144,7 +144,7 @@
       "id": "96c6c15ecc3e",
       "type": "non_functional",
       "title": "Declared stack",
-      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the journal lines of spec/.history.jsonl; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
+      "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the task journal's lines; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
       "priority": 2
     },
     {
@@ -159,6 +159,13 @@
       "type": "functional",
       "title": "Installable and self-updating",
       "description": "Pre-built signed binaries for linux and macOS (amd64, arm64), installable via a verified install script and go install, and updatable in place with spex upgrade.",
+      "priority": 1
+    },
+    {
+      "id": "2574f0fdcef2",
+      "type": "functional",
+      "title": "Project initialization and health",
+      "description": "A spex project has a declared state directory holding what the tool writes, created by an explicit init command — never implicitly, and never as a side effect of a read command. Absence of that state is an error rather than a fallback, distinguishing a project that was never initialised from one that is broken. The project's condition is diagnosable without repair: a doctor command reports what is present, missing or unreadable and names the command that would fix each finding, but never mints or moves a baseline.",
       "priority": 1
     }
   ],
@@ -244,10 +251,20 @@
       "id": "fb20a21b62f1",
       "name": "map",
       "path": "map",
-      "description": "Spec-to-bead correlation layer. Owns access to the task journal (spec/.history.jsonl) that links spec node identity hashes to task ids. Provides journal folds, context resolution, and the CLI query interface.",
+      "description": "Spec-to-bead correlation layer. Owns access to the task journal that links spec node identity hashes to task ids. Provides journal folds, context resolution, and the CLI query interface.",
       "requires_module": [
         "f03774b40bd5",
         "085966b6bfa1"
+      ]
+    },
+    {
+      "id": "4d1f62b99b8d",
+      "name": "lifecycle",
+      "path": "lifecycle",
+      "description": "Project identity and lifecycle: owns the on-disk contract of what a spex project is — the .spex/ state directory holding the snapshot and the task journal — the explicit init and doctor commands over it, and the single pre-flight resolver every subcommand calls.",
+      "requires_module": [
+        "085966b6bfa1",
+        "fb20a21b62f1"
       ]
     },
     {

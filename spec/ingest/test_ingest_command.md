@@ -5,7 +5,7 @@ End-to-end tests for `spex ingest`.
 ## Setup
 
 - In-code fixtures, no on-disk testdata: `cmd/spex/ingest_test.go` writes each changeset/receipts
-  pair and the initial `spec/.history.jsonl` into a `t.TempDir()`.
+  pair and the initial journal (at the fixture project's resolved location) into a `t.TempDir()`.
 - Tests invoke the binary via the standard harness.
 
 ## Scenarios
@@ -13,7 +13,7 @@ End-to-end tests for `spex ingest`.
 ### Happy path: complete run
 
 - `spex ingest --changeset changeset.json --receipts receipts.json`
-- Expected: exit 0; the journal gains the batch's change events and receipts; spec/.snapshot.json
+- Expected: exit 0; the journal gains the batch's change events and receipts; the snapshot
   rewritten; stdout is a JSON summary (`{"ok": N, "skipped": M, "errors": 0,
   "events_appended": …, "receipts_appended": …, "snapshot_saved": true, "status": "complete"}`).
 
@@ -58,7 +58,7 @@ End-to-end tests for `spex ingest`.
 ### Re-run idempotency
 
 - Run ingest; run ingest again with the same inputs.
-- Expected: second run exits 0 with the same summary counts; `spec/.history.jsonl` byte-identical
+- Expected: second run exits 0 with the same summary counts; the journal byte-identical
   after the second run; snapshot unchanged.
 
 ### Unknown --mode value

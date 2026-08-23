@@ -41,8 +41,9 @@ A `node_type` that none of those five rules names gets no level at all and is re
 on the change's own line in both output formats, and in the JSON summary's per-impact counts.
 TreeBuilder never produces such a type, because it stamps every leaf it creates with one of the node
 types the rules already cover. It is reachable anyway: a removed leaf takes its node type from the
-snapshot side rather than from the current tree, and node types load out of `spec/.snapshot.json`
-verbatim, so a foreign or hand-edited snapshot can carry a type no spec directory would produce.
+snapshot side rather than from the current tree, and node types load out of the snapshot file
+verbatim — whichever resolved location it lives at — so a foreign or hand-edited snapshot can
+carry a type no spec directory would produce.
 
 ## Call site
 

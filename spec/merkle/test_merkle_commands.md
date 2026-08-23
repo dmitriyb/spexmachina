@@ -36,27 +36,28 @@ the command execution.
 
 ## Scenarios
 
-### S1: `spex diff` on fresh project (no snapshot) reports every leaf as added
+### S1: `spex diff` on a freshly initialised project reports every leaf as added
 
-**Given** the full fixture directory with no existing `spec/.snapshot.json`
+**Given** the full fixture directory, initialised — the state directory exists,
+seeded with the empty-tree snapshot and the empty journal
 **When** `runDiff(tmpdir)` is called
 **Then** exit code is 0
 **And** stdout lists every spec leaf (component, data_flow, test_section,
 requirement, meta) as `added`
 **And** every change carries an impact classification consistent with its node type
 
-**Rationale**: This is the bootstrap entry point — the first diff after `spex
-validate` on a fresh project. `SnapshotStore.Load` returns the empty tree when
-the snapshot file is absent (per the contract in `flow_hash_computation.md`),
-so the diff reports the entire spec as new. This drives the first
-plan → adapter → ingest cycle that creates the initial journal and
-writes the first snapshot. Replaces what an earlier draft of the pipeline
-attempted with a separate `spex hash` step. Exercises Hasher, TreeBuilder,
+**Rationale**: This is the bootstrap entry point — the first diff after
+`spex init` and `spex validate` on a project being born. The everything-added
+output comes from diffing against the empty tree init *seeded*, not from a
+loader fallback: `SnapshotStore.Load` errors on an absent snapshot, and an
+uninitialised directory is refused outright (E7). This drives the first
+plan → adapter → ingest cycle that appends the first journal events and
+writes the first real snapshot. Exercises Hasher, TreeBuilder,
 SnapshotStore, DiffEngine, and ImpactClassifier end-to-end.
 
 ### S2: `spex diff --json` outputs structured JSON with full snapshot view
 
-**Given** the full fixture directory with no existing snapshot
+**Given** the full fixture directory, freshly initialised
 **When** `runDiff(tmpdir, "--json")` is called
 **Then** exit code is 0
 **And** stdout is valid JSON
@@ -114,7 +115,7 @@ most downstream work (new beads, new journal pairings).
 
 **Given** the fixture directory and a snapshot file saved at a custom path `/tmp/custom-snapshot.json`
 **When** `runDiff(tmpdir, "--snapshot", "/tmp/custom-snapshot.json")` is called
-**Then** the diff is computed against the custom snapshot, not the default `spec/.snapshot.json`
+**Then** the diff is computed against the custom snapshot, not the resolved default inside `.spex/`
 
 **Rationale**: The `--snapshot` flag (from `arch_diff_command.md`) allows
 comparing against any previous state, not just the most recent snapshot.
@@ -138,7 +139,7 @@ per-module impact views.
 
 ### S8: Full bootstrap-then-steady-state cycle through diff alone
 
-**Given** a clean fixture directory with no snapshot
+**Given** a freshly initialised fixture directory
 **When** `runDiff(tmpdir)` is called (reports everything as added)
 **And** the plan + adapter + ingest cycle runs against that diff
 (simulated by writing a complete-status receipts file and invoking
@@ -169,10 +170,12 @@ steady-state share the same component composition. There is no separate
 
 ### E2: `spex diff` on corrupted snapshot
 
-**Given** a `spec/.snapshot.json` file containing invalid JSON
+**Given** an initialised project whose snapshot file contains invalid JSON
 **When** `runDiff(tmpdir)` is called
-**Then** exit code is non-zero (1)
-**And** stderr reports a snapshot parse error with the file path
+**Then** exit code is non-zero
+**And** stderr reports a snapshot parse error with the file path and names
+`spex doctor` — the state directory exists, so this is a broken project,
+never a "run init" situation
 
 ### E3: `spex diff` with no arguments defaults to current directory
 
@@ -230,3 +233,19 @@ labels the same entries with `error:`, not `warning:`
 synonyms — both call CompletenessChecker findings errors. A future
 implementation that drifts back to `warning:` in text or `warnings:` in JSON
 fails this test.
+
+### E7: `spex diff` on an uninitialised directory is a not-a-project error
+
+**Given** a fixture directory that was never initialised — no `.spex/` state
+directory
+**When** `runDiff(tmpdir)` is called
+**Then** the exit code is the stable, documented not-a-spex-project code —
+distinct from 1 (input error) and 2 (diff carrying errors)
+**And** stderr names `spex init`
+**And** nothing is reported as added
+
+**Rationale**: The check that can actually fail, and the ambiguity this
+lifecycle exists to remove: before it, a never-initialised project and a
+properly initialised one whose first cycle had not run printed identical
+everything-added output, and piping either into `spex plan` minted a full task
+set. A read command refuses rather than guesses — and writes nothing.

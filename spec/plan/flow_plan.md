@@ -22,8 +22,8 @@ digraph plan_position {
     "scripts/apply-br.sh" [style=dashed];
     "receipts.json"       [style=dashed];
     "3589714e50f8"        [label="spex ingest\n3589714e"];
-    "spec/.history.jsonl" [style=dashed];
-    "spec/.snapshot.json" [style=dashed];
+    "journal (.spex/)"    [style=dashed];
+    "snapshot (.spex/)"   [style=dashed];
 
     "spec change"         -> "528f91e5fb7d"        [label="gate"];
     "528f91e5fb7d"        -> "d487fc9c4fa5";
@@ -32,8 +32,8 @@ digraph plan_position {
     "changeset.json"      -> "scripts/apply-br.sh" [label="stdin or $1"];
     "scripts/apply-br.sh" -> "receipts.json"       [label="writes"];
     "receipts.json"       -> "3589714e50f8";
-    "3589714e50f8"        -> "spec/.history.jsonl" [label="appends events + receipts"];
-    "3589714e50f8"        -> "spec/.snapshot.json" [label="iff status == complete"];
+    "3589714e50f8"        -> "journal (.spex/)"    [label="appends events + receipts"];
+    "3589714e50f8"        -> "snapshot (.spex/)"   [label="iff status == complete"];
 }
 ```
 
@@ -60,7 +60,7 @@ digraph plan_internals {
     "merkle diff"    [style=dashed];
     "beads.json"     [style=dashed];
     "absorb.json"    [style=dashed];
-    "spec/.history.jsonl" [style=dashed];
+    "journal (.spex/)"    [style=dashed];
     "spec dir"       [style=dashed];
     "9f1578d7af6d"   [label="BeadReader\n9f1578d7"];
     "972faea162a6"   [label="NodeMatcher\n972faea1"];
@@ -75,7 +75,7 @@ digraph plan_internals {
     "beads.json"     -> "9f1578d7af6d"  [label="--beads"];
     "9f1578d7af6d"   -> "92ae9dab6d6d"  [label="live status, joined by task id"];
     "merkle diff"    -> "92ae9dab6d6d"  [label="stdin or --diff"];
-    "spec/.history.jsonl" -> "92ae9dab6d6d"  [label="parse + fold, read only"];
+    "journal (.spex/)"    -> "92ae9dab6d6d"  [label="parse + fold, read only"];
     "92ae9dab6d6d"   -> "972faea162a6"  [label="changes + enriched pairings;\nmarked and tombstones withheld"];
     "972faea162a6"   -> "8aa1ab5ac102"  [label="matched, unmatched, orphaned"];
     "spec dir"       -> "8aa1ab5ac102"  [label="uses, requires_module, describes"];
@@ -102,7 +102,7 @@ digraph plan_internals {
    listing — the only tracker state in the run, a file the caller supplied,
    never a command this binary ran — and each bead's live status is joined onto
    the fold's pairing whose task id matches, in memory on the way past: this
-   flow reads `spec/.history.jsonl` and never writes it.
+   flow reads the journal at its resolved location and never writes it.
 3. **Match.** [[972faea162a6|NodeMatcher]] joins the enriched pairings to the
    diff's changes on identity hash and splits the result three ways.
 4. **Classify.** [[8aa1ab5ac102|ActionClassifier]] turns the three lists into

@@ -16,7 +16,7 @@ Composes `changeset.json` v3 from the classified actions, the spec graph, the ta
 
 ## Interface
 
-The builder is set up once per run from six values that do not change while it runs — the spec graph, the journal fold, the run's registration, the git HEAD SHA, the proposal ref and the composed absorbed entries — and is then handed exactly one batch of classified actions. It answers with one v3 changeset or with an error, never with both.
+The builder is set up once per run from six values that do not change while it runs — the spec graph, the journal fold, the run's registration, the git HEAD SHA, the proposal ref and the composed absorbed entries — and is then handed exactly one batch of classified actions. It answers with one v3 changeset or with an error, never with both. Every one of those six arrives finished: the fold, the registration and the absorbed entries were read by PlanCommand from the journal and absorb file at their resolved locations, so the builder is indifferent to where the project keeps its state — the lifecycle module's location resolution is invisible from here, and no relocation of the state directory can reach into the composition.
 
 The document it answers with carries five top-level fields in this order: the schema version (always `3`), the git HEAD, the proposal ref, the ordered op list, and the absorbed array.
 

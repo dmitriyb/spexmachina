@@ -4,7 +4,8 @@ Tests for the five journal invariants the ingest module enforces at baselining. 
 scenarios construct a state that SHOULD violate an invariant and assert that reconciliation rejects
 it with a specific error; the snapshot-gate scenarios assert the gate behaves on both partial and
 complete runs; and the Happy Path scenario asserts the positive integrated property that a clean
-complete run leaves `spec/.history.jsonl` AND the snapshot both updated and schema-valid.
+complete run leaves the journal AND the snapshot both updated and schema-valid — both at the
+locations the lifecycle resolver answered for the fixture project.
 
 ## The Five Invariants
 
@@ -53,7 +54,7 @@ scenarios below include one that proves the replacement holds.
 ### Invariant 4: partial → snapshot not saved
 
 - Receipts top-level status is partial. Reconciler appends events for the ok ops.
-- Expected: spec/.snapshot.json is unchanged on disk (assert via content equality against the
+- Expected: the snapshot is unchanged on disk (assert via content equality against the
   pre-run baseline); the journal carries the ok ops' events — the two artifacts may legitimately
   diverge only in this direction and only until the completing re-run.
 
@@ -109,7 +110,7 @@ writes.
 ## Happy Path
 
 - Full complete run with 5 ok creates and 3 ok closes — 2 of the creates paired with 2 of the closes as modify pairs, the third close a removal.
-  All invariants pass. `spec/.history.jsonl` gains exactly the expected events and receipts,
+  All invariants pass. The journal gains exactly the expected events and receipts,
   the snapshot is rewritten, and every appended line validates against the journal-line schema.
 
 ## Fixtures

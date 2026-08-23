@@ -18,13 +18,13 @@ RootCommand is what [[0d7b10a39eb0|Root command and subcommand registration]] as
 
 Every subcommand is defined in the `cmd/spex` package — one file per command (`cmd/spex/diff.go`, `cmd/spex/plan.go`, `cmd/spex/ingest.go`, and so on), each exporting nothing and providing an unexported constructor of its own. The worker packages hold no command definitions at all.
 
-Wiring happens in `cmd/spex/main.go`, which builds the root and attaches all twelve constructors in a single registration call, in this order: `hash-id`, `diff`, `validate`, `plan`, `map`, `register`, `log`, `template`, `version`, `render`, `ingest`, `upgrade`.
+Wiring happens in `cmd/spex/main.go`, which builds the root and attaches all fourteen constructors in a single registration call, in this order: `hash-id`, `diff`, `validate`, `plan`, `map`, `register`, `log`, `template`, `version`, `render`, `ingest`, `upgrade`, `init`, `doctor`.
 
 The root command imports no worker package; `cmd/spex` imports both the root and the workers, and is the only place the two meet. Keeping the constructors unexported in a `main` package is what makes that boundary unforgeable — nothing outside the binary can reach a subcommand constructor, so no worker package can grow a CLI dependency by accident.
 
 ## Where the surface is declared
 
-Each of those twelve invocations is declared as an api node, and it is declared in the module that owns the subcommand's entry-point component — not here. `spex diff` belongs to merkle, `spex validate` to validator, `spex map` and its three children to map, and so on; this module declares only the three whose entry points it owns, `spex hash-id`, `spex version`, and `spex upgrade`. That placement is what makes the graph agree with the wiring above: the registration list is flat, but the ownership is not. Declaring all fifteen here would attach every surface to the module whose components exist precisely to hold no worker logic, and `provided_by` — module-local by design — would have no component to point at for twelve of them.
+Each of those fourteen invocations is declared as an api node, and it is declared in the module that owns the subcommand's entry-point component — not here. `spex diff` belongs to merkle, `spex validate` to validator, `spex map` and its three children to map, `spex init` and `spex doctor` to lifecycle, and so on; this module declares only the three whose entry points it owns, `spex hash-id`, `spex version`, and `spex upgrade`. That placement is what makes the graph agree with the wiring above: the registration list is flat, but the ownership is not. Declaring all seventeen here would attach every surface to the module whose components exist precisely to hold no worker logic, and `provided_by` — module-local by design — would have no component to point at for fourteen of them.
 
 The api names are globally unique across every module.json, so two modules cannot both claim an invocation — the check that would otherwise be impossible to state, because every other uniqueness rule in the spec is scoped to a single array in a single file.
 
@@ -32,9 +32,9 @@ The api names are globally unique across every module.json, so two modules canno
 
 There is no api node for `spex` itself, and the omission is a decision rather than an oversight.
 
-An api node names an invocation with a contract behind it. Bare `spex` has none: with no args it prints cobra's help and exits, and every operation the binary performs is reached through one of the fifteen declared surfaces. What the root does own — the persistent `--spec-dir` flag, the "did you mean?" suggestions, the `completion` subcommand — is either a flag or a cobra built-in, and a flag is never part of an api name, so a `spex` node would carry no identity that any of the fifteen does not already carry as its first word.
+An api node names an invocation with a contract behind it. Bare `spex` has none: with no args it prints cobra's help and exits, and every operation the binary performs is reached through one of the seventeen declared surfaces. What the root does own — the persistent `--spec-dir` flag, the "did you mean?" suggestions, the `completion` subcommand — is either a flag or a cobra built-in, and a flag is never part of an api name, so a `spex` node would carry no identity that any of the seventeen does not already carry as its first word.
 
-The second reason is that the name would be unremovable. The removal-time name check searches the spec corpus for a removed api's declared name, longest-match-first, discarding hits a longer live name already covers. `spex` is one token and it prefixes all fifteen live names, so the subtraction clears only the mentions that are part of a longer invocation. Every other mention survives it, and the corpus is full of them: "the `spex` CLI", "the spex binary", the project's own name. Retiring such a node would report all of those, every one of them correct prose that must stay. A name the gate can never clear is worse than no node at all, because it teaches readers to override the check.
+The second reason is that the name would be unremovable. The removal-time name check searches the spec corpus for a removed api's declared name, longest-match-first, discarding hits a longer live name already covers. `spex` is one token and it prefixes all seventeen live names, so the subtraction clears only the mentions that are part of a longer invocation. Every other mention survives it, and the corpus is full of them: "the `spex` CLI", "the spex binary", the project's own name. Retiring such a node would report all of those, every one of them correct prose that must stay. A name the gate can never clear is worse than no node at all, because it teaches readers to override the check.
 
 ## Global Flags
 
@@ -42,7 +42,7 @@ The second reason is that the name would be unremovable. The removal-time name c
 |------|-----------|------|---------|-------------|
 | `--spec-dir` | `-s` | string | `spec/` | Path to the spec directory |
 
-Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word. Since the per-child `--map`/`--map-file` flags were retired with the bead-map, `--spec-dir` is the single locator for every piece of pipeline state — the spec tree, `spec/.snapshot.json`, and the task journal `spec/.history.jsonl` all resolve from it and from nothing else.
+Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word. Since the per-child `--map`/`--map-file` flags were retired with the bead-map, `--spec-dir` locates the authored spec tree and nothing else: the derived state — the snapshot and the task journal — resolves through the lifecycle module's pre-flight to the `.spex/` state directory, the only layout there is. The two lifecycle constructors, `init` and `doctor`, register here exactly as the other twelve do; owning the pre-flight gives lifecycle no special standing in the wiring.
 
 ## Dependency Boundary
 

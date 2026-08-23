@@ -24,7 +24,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Store snapshots",
-      "description": "Write the complete hash tree to a snapshot file committed to git alongside the spec.",
+      "description": "Write the complete hash tree to the project's snapshot file, committed to git, at the location the lifecycle resolver answers. Loading an absent snapshot is an error, never an implicit empty baseline: the canonical empty tree is no longer Load's forgiving default — it is produced in exactly one place, as the seed value spex init writes — so absence at read time means uninitialised or broken, not 'nothing has changed yet'.",
       "depends_on": [
         "97cc591528f9"
       ]

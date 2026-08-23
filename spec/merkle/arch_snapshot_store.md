@@ -1,12 +1,12 @@
 # SnapshotStore
 
-[[e99a846810df|Writes the complete hash tree out to a snapshot file that is committed to git beside the spec]], and reads that file back into a tree. The snapshot is JSON and is keyed by identity hash.
+[[e99a846810df|Writes the complete hash tree out to the project's snapshot file, committed to git]], and reads that file back into a tree. The snapshot is JSON and is keyed by identity hash.
 
 ## Responsibilities
 
 - Serialize an ID-keyed merkle tree to the snapshot file's canonical bytes
 - Deserialize a stored snapshot back into a tree
-- Manage snapshot file location within the spec directory
+- Read and write the snapshot at the resolved location handed to it — the component computes no location of its own
 
 ## Interface
 
@@ -16,11 +16,11 @@ Three operations: one over bytes, two over a file.
 
 **Save** is Encode plus the plainest write there is — it creates the destination's parent directory if that is missing and replaces the file. It offers no atomicity: a reader arriving mid-write can see a truncated file. That is why the one process that persists a snapshot in production does not use it; see "Read vs. write call sites".
 
-**Load** takes a path and returns the tree the file holds. Its behaviour when the file is absent is a contract in its own right and is stated under "Read vs. write call sites" below. Every other failure is an error rather than a fallback: an unreadable file, malformed JSON, a snapshot that records no root key, a root key with no entry in the node map, and a child key that a parent lists but no entry defines. That last one matters — a snapshot missing an entry its parent still names fails loudly instead of quietly loading as a smaller tree.
+**Load** takes a path and returns the tree the file holds. Every failure is an error, absence included — there is no fallback of any kind: an absent file (a typed error, distinguishable from a parse failure, whose meaning is stated under "Read vs. write call sites" below), an unreadable file, malformed JSON, a snapshot that records no root key, a root key with no entry in the node map, and a child key that a parent lists but no entry defines. That last one matters — a snapshot missing an entry its parent still names fails loudly instead of quietly loading as a smaller tree.
 
 ## Snapshot Location
 
-Snapshots are stored at `spec/.snapshot.json`. This file is committed to git alongside the spec. Only one snapshot exists at a time — it represents the last known state.
+The snapshot lives at the location the lifecycle pre-flight ([[a9aa93774cc2|ProjectResolver]]) answers: inside the `.spex/` state directory, the only layout there is. It is committed to git. Only one snapshot exists at a time — it represents the last known state.
 
 ## File Format
 
@@ -76,7 +76,7 @@ No file content is stored — only the hashes and the handful of fields above. C
 
 ### Single snapshot file
 
-One snapshot is sufficient. Git history provides access to any previous snapshot via `git show <commit>:spec/.snapshot.json`. No need for a snapshot archive within the working tree.
+One snapshot is sufficient. Git history provides access to any previous snapshot via `git show <commit>:<snapshot path>`. No need for a snapshot archive within the working tree.
 
 ### JSON format
 
@@ -93,13 +93,16 @@ Reads and writes reach this component from different commands:
 - `Load` is called from `spex diff` to read the previous snapshot for
   comparison, and from `spex ingest --mode refresh`, which loads it to
   diff against a freshly built tree and decide whether the drift is
-  content-only. When `spec/.snapshot.json` does not exist, `Load` returns
-  the empty tree (root with no children, root hash = SHA-256 of the empty
-  string) rather than an error. No production caller reaches that branch
-  today: `spex diff` stats the snapshot path itself and hands DiffEngine
-  no snapshot at all when the file is absent, and `spex ingest --mode
-  refresh` refuses before loading. Bootstrap is what `spex diff` does
-  with no snapshot, not what `Load` returns for a missing one.
+  content-only. When the file does not exist, `Load` returns a typed
+  absence error — never a baseline. The empty tree (root with no
+  children, root hash = SHA-256 of the empty string) that this branch
+  once returned is now produced in exactly one place: as the seed
+  snapshot `spex init` writes when a project is born. Callers reach
+  `Load` with a location the lifecycle pre-flight resolved, so an absent
+  file here means the project is uninitialised or broken — which the
+  pre-flight, not this component, reports to the user. Bootstrap is
+  diffing against the snapshot init seeded, not a fallback anywhere in
+  the read path.
 - `Encode` is called from `spex ingest`, by both of its writers: the
   SnapshotSaver path on a complete-status normal run, and the refresh
   pathway, which shares that path's temp-file-and-rename helper rather

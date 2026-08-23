@@ -1,6 +1,6 @@
 # MappingStore
 
-Owner of the task journal — `spec/.history.jsonl`, the append-only event log that is the
+Owner of the task journal — the append-only event log that is the
 single source of truth for spec-to-task correlation. Parsing, scanning, folding and appending it
 is the whole of [[934d627f0e90|storing mapping records]]: the journal remembers every structural
 event a baselining absorbed, every proposal lifecycle a registration opened, and every task the
@@ -116,12 +116,14 @@ JSON. Nothing writes through that surface.
 
 ## File Location
 
-The journal is `spec/.history.jsonl`, beside `spec/.snapshot.json` — spec history belongs to the
-spec tree, so pointing spex at a different `--spec-dir` points it at that spec's own history. Like
-the snapshot it is committed to git and is NOT hashed into the merkle tree — the tree hashes only
-the content files module.json declares — so appends move no hash and trigger no diff. The removal
-sweep's corpus scan skips dot-prefixed files, which is load-bearing: the journal's own `removed`
-events carry exactly the names the sweep hunts, and must never count as survivors. The retired `--map`/`--map-file`
+The journal lives beside the snapshot at the location the lifecycle pre-flight
+([[a9aa93774cc2|ProjectResolver]]) answers: inside the `.spex/` state directory — the tool's half
+of the tool-writes/person-writes split. The store takes the resolved path as input and computes
+no location of its own. The journal is committed to git and is NOT hashed into the merkle tree —
+the tree hashes only the content files module.json declares — so appends move no hash and trigger
+no diff. Sitting under `.spex/`, outside the spec tree, the journal is also invisible to the
+removal sweep's corpus scan, so its own `removed` events — which carry exactly the names the
+sweep hunts — can never count as survivors. The retired `--map`/`--map-file`
 flags are gone with the file they pointed at; the journal's location is a function of `--spec-dir`
 alone.
 

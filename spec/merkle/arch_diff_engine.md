@@ -40,11 +40,13 @@ Renaming the *node* is the opposite case. Changing a `name` changes the identity
 
 `DiffEngine` is invoked by `spex diff` against two trees: the one
 [[dfe1467b7a4b|TreeBuilder]] just built from the current spec, and the one
-[[b2fcd9457a28|SnapshotStore]] read back from the stored snapshot. On a fresh
-project where `spec/.snapshot.json` does not exist, `spex diff` loads no
-snapshot at all. DiffEngine is handed the populated current tree and nothing
-against it, and reports every leaf as `added`. That is the
+[[b2fcd9457a28|SnapshotStore]] read back from the snapshot at its resolved
+location. On a project being born, that snapshot is the empty tree
+`spex init` seeded: DiffEngine is handed the populated current tree against
+the empty baseline and reports every leaf as `added`. That is the
 diff input the rest of the pipeline (plan → adapter → ingest)
-consumes to produce the first journal pairings and the first snapshot. There is no
-"prime the snapshot" step beforehand — bootstrap and steady-state share
+consumes to produce the first journal pairings and the first real snapshot.
+The engine has no notion of a missing baseline — an absent snapshot file is
+refused upstream by the lifecycle pre-flight — and there is no
+"prime the snapshot" step beforehand: bootstrap and steady-state share
 the same DiffEngine call.

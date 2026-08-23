@@ -1,10 +1,98 @@
 [
   {
-    "node": "15019980fcea",
-    "reason": "spec-review over 2026-08-20-derivation-status: S5 in test_conformance_and_content.md corrected from the integer-id era's 'type mismatch' to the shipped identity-hash pattern rejection (^[a-f0-9]{12}$). The scenario's observable contract is unchanged — the input still fails — only the stated rejection reason moves. No Go test asserts the old wording (validator/schema_checker_test.go carries no S5 counterpart, and no assertion mentions a type mismatch), so the correction owes no code."
+    "node": "45a52ae06265",
+    "reason": "project-lifecycle addendum sweep: flow_diff_classification.md renames the retired spec/.snapshot.json spelling to the resolved .spex/ location in one DOT node label, its read edge, and one input line. The Data Shapes section, every component, and every arrow are untouched; the flow's contract is unchanged and the location behaviour is owed by the SnapshotStore/DiffCommand beads."
   },
   {
-    "node": "49a61e0d5737",
-    "reason": "spec-review over 2026-08-20-derivation-status: S4's rationale in test_merkle_commands.md drops the stale 'filename-pattern' phrasing that contradicted arch_impact_classifier.md's no-path-parsing contract. The asserted behaviour (arch change classified arch_impl) is unchanged and already shipped; a describes==1 section owes no bead of its own regardless. No behaviour owed."
+    "node": "38b6d99f08bf",
+    "reason": "project-lifecycle addendum sweep: flow_bead_mapping.md renames the retired spec/.history.jsonl spelling in one DOT node label, its append edge, and one section heading. Line shapes, events, and edges are untouched; journal location behaviour is owed by the MappingStore bead."
+  },
+  {
+    "node": "878c885a2517",
+    "reason": "project-lifecycle addendum sweep: flow_plan.md renames the retired path spellings in DOT node labels, two edges, and one prose sentence (journal read at its resolved location). Stage order, shapes, and the read-only contract are untouched; location behaviour is owed by the PlanCommand bead."
+  },
+  {
+    "node": "1d33b4c6c36e",
+    "reason": "project-lifecycle addendum sweep: flow_proposal_lifecycle.md renames the retired path spellings in DOT node labels, three edges, and one prose phrase (ingest rebaselines the snapshot). The lifecycle stages and the writer-owner statement are untouched; no proposal-module code is owed \u2014 resolution rides the lifecycle and map beads."
+  },
+  {
+    "node": "425f743382a7",
+    "reason": "project-lifecycle addendum sweep: test_reconciliation.md's one setup sentence stops naming the retired spec/.history.jsonl spelling for its journal fixture. Every scenario and assertion is untouched; no code owed."
+  },
+  {
+    "node": "ea5d8a24b604",
+    "reason": "project-lifecycle addendum sweep: test_context_resolver.md's fixture listing and one setup phrase stop naming the retired journal path (fixture now shows the journal under .spex/). Scenarios and assertions are untouched; resolver-aware fixtures are owed by the lifecycle test beads, not this leaf."
+  },
+  {
+    "node": "952043f8e172",
+    "reason": "project-lifecycle addendum sweep: test_bead_matching.md's one setup sentence ('never touches the journal') stops naming the retired .history.jsonl spelling. BeadReader/NodeMatcher scenarios are untouched; no code owed."
+  },
+  {
+    "node": "7885ad439bb9",
+    "reason": "project-lifecycle addendum sweep: test_registration.md's fixture precondition is restated ('freshly initialised: an empty journal' instead of 'no spec/.history.jsonl') and one assertion says 'the journal' instead of the retired path. The registered-event content asserted is unchanged; registration writes through MappingStore, whose location change is that bead's work."
+  },
+  {
+    "node": "bbdb70e6f9f7",
+    "reason": "project-lifecycle addendum, spec-review lens 2: arch_version_command.md corrects one stale count \u2014 'twelve constructors' becomes 'fourteen' after init and doctor register. VersionCommand's own contract, flags, and output are untouched; the constructor count's authority is arch_root_command.md, whose bead carries the registration change."
+  },
+  {
+    "node": "a20cc3f7f6f1",
+    "reason": "project-lifecycle addendum sweep: test_proposal_commands.md renames the retired journal spelling in two assertions; the --spec-dir scenario now states that state follows the project via the pre-flight rather than the literal path. The registered event's asserted fields are unchanged; no proposal-module code owed beyond the epic's wiring."
+  },
+  {
+    "node": "dfe1467b7a4b",
+    "reason": "code-verified (user-directed pre-mint pass): TreeBuilder's leaf edits rewrite the bootstrap narrative in its Consumers section and drop a retired path spelling. merkle/tree_builder.go has zero snapshot involvement (grep: no mention); TreeBuilder's own contract is unchanged and the bootstrap behaviour change is owed by the SnapshotStore, DiffCommand and InitCommand beads."
+  },
+  {
+    "node": "cb262b280963",
+    "reason": "code-verified: DiffEngine's leaf now says the engine has no notion of a missing baseline and always receives a real tree. merkle/diff_engine.go already takes two trees and treats a nil snapshot as all-added; the new contract makes the nil branch unreachable without requiring any engine change. Location behaviour is owed by DiffCommand's bead."
+  },
+  {
+    "node": "f1a672216ce9",
+    "reason": "code-verified: ImpactClassifier's leaf edit renames a snapshot-path phrase in the unknown-node-type note. merkle/impact_classifier.go carries no location logic (grep: no snapshot/path/history mention); no code owed."
+  },
+  {
+    "node": "4c1146bb7287",
+    "reason": "code-verified: ChangesetBuilder's leaf edit states that its six inputs arrive finished and it opens no state file. plan/builder.go already receives the fold, registration and absorbed entries from PlanCommand and performs no file access (grep: no os/ReadFile/Open); the location behaviour is owed by PlanCommand's bead. Rides the cf4f1ab8264a and 91f6f338de19 description amendments whose behavioural content lands elsewhere."
+  },
+  {
+    "node": "7d1150c19724",
+    "reason": "code-verified: SpecReader's leaf edit states it reads authored spec only, never snapshot or journal. render/*.go contains no snapshot or history reads (grep clean); the boundary is already the code's behaviour. Obligation discharged by a true statement, no code owed."
+  },
+  {
+    "node": "c56eefd05f42",
+    "reason": "code-verified: RenderCommand's leaf edit documents its exit surface (0 success, 1 input error) and that it never consults the lifecycle pre-flight. cmd/spex/render.go already returns errors for exactly those cases and calls no resolver \u2014 trivially true today and required to stay true; the constraint binds the lifecycle epic's wiring work, not render code."
+  },
+  {
+    "node": "95a279cbdcbc",
+    "reason": "code-verified: Diff and classification tests' single edit is S6's rationale sentence (empty tree as ordinary engine input); no Given/When/Then changed, so no test code is owed. The behavioural shift it narrates is covered by the SnapshotStore and DiffCommand beads and their bundled command tests."
+  },
+  {
+    "node": "2cd902e10873",
+    "reason": "code-verified: Consistency invariants' edits rename the journal/snapshot path phrasing in the intro and two assertions' wording; every invariant and assertion is otherwise unchanged, so no test code is owed beyond what the SnapshotSaver/Reconciler beads already carry."
+  },
+  {
+    "node": "2515c91337a5",
+    "reason": "code-verified: Partial run recovery tests' edits rename two snapshot-path phrases; scenarios and assertions unchanged, no test code owed."
+  },
+  {
+    "node": "3e9de336f65f",
+    "reason": "code-verified: Ingest command tests' three edits are path-phrase renames (journal fixture, snapshot rewritten, journal byte-identical); no scenario or assertion changed, no test code owed \u2014 the resolver-wired fixtures belong to IngestCommand's bead."
+  },
+  {
+    "node": "7f529376c087",
+    "reason": "code-verified: Plan command tests' single edit renames the journal fixture phrase; scenarios unchanged, no test code owed."
+  },
+  {
+    "node": "fe35207b5210",
+    "reason": "code-verified: Bead map schema tests' single edit renames the journal phrase in the intro; scenarios unchanged, no test code owed \u2014 the schema description fix itself is BeadMapSchema's minted bead."
+  },
+  {
+    "node": "35f39388bc76",
+    "reason": "code-verified, rule-2 tension flagged for review: flow_hash_computation.md's bootstrap narrative and Load-absence contract are rewritten, but its Data Shapes section \u2014 the flow's own contract \u2014 is untouched, so the flow owes no shared-type work of its own; the behaviour is owed in full by the SnapshotStore, DiffCommand and InitCommand beads. Absorbed on the user's directed already-satisfied-or-owed-elsewhere criterion."
+  },
+  {
+    "node": "6fd1f0cbb76c",
+    "reason": "code-verified, rule-2 tension flagged for review: flow_ingest.md's refresh pre-flight step now states the journal-empty bootstrap guard, but Data Shapes are untouched and the guard's code is owed entirely by RefreshHandler's bead; the flow owes no cross-component shape work. Absorbed on the user's directed criterion."
   }
 ]

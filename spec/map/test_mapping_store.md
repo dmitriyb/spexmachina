@@ -3,7 +3,7 @@
 ## Setup
 
 - Create a temporary directory with a valid spec structure (project.json + one module)
-- Write `spec/.history.jsonl` line by line as each scenario requires: change events
+- Write the journal file, at the fixture's resolved location, line by line as each scenario requires: change events
   (`added`/`removed`/`modified` with `eid`, `node`, `name`, `node_type`, `module`, `before`,
   `after`, `git_head`, `proposal`), `registered` events (`eid` of the form `<git_head>:<slug>`,
   `proposal`, `git_head`), and receipt events (`task_created`/`task_closed`/`task_retargeted`
@@ -79,12 +79,12 @@
 
 ### Missing journal file
 
-- MappingStore is constructed where `spec/.history.jsonl` does not exist
-- **Expected**: parse returns an empty event list, the fold is empty, and no error is raised — absence is a first-class state, not a failure
+- MappingStore is constructed where the journal file does not exist
+- **Expected**: parse returns an empty event list, the fold is empty, and no error is raised — absence is a first-class state for the store as a library. The command surfaces above it no longer reach this state through a missing project: the lifecycle pre-flight refuses an uninitialised or broken project before any store call
 
 ### Empty journal file
 
-- A zero-byte `spec/.history.jsonl`
+- A zero-byte journal file
 - **Expected**: same as missing — empty fold, no error
 
 ### Malformed line

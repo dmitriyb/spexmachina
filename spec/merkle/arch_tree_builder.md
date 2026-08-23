@@ -44,7 +44,7 @@ The second takes a finished tree and returns a map from each module's identity h
 
 Every digest in that tree, leaf and interior alike, is taken by [[325f48728e04|Hasher]]. TreeBuilder decides what gets hashed and how children are grouped; it never decides how a digest is computed.
 
-Each node in the returned tree carries five things: its key, its content hash, its level (`leaf`, `module` or `project`), its node type where it has one, and the identity hash of the module it belongs to — empty for the root, for the project envelope leaf and for project-level requirement leaves. Interior nodes additionally carry their children. All of those the snapshot persists, so a tree loaded from `spec/.snapshot.json` and a tree just built can be compared field for field. A module interior node carries one more that the snapshot does not: the module's own name, which is what the second operation reads back out. That is why the name map is meaningful only on a freshly built tree — ask a snapshot-loaded tree for it and every name comes back empty.
+Each node in the returned tree carries five things: its key, its content hash, its level (`leaf`, `module` or `project`), its node type where it has one, and the identity hash of the module it belongs to — empty for the root, for the project envelope leaf and for project-level requirement leaves. Interior nodes additionally carry their children. All of those the snapshot persists, so a tree loaded from the snapshot file and a tree just built can be compared field for field. A module interior node carries one more that the snapshot does not: the module's own name, which is what the second operation reads back out. That is why the name map is meaningful only on a freshly built tree — ask a snapshot-loaded tree for it and every name comes back empty.
 
 Because the owning module is carried as an identity hash rather than an integer, any consumer that needs to know which module a leaf belongs to compares it against module-level identity hashes directly, with no lookup table in between.
 
@@ -131,8 +131,10 @@ reach past the merkle pipeline:
   link target and a component with no content file is not one either.
 - `spex plan` — the spec graph it loads carries a tree built the same way.
 
-There is no standalone tree-building CLI. The first `spex diff` on a fresh
-project builds the current tree and compares it against no snapshot at
-all, because `spex diff` skips the load when `spec/.snapshot.json` is
-absent — this is what bootstraps the pipeline without a separate hash
-step. See `flow_hash_computation.md` for the full bootstrap flow.
+There is no standalone tree-building CLI. The first `spex diff` on a
+project being born builds the current tree and compares it against the
+empty-tree snapshot `spex init` seeded — everything reports as added, and
+the pipeline bootstraps without a separate hash step. There is no
+skip-the-load path any more: the snapshot location comes from the
+lifecycle pre-flight, the load always happens, and an absent snapshot is
+that pre-flight's error, not a fallback.

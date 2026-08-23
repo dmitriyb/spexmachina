@@ -3,7 +3,7 @@
 ## Setup
 
 - Create a temporary spec directory with project.json, two modules, and a populated
-  `spec/.history.jsonl`: change events for several live nodes with `task_created` receipts,
+  journal at the fixture project's resolved location: change events for several live nodes with `task_created` receipts,
   one removed node with its full biography, one `registered` event with its epic `task_created`
   referencing it, and one legacy epic receipt keyed by proposal slug
 - Build the `spex` binary with `go build`
@@ -54,8 +54,8 @@
 
 ### No journal exists
 
-- **Input**: `spex map list` in a spec directory with no `spec/.history.jsonl`
-- **Expected**: empty JSON array `[]`, exit code 0. The file is NOT created by read-only commands.
+- **Input**: `spex map list` in a directory whose resolved journal file is absent
+- **Expected**: the lifecycle pre-flight refuses before the store is consulted — a state directory missing its journal is a broken project and the error names `spex doctor`; a directory with no project state at all errors naming `spex init` with the not-a-spex-project exit code. In no case is any file created by a read-only command. The old empty-array answer survives only at the MappingStore library layer, which still folds an absent file to empty.
 
 ### Integer keys are gone
 

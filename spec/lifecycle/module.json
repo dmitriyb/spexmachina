@@ -1,0 +1,118 @@
+{
+  "name": "lifecycle",
+  "description": "Project identity and lifecycle: owns the on-disk contract of what a spex project is — the .spex/ state directory holding the snapshot and the task journal — the explicit init and doctor commands over it, and the single pre-flight resolver every subcommand calls.",
+  "requirements": [
+    {
+      "id": "44b8c5de0d37",
+      "preq_id": "2574f0fdcef2",
+      "type": "functional",
+      "title": "Project state directory",
+      "description": "Derived state lives in .spex/ at the project root: the snapshot and the task journal, and nothing else. Authored content — spec leaves, project.json, module.json, proposals — stays where a human edits it. The split is the rule, not the convenience: .spex/ is what the tool writes, spec/ is what a person writes. .spex/ is committed to git, not ignored — the journal is the one artifact in the system that cannot be reconstructed from anything else. Run scratch lives under .spex/runs/ (the absorb list is .spex/runs/absorb.json): written for one cycle, consumed by it, safe to remove afterwards — neither authored spec nor durable derived state."
+    },
+    {
+      "id": "ac57844f66a6",
+      "preq_id": "2574f0fdcef2",
+      "type": "functional",
+      "title": "Initialize a project",
+      "description": "spex init creates .spex/ with exactly two files. The snapshot it seeds is the canonical empty tree — never a snapshot of the spec that already exists, because seeding from the current spec would make the first diff clean and no work would ever be born from the initial spec; the empty tree moves here, from the snapshot loader's forgiving default to init's seed value. The journal it seeds is empty, with deliberately no init event: the empty journal is what 'no cycle has completed' means, and an event written at birth would make that predicate permanently false — the exact predicate the refresh bootstrap guard reads. init refuses a directory that already has .spex/ rather than overwriting it; it is the one command that can destroy a journal.",
+      "depends_on": [
+        "44b8c5de0d37"
+      ]
+    },
+    {
+      "id": "1ddbd6e36681",
+      "preq_id": "2574f0fdcef2",
+      "type": "functional",
+      "title": "Diagnose project health",
+      "description": "spex doctor reports what is present, what is missing and what is unreadable in the project state, and names the command that would fix each finding. It never mints or moves a baseline — not by default and not behind a repair flag: the moment doctor can repair a snapshot, the rule that the baseline moves only deliberately acquires an automated exception, exercised in exactly the situation where nobody is thinking clearly. Doctor diagnoses; a human decides.",
+      "depends_on": [
+        "44b8c5de0d37"
+      ]
+    },
+    {
+      "id": "055444aee4c7",
+      "preq_id": "2574f0fdcef2",
+      "type": "functional",
+      "title": "Uninitialized project is an error",
+      "description": "Absence of project state is an error, never a fallback, and no command initialises implicitly — a read command must not write. Two absences are distinguished, because conflating them is dangerous: no .spex/ at all means the project was never initialised, and the error names spex init; .spex/ present with the snapshot or journal missing or unparseable means the project is broken, and the error names spex doctor. If both said init, a user with a bad merge would re-initialise and destroy the journal — the failure mode is asymmetric, so the messages are too. 'Not a spex project' exits with its own stable, documented exit code, distinct from the input-error and invariant codes, so CI and scripts branch on the code rather than grepping the message.",
+      "depends_on": [
+        "44b8c5de0d37"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "a9aa93774cc2",
+      "name": "ProjectResolver",
+      "description": "The single pre-flight every subcommand that touches project state calls (a command reading only authored spec — render, validate, hash-id, version — never invokes it): returns a project context — the resolved snapshot and journal locations inside .spex/ — or a typed error. Distinguishes an uninitialised project (no .spex/; the error names spex init) from a broken one (.spex/ present, state missing or unreadable; the error names spex doctor), and carries the stable not-a-spex-project exit code. Owns location resolution: .spex/ is the only layout.",
+      "content": "arch_project_resolver.md",
+      "implements": [
+        "44b8c5de0d37",
+        "055444aee4c7"
+      ]
+    },
+    {
+      "id": "f64995aaeb56",
+      "name": "InitCommand",
+      "description": "CLI entry point for spex init. Creates .spex/ seeded with the canonical empty-tree snapshot and an empty journal — no init event. Refuses a directory that already has .spex/ rather than overwriting it.",
+      "content": "arch_init_command.md",
+      "implements": [
+        "ac57844f66a6"
+      ],
+      "uses": [
+        "a9aa93774cc2"
+      ]
+    },
+    {
+      "id": "3accd139a00d",
+      "name": "DoctorCommand",
+      "description": "CLI entry point for spex doctor. Reports what is present, missing or unreadable in the project state and names the command that would fix each finding. Read-only: never writes, never mints or moves a baseline.",
+      "content": "arch_doctor_command.md",
+      "implements": [
+        "1ddbd6e36681"
+      ],
+      "uses": [
+        "a9aa93774cc2"
+      ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "3baf321bfb97",
+      "name": "Resolver tests",
+      "content": "test_resolver.md",
+      "describes": [
+        "a9aa93774cc2"
+      ]
+    },
+    {
+      "id": "7fb345b743f3",
+      "name": "Lifecycle command tests",
+      "content": "test_lifecycle_commands.md",
+      "describes": [
+        "f64995aaeb56",
+        "3accd139a00d"
+      ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "063aeb01cdfe",
+      "name": "spex init",
+      "description": "Create the .spex/ project state directory: empty-tree snapshot, empty journal. Refuses if .spex/ exists.",
+      "provided_by": [
+        "f64995aaeb56"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "c318df455dcc",
+      "name": "spex doctor",
+      "description": "Diagnose project state health: report findings and the fixing command for each; never repair",
+      "provided_by": [
+        "3accd139a00d"
+      ],
+      "group": "cli"
+    }
+  ]
+}

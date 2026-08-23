@@ -37,19 +37,19 @@ absorbed, so a refresh is visible in history instead of amnesiac.
   harness treats refresh as a peer of normal mode; IngestCommand inspects the `--mode refresh`
   flag and routes the call.
 - The current spec directory (project.json + module.json files + content leaves).
-- The current `spec/.history.jsonl`.
-- The current `spec/.snapshot.json` (the diff baseline; required).
+- The current journal, at its resolved location — required to be non-empty; see the bootstrap guard under "Refusal contract".
+- The current snapshot, at its resolved location (the diff baseline).
 - Optionally `--git-head`; the receipt records the value when given and its absence otherwise.
 
 ## Outputs
 
-- An extended `spec/.history.jsonl`: one change event per absorbed drift entry — `modified` events
+- An extended journal: one change event per absorbed drift entry — `modified` events
   carrying before/after hashes for content drift, `added`/`removed` events for the absorbable
   structural set (their `node_type` spans the absorbable kinds, `requirement` and `api` included) —
   closed by one `refresh` receipt whose `absorbed` list names exactly those event ids. A
   refresh-born event has no op behind it, so its `eid` derives from `(node, before, after)` — the
   drift itself — rather than from `(git_head, op_id)`. Nothing already in the journal is altered.
-- A rewritten `spec/.snapshot.json` matching the current spec state, whenever anything moved at
+- A rewritten snapshot matching the current spec state, whenever anything moved at
   all (see the no-op case below).
 - A JSON summary on stdout describing how many events were appended.
 
@@ -90,7 +90,7 @@ following is true:
 | The diff contains an `added` entry whose node type is not absorbable in the added direction | Structural change; requires the normal pipeline so bead lifecycle runs. |
 | The diff contains a `removed` entry whose node type is not absorbable in the removed direction | Structural change; requires the normal pipeline. |
 | A `removed` entry's node still has a live task pairing in the journal fold — a `task_created` with no matching `task_closed` | Open work points at the vanishing node. The normal pipeline owes a close or a cleanup; absorbing the removal would leave the tracker lying about live work. |
-| `spec/.snapshot.json` does not exist | Refresh's diff baseline is the snapshot; without one, every leaf looks added (the bootstrap case requires the normal pipeline). |
+| The journal is empty | The bootstrap guard: an empty journal means no cycle has ever completed, and refresh absorbs drift between cycles — the first cycle is the normal pipeline's. The guard keys on the journal, not on snapshot presence, because `spex init` writes a snapshot at birth and would make a file-existence proxy permanently true. The journal-empty predicate stays available as a gate so a future adoption-style mode and refresh can be made mutually exclusive by construction. |
 | The changeset or receipts file is non-empty | Configuration error; refresh has no per-op transitions. |
 
 `modified` entries are never gated. Only additions and removals reach the structural gate.
