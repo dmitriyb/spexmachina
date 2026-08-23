@@ -2,6 +2,7 @@ package merkle
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -300,63 +301,41 @@ func assertTreeEqual(t *testing.T, want, got *Node, path string) {
 	}
 }
 
-// TestREQ3_Load_MissingFileReturnsEmptyTree pins the contract from
-// spec/merkle/arch_snapshot_store.md ("Read vs. write call sites"):
-// when the snapshot file does not exist, Load returns the empty-tree
-// baseline (root with no children, hash = SHA-256("")) and a nil error.
-// This is what enables spex diff to bootstrap on a fresh project
-// without a pre-seeded snapshot — the missing-file path is no longer
-// an error, it is the documented baseline.
-func TestREQ3_Load_MissingFileReturnsEmptyTree(t *testing.T) {
+// TestREQ3_Load_MissingFile_AbsenceError pins the contract from
+// spec/merkle/arch_snapshot_store.md ("Read vs. write call sites") and
+// test_snapshots.md E1: when the snapshot file does not exist, Load
+// returns a nil tree and an error wrapping ErrSnapshotAbsent — never a
+// fallback tree. The empty tree is produced in exactly one place now:
+// the seed snapshot `spex init` writes at project birth.
+func TestREQ3_Load_MissingFile_AbsenceError(t *testing.T) {
 	tree, err := Load(filepath.Join(t.TempDir(), "does-not-exist", ".snapshot.json"))
-	if err != nil {
-		t.Fatalf("Load on missing file: want nil error, got %v", err)
+	if err == nil {
+		t.Fatal("Load on missing file: want error, got nil")
 	}
-	if tree == nil {
-		t.Fatal("Load on missing file: want empty-tree node, got nil")
+	if tree != nil {
+		t.Fatalf("Load on missing file: want nil tree, got %+v", tree)
 	}
-
-	want := EmptyTree()
-	if tree.Hash != want.Hash {
-		t.Errorf("Hash = %q, want EmptyTree().Hash = %q", tree.Hash, want.Hash)
-	}
-	if tree.Type != want.Type {
-		t.Errorf("Type = %q, want %q", tree.Type, want.Type)
-	}
-	if tree.Key != want.Key {
-		t.Errorf("Key = %q, want %q", tree.Key, want.Key)
-	}
-	if len(tree.Children) != 0 {
-		t.Errorf("Children = %d, want 0 (empty baseline)", len(tree.Children))
+	if !errors.Is(err, ErrSnapshotAbsent) {
+		t.Fatalf("Load on missing file: want error wrapping ErrSnapshotAbsent, got %v", err)
 	}
 }
 
-// TestREQ3_Load_MissingFile_DiffsAsAllAdded is the integration contract
-// that justifies the missing-file → EmptyTree behavior: the result of
-// Load on an absent snapshot must be diff-equivalent to EmptyTree(),
-// so a current spec compared against it reports every node as "added".
-// If Load returned a different shape (e.g., nil), the bootstrap diff
-// would either panic or produce wrong results.
-func TestREQ3_Load_MissingFile_DiffsAsAllAdded(t *testing.T) {
-	specDir := setupSpecDir(t)
-	current, err := BuildTree(specDir)
-	if err != nil {
-		t.Fatalf("BuildTree: %v", err)
-	}
+// TestREQ3_Load_MissingFile_DistinguishableFromParseFailure is E1's
+// second clause: the absence error must be distinguishable from a parse
+// failure, so a caller can report "uninitialised or broken" rather than
+// "invalid".
+func TestREQ3_Load_MissingFile_DistinguishableFromParseFailure(t *testing.T) {
+	_, absenceErr := Load(filepath.Join(t.TempDir(), "does-not-exist", ".snapshot.json"))
 
-	loaded, err := Load(filepath.Join(t.TempDir(), ".snapshot.json"))
-	if err != nil {
-		t.Fatalf("Load on missing file: %v", err)
-	}
+	badPath := filepath.Join(t.TempDir(), ".snapshot.json")
+	must(t, os.WriteFile(badPath, []byte("not json"), 0644))
+	_, parseErr := Load(badPath)
 
-	changes := Diff(current, loaded)
-	if len(changes) == 0 {
-		t.Fatal("Diff against missing-file baseline produced no changes; bootstrap path is broken")
+	if errors.Is(parseErr, ErrSnapshotAbsent) {
+		t.Fatal("parse failure must not be reported as ErrSnapshotAbsent")
 	}
-	for _, c := range changes {
-		if c.Type != Added {
-			t.Errorf("unexpected non-added change against empty baseline: %+v", c)
-		}
+	if !errors.Is(absenceErr, ErrSnapshotAbsent) {
+		t.Fatal("missing-file failure must be reported as ErrSnapshotAbsent")
 	}
 }
 
@@ -381,8 +360,12 @@ func TestREQ3_Load_PermissionErrorStillFails(t *testing.T) {
 		t.Skip("running as root — chmod 0 does not block reads, skipping permission-error contract test")
 	}
 
-	if _, err := Load(path); err == nil {
+	_, err := Load(path)
+	if err == nil {
 		t.Fatal("want error for unreadable snapshot, got nil")
+	}
+	if errors.Is(err, ErrSnapshotAbsent) {
+		t.Fatal("permission-denied error must not be reported as ErrSnapshotAbsent")
 	}
 }
 
