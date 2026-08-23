@@ -173,7 +173,7 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 	}
 
 	// Normal-mode ingest writes the task journal (spec/.history.jsonl).
-	entry, err := mapping.NewMappingStore(f.specDir).Get(f.compID)
+	entry, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Get(f.compID)
 	if err != nil {
 		t.Fatalf("expected journal entry for %s after ingest: %v", f.compID, err)
 	}
@@ -553,7 +553,7 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 		t.Errorf("summary: want 1 event appended, snapshot_saved, complete; got %+v", sum)
 	}
 
-	events, err := mapping.NewMappingStore(f.specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -574,7 +574,7 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 		t.Errorf("modified event after: want %s, got %+v", wantHash, modified.After)
 	}
 
-	entry, err := mapping.NewMappingStore(f.specDir).Get(f.compID)
+	entry, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Get(f.compID)
 	if err != nil {
 		t.Fatalf("get fold entry: %v", err)
 	}
@@ -603,7 +603,7 @@ func TestIngestCommand_RefreshMode_GitHeadStampsReceipt(t *testing.T) {
 		t.Fatalf("refresh run: exit %d err %v", exit, err)
 	}
 
-	events, err := mapping.NewMappingStore(f.specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}

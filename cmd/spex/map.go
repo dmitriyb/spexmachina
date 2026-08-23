@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/spf13/cobra"
@@ -78,7 +79,9 @@ func runMapGetE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	store := mapping.NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	entry, err := store.Get(args[0])
 	if err != nil {
 		return fmt.Errorf("map: %w", err)
@@ -96,7 +99,9 @@ func runMapListE(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	store := mapping.NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	fold, err := store.List()
 	if err != nil {
 		return fmt.Errorf("map: %w", err)
