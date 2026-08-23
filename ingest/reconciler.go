@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -76,7 +77,9 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		return ReconcileSummary{}, err
 	}
 
-	store := mapping.NewMappingStore(r.SpecDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining SpecDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(r.SpecDir, ".history.jsonl"))
 	existing, err := store.Parse()
 	if err != nil {
 		return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: read journal: %w", err)

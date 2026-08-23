@@ -50,7 +50,9 @@ type ContextResult struct {
 // directory. It is a pure function: deterministic, no side effects beyond
 // reading files, no tracker contact.
 func ResolveContext(specDir, key string) (ContextResult, error) {
-	store := NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 
 	hash := key
 	if !nodeHashPattern.MatchString(key) {

@@ -191,7 +191,9 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		}
 	}
 
-	store := mapping.NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	existing, err := store.Parse()
 	if err != nil {
 		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)

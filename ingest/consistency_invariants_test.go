@@ -107,7 +107,7 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		t.Errorf("receipts_appended = %d, want 8", sum.ReceiptsAppended)
 	}
 
-	fold, err := mapping.NewMappingStore(specDir).List()
+	fold, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -274,7 +274,7 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 		t.Fatal("old task_created (br-old) missing — lineage must not be deleted")
 	}
 
-	fold, err := mapping.NewMappingStore(dir).List()
+	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

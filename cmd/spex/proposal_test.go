@@ -54,7 +54,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 
 	// The flag's head feeds the registered event's eid — spex itself never
 	// calls git.
-	events, err := mapping.NewMappingStore(specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 
 	// The journal follows --spec-dir exactly as the proposals directory
 	// does.
-	events, err := mapping.NewMappingStore(specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -175,7 +175,7 @@ func TestREQ30_E7_RegisterMissingGitHead(t *testing.T) {
 	if len(entries) != 0 {
 		t.Error("no file should be created when --git-head is missing")
 	}
-	events, _ := mapping.NewMappingStore(specDir).Parse()
+	events, _ := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 	if len(events) != 0 {
 		t.Errorf("no journal event should be appended when --git-head is missing, got: %+v", events)
 	}
@@ -216,7 +216,7 @@ func TestREQ30_E8_RegisterMalformedGitHead(t *testing.T) {
 			if len(entries) != 0 {
 				t.Error("no file should be created for a malformed --git-head")
 			}
-			events, _ := mapping.NewMappingStore(specDir).Parse()
+			events, _ := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 			if len(events) != 0 {
 				t.Errorf("no journal event should be appended for a malformed --git-head, got: %+v", events)
 			}

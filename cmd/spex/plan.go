@@ -71,7 +71,9 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorb
 		return planInputErr(fmt.Errorf("plan: diff contains %d error(s), refusing to proceed", len(diffErrors)))
 	}
 
-	store := mapping.NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	events, err := store.Parse()
 	if err != nil {
 		return planInputErr(fmt.Errorf("plan: read journal: map: %w", err))

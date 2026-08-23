@@ -57,7 +57,7 @@ func writeInput(t *testing.T, specDir, name, content string) string {
 // any parse error.
 func journalEvents(t *testing.T, specDir string) []mapping.Event {
 	t.Helper()
-	events, err := mapping.NewMappingStore(specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -357,7 +357,7 @@ func TestREQ_7885ad439bb9_E3b_CrashRecoveryEventAppendedFileNotCopied(t *testing
 	stem := "2026-03-10-some-change"
 	eid := fixtureHead + ":" + stem
 
-	store := mapping.NewMappingStore(specDir)
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	if err := store.Append([]mapping.Event{{
 		Event: "registered", EID: eid, Proposal: stem, GitHead: fixtureHead,
 	}}); err != nil {

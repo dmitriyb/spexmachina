@@ -58,7 +58,9 @@ func Register(proposalPath, specDir, gitHead string) (string, error) {
 		return "", fmt.Errorf("proposal: already registered: %s", filename)
 	}
 
-	store := mapping.NewMappingStore(specDir)
+	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
+	// ProjectResolver instead of joining specDir here, once it lands.
+	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
 	eid := gitHead + ":" + stem
 	already, err := registeredEventExists(store, eid)
 	if err != nil {

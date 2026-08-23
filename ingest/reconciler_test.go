@@ -73,7 +73,7 @@ func newTestReconciler(t *testing.T, graph SpecGraph) (*Reconciler, string) {
 // Reconciler.Apply would have produced.
 func seedJournal(t *testing.T, specDir string, lines ...mapping.Event) {
 	t.Helper()
-	if err := mapping.NewMappingStore(specDir).Append(lines); err != nil {
+	if err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Append(lines); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
 }
@@ -81,7 +81,7 @@ func seedJournal(t *testing.T, specDir string, lines ...mapping.Event) {
 // readJournal parses the current on-disk journal.
 func readJournal(t *testing.T, specDir string) []mapping.Event {
 	t.Helper()
-	events, err := mapping.NewMappingStore(specDir).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -314,7 +314,7 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 
 	// The fold now answers beadbead0002 → br-new; the br-old pairing
 	// remains as lineage (nothing deleted).
-	fold, err := mapping.NewMappingStore(dir).List()
+	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -483,7 +483,7 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 		}
 	}
 
-	fold, err := mapping.NewMappingStore(dir).List()
+	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -1041,7 +1041,7 @@ func TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended(t *testing.T) {
 		t.Errorf("task_retargeted = %+v, want for=%s task_id=br-open", retargeted, modified.EID)
 	}
 
-	fold, err := mapping.NewMappingStore(dir).List()
+	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}

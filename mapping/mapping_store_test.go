@@ -12,8 +12,10 @@ import (
 
 // --- fixture helpers ---
 
-// writeJournal writes spec/.history.jsonl in dir, one line per entry.
-func writeJournal(t *testing.T, dir string, lines []string) {
+// writeJournal writes a journal file named .history.jsonl in dir, one line
+// per entry, and returns its path — the resolved location a fixture hands
+// to NewMappingStore, since the store computes no location of its own.
+func writeJournal(t *testing.T, dir string, lines []string) string {
 	t.Helper()
 	content := ""
 	if len(lines) > 0 {
@@ -23,6 +25,7 @@ func writeJournal(t *testing.T, dir string, lines []string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("write journal: %v", err)
 	}
+	return path
 }
 
 // jsonField renders v as a quoted JSON string, or the literal null when v
@@ -88,13 +91,13 @@ func strPtr(s string) *string {
 
 func TestREQ_934d627f0e90_ParseWellFormedJournal(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "hash-after-1", "head1", "prop1"),
 		changeLine("removed", "e2", "bbbbbbbbbbbb", "Bar", "component", "modB", "hash-before-2", "", "head2", "prop2"),
 		taskCreatedLine("e1", "", "task-a"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	events, err := store.Parse()
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
@@ -136,9 +139,9 @@ func nodeXYJournal() []string {
 
 func TestREQ_934d627f0e90_FoldLatestTaskBearingEventPerNode(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nodeXYJournal())
+	path := writeJournal(t, dir, nodeXYJournal())
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	f, err := store.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -168,9 +171,9 @@ func TestREQ_934d627f0e90_FoldLatestTaskBearingEventPerNode(t *testing.T) {
 
 func TestREQ_934d627f0e90_LookupByIdentityHash(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nodeXYJournal())
+	path := writeJournal(t, dir, nodeXYJournal())
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	entry, err := store.Get("aaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -187,9 +190,9 @@ func TestREQ_934d627f0e90_LookupByIdentityHash(t *testing.T) {
 
 func TestREQ_934d627f0e90_LookupByTaskID(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nodeXYJournal())
+	path := writeJournal(t, dir, nodeXYJournal())
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	byHash, err := store.Get("aaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("Get by hash: %v", err)
@@ -207,7 +210,7 @@ func TestREQ_934d627f0e90_LookupByTaskID(t *testing.T) {
 
 func TestREQ_76fe608c3a40_FoldTaskRetargetedMovesSourcingEvent(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "eeeeeeeeeeee", "CompW", "component", "modA", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-C"),
 		changeLine("modified", "e2", "eeeeeeeeeeee", "CompW", "component", "modA", "h1", "h2", "g2", "p2"),
@@ -217,7 +220,7 @@ func TestREQ_76fe608c3a40_FoldTaskRetargetedMovesSourcingEvent(t *testing.T) {
 		refreshLine("g4", []string{"e3"}),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	entry, err := store.Get("eeeeeeeeeeee")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -237,14 +240,14 @@ func TestREQ_76fe608c3a40_FoldTaskRetargetedMovesSourcingEvent(t *testing.T) {
 
 func TestREQ_934d627f0e90_RemovedNodeRetainsBiography(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "cccccccccccc", "CompZ", "component", "modC", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-Z"),
 		changeLine("removed", "e2", "cccccccccccc", "CompZ", "component", "modC", "h1", "", "g2-removed", "remove-prop"),
 		taskClosedLine("e2", "task-Z"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	entry, err := store.Get("cccccccccccc")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -268,13 +271,13 @@ func TestREQ_934d627f0e90_RemovedNodeRetainsBiography(t *testing.T) {
 
 func TestREQ_934d627f0e90_RemovedNodeWithCleanupTaskStaysRemoved(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("removed", "e1", "dddddddddddd", "CompY", "component", "modD", "h1", "", "g1-removed", "remove-prop"),
 		taskClosedLine("e1", "task-Y"),
 		taskCreatedLine("e1", "", "br-cleanup"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	entry, err := store.Get("dddddddddddd")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -312,8 +315,8 @@ func TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID(t *testing.T) {
 	for name, lines := range orders {
 		t.Run(name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeJournal(t, dir, lines)
-			store := NewMappingStore(dir)
+			path := writeJournal(t, dir, lines)
+			store := NewMappingStore(path)
 
 			f, err := store.List()
 			if err != nil {
@@ -354,7 +357,7 @@ func TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID(t *testing.T) {
 // appears later in the file still belongs to that node's history.
 func TestREQ_934d627f0e90_HistoryPairsReceiptAheadOfItsEvent(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "ffffffffffff", "CompV", "component", "modE", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-V"),
 		taskCreatedLine("e9", "", "task-cleanup"),
@@ -362,7 +365,7 @@ func TestREQ_934d627f0e90_HistoryPairsReceiptAheadOfItsEvent(t *testing.T) {
 		taskClosedLine("e9", "task-V"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	history, err := store.History("ffffffffffff")
 	if err != nil {
 		t.Fatalf("History: %v", err)
@@ -386,11 +389,11 @@ func TestREQ_934d627f0e90_HistoryPairsReceiptAheadOfItsEvent(t *testing.T) {
 func TestREQ_934d627f0e90_EpicReceiptFoldsWithoutChangeEvent(t *testing.T) {
 	dir := t.TempDir()
 	slug := "2026-04-18-decouple-spex-from-br"
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		taskCreatedLine("", slug, "spexmachina-0lk"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	f, err := store.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -416,12 +419,12 @@ func TestREQ_934d627f0e90_RegisteredEventFoldsEpic(t *testing.T) {
 	dir := t.TempDir()
 	eid := "cafe1234:2026-08-11-event-keyed-linkage"
 	slug := "2026-08-11-event-keyed-linkage"
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		registeredLine(eid, slug, "cafe1234"),
 		taskCreatedLine(eid, "", "spexmachina-hdkq"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	f, err := store.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -453,8 +456,8 @@ func TestREQ_934d627f0e90_RegisteredEventFoldsEpic(t *testing.T) {
 
 func TestREQ_934d627f0e90_AppendLandsBatchAtomically(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMappingStore(dir)
 	journalPath := filepath.Join(dir, ".history.jsonl")
+	store := NewMappingStore(journalPath)
 
 	batch := []Event{
 		{Event: "added", EID: "e1", Node: "aaaaaaaaaaaa", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
@@ -486,8 +489,8 @@ func TestREQ_934d627f0e90_AppendLandsBatchAtomically(t *testing.T) {
 
 func TestREQ_934d627f0e90_AppendRefusedBatchChangesNothing(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMappingStore(dir)
 	journalPath := filepath.Join(dir, ".history.jsonl")
+	store := NewMappingStore(journalPath)
 
 	seed := []Event{
 		{Event: "added", EID: "e1", Node: "aaaaaaaaaaaa", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
@@ -529,8 +532,8 @@ func TestREQ_934d627f0e90_AppendRefusedBatchChangesNothing(t *testing.T) {
 
 func TestREQ_934d627f0e90_AppendLandsOnNonEmptyJournal(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMappingStore(dir)
 	journalPath := filepath.Join(dir, ".history.jsonl")
+	store := NewMappingStore(journalPath)
 	node := "aaaaaaaaaaaa"
 
 	first := []Event{
@@ -584,7 +587,7 @@ func TestREQ_934d627f0e90_AppendLandsOnNonEmptyJournal(t *testing.T) {
 
 func TestREQ_76fe608c3a40_AppendTaskRetargeted(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMappingStore(dir)
+	store := NewMappingStore(filepath.Join(dir, ".history.jsonl"))
 
 	batch := []Event{
 		{Event: "added", EID: "e1", Node: "ffffffffffff", Name: "Foo", NodeType: "component", Module: "modA", After: strPtr("h1"), GitHead: "g1", Proposal: "p1"},
@@ -609,14 +612,14 @@ func TestREQ_76fe608c3a40_AppendTaskRetargeted(t *testing.T) {
 
 func TestREQ_934d627f0e90_DeterministicOrder(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "111111111111", "CompP", "component", "modA", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-P"),
 		changeLine("added", "e2", "222222222222", "CompQ", "component", "modA", "", "h2", "g2", "p2"),
 		taskCreatedLine("e2", "", "task-Q"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	first, err := store.List()
 	if err != nil {
 		t.Fatalf("List (1st): %v", err)
@@ -641,7 +644,7 @@ func TestREQ_934d627f0e90_DeterministicOrder(t *testing.T) {
 
 func TestREQ_934d627f0e90_MissingJournalFile(t *testing.T) {
 	dir := t.TempDir()
-	store := NewMappingStore(dir)
+	store := NewMappingStore(filepath.Join(dir, ".history.jsonl"))
 
 	events, err := store.Parse()
 	if err != nil {
@@ -662,8 +665,8 @@ func TestREQ_934d627f0e90_MissingJournalFile(t *testing.T) {
 
 func TestREQ_934d627f0e90_EmptyJournalFile(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nil)
-	store := NewMappingStore(dir)
+	path := writeJournal(t, dir, nil)
+	store := NewMappingStore(path)
 
 	events, err := store.Parse()
 	if err != nil {
@@ -684,13 +687,13 @@ func TestREQ_934d627f0e90_EmptyJournalFile(t *testing.T) {
 
 func TestREQ_4aee62bd3c15_MalformedLineReportsLineNumber(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-a"),
 		"not valid json {",
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	_, err := store.Parse()
 	if err == nil {
 		t.Fatal("want error for malformed line")
@@ -721,12 +724,12 @@ func TestREQ_4aee62bd3c15_SchemaViolationReportsLineNumber(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			dir := t.TempDir()
-			writeJournal(t, dir, []string{
+			path := writeJournal(t, dir, []string{
 				changeLine("added", "e1", "aaaaaaaaaaaa", "Foo", "component", "modA", "", "h1", "g1", "p1"),
 				tt.line,
 			})
 
-			store := NewMappingStore(dir)
+			store := NewMappingStore(path)
 			_, err := store.Parse()
 			if err == nil {
 				t.Fatal("want schema validation error")
@@ -744,13 +747,13 @@ func TestREQ_4aee62bd3c15_SchemaViolationReportsLineNumber(t *testing.T) {
 
 func TestREQ_934d627f0e90_DanglingReceiptDoesNotPoisonFold(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "aaaaaaaaaaaa", "CompM", "component", "modA", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-M"),
 		taskCreatedLine("no-such-eid", "", "task-orphan"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	f, err := store.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -775,9 +778,9 @@ func TestREQ_934d627f0e90_DanglingReceiptDoesNotPoisonFold(t *testing.T) {
 
 func TestREQ_934d627f0e90_HistoryOldestFirst(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nodeXYJournal())
+	path := writeJournal(t, dir, nodeXYJournal())
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	history, err := store.History("aaaaaaaaaaaa")
 	if err != nil {
 		t.Fatalf("History: %v", err)
@@ -795,14 +798,14 @@ func TestREQ_934d627f0e90_HistoryOldestFirst(t *testing.T) {
 
 func TestREQ_76fe608c3a40_HistoryIncludesTaskRetargeted(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, []string{
+	path := writeJournal(t, dir, []string{
 		changeLine("added", "e1", "eeeeeeeeeeee", "CompW", "component", "modA", "", "h1", "g1", "p1"),
 		taskCreatedLine("e1", "", "task-C"),
 		changeLine("modified", "e2", "eeeeeeeeeeee", "CompW", "component", "modA", "h1", "h2", "g2", "p2"),
 		taskRetargetedLine("e2", "task-C"),
 	})
 
-	store := NewMappingStore(dir)
+	store := NewMappingStore(path)
 	history, err := store.History("eeeeeeeeeeee")
 	if err != nil {
 		t.Fatalf("History: %v", err)
@@ -822,8 +825,8 @@ func TestREQ_76fe608c3a40_HistoryIncludesTaskRetargeted(t *testing.T) {
 
 func TestREQ_934d627f0e90_GetNotFound(t *testing.T) {
 	dir := t.TempDir()
-	writeJournal(t, dir, nodeXYJournal())
-	store := NewMappingStore(dir)
+	path := writeJournal(t, dir, nodeXYJournal())
+	store := NewMappingStore(path)
 
 	if _, err := store.Get("dddddddddddd"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("want ErrNotFound for unknown hash, got %v", err)

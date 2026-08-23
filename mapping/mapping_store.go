@@ -108,23 +108,24 @@ type Fold struct {
 	Dangling []DanglingReceipt
 }
 
-// MappingStore provides access to the task journal
-// (<spec-dir>/.history.jsonl), the append-only event log linking spec node
-// identity hashes to tracker task ids. Parsing, scanning and folding it is
-// most of the store: the fold — the latest task-bearing event per node —
-// is the current linkage every consumer derives on demand, never a stored
-// cache. The store is also the journal's one writer-owner: every append
-// goes through Append, its atomic, schema-validating primitive.
+// MappingStore provides access to the task journal, the append-only event
+// log linking spec node identity hashes to tracker task ids. Parsing,
+// scanning and folding it is most of the store: the fold — the latest
+// task-bearing event per node — is the current linkage every consumer
+// derives on demand, never a stored cache. The store is also the journal's
+// one writer-owner: every append goes through Append, its atomic,
+// schema-validating primitive.
 type MappingStore struct {
 	path string
 	mu   sync.Mutex
 }
 
-// NewMappingStore returns a MappingStore reading the journal at
-// <specDir>/.history.jsonl. The journal's location is a function of
-// --spec-dir alone — there is no separate --map/--map-file flag.
-func NewMappingStore(specDir string) *MappingStore {
-	return &MappingStore{path: filepath.Join(specDir, ".history.jsonl")}
+// NewMappingStore returns a MappingStore reading and writing the journal at
+// path. The store computes no location of its own — it takes the resolved
+// journal path as input, the caller's responsibility (ultimately the
+// lifecycle pre-flight's) to answer.
+func NewMappingStore(path string) *MappingStore {
+	return &MappingStore{path: path}
 }
 
 var (
