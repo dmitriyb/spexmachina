@@ -40,11 +40,13 @@ func TestREQ4_Diff_BootstrapEmptyTreeBaseline(t *testing.T) {
 	specDir := setupSpecDir(t)
 	current := mustBuildTree(t, specDir)
 
-	// Bootstrap path: spex diff calls SnapshotStore.Load, which returns
-	// EmptyTree() (a non-nil project root with no children) when
-	// spec/.snapshot.json is absent. DiffEngine must treat that empty
-	// baseline the same as a fresh project and report every current leaf
-	// as "added" — see arch_diff_engine.md "Bootstrap behavior".
+	// Bootstrap path: on a project being born, SnapshotStore.Load reads
+	// back the empty tree spex init seeded at spec/.snapshot.json — the
+	// engine has no notion of a missing baseline; an absent file is
+	// refused upstream by the lifecycle pre-flight, never surfaced here.
+	// DiffEngine must treat that empty baseline the same as a fresh
+	// project and report every current leaf as "added" — see
+	// arch_diff_engine.md "Bootstrap behavior".
 	changes := Diff(current, EmptyTree())
 
 	if len(changes) == 0 {
