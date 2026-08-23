@@ -8,8 +8,10 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/merkle"
 )
 
 // writeTestJournal writes spec/.history.jsonl under dir with the given
@@ -23,8 +25,21 @@ func writeTestJournal(t *testing.T, dir string, lines []string) {
 	writeTestFile(t, dir, ".history.jsonl", content)
 }
 
+// seedMapSnapshot writes an empty-tree snapshot at dir's default location,
+// marking dir as an initialised project — the interim pre-flight signal
+// mapPreflight checks (see map.go), same as cmd/spex/diff.go's own tests
+// seed before exercising a command that expects to run past the
+// uninitialised-project refusal.
+func seedMapSnapshot(t *testing.T, dir string) {
+	t.Helper()
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+}
+
 func TestFR_MapGet_ByIdentityHash(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"ActionClassifier","node_type":"component","module":"impact","before":null,"after":"h1","git_head":"cafe1234","proposal":"prop1"}`,
 		`{"event":"task_created","for":"e1","task_id":"spexmachina-abc"}`,
@@ -52,6 +67,7 @@ func TestFR_MapGet_ByIdentityHash(t *testing.T) {
 
 func TestFR_MapGet_ByTaskID(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"ActionClassifier","node_type":"component","module":"impact","before":null,"after":"h1","git_head":"cafe1234","proposal":"prop1"}`,
 		`{"event":"task_created","for":"e1","task_id":"spexmachina-abc"}`,
@@ -72,6 +88,7 @@ func TestFR_MapGet_ByTaskID(t *testing.T) {
 
 func TestFR_MapGet_UnknownKey(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, nil)
 
 	_, err := runSpex(t, "map", "get", "--spec-dir", dir, "deadbeefdead")
@@ -82,6 +99,7 @@ func TestFR_MapGet_UnknownKey(t *testing.T) {
 
 func TestFR_MapGet_IntegerKeyGone(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"ActionClassifier","node_type":"component","module":"impact","before":null,"after":"h1","git_head":"cafe1234","proposal":"prop1"}`,
 		`{"event":"task_created","for":"e1","task_id":"spexmachina-abc"}`,
@@ -97,6 +115,7 @@ func TestFR_MapGet_IntegerKeyGone(t *testing.T) {
 
 func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"Comp1","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
 		`{"event":"task_created","for":"e1","task_id":"task-1"}`,
@@ -198,28 +217,52 @@ func TestFR_MapList_FoldedLinkage(t *testing.T) {
 	}
 }
 
-func TestFR_MapList_NoJournal(t *testing.T) {
+// TestFR_MapList_NoProjectState covers test_map_command.md's "No journal
+// exists" edge case, the "directory with no project state at all" branch:
+// the pre-flight refuses before the store is consulted, naming spex init
+// and exiting with the not-a-spex-project code.
+func TestFR_MapList_NoProjectState(t *testing.T) {
 	dir := t.TempDir()
 
-	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
-	if err != nil {
-		t.Fatalf("want no error when no journal exists, got %v", err)
+	_, err := runSpex(t, "map", "list", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want error when no project state exists, got nil")
 	}
+	if exitCodeOf(err) != exitNotAProject {
+		t.Fatalf("want exit code %d, got %d (%v)", exitNotAProject, exitCodeOf(err), err)
+	}
+	if !strings.Contains(err.Error(), "spex init") {
+		t.Fatalf("want error naming 'spex init', got %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, ".history.jsonl")); statErr == nil {
+		t.Fatal("map list must not create the journal file")
+	}
+}
 
-	var entries []map[string]any
-	if err := json.Unmarshal([]byte(out), &entries); err != nil {
-		t.Fatalf("output should be valid JSON array: %v\noutput: %s", err, out)
+// TestFR_MapList_NoJournal covers the other branch of the same edge case:
+// a state directory (a snapshot exists — the interim initialised signal)
+// missing its journal is a broken project, not an empty answer. The old
+// empty-array response survives only at the MappingStore library layer,
+// which this pre-flight now sits in front of.
+func TestFR_MapList_NoJournal(t *testing.T) {
+	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
+
+	_, err := runSpex(t, "map", "list", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want error when the journal is missing, got nil")
 	}
-	if len(entries) != 0 {
-		t.Fatalf("want empty array, got %d entries", len(entries))
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Fatalf("want error naming 'spex doctor', got %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".history.jsonl")); err == nil {
+	if _, statErr := os.Stat(filepath.Join(dir, ".history.jsonl")); statErr == nil {
 		t.Fatal("map list must not create the journal file")
 	}
 }
 
 func TestFR_MapList_MalformedLine(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"aaaaaaaaaaaa","name":"Foo","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
 		`{"event":"task_created","for":"e1","task_id":"t1"}`,
@@ -241,6 +284,7 @@ func TestFR_MapList_MalformedLine(t *testing.T) {
 func setupMapContextTestSpec(t *testing.T) (specDir string) {
 	t.Helper()
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
@@ -409,6 +453,7 @@ func buildSpexBinary(t *testing.T) string {
 
 func TestFR_MapCommand_ConcurrentInvocations(t *testing.T) {
 	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
 	writeTestJournal(t, dir, []string{
 		`{"event":"added","eid":"e1","node":"a1b2c3d4e5f6","name":"Comp1","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
 		`{"event":"task_created","for":"e1","task_id":"task-1"}`,
