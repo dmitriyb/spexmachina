@@ -24,7 +24,7 @@
 // inside spex diff (read path) and inside spex ingest's SnapshotSaver
 // (write path).
 //
-// # Bootstrap (no snapshot file)
+// # Bootstrap (seeded snapshot)
 //
 // spec/.snapshot.json exists before the first diff: spex init seeds it
 // with EmptyTree, the one place that baseline is produced. SnapshotStore
