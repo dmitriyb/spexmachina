@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-uiei.6",
+  "node": "08909d62930b",
+  "files": [
+    "spec/map/arch_map_command.md",
+    "spec/map/test_map_command.md"
+  ],
+  "claim": "arch_map_command.md:42 still says of `spex map list`, \"Exit code 0. Empty array `[]` if the journal is absent or holds no task-bearing events,\" and arch_map_command.md:12 caps the whole command tree at \"Set exit codes: 0 for success, 1 for errors.\" Both statements are the pre-lifecycle behaviour that test_map_command.md's \"No journal exists\" edge case (line 58) retired: that leaf now requires the lifecycle pre-flight to refuse before the store is consulted, naming `spex init` with the not-a-spex-project exit code (3) when no project state exists at all, and naming `spex doctor` when a snapshot exists but the journal does not.",
+  "authoritative_source": "spec/map/test_map_command.md:58, \"No journal exists\": \"the lifecycle pre-flight refuses before the store is consulted ... the error names `spex init` with the not-a-spex-project exit code ... In no case is any file created by a read-only command. The old empty-array answer survives only at the MappingStore library layer, which still folds an absent file to empty.\" This is the more recently authored statement (rewritten by e98a34f, the project-lifecycle proposal) and is what this PR's code implements.",
+  "evidence": "`git show e98a34f --stat -- spec/map/` touches only arch_map_command.md's File Location paragraph (lines 83-86) and test_map_command.md's edge case (line 58); it left arch_map_command.md's Subcommands section (line 42, `spex map list`'s own exit-code prose) and its Responsibilities section (line 12, the command-wide \"0 for success, 1 for errors\" cap) untouched. This PR's `cmd/spex/map.go` (`mapPreflight`, wired into all three children) ships the refusal test_map_command.md:58 requires — including the `exitNotAProject` (3) exit code — which now contradicts arch_map_command.md:12 and :42 verbatim. The two leaves of this one bead disagree about behaviour this PR ships; reconciling which wins belongs to the authoring loop, not to a silent implementer choice.",
+  "blocking": false,
+  "proposed_fix": "Reword arch_map_command.md:42 to describe the lifecycle pre-flight refusal (a broken project names `spex doctor`; no project state at all names `spex init` and exits with the not-a-spex-project code) in place of \"Exit code 0. Empty array `[]` if the journal is absent or holds no task-bearing events.\" Reword arch_map_command.md:12's \"Set exit codes: 0 for success, 1 for errors\" to acknowledge the third, not-a-spex-project exit code the pre-flight can return, mirroring how arch_diff_command.md documents DiffCommand's own exit codes for the same seam."
+}
