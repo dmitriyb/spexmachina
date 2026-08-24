@@ -919,9 +919,8 @@ func TestREQ_e68653819f38_Refresh_RefusesEmptyJournal(t *testing.T) {
 			Now:          refreshClock,
 		}
 		_, err := h.Apply(specDir)
-		var refusal *RefreshRefusal
-		if !errors.As(err, &refusal) || refusal.Kind != "empty_journal" {
-			t.Fatalf("want RefreshRefusal empty_journal, got %v", err)
+		if !errors.Is(err, ErrRefreshNoCompletedCycle) {
+			t.Fatalf("want ErrRefreshNoCompletedCycle, got %v", err)
 		}
 		if !strings.Contains(err.Error(), "completed cycle") || !strings.Contains(err.Error(), "normal pipeline") {
 			t.Errorf("refusal must indicate refresh requires a completed cycle via the normal pipeline: %v", err)

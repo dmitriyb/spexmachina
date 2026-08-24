@@ -16,12 +16,22 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// ErrRefreshNonEmptyArtifacts rejects a refresh run whose changeset or
-// receipts carry ops. Refresh has no per-op transitions; a non-empty
-// artifact is a configuration error. IngestCommand maps it to
-// ExitInputError; every other refusal below is a *RefreshRefusal, mapped
-// to ExitInvariant.
-var ErrRefreshNonEmptyArtifacts = errors.New("ingest: refresh: changeset and receipts must be empty in refresh mode")
+// Sentinel pre-flight errors for refresh mode. IngestCommand maps these
+// to ExitInputError; the gate refusals below (*RefreshRefusal) map to
+// ExitInvariant.
+var (
+	// ErrRefreshNonEmptyArtifacts rejects a refresh run whose changeset
+	// or receipts carry ops. Refresh has no per-op transitions; a
+	// non-empty artifact is a configuration error.
+	ErrRefreshNonEmptyArtifacts = errors.New("ingest: refresh: changeset and receipts must be empty in refresh mode")
+	// ErrRefreshNoCompletedCycle rejects a refresh run against an empty
+	// journal: no cycle has ever completed, and refresh absorbs drift
+	// between cycles — the first cycle belongs to the normal pipeline.
+	// This is a pre-flight check (arch_ingest_command.md's "Pre-flight
+	// / Mode: refresh"), not a gate refusal, so it exits 1 rather than
+	// joining the *RefreshRefusal set below.
+	ErrRefreshNoCompletedCycle = errors.New("ingest: refresh requires a completed cycle; run the normal pipeline first")
+)
 
 // refreshDirections records, for one node type, which structural diff
 // directions refresh may absorb.
@@ -55,20 +65,17 @@ var refreshAbsorbable = map[string]refreshDirections{
 	"component":   {added: false, removed: true},
 }
 
-// RefreshRefusal is the typed error for the refresh gates: an empty
-// journal, structural diff entries, or a live task pairing on a removed
-// node. IngestCommand maps it to a non-zero exit with a structured
-// stderr message naming the entries.
+// RefreshRefusal is the typed error for the refresh gates: structural
+// diff entries or a live task pairing on a removed node. IngestCommand
+// maps it to a non-zero exit with a structured stderr message naming
+// the entries.
 type RefreshRefusal struct {
-	Kind    string // "empty_journal" | "added_entries" | "removed_entries" | "live_task_pairing"
+	Kind    string // "added_entries" | "removed_entries" | "live_task_pairing"
 	Entries []string
 	Hint    string
 }
 
 func (e *RefreshRefusal) Error() string {
-	if len(e.Entries) == 0 {
-		return fmt.Sprintf("ingest: refresh refused (%s): %s", e.Kind, e.Hint)
-	}
 	return fmt.Sprintf("ingest: refresh refused (%s): %s — %s",
 		e.Kind, strings.Join(e.Entries, ", "), e.Hint)
 }
@@ -140,7 +147,9 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	// to the normal pipeline. Keyed on the journal rather than snapshot
 	// presence, because spex init writes a snapshot at project birth and
 	// would make a file-existence proxy permanently true. Checked ahead of
-	// the diff — a missing/empty journal makes the diff moot.
+	// the diff — a missing/empty journal makes the diff moot. A pre-flight
+	// check, not a gate refusal, so it is a sentinel error (exit 1) rather
+	// than a *RefreshRefusal (exit 2).
 	journalPath := h.JournalPath
 	if journalPath == "" {
 		journalPath = filepath.Join(specDir, ".history.jsonl")
@@ -151,10 +160,7 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
 	}
 	if len(existing) == 0 {
-		return summary, &RefreshRefusal{
-			Kind: "empty_journal",
-			Hint: "refresh requires a completed cycle; run the normal pipeline first",
-		}
+		return summary, ErrRefreshNoCompletedCycle
 	}
 
 	snapPath := h.SnapshotPath

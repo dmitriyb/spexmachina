@@ -675,11 +675,13 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	}
 }
 
-// TestIngestCommand_RefreshMode_EmptyJournalExits2 covers the bootstrap
+// TestIngestCommand_RefreshMode_EmptyJournalExits1 covers the bootstrap
 // guard: a fresh project (no normal-mode cycle has ever run, so the
-// journal is empty) refuses a refresh run — exit 2, same as any other
-// RefreshRefusal — pointing the caller at the normal pipeline instead.
-func TestIngestCommand_RefreshMode_EmptyJournalExits2(t *testing.T) {
+// journal is empty) refuses a refresh run — exit 1, a pre-flight
+// failure per arch_ingest_command.md's "Pre-flight / Mode: refresh"
+// (not a *RefreshRefusal gate, which exits 2) — pointing the caller at
+// the normal pipeline instead.
+func TestIngestCommand_RefreshMode_EmptyJournalExits1(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 	dir := filepath.Dir(f.changesetPath)
 	emptyCS := filepath.Join(dir, "refresh-changeset.json")
@@ -693,8 +695,8 @@ func TestIngestCommand_RefreshMode_EmptyJournalExits2(t *testing.T) {
 		"--receipts", emptyRC,
 		"--spec-dir", f.specDir,
 	)
-	if exit != 2 {
-		t.Fatalf("want exit 2 for the empty-journal bootstrap guard, got %d (err %v)", exit, err)
+	if exit != 1 {
+		t.Fatalf("want exit 1 for the empty-journal bootstrap guard, got %d (err %v)", exit, err)
 	}
 	if err == nil || !strings.Contains(err.Error(), "completed cycle") || !strings.Contains(err.Error(), "normal pipeline") {
 		t.Errorf("error must indicate refresh requires a completed cycle via the normal pipeline: %v", err)
