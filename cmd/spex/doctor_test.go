@@ -153,9 +153,14 @@ func TestDoctor_HealthyProject(t *testing.T) {
 	if !report.Healthy {
 		t.Fatalf("report.Healthy = false, want true: %+v", report)
 	}
-	for _, f := range report.Findings {
-		if f.Status != "present" {
-			t.Errorf("finding %s: status = %q, want present", f.Artifact, f.Status)
+	for _, artifact := range []string{
+		lifecycle.StateDirName,
+		filepath.Join(lifecycle.StateDirName, lifecycle.SnapshotFileName),
+		filepath.Join(lifecycle.StateDirName, lifecycle.JournalFileName),
+	} {
+		finding := findingFor(t, report, artifact)
+		if finding.Status != "present" {
+			t.Errorf("finding %s: status = %q, want present", artifact, finding.Status)
 		}
 	}
 }
