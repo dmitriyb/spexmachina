@@ -100,6 +100,12 @@ type RefreshHandler struct {
 	// SnapshotPath is the diff baseline and rewrite target. Defaults to
 	// <specDir>/.snapshot.json when empty.
 	SnapshotPath string
+	// JournalPath is the task journal's resolved location. Defaults to
+	// <specDir>/.history.jsonl when empty; the shipped command sets both
+	// this and SnapshotPath to the locations inside .spex/ the lifecycle
+	// pre-flight resolved, so this component computes no location of its
+	// own.
+	JournalPath string
 	// Changeset and Receipts are the (required, empty) artifacts the
 	// caller parsed. Any ops present refuse the run.
 	Changeset *plan.Changeset
@@ -191,9 +197,11 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		}
 	}
 
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
+	journalPath := h.JournalPath
+	if journalPath == "" {
+		journalPath = filepath.Join(specDir, ".history.jsonl")
+	}
+	store := mapping.NewMappingStore(journalPath)
 	existing, err := store.Parse()
 	if err != nil {
 		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
@@ -376,7 +384,6 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, err
 	}
 
-	journalPath := filepath.Join(specDir, ".history.jsonl")
 	originalJournal, readErr := os.ReadFile(journalPath)
 	journalExisted := true
 	if readErr != nil {

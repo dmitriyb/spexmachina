@@ -70,7 +70,7 @@ func TestREQ_7885ad439bb9_S1_RegisterValidProjectProposal(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "valid-project.md", validProjectContent)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestREQ_7885ad439bb9_S2_RegisterValidChangeProposal(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "valid-change.md", validChangeContent)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -135,7 +135,7 @@ func TestREQ_7885ad439bb9_S3_RejectProjectMissingSections(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "partial-project.md", partialProjectContent)
 
-	_, err := Register(input, specDir, fixtureHead)
+	_, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error for missing sections, got nil")
 	}
@@ -158,7 +158,7 @@ func TestREQ_7885ad439bb9_S4_RejectChangeMissingSections(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "partial-change.md", partialChangeContent)
 
-	_, err := Register(input, specDir, fixtureHead)
+	_, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error for missing sections, got nil")
 	}
@@ -179,7 +179,7 @@ func TestREQ_7885ad439bb9_S5_ReportAllMissingSections(t *testing.T) {
 	content := "# Project Proposal: One Section\n\n## Vision\n\nx\n"
 	input := writeInput(t, specDir, "one-section.md", content)
 
-	_, err := Register(input, specDir, fixtureHead)
+	_, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -199,7 +199,7 @@ func TestREQ_7885ad439bb9_S6_PreserveExistingDatePrefixedFilename(t *testing.T) 
 	content := "# Change Proposal: Caching Layer\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
 	input := writeInput(t, specDir, "2026-05-10-caching.md", content)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -214,7 +214,7 @@ func TestREQ_7885ad439bb9_S7_GenerateSlugFromH1Heading(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "valid-project.md", validProjectContent)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestREQ_7885ad439bb9_S8_CaseInsensitiveSectionMatching(t *testing.T) {
 	content := "# Project Proposal: Mixed Case\n\n## VISION\n\nx\n\n## modules\n\nx\n\n## key Requirements\n\nx\n\n## design Decisions\n\nx\n"
 	input := writeInput(t, specDir, "mixed-case.md", content)
 
-	if _, err := Register(input, specDir, fixtureHead); err != nil {
+	if _, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 }
@@ -242,7 +242,7 @@ func TestREQ_7885ad439bb9_S9_SourceFileDoesNotExist(t *testing.T) {
 	specDir := newSpecDir(t)
 	ghost := filepath.Join(filepath.Dir(specDir), "input", "nonexistent.md")
 
-	_, err := Register(ghost, specDir, fixtureHead)
+	_, err := Register(ghost, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error for nonexistent source, got nil")
 	}
@@ -267,7 +267,7 @@ func TestREQ_7885ad439bb9_S10_TargetProposalsDirectoryDoesNotExist(t *testing.T)
 	// Deliberately no spec/proposals/ subdirectory.
 	input := writeInput(t, specDir, "valid-project.md", validProjectContent)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestREQ_7885ad439bb9_E1_EmptyFile(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "empty.md", "")
 
-	_, err := Register(input, specDir, fixtureHead)
+	_, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error for empty file, got nil")
 	}
@@ -302,7 +302,7 @@ func TestREQ_7885ad439bb9_E2_UnrecognizableHeadings(t *testing.T) {
 	content := "# Something\n\n## Introduction\n\nx\n\n## Conclusion\n\nx\n"
 	input := writeInput(t, specDir, "no-headings.md", content)
 
-	_, err := Register(input, specDir, fixtureHead)
+	_, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error, got nil")
 	}
@@ -322,7 +322,7 @@ func TestREQ_7885ad439bb9_E3_DuplicateRegistration(t *testing.T) {
 	specDir := newSpecDir(t)
 	input := writeInput(t, specDir, "2026-03-10-some-change.md", validChangeContent)
 
-	first, err := Register(input, specDir, fixtureHead)
+	first, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("first Register: %v", err)
 	}
@@ -332,7 +332,7 @@ func TestREQ_7885ad439bb9_E3_DuplicateRegistration(t *testing.T) {
 		t.Fatalf("read first copy: %v", err)
 	}
 
-	_, err = Register(input, specDir, fixtureHead)
+	_, err = Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err == nil {
 		t.Fatal("want error on second registration, got nil")
 	}
@@ -364,7 +364,7 @@ func TestREQ_7885ad439bb9_E3b_CrashRecoveryEventAppendedFileNotCopied(t *testing
 		t.Fatalf("seed journal: %v", err)
 	}
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -395,7 +395,7 @@ func TestREQ_7885ad439bb9_E4_BothProjectAndChangeMarkers(t *testing.T) {
 	content := "# Combo\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n\n## Proposed change\n\nx\n"
 	input := writeInput(t, specDir, "combo.md", content)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("want project-type validation to pass (all project sections present), got: %v", err)
 	}
@@ -412,7 +412,7 @@ func TestREQ_7885ad439bb9_E5_VeryLargeProposalFile(t *testing.T) {
 	content := "# Project Proposal: Big\n\n## Vision\n\n" + padding + "\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n"
 	input := writeInput(t, specDir, "big.md", content)
 
-	filename, err := Register(input, specDir, fixtureHead)
+	filename, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead)
 	if err != nil {
 		t.Fatalf("Register: %v", err)
 	}
@@ -432,7 +432,7 @@ func TestREQ_7885ad439bb9_E6_ExtraSectionsIgnored(t *testing.T) {
 	content := "# Project Proposal: Extra\n\n## Vision\n\nx\n\n## Modules\n\nx\n\n## Key requirements\n\nx\n\n## Design decisions\n\nx\n\n## Timeline\n\nx\n\n## Open questions\n\nx\n\n## Appendix\n\nx\n"
 	input := writeInput(t, specDir, "extra.md", content)
 
-	if _, err := Register(input, specDir, fixtureHead); err != nil {
+	if _, err := Register(input, specDir, filepath.Join(specDir, ".history.jsonl"), fixtureHead); err != nil {
 		t.Fatalf("Register: %v", err)
 	}
 }

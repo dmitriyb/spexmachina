@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/spf13/cobra"
 )
 
@@ -18,6 +21,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	content := "# Change Proposal: New Change\n\n## Context\n\nSome context.\n\n## Proposed change\n\nSome change.\n\n## Impact expectation\n\nSome impact.\n"
 	inputDir := filepath.Join(tmp, "input")
@@ -54,7 +58,7 @@ func TestREQ30_S1_RegisterValidProposal(t *testing.T) {
 
 	// The flag's head feeds the registered event's eid — spex itself never
 	// calls git.
-	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
+	events, err := mapping.NewMappingStore(filepath.Join(projectStateDir(specDir), lifecycle.JournalFileName)).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -74,6 +78,7 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "myspec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	content := "# Change Proposal: Explicit Dir\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
 	inputFile := filepath.Join(tmp, "explicit.md")
@@ -91,9 +96,10 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 		t.Error("no file created in custom spec dir proposals/")
 	}
 
-	// The journal follows --spec-dir exactly as the proposals directory
-	// does.
-	events, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).Parse()
+	// The journal follows the lifecycle pre-flight's resolved location,
+	// itself keyed off --spec-dir, exactly as the proposals directory
+	// follows --spec-dir.
+	events, err := mapping.NewMappingStore(filepath.Join(projectStateDir(specDir), lifecycle.JournalFileName)).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -104,7 +110,7 @@ func TestREQ30_S2_RegisterWithExplicitSpecDir(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("want registered event in %s/.history.jsonl, got events: %+v", specDir, events)
+		t.Errorf("want registered event in the resolved journal, got events: %+v", events)
 	}
 }
 
@@ -112,6 +118,7 @@ func TestREQ30_S3_RegisterValidationFailure(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	content := "# Bad\n\n## Background\n\n## Plan\n"
 	inputFile := filepath.Join(tmp, "invalid-proposal.md")
@@ -228,6 +235,7 @@ func TestREQ30_S5_RegisterNonexistentFile(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	root := buildTestCmd(specDir)
 	root.SetArgs([]string{"register", filepath.Join(tmp, "input", "ghost.md"), "--git-head", "cafe1234"})
@@ -241,6 +249,7 @@ func TestREQ30_E6_RegisterIdempotency(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
 	os.MkdirAll(filepath.Join(specDir, "proposals"), 0755)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	content := "# Change Proposal: Repeat\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"
 	inputFile := filepath.Join(tmp, "repeat.md")
@@ -495,6 +504,7 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
 		t.Fatal(err)
 	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	inputFile := filepath.Join(tmp, "new.md")
 	if err := os.WriteFile(inputFile, []byte(changeProposalContent), 0644); err != nil {

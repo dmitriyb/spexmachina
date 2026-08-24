@@ -13,9 +13,6 @@ bin/
 .beads/.br_recovery
 .beads/beads.db*
 
-# /converge pipeline run artifacts (diff.json, changeset.json, receipts.json, log)
-.spex/
-
 # Hook violation log (per-machine; format documented in docs/enforcement-rfc.md §5)
 .claude/hook-violations.log
 

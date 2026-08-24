@@ -47,9 +47,9 @@ func writeModuleJSON(t *testing.T, dir string, ms schema.ModuleSpec) {
 // describes. Builder has an added event (e2) but no task_created receipt
 // naming it, for S1c. Extra lines are appended to the journal after the
 // base fixture, for scenarios that extend a node's history (S1b).
-func buildContextFixture(t *testing.T, extra ...string) string {
+func buildContextFixture(t *testing.T, extra ...string) (specDir, journalPath string) {
 	t.Helper()
-	specDir := t.TempDir()
+	specDir = t.TempDir()
 
 	writeProjectJSON(t, specDir, schema.Project{
 		Name: "fixture",
@@ -83,17 +83,17 @@ func buildContextFixture(t *testing.T, extra ...string) string {
 		changeLine("removed", "e4", "999999999999", "Widget", "component", "alpha", "h3", "", "cafe1234", "2026-08-01-task-journal"),
 	}
 	lines = append(lines, extra...)
-	writeJournal(t, specDir, lines)
+	journalPath = writeJournal(t, specDir, lines)
 
-	return specDir
+	return specDir, journalPath
 }
 
 // --- S1: live component by identity hash ---
 
 func TestREQ_40a3d3155131_S1_ResolveLiveComponentByHash(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "aabbccddeeff")
+	result, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -138,12 +138,12 @@ func TestREQ_40a3d3155131_S1_ResolveLiveComponentByHash(t *testing.T) {
 // --- S1b: bracket follows the lineage's latest event ---
 
 func TestREQ_40a3d3155131_S1b_BracketFollowsLatestEvent(t *testing.T) {
-	specDir := buildContextFixture(t,
+	specDir, journalPath := buildContextFixture(t,
 		changeLine("modified", "e5", "aabbccddeeff", "Parser", "component", "alpha", "h1", "h5", "cafe9999", ""),
 		taskCreatedLine("e5", "", "abc-124"),
 	)
 
-	result, err := ResolveContext(specDir, "aabbccddeeff")
+	result, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestREQ_40a3d3155131_S1b_BracketFollowsLatestEvent(t *testing.T) {
 // --- S1d: retargeted task widens the bracket ---
 
 func TestREQ_76fe608c3a40_S1d_RetargetedTaskWidensBracket(t *testing.T) {
-	specDir := buildContextFixture(t,
+	specDir, journalPath := buildContextFixture(t,
 		changeLine("modified", "e5", "aabbccddeeff", "Parser", "component", "alpha", "h1", "h5", "cafe9999", ""),
 		taskRetargetedLine("e5", "abc-123"),
 		changeLine("modified", "e8", "aabbccddeeff", "Parser", "component", "alpha", "h5", "h8", "feed0002", ""),
@@ -179,7 +179,7 @@ func TestREQ_76fe608c3a40_S1d_RetargetedTaskWidensBracket(t *testing.T) {
 
 	for _, key := range []string{"aabbccddeeff", "abc-123"} {
 		t.Run(key, func(t *testing.T) {
-			result, err := ResolveContext(specDir, key)
+			result, err := ResolveContext(specDir, journalPath, key)
 			if err != nil {
 				t.Fatalf("ResolveContext(%q): %v", key, err)
 			}
@@ -209,7 +209,7 @@ func TestREQ_76fe608c3a40_S1d_RetargetedTaskWidensBracket(t *testing.T) {
 // has a null before_head, not the prior removal's git_head ---
 
 func TestREQ_76fe608c3a40_S1d_RetargetedResurrectedAdd_BeforeHeadNull(t *testing.T) {
-	specDir := buildContextFixture(t,
+	specDir, journalPath := buildContextFixture(t,
 		changeLine("added", "e1g", "112233445566", "Ghost", "component", "alpha", "", "g1", "beefg001", ""),
 		changeLine("removed", "e5g", "112233445566", "Ghost", "component", "alpha", "g1", "", "cafe1111", "some-proposal"),
 		changeLine("added", "e6g", "112233445566", "Ghost", "component", "alpha", "", "g6", "cafe2222", ""),
@@ -218,7 +218,7 @@ func TestREQ_76fe608c3a40_S1d_RetargetedResurrectedAdd_BeforeHeadNull(t *testing
 		taskRetargetedLine("e7g", "abc-999"),
 	)
 
-	result, err := ResolveContext(specDir, "112233445566")
+	result, err := ResolveContext(specDir, journalPath, "112233445566")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -243,9 +243,9 @@ func TestREQ_76fe608c3a40_S1d_RetargetedResurrectedAdd_BeforeHeadNull(t *testing
 // --- S1c: live node with no task-bearing event serves a null bracket ---
 
 func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "ffeeddccbbaa")
+	result, err := ResolveContext(specDir, journalPath, "ffeeddccbbaa")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -266,7 +266,7 @@ func TestREQ_40a3d3155131_S1c_NullBracketForNoTaskBearingEvent(t *testing.T) {
 // --- a resurrected node's before_head is null for the add, not the prior removal ---
 
 func TestREQ_40a3d3155131_ResurrectedAdd_BeforeHeadNull(t *testing.T) {
-	specDir := buildContextFixture(t,
+	specDir, journalPath := buildContextFixture(t,
 		changeLine("added", "e6", "112233445566", "Ghost", "component", "alpha", "", "g6", "cafeaaa1", ""),
 		taskCreatedLine("e6", "", "task-001"),
 		changeLine("removed", "e7", "112233445566", "Ghost", "component", "alpha", "g6", "", "cafeaaa2", "some-proposal"),
@@ -274,7 +274,7 @@ func TestREQ_40a3d3155131_ResurrectedAdd_BeforeHeadNull(t *testing.T) {
 		taskCreatedLine("e8", "", "task-002"),
 	)
 
-	result, err := ResolveContext(specDir, "112233445566")
+	result, err := ResolveContext(specDir, journalPath, "112233445566")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -299,13 +299,13 @@ func TestREQ_40a3d3155131_ResurrectedAdd_BeforeHeadNull(t *testing.T) {
 // --- S2: resolve by task id reaches the same node ---
 
 func TestREQ_40a3d3155131_S2_ResolveByTaskIDMatchesHash(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	byHash, err := ResolveContext(specDir, "aabbccddeeff")
+	byHash, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("ResolveContext by hash: %v", err)
 	}
-	byTask, err := ResolveContext(specDir, "abc-123")
+	byTask, err := ResolveContext(specDir, journalPath, "abc-123")
 	if err != nil {
 		t.Fatalf("ResolveContext by task id: %v", err)
 	}
@@ -320,9 +320,9 @@ func TestREQ_40a3d3155131_S2_ResolveByTaskIDMatchesHash(t *testing.T) {
 // --- S3: component referenced by multiple test_sections ---
 
 func TestREQ_40a3d3155131_S3_MultipleTestSectionsInDeclarationOrder(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "aabbccddeeff")
+	result, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -344,9 +344,9 @@ func TestREQ_40a3d3155131_S3_MultipleTestSectionsInDeclarationOrder(t *testing.T
 // --- S4: component with no data_flows ---
 
 func TestREQ_40a3d3155131_S4_ComponentWithNoDataFlows(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "112233445566")
+	result, err := ResolveContext(specDir, journalPath, "112233445566")
 	if err != nil {
 		t.Fatalf("ResolveContext should not error for a component with no data_flows: %v", err)
 	}
@@ -358,9 +358,9 @@ func TestREQ_40a3d3155131_S4_ComponentWithNoDataFlows(t *testing.T) {
 // --- S5: removed node resolves from the journal ---
 
 func TestREQ_40a3d3155131_S5_RemovedNodeResolvesFromJournal(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "999999999999")
+	result, err := ResolveContext(specDir, journalPath, "999999999999")
 	if err != nil {
 		t.Fatalf("ResolveContext should not error for a removed-but-remembered node: %v", err)
 	}
@@ -402,9 +402,9 @@ func TestREQ_40a3d3155131_S5_RemovedNodeResolvesFromJournal(t *testing.T) {
 // --- S6: live data_flow by identity hash ---
 
 func TestREQ_40a3d3155131_S6_ResolveLiveDataFlowByHash(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "444444444444")
+	result, err := ResolveContext(specDir, journalPath, "444444444444")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -428,9 +428,9 @@ func TestREQ_40a3d3155131_S6_ResolveLiveDataFlowByHash(t *testing.T) {
 // --- S7: live test_section by identity hash ---
 
 func TestREQ_40a3d3155131_S7_ResolveLiveTestSectionByHash(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "333333333333")
+	result, err := ResolveContext(specDir, journalPath, "333333333333")
 	if err != nil {
 		t.Fatalf("ResolveContext: %v", err)
 	}
@@ -465,11 +465,11 @@ func TestREQ_40a3d3155131_E1_MissingModuleJSON(t *testing.T) {
 	// No module.json written under "missing" — the directory itself is
 	// never created.
 
-	writeJournal(t, specDir, []string{
+	journalPath := writeJournal(t, specDir, []string{
 		changeLine("added", "e1", "aabbccddeeff", "Parser", "component", "missing", "", "h1", "", ""),
 	})
 
-	_, err := ResolveContext(specDir, "aabbccddeeff")
+	_, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err == nil {
 		t.Fatal("want error for missing module.json, got nil")
 	}
@@ -482,9 +482,9 @@ func TestREQ_40a3d3155131_E1_MissingModuleJSON(t *testing.T) {
 // --- E2: key known to neither spec nor journal ---
 
 func TestREQ_40a3d3155131_E2_UnknownEverywhere(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	_, err := ResolveContext(specDir, "deadbeefdead")
+	_, err := ResolveContext(specDir, journalPath, "deadbeefdead")
 	if err == nil {
 		t.Fatal("want not-found error, got nil")
 	}
@@ -499,9 +499,9 @@ func TestREQ_40a3d3155131_E2_UnknownEverywhere(t *testing.T) {
 // --- E3: component hash not found in any section ---
 
 func TestREQ_40a3d3155131_E3_ComponentInNoSection(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	result, err := ResolveContext(specDir, "112233445566")
+	result, err := ResolveContext(specDir, journalPath, "112233445566")
 	if err != nil {
 		t.Fatalf("ResolveContext should not error for a component described/used by nothing: %v", err)
 	}
@@ -524,10 +524,10 @@ func TestREQ_40a3d3155131_E3_ComponentInNoSection(t *testing.T) {
 // --- E4: malformed journal propagates as a parse error for a task-id lookup ---
 
 func TestREQ_40a3d3155131_E4_MalformedJournalPropagatesForTaskIDLookup(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 	writeJournal(t, specDir, []string{`{"event":"added","eid":"e1"invalid}`})
 
-	_, err := ResolveContext(specDir, "abc-123")
+	_, err := ResolveContext(specDir, journalPath, "abc-123")
 	if err == nil {
 		t.Fatal("want error for malformed journal, got nil")
 	}
@@ -545,10 +545,10 @@ func TestREQ_40a3d3155131_E4_MalformedJournalPropagatesForTaskIDLookup(t *testin
 // --- E5: malformed journal propagates as a parse error for a removed-node lookup ---
 
 func TestREQ_40a3d3155131_E5_MalformedJournalPropagatesForRemovedLookup(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 	writeJournal(t, specDir, []string{`{"event":"added","eid":"e1"invalid}`})
 
-	_, err := ResolveContext(specDir, "deadbeefdead")
+	_, err := ResolveContext(specDir, journalPath, "deadbeefdead")
 	if err == nil {
 		t.Fatal("want error for malformed journal, got nil")
 	}
@@ -566,13 +566,13 @@ func TestREQ_40a3d3155131_E5_MalformedJournalPropagatesForRemovedLookup(t *testi
 // --- Pure-function determinism ---
 
 func TestREQ_40a3d3155131_Deterministic(t *testing.T) {
-	specDir := buildContextFixture(t)
+	specDir, journalPath := buildContextFixture(t)
 
-	r1, err := ResolveContext(specDir, "aabbccddeeff")
+	r1, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("first call: %v", err)
 	}
-	r2, err := ResolveContext(specDir, "aabbccddeeff")
+	r2, err := ResolveContext(specDir, journalPath, "aabbccddeeff")
 	if err != nil {
 		t.Fatalf("second call: %v", err)
 	}

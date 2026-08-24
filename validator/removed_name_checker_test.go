@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -186,7 +187,7 @@ func removedChange(module, nodeType, name string) merkle.ClassifiedChange {
 
 func mustReport(t *testing.T, dir string, changes ...merkle.ClassifiedChange) RemovedNameReport {
 	t.Helper()
-	report, err := CheckRemovedNames(dir, changes)
+	report, err := CheckRemovedNames(dir, journalFilePath(dir), changes)
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}
@@ -615,7 +616,7 @@ func TestREQ_6f8284df92a2_MissingJournalIsNotAnError(t *testing.T) {
 		withFile("validator/leaf.md", "OrphanDetector is still named.\n").
 		build(t, "validator")
 
-	report, err := CheckRemovedNames(dir, []merkle.ClassifiedChange{
+	report, err := CheckRemovedNames(dir, journalFilePath(dir), []merkle.ClassifiedChange{
 		removedChange("validator", "component", "OrphanDetector"),
 	})
 	if err != nil {
@@ -653,18 +654,19 @@ func TestREQ_6f8284df92a2_NoRemovalsNoFindings(t *testing.T) {
 // snapshot, and its 24 prose mentions really were swept.
 func TestREQ_6f8284df92a2_SelfCheckRealCorpus(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
+	stateDir := filepath.Join("..", lifecycle.StateDirName)
 
 	current, err := merkle.BuildTree(specDir)
 	if err != nil {
 		t.Fatalf("build tree: %v", err)
 	}
-	snapshot, err := merkle.Load(filepath.Join(specDir, ".snapshot.json"))
+	snapshot, err := merkle.Load(filepath.Join(stateDir, lifecycle.SnapshotFileName))
 	if err != nil {
 		t.Fatalf("load snapshot: %v", err)
 	}
 	classified := merkle.Classify(merkle.Diff(current, snapshot), merkle.ModuleNames(current))
 
-	report, err := CheckRemovedNames(specDir, classified)
+	report, err := CheckRemovedNames(specDir, filepath.Join(stateDir, lifecycle.JournalFileName), classified)
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}

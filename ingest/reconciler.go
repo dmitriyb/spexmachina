@@ -60,9 +60,13 @@ type ReconcileSummary struct {
 // the whole batch before anything reaches disk; invariant 4 (snapshot
 // saved iff complete) is SnapshotSaver's gate, not this component's.
 type Reconciler struct {
-	// SpecDir is the spec root; the journal lives at
-	// <SpecDir>/.history.jsonl.
+	// SpecDir is the spec root.
 	SpecDir string
+	// JournalPath is the task journal's resolved location. Defaults to
+	// <SpecDir>/.history.jsonl when empty; the shipped command sets it to
+	// the location inside .spex/ the lifecycle pre-flight resolved, so
+	// this component computes no location of its own.
+	JournalPath string
 	// SpecGraph resolves a fresh or modified node's current metadata.
 	SpecGraph SpecGraph
 }
@@ -77,9 +81,11 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		return ReconcileSummary{}, err
 	}
 
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining SpecDir here, once it lands.
-	store := mapping.NewMappingStore(filepath.Join(r.SpecDir, ".history.jsonl"))
+	journalPath := r.JournalPath
+	if journalPath == "" {
+		journalPath = filepath.Join(r.SpecDir, ".history.jsonl")
+	}
+	store := mapping.NewMappingStore(journalPath)
 	existing, err := store.Parse()
 	if err != nil {
 		return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: read journal: %w", err)

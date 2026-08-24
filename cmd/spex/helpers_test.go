@@ -8,11 +8,41 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// projectStateDir returns the .spex/ directory the lifecycle pre-flight
+// resolves for specDir — its sibling under the shared project root
+// (spec/ and .spex/ both live directly under one root; --spec-dir names
+// only the former).
+func projectStateDir(specDir string) string {
+	return filepath.Join(filepath.Dir(specDir), lifecycle.StateDirName)
+}
+
+// seedProjectState creates .spex/ as a sibling of specDir, holding tree
+// encoded at the resolved snapshot location and an empty journal at the
+// resolved journal location — matching what spex init leaves behind, so a
+// CLI-level test's project is not "uninitialised" to the lifecycle
+// pre-flight. Returns the two resolved paths for tests that go on to seed
+// real journal content in place of the default empty one.
+func seedProjectState(t *testing.T, specDir string, tree *merkle.Node, createdAt time.Time) (snapshotPath, journalPath string) {
+	t.Helper()
+	stateDir := projectStateDir(specDir)
+	snapshotPath = filepath.Join(stateDir, lifecycle.SnapshotFileName)
+	journalPath = filepath.Join(stateDir, lifecycle.JournalFileName)
+	if err := merkle.Save(tree, snapshotPath, createdAt); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+	if err := os.WriteFile(journalPath, nil, 0644); err != nil {
+		t.Fatalf("seed journal: %v", err)
+	}
+	return snapshotPath, journalPath
+}
 
 // The wire spellings `spex diff --json` writes map onto merkle's enums one
 // for one. A swapped pair here would misclassify every change of that kind
