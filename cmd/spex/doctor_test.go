@@ -89,9 +89,11 @@ func newProjectRoot(t *testing.T) (root, specDir string) {
 
 // healthyProject builds a project root whose .spex/ holds a parseable
 // empty-tree snapshot and an empty journal — what spex init leaves behind,
-// per lifecycle.initialisedProject's own fixture. InitCommand does not yet
-// exist as a runnable CLI command in this codebase, so the fixture is built
-// directly against the same on-disk contract doctor and the resolver share.
+// per lifecycle.initialisedProject's own fixture. Built directly against
+// the same on-disk contract doctor and the resolver share, rather than by
+// shelling out to spex init, so doctor's own tests stay independent of
+// init's; the init → doctor round trip itself is covered separately by
+// TestInitDoctor_RoundTrip in init_test.go.
 func healthyProject(t *testing.T) (root, specDir string) {
 	t.Helper()
 	root, specDir = newProjectRoot(t)

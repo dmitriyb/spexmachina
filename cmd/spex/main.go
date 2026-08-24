@@ -23,6 +23,7 @@ func main() {
 		newRenderCmd(),
 		newIngestCmd(),
 		newUpgradeCmd(),
+		newInitCmd(),
 		newDoctorCmd(),
 	)
 
