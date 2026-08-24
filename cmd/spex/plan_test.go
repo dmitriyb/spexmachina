@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/internal/perf"
 	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
@@ -1063,16 +1064,17 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 	beadsPath := writePlanBeads(t, dir, "beads.json", beadStatus)
 	diffPath := writePlanDiff(t, dir, "diff.json", changes, nil)
 
-	start := time.Now()
-	stdout, stderr, err := runPlan(t, "",
-		"--proposal", "large-prop", "--git-head", "deadbeefcafe", "--diff", diffPath, "--beads", beadsPath, "--spec-dir", specDir,
+	var (
+		stdout, stderr string
+		err            error
 	)
-	elapsed := time.Since(start)
+	perf.Within(t, 5*time.Second, func() {
+		stdout, stderr, err = runPlan(t, "",
+			"--proposal", "large-prop", "--git-head", "deadbeefcafe", "--diff", diffPath, "--beads", beadsPath, "--spec-dir", specDir,
+		)
+	})
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
-	}
-	if elapsed > 5*time.Second {
-		t.Errorf("want completion under 5s, took %s", elapsed)
 	}
 	cs := parsePlanChangeset(t, stdout)
 	wantOps := numModules*compsPerModule + 1 // + epic

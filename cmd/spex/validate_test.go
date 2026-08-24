@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/internal/perf"
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/dmitriyb/spexmachina/validator"
 )
@@ -659,9 +660,13 @@ func TestFR7_ValidateCommand_SpecialCharactersInMessage(t *testing.T) {
 func TestFR7_ValidateCommand_PerformanceBudget(t *testing.T) {
 	dir := buildLargeValidSpec(t, 100, 10, 5, 5)
 
-	start := time.Now()
-	out, err := runSpex(t, "validate", "--spec-dir", dir)
-	elapsed := time.Since(start)
+	var (
+		out string
+		err error
+	)
+	perf.Within(t, time.Second, func() {
+		out, err = runSpex(t, "validate", "--spec-dir", dir)
+	})
 
 	if err != nil {
 		t.Fatalf("want no error for a valid large spec, got %v\noutput: %s", err, out)
@@ -669,9 +674,6 @@ func TestFR7_ValidateCommand_PerformanceBudget(t *testing.T) {
 	report := parseReport(t, out)
 	if !report.Valid {
 		t.Fatalf("want valid=true, got errors: %v", report.Errors)
-	}
-	if elapsed > time.Second {
-		t.Fatalf("want the full pipeline under 1s for 100 modules / 2000 module-scoped nodes, took %s", elapsed)
 	}
 }
 

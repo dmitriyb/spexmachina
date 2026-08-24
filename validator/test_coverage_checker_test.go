@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/internal/perf"
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
@@ -194,15 +195,13 @@ func TestREQ12_LargeModuleCountPerformance(t *testing.T) {
 	}
 	writeProject(t, dir, string(projData))
 
-	start := time.Now()
-	errs := CheckTestCoverage(dir)
-	elapsed := time.Since(start)
+	var errs []ValidationError
+	perf.Within(t, time.Second, func() {
+		errs = CheckTestCoverage(dir)
+	})
 
 	if len(errs) > 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
-	}
-	if elapsed > time.Second {
-		t.Fatalf("expected completion within 1 second, took %s", elapsed)
 	}
 }
 
