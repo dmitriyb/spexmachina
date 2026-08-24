@@ -86,6 +86,11 @@ type RemovedNameReport struct {
 // the diff reports as removed, and returns one finding per node whose name
 // survives somewhere, plus a note for every removal it could not fully check.
 //
+// journalPath is the task journal's resolved location (lifecycle.Resolve
+// computes it; no other component computes a state path). An empty path
+// degrades to "no names known" the same way a missing file does — the
+// journal can only strengthen removal detection, never gate it.
+//
 // Only api and component names are searched. Other node types carry generic
 // noun phrases for names — "Hash computation" alone survives sixteen times in
 // another module's test leaves — and searching them would report the corpus
@@ -133,18 +138,17 @@ type RemovedNameReport struct {
 // hashed as IdentityHash("module", phrase) against the module hash. That
 // source has a perverse property on its own — it works only while the module
 // name still survives in prose, so the sweep's reach was inversely coupled to
-// how thoroughly the removal was swept. The task journal at
-// `<spec-dir>/.history.jsonl` closes it: every removed change event carries
-// the module and component names of the node it describes, so journalNames
-// can prove the module name from data `spex ingest` already wrote, whether or
-// not a single mention remains. Only when both sources come up empty is the
-// group reported as a NoteUnverifiableModule note rather than skipped in
-// silence.
+// how thoroughly the removal was swept. The task journal, at its resolved
+// location, closes it: every removed change event carries the module and
+// component names of the node it describes, so journalNames can prove the
+// module name from data `spex ingest` already wrote, whether or not a single
+// mention remains. Only when both sources come up empty is the group
+// reported as a NoteUnverifiableModule note rather than skipped in silence.
 //
 // The journal may be absent — `spex diff` runs in trees that have never been
 // ingested — and a malformed journal degrades the same way: either way the
 // sweep falls back to the corpus alone, never failing the run over it.
-func CheckRemovedNames(specDir string, changes []merkle.ClassifiedChange) (RemovedNameReport, error) {
+func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedChange) (RemovedNameReport, error) {
 	var report RemovedNameReport
 
 	targets := removedNameTargets(changes)
@@ -187,7 +191,7 @@ func CheckRemovedNames(specDir string, changes []merkle.ClassifiedChange) (Remov
 		if err != nil {
 			return report, err
 		}
-		journal := loadJournalNames(specDir)
+		journal := loadJournalNames(journalPath)
 		for _, g := range orphans {
 			name, ok := recovered[g.module]
 			if !ok {
@@ -330,13 +334,17 @@ type journalNames struct {
 }
 
 // loadJournalNames reads and folds the task journal's removed change events
-// at `<spec-dir>/.history.jsonl`. A missing journal — `spex diff` runs in
-// trees that have never been ingested — yields a nil index, which moduleName
-// treats as "no names known". A journal that cannot be parsed degrades the
-// same way rather than failing the run: the journal can only strengthen
-// removal detection, never gate it (see arch_diff_command.md).
-func loadJournalNames(specDir string) *journalNames {
-	data, err := os.ReadFile(filepath.Join(specDir, ".history.jsonl"))
+// at journalPath, the caller's resolved journal location. A missing or empty
+// path — `spex diff` runs in trees that have never been ingested — yields a
+// nil index, which moduleName treats as "no names known". A journal that
+// cannot be parsed degrades the same way rather than failing the run: the
+// journal can only strengthen removal detection, never gate it (see
+// arch_diff_command.md).
+func loadJournalNames(journalPath string) *journalNames {
+	if journalPath == "" {
+		return nil
+	}
+	data, err := os.ReadFile(journalPath)
 	if err != nil {
 		return nil
 	}

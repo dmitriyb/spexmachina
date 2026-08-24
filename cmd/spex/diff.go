@@ -75,13 +75,13 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	// gate keyed off the classified diff, reported through .errors, and
 	// halting the pipeline with exit 2.
 	//
-	// The task journal at <spec-dir>/.history.jsonl is read as a second
-	// hash -> name source: when a whole module is retired, its removed
-	// change events still carry the module name the diff can only report
-	// as a hash. It is read, never written, and an absent (or malformed)
-	// journal is not an error — `spex diff` runs in trees that have never
-	// been ingested.
-	removed, err := validator.CheckRemovedNames(specDir, classified)
+	// The task journal, at its resolved location (ctx.JournalPath), is
+	// read as a second hash -> name source: when a whole module is
+	// retired, its removed change events still carry the module name the
+	// diff can only report as a hash. It is read, never written, and an
+	// absent (or malformed) journal is not an error — `spex diff` runs in
+	// trees that have never been ingested.
+	removed, err := validator.CheckRemovedNames(specDir, ctx.JournalPath, classified)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}

@@ -1087,7 +1087,7 @@ func setupRetiredModuleSpec(t *testing.T) string {
 }
 
 // TestFR8_DiffCommand_JournalRecoversRetiredModule is the wiring for the task
-// journal at <spec-dir>/.history.jsonl, and the hole it closes now that the
+// journal at its resolved location, and the hole it closes now that the
 // retired --map flag is gone. The surviving mention of Retiree is identical
 // in both runs; only the hash → name source differs. Without a journal the
 // sweep can prove nothing about a module whose name was swept out of the
@@ -1118,7 +1118,7 @@ func TestFR8_DiffCommand_JournalRecoversRetiredModule(t *testing.T) {
 
 	t.Run("journal: the same survivor is reported", func(t *testing.T) {
 		specDir := setupRetiredModuleSpec(t)
-		writeTestFile(t, specDir, ".history.jsonl",
+		writeTestFile(t, projectStateDir(specDir), lifecycle.JournalFileName,
 			`{"event":"removed","eid":"e1","node":"`+retireeHash+`","name":"Retiree","node_type":"component","module":"alpha","before":"deadbeef","after":null,"git_head":"headsha1","proposal":"test-removal"}`+"\n")
 
 		out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
@@ -1150,28 +1150,31 @@ func TestFR8_DiffCommand_JournalRecoversRetiredModule(t *testing.T) {
 	})
 }
 
-// TestFR8_DiffCommand_MalformedJournalDegradesGently pins the "gentler than
-// the retired bead-map's hard error" contract from arch_diff_command.md: a
-// spec/.history.jsonl that fails to parse must not fail the diff run. It
-// degrades the removal sweep's journal source exactly as an absent journal
-// does, leaving the unverifiable-module note as the disclosure.
+// TestFR8_DiffCommand_MalformedJournalDegradesGently pins what actually
+// happens to a malformed journal once it lives at its resolved .spex/
+// location: the lifecycle pre-flight (arch_diff_command.md's own first
+// Responsibilities bullet: "refusing an uninitialised or broken project with
+// the pre-flight's own error and exit code") parses that same file before
+// CheckRemovedNames's own gentle degradation ever runs, and
+// arch_project_resolver.md/test_resolver.md are unambiguous that an
+// unparseable journal makes the project broken. So the run is refused with
+// the not-a-spex-project exit code naming `spex doctor`, not degraded to a
+// note — see drifts/drift-spexmachina-uiei.8-diff-journal.json, which reports
+// the leaf's own now-unreachable "degrades gently" sentence. The gentle
+// degradation this test's name still describes is exercised directly at the
+// library level by
+// validator.TestREQ_6f8284df92a2_MalformedJournalStillNotes, which calls
+// CheckRemovedNames without going through the pre-flight.
 func TestFR8_DiffCommand_MalformedJournalDegradesGently(t *testing.T) {
 	specDir := setupRetiredModuleSpec(t)
-	writeTestFile(t, specDir, ".history.jsonl", "{not valid json\n")
+	writeTestFile(t, projectStateDir(specDir), lifecycle.JournalFileName, "{not valid json\n")
 
-	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
-	if exitCode != 0 {
-		t.Fatalf("a malformed journal must not fail the run, got exit %d\noutput: %s", exitCode, out)
+	_, stderr, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != exitNotAProject {
+		t.Fatalf("a malformed journal is broken project state once the pre-flight reads it, want exit %d, got %d\nstderr: %s", exitNotAProject, exitCode, stderr)
 	}
-	var result diffOutput
-	if err := json.Unmarshal([]byte(out), &result); err != nil {
-		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
-	}
-	if len(result.Errors) != 0 {
-		t.Fatalf("want no errors when the journal cannot be parsed, got: %+v", result.Errors)
-	}
-	if len(result.Notes) != 1 || result.Notes[0].Type != "unverifiable_module" {
-		t.Fatalf("want exactly one unverifiable_module note, got: %+v", result.Notes)
+	if !strings.Contains(stderr, "spex doctor") {
+		t.Fatalf("stderr should name 'spex doctor', got: %s", stderr)
 	}
 }
 

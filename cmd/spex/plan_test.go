@@ -784,8 +784,11 @@ func TestPlanCommand_S11_DeterministicAcrossRuns(t *testing.T) {
 // broken project before the fold is reached") before PlanCommand's own
 // journal read is ever attempted — a broken project, naming spex doctor,
 // not the fold-level "read journal" error. See
-// drifts/drift-spexmachina-uiei.7.json for the still-open doc gap this
-// closes in code but not yet in test_plan_command.md's S12 prose.
+// drifts/drift-spexmachina-uiei.8-plan-exit-codes.json for the still-open
+// doc gap this closes in code but not yet in arch_plan_command.md's Exit
+// Codes section or test_plan_command.md's S12 prose (both still list a
+// malformed journal under exit 1; drift-spexmachina-uiei.7.json covers only
+// the missing not-a-spex-project bullet, not this one).
 func TestPlanCommand_S12_MalformedJournalLine_BrokenProject(t *testing.T) {
 	f := setupPlanFixture(t)
 	if err := os.WriteFile(filepath.Join(projectStateDir(f.specDir), lifecycle.JournalFileName), []byte("not-json\n"), 0644); err != nil {
@@ -1222,12 +1225,12 @@ func TestPlanCommand_NotAProject_ExitNotAProject(t *testing.T) {
 	}
 }
 
-// TestPlanCommand_BrokenProject_Exit1 covers the pre-flight's other branch: a
-// corrupted snapshot is a broken project (the not-a-spex-project exit code,
-// naming 'spex doctor'), never the "run spex init" refusal — same
-// distinction cmd/spex/diff.go's TestFR4_E2_DiffCommand_CorruptedSnapshot
-// asserts.
-func TestPlanCommand_BrokenProject_Exit1(t *testing.T) {
+// TestPlanCommand_BrokenProject_ExitNotAProject covers the pre-flight's
+// other branch: a corrupted snapshot is a broken project (the
+// not-a-spex-project exit code, naming 'spex doctor'), never the "run spex
+// init" refusal — same distinction cmd/spex/diff.go's
+// TestFR4_E2_DiffCommand_CorruptedSnapshot asserts.
+func TestPlanCommand_BrokenProject_ExitNotAProject(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
 	writeTestJournal(t, specDir, nil)
 	snapshotPath := filepath.Join(projectStateDir(specDir), lifecycle.SnapshotFileName)
