@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/cli"
@@ -51,15 +52,18 @@ type ingestFixture struct {
 	changesetPath string
 	receiptsPath  string
 	snapshotPath  string
+	journalPath   string
 	compID        string
 	recordID      int
 	beadID        string
 }
 
 // setupIngestFixture writes a minimal spec tree (one component), a
-// matching changeset (one create op), and a matching ok-receipt. The
-// mapping store starts empty so the create op exercises the
-// fresh-insert path.
+// matching changeset (one create op), and a matching ok-receipt, then
+// seeds .spex/ as a sibling of specDir so the lifecycle pre-flight
+// IngestCommand runs sees an initialised project (arch_ingest_command.md
+// "The root's persistent --spec-dir is read too"). The journal starts
+// empty so the create op exercises the fresh-insert path.
 func setupIngestFixture(t *testing.T, status string) ingestFixture {
 	t.Helper()
 	dir := t.TempDir()
@@ -84,6 +88,8 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 	}`
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	snapshotPath, journalPath := seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	cs := plan.Changeset{
 		Version:  plan.ChangesetVersion,
@@ -118,7 +124,8 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 		specDir:       specDir,
 		changesetPath: csPath,
 		receiptsPath:  rcPath,
-		snapshotPath:  filepath.Join(specDir, ".snapshot.json"),
+		snapshotPath:  snapshotPath,
+		journalPath:   journalPath,
 		compID:        compID,
 		recordID:      1,
 		beadID:        "bead-1",
@@ -173,7 +180,7 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 	}
 
 	// Normal-mode ingest writes the task journal (spec/.history.jsonl).
-	entry, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Get(f.compID)
+	entry, err := mapping.NewMappingStore(f.journalPath).Get(f.compID)
 	if err != nil {
 		t.Fatalf("expected journal entry for %s after ingest: %v", f.compID, err)
 	}
@@ -185,8 +192,11 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 func TestIngestCommand_PartialRun_SkipsSnapshot(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusPartial)
 
-	// Pre-write a sentinel snapshot so we can confirm partial leaves it.
-	if err := os.WriteFile(f.snapshotPath, []byte(`{"sentinel":true}`), 0o644); err != nil {
+	// The fixture already seeds a valid (empty-tree) snapshot so the
+	// lifecycle pre-flight resolves; capture it to confirm partial
+	// leaves it untouched.
+	snapBefore, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
 		t.Fatal(err)
 	}
 
@@ -217,8 +227,8 @@ func TestIngestCommand_PartialRun_SkipsSnapshot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read snapshot: %v", err)
 	}
-	if !strings.Contains(string(data), "sentinel") {
-		t.Errorf("partial run rewrote snapshot; want sentinel preserved, got: %s", data)
+	if string(data) != string(snapBefore) {
+		t.Errorf("partial run rewrote snapshot; want unchanged, got: %s", data)
 	}
 }
 
@@ -367,7 +377,7 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 // targeting a bead with no journal pairing at all (Reconciler's
 // invariant 1 — "no journal entry for bead ...") fails the whole batch,
 // including the earlier, otherwise-valid create op, and the journal file
-// is never written.
+// is left byte-identical to its pre-run state.
 func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
@@ -404,7 +414,10 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 	}
 	writeJSON(t, f.receiptsPath, rc)
 
-	journalPath := filepath.Join(f.specDir, ".history.jsonl")
+	journalBefore, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	_, _, exit, err := runIngest(t,
 		"--spec-dir", f.specDir,
@@ -421,8 +434,12 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 		t.Errorf("want error mentioning invariant, got: %v", err)
 	}
 
-	if _, statErr := os.Stat(journalPath); !os.IsNotExist(statErr) {
-		t.Errorf("invariant failure should leave the journal unwritten, stat err: %v", statErr)
+	journalAfter, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(journalAfter) != string(journalBefore) {
+		t.Errorf("invariant failure should leave the journal unchanged, before=%q after=%q", journalBefore, journalAfter)
 	}
 }
 
@@ -437,7 +454,7 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 		t.Fatalf("first run: %v", err)
 	}
 
-	journalPath := filepath.Join(f.specDir, ".history.jsonl")
+	journalPath := f.journalPath
 	journalAfter1, err := os.ReadFile(journalPath)
 	if err != nil {
 		t.Fatal(err)
@@ -553,7 +570,7 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 		t.Errorf("summary: want 1 event appended, snapshot_saved, complete; got %+v", sum)
 	}
 
-	events, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Parse()
+	events, err := mapping.NewMappingStore(f.journalPath).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -574,7 +591,7 @@ func TestIngestCommand_RefreshMode_AbsorbsDrift(t *testing.T) {
 		t.Errorf("modified event after: want %s, got %+v", wantHash, modified.After)
 	}
 
-	entry, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Get(f.compID)
+	entry, err := mapping.NewMappingStore(f.journalPath).Get(f.compID)
 	if err != nil {
 		t.Fatalf("get fold entry: %v", err)
 	}
@@ -603,7 +620,7 @@ func TestIngestCommand_RefreshMode_GitHeadStampsReceipt(t *testing.T) {
 		t.Fatalf("refresh run: exit %d err %v", exit, err)
 	}
 
-	events, err := mapping.NewMappingStore(filepath.Join(f.specDir, ".history.jsonl")).Parse()
+	events, err := mapping.NewMappingStore(f.journalPath).Parse()
 	if err != nil {
 		t.Fatalf("parse journal: %v", err)
 	}
@@ -637,7 +654,7 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	}`)
 	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp2.md", "# Comp2\n")
 
-	journalPath := filepath.Join(f.specDir, ".history.jsonl")
+	journalPath := f.journalPath
 	journalBefore, err := os.ReadFile(journalPath)
 	if err != nil {
 		t.Fatal(err)
@@ -689,6 +706,11 @@ func TestIngestCommand_RefreshMode_EmptyJournalExits1(t *testing.T) {
 	emptyRC := filepath.Join(dir, "refresh-receipts.json")
 	writeJSON(t, emptyRC, adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete})
 
+	snapBefore, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	_, _, exit, err := runIngest(t,
 		"--mode", "refresh",
 		"--changeset", emptyCS,
@@ -701,8 +723,12 @@ func TestIngestCommand_RefreshMode_EmptyJournalExits1(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "completed cycle") || !strings.Contains(err.Error(), "normal pipeline") {
 		t.Errorf("error must indicate refresh requires a completed cycle via the normal pipeline: %v", err)
 	}
-	if _, statErr := os.Stat(f.snapshotPath); statErr == nil {
-		t.Error("snapshot must not be created by a refused run")
+	snapAfter, statErr := os.ReadFile(f.snapshotPath)
+	if statErr != nil {
+		t.Fatal(statErr)
+	}
+	if string(snapAfter) != string(snapBefore) {
+		t.Error("a refused run must leave the snapshot unchanged")
 	}
 }
 
