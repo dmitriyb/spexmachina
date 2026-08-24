@@ -872,19 +872,83 @@ func TestREQ_e68653819f38_Refresh_RemovedReAddedRemovedComponentEIDsUnique(t *te
 	assertSnapshotIsCurrent(t, fx)
 }
 
-// TestRefresh_MissingSnapshotRefused covers the edge case: refresh's
-// diff baseline is the snapshot; without one the run is refused before
-// touching anything.
-func TestRefresh_MissingSnapshotRefused(t *testing.T) {
-	fx := setupRefreshFixture(t)
-	if err := os.Remove(fx.snapPath); err != nil {
-		t.Fatal(err)
+// TestREQ_e68653819f38_Refresh_RefusesEmptyJournal covers the bootstrap
+// guard: a project whose snapshot is present — spex init seeds one at
+// birth — but whose journal contains zero lines has never completed a
+// cycle, so refresh (which absorbs drift *between* cycles) refuses
+// before ever computing the diff, regardless of whether the spec itself
+// has drifted from the snapshot. The guard keys on the journal rather
+// than snapshot presence for exactly this reason: file-existence alone
+// can no longer stand in for "a cycle has completed".
+func TestREQ_e68653819f38_Refresh_RefusesEmptyJournal(t *testing.T) {
+	setup := func(t *testing.T) (specDir, snapPath string) {
+		t.Helper()
+		specDir = t.TempDir()
+		writeFile(t, specDir, "project.json", `{
+			"name": "refresh-fixture",
+			"modules": [
+				{"id": "aabbccddee10", "name": "alpha", "path": "alpha"}
+			]
+		}`)
+		alphaDir := filepath.Join(specDir, "alpha")
+		if err := os.MkdirAll(alphaDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, alphaDir, "module.json", `{
+			"name": "alpha",
+			"components": [
+				{"id": "aabbccddee01", "name": "Widget", "content": "arch_widget.md"}
+			]
+		}`)
+		writeFile(t, alphaDir, "arch_widget.md", "# Widget\n")
+
+		snapPath = filepath.Join(specDir, ".snapshot.json")
+		if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+			t.Fatalf("seed snapshot: %v", err)
+		}
+		return specDir, snapPath
 	}
 
-	_, err := fx.handler().Apply(fx.specDir)
-	if !errors.Is(err, ErrRefreshRequiresSnapshot) {
-		t.Fatalf("want ErrRefreshRequiresSnapshot, got %v", err)
+	assertRefused := func(t *testing.T, specDir, snapPath string) {
+		t.Helper()
+		snapBefore := readBytes(t, snapPath)
+		h := &RefreshHandler{
+			SnapshotPath: snapPath,
+			Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
+			Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
+			Now:          refreshClock,
+		}
+		_, err := h.Apply(specDir)
+		if !errors.Is(err, ErrRefreshNoCompletedCycle) {
+			t.Fatalf("want ErrRefreshNoCompletedCycle, got %v", err)
+		}
+		if !strings.Contains(err.Error(), "completed cycle") || !strings.Contains(err.Error(), "normal pipeline") {
+			t.Errorf("refusal must indicate refresh requires a completed cycle via the normal pipeline: %v", err)
+		}
+		if got := readBytes(t, snapPath); string(got) != string(snapBefore) {
+			t.Error("snapshot must be byte-identical after refusal")
+		}
 	}
+
+	t.Run("missing journal file", func(t *testing.T) {
+		specDir, snapPath := setup(t)
+		assertRefused(t, specDir, snapPath)
+		if _, statErr := os.Stat(filepath.Join(specDir, ".history.jsonl")); statErr == nil {
+			t.Error("journal must not be created by a refused run")
+		}
+	})
+
+	t.Run("present but empty journal file", func(t *testing.T) {
+		specDir, snapPath := setup(t)
+		journalPath := filepath.Join(specDir, ".history.jsonl")
+		if err := os.WriteFile(journalPath, nil, 0644); err != nil {
+			t.Fatal(err)
+		}
+		assertRefused(t, specDir, snapPath)
+		if got := readBytes(t, journalPath); len(got) != 0 {
+			t.Errorf("journal must stay empty, got %q", got)
+		}
+	})
 }
 
 // TestRefresh_NonEmptyArtifactsRefused covers the configuration-error
@@ -1108,13 +1172,15 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 // allow-list — dropping an admitted direction, or admitting a refused
 // one — fails a row here.
 //
-// The journal is empty in every row so the live-pairing gate can never
-// stand in for the type filter: a refusal below is the type filter's
-// own, and an absorbed removal is not an artefact of a task that
-// happened to already be closed. (The live-pairing gate's own role in
-// making component removals safe is covered by
-// RefusesRemovedComponentWithLiveTaskPairing and
-// AbsorbsAbsorbableStructuralSet.)
+// The journal carries a single bootstrap-only entry in every row — an
+// "added" event for the ever-present anchor component, with no
+// task_created and so no fold entry at all — just enough to clear the
+// empty-journal bootstrap guard without ever standing in for the
+// live-pairing gate: a refusal below is the type filter's own, and an
+// absorbed removal is not an artefact of a task that happened to already
+// be closed. (The live-pairing gate's own role in making component
+// removals safe is covered by RefusesRemovedComponentWithLiveTaskPairing
+// and AbsorbsAbsorbableStructuralSet.)
 //
 // requirement is covered at both levels — a module requirement in alpha
 // and a project requirement in project.json — because tree_builder
@@ -1157,6 +1223,17 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 			// Baseline is the state without the node for an addition, the
 			// state with it for a removal.
 			writeRefreshTypeSpec(t, specDir, tc.variant, !tc.added)
+
+			anchorHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_anchor.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedJournal(t, specDir, mapping.Event{
+				Event: "added", EID: "bootstrap0:op-anchor", Node: refreshTypeAnchorID,
+				Name: "Anchor", NodeType: "component", Module: refreshTypeAlphaID,
+				After: strPtr(anchorHash), GitHead: "bootstrap0", Path: "spec/alpha/arch_anchor.md",
+			})
+
 			snapPath := filepath.Join(specDir, ".snapshot.json")
 			if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
 				t.Fatalf("seed snapshot: %v", err)

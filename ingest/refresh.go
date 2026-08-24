@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,17 +17,20 @@ import (
 )
 
 // Sentinel pre-flight errors for refresh mode. IngestCommand maps these
-// to ExitInputError; the gate refusals below map to ExitInvariant.
+// to ExitInputError; the gate refusals below (*RefreshRefusal) map to
+// ExitInvariant.
 var (
-	// ErrRefreshRequiresSnapshot rejects a refresh run with no
-	// pre-existing snapshot: the snapshot is the diff baseline, and
-	// without one every leaf looks added — the bootstrap case that
-	// requires the normal pipeline.
-	ErrRefreshRequiresSnapshot = errors.New("ingest: refresh: no pre-existing snapshot; refresh requires a snapshot baseline (bootstrap via a normal-mode run)")
 	// ErrRefreshNonEmptyArtifacts rejects a refresh run whose changeset
 	// or receipts carry ops. Refresh has no per-op transitions; a
 	// non-empty artifact is a configuration error.
 	ErrRefreshNonEmptyArtifacts = errors.New("ingest: refresh: changeset and receipts must be empty in refresh mode")
+	// ErrRefreshNoCompletedCycle rejects a refresh run against an empty
+	// journal: no cycle has ever completed, and refresh absorbs drift
+	// between cycles — the first cycle belongs to the normal pipeline.
+	// This is a pre-flight check (arch_ingest_command.md's "Pre-flight
+	// / Mode: refresh"), not a gate refusal, so it exits 1 rather than
+	// joining the *RefreshRefusal set below.
+	ErrRefreshNoCompletedCycle = errors.New("ingest: refresh requires a completed cycle; run the normal pipeline first")
 )
 
 // refreshDirections records, for one node type, which structural diff
@@ -68,7 +70,7 @@ var refreshAbsorbable = map[string]refreshDirections{
 // maps it to a non-zero exit with a structured stderr message naming
 // the entries.
 type RefreshRefusal struct {
-	Kind    string   // "added_entries" | "removed_entries" | "live_task_pairing"
+	Kind    string // "added_entries" | "removed_entries" | "live_task_pairing"
 	Entries []string
 	Hint    string
 }
@@ -140,15 +142,30 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, ErrRefreshNonEmptyArtifacts
 	}
 
+	// Bootstrap guard: an empty journal means no cycle has ever completed,
+	// and refresh absorbs drift between cycles — the first cycle belongs
+	// to the normal pipeline. Keyed on the journal rather than snapshot
+	// presence, because spex init writes a snapshot at project birth and
+	// would make a file-existence proxy permanently true. Checked ahead of
+	// the diff — a missing/empty journal makes the diff moot. A pre-flight
+	// check, not a gate refusal, so it is a sentinel error (exit 1) rather
+	// than a *RefreshRefusal (exit 2).
+	journalPath := h.JournalPath
+	if journalPath == "" {
+		journalPath = filepath.Join(specDir, ".history.jsonl")
+	}
+	store := mapping.NewMappingStore(journalPath)
+	existing, err := store.Parse()
+	if err != nil {
+		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
+	}
+	if len(existing) == 0 {
+		return summary, ErrRefreshNoCompletedCycle
+	}
+
 	snapPath := h.SnapshotPath
 	if snapPath == "" {
 		snapPath = filepath.Join(specDir, ".snapshot.json")
-	}
-	if _, err := os.Stat(snapPath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return summary, ErrRefreshRequiresSnapshot
-		}
-		return summary, fmt.Errorf("ingest: refresh: stat snapshot: %w", err)
 	}
 
 	tree, err := merkle.BuildTree(specDir)
@@ -197,15 +214,6 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		}
 	}
 
-	journalPath := h.JournalPath
-	if journalPath == "" {
-		journalPath = filepath.Join(specDir, ".history.jsonl")
-	}
-	store := mapping.NewMappingStore(journalPath)
-	existing, err := store.Parse()
-	if err != nil {
-		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)
-	}
 	fold, err := store.List()
 	if err != nil {
 		return summary, fmt.Errorf("ingest: refresh: read journal: %w", err)

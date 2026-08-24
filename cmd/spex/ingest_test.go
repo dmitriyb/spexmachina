@@ -675,10 +675,13 @@ func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	}
 }
 
-// TestIngestCommand_RefreshMode_MissingSnapshotExits1 covers the
-// pre-flight edge: refresh without a snapshot baseline is an input
-// error (exit 1), pointing the caller at a normal-mode bootstrap.
-func TestIngestCommand_RefreshMode_MissingSnapshotExits1(t *testing.T) {
+// TestIngestCommand_RefreshMode_EmptyJournalExits1 covers the bootstrap
+// guard: a fresh project (no normal-mode cycle has ever run, so the
+// journal is empty) refuses a refresh run — exit 1, a pre-flight
+// failure per arch_ingest_command.md's "Pre-flight / Mode: refresh"
+// (not a *RefreshRefusal gate, which exits 2) — pointing the caller at
+// the normal pipeline instead.
+func TestIngestCommand_RefreshMode_EmptyJournalExits1(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 	dir := filepath.Dir(f.changesetPath)
 	emptyCS := filepath.Join(dir, "refresh-changeset.json")
@@ -693,10 +696,13 @@ func TestIngestCommand_RefreshMode_MissingSnapshotExits1(t *testing.T) {
 		"--spec-dir", f.specDir,
 	)
 	if exit != 1 {
-		t.Fatalf("want exit 1 for missing snapshot, got %d (err %v)", exit, err)
+		t.Fatalf("want exit 1 for the empty-journal bootstrap guard, got %d (err %v)", exit, err)
 	}
-	if err == nil || !strings.Contains(err.Error(), "snapshot") {
-		t.Errorf("error must mention the missing snapshot: %v", err)
+	if err == nil || !strings.Contains(err.Error(), "completed cycle") || !strings.Contains(err.Error(), "normal pipeline") {
+		t.Errorf("error must indicate refresh requires a completed cycle via the normal pipeline: %v", err)
+	}
+	if _, statErr := os.Stat(f.snapshotPath); statErr == nil {
+		t.Error("snapshot must not be created by a refused run")
 	}
 }
 

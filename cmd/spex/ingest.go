@@ -124,7 +124,7 @@ Exit codes:
 
 // runRefreshMode dispatches to the RefreshHandler pathway. Refusals
 // (structural diff entries, a live task pairing on a removed node) map
-// to the invariant exit code 2; pre-flight failures (missing snapshot,
+// to the invariant exit code 2; pre-flight failures (no completed cycle,
 // non-empty artifacts) and IO errors map to input-error exit code 1,
 // per arch_ingest_command.md. An empty gitHead records the refresh
 // receipt's git_head as absent, per RefreshHandler's GitHead contract.
