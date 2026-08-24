@@ -27,33 +27,39 @@ import (
 // tests below cover. "One snapshot format across both writers" lives in
 // snapshot_format_test.go.
 
-// resolvedSnapshotPath returns the snapshot location a lifecycle.Resolve
-// call answers for a freshly initialised fixture project — the pattern
-// IngestCommand's caller follows when it hands the Saver a SnapshotPath,
-// per arch_snapshot_saver.md's Interface section ("this writer computes
-// no location of its own").
-func resolvedSnapshotPath(t *testing.T) string {
+// resolvedProjectContext seeds an empty .spex/ state directory beside the
+// fixture project's own spec tree (specDir's parent, the sibling layout
+// spec/ and .spex/ share under one project root) and resolves it via
+// lifecycle.Resolve — the same call IngestCommand's caller makes before
+// handing the Reconciler and Saver their JournalPath and SnapshotPath, per
+// arch_snapshot_saver.md's Interface section ("this writer computes no
+// location of its own"). Unlike a throwaway root, the returned locations
+// live alongside the fixture project under test, so a write there is
+// verifiable as belonging to it.
+func resolvedProjectContext(t *testing.T, specDir string) *lifecycle.ProjectContext {
 	t.Helper()
-	root := t.TempDir()
-	stateDir := filepath.Join(root, lifecycle.StateDirName)
+	projectRoot := filepath.Dir(specDir)
+	stateDir := filepath.Join(projectRoot, lifecycle.StateDirName)
 	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(stateDir, lifecycle.SnapshotFileName), time.Now().UTC()); err != nil {
 		t.Fatalf("seed snapshot: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(stateDir, lifecycle.JournalFileName), nil, 0644); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
-	ctx, err := lifecycle.Resolve(root)
+	ctx, err := lifecycle.Resolve(projectRoot)
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	return ctx.SnapshotPath
+	return ctx
 }
 
 // runWithSnapshot drives Reconciler.Apply followed by SnapshotSaver.Save
 // against shared on-disk state, mirroring the order IngestCommand wires.
-func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath string, cs plan.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
+// An empty journalPath defers to Reconciler's own <SpecDir>/.history.jsonl
+// default, for scenarios that don't go through lifecycle resolution.
+func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, journalPath, snapPath string, cs plan.Changeset, rc adapters.Receipts) (ReconcileSummary, bool) {
 	t.Helper()
-	r := &Reconciler{SpecDir: specDir, SpecGraph: graph}
+	r := &Reconciler{SpecDir: specDir, JournalPath: journalPath, SpecGraph: graph}
 	sum, err := r.Apply(cs, rc)
 	if err != nil {
 		t.Fatalf("Reconciler.Apply: %v", err)
@@ -76,21 +82,23 @@ func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath str
 // write).
 func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	specDir := setupSpecDir(t)
-	snapPath := resolvedSnapshotPath(t)
+	ctx := resolvedProjectContext(t, specDir)
 
 	graph := newFakeSpecGraph()
 	for _, id := range []string{hexMod1, hexMod2, hexA, hexB, hexC} {
 		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "new-" + id, NodeType: "component"}
 	}
 
-	seedJournal(t, specDir,
-		mapping.Event{Event: "added", EID: "seed-Mod1", Node: hexMod1, Name: "Mod1", NodeType: "component", Module: "m", After: strPtr("old-Mod1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod1.md"},
-		mapping.Event{Event: "task_created", TaskID: "br-old1", For: "seed-Mod1"},
-		mapping.Event{Event: "added", EID: "seed-Mod2", Node: hexMod2, Name: "Mod2", NodeType: "component", Module: "m", After: strPtr("old-Mod2"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod2.md"},
-		mapping.Event{Event: "task_created", TaskID: "br-old2", For: "seed-Mod2"},
-		mapping.Event{Event: "added", EID: "seed-Gone", Node: hexGone, Name: "Gone", NodeType: "component", Module: "m", After: strPtr("h-gone"), GitHead: "seedhead", Proposal: "seed-p", Path: "Gone.md"},
-		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
-	)
+	if err := mapping.NewMappingStore(ctx.JournalPath).Append([]mapping.Event{
+		{Event: "added", EID: "seed-Mod1", Node: hexMod1, Name: "Mod1", NodeType: "component", Module: "m", After: strPtr("old-Mod1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod1.md"},
+		{Event: "task_created", TaskID: "br-old1", For: "seed-Mod1"},
+		{Event: "added", EID: "seed-Mod2", Node: hexMod2, Name: "Mod2", NodeType: "component", Module: "m", After: strPtr("old-Mod2"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod2.md"},
+		{Event: "task_created", TaskID: "br-old2", For: "seed-Mod2"},
+		{Event: "added", EID: "seed-Gone", Node: hexGone, Name: "Gone", NodeType: "component", Module: "m", After: strPtr("h-gone"), GitHead: "seedhead", Proposal: "seed-p", Path: "Gone.md"},
+		{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
+	}); err != nil {
+		t.Fatalf("seed journal: %v", err)
+	}
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []plan.Op{
 		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
@@ -113,7 +121,7 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-gone"},
 	}}
 
-	sum, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
+	sum, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)
 
 	if sum.OkCreates != 5 || sum.OkCloses != 3 {
 		t.Errorf("summary = %+v, want 5 ok creates / 3 ok closes", sum)
@@ -131,7 +139,7 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		t.Errorf("receipts_appended = %d, want 8", sum.ReceiptsAppended)
 	}
 
-	fold, err := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl")).List()
+	fold, err := mapping.NewMappingStore(ctx.JournalPath).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
@@ -154,7 +162,7 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")
 	}
-	snapData, err := os.ReadFile(snapPath)
+	snapData, err := os.ReadFile(ctx.SnapshotPath)
 	if err != nil {
 		t.Fatalf("read snapshot: %v", err)
 	}
@@ -192,7 +200,7 @@ func TestConsistencyInvariants_Invariant4_PartialLeavesSnapshotUntouched(t *test
 		{OpID: "op-2", Status: adapters.OpStatusError, Error: "tracker boom"},
 	}}
 
-	sum, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
+	sum, wrote := runWithSnapshot(t, specDir, graph, "", snapPath, cs, rc)
 
 	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
 		t.Errorf("summary = %+v, want 1 event / 1 receipt (only the ok op)", sum)
@@ -237,7 +245,7 @@ func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
 	}}
 
-	_, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
+	_, wrote := runWithSnapshot(t, specDir, graph, "", snapPath, cs, rc)
 
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")

@@ -55,7 +55,7 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		{OpID: "op-4", Status: adapters.OpStatusOk, BeadID: "br-old"},
 	}}
 
-	_, wrote1 := runWithSnapshot(t, specDir, graph, snapPath, run1CS, run1RC)
+	_, wrote1 := runWithSnapshot(t, specDir, graph, "", snapPath, run1CS, run1RC)
 
 	journalAfterRun1 := readJournal(t, specDir)
 	// Seed (2 lines) + A's added/task_created + B's added/task_created +
@@ -89,7 +89,7 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: false},
 	}}
 
-	_, wrote2 := runWithSnapshot(t, specDir, graph, snapPath, run2CS, run2RC)
+	_, wrote2 := runWithSnapshot(t, specDir, graph, "", snapPath, run2CS, run2RC)
 
 	run2Bytes := journalBytes(t, specDir)
 	if !bytes.HasPrefix(run2Bytes, run1Bytes) {
@@ -156,7 +156,7 @@ func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 		{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: true},
 	}}
 
-	_, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
+	_, wrote := runWithSnapshot(t, specDir, graph, "", snapPath, cs, rc)
 
 	journal := readJournal(t, specDir)
 	if len(journal) != 6 {
@@ -191,7 +191,7 @@ func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 // spec directory.
 func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 	specDir := setupSpecDir(t)
-	snapPath := resolvedSnapshotPath(t)
+	ctx := resolvedProjectContext(t, specDir)
 
 	graph := newFakeSpecGraph()
 	graph.nodes[hexC] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "hC", NodeType: "component"}
@@ -203,7 +203,7 @@ func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC"},
 	}}
 
-	_, wrote := runWithSnapshot(t, specDir, graph, snapPath, cs, rc)
+	_, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)
 	if !wrote {
 		t.Fatal("Saver.Save reported wrote=false on complete status")
 	}
@@ -212,7 +212,7 @@ func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 	if err != nil {
 		t.Fatalf("independent BuildTree: %v", err)
 	}
-	loaded, err := merkle.Load(snapPath)
+	loaded, err := merkle.Load(ctx.SnapshotPath)
 	if err != nil {
 		t.Fatalf("load saved snapshot: %v", err)
 	}
