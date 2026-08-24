@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-uiei.7",
+  "node": "92ae9dab6d6d",
+  "files": [
+    "spec/plan/arch_plan_command.md",
+    "spec/plan/test_plan_command.md"
+  ],
+  "claim": "arch_plan_command.md's Exit Codes section (lines 52-58) lists only three codes — 0 success, 1 input validation, 2 contract refusal — with no entry for the not-a-spex-project refusal that the same leaf's pre-flight step 3 (line 36) and Wiring section (line 46) require PlanCommand to run before folding the journal. test_plan_command.md's S12 Exit Codes scenario mirrors that same three-way list verbatim and has no case for it either.",
+  "authoritative_source": "The sibling command leaves resolved the identical seam explicitly: spec/merkle/arch_diff_command.md's own Exit Codes section (line 69) lists a fourth bullet, \"not a spex project — the pre-flight's own stable exit code, distinct from both codes above, when the directory was never initialised\" — and cmd/spex/diff.go and cmd/spex/map.go both ship that code (exitNotAProject = 3) today, ahead of ProjectResolver landing, per drifts/drift-spexmachina-uiei.4.json's proposed_fix (\"implement the behavioural core ... using the CURRENT default location as an interim stand-in\").",
+  "evidence": "This PR wires the same interim pre-flight into PlanCommand (planPreflight in cmd/spex/plan.go, reusing diff.go's exitNotAProject=3 and mapPreflight's pattern): an absent default snapshot now refuses the run naming 'spex init' before the journal is parsed, and a corrupted snapshot refuses naming 'spex doctor' — matching arch_plan_command.md line 36 and 46's own description of the pre-flight. But unlike arch_diff_command.md, arch_plan_command.md's Exit Codes section never got the matching fourth bullet, so the code this PR now ships (and diff.go/map.go already shipped) has no exit-codes documentation on this leaf, and test_plan_command.md's S12 has no scenario for it — the same doc gap the review on this PR identified.",
+  "blocking": false,
+  "proposed_fix": "Add a fourth bullet to arch_plan_command.md's Exit Codes section mirroring arch_diff_command.md's: 'not a spex project — the pre-flight's own stable exit code, distinct from 1 and 2, when the directory was never initialised.' Extend test_plan_command.md's S12 to add that case (no snapshot at the resolved default location -> the not-a-spex-project code, naming 'spex init') alongside its existing three-way list, matching how test_merkle_commands.md's own E7 fixture already covers the analogous case for spex diff."
+}
