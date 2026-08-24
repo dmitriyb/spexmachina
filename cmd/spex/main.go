@@ -11,7 +11,6 @@ import (
 func main() {
 	rootCmd := cli.NewRootCmd()
 	rootCmd.AddCommand(
-		newInitCmd(),
 		newHashIDCmd(),
 		newDiffCmd(),
 		newValidateCmd(),
@@ -24,6 +23,7 @@ func main() {
 		newRenderCmd(),
 		newIngestCmd(),
 		newUpgradeCmd(),
+		newInitCmd(),
 		newDoctorCmd(),
 	)
 

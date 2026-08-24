@@ -103,20 +103,54 @@ func TestInit_EmptyJournalNoEvent(t *testing.T) {
 
 // TestInit_RefusesInitializedDirectory covers "Init refuses an
 // initialised directory": spex init where .spex/ exists → non-zero exit,
-// and every byte under .spex/ is unchanged — the journal survives.
+// and every byte under .spex/ is unchanged — the journal survives. Per
+// arch_init_command.md's Refusal, init refuses "whatever its condition",
+// so the damaged fixtures (snapshot deleted, journal malformed) are
+// exercised alongside the healthy one: the broken case is the dangerous
+// one, since narrowing the refusal to a healthy .spex/ would still pass
+// against a healthy fixture alone.
 func TestInit_RefusesInitializedDirectory(t *testing.T) {
-	root := t.TempDir()
-	specDir := filepath.Join(root, "spec")
-	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now().UTC())
-
-	before := dirBytes(t, root)
-
-	_, stderr, exitCode := runInit(t, "--spec-dir", specDir)
-	if exitCode == 0 {
-		t.Fatalf("exit code = 0, want non-zero; stderr=%s", stderr)
+	cases := []struct {
+		name   string
+		damage func(t *testing.T, root string)
+	}{
+		{name: "healthy", damage: func(t *testing.T, root string) {}},
+		{
+			name: "snapshot deleted",
+			damage: func(t *testing.T, root string) {
+				if err := os.Remove(filepath.Join(root, lifecycle.StateDirName, lifecycle.SnapshotFileName)); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
+		{
+			name: "journal malformed",
+			damage: func(t *testing.T, root string) {
+				journalPath := filepath.Join(root, lifecycle.StateDirName, lifecycle.JournalFileName)
+				if err := os.WriteFile(journalPath, []byte("{not valid json\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			},
+		},
 	}
 
-	assertDirByteIdentical(t, root, before)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			specDir := filepath.Join(root, "spec")
+			seedProjectState(t, specDir, merkle.EmptyTree(), time.Now().UTC())
+			tc.damage(t, root)
+
+			before := dirBytes(t, root)
+
+			_, stderr, exitCode := runInit(t, "--spec-dir", specDir)
+			if exitCode == 0 {
+				t.Fatalf("exit code = 0, want non-zero; stderr=%s", stderr)
+			}
+
+			assertDirByteIdentical(t, root, before)
+		})
+	}
 }
 
 // TestInit_RetiredPathsIgnored covers the edge case: spex init in a
@@ -154,4 +188,38 @@ func TestInit_RetiredPathsIgnored(t *testing.T) {
 	}
 
 	assertDirByteIdentical(t, specDir, beforeRetired)
+}
+
+// TestInitDoctor_RoundTrip covers "Doctor on a healthy project": after
+// spex init, spex doctor reports every artifact present and readable,
+// exit 0 — the init → doctor round-trip that spans both commands, as
+// opposed to healthyProject's hand-built fixture in doctor_test.go, which
+// exercises doctor in isolation from init.
+func TestInitDoctor_RoundTrip(t *testing.T) {
+	root := t.TempDir()
+	specDir := filepath.Join(root, "spec")
+
+	_, initStderr, initExit := runInit(t, "--spec-dir", specDir)
+	if initExit != 0 {
+		t.Fatalf("init exit code = %d, want 0; stderr=%s", initExit, initStderr)
+	}
+
+	stdout, stderr, exitCode := runDoctor(t, "--spec-dir", specDir)
+	if exitCode != 0 {
+		t.Fatalf("doctor exit code = %d, want 0; stdout=%s stderr=%s", exitCode, stdout, stderr)
+	}
+	report := decodeDoctorReport(t, stdout)
+	if !report.Healthy {
+		t.Fatalf("report.Healthy = false, want true: %+v", report)
+	}
+	for _, artifact := range []string{
+		lifecycle.StateDirName,
+		filepath.Join(lifecycle.StateDirName, lifecycle.SnapshotFileName),
+		filepath.Join(lifecycle.StateDirName, lifecycle.JournalFileName),
+	} {
+		finding := findingFor(t, report, artifact)
+		if finding.Status != "present" {
+			t.Errorf("finding %s: status = %q, want present", artifact, finding.Status)
+		}
+	}
 }
