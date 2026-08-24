@@ -170,7 +170,7 @@ func planPreflight(specDir string) error {
 				err:  fmt.Errorf("plan: not a spex project (no snapshot at %s); run 'spex init'", defaultSnapshotPath),
 			}
 		}
-		return fmt.Errorf("plan: %w; project state is broken, run 'spex doctor'", err)
+		return planInputErr(fmt.Errorf("plan: %w; project state is broken, run 'spex doctor'", err))
 	}
 	return nil
 }

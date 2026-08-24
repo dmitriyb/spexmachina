@@ -1229,6 +1229,9 @@ func TestPlanCommand_BrokenProject_Exit1(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for a corrupted snapshot")
 	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit code 1, got %d (%v)", code, err)
+	}
 	if !strings.Contains(err.Error(), "spex doctor") {
 		t.Errorf("want error naming 'spex doctor', got %v", err)
 	}
