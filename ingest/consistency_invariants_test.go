@@ -6,8 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/adapters"
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
@@ -24,6 +26,28 @@ import (
 // iff complete) and the spec's Happy Path acceptance — that is what the
 // tests below cover. "One snapshot format across both writers" lives in
 // snapshot_format_test.go.
+
+// resolvedSnapshotPath returns the snapshot location a lifecycle.Resolve
+// call answers for a freshly initialised fixture project — the pattern
+// IngestCommand's caller follows when it hands the Saver a SnapshotPath,
+// per arch_snapshot_saver.md's Interface section ("this writer computes
+// no location of its own").
+func resolvedSnapshotPath(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	stateDir := filepath.Join(root, lifecycle.StateDirName)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(stateDir, lifecycle.SnapshotFileName), time.Now().UTC()); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, lifecycle.JournalFileName), nil, 0644); err != nil {
+		t.Fatalf("seed journal: %v", err)
+	}
+	ctx, err := lifecycle.Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return ctx.SnapshotPath
+}
 
 // runWithSnapshot drives Reconciler.Apply followed by SnapshotSaver.Save
 // against shared on-disk state, mirroring the order IngestCommand wires.
@@ -52,7 +76,7 @@ func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, snapPath str
 // write).
 func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	specDir := setupSpecDir(t)
-	snapPath := filepath.Join(specDir, ".snapshot.json")
+	snapPath := resolvedSnapshotPath(t)
 
 	graph := newFakeSpecGraph()
 	for _, id := range []string{hexMod1, hexMod2, hexA, hexB, hexC} {

@@ -226,22 +226,36 @@ func TestSaver_BuildTreeError_ReturnsErrorAndPreservesExisting(t *testing.T) {
 	}
 }
 
-func TestSaver_Defaults_SpecDirAndSnapshotPath(t *testing.T) {
-	// SpecDir defaults to ./spec; SnapshotPath defaults to
-	// <SpecDir>/.snapshot.json. Set SpecDir explicitly and leave
-	// SnapshotPath blank to confirm the path-default logic.
+func TestSaver_UnsetSnapshotPath_IsCallerError(t *testing.T) {
+	// The writer computes no location of its own: an unset SnapshotPath
+	// on a complete-status run is a caller error, not a fallback to some
+	// default location.
 	specDir := setupSpecDir(t)
 
 	s := &Saver{SpecDir: specDir} // SnapshotPath omitted on purpose
 	wrote, err := s.Save(adapters.StatusComplete)
-	if err != nil {
-		t.Fatalf("Save: %v", err)
+	if err == nil {
+		t.Fatalf("Save: want error for unset SnapshotPath, got nil")
 	}
-	if !wrote {
-		t.Fatalf("wrote: want true, got false")
+	if wrote {
+		t.Fatalf("wrote: want false on error, got true")
 	}
-	if _, err := os.Stat(filepath.Join(specDir, ".snapshot.json")); err != nil {
-		t.Fatalf("default snapshot path not honored: %v", err)
+}
+
+func TestSaver_UnsetSpecDir_IsCallerError(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapPath := filepath.Join(specDir, ".snapshot.json")
+
+	s := &Saver{SnapshotPath: snapPath} // SpecDir omitted on purpose
+	wrote, err := s.Save(adapters.StatusComplete)
+	if err == nil {
+		t.Fatalf("Save: want error for unset SpecDir, got nil")
+	}
+	if wrote {
+		t.Fatalf("wrote: want false on error, got true")
+	}
+	if _, statErr := os.Stat(snapPath); !os.IsNotExist(statErr) {
+		t.Fatalf("snapshot must not be created, stat err: %v", statErr)
 	}
 }
 

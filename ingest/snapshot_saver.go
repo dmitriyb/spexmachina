@@ -3,23 +3,23 @@ package ingest
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
-// Saver writes spec/.snapshot.json from the current merkle tree, gated
-// on the receipts top-level status. Partial runs leave the snapshot
-// untouched so the next spex plan diffs against the original baseline
-// and resurfaces unfinished ops through the idempotency path.
+// Saver writes the snapshot from the current merkle tree, gated on the
+// receipts top-level status. Partial runs leave the snapshot untouched
+// so the next spex plan diffs against the original baseline and
+// resurfaces unfinished ops through the idempotency path.
 type Saver struct {
-	// SpecDir is the spec root passed to merkle.BuildTree. Defaults to
-	// "./spec" when empty.
+	// SpecDir is the spec root passed to merkle.BuildTree.
 	SpecDir string
-	// SnapshotPath is the destination for the snapshot file. Defaults
-	// to <SpecDir>/.snapshot.json when empty.
+	// SnapshotPath is the destination for the snapshot file. The shipped
+	// command sets it to the location inside .spex/ the lifecycle
+	// pre-flight resolved, so this writer computes no location of its
+	// own.
 	SnapshotPath string
 	// Now is the timestamp source for the snapshot's created_at field.
 	// Defaults to time.Now when nil. Tests inject a fixed clock to pin
@@ -30,31 +30,29 @@ type Saver struct {
 // Save writes the snapshot iff status == adapters.StatusComplete.
 // Returns (true, nil) when the snapshot was written, (false, nil) when
 // the gate skipped the write, and (false, err) on any failure to build
-// or persist the tree.
+// or persist the tree — including an unset SpecDir or SnapshotPath,
+// which are caller errors rather than a fallback.
 func (s *Saver) Save(status string) (bool, error) {
 	if status != adapters.StatusComplete {
 		return false, nil
 	}
-
-	dir := s.SpecDir
-	if dir == "" {
-		dir = "./spec"
+	if s.SpecDir == "" {
+		return false, fmt.Errorf("ingest: snapshot: SpecDir is required")
 	}
-	path := s.SnapshotPath
-	if path == "" {
-		path = filepath.Join(dir, ".snapshot.json")
+	if s.SnapshotPath == "" {
+		return false, fmt.Errorf("ingest: snapshot: SnapshotPath is required")
 	}
 	now := s.Now
 	if now == nil {
 		now = time.Now
 	}
 
-	tree, err := merkle.BuildTree(dir)
+	tree, err := merkle.BuildTree(s.SpecDir)
 	if err != nil {
 		return false, fmt.Errorf("ingest: snapshot: build tree: %w", err)
 	}
-	if err := writeAtomic(path, tree, now()); err != nil {
-		return false, fmt.Errorf("ingest: snapshot: write %s: %w", path, err)
+	if err := writeAtomic(s.SnapshotPath, tree, now()); err != nil {
+		return false, fmt.Errorf("ingest: snapshot: write %s: %w", s.SnapshotPath, err)
 	}
 	return true, nil
 }

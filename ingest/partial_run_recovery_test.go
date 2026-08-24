@@ -191,7 +191,7 @@ func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 // spec directory.
 func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 	specDir := setupSpecDir(t)
-	snapPath := filepath.Join(specDir, ".snapshot.json")
+	snapPath := resolvedSnapshotPath(t)
 
 	graph := newFakeSpecGraph()
 	graph.nodes[hexC] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "hC", NodeType: "component"}

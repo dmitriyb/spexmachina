@@ -87,7 +87,11 @@ Exit codes:
 				return ingestInvariantErr(err)
 			}
 
-			saver := &ingest.Saver{SpecDir: specDir}
+			// TODO(bead:spexmachina-uiei.13): resolve SnapshotPath via
+			// lifecycle.Resolve once IngestCommand adopts the .spex/
+			// state dir; SnapshotSaver itself no longer defaults this
+			// path (arch_snapshot_saver.md's Interface section).
+			saver := &ingest.Saver{SpecDir: specDir, SnapshotPath: filepath.Join(specDir, ".snapshot.json")}
 			wrote, err := saver.Save(rc.Status)
 			if err != nil {
 				return ingestInputErr(fmt.Errorf("ingest: snapshot: %w", err))
