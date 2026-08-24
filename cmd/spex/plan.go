@@ -2,13 +2,13 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
@@ -72,13 +72,12 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorb
 		return planInputErr(fmt.Errorf("plan: diff contains %d error(s), refusing to proceed", len(diffErrors)))
 	}
 
-	if err := planPreflight(specDir); err != nil {
-		return err
+	ctx, err := lifecycle.Resolve(resolveProjectRoot(specDir))
+	if err != nil {
+		return fmt.Errorf("plan: %w", err)
 	}
 
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
+	store := mapping.NewMappingStore(ctx.JournalPath)
 	events, err := store.Parse()
 	if err != nil {
 		return planInputErr(fmt.Errorf("plan: read journal: map: %w", err))
@@ -148,31 +147,6 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorb
 	}
 
 	return writePlanChangeset(cs, outPath, cmd.OutOrStdout())
-}
-
-// planPreflight refuses the invocation before the journal is parsed, per
-// arch_plan_command.md pre-flight step 3: "an absent file still folds empty
-// at this layer, though the lifecycle pre-flight refuses an uninitialised or
-// broken project before the fold is reached." An absent journal alone is not
-// refused here — the fold below still answers empty for that — only the
-// absence or corruption of the project's snapshot is.
-//
-// TODO(bead:spexmachina-uiei.8): this inlines the distinction
-// ProjectResolver will own — until it lands, the interim signal is the same
-// one cmd/spex/diff.go's and cmd/spex/map.go's pre-flights use: the default
-// snapshot's presence marks an initialised project.
-func planPreflight(specDir string) error {
-	defaultSnapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if _, err := merkle.Load(defaultSnapshotPath); err != nil {
-		if errors.Is(err, merkle.ErrSnapshotAbsent) {
-			return &diffError{
-				code: exitNotAProject,
-				err:  fmt.Errorf("plan: not a spex project (no snapshot at %s); run 'spex init'", defaultSnapshotPath),
-			}
-		}
-		return planInputErr(fmt.Errorf("plan: %w; project state is broken, run 'spex doctor'", err))
-	}
-	return nil
 }
 
 // readPlanDiff reads the diff document from --diff (a path, or "-" for

@@ -27,6 +27,15 @@ func resolveSpecDir(cmd *cobra.Command) (string, error) {
 	return abs, nil
 }
 
+// resolveProjectRoot returns the project root the lifecycle pre-flight
+// resolves .spex/ under: the parent directory of the resolved spec
+// directory. spec/ and .spex/ are siblings under one project root —
+// --spec-dir names only the former, per spec/cli/arch_root_command.md
+// "Global Flags".
+func resolveProjectRoot(specDir string) string {
+	return filepath.Dir(specDir)
+}
+
 // parseDiffJSON converts the JSON output of `spex diff --json` into
 // []merkle.ClassifiedChange and []merkle.DiffError for the plan pipeline.
 func parseDiffJSON(data []byte) ([]merkle.ClassifiedChange, []merkle.DiffError, error) {

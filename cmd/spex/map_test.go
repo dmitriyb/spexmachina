@@ -10,29 +10,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 )
 
-// writeTestJournal writes spec/.history.jsonl under dir with the given
-// raw lines, one per line.
+// writeTestJournal writes the journal at dir's resolved .spex/ location
+// with the given raw lines, one per line.
 func writeTestJournal(t *testing.T, dir string, lines []string) {
 	t.Helper()
 	content := ""
 	if len(lines) > 0 {
 		content = strings.Join(lines, "\n") + "\n"
 	}
-	writeTestFile(t, dir, ".history.jsonl", content)
+	stateDir := projectStateDir(dir)
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", stateDir, err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, lifecycle.JournalFileName), []byte(content), 0644); err != nil {
+		t.Fatalf("write journal: %v", err)
+	}
 }
 
-// seedMapSnapshot writes an empty-tree snapshot at dir's default location,
-// marking dir as an initialised project — the interim pre-flight signal
-// mapPreflight checks (see map.go), same as cmd/spex/diff.go's own tests
+// seedMapSnapshot writes an empty-tree snapshot at dir's resolved .spex/
+// location, marking dir's project as initialised for the lifecycle
+// pre-flight map.go's commands run — same as cmd/spex/diff.go's own tests
 // seed before exercising a command that expects to run past the
-// uninitialised-project refusal.
+// uninitialised-project refusal. It seeds the snapshot alone, deliberately:
+// TestFR_MapList_NoJournal relies on a project whose snapshot exists but
+// whose journal does not, to exercise the broken-project branch.
 func seedMapSnapshot(t *testing.T, dir string) {
 	t.Helper()
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+	stateDir := projectStateDir(dir)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(stateDir, lifecycle.SnapshotFileName), time.Now()); err != nil {
 		t.Fatalf("seed snapshot: %v", err)
 	}
 }
@@ -234,7 +244,7 @@ func TestFR_MapList_NoProjectState(t *testing.T) {
 	if !strings.Contains(err.Error(), "spex init") {
 		t.Fatalf("want error naming 'spex init', got %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, ".history.jsonl")); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(projectStateDir(dir), lifecycle.JournalFileName)); statErr == nil {
 		t.Fatal("map list must not create the journal file")
 	}
 }
@@ -255,7 +265,7 @@ func TestFR_MapList_NoJournal(t *testing.T) {
 	if !strings.Contains(err.Error(), "spex doctor") {
 		t.Fatalf("want error naming 'spex doctor', got %v", err)
 	}
-	if _, statErr := os.Stat(filepath.Join(dir, ".history.jsonl")); statErr == nil {
+	if _, statErr := os.Stat(filepath.Join(projectStateDir(dir), lifecycle.JournalFileName)); statErr == nil {
 		t.Fatal("map list must not create the journal file")
 	}
 }

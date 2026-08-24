@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
 )
@@ -34,7 +35,12 @@ func runRegisterE(cmd *cobra.Command, args []string, gitHead string) error {
 		return err
 	}
 
-	filename, err := proposal.Register(args[0], specDir, gitHead)
+	ctx, err := lifecycle.Resolve(resolveProjectRoot(specDir))
+	if err != nil {
+		return fmt.Errorf("register: %w", err)
+	}
+
+	filename, err := proposal.Register(args[0], specDir, ctx.JournalPath, gitHead)
 	if err != nil {
 		return err
 	}

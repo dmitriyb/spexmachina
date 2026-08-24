@@ -13,6 +13,8 @@ import (
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/ingest"
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
@@ -94,9 +96,7 @@ func setupDiffTestSpec(t *testing.T) (specDir, comp1Hash, test1Hash string) {
 // not-a-project refusal, never this path.
 func TestFR4_S1_S2_DiffCommand_BootstrapAllAdded(t *testing.T) {
 	specDir := setupTestSpec(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
@@ -145,10 +145,7 @@ func TestFR4_DiffCommand_NoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
@@ -172,10 +169,7 @@ func TestFR4_DiffCommand_Modified(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	testPath := filepath.Join(specDir, "alpha", "test_comp1.md")
 	if err := os.WriteFile(testPath, []byte("# Changed tests\n"), 0644); err != nil {
@@ -224,10 +218,7 @@ func TestFR5_DiffCommand_ImpactClassification(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	archPath := filepath.Join(specDir, "alpha", "arch_comp1.md")
 	if err := os.WriteFile(archPath, []byte("# Changed architecture\n"), 0644); err != nil {
@@ -305,9 +296,7 @@ func TestFR5_DiffCommand_DataFlowIsContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	flowPath := filepath.Join(specDir, "alpha", "flow_flow1.md")
 	if err := os.WriteFile(flowPath, []byte("# Flow1 data flow CHANGED\n"), 0644); err != nil {
@@ -351,9 +340,7 @@ func TestFR5_DiffCommand_ContractInHumanSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	flowPath := filepath.Join(specDir, "alpha", "flow_flow1.md")
 	if err := os.WriteFile(flowPath, []byte("# Flow1 data flow CHANGED\n"), 0644); err != nil {
@@ -381,9 +368,7 @@ func TestFR4_DiffCommand_CustomSnapshotPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 	customPath := filepath.Join(t.TempDir(), "custom-snapshot.json")
 	if err := merkle.Save(tree, customPath, time.Now()); err != nil {
 		t.Fatal(err)
@@ -411,9 +396,7 @@ func TestFR4_DiffCommand_HumanOutput_NoChanges(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	out, err := runSpex(t, "diff", "--spec-dir", specDir)
 	if err != nil {
@@ -427,9 +410,7 @@ func TestFR4_DiffCommand_HumanOutput_NoChanges(t *testing.T) {
 
 func TestFR4_DiffCommand_HumanOutput_WithChanges(t *testing.T) {
 	specDir := setupTestSpec(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	out, err := runSpex(t, "diff", "--spec-dir", specDir)
 	if err != nil {
@@ -456,14 +437,21 @@ func TestFR4_DiffCommand_NonexistentDir(t *testing.T) {
 func TestFR4_E2_DiffCommand_CorruptedSnapshot(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	stateDir := projectStateDir(specDir)
+	if err := os.MkdirAll(stateDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	snapshotPath := filepath.Join(stateDir, lifecycle.SnapshotFileName)
 	if err := os.WriteFile(snapshotPath, []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, lifecycle.JournalFileName), nil, 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	_, stderr, exitCode := runDiff(t, "--spec-dir", specDir)
-	if exitCode != 1 {
-		t.Fatalf("want exit 1 on corrupted snapshot, got %d", exitCode)
+	if exitCode != exitNotAProject {
+		t.Fatalf("want the not-a-project exit code for a broken project, got %d", exitCode)
 	}
 	if !strings.Contains(stderr, snapshotPath) {
 		t.Fatalf("stderr should name the snapshot path %q, got: %s", snapshotPath, stderr)
@@ -563,9 +551,7 @@ func TestFR8_DiffCommand_CompletenessErrors_JSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	// Modify a requirement leaf by changing the module.json requirement description.
 	// This changes the requirement node hash but NOT the implementing component.
@@ -604,9 +590,7 @@ func TestFR8_DiffCommand_CompletenessErrors_HumanOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	// Modify requirement without component change.
 	alphaDir := filepath.Join(specDir, "alpha")
@@ -635,9 +619,7 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	// Modify both the requirement AND all implementing components.
 	// Changing module.json (requirement title) also triggers meta-only checks
@@ -664,9 +646,7 @@ func TestFR8_DiffCommand_NoCompletenessErrors_WhenComplete(t *testing.T) {
 
 func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 	specDir := setupTestSpecWithRequirements(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	// Against an empty-tree (bootstrap) snapshot, all nodes are "added" —
 	// requirements and their implementing components are both added, so no
@@ -691,9 +671,7 @@ func TestFR8_DiffCommand_NoSnapshot_NoCompletenessErrors(t *testing.T) {
 
 func TestNFR6_DiffCommand_Deterministic(t *testing.T) {
 	specDir := setupTestSpec(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	out1, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	out2, _ := runSpex(t, "diff", "--json", "--spec-dir", specDir)
@@ -730,9 +708,7 @@ func snapshotIncompleteSpec(t *testing.T) (specDir string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	alphaDir := filepath.Join(specDir, "alpha")
 	writeTestFile(t, alphaDir, "module.json", mutatedAlphaModule(t, "Req 1 CHANGED", "Req 2"))
@@ -749,9 +725,7 @@ func TestFR8_E5_DiffCommand_ExitCodeSemantics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-			t.Fatal(err)
-		}
+		seedProjectState(t, specDir, tree, time.Now())
 		testPath := filepath.Join(specDir, "alpha", "test_comp1.md")
 		if err := os.WriteFile(testPath, []byte("# Changed tests\n"), 0644); err != nil {
 			t.Fatal(err)
@@ -779,9 +753,7 @@ func TestFR8_E5_DiffCommand_ExitCodeSemantics(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-			t.Fatal(err)
-		}
+		seedProjectState(t, specDir, tree, time.Now())
 
 		_, _, exitCode := runDiff(t, "--spec-dir", specDir)
 		if exitCode != 0 {
@@ -915,9 +887,7 @@ func setupRemovalSpec(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, dir, tree, time.Now())
 
 	writeTestFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
@@ -1102,9 +1072,7 @@ func setupRetiredModuleSpec(t *testing.T) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, dir, tree, time.Now())
 
 	writeTestFile(t, dir, "project.json", `{
 		"name": "test-project",
@@ -1212,9 +1180,7 @@ func TestFR8_DiffCommand_MalformedJournalDegradesGently(t *testing.T) {
 // initialised project), but the authored spec itself will not read.
 func TestFR4_E1_DiffCommand_MissingProjectJSON(t *testing.T) {
 	dir := t.TempDir()
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, dir, merkle.EmptyTree(), time.Now())
 
 	_, stderr, exitCode := runDiff(t, "--spec-dir", dir)
 	if exitCode != 1 {
@@ -1239,9 +1205,7 @@ func TestFR4_E3_DiffCommand_DefaultSpecDir(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := merkle.Save(tree, filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	t.Chdir(tmp)
 	out, err := runSpex(t, "diff", "--json")
@@ -1261,9 +1225,7 @@ func TestFR4_E3_DiffCommand_DefaultSpecDir(t *testing.T) {
 // ANSI escapes or interactive formatting.
 func TestFR4_E4_DiffCommand_Pipeable(t *testing.T) {
 	specDir := setupTestSpec(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	out, err := runSpex(t, "diff", "--json", "--spec-dir", specDir)
 	if err != nil {
@@ -1342,6 +1304,42 @@ func writeCompleteIngestFixture(t *testing.T, dir, compID string) (changesetPath
 	return changesetPath, receiptsPath
 }
 
+// runIngestAtResolvedLocation drives the ingest library directly against
+// the .spex/ locations the lifecycle pre-flight resolves, standing in for
+// `spex ingest` until its own beads (spexmachina-uiei.11..13) migrate the
+// CLI command itself off <spec-dir>/.snapshot.json and
+// <spec-dir>/.history.jsonl. It proves the diff/ingest bootstrap-then-
+// steady-state cycle holds once a writer targets the resolved location,
+// same as spex diff's own reader now does.
+func runIngestAtResolvedLocation(t *testing.T, specDir, changesetPath, receiptsPath string) {
+	t.Helper()
+	cs, err := loadChangeset(changesetPath)
+	if err != nil {
+		t.Fatalf("load changeset: %v", err)
+	}
+	rc, err := loadReceipts(receiptsPath)
+	if err != nil {
+		t.Fatalf("load receipts: %v", err)
+	}
+	ctx, err := lifecycle.Resolve(resolveProjectRoot(specDir))
+	if err != nil {
+		t.Fatalf("resolve project: %v", err)
+	}
+	graph, err := newIngestSpecGraph(specDir)
+	if err != nil {
+		t.Fatalf("load spec graph: %v", err)
+	}
+
+	reconciler := &ingest.Reconciler{SpecDir: specDir, JournalPath: ctx.JournalPath, SpecGraph: graph}
+	if _, err := reconciler.Apply(cs, rc); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	saver := &ingest.Saver{SpecDir: specDir, SnapshotPath: ctx.SnapshotPath}
+	if _, err := saver.Save(rc.Status); err != nil {
+		t.Fatalf("save snapshot: %v", err)
+	}
+}
+
 // S8: the full bootstrap-then-steady-state cycle through diff alone. A
 // fresh diff reports everything added; a real ingest cycle (simulated with
 // a complete-status receipts file) writes the first snapshot; two edits
@@ -1351,9 +1349,7 @@ func writeCompleteIngestFixture(t *testing.T, dir, compID string) (changesetPath
 // component composition.
 func TestFR4_S8_DiffCommand_BootstrapThenSteadyStateCycle(t *testing.T) {
 	specDir, comp1Hash, _ := setupDiffTestSpec(t)
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(specDir, ".snapshot.json"), time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
 	// First diff: everything added.
 	out1, _, exit1 := runDiff(t, "--json", "--spec-dir", specDir)
@@ -1376,9 +1372,7 @@ func TestFR4_S8_DiffCommand_BootstrapThenSteadyStateCycle(t *testing.T) {
 	// First simulated complete ingest writes the first real snapshot.
 	runDir := t.TempDir()
 	csPath, rcPath := writeCompleteIngestFixture(t, runDir, comp1Hash)
-	if _, stderr, exit, err := runIngest(t, "--spec-dir", specDir, "--changeset", csPath, "--receipts", rcPath); err != nil {
-		t.Fatalf("first ingest: %v (exit %d)\nstderr: %s", err, exit, stderr)
-	}
+	runIngestAtResolvedLocation(t, specDir, csPath, rcPath)
 
 	// Modify both leaves.
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Changed tests\n")
@@ -1403,9 +1397,7 @@ func TestFR4_S8_DiffCommand_BootstrapThenSteadyStateCycle(t *testing.T) {
 	}
 
 	// Second simulated complete ingest converges the snapshot.
-	if _, stderr, exit, err := runIngest(t, "--spec-dir", specDir, "--changeset", csPath, "--receipts", rcPath); err != nil {
-		t.Fatalf("second ingest: %v (exit %d)\nstderr: %s", err, exit, stderr)
-	}
+	runIngestAtResolvedLocation(t, specDir, csPath, rcPath)
 
 	// Third diff: zero changes, snapshot now matches current state.
 	out3, _, exit3 := runDiff(t, "--json", "--spec-dir", specDir)
@@ -1432,10 +1424,7 @@ func TestFR5_S5_DiffCommand_StructuralImpact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	modPath := filepath.Join(specDir, "alpha", "module.json")
 	data, err := os.ReadFile(modPath)
@@ -1486,10 +1475,7 @@ func TestFR5_S7_DiffCommand_ModuleLevelAggregation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
-		t.Fatal(err)
-	}
+	seedProjectState(t, specDir, tree, time.Now())
 
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Changed tests\n")
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Changed architecture\n")

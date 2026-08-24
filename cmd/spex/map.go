@@ -2,13 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
-	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/spf13/cobra"
 )
 
@@ -75,53 +73,32 @@ func newMapCmd() *cobra.Command {
 	return mapCmd
 }
 
-// mapPreflight refuses the invocation before the store or resolver reads
-// anything, per spec/map/test_map_command.md "No journal exists": a query
-// surface fails loudly rather than folding the ambiguity between "never
-// initialised" and "broken" into one silent empty answer.
-//
-// TODO(bead:spexmachina-uiei.8): this inlines the distinction
-// ProjectResolver will own — until it lands, the interim signal is the
-// same one cmd/spex/diff.go's pre-flight uses: the default snapshot's
-// presence marks an initialised project. Absent snapshot means never
-// initialised (name spex init, exitNotAProject); snapshot present but the
-// journal missing means an initialised project with broken state (name
-// spex doctor). The MappingStore library layer is untouched by this check
-// and keeps folding an absent journal to empty for any caller that
-// bypasses this pre-flight.
-func mapPreflight(specDir, journalPath string) error {
-	defaultSnapshotPath := filepath.Join(specDir, ".snapshot.json")
-	if _, err := merkle.Load(defaultSnapshotPath); err != nil {
-		if errors.Is(err, merkle.ErrSnapshotAbsent) {
-			return &diffError{
-				code: exitNotAProject,
-				err:  fmt.Errorf("map: not a spex project (no snapshot at %s); run 'spex init'", defaultSnapshotPath),
-			}
-		}
-		return fmt.Errorf("map: %w; project state is broken, run 'spex doctor'", err)
+// resolveMapProject reads --spec-dir and runs the lifecycle pre-flight
+// before any child reads the journal, per spec/map/arch_map_command.md
+// "The journal's location comes from the lifecycle pre-flight" and
+// spec/map/test_map_command.md "No journal exists": a query surface fails
+// loudly rather than folding the ambiguity between "never initialised"
+// and "broken" into one silent empty answer. The MappingStore library
+// layer is untouched by this check and keeps folding an absent journal to
+// empty for any caller that bypasses this pre-flight.
+func resolveMapProject(cmd *cobra.Command) (specDir string, ctx *lifecycle.ProjectContext, err error) {
+	specDir, err = resolveSpecDir(cmd)
+	if err != nil {
+		return "", nil, err
 	}
-	if _, err := os.Stat(journalPath); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("map: journal absent at %s; project state is broken, run 'spex doctor'", journalPath)
-		}
-		return fmt.Errorf("map: %w", err)
+	ctx, err = lifecycle.Resolve(resolveProjectRoot(specDir))
+	if err != nil {
+		return "", nil, fmt.Errorf("map: %w", err)
 	}
-	return nil
+	return specDir, ctx, nil
 }
 
 func runMapGetE(cmd *cobra.Command, args []string) error {
-	specDir, err := resolveSpecDir(cmd)
+	_, ctx, err := resolveMapProject(cmd)
 	if err != nil {
 		return err
 	}
-
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	journalPath := filepath.Join(specDir, ".history.jsonl")
-	if err := mapPreflight(specDir, journalPath); err != nil {
-		return err
-	}
-	store := mapping.NewMappingStore(journalPath)
+	store := mapping.NewMappingStore(ctx.JournalPath)
 	entry, err := store.Get(args[0])
 	if err != nil {
 		return fmt.Errorf("map: %w", err)
@@ -134,18 +111,11 @@ func runMapGetE(cmd *cobra.Command, args []string) error {
 }
 
 func runMapListE(cmd *cobra.Command, args []string) error {
-	specDir, err := resolveSpecDir(cmd)
+	_, ctx, err := resolveMapProject(cmd)
 	if err != nil {
 		return err
 	}
-
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	journalPath := filepath.Join(specDir, ".history.jsonl")
-	if err := mapPreflight(specDir, journalPath); err != nil {
-		return err
-	}
-	store := mapping.NewMappingStore(journalPath)
+	store := mapping.NewMappingStore(ctx.JournalPath)
 	fold, err := store.List()
 	if err != nil {
 		return fmt.Errorf("map: %w", err)
@@ -162,18 +132,11 @@ func runMapListE(cmd *cobra.Command, args []string) error {
 }
 
 func runMapContextE(cmd *cobra.Command, args []string) error {
-	specDir, err := resolveSpecDir(cmd)
+	specDir, ctx, err := resolveMapProject(cmd)
 	if err != nil {
 		return err
 	}
-
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	journalPath := filepath.Join(specDir, ".history.jsonl")
-	if err := mapPreflight(specDir, journalPath); err != nil {
-		return err
-	}
-	result, err := mapping.ResolveContext(specDir, args[0])
+	result, err := mapping.ResolveContext(specDir, ctx.JournalPath, args[0])
 	if err != nil {
 		return fmt.Errorf("map context: %w", err)
 	}

@@ -46,13 +46,13 @@ type ContextResult struct {
 }
 
 // ResolveContext resolves all spec files needed to implement or review a
-// node, given one key — an identity hash or a task id — and the spec
-// directory. It is a pure function: deterministic, no side effects beyond
-// reading files, no tracker contact.
-func ResolveContext(specDir, key string) (ContextResult, error) {
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	store := NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
+// node, given one key — an identity hash or a task id — the spec
+// directory, and the resolved journal path (the lifecycle pre-flight's
+// answer; ResolveContext computes no location of its own). It is a pure
+// function: deterministic, no side effects beyond reading files, no
+// tracker contact.
+func ResolveContext(specDir, journalPath, key string) (ContextResult, error) {
+	store := NewMappingStore(journalPath)
 
 	hash := key
 	if !nodeHashPattern.MatchString(key) {

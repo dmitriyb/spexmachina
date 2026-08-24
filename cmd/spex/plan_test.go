@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
@@ -37,14 +38,15 @@ func runPlan(t *testing.T, stdinData string, args ...string) (string, string, er
 	return outBuf.String(), errBuf.String(), err
 }
 
-// seedPlanSnapshot writes an empty-tree snapshot at dir's default location,
-// marking dir as an initialised project — the interim pre-flight signal
-// planPreflight checks (see plan.go), same as cmd/spex/diff.go's and
-// cmd/spex/map.go's own tests seed before exercising a command that expects
-// to run past the uninitialised-project refusal.
+// seedPlanSnapshot writes an empty-tree snapshot at dir's resolved .spex/
+// location, marking dir's project as initialised for the lifecycle
+// pre-flight plan.go's command runs — same as cmd/spex/diff.go's and
+// cmd/spex/map.go's own tests seed before exercising a command that
+// expects to run past the uninitialised-project refusal.
 func seedPlanSnapshot(t *testing.T, dir string) {
 	t.Helper()
-	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+	stateDir := projectStateDir(dir)
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(stateDir, lifecycle.SnapshotFileName), time.Now()); err != nil {
 		t.Fatalf("seed snapshot: %v", err)
 	}
 }
@@ -327,12 +329,13 @@ func TestPlanCommand_S2_DiffFromStdinAndDashFlag(t *testing.T) {
 
 func TestPlanCommand_S3_PipelineComposition_DiffIntoPlan(t *testing.T) {
 	dir := setupTestSpec(t)
+	seedProjectState(t, dir, merkle.EmptyTree(), time.Now())
 
 	tree, err := merkle.BuildTree(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	snapshotPath := filepath.Join(dir, ".snapshot.json")
+	snapshotPath := filepath.Join(t.TempDir(), "custom-snapshot.json")
 	if err := merkle.Save(tree, snapshotPath, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -775,9 +778,17 @@ func TestPlanCommand_S11_DeterministicAcrossRuns(t *testing.T) {
 
 // --- S12: Exit codes ---
 
-func TestPlanCommand_S12_MalformedJournalLine_Exit1(t *testing.T) {
+// A malformed journal line is now caught by the lifecycle pre-flight
+// (spec/lifecycle/arch_project_resolver.md, spec/plan/arch_plan_command.md
+// pre-flight step 3: "the lifecycle pre-flight refuses an uninitialised or
+// broken project before the fold is reached") before PlanCommand's own
+// journal read is ever attempted — a broken project, naming spex doctor,
+// not the fold-level "read journal" error. See
+// drifts/drift-spexmachina-uiei.7.json for the still-open doc gap this
+// closes in code but not yet in test_plan_command.md's S12 prose.
+func TestPlanCommand_S12_MalformedJournalLine_BrokenProject(t *testing.T) {
 	f := setupPlanFixture(t)
-	if err := os.WriteFile(filepath.Join(f.specDir, ".history.jsonl"), []byte("not-json\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(projectStateDir(f.specDir), lifecycle.JournalFileName), []byte("not-json\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runPlan(t, "",
@@ -786,11 +797,11 @@ func TestPlanCommand_S12_MalformedJournalLine_Exit1(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for a malformed journal line")
 	}
-	if code := exitCodeOf(err); code != 1 {
-		t.Errorf("want exit 1, got %d (%v)", code, err)
+	if code := exitCodeOf(err); code != exitNotAProject {
+		t.Errorf("want the not-a-project exit code %d, got %d (%v)", exitNotAProject, code, err)
 	}
-	if !strings.Contains(err.Error(), "read journal") {
-		t.Errorf("want error mentioning 'read journal', got %v", err)
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Errorf("want error naming 'spex doctor', got %v", err)
 	}
 }
 
@@ -1212,12 +1223,14 @@ func TestPlanCommand_NotAProject_ExitNotAProject(t *testing.T) {
 }
 
 // TestPlanCommand_BrokenProject_Exit1 covers the pre-flight's other branch: a
-// corrupted snapshot is a broken project (exit 1, naming 'spex doctor'), not
-// the not-a-spex-project refusal — same distinction cmd/spex/diff.go's
-// TestFR4_E2_DiffCommand_CorruptedSnapshot asserts.
+// corrupted snapshot is a broken project (the not-a-spex-project exit code,
+// naming 'spex doctor'), never the "run spex init" refusal — same
+// distinction cmd/spex/diff.go's TestFR4_E2_DiffCommand_CorruptedSnapshot
+// asserts.
 func TestPlanCommand_BrokenProject_Exit1(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
-	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	writeTestJournal(t, specDir, nil)
+	snapshotPath := filepath.Join(projectStateDir(specDir), lifecycle.SnapshotFileName)
 	if err := os.WriteFile(snapshotPath, []byte("{not valid json"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -1229,8 +1242,8 @@ func TestPlanCommand_BrokenProject_Exit1(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error for a corrupted snapshot")
 	}
-	if code := exitCodeOf(err); code != 1 {
-		t.Errorf("want exit code 1, got %d (%v)", code, err)
+	if code := exitCodeOf(err); code != exitNotAProject {
+		t.Errorf("want the not-a-project exit code %d, got %d (%v)", exitNotAProject, code, err)
 	}
 	if !strings.Contains(err.Error(), "spex doctor") {
 		t.Errorf("want error naming 'spex doctor', got %v", err)

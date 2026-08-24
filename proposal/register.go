@@ -22,7 +22,9 @@ var projectSections = []string{"vision", "modules", "key requirements", "design 
 var changeSections = []string{"context", "proposed change", "impact expectation"}
 
 // Register validates a proposal file, appends the registered event that
-// opens its lifecycle to the task journal, and copies it to
+// opens its lifecycle to the task journal at journalPath (the caller's
+// responsibility — ultimately the lifecycle pre-flight's — to resolve;
+// Register computes no location of its own), and copies it to
 // specDir/proposals/. It detects the proposal type from headings, checks
 // required sections, generates a dated filename, then — in that order —
 // appends the journal event and copies the file: every refusal happens
@@ -34,7 +36,7 @@ var changeSections = []string{"context", "proposed change", "impact expectation"
 // appended, file not yet copied — is repaired by re-running: the
 // already-registered check finds no file, the append finds its eid already
 // present and adds nothing, and the copy lands.
-func Register(proposalPath, specDir, gitHead string) (string, error) {
+func Register(proposalPath, specDir, journalPath, gitHead string) (string, error) {
 	content, err := os.ReadFile(proposalPath)
 	if err != nil {
 		return "", fmt.Errorf("proposal: read %s: %w", proposalPath, err)
@@ -58,9 +60,7 @@ func Register(proposalPath, specDir, gitHead string) (string, error) {
 		return "", fmt.Errorf("proposal: already registered: %s", filename)
 	}
 
-	// TODO(bead:spexmachina-uiei.8): resolve the journal location through
-	// ProjectResolver instead of joining specDir here, once it lands.
-	store := mapping.NewMappingStore(filepath.Join(specDir, ".history.jsonl"))
+	store := mapping.NewMappingStore(journalPath)
 	eid := gitHead + ":" + stem
 	already, err := registeredEventExists(store, eid)
 	if err != nil {
