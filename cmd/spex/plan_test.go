@@ -37,6 +37,18 @@ func runPlan(t *testing.T, stdinData string, args ...string) (string, string, er
 	return outBuf.String(), errBuf.String(), err
 }
 
+// seedPlanSnapshot writes an empty-tree snapshot at dir's default location,
+// marking dir as an initialised project — the interim pre-flight signal
+// planPreflight checks (see plan.go), same as cmd/spex/diff.go's and
+// cmd/spex/map.go's own tests seed before exercising a command that expects
+// to run past the uninitialised-project refusal.
+func seedPlanSnapshot(t *testing.T, dir string) {
+	t.Helper()
+	if err := merkle.Save(merkle.EmptyTree(), filepath.Join(dir, ".snapshot.json"), time.Now()); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+}
+
 func parsePlanChangeset(t *testing.T, stdout string) plan.Changeset {
 	t.Helper()
 	var cs plan.Changeset
@@ -126,6 +138,7 @@ func setupMinimalPlanSpec(t *testing.T) string {
 	}
 	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{"name":"alpha"}`)
+	seedPlanSnapshot(t, specDir)
 	return specDir
 }
 
@@ -181,6 +194,7 @@ func setupPlanFixture(t *testing.T) planFixture {
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_existing.md", "# Existing\n")
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_existing2.md", "# Existing2\n")
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_new.md", "# New\n")
+	seedPlanSnapshot(t, specDir)
 
 	proposal := "2026-08-14-plan-fixture"
 	gitHead := "deadbeefcafe"
@@ -798,6 +812,7 @@ func TestPlanCommand_S12_UnresolvableDep_Exit2(t *testing.T) {
 		]
 	}`)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
+	seedPlanSnapshot(t, specDir)
 	writeTestJournal(t, specDir, []string{
 		`{"event":"registered","eid":"cafe:p","proposal":"p","git_head":"cafe0000"}`,
 	})
@@ -1021,6 +1036,7 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 	}
 	modulesJSON.WriteString("]")
 	writeTestFile(t, specDir, "project.json", `{"name":"large","modules":`+modulesJSON.String()+`}`)
+	seedPlanSnapshot(t, specDir)
 
 	writeTestJournal(t, specDir, []string{
 		`{"event":"registered","eid":"cafe:large-prop","proposal":"large-prop","git_head":"cafe0000"}`,
@@ -1141,6 +1157,86 @@ func TestPlanCommand_S13_ZeroBytesOnStdin_Exit1(t *testing.T) {
 	}
 }
 
+// TestPlanCommand_S12_MissingDiffFile_Exit1 covers the one S12 "missing diff
+// file" case that plan_test.go otherwise left unexercised: --diff pointing
+// at a path that does not exist (the `plan: read diff:` branch, distinct
+// from the malformed-JSON and empty-file cases above).
+func TestPlanCommand_S12_MissingDiffFile_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	diffPath := filepath.Join(t.TempDir(), "does-not-exist.json")
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a nonexistent --diff path")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), diffPath) {
+		t.Errorf("want error naming the missing diff path %q, got %v", diffPath, err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset on a refused run, got %q", stdout)
+	}
+}
+
+// TestPlanCommand_NotAProject_ExitNotAProject covers the pre-flight
+// arch_plan_command.md's pre-flight step 3 describes ("the lifecycle
+// pre-flight refuses an uninitialised or broken project before the fold is
+// reached") — a scenario test_plan_command.md's S12 Exit Codes list does not
+// yet enumerate (see drifts/drift-spexmachina-uiei.7.json). Mirrors
+// cmd/spex/diff.go's and cmd/spex/map.go's own tests for the same interim
+// signal: the default snapshot's absence marks a never-initialised project.
+func TestPlanCommand_NotAProject_ExitNotAProject(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	if err := os.MkdirAll(specDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	diffPath := writePlanDiff(t, dir, "diff.json", nil, nil)
+
+	_, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error when no project state exists")
+	}
+	if code := exitCodeOf(err); code != exitNotAProject {
+		t.Errorf("want exit code %d, got %d (%v)", exitNotAProject, code, err)
+	}
+	if !strings.Contains(err.Error(), "spex init") {
+		t.Errorf("want error naming 'spex init', got %v", err)
+	}
+}
+
+// TestPlanCommand_BrokenProject_Exit1 covers the pre-flight's other branch: a
+// corrupted snapshot is a broken project (exit 1, naming 'spex doctor'), not
+// the not-a-spex-project refusal — same distinction cmd/spex/diff.go's
+// TestFR4_E2_DiffCommand_CorruptedSnapshot asserts.
+func TestPlanCommand_BrokenProject_Exit1(t *testing.T) {
+	specDir := setupMinimalPlanSpec(t)
+	snapshotPath := filepath.Join(specDir, ".snapshot.json")
+	if err := os.WriteFile(snapshotPath, []byte("{not valid json"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", nil, nil)
+
+	_, _, err := runPlan(t, "",
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a corrupted snapshot")
+	}
+	if code := exitCodeOf(err); code != 1 {
+		t.Errorf("want exit code 1, got %d (%v)", code, err)
+	}
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Errorf("want error naming 'spex doctor', got %v", err)
+	}
+}
+
 // --- S14: A removed node's tombstone participates in nothing ---
 
 // TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate seeds the journal with a
@@ -1168,6 +1264,7 @@ func TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate(t *testing.T) {
 		]
 	}`)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_ghost.md", "# Ghost\n")
+	seedPlanSnapshot(t, specDir)
 
 	proposal := "2026-08-15-readd"
 	writeTestJournal(t, specDir, []string{
@@ -1248,6 +1345,7 @@ func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
 		]
 	}`)
 	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_new.md", "# New\n")
+	seedPlanSnapshot(t, specDir)
 
 	// The proposal slug is itself a 12-hex identity hash — a legal shape for
 	// both a registeredEvent's proposal field (any non-empty string) and a
