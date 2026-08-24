@@ -47,7 +47,7 @@ Inputs:
 Exit codes:
   0 — success (complete OR partial with no reconciler errors)
   1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure,
-      missing pre-refresh snapshot, non-empty refresh artifacts)
+      non-empty refresh artifacts)
   2 — invariant failure (journal unchanged on disk) or refresh refusal
       (non-absorbable added/removed entries, a live task pairing on a
       removed node)`,
