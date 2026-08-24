@@ -24,8 +24,8 @@ func newIngestCmd() *cobra.Command {
 		Short: "Reconcile the task journal and save snapshot from a changeset+receipts pair",
 		Long: `Ingest reads a changeset.json (produced by spex plan) and the
 receipts.json an adapter wrote after applying it, reconciles the task
-journal (spec/.history.jsonl), and writes spec/.snapshot.json when the
-run is complete.
+journal and writes the snapshot when the run is complete — both at the
+locations the lifecycle pre-flight resolves inside .spex/.
 
 With --mode refresh (empty changeset + empty receipts), ingest instead
 absorbs spec drift: one change event per drifted or absorbable

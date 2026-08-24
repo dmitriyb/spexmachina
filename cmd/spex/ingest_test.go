@@ -179,7 +179,7 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 		t.Errorf("snapshot file missing after complete run: %v", err)
 	}
 
-	// Normal-mode ingest writes the task journal (spec/.history.jsonl).
+	// Normal-mode ingest writes the task journal at its resolved location (f.journalPath).
 	entry, err := mapping.NewMappingStore(f.journalPath).Get(f.compID)
 	if err != nil {
 		t.Fatalf("expected journal entry for %s after ingest: %v", f.compID, err)
@@ -518,10 +518,10 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 }
 
 // setupRefreshedFixture runs a complete normal-mode ingest over the
-// fixture — materialising the component's added event + task_created in
-// spec/.history.jsonl and the snapshot baseline — then writes the empty
-// changeset+receipts pair refresh mode requires. Returns the fixture
-// plus the two empty artifact paths.
+// fixture — materialising the component's added event + task_created at
+// f.journalPath and the snapshot baseline at f.snapshotPath — then writes
+// the empty changeset+receipts pair refresh mode requires. Returns the
+// fixture plus the two empty artifact paths.
 func setupRefreshedFixture(t *testing.T) (ingestFixture, string, string) {
 	t.Helper()
 	f := setupIngestFixture(t, adapters.StatusComplete)
