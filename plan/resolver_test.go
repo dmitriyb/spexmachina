@@ -239,6 +239,184 @@ func TestRetargetDeps_ClassifierOutputUnresolvedIsError(t *testing.T) {
 	}
 }
 
+// --- Test_section describes deps: the four fates, fed from the real
+// classifier output (S10) ---
+//
+// S10 makes no Resolver change — describes-collected deps are ordinary
+// spec_node_ids and ResolveDeps already classifies them by the same
+// in-batch/fold/error precedence a component's uses deps take. These tests
+// pin that a test_section's real, classifier-computed DepSpecNodeIDs (its
+// describes array, per D10) resolve correctly through Resolver, one arm per
+// fate, mirroring how S6's tests pair ActionClassifier's retarget output
+// with Resolver rather than hand-writing dep lists.
+
+// resolveTSManyCreate classifies TSMany plus whichever of CompX/CompY the
+// caller also lists as unmatched creates, and returns TSMany's create
+// action's DepSpecNodeIDs (sorted [CompX, CompY] per the fixture's
+// TSMany.Describes).
+func resolveTSManyCreate(t *testing.T, f classifierFixture, extra ...Unmatched) Action {
+	t.Helper()
+	u := append([]Unmatched{{Change: change(f.TSMany, "plan", "test_section", merkle.Added, "", "ts-hash")}}, extra...)
+	actions, err := ClassifyActions(nil, u, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	for _, a := range actions {
+		if a.SpecNodeID == f.TSMany {
+			return a
+		}
+	}
+	t.Fatalf("TSMany create action missing: %+v", actions)
+	return Action{}
+}
+
+func TestResolveDeps_TestSectionDescribes_AllInBatchCreate(t *testing.T) {
+	f := newClassifierFixture()
+	tsAction := resolveTSManyCreate(t, f,
+		Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")},
+		Unmatched{Change: change(f.CompY, "plan", "component", merkle.Added, "", "cy-hash")},
+	)
+
+	batch := map[string]string{f.CompX: "op-x", f.CompY: "op-y"}
+	refs, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fakeFold{})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var want []Ref
+	for _, id := range tsAction.DepSpecNodeIDs {
+		switch id {
+		case f.CompX:
+			want = append(want, Ref{Kind: RefOp, OpID: "op-x"})
+		case f.CompY:
+			want = append(want, Ref{Kind: RefOp, OpID: "op-y"})
+		default:
+			t.Fatalf("unexpected dep: %s", id)
+		}
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("got %+v, want %+v — the test task is not actionable until its components exist", refs, want)
+	}
+}
+
+func TestResolveDeps_TestSectionDescribes_OpenFoldPairingYieldsRefBead(t *testing.T) {
+	f := newClassifierFixture()
+	tsAction := resolveTSManyCreate(t, f,
+		Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")},
+	)
+
+	batch := map[string]string{f.CompX: "op-x"}
+	fold := fakeFold{f.CompY: {TaskID: "spexmachina-y", BeadStatus: "open"}}
+	refs, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fold)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var want []Ref
+	for _, id := range tsAction.DepSpecNodeIDs {
+		switch id {
+		case f.CompX:
+			want = append(want, Ref{Kind: RefOp, OpID: "op-x"})
+		case f.CompY:
+			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-y"})
+		default:
+			t.Fatalf("unexpected dep: %s", id)
+		}
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("got %+v, want %+v — the test task waits for the in-flight component work", refs, want)
+	}
+}
+
+func TestResolveDeps_TestSectionDescribes_ClosedPairingIsDropped(t *testing.T) {
+	f := newClassifierFixture()
+	tsAction := resolveTSManyCreate(t, f,
+		Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")},
+	)
+
+	batch := map[string]string{f.CompX: "op-x"}
+	fold := fakeFold{f.CompY: {TaskID: "spexmachina-y", BeadStatus: "closed"}}
+	refs, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fold)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	want := []Ref{{Kind: RefOp, OpID: "op-x"}}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("got %+v, want %+v — a test against existing code stays immediately actionable, no ref for the closed dep", refs, want)
+	}
+}
+
+func TestResolveDeps_TestSectionDescribes_NoPairingIsError(t *testing.T) {
+	f := newClassifierFixture()
+	tsAction := resolveTSManyCreate(t, f,
+		Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")},
+	)
+
+	batch := map[string]string{f.CompX: "op-x"}
+	_, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fakeFold{})
+	if err == nil {
+		t.Fatal("want a plan error when a described component has never been tracked by any journal event")
+	}
+	if !strings.Contains(err.Error(), f.CompY) {
+		t.Fatalf("error should name CompY's spec_node_id, got: %v", err)
+	}
+}
+
+// TestRetargetDeps_TestSectionDescribes_ReMintedSuccessorGainsRefOp pins
+// S10's closing line: a test section retargeted in a batch that re-mints
+// one of its described components gains a ref:op dep on the successor,
+// applied add-only per S6.
+func TestRetargetDeps_TestSectionDescribes_ReMintedSuccessorGainsRefOp(t *testing.T) {
+	f := newClassifierFixture()
+	matches := []Match{
+		{
+			Change:  change(f.TSMany, "plan", "test_section", merkle.Modified, "old-ts", "new-ts"),
+			Records: []Pairing{{TaskID: "spex-ts", BeadStatus: "open", After: "old-ts"}},
+		},
+		{
+			Change:  change(f.CompY, "plan", "component", merkle.Modified, "old-y", "new-y"),
+			Records: []Pairing{{TaskID: "spex-y-old", BeadStatus: "closed"}},
+		},
+	}
+	actions, err := ClassifyActions(matches, nil, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+
+	var tsAction *Action
+	for i := range actions {
+		if actions[i].SpecNodeID == f.TSMany && actions[i].Type == ActionRetarget {
+			tsAction = &actions[i]
+		}
+	}
+	if tsAction == nil {
+		t.Fatalf("TSMany retarget action missing: %+v", actions)
+	}
+
+	batch := map[string]string{f.CompY: "op-y-successor"}
+	fold := fakeFold{f.CompX: {TaskID: "spexmachina-x", BeadStatus: "open"}}
+	refs, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fold)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var want []Ref
+	for _, id := range tsAction.DepSpecNodeIDs {
+		switch id {
+		case f.CompX:
+			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-x"})
+		case f.CompY:
+			want = append(want, Ref{Kind: RefOp, OpID: "op-y-successor"})
+		default:
+			t.Fatalf("unexpected dep: %s", id)
+		}
+	}
+	if !reflect.DeepEqual(refs, want) {
+		t.Fatalf("got %+v, want %+v — the retargeted section gains a ref:op dep on the re-minted successor", refs, want)
+	}
+}
+
 // --- ResolveEpicAction: fold vs. registration precedence ---
 
 func TestResolveEpicAction_FoldPairingSkipsCreate(t *testing.T) {
