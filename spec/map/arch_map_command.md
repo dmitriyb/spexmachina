@@ -9,7 +9,9 @@ of [[27c046dde129|querying mappings from the command line]]: three reads over th
 - Wire [[205e67ca4aad|MappingStore]] and [[6b79188dff4c|ContextResolver]] — the store answers `get`
   and `list` on its own, the resolver answers `context`
 - Output structured JSON to stdout
-- Set exit codes: 0 for success, 1 for errors
+- Set exit codes: 0 for success, 1 for errors, and the lifecycle pre-flight's own stable
+  not-a-spex-project code when the project is uninitialised or broken — the same seam
+  DiffCommand's exit codes document for `spex diff`
 
 ## Subcommands
 
@@ -39,7 +41,11 @@ $ spex map list
 [{"node":"a1b2c3d4e5f6","task_id":"spexmachina-abc",...},{"node":"0f1e2d3c4b5a","task_id":"spexmachina-def",...}]
 ```
 
-Exit code 0. Empty array `[]` if the journal is absent or holds no task-bearing events.
+Exit code 0. Empty array `[]` if the journal holds no task-bearing events. An absent journal
+never reaches the store: the lifecycle pre-flight refuses first — no project state at all names
+`spex init` with the not-a-spex-project exit code; a snapshot without its journal is broken and
+names `spex doctor`. The old empty-array answer for an absent file survives only at the
+MappingStore library layer.
 
 ### spex map context \<key\>
 

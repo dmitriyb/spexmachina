@@ -22,7 +22,7 @@ tmp/spec/
 ### CLI Invocation Pattern
 
 ```
-spex validate tmp/spec/
+spex validate --spec-dir tmp/spec/
 ```
 
 Output goes to stdout as JSON. Exit code is the primary assertion target for CLI-level tests.
@@ -172,19 +172,19 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 #### V12: Non-existent directory
 
 **Given** the path `/tmp/nonexistent/` does not exist.
-**When** `spex validate /tmp/nonexistent/` is executed.
+**When** `spex validate --spec-dir /tmp/nonexistent/` is executed.
 **Then** exit code is 1 with an error indicating the directory or `project.json` was not found. The output is still valid JSON.
 
 #### V13: Self-validation passes
 
 **Given** the spex-machina repo's own `spec/` directory.
-**When** `spex validate spec/` is executed from the repo root.
+**When** `spex validate --spec-dir spec/` is executed from the repo root.
 **Then** exit code is 0. This validates requirement 8 (self-validate): the tool can validate its own spec.
 
 #### V14: Piped output is compact JSON
 
 **Given** a valid spec.
-**When** `spex validate tmp/spec/ | cat` is executed (stdout piped to cat, not a TTY).
+**When** `spex validate --spec-dir tmp/spec/ | cat` is executed (stdout piped to cat, not a TTY).
 **Then** the output is compact JSON (single line, no indentation).
 
 #### V15: Test coverage error exits 1
@@ -206,14 +206,14 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 ### E1: Empty spec directory (no project.json)
 
 **Given** an empty directory with no files.
-**When** `spex validate tmp/empty/` is executed.
+**When** `spex validate --spec-dir tmp/empty/` is executed.
 **Then** exit code is 1 with a structured error about missing `project.json`. Not a panic or unhandled exception.
 
 ### E2: project.json with zero modules
 
 **Given** `project.json` has `modules: []`.
 **When** `spex validate --spec-dir tmp/spec/` is executed.
-**Then** exit code is 0. A project with no modules is structurally valid (no nodes to check). Schema validation determines whether empty modules is allowed.
+**Then** exit code is 1 with a `schema` check error: the project schema requires at least one module (`minItems: 1`), so SchemaChecker rejects the file before any structural check runs. Structural validation alone would pass — no nodes to check — but the schema is the component that decides an empty-modules project is not yet valid.
 
 ### E3: Concurrent-safe error aggregation
 
@@ -229,7 +229,7 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 
 ### E5: Validate command resolves relative paths
 
-**Given** `spex validate ./spec/` is called from the repo root.
+**Given** `spex validate --spec-dir ./spec/` is called from the repo root.
 **When** the command runs.
 **Then** it resolves `./spec/` to an absolute path before passing to checkers. All error paths in the output are relative to the spec directory (e.g., `alpha/module.json`), not absolute filesystem paths.
 

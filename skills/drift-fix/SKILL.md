@@ -45,20 +45,36 @@ Use the four-class defect taxonomy; the class determines the shape of the fix:
 | 4 Impossible seam | the leaf relies on a dependency contract the provider's leaf does not promise | fix whichever side is wrong: promise the seam in the provider or reroute the consumer |
 
 A report may also be **wrong** — the implementer misread the spec. Rejecting it is a valid
-verdict: record why in the PR description, delete the report, change nothing else.
+verdict: record why in the PR description, delete the report, change nothing else. A rejected
+report can still surface a code defect: if the spec was right and the shipped code disagrees
+with it, that is a bug in the code — file a tracker bead directly and touch neither `spec/` nor
+the baseline; with no spec diff there is nothing to mint or refresh. A report may also be
+**overtaken** — the defect it describes was resolved by work that landed after it was filed;
+verify the resolution, record it in the PR description, delete the report.
 
 ## Step 3: Fix the spec
 
 - Branch off main. Apply the corrections with `/spec` discipline (ids via `bin/spex hash-id`,
   links in prose, no Go in arch leaves, completeness obligations honored).
 - Run `/spec-review` scoped to the touched modules. Fix its findings.
-- Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`.
+- Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`. Know where
+  this rule is enforced and where it is prose: the mint path enforces it (`spex plan` refuses a
+  diff whose `errors` are non-empty); the refresh path does not — step 4 names the one narrow
+  override.
 
 ## Step 4: The deliberate baseline decision
 
-This is the step that must never be automated. Look at what the fix changed:
+This is the step that must never be automated. The decision is one axis — **which side yields**:
+does the corrected spec change what the code must do, or record what the code already provably
+does? "Prose-only" and "contract-bearing" are both proxies for that axis, and both misfire alone.
+The spec-yields verdict is evidenced, never asserted: for every corrected node, name the test
+that pins the corrected behaviour — in the PR description for a whole-run refresh, in the mark's
+`reason` for an absorb. A pinning test that does not exist yet does not force a mint: write it in
+the same PR, and it counts once green — it merges together with the text it pins. Look at what
+the fix changed:
 
-- **Work is born** (a node added/removed, a contract change that owed code): run the mint —
+- **Code must yield to spec** — work is born (a node added/removed, a decided cell the code
+  implements the other way, a hole whose decision has no implementation): run the mint —
   `diff → plan → <adapter> → ingest`, the adapter being `scripts/apply-br.sh` or another
   implementation of the adapter contract. `spex plan` takes `--proposal`, `--git-head` and
   `--beads`: the SHA is the commit carrying the spec edits, so the corrections are committed
@@ -73,7 +89,8 @@ This is the step that must never be automated. Look at what the fix changed:
   label is not plan's to fix — it is `spex:<git_head>:<proposal_stem>` from the `registered` event,
   settled back at `spex register`. New beads join the epic's remainder; if the fix reshaped contracts of still-open beads, the
   mint legitimately updates or replaces them.
-- **No work is born** (prose-only correction; code already complies): refresh —
+- **Spec yields to code** — no work is born; every corrected statement has its pinning test:
+  refresh —
   `bin/spex ingest --mode refresh --changeset <empty-v3> --receipts <empty-v1>` (both artifacts
   required and must be empty: `{"version":3,...,"ops":[],"absorbed":[]}` /
   `{"version":1,"status":"complete","ops":[]}`), optionally `--git-head <sha>`. Absorbs the
@@ -81,9 +98,23 @@ This is the step that must never be automated. Look at what the fix changed:
   receipts included, per `adapters/types.go` — and an unknown key is silently ignored rather
   than rejected, so a misspelling reads as an empty array and passes the empty case while losing
   every entry in a non-empty one.
-- Mixed changes: mint — the pipeline computes both sides; refresh is only for the pure-correction
-  case. Mark the pure-correction nodes in an `--absorb` file so the mint does not open beads that
-  owe nothing.
+  The gates bind asymmetrically here: refresh runs neither `spex validate` nor the completeness
+  checker, so a diff that `spex diff` flags with `incomplete_change` is still refresh-landable —
+  an override, not an impossibility, and never a silent one. It is legitimate only when the
+  flagged obligation is discharged by hand — name the entry that actually changed and why every
+  flagged sibling owes nothing — and recorded in the PR description. The recurring case is a
+  `module.json` description sync: the meta sweep deliberately obliges every component in the
+  module (arch_completeness_checker.md), so a per-entry correction can never show a green diff
+  and rides on the hand-verification instead.
+- Mixed changes: mint — the pipeline computes both sides; refresh is only for the all-nodes-yield
+  case. Mark the yielding nodes in an `--absorb` file so the mint does not open beads that owe
+  nothing.
+
+A blocking triage mints in all but the rare case where the fix only clarifies wording and the
+reopened bead's obligations are unchanged — the fix settles an open bead's contract, and the mint
+is what updates or replaces its pairing. A post-epic batch of non-blocking reports usually
+refreshes, but each node earns its direction individually: a resolution that changes the contract
+mints regardless of the batch around it.
 
 ### What may be absorbed
 
@@ -98,31 +129,32 @@ decision above.
 
 `spex plan` checks exactly two things about a mark: that the node is a 12-character hex identity
 hash, and that the diff reports it as `modified` — a mark on an `added` or `removed` node, or on
-one absent from the diff, is exit 2 naming the node. **Whether the edit was cosmetic is not
-checked and cannot be**: it is decided here, under these four rules, and nothing downstream will
-catch a wrong mark.
+one absent from the diff, is exit 2 naming the node. **Whether the node's edit yields work is
+not checked and cannot be**: it is decided here, under these four rules, and nothing downstream
+will catch a wrong mark.
 
 1. **Declare per node what changed.** Every mark carries a `reason` naming the sections the edit
-   touched and why each of them is cosmetic. "It owes no code" is the weaker half of the test and
-   never sufficient alone — rule 2 is what decides eligibility. A reason that restates the node
-   name, or says only "prose-only", is not a declaration.
-2. **Contract-bearing content is categorically ineligible**, whatever the reason argues: an
-   Interface or Responsibilities section, any table stating a contract (flags, exit codes, states,
-   field lists, vocabularies), and any `module.json` change — a module meta leaf is never
-   absorbable.
-3. **The presumption is non-cosmetic.** Absorption is the exception that has to be argued; minting
-   is the default. Silence never skips: an unmarked node mints, which is the safe direction.
+   touched and the pinning test the step-4 evidence rule requires. A reason that restates the
+   node name, or says only "prose-only", is not a declaration.
+2. **Contract-bearing content yields only to a pinning test.** An Interface or Responsibilities
+   section, any table stating a contract (flags, exit codes, states, field lists, vocabularies):
+   if the edit changes what the code must do, no reason makes it absorbable; if it converges the
+   text onto pinned behaviour, the named test is what makes it eligible. A `module.json` change
+   is never absorbable in either direction — module meta is structure, not prose.
+3. **The presumption is mint.** Absorption is the exception that has to be argued; silence never
+   skips: an unmarked node mints, which is the safe direction.
 4. **The reviewer validates the declaration**, not merely its presence — the same posture a
    blocking drift report gets. The absorb file in the PR diff and the reasons in the journal are
    the entire audit trail.
 
-Rule 2 is what the weaker test — "does the change owe code?" — leaves out, and the gap is on the
-record: on 2026-08-16 a run of this skill absorbed five contract-bearing leaves (MappingStore,
-ChangesetBuilder, the plan flow, ActionClassifier, the mapping store tests) on that test alone, and
-the mint had to be reverted and re-run as eight beads. Nothing enforces rules 1–4: `spex plan`
-validates shape only, "git-committed and reviewed" is doctrine rather than a gate, and skill prose
-is advisory by construction. Making any of them binding is a change to `spex` behaviour and needs a
-proposal first; until one lands, the PR review is the only check there is.
+Rule 2's carve-out is deliberately narrow, and the record shows why: on 2026-08-16 a run of this
+skill absorbed five contract-bearing leaves (MappingStore, ChangesetBuilder, the plan flow,
+ActionClassifier, the mapping store tests) on a bare "owes no code" — nothing pinned the claimed
+compliance, the changes did owe code, and the mint had to be reverted and re-run as eight beads.
+Nothing enforces rules 1–4: `spex plan` validates shape only, "git-committed and reviewed" is
+doctrine rather than a gate, and skill prose is advisory by construction. Making any of them
+binding is a change to `spex` behaviour and needs a proposal first; until one lands, the PR
+review is the only check there is.
 
 State the decision and its reason in the PR description. A refresh without a stated reason — or
 an absorb mark without one — is the "bezdumny refresh" failure mode this skill exists to prevent.

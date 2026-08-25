@@ -178,7 +178,7 @@ This covers module requirements, components, data_flows, test_sections and apis.
 
 Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
 
-There are no integer IDs in the system. The task journal (`spec/.history.jsonl`) files every change event under the changed node's own identity hash, and keys the event itself by an `eid`: `<git_head>:<op_id>` for an event a mint produced from an op, `refresh:<node>:<before>:<after>` (plus a `#N` suffix on the rare collision) for one produced without an op behind it — a whole-run refresh, or a node absorbed inside a normal run, which are indistinguishable on the wire. A tracker label carries that eid — `spex:<eid>` — but the label is optional insurance an adapter may stamp, not identity: the journal is what every downstream stage reads. The older `spex:<spec_node_id>` labels still on beads predate the eid scheme.
+There are no integer IDs in the system. The task journal (`.spex/history.jsonl`) files every change event under the changed node's own identity hash, and keys the event itself by an `eid`: `<git_head>:<op_id>` for an event a mint produced from an op, `refresh:<node>:<before>:<after>` (plus a `#N` suffix on the rare collision) for one produced without an op behind it — a whole-run refresh, or a node absorbed inside a normal run, which are indistinguishable on the wire. A tracker label carries that eid — `spex:<eid>` — but the label is optional insurance an adapter may stamp, not identity: the journal is what every downstream stage reads. The older `spex:<spec_node_id>` labels still on beads predate the eid scheme.
 
 ### Declarable names — component and api
 

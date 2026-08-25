@@ -9,7 +9,7 @@
   `proposal`, `git_head`), and receipt events (`task_created`/`task_closed`/`task_retargeted`
   with `for` and `task_id` — plus the legacy shape carrying `proposal` in place of `for`, for the
   legacy-branch scenarios)
-- Construct a MappingStore instance pointing at the temp directory. Read scenarios go through
+- Construct a MappingStore instance pointing at the fixture's resolved location. Read scenarios go through
   its parse/fold surface; append scenarios go through its append primitive — the journal's one
   write path
 

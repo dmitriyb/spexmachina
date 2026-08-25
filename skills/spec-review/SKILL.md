@@ -32,7 +32,7 @@ highest-confidence signals and the cheapest to interpret.
 
 ```bash
 bin/spex validate      # JSON report on stdout. exit 0 valid, 1 invalid
-bin/spex diff --json   # exit 0 no errors (changes are fine), 2 errors found, 1 the tree did not build
+bin/spex diff --json   # exit 0 no errors (changes are fine), 2 errors found, 1 the tree did not build, 3 not a spex project
 ```
 
 **`spex validate` is snapshot-free and corpus-local.** It always writes a report to stdout —
@@ -41,7 +41,8 @@ bin/spex diff --json   # exit 0 no errors (changes are fine), 2 errors found, 1 
 0**: no checker emits any severity but `error`. Do not triage warnings; do not ask whether a finding
 is "only a warning". There is no such thing.
 
-**`spex diff` is history-relative.** It compares the current tree against `spec/.snapshot.json`, and
+**`spex diff` is history-relative.** It compares the current tree against the baseline snapshot at
+`.spex/snapshot.json` (the location the lifecycle pre-flight resolves), and
 it is the only place two whole classes of error appear:
 
 - **exit 2, `errors[].type == "incomplete_change"`** — a requirement change, or a `meta` change (the
@@ -60,8 +61,12 @@ it is the only place two whole classes of error appear:
   recovered). Read them. Each marks a place where "no errors" means less than it looks.
 - **exit 1** — the tree did not build (a missing or unreadable content file, malformed JSON).
   **stdout is empty**; the reason is on stderr. Nothing else is reported until that is fixed.
+- **exit 3** — not a spex project: the lifecycle pre-flight refused before any tree was built —
+  never initialised (stderr names `spex init`), or the snapshot or journal is missing or
+  unparseable (broken; stderr names `spex doctor`). Fix the project state first; the audit
+  cannot start without it.
 
-`spex diff` reads the task journal (`spec/.history.jsonl`) as a second hash→name source for the removal check. It
+`spex diff` reads the task journal (`.spex/history.jsonl`) as a second hash→name source for the removal check. It
 never writes anything.
 
 ## Step 3: What the gates already cover — do not re-derive any of it
@@ -285,11 +290,15 @@ So:
   Nothing in `spex` parses that frontmatter; it is a signal to whoever runs the pipeline
   (`spec/ingest/arch_refresh.md`).
 - **Refresh runs neither `spex validate` nor the completeness checker.** Never propose a refresh-mode
-  change without first showing that both Step 2 gates are green on the proposed end state. Refresh
-  will happily baseline a tree that `diff` would have rejected with exit 2, hiding it from every
-  downstream tool.
-- Refresh also refuses a non-empty changeset or receipts, a missing pre-existing snapshot, and any
-  orphan mapping record. Exit 1 is an input error, exit 2 a refusal.
+  change without either showing both Step 2 gates green on the proposed end state, or explicitly
+  declaring the one exception: the hand-verified completeness override the `/drift-fix` skill
+  documents (per-entry discharge of a meta-sweep obligation, recorded in the PR description).
+  Refresh will happily baseline a tree that `diff` would have rejected with exit 2, hiding it
+  from every downstream tool — a red diff blocks the mint path structurally (`spex plan` refuses
+  it), while on the refresh path "gates green" is doctrine, not a gate.
+- Refresh also refuses a non-empty changeset or receipts and any orphan mapping record — exit 1
+  is an input error, exit 2 a refusal. A missing pre-existing snapshot never reaches it: the
+  lifecycle pre-flight refuses first with the not-a-spex-project code, naming `spex doctor`.
 
 ## Step 7: Draft the proposal in plan mode (if findings)
 

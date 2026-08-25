@@ -770,3 +770,61 @@ func TestIngestCommand_UnknownModeExits1(t *testing.T) {
 		t.Errorf("error must mention --mode: %v", err)
 	}
 }
+
+// TestIngestCommand_Uninitialized_ExitNotAProject pins the pre-flight
+// seam: with no project state at all, both modes refuse with the
+// not-a-spex-project code, naming spex init, before either pathway runs.
+func TestIngestCommand_Uninitialized_ExitNotAProject(t *testing.T) {
+	f := setupIngestFixture(t, adapters.StatusComplete)
+	if err := os.RemoveAll(projectStateDir(f.specDir)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, exit, err := runIngest(t,
+		"--spec-dir", f.specDir,
+		"--changeset", f.changesetPath,
+		"--receipts", f.receiptsPath,
+	)
+	if exit != exitNotAProject {
+		t.Fatalf("want exit %d for uninitialised project, got %d (err %v)", exitNotAProject, exit, err)
+	}
+	if err == nil || !strings.Contains(err.Error(), "spex init") {
+		t.Errorf("error must name spex init: %v", err)
+	}
+}
+
+// TestIngestCommand_MalformedJournal_BrokenProject pins that a
+// schema-violating journal is caught by the lifecycle pre-flight in
+// both modes — exit not-a-spex-project naming spex doctor, journal
+// untouched — never the per-mode 1/2 split the pre-flight retired.
+func TestIngestCommand_MalformedJournal_BrokenProject(t *testing.T) {
+	for _, mode := range []string{"normal", "refresh"} {
+		t.Run(mode, func(t *testing.T) {
+			f := setupIngestFixture(t, adapters.StatusComplete)
+			before := []byte("not-json\n")
+			if err := os.WriteFile(f.journalPath, before, 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			_, _, exit, err := runIngest(t,
+				"--mode", mode,
+				"--spec-dir", f.specDir,
+				"--changeset", f.changesetPath,
+				"--receipts", f.receiptsPath,
+			)
+			if exit != exitNotAProject {
+				t.Fatalf("want exit %d for malformed journal, got %d (err %v)", exitNotAProject, exit, err)
+			}
+			if err == nil || !strings.Contains(err.Error(), "spex doctor") {
+				t.Errorf("error must name spex doctor: %v", err)
+			}
+			after, readErr := os.ReadFile(f.journalPath)
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			if !bytes.Equal(before, after) {
+				t.Error("journal must be untouched on refusal")
+			}
+		})
+	}
+}

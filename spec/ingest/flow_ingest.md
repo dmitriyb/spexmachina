@@ -204,7 +204,8 @@ the journal and snapshot byte-identical to their pre-call state.
 
 ### Mode: refresh
 
-- Missing pre-refresh snapshot → exit 1, files unchanged.
+- Missing pre-refresh snapshot → refused one layer up, before refresh runs: the lifecycle
+  pre-flight exits with the not-a-spex-project code, naming `spex doctor`; files unchanged.
 - Non-empty changeset or receipts → exit 1, files unchanged.
 - Diff carries an added or removed entry outside the absorbable set → exit 2 (structured error),
   files unchanged.

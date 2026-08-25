@@ -73,14 +73,18 @@ Refresh has no per-op accounting; it reports what it appended.
 Exit code reflects the outcome:
 
 - `0` — success.
-- `1` — input error (bad flags, malformed JSON, op_id mismatch in normal mode, missing
-  pre-refresh snapshot in refresh mode, non-empty changeset/receipts in refresh mode,
-  atomic-write failure).
+- `1` — input error (bad flags, malformed JSON, op_id mismatch in normal mode, non-empty
+  changeset/receipts in refresh mode, atomic-write failure).
 - `2` — invariant failure (normal mode) or refresh refusal (a *non-absorbable* added or removed
   entry, or a removed node whose journal pairing is still live). Not every structural entry
   refuses: refresh absorbs `requirement` and `api` entries in either direction, plus `component`
   removals. See RefreshHandler's absorbable set for the full table — declaring an api is the
   common case that would otherwise refuse for nothing.
+- not a spex project — the pre-flight's own stable exit code, distinct from both codes above:
+  the directory was never initialised (naming `spex init`), or its snapshot or journal is
+  missing or unparseable (broken, naming `spex doctor`). The missing pre-refresh snapshot
+  formerly listed under `1` lives here: RefreshHandler never reaches its own snapshot read
+  without the pre-flight having already resolved a loadable one.
 
 ## Wiring
 
@@ -90,8 +94,10 @@ Every run starts the same way and forks exactly once, on `--mode`:
    checked until both are in hand, so a changeset carrying the wrong version alongside an
    unreadable receipts path reports the receipts read failure, not the version.
 2. Run the pre-flight checks below over the loaded pair.
-3. Open the journal at its resolved location — nothing is read from it yet — then read
-   `--mode` and take one of two paths. Whichever path runs performs the first read itself.
+3. Resolve the project through the lifecycle pre-flight, which itself loads the snapshot and
+   schema-checks the journal — a missing or unparseable file in either role is refused there as
+   a broken project, naming `spex doctor`, before `--mode` is read. Then read `--mode` and take
+   one of two paths; whichever path runs performs its own reads at the resolved locations.
 
 **Normal.** Hand the changeset and receipts together to [[2b5158af774b|Reconciler]], which
 constructs and appends the batch's journal lines atomically; then hand the receipts' top-level
@@ -173,12 +179,12 @@ computes against a stale baseline while the journal already moved forward.
 - Does NOT retry failed ops — that's the user's job via re-running plan→adapter→ingest (normal
   mode) or fixing the underlying drift and re-running refresh.
 - Does NOT repair a journal it cannot read. Each line is checked against the journal-line schema
-  on the way in as well as before every append, so a file that violates the schema ends the run
-  with the file untouched. Which exit code that is depends on where the read sits: in normal mode
-  the first read happens inside reconciliation, so the failure takes the invariant code `2`; in
-  refresh mode it is an input error and exits `1`. An absent journal file does not occur on a
-  resolved project — `spex init` creates it empty at birth, and a project whose journal has gone
-  missing is refused by the lifecycle pre-flight as broken, naming `spex doctor`.
+  before every append, and the lifecycle pre-flight schema-checks the whole file before either
+  mode's first read, so a file that violates the schema ends the run with the file untouched —
+  refused as a broken project in both modes, with the pre-flight's not-a-spex-project exit code,
+  naming `spex doctor`. An absent journal file does not occur on a resolved project — `spex init`
+  creates it empty at birth, and a project whose journal has gone missing is refused by the same
+  pre-flight as broken.
 - [[20589ccf7072|Does NOT invoke git, a tracker, or any other subprocess in either mode]]. Both
   inputs and both file outputs are local files; besides them the run writes its JSON summary to
   stdout and, on failure, an error line to stderr.

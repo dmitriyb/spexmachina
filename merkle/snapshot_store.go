@@ -54,9 +54,10 @@ func EncodeSnapshot(tree *Node, createdAt time.Time) ([]byte, error) {
 }
 
 // Save writes the merkle tree to a snapshot file as JSON, replacing the
-// destination in place. It carries no atomicity guarantee, so it has no
-// production caller: ingest's SnapshotSaver pairs EncodeSnapshot with its
-// own temp-file-and-rename write instead.
+// destination in place. It carries no atomicity guarantee, so its one
+// production caller is spex init seeding a freshly created .spex/ (no
+// live file to observe mid-write); ingest's SnapshotSaver pairs
+// EncodeSnapshot with its own temp-file-and-rename write instead.
 func Save(tree *Node, path string, createdAt time.Time) error {
 	data, err := EncodeSnapshot(tree, createdAt)
 	if err != nil {
