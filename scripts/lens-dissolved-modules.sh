@@ -24,7 +24,8 @@
 #                  impact views" is ordinary English, not a reference)
 #
 # Terms are DERIVED, never declared: a module named by a `removed` event in
-# spec/.history.jsonl that spec/project.json no longer lists has dissolved.
+# the task journal (.spex/history.jsonl) that spec/project.json no longer
+# lists has dissolved.
 # Nothing to maintain — retiring a module registers it here automatically.
 #
 # Precision over recall, deliberately. A hit is always worth a look; a clean
@@ -57,12 +58,12 @@ cd "$(dirname "$0")/.."
 SPEC_DIR="${1:-spec}"
 SPEC_DIR="${SPEC_DIR%/}"
 ALLOW="${2:-scripts/lens-dissolved-modules.allow}"
-JOURNAL="$SPEC_DIR/.history.jsonl"
+JOURNAL="$(dirname "$SPEC_DIR")/.spex/history.jsonl"
 PROJECT="$SPEC_DIR/project.json"
 
 if [ ! -f "$JOURNAL" ] || [ ! -f "$PROJECT" ]; then
-    echo "lens-dissolved-modules: no journal or project.json; nothing to derive"
-    exit 0
+    echo "lens-dissolved-modules: cannot sweep — missing $JOURNAL or $PROJECT" >&2
+    exit 2
 fi
 
 # Modules named by a removed event that project.json no longer declares.

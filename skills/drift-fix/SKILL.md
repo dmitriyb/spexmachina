@@ -57,7 +57,10 @@ verify the resolution, record it in the PR description, delete the report.
 - Branch off main. Apply the corrections with `/spec` discipline (ids via `bin/spex hash-id`,
   links in prose, no Go in arch leaves, completeness obligations honored).
 - Run `/spec-review` scoped to the touched modules. Fix its findings.
-- Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`.
+- Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`. Know where
+  this rule is enforced and where it is prose: the mint path enforces it (`spex plan` refuses a
+  diff whose `errors` are non-empty); the refresh path does not — step 4 names the one narrow
+  override.
 
 ## Step 4: The deliberate baseline decision
 
@@ -95,6 +98,14 @@ the fix changed:
   receipts included, per `adapters/types.go` — and an unknown key is silently ignored rather
   than rejected, so a misspelling reads as an empty array and passes the empty case while losing
   every entry in a non-empty one.
+  The gates bind asymmetrically here: refresh runs neither `spex validate` nor the completeness
+  checker, so a diff that `spex diff` flags with `incomplete_change` is still refresh-landable —
+  an override, not an impossibility, and never a silent one. It is legitimate only when the
+  flagged obligation is discharged by hand — name the entry that actually changed and why every
+  flagged sibling owes nothing — and recorded in the PR description. The recurring case is a
+  `module.json` description sync: the meta sweep deliberately obliges every component in the
+  module (arch_completeness_checker.md), so a per-entry correction can never show a green diff
+  and rides on the hand-verification instead.
 - Mixed changes: mint — the pipeline computes both sides; refresh is only for the all-nodes-yield
   case. Mark the yielding nodes in an `--absorb` file so the mint does not open beads that owe
   nothing.
