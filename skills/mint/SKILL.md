@@ -79,6 +79,19 @@ first; until one lands, the PR review is the only check there is.
 
 ## Step 3: Mint
 
+Registration comes first: `spex plan` resolves the epic through a `registered` event carrying
+the proposal stem (or a live epic task), and fails without one. Check the journal; if neither
+exists, run
+
+```
+bin/spex register spec/proposals/<stem>.md --git-head <sha7>
+```
+
+with the **same 7-character SHA** the plan invocation below uses — the spec-edits commit — and
+commit the appended journal event with the run's artifacts. The Registrar validates the
+template's H2 sections and refuses a malformed proposal. The event's eid `<git_head>:<stem>`
+becomes the epic's idempotency label, which is why `/propose` caps the slug at 26 characters.
+
 ```
 bin/spex diff --json > diff.json
 bin/spex plan --proposal <stem> --git-head <sha> --diff diff.json \
