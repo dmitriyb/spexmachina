@@ -2,7 +2,7 @@
 
 `spex` owns the structural half of spec-driven development. The creative half
 — deciding what the spec should say — happens in an interactive session, and
-four Claude Code skills under `skills/` drive it. They call `spex` subcommands
+five Claude Code skills under `skills/` drive it. They call `spex` subcommands
 for everything mechanical, which keeps the two halves cleanly separated: the
 skills never guess at structure, and `spex` never guesses at intent.
 
@@ -17,7 +17,7 @@ writes `spec/`. Automated implementer contexts are structurally denied write
 access to it — an implementer that finds a spec defect files a drift report,
 never a spec edit.
 
-**The baseline moves only deliberately.** `spec/.snapshot.json` advances by a
+**The baseline moves only deliberately.** `.spex/snapshot.json` advances by a
 *mint* when work is born, or a *refresh* when a correction owes no task work.
 Never automatically, never as a side effect. Every refresh states its reason.
 
@@ -71,6 +71,19 @@ clean exit, not a failure.
 It never reads implementation code. A mismatch between spec and code is drift,
 and drift has its own path.
 
+## `/mint`
+
+*Move the baseline for a committed spec change: decide mint-vs-refresh per
+node, assess absorb marks, then run the pipeline.*
+
+The loop's last phase and the only place the baseline moves. It owns the
+doctrine the other skills reference: the direction axis (does the corrected
+spec change what code must do, or record what code already provably does),
+the per-node absorb assessment with its four rules, the plan → adapter →
+ingest mechanics with their label budgets, the refresh pathway, and the
+gate-asymmetry override. `/spec` ends at green gates and a commit; `/mint`
+starts from that commit.
+
 ## `/drift-fix`
 
 *Triage drift reports filed by implementers, fix the spec through review, make
@@ -85,20 +98,21 @@ claim, the authoritative source that contradicts it, and the evidence. It is
 travels as its own PR and stops the epic.
 
 `/drift-fix` collects and validates the reports, classifies each, fixes the
-spec through review, and then makes the baseline call explicitly: mint if the
-correction implies new work, refresh if it does not. That decision is the
-reason the skill exists — it is the one moment where the snapshot is allowed
-to move outside a normal ingest cycle, and it is made by a human-supervised
-session, never by a box.
+spec through review, and then makes the baseline call explicitly on `/mint`'s
+direction axis — mint if the correction births work, refresh if the spec is
+converging on shipped, test-pinned behaviour — and executes it through
+`/mint`. That decision is the reason the skill exists, and it is made by a
+human-supervised session, never by a box.
 
 ## How they fit together
 
 ```
 /propose ──▶ proposal in spec/proposals/
               │
-           /spec ──▶ spec/ written ──▶ spex validate
+           /spec ──▶ spec/ written, gates green, committed
                                           │
-                        spex diff → plan → adapter → ingest
+                         /mint ──▶ diff → plan → adapter → ingest
+                                   (or refresh; baseline moves here)
                                           │
                             implementation happens; defects found
                             become drifts/drift-<task-id>.json

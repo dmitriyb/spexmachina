@@ -147,7 +147,7 @@ What an arch leaf is *for*: falsifiable statements a reader with the built binar
 
 ### 5.6 Say what the change costs
 
-`spex diff` exits **0** clean, **2** on completeness errors, **1** when the tree cannot be built. Two of those completeness rules make proposals larger than they look, and the Impact expectation section should account for them.
+`spex diff` exits **0** clean, **2** on completeness errors, **1** when the tree cannot be built, **3** when the lifecycle pre-flight refuses an uninitialised or broken project. Two of those completeness rules make proposals larger than they look, and the Impact expectation section should account for them.
 
 **Touching a requirement's description obliges a changed content leaf on every implementing component.** Changing one line of one module requirement:
 
@@ -178,6 +178,15 @@ diff: 1 completeness error(s) found     # exit 2
 **Renaming a node is delete-plus-create.** The name is the identity, so a rename destroys one node and mints another: a new hash, an obsolete bead and a create bead, every inbound link rewritten, and a corpus-wide sweep for surviving mentions of the old name. A proposal that renames things is proposing expensive work — name the cost in the Impact expectation rather than letting `/spec` discover it.
 
 `spex validate` has no warnings. Every finding is an error, `warning_count` is always 0, and a spec either validates or does not.
+
+### Say which way the baseline moves
+
+A proposal whose whole effect is corrective — spec text converged onto shipped, test-pinned
+behaviour, no work born — should declare it: prepend `mode: refresh` YAML frontmatter (the
+convention `/spec-review`'s correction proposals already use) and name the pinning evidence in
+the Impact expectation. `/mint` then executes it as a refresh instead of minting beads that owe
+nothing. A proposal that births any work omits the frontmatter; mixed changes stay a mint, with
+the yielding nodes argued per `/mint`'s absorb rules.
 
 ### Retired vocabulary (required when anything is retired)
 
