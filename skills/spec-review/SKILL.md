@@ -291,7 +291,7 @@ So:
   (`spec/ingest/arch_refresh.md`).
 - **Refresh runs neither `spex validate` nor the completeness checker.** Never propose a refresh-mode
   change without either showing both Step 2 gates green on the proposed end state, or explicitly
-  declaring the one exception: the hand-verified completeness override the `/drift-fix` skill
+  declaring the one exception: the hand-verified completeness override the `/mint` skill
   documents (per-entry discharge of a meta-sweep obligation, recorded in the PR description).
   Refresh will happily baseline a tree that `diff` would have rejected with exit 2, hiding it
   from every downstream tool — a red diff blocks the mint path structurally (`spex plan` refuses

@@ -461,8 +461,9 @@ Exit contract:
 | Exit | Meaning |
 |------|---------|
 | 0 | the tree built and the `errors` array is empty |
-| 1 | the tree did not build — missing or unparseable `project.json` / `module.json`, unreadable content leaf, unparseable snapshot. An absent or malformed task journal is **not** an error: `spex diff` runs in trees that were never ingested. It costs only the second fallback the removal sweep uses when a whole module is retired — with the module gone from `project.json` and the journal unreadable, the sweep reports `unverifiable_module` and leaves the prose sweep to you |
+| 1 | the tree did not build — missing or unparseable `project.json` / `module.json`, unreadable content leaf |
 | 2 | the tree built and `errors` is non-empty |
+| 3 | not a spex project — the lifecycle pre-flight refused before any tree was built: never initialised (stderr names `spex init`), or the snapshot or journal missing or unparseable (broken; stderr names `spex doctor`). An *empty* journal is fine — `spex init` seeds it empty and a never-ingested project simply contributes no names to the removal sweep |
 
 The bare text output reports these as **errors**, not warnings — `N error(s):` followed by `error: [<type>] <message>`, `path:` and `related:` lines. The `--json` form puts the same items in the top-level `errors` array. Either way a non-empty `errors` array is a hard failure and the command exits 2. `bin/spex plan` refuses to consume such a diff — `plan: diff contains N error(s), refusing to proceed`, exit 1 — so leaving one unresolved blocks the user's mint outright.
 
@@ -522,7 +523,7 @@ Tell the user:
 - What files were created or modified (list them)
 - Any `<!-- TODO -->` markers that need follow-up
 - In a module-scoped run, the project-level or sibling-module edits the proposal still needs, and any out-of-scope gate findings left in place
-- If this run authored an `--absorb` file, every node marked in it with its reason — see "Cosmetic absorption", which is also where the decision to author one is made
+- Which nodes look like absorb candidates and why — advisory only; the classification itself is `/mint`'s Step 2, made against the committed diff
 - Remind them to review the spec and commit it to git. The mint runs against that commit, so the SHA the user hands `spex plan --git-head` is the one carrying these edits
 
 ## Alter Mode Details
@@ -542,133 +543,17 @@ When modifying an existing spec:
 
 ## Handing the spec to the pipeline
 
-`/spec` writes the spec and stops. It never runs the pipeline and never moves the baseline — but
-what it writes has to be consumable by the five stages that follow, so author with them in view:
+`/spec` writes the spec and stops: gates green, edits committed by the user, baseline untouched.
+Everything after that — the per-node mint-vs-absorb assessment, `spex plan`, the adapter,
+`spex ingest`, the label budgets, and the refresh pathway — is `/mint`'s, the one skill that
+moves the baseline and the canonical home of that doctrine. Author with it in view:
 
-```
-bin/spex validate → bin/spex diff → bin/spex plan → <adapter> → bin/spex ingest
-```
-
-`validate` and `diff` are the two gates step 6 already runs. `spex plan` then decides the entire
-bead-action changeset in one pass — match, classify, order, label, resolve, compose. The adapter
-(`scripts/apply-br.sh` is the reference) applies it and writes receipts, and `spex ingest` appends
-the journal events and saves the snapshot. The baseline moves at that last stage only, in an
-interactive session, on purpose.
-
-### `spex plan` — flags and exit codes
-
-```
-spex plan --proposal <ref> --git-head <sha> [--diff <file>] [--beads <file>] [--absorb <file>] [--out <file>]
-```
-
-| Flag | Required | What it is |
-|------|----------|-----------|
-| `--proposal` | yes | the proposal stem, without `.md`. The run's epic is resolved through it: a live epic task in the journal fold answers first, else a `registered` event carrying the same stem. With neither, the run fails — `plan: build: plan: resolve: proposal "…" has no registered event in the journal and no existing epic task` |
-| `--git-head` | yes | the commit carrying the spec edits; 7–40 hex characters |
-| `--diff` | no | the document `spex diff --json` writes; stdin by default, `-` selects stdin explicitly |
-| `--beads` | no | tracker listing (`br list --json` or a compatible shape). Omitting it means no pairing is known-open and the cleanup gate defaults closed: nothing retargets, no cleanup task is minted for a removed node, and a *matched* modified node — one the journal already pairs with a task — goes down the obsolete+create path unless the journal already records its new hash or it is a test section folding back |
-| `--absorb` | no | git-committed JSON list of `{node, reason}` cosmetic marks (below) |
-| `--out` | no | changeset path; stdout by default |
-
-The root's persistent `--spec-dir` is read too — it is where the spec graph and the task journal
-are found.
-
-| Exit | Meaning |
-|------|---------|
-| 0 | changeset written |
-| 1 | input validation — bad flags, malformed JSON, an unreadable `--beads` or journal, **or a diff that still carries errors**: `plan: diff contains N error(s), refusing to proceed` |
-| 2 | contract refusal — a claimed (`in_progress`) task's node changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent |
-
-Exit 1 on a dirty diff is the practical reason step 6's completeness pass must end with
-`errors: []`: an unresolved `incomplete_change` or `surviving_name` does not annotate the user's
-mint, it blocks it.
-
-Exit 2 on a claimed task is the reason to author a module's changes in one run rather than
-dribbling them across several while beads are in flight: a claimed task's target never moves under
-the implementer holding it.
-
-### Changeset v3 vocabulary
-
-The changeset `spex plan` writes declares `"version": 3`. The vocabulary a spec author meets in it:
-
-- **Ops** are `create`, `close` and `retarget`. `label` and `tag` are reserved and nothing emits
-  them. `obsolete` is an *action* word, never an op — an obsoleted node reaches the adapter as a
-  `close`.
-- **`spec_node_kind`** on a create is one of `proposal_epic`, `component`, `data_flow`,
-  `test_section`, `cleanup`. There is no `api` and no `requirement`: neither produces a bead, which
-  is why the components behind them carry the work.
-- **Refs** are `{"ref":"bead",…}` or `{"ref":"op",…}`, nothing else. A dep that is neither already
-  tracked nor part of this batch is a build-time error, not a deferred adapter-side lookup.
-- **`retarget`** moves an existing *unclaimed* task from the old content hash to the new one
-  instead of closing it and creating a successor — so a node's bead survives a re-spec, and the
-  `blocks` lineage edge between generations does not appear for that path.
-- **`absorbed`** is a top-level array beside `ops`, never an op: the nodes marked cosmetic, each
-  with its before/after hashes and its authored reason.
-
-### The 50-character label budget
-
-br rejects any label over 50 characters (`Error: Validation failed: label: exceeds 50 characters`,
-exit 4), and the reference adapter passes the idempotency label in the same `br create` as the
-bead — so an over-long label fails the create outright rather than degrading to an unlabelled
-bead. Two labels are the author's to size, and they take their SHA from two different commands:
-
-- **The proposal epic's label is `spex:<the registered event's eid>`**, and that eid is
-  `<git_head>:<proposal_stem>` — fixed at `spex register --git-head`, not at plan time. Here it is
-  the stem that has to be short: a 7-character SHA leaves 37 characters for it, which is why
-  `/propose` caps its slug at 26 after `YYYY-MM-DD-`. This has bitten once already —
-  `2026-08-13-plan-module-task-per-change` (38) overflowed and the proposal was renamed to
-  `2026-08-13-plan-module` (22).
-- **Every op this run labels for itself carries `spex:<git_head>:op-NN`** — creates, cleanups whose
-  removal this same batch closes, and retargets — this time the SHA `spex plan --git-head` was
-  handed, with op ids zero-padded to the digit width of the batch. A full 40-character SHA sits at
-  exactly 50 for a batch under ten ops and overflows at ten or more; the 7-character abbreviation
-  puts it beyond doubt.
-
-One label is nobody's to size: a cleanup create answering a removal that landed in an *earlier*
-batch takes that removal event's eid whole, and a refresh-born eid
-(`refresh:<node>:<64-hex>:<64-hex>`) is several times the cap. No such label exists in this
-repository's journal — every `removed` event there is mint-born — and no authoring choice controls
-it; it is named here only so that a mint failing on one is recognisable.
-
-Nothing enforces any of these budgets — not `spex`, and `br` only once the adapter is already
-partway through a mint.
-
-### Cosmetic absorption
-
-`--absorb` names a git-committed JSON list of `{node, reason}`. A marked node's change is withheld
-before matching, so it yields no op at all — no create, no obsolete, no retarget, no claimed-task
-refusal — and rides in the changeset's `absorbed` array instead; `ingest` mints its `modified`
-event — keyed by the same `refresh:<node>:<before>:<after>` scheme a whole-run refresh uses — and
-the batch's single non-task-bearing `refresh` receipt names every absorbed eid the journal did
-not already carry — on an idempotent re-run where it carries them all, no receipt is written at
-all. It is the per-node
-form of `ingest --mode refresh`: a way to move the baseline over an edit that owes no code, inside
-a run that does owe code elsewhere. A spec run that carries sweep-only leaves — a retired name
-rewritten across a dozen modules, say — authors the absorb file here, alongside the spec edits, and
-commits it in the same PR, where the reasons are reviewed. This repo has used `absorb.json` at the
-repository root; any path works, since `--absorb` names it.
-
-`spex plan` checks exactly two things about a mark: that the node is a 12-character hex identity
-hash, and that the diff reports it as `modified`. A mark on an `added` or `removed` node, or on one
-absent from the diff, is exit 2 naming the node. **It does not and cannot check whether the edit
-was cosmetic** — that judgment is this skill's, and the rules below are the whole of it.
-
-1. **Declare per node what changed.** Every mark carries a `reason` naming the sections the edit
-   touched and why each of them is cosmetic. "It owes no code" is the weaker half of the test and
-   never sufficient alone — rule 2 is what decides eligibility. A reason that restates the node
-   name, or says only "prose-only", is not a declaration.
-2. **Contract-bearing content is categorically ineligible**, whatever the reason argues: an
-   Interface or Responsibilities section, any table stating a contract (flags, exit codes, states,
-   field lists, vocabularies), and any `module.json` change — a module meta leaf is never
-   absorbable.
-3. **The presumption is non-cosmetic.** Absorption is the exception that has to be argued; minting
-   is the default. Silence never skips: an unmarked node mints, which is the safe direction.
-4. **The reviewer validates the declaration**, not merely its presence — the same posture a
-   blocking drift report gets. The absorb file in the PR diff and the reasons in the journal are
-   the entire audit trail.
-
-Rule 2 is the one that was missing when this went wrong: on 2026-08-16 a `/drift-fix` run absorbed
-five contract-bearing leaves on the weaker test "does it owe code?", and the mint had to be
-reverted and re-run as eight beads. Nothing enforces rules 1–4 — `spex plan` validates shape only,
-and skill prose is advisory by construction. Making any of them binding is a change to `spex`
-behaviour and needs a proposal first; until one lands, the PR review is the only check there is.
+- The mint runs against the commit carrying these edits — the SHA the user hands
+  `spex plan --git-head` (as a 7-character short SHA; `/mint` carries the label budget).
+- `spex plan` refuses a diff with errors outright, which is why step 6's completeness pass must
+  end `errors: []` — an unresolved finding blocks the user's mint, not merely annotates it.
+- A run that carries sweep-only leaves (a retired name rewritten across modules, say) should
+  name them in the step 7 report as absorb candidates, so `/mint`'s assessment starts from the
+  author's own knowledge of what changed.
+- A claimed (`in_progress`) task's node must not change — mint a module's changes in one run
+  rather than dribbling them across several while beads are in flight.
