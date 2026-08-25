@@ -222,15 +222,52 @@ func matchedNodeName(change merkle.ClassifiedChange, graph SpecGraph) string {
 	return nodeName(change.Module, change.Key, change.NodeType, graph)
 }
 
-// depsFor collects DepSpecNodeIDs for a create or retarget action. Only
-// components carry uses/requires_module edges; data_flow and test_section
-// actions collect nothing here (the data_flow add-on runs separately, and
-// only ever targets components).
+// depsFor collects DepSpecNodeIDs for a create or retarget action.
+// Components walk their uses (direct) and their module's requires_module
+// (transitive) edges. A test_section walks its describes array —
+// unconditionally, with no journal lookup and no bead-status filtering at
+// collection time; whether each described component's hash resolves to
+// ref:op, ref:bead, is dropped, or is a plan error is the Resolver's
+// existing precedence, unchanged (spec/plan/arch_action_classifier.md,
+// "DepSpecNodeIDs Collection", rule 4). A data_flow action collects nothing
+// here — the data_flow add-on runs separately, and only ever targets
+// components.
 func depsFor(change merkle.ClassifiedChange, graph SpecGraph) []string {
-	if change.NodeType != "component" {
+	switch change.NodeType {
+	case "component":
+		return collectDeps(change.Module, change.Key, graph)
+	case "test_section":
+		return collectDescribes(change.Module, change.Key, graph)
+	default:
 		return nil
 	}
-	return collectDeps(change.Module, change.Key, graph)
+}
+
+// collectDescribes returns the deduplicated, sorted set of identity hashes
+// in a test_section's describes array. An unresolvable module or an id the
+// module declares no test_section under yields no deps, exactly as
+// collectDeps behaves for a component the graph cannot resolve.
+func collectDescribes(moduleName, nodeID string, graph SpecGraph) []string {
+	mod, ok := graph.moduleByName(moduleName)
+	if !ok {
+		return nil
+	}
+	ts, ok := findTestSection(mod.Spec, nodeID)
+	if !ok || len(ts.Describes) == 0 {
+		return nil
+	}
+
+	seen := map[string]bool{}
+	out := make([]string, 0, len(ts.Describes))
+	for _, id := range ts.Describes {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, id)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // collectDeps walks a component's direct uses edges and its module's
