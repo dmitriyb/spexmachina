@@ -626,15 +626,87 @@ func TestDeps_UnknownModuleYieldsEmpty(t *testing.T) {
 	}
 }
 
-func TestDepsFor_NonComponentCollectsNothing(t *testing.T) {
+func TestDepsFor_DataFlowCollectsNothing(t *testing.T) {
 	f := newClassifierFixture()
 	flowChange := change(f.FlowF, "plan", "data_flow", merkle.Added, "", "h")
 	if deps := depsFor(flowChange, f.Graph); len(deps) != 0 {
 		t.Errorf("data_flow must collect no uses/requires_module deps, got %v", deps)
 	}
+}
+
+// --- Test_section describes edges (D10) ---
+
+func TestDeps_TestSectionDescribesCollectsEachDescribedComponent(t *testing.T) {
+	f := newClassifierFixture()
 	tsChange := change(f.TSMany, "plan", "test_section", merkle.Added, "", "h")
-	if deps := depsFor(tsChange, f.Graph); len(deps) != 0 {
-		t.Errorf("test_section must collect no uses/requires_module deps, got %v", deps)
+	deps := depsFor(tsChange, f.Graph)
+	want := sortedStrings(f.CompX, f.CompY)
+	if !reflect.DeepEqual(deps, want) {
+		t.Fatalf("D10: got %v want %v", deps, want)
+	}
+}
+
+func TestDeps_TestSectionDescribes_HoldsForRetargetToo(t *testing.T) {
+	f := newClassifierFixture()
+	c := change(f.TSMany, "plan", "test_section", merkle.Modified, "old", "new")
+	m := Match{Change: c, Records: []Pairing{{TaskID: "spex-ts", BeadStatus: "open", After: "old"}}}
+	actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 || actions[0].Type != ActionRetarget {
+		t.Fatalf("want 1 retarget, got %+v", actions)
+	}
+	want := sortedStrings(f.CompX, f.CompY)
+	if !reflect.DeepEqual(actions[0].DepSpecNodeIDs, want) {
+		t.Fatalf("D10 on retarget: got %v want %v", actions[0].DepSpecNodeIDs, want)
+	}
+}
+
+func TestDeps_TestSectionDescribesCollectionIgnoresBeadStatus(t *testing.T) {
+	// D2's division of labour holds for describes too: a described
+	// component's own bead status must not filter it out of collection —
+	// that is the Resolver's job three steps later.
+	f := newClassifierFixture()
+	yMatch := Match{
+		Change:  change(f.CompY, "plan", "component", merkle.Modified, "old", "new"),
+		Records: []Pairing{{TaskID: "spex-y", BeadStatus: "closed"}},
+	}
+	unmatched := Unmatched{Change: change(f.TSMany, "plan", "test_section", merkle.Added, "", "th")}
+	actions, err := ClassifyActions([]Match{yMatch}, []Unmatched{unmatched}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	var tsAction *Action
+	for i := range actions {
+		if actions[i].SpecNodeID == f.TSMany {
+			tsAction = &actions[i]
+		}
+	}
+	if tsAction == nil {
+		t.Fatalf("TSMany action missing: %+v", actions)
+	}
+	want := sortedStrings(f.CompX, f.CompY)
+	if !reflect.DeepEqual(tsAction.DepSpecNodeIDs, want) {
+		t.Errorf("got %v want %v — CompY's closed status must not filter collection", tsAction.DepSpecNodeIDs, want)
+	}
+}
+
+func TestDeps_TestSectionUnresolvableYieldsEmpty(t *testing.T) {
+	f := newClassifierFixture()
+	tests := []struct {
+		name   string
+		change merkle.ClassifiedChange
+	}{
+		{"unknown module", change("whatever", "no-such-module", "test_section", merkle.Added, "", "h")},
+		{"unknown section in known module", change("no-such-hash", "plan", "test_section", merkle.Added, "", "h")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if deps := depsFor(tt.change, f.Graph); len(deps) != 0 {
+				t.Errorf("want 0 deps, got %v", deps)
+			}
+		})
 	}
 }
 
@@ -778,23 +850,49 @@ func TestDataFlowAddOn_ComponentsNotListedGainNothing(t *testing.T) {
 	}
 }
 
-func TestNonComponentCreates_CarryNoSpecGraphDeps(t *testing.T) {
+// TestDataFlowCreate_CarriesNoSpecGraphDeps pins D8's data_flow half: a
+// data_flow create walks neither uses nor requires_module and collects no
+// describes (it has none) — its ordering inside the batch is driven by the
+// add-on applied to the components on the other side, not by deps of its
+// own.
+func TestDataFlowCreate_CarriesNoSpecGraphDeps(t *testing.T) {
 	f := newClassifierFixture()
 	u := []Unmatched{
 		{Change: change(f.FlowF, "plan", "data_flow", merkle.Added, "", "fh")},
+	}
+	actions, err := ClassifyActions(nil, u, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %+v", actions)
+	}
+	if len(actions[0].DepSpecNodeIDs) != 0 {
+		t.Errorf("data_flow must carry no deps from classification, got %v", actions[0].DepSpecNodeIDs)
+	}
+}
+
+// TestTestSectionCreate_WalksDescribesButNotUsesOrRequiresModule pins D8's
+// test_section half: a test_section create is not dep-free — it collects
+// its describes array (D10) — but it walks no uses and no requires_module,
+// so a test_section id that happened to collide with a component's uses
+// edge (it never does here; the fixture's TSMany has no uses of its own)
+// still yields exactly the describes set.
+func TestTestSectionCreate_WalksDescribesButNotUsesOrRequiresModule(t *testing.T) {
+	f := newClassifierFixture()
+	u := []Unmatched{
 		{Change: change(f.TSMany, "plan", "test_section", merkle.Added, "", "th")},
 	}
 	actions, err := ClassifyActions(nil, u, nil, f.Graph)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if len(actions) != 2 {
-		t.Fatalf("want 2 actions, got %+v", actions)
+	if len(actions) != 1 {
+		t.Fatalf("want 1 action, got %+v", actions)
 	}
-	for _, a := range actions {
-		if len(a.DepSpecNodeIDs) != 0 {
-			t.Errorf("node type %s must carry no deps from classification, got %v", a.NodeType, a.DepSpecNodeIDs)
-		}
+	want := sortedStrings(f.CompX, f.CompY)
+	if !reflect.DeepEqual(actions[0].DepSpecNodeIDs, want) {
+		t.Fatalf("got %v want %v", actions[0].DepSpecNodeIDs, want)
 	}
 }
 
