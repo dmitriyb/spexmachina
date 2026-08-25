@@ -8,7 +8,7 @@
 - Handle modified nodes with a closed pairing by generating both obsolete (old bead) and create (new bead) actions; handle modified nodes with an open pairing by generating [[7d45c20bd0f7|one retarget action that moves the task's target instead of recreating it]]; refuse the whole run when a modified node's pairing is claimed (`in_progress`).
 - Gate action production by node type and, for test_sections, by `len(describes)`.
 - Choose between obsolete-only and obsolete-plus-cleanup-create for a removed node from the live bead status [[9f1578d7af6d|BeadReader]] carried off the caller's tracker file. [[8987ef169e48|A closed bead means the code already shipped]], so the repository now holds code answering to no spec node and a cleanup bead is created to have it deleted; an open or in-progress bead means nothing shipped and there is nothing to clean up.
-- For each create or retarget action, collect `DepSpecNodeIDs` by walking component `uses` (direct) and module `requires_module` (transitive).
+- For each create or retarget action, collect `DepSpecNodeIDs` by walking component `uses` (direct), module `requires_module` (transitive) and — for a test_section — its `describes` array.
 
 ## Node-Type Gate
 
@@ -77,11 +77,12 @@ re-classify.
 
 ## DepSpecNodeIDs Collection
 
-After classification, [[e3b2b4e914fc|each create or retarget action collects the identity hashes its task is to depend on]], from three places:
+After classification, [[e4234a9928e6|each create or retarget action collects the identity hashes its task is to depend on]], from four places:
 
 1. **Component `uses` edges** (direct only): read the component's `uses` array; each entry is a sibling component's identity hash. Add each to `DepSpecNodeIDs`.
 2. **Module `requires_module` edges** (transitive, with cycle detection): walk the module dependency graph by identity hash. For each reachable required module, add every component's identity hash from that module to `DepSpecNodeIDs`.
 3. **Data_flow add-ons** (contract layer): for each create with node_type=component whose spec_node appears in a changed data_flow's `uses` array, add the data_flow's identity hash to the component's `DepSpecNodeIDs`. This ensures the topological sort places the data_flow create op first and the component ops gain `ref:op` deps on it.
+4. **Test_section `describes` edges** (direct, unconditional): for a create or retarget whose node is a test_section, read the section's `describes` array; each entry is a described component's identity hash. Add each to `DepSpecNodeIDs`. Collection is deliberately not batch-aware: whether a described component is an in-batch create (`ref:op`), in-flight work (`ref:bead`), already shipped (dep dropped) or never tracked (a plan error naming the hash) is the Resolver's existing precedence, unchanged. This is what keeps a multi-component test task off the ready list until the components it describes exist — the sorter's features-before-test-tasks tier order was advisory without these deps and is load-bearing with them.
 
 The output is a set (deduplicated) of identity hashes. No bead lookup, no status filtering — those belong to the Resolver. A retarget's set is recomputed from the node's current edges, exactly as a fresh create's would be; how the adapter applies it (add-only) is the op's contract, not a collection rule.
 
