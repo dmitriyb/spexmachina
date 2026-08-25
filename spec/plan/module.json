@@ -64,15 +64,15 @@
       "description": "Produce a create action with node_type=data_flow for every added or modified data_flow change (contract-level impact). Filter test_section changes by the describes array length in the current module spec: len(describes) >= 2 produces a task action, len(describes) == 1 is skipped (bundled into the single described component's feature bead). For every component create action whose spec node appears in a changed data_flow's uses array, add the data_flow's spec_node_id to the component's DepSpecNodeIDs. The TopologicalSorter and Resolver then ensure the data_flow's create op is emitted first and participating components carry ref:op deps on it.",
       "depends_on": [
         "de42d9efa750",
-        "e3b2b4e914fc"
+        "e4234a9928e6"
       ]
     },
     {
-      "id": "e3b2b4e914fc",
+      "id": "e4234a9928e6",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Emit DepSpecNodeIDs per create action",
-      "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here — it is deferred within the same pass to the Resolver, which classifies each spec_node_id into ref:op or ref:bead at changeset-build time, with full knowledge of the batch's op ids. Retires the prior design that pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
+      "title": "Emit DepSpecNodeIDs per create and retarget action",
+      "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges; for a create or retarget action whose node is a test_section, collect the section's describes array — unconditionally, with no batch-awareness at collection time, because filtering already-satisfied deps is the Resolver's responsibility and its existing precedence (in-batch create → ref:op, open fold pairing → ref:bead, closed pairing → dropped, no pairing → plan error) already yields the right answer per dep. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here — it is deferred within the same pass to the Resolver, which classifies each spec_node_id into ref:op or ref:bead at changeset-build time, with full knowledge of the batch's op ids. Retires the prior design that pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
       "depends_on": [
         "de42d9efa750"
       ]
@@ -197,12 +197,12 @@
     {
       "id": "8aa1ab5ac102",
       "name": "ActionClassifier",
-      "description": "Determines the action for each matched or unmatched spec node using the state transition table: added→create, removed→obsolete; a modified node — or a matched added one with differing hashes — splits on the live pairing's status: open→retarget, in_progress→refuse the run, closed→obsolete+create; a matched change whose open pairing already records the change's current after hash is already tracked and yields no action. For removed nodes with closed tasks (live status from BeadReader), also creates a cleanup bead, phrasing it from the journal's removed event — the surviving record of the node's name, kind and module. For create and retarget actions, collects DepSpecNodeIDs from component uses (direct) and transitive requires_module edges — the list of spec_node_ids the task will depend on. Bead-ID resolution is NOT performed here; it belongs to the Resolver. Gates bead creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
+      "description": "Determines the action for each matched or unmatched spec node using the state transition table: added→create, removed→obsolete; a modified node — or a matched added one with differing hashes — splits on the live pairing's status: open→retarget, in_progress→refuse the run, closed→obsolete+create; a matched change whose open pairing already records the change's current after hash is already tracked and yields no action. For removed nodes with closed tasks (live status from BeadReader), also creates a cleanup bead, phrasing it from the journal's removed event — the surviving record of the node's name, kind and module. For create and retarget actions, collects DepSpecNodeIDs — the list of spec_node_ids the task will depend on — from component uses (direct), transitive requires_module edges, and, for a test_section node, its describes array (unconditional; the Resolver filters). Bead-ID resolution is NOT performed here; it belongs to the Resolver. Gates bead creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature bead, if len(describes) >= 2 a cross-component task bead is produced. Data_flow nodes always produce a task bead.",
       "content": "arch_action_classifier.md",
       "implements": [
         "de42d9efa750",
         "8987ef169e48",
-        "e3b2b4e914fc",
+        "e4234a9928e6",
         "3ec0a433e476",
         "7d45c20bd0f7"
       ],

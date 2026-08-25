@@ -83,6 +83,17 @@ A retarget op carries no `parent` and no `priority` — the task already sits un
 
 Classify the full fixture twice, shuffling pairing order between runs. Assert the action lists are identical in content and order — the sort by (Type, Module, Node, BeadID) now covers three action types, with retargets ordered inside the same scheme.
 
+### S10: Resolver precedence over a test task's `describes` deps
+
+The four fates of a described component's hash, one fixture arm each — the same precedence create deps already take, with no Resolver change:
+
+- **In-batch create**: test_section T describes components X and Y, all three fresh creates in one batch. T's create op carries `{"ref":"op"}` deps on X's and Y's ops, and the sorter emits both component ops before T's — the test task is not actionable until its components exist.
+- **Open fold pairing**: Y instead has an open task in the fold → T's dep on Y resolves to `ref:bead`; the test task waits for the in-flight component work.
+- **Closed pairing**: Y's pairing is closed → the dep is dropped, no error, and T's op carries no ref for it — the steady state, where a test against existing code stays immediately actionable and today's behaviour is preserved.
+- **No pairing at all**: Y has never been tracked by any journal event → the existing plan error naming the spec_node_id, exactly as a component `uses` dep resolves. Assert the error, not a silent drop.
+
+A retargeted test section takes the same path: its recomputed `DepSpecNodeIDs` include `describes`, so a section retargeted in a batch that re-mints a described component gains a `ref:op` dep on the successor, applied add-only per S6.
+
 ## Dependency Collection Scenarios
 
 For each create or retarget action, ActionClassifier walks the spec graph and records identity hashes of spec nodes the task will depend on in `DepSpecNodeIDs`. No journal lookup and no bead-status filtering happens here — the Resolver classifies each identity hash into a `ref:op` or `ref:bead` at changeset-build time, with full knowledge of the batch's op ids.
@@ -117,11 +128,15 @@ Data_flow F with `uses: [X]`, both F and X in the batch: X's `DepSpecNodeIDs` co
 
 ### D8: Non-component creates do not walk `uses` / `requires_module`
 
-Data_flow and test_section creates carry no spec-graph deps from classification; their ordering inside the batch is driven by the data_flow add-on applied to the components on the other side.
+Data_flow creates carry no spec-graph deps from classification; their ordering inside the batch is driven by the data_flow add-on applied to the components on the other side. A test_section create is not dep-free — it collects its `describes` array (D10) — but it walks no `uses` and no `requires_module`; those two walks stay component-only.
 
 ### D9: Obsolete actions never carry `DepSpecNodeIDs`
 
 Dependency information belongs on creates and retargets only — an obsolete describes work on an existing bead and inherits its graph position.
+
+### D10: Test_section `describes` collects each described component's identity hash
+
+Section T `describes: [X, Y]`: T's `DepSpecNodeIDs` contains `id_X` and `id_Y`, on creates and retargets alike. Collection is unconditional — no journal lookup, no bead-status filtering, no batch-awareness; D2's division of labour holds here too, and whether each hash becomes a ref, a drop or an error is S10's business.
 
 ## Edge Cases
 
