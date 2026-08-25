@@ -111,14 +111,19 @@ Reads and writes reach this component from different commands:
   (mode: normal on complete receipts; mode: refresh always), and `Save`'s
   replace-in-place write cannot hold that invariant — which is why the
   composition sits there rather than here.
-  There is no other writer — no standalone `spex hash` command, no other
-  subcommand that persists the tree.
-- `Save` therefore has no production caller. It stays for callers that
-  want a snapshot on disk without ingest's invariant, which today means
-  the test suites of this module, of `spex diff` and of
-  `spex plan` seeding a baseline to diff against, plus
-  `ingest/snapshot_format_test.go`, which pins that Save and the ingest
-  writer emit the same bytes.
+  There is no other writer of a *lived-in* project's tree — no
+  standalone `spex hash` command, no other subcommand that persists a
+  built tree.
+- `Save` has exactly one production caller: `spex init`, seeding the
+  empty-tree snapshot into the `.spex/` directory it just created.
+  That seed write needs none of ingest's invariant — init refuses to
+  run when `.spex/` already exists, so there is no live file for a
+  reader to observe mid-write and no journal yet to move in step.
+  Beyond init, `Save` serves callers that want a snapshot on disk
+  without ingest's invariant: the test suites of this module, of
+  `spex diff` and of `spex plan` seeding a baseline to diff against,
+  plus `ingest/snapshot_format_test.go`, which pins that Save and the
+  ingest writer emit the same bytes.
 
 Keeping reads in `spex diff` and writes in `spex ingest` is what holds the
 snapshot+journal atomicity invariant in place.

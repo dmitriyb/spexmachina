@@ -52,8 +52,9 @@ Once the builder answers, the command has one job left: serialize the changeset 
 ## Exit Codes
 
 - `0` — success; changeset written.
-- `1` — input validation error (bad flags, malformed JSON, diff carries errors, unreadable `--beads` or journal). Stderr names the flag or the input that failed.
+- `1` — input validation error (bad flags, malformed JSON, diff carries errors, unreadable `--beads`). Stderr names the flag or the input that failed.
 - `2` — contract refusal (a claimed task's node changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent). Stderr carries the error with the spec_node_ids or task ids implicated.
+- not a spex project — the pre-flight's own stable exit code, distinct from both codes above: the directory was never initialised (naming `spex init`), or its snapshot or journal is missing or unparseable (broken, naming `spex doctor`). A malformed journal can never take `1`: the fold is reached only after the pre-flight has resolved a readable journal.
 
 Failure modes never write a partial changeset.
 

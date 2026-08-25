@@ -124,8 +124,8 @@ the tree hashes only the content files module.json declares — so appends move 
 no diff. Sitting under `.spex/`, outside the spec tree, the journal is also invisible to the
 removal sweep's corpus scan, so its own `removed` events — which carry exactly the names the
 sweep hunts — can never count as survivors. The retired `--map`/`--map-file`
-flags are gone with the file they pointed at; the journal's location is a function of `--spec-dir`
-alone.
+flags are gone with the file they pointed at; `--spec-dir` no longer determines the journal's
+location at all — the lifecycle pre-flight's `.spex/` resolution does.
 
 ## Design Rationale
 

@@ -65,7 +65,7 @@
 ### Malformed journal line
 
 - **Input**: `spex map list` over a journal whose third line is invalid JSON
-- **Expected**: `map: journal line 3: …` on stderr, exit code 1 — the query surface fails loudly where gating commands would degrade to absent.
+- **Expected**: the lifecycle pre-flight refuses the broken project — stderr carries `map:` and names the offending line and `spex doctor`, with the not-a-spex-project exit code. The journal is schema-checked before the store is consulted, so no query surface ever folds over a malformed file.
 
 ### Concurrent CLI invocations
 

@@ -80,8 +80,9 @@ Run S1 five times. All five stdout captures are byte-for-byte identical: same di
 ### S12: Exit codes
 
 - Valid inputs → 0.
-- Unreadable or malformed inputs (missing diff file, malformed JSON, unreadable `--beads`, malformed journal line) → 1, stderr naming the input.
+- Unreadable or malformed inputs (missing diff file, malformed JSON, unreadable `--beads`) → 1, stderr naming the input.
 - Contract refusals (claimed task's node changed, invalid absorb entry, unresolvable dep, dep cycle) → 2, stderr naming the spec_node_ids or tasks implicated.
+- No project state at the resolved location (no snapshot ever seeded) → the not-a-spex-project code, stderr naming `spex init`; a present but unloadable snapshot, or a malformed journal line, is a broken project → the same code, stderr naming `spex doctor` — never `1`, the pre-flight refuses before the fold reads anything.
 
 ### S13: The diff document itself is malformed or empty
 

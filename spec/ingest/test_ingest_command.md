@@ -61,6 +61,14 @@ End-to-end tests for `spex ingest`.
 - Expected: second run exits 0 with the same summary counts; the journal byte-identical
   after the second run; snapshot unchanged.
 
+### Pre-flight refusal in both modes
+
+- With no project state at the resolved location: exit is the not-a-spex-project code, stderr
+  names `spex init`, neither pathway runs.
+- With a journal line that violates the journal-line schema: same code in normal and refresh
+  mode alike, stderr names `spex doctor`, the journal is untouched — the lifecycle pre-flight
+  reads both state files before `--mode` forks, so neither mode's own reader is reached.
+
 ### Unknown --mode value
 
 - `spex ingest --changeset <valid.json> --receipts <valid.json> --mode bogus`.

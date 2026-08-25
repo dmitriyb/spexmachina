@@ -286,6 +286,12 @@ func TestFR_MapList_MalformedLine(t *testing.T) {
 	if !strings.Contains(err.Error(), "map:") || !strings.Contains(err.Error(), "line 3") {
 		t.Fatalf("want error naming the file and line, got %v", err)
 	}
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Fatalf("want the pre-flight's broken-project error naming 'spex doctor', got %v", err)
+	}
+	if exitCodeOf(err) != exitNotAProject {
+		t.Fatalf("want exit code %d, got %d (%v)", exitNotAProject, exitCodeOf(err), err)
+	}
 }
 
 // setupMapContextTestSpec creates a spec directory with project.json, one
