@@ -9,6 +9,7 @@ import (
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/ingest"
+	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
 	"github.com/dmitriyb/spexmachina/schema"
@@ -23,8 +24,8 @@ func newIngestCmd() *cobra.Command {
 		Short: "Reconcile the task journal and save snapshot from a changeset+receipts pair",
 		Long: `Ingest reads a changeset.json (produced by spex plan) and the
 receipts.json an adapter wrote after applying it, reconciles the task
-journal (spec/.history.jsonl), and writes spec/.snapshot.json when the
-run is complete.
+journal and writes the snapshot when the run is complete — both at the
+locations the lifecycle pre-flight resolves inside .spex/.
 
 With --mode refresh (empty changeset + empty receipts), ingest instead
 absorbs spec drift: one change event per drifted or absorbable
@@ -46,7 +47,7 @@ Inputs:
 Exit codes:
   0 — success (complete OR partial with no reconciler errors)
   1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure,
-      missing pre-refresh snapshot, non-empty refresh artifacts)
+      non-empty refresh artifacts)
   2 — invariant failure (journal unchanged on disk) or refresh refusal
       (non-absorbable added/removed entries, a live task pairing on a
       removed node)`,
@@ -69,8 +70,17 @@ Exit codes:
 				return ingestInputErr(err)
 			}
 
+			// Open the journal and snapshot at their resolved .spex/
+			// locations before branching on --mode; neither pathway
+			// computes a location of its own (arch_ingest_command.md
+			// "Wiring" step 3).
+			ctx, err := lifecycle.Resolve(resolveProjectRoot(specDir))
+			if err != nil {
+				return fmt.Errorf("ingest: %w", err)
+			}
+
 			if mode == "refresh" {
-				return runRefreshMode(cmd, specDir, cs, rc, gitHead)
+				return runRefreshMode(cmd, specDir, ctx, cs, rc, gitHead)
 			}
 			if mode != "normal" {
 				return ingestInputErr(fmt.Errorf("ingest: --mode must be normal or refresh, got %q", mode))
@@ -81,17 +91,13 @@ Exit codes:
 				return ingestInputErr(fmt.Errorf("ingest: load spec graph: %w", err))
 			}
 
-			reconciler := &ingest.Reconciler{SpecDir: specDir, SpecGraph: graph}
+			reconciler := &ingest.Reconciler{SpecDir: specDir, SpecGraph: graph, JournalPath: ctx.JournalPath}
 			sum, err := reconciler.Apply(cs, rc)
 			if err != nil {
 				return ingestInvariantErr(err)
 			}
 
-			// TODO(bead:spexmachina-uiei.13): resolve SnapshotPath via
-			// lifecycle.Resolve once IngestCommand adopts the .spex/
-			// state dir; SnapshotSaver itself no longer defaults this
-			// path (arch_snapshot_saver.md's Interface section).
-			saver := &ingest.Saver{SpecDir: specDir, SnapshotPath: filepath.Join(specDir, ".snapshot.json")}
+			saver := &ingest.Saver{SpecDir: specDir, SnapshotPath: ctx.SnapshotPath}
 			wrote, err := saver.Save(rc.Status)
 			if err != nil {
 				return ingestInputErr(fmt.Errorf("ingest: snapshot: %w", err))
@@ -128,10 +134,12 @@ Exit codes:
 // non-empty artifacts) and IO errors map to input-error exit code 1,
 // per arch_ingest_command.md. An empty gitHead records the refresh
 // receipt's git_head as absent, per RefreshHandler's GitHead contract.
-func runRefreshMode(cmd *cobra.Command, specDir string, cs plan.Changeset, rc adapters.Receipts, gitHead string) error {
+func runRefreshMode(cmd *cobra.Command, specDir string, ctx *lifecycle.ProjectContext, cs plan.Changeset, rc adapters.Receipts, gitHead string) error {
 	h := &ingest.RefreshHandler{
-		Changeset: &cs,
-		Receipts:  &rc,
+		JournalPath:  ctx.JournalPath,
+		SnapshotPath: ctx.SnapshotPath,
+		Changeset:    &cs,
+		Receipts:     &rc,
 	}
 	if gitHead != "" {
 		h.GitHead = &gitHead
