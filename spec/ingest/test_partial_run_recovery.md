@@ -1,7 +1,10 @@
 # Partial run recovery tests
 
 Exercises the two-run sequence where the first ingest runs with partial receipts and the second
-run completes the work.
+run completes the work. The recovery path runs through the carved-out builders: on each run
+`Reconciler` seeds `EventBuilder`'s per-run state from the journal as it stands, so Run 2's
+dedup — re-derived eids finding Run 1's lines already present — is the builder's eid predicate
+answering from the journal, not a property of the orchestrator's loop.
 
 ## Setup
 

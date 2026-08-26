@@ -143,8 +143,11 @@ Once wired, the handler runs in one order:
 3. Refuse on any added or removed entry the absorbable set does not cover.
 4. Refuse on any removed node whose journal pairing is still live.
 5. Construct one change event per absorbed entry, plus the refresh receipt naming them.
-6. Commit the journal and the snapshot together, atomically.
-7. Write the summary to stdout.
+6. Encode every constructed line through [[6ce1df0a456b|JournalEncoder]], whose schema gate
+   refuses the run on an invalid line before anything is written — the refresh append inherits
+   invariant 5's guarantee from the same component normal mode uses.
+7. Commit the journal and the snapshot together, atomically.
+8. Write the summary to stdout.
 
 ## Relationship to existing components
 
@@ -152,9 +155,10 @@ Once wired, the handler runs in one order:
   into an event is the same digest `spex diff` would compute for that leaf. It introduces no
   hashing primitive of its own.
 - Uses the same atomic-write helper SnapshotSaver uses; refresh just commits both writes together.
-- Does not extend `Reconciler`. Reconciler's surface remains per-op construction plus invariant
-  assertion; the refresh-mode rules are fundamentally different (no ops, no receipts from a
-  tracker) and would only complicate Reconciler's tests.
+- Does not extend `Reconciler`. Reconciler's surface remains normal-mode orchestration —
+  dispatching construction to EventBuilder, invariant assertion to InvariantChecker, line
+  encoding to JournalEncoder; the refresh-mode rules are fundamentally different (no ops, no
+  receipts from a tracker) and would only complicate Reconciler's tests.
 
 ## Failure modes
 

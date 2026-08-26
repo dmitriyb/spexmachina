@@ -1,6 +1,10 @@
 # Reconciliation tests
 
-Integration tests for `Reconciler.Apply` against fixture changesets and receipts.
+Integration tests for `Reconciler.Apply` against fixture changesets and receipts. Every scenario
+crosses the orchestrator/builder boundary: `Reconciler` pairs receipts to ops, assembles the
+per-run state and dispatches; `EventBuilder` constructs the lines each op implies. The scenarios
+assert on what lands in the journal, so a construction defect in the builder and a dispatch defect
+in the orchestrator both surface here.
 
 ## Setup
 
@@ -195,6 +199,18 @@ Integration tests for `Reconciler.Apply` against fixture changesets and receipts
   event, and carries no proposal stem.
 - Expected: structured error naming the op; the journal file is byte-identical to its pre-run
   state — a refused batch appends nothing.
+
+### Eid predicate sees the journal and the in-flight batch
+
+- Initial journal: the change event and `task_created` for node `A` (a journal-side duplicate).
+- Changeset: [the same create op for `A` re-emitted (same git_head, same op_id), a create op for
+  node `B`, then a second create op whose derived eid collides with `B`'s] — receipts all ok.
+- Expected: nothing appended for `A` (its eid is already in the journal), `B`'s event and receipt
+  land once, and the colliding op appends nothing — its eid is already in the in-flight batch.
+  This pins the one thing the decomposition could plausibly get wrong: the predicate is
+  `EventBuilder`'s own per-run state, mutated as the batch grows, and it must answer for both
+  sources — lines already on disk and lines constructed earlier in this same run — not only the
+  journal it was seeded from.
 
 ## Idempotent Append
 

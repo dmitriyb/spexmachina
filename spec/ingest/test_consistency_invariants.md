@@ -1,22 +1,27 @@
 # Consistency invariants
 
-Tests for the five journal invariants the ingest module enforces at baselining. The per-invariant
-scenarios construct a state that SHOULD violate an invariant and assert that reconciliation rejects
-it with a specific error; the snapshot-gate scenarios assert the gate behaves on both partial and
-complete runs; and the Happy Path scenario asserts the positive integrated property that a clean
-complete run leaves the journal AND the snapshot both updated and schema-valid — both at the
-locations the lifecycle resolver answered for the fixture project.
+Tests for the five journal invariants the ingest module enforces at baselining. Enforcement is
+`InvariantChecker`'s: the per-invariant scenarios construct a state that SHOULD violate an
+invariant and assert that the check rejects it with a specific error naming the invariant, whether
+reached through `Reconciler.Apply` or against the checker directly. Line validity is
+`JournalEncoder`'s: invariant 5's scenarios exercise the encoder that owns the schema gate. The
+snapshot-gate scenarios assert the gate behaves on both partial and complete runs; and the Happy
+Path scenario asserts the positive integrated property that a clean complete run leaves the
+journal AND the snapshot both updated and schema-valid — both at the locations the lifecycle
+resolver answered for the fixture project.
 
 ## The Five Invariants
 
 1. Every ok create pairs exactly one `task_created` receipt with exactly one referent event — a
    change event, the `removed` event the cleanup answers (prior-batch or same-batch), or the
-   proposal's `registered` event (epic creates) — and every ok retarget pairs exactly one
-   `task_retargeted` receipt with its own `modified` event. A `proposal`-keyed receipt with no
+   proposal's `registered` event (epic creates) — every ok retarget pairs exactly one
+   `task_retargeted` receipt with its own `modified` event, and a batch's absorbed events are
+   closed by exactly one `refresh` receipt naming them. A `proposal`-keyed receipt with no
    `for` is a legacy line read as inert history, never constructed anew.
-2. No receipt references an event id the journal does not contain.
-3. Re-running the same changeset+receipts pair appends nothing — event ids derive from
-   `(git_head, op_id)`.
+2. No receipt references an event id that neither the journal nor the batch contains — `for`
+   fields and the entries of a `refresh` receipt's `absorbed` list alike.
+3. Re-running the same changeset+receipts pair appends nothing — op-born event ids derive from
+   `(git_head, op_id)` and absorb-born ones from `(node, before, after)`.
 4. The snapshot is saved iff receipts top-level status is complete, so journal and snapshot
    describe the same point-in-time state.
 5. Every appended line validates against the journal-line schema before the write.
@@ -82,6 +87,15 @@ writes.
 - Construct a batch that would append a change event missing its `node` field.
 - Expected: the journal-line schema validation fails before the write; error names the violated
   constraint; the on-disk journal is untouched.
+
+### Invariant 5: the encoder refuses at its own boundary
+
+- Hand `JournalEncoder` a deliberately schema-invalid event directly — no changeset, no
+  reconciliation run around it.
+- Expected: the encoder refuses the line naming the violated constraint, before any write path is
+  reached. This exercises invariant 5 against the component that owns it rather than only through
+  the integrated run above, so a future caller of the encoder inherits the gate rather than
+  re-implementing it.
 
 ### Lineage replaces the rebind invariant
 

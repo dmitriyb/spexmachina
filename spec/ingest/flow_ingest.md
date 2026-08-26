@@ -15,6 +15,9 @@ digraph ingest_dispatch {
     "--mode"                [style=dashed];
     "db90eb607bcb"          [label="IngestCommand\ndb90eb60"];
     "2b5158af774b"          [label="Reconciler\n2b5158af"];
+    "3c0569749972"          [label="EventBuilder\n3c056974"];
+    "5fd9613616e1"          [label="InvariantChecker\n5fd96136"];
+    "6ce1df0a456b"          [label="JournalEncoder\n6ce1df0a"];
     "f85bd2f94aeb"          [label="SnapshotSaver\nf85bd2f9"];
     "f9033352c13f"          [label="RefreshHandler\nf9033352"];
     "journal (.spex/)"      [style=dashed];
@@ -27,6 +30,10 @@ digraph ingest_dispatch {
     "db90eb607bcb"    -> "2b5158af774b"        [label="mode: normal"];
     "db90eb607bcb"    -> "f85bd2f94aeb"        [label="mode: normal"];
     "db90eb607bcb"    -> "f9033352c13f"        [label="mode: refresh"];
+    "2b5158af774b"    -> "3c0569749972"        [label="dispatches each op"];
+    "2b5158af774b"    -> "5fd9613616e1"        [label="checks the batch"];
+    "2b5158af774b"    -> "6ce1df0a456b"        [label="encodes surviving lines"];
+    "f9033352c13f"    -> "6ce1df0a456b"        [label="schema-gates its lines"];
     "2b5158af774b"    -> "journal (.spex/)"    [label="appends events + receipts"];
     "f85bd2f94aeb"    -> "snapshot (.spex/)"   [label="iff status == complete"];
     "f9033352c13f"    -> "journal (.spex/)"    [label="appends absorbed drift"];
@@ -35,21 +42,23 @@ digraph ingest_dispatch {
 }
 ```
 
-The four solid nodes are this module's declared components; everything dashed is a flag, a file on
-disk or a stream.
+The seven solid nodes are this module's declared components; everything dashed is a flag, a file
+on disk or a stream.
 
 ## Mode: normal (default)
 
 1. **Pre-flight.** Parse both files, check the changeset carries version 3 and the receipts
    version 1, and confirm the two name exactly the same set of op ids.
-2. **Reconcile.** [[2b5158af774b|Reconciler]] constructs the batch's journal lines in memory —
-   change events and task receipts, with event ids derived from `(git_head, op_id)` — dropping any
-   line whose eid the journal already contains as it builds them. The changeset's top-level
-   `absorbed` array is constructed in the same pass: one `modified` event per entry, eids derived
-   from `(node, before, after)`, closed by one `refresh` receipt naming them — not receipt-gated,
-   so absorbed entries land on partial runs too. Only once the batch is complete
-   does it assert the journal invariants over what remains, and only then commits the append
-   atomically.
+2. **Reconcile.** [[2b5158af774b|Reconciler]] assembles the per-run state and dispatches each op
+   to [[3c0569749972|EventBuilder]], which constructs the batch's journal lines in memory —
+   change events and task receipts, with event ids derived from `(git_head, op_id)` — dropping
+   any line whose derived eid its predicate already answers for, in the journal or in the batch
+   constructed so far. The changeset's top-level `absorbed` array is constructed in the same
+   pass: one `modified` event per entry, eids derived from `(node, before, after)`, closed by one
+   `refresh` receipt naming them — not receipt-gated, so absorbed entries land on partial runs
+   too. Only once the batch is complete does [[5fd9613616e1|InvariantChecker]] assert the journal
+   invariants over what remains; each surviving line is then encoded and schema-validated by
+   [[6ce1df0a456b|JournalEncoder]] before the append commits atomically.
 3. **Save the snapshot.** [[f85bd2f94aeb|SnapshotSaver]] is handed the receipts' top-level
    status. Anything but `complete` and it writes nothing and reports that it wrote nothing; on
    `complete` it builds the current merkle tree and writes the snapshot atomically.
@@ -153,7 +162,7 @@ failures return a structured error and no summary.
 
 ## Per-Op Construction (mode: normal)
 
-For the full construction table, see `arch_reconciler.md`. Summary:
+For the full construction table, see `arch_event_builder.md`. Summary:
 
 - ok create → change event plus `task_created`; cleanup creates pair with the `removed` event
   they answer (prior-batch or same-batch), epic creates pair with the proposal's `registered`
@@ -162,8 +171,11 @@ For the full construction table, see `arch_reconciler.md`. Summary:
   derived event id) are dropped, so a true duplicate appends nothing and adapter-side recovery
   appends the missing pairing.
 - ok close / reason="Spec node removed" → `removed` event plus `task_closed`.
-- ok close / reason starts "Spec node modified" → `task_closed` only; the paired create owns the
-  `modified` event.
+- ok close / reason starts "Spec node modified" → when a create in the changeset claims the bead,
+  the pair's lines — `modified` event, `task_closed`, `task_created` — are built with that create
+  and the close adds nothing; when no create in the changeset claims it (the coupled
+  `test_section` shape), the close alone builds the `modified` event plus its `task_closed`, no
+  `task_created`.
 - ok retarget → `modified` event plus `task_retargeted`.
 - absorbed entry (no receipt exists for one) → `modified` event, eid from `(node, before, after)`;
   the batch's absorbed events close under one `refresh` receipt naming them.
