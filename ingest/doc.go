@@ -18,11 +18,16 @@
 //     change events and task receipts, with event ids derived from
 //     (git_head, op_id) — dropping any line whose eid (or, for cleanup
 //     and proposal-epic creates, whose fold entry) the journal already
-//     carries. Only once the batch is complete does it assert
-//     invariants 1, 2 and 5 over journal-plus-batch (invariant 3 —
-//     re-running appends nothing — falls out of the dedup construction
-//     itself; invariant 4 — snapshot saved iff complete — is
-//     SnapshotSaver's gate), then commits the append atomically.
+//     carries. Construction, invariant checking and line encoding have
+//     declared contracts — EventBuilder, InvariantChecker and
+//     JournalEncoder — not yet wired in here (see "Reconciler
+//     decomposition" below); Reconciler still performs each inline and
+//     remains the one place the run's sequence lives. Only once the
+//     batch is complete does it assert invariants 1, 2 and 5 over
+//     journal-plus-batch (invariant 3 — re-running
+//     appends nothing — falls out of the dedup construction itself;
+//     invariant 4 — snapshot saved iff complete — is SnapshotSaver's
+//     gate), then commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
 //     leave the snapshot untouched so the next spex plan recomputes
@@ -90,4 +95,18 @@
 // exit-code constants. Component-level behavior — Reconciler,
 // SnapshotSaver, RefreshHandler, IngestCommand — is owned by the
 // per-component beads.
+//
+// # Reconciler decomposition
+//
+// Normal-mode construction, invariant checking and line encoding —
+// previously carried inline in Reconciler — are declared as three
+// further components per spec/ingest/module.json: EventBuilder
+// (construction, arch_event_builder.md), InvariantChecker (invariants
+// 1 and 2, arch_invariant_checker.md) and JournalEncoder (encode plus
+// schema validation — invariant 5, shared with RefreshHandler,
+// arch_journal_encoder.md). Their type-level contracts are declared in
+// event_builder.go, invariant_checker.go and journal_encoder.go;
+// Reconciler still carries the working logic inline
+// (ingest/reconciler.go) pending extraction by spexmachina-ugrs.2/.3/.4
+// and Reconciler's own rewiring by spexmachina-ugrs.5.
 package ingest
