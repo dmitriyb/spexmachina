@@ -63,29 +63,60 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "title": "Reconcile retarget receipts",
-      "description": "A retarget op's ok receipt yields a pair: the modified change event for the node — eid derived from (git_head, op_id) exactly as create-op events are — plus a task_retargeted receipt (for: that event's eid, task_id: the existing task the op targeted). Reconciler constructs both from the retarget op and its receipt; no bead is closed and none created, so neither a task_closed nor a task_created line accompanies the pair. Re-running the same changeset+receipts pair appends nothing, because both lines dedup by derived event id like every other journal append."
+      "description": "A retarget op's ok receipt yields a pair: the modified change event for the node — eid derived from (git_head, op_id) exactly as create-op events are — plus a task_retargeted receipt (for: that event's eid, task_id: the existing task the op targeted). EventBuilder constructs both from the retarget op and its receipt; no bead is closed and none created, so neither a task_closed nor a task_created line accompanies the pair. Re-running the same changeset+receipts pair appends nothing, because both lines dedup by derived event id like every other journal append."
     },
     {
       "id": "7900dcd38c4a",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "title": "Absorb entries reach the journal",
-      "description": "The changeset's top-level absorbed array is ingest's input, not the adapter's: for each entry, Reconciler constructs one modified change event — eid derived from (node, before, after) exactly as refresh-born events are, hashes off the entry itself — and closes the batch's absorbed events with one refresh receipt naming them. Absorbed entries are not receipt-gated: they describe spec state, not tracker work, so they append on partial runs too; the eid derivation makes re-absorption after a partial run dedup to nothing, and a batch with an empty absorbed array appends no refresh receipt. This is the per-node counterpart of the whole-run refresh mode, riding a normal run through the same event and receipt shapes."
+      "description": "The changeset's top-level absorbed array is ingest's input, not the adapter's: for each entry, EventBuilder constructs one modified change event — eid derived from (node, before, after) exactly as refresh-born events are, hashes off the entry itself — and closes the batch's absorbed events with one refresh receipt naming them. Absorbed entries are not receipt-gated: they describe spec state, not tracker work, so they append on partial runs too; the eid derivation makes re-absorption after a partial run dedup to nothing, and a batch with an empty absorbed array appends no refresh receipt. This is the per-node counterpart of the whole-run refresh mode, riding a normal run through the same event and receipt shapes."
     }
   ],
   "components": [
     {
       "id": "2b5158af774b",
       "name": "Reconciler",
-      "description": "Consumes the changeset+receipts pair and appends the corresponding journal events: change events built from ops (node identity, leaf hashes, git_head) and task receipts built from adapter receipts — task_created pairing a change event, the removal event the cleanup answers (cleanups) or the registered event (epics), task_closed for closes, task_retargeted pairing a retarget op's modified event with the existing task it moved; every receipt references an event. Appends through MappingStore's writer-owner primitive, dedups the epic's receipt by eid like every other line, and asserts the journal invariants before the append commits — the append is idempotent by derived event id, so re-processing a batch changes nothing.",
+      "description": "Orchestrates a normal-mode ingest run over the changeset+receipts pair: pairs receipts to ops, opens and folds the journal, assembles the per-run state, constructs EventBuilder once per run and dispatches each op and absorbed entry to it, then runs InvariantChecker over journal-plus-batch, encodes the surviving lines through JournalEncoder, and commits one atomic append through MappingStore's writer-owner primitive. Never reads the receipts' top-level status: ok ops append, error/skipped ops construct nothing, so a partial run lands internally consistent. The append is idempotent by derived event id, so re-processing a batch changes nothing.",
       "content": "arch_reconciler.md",
       "implements": [
         "539030e8c5a4",
-        "16dbbee94e88",
-        "ee28b5d190ae",
-        "fd6f08ef34fa",
+        "16dbbee94e88"
+      ],
+      "uses": [
+        "3c0569749972",
+        "5fd9613616e1",
+        "6ce1df0a456b"
+      ]
+    },
+    {
+      "id": "3c0569749972",
+      "name": "EventBuilder",
+      "description": "Constructs journal lines per action class from an op (or absorbed entry) and its receipt: the create paths — plain, cleanup, epic — the modified-node pair, retargets, removal closes and absorbed entries. Holds the per-run state the construction paths share — the eid predicate answering whether an eid is already in the journal or already in this batch, the journal fold, the same-batch removals, the registered-by-stem map and the modified-handled set — so Reconciler constructs it once per run and calls it per op. Drops any line whose derived eid the predicate already answers for, which is what makes the batch idempotent.",
+      "content": "arch_event_builder.md",
+      "implements": [
+        "539030e8c5a4",
         "7191a50f7447",
-        "7900dcd38c4a"
+        "7900dcd38c4a",
+        "fd6f08ef34fa"
+      ]
+    },
+    {
+      "id": "5fd9613616e1",
+      "name": "InvariantChecker",
+      "description": "Asserts the journal consistency invariants over the existing journal plus the constructed batch, after the whole batch exists and before anything reaches disk, in numeric order so the first failure names the most upstream cause. Each check carries a doc comment naming the invariant it enforces and the spec section it traces to, so the numbering — including the invariants enforced elsewhere: 3 by construction in EventBuilder's eid predicate, 4 by SnapshotSaver's gate, 5 by JournalEncoder — resolves without leaving the file. A failure names the invariant and the offending op or eid, and no candidate batch is written.",
+      "content": "arch_invariant_checker.md",
+      "implements": [
+        "ee28b5d190ae"
+      ]
+    },
+    {
+      "id": "6ce1df0a456b",
+      "name": "JournalEncoder",
+      "description": "Turns a journal event or receipt into its serialized journal line and validates that line against the journal-line schema before it is written — invariant 5's guarantee, owned by one component. A line that fails validation refuses the batch before the write; the on-disk journal is untouched. Ingest encodes journal lines while the map module owns the journal file; this component is where that boundary is visible.",
+      "content": "arch_journal_encoder.md",
+      "implements": [
+        "ee28b5d190ae"
       ]
     },
     {
@@ -119,6 +150,9 @@
       "content": "arch_refresh.md",
       "implements": [
         "e68653819f38"
+      ],
+      "uses": [
+        "6ce1df0a456b"
       ]
     }
   ],
@@ -126,13 +160,16 @@
     {
       "id": "6fd1f0cbb76c",
       "name": "Ingest flow",
-      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (per-op state transitions, invariant assertion) and SnapshotSaver (writes the snapshot at its resolved location iff status=complete); mode: refresh routes through RefreshHandler (refuse on an empty journal, re-hash every content leaf off a freshly built merkle tree, append one change event per absorbed drift entry plus a refresh receipt naming them, save snapshot atomically, refuse on an added or removed entry outside the absorbable set). Both pathways write atomically.",
+      "description": "changeset.json + receipts.json → IngestCommand inspects the run mode → mode: normal routes through Reconciler (dispatching construction to EventBuilder, invariant assertion to InvariantChecker, line encoding to JournalEncoder) and SnapshotSaver (writes the snapshot at its resolved location iff status=complete); mode: refresh routes through RefreshHandler (refuse on an empty journal, re-hash every content leaf off a freshly built merkle tree, append one change event per absorbed drift entry plus a refresh receipt naming them, save snapshot atomically, refuse on an added or removed entry outside the absorbable set). Both pathways write atomically.",
       "content": "flow_ingest.md",
       "uses": [
         "2b5158af774b",
         "f85bd2f94aeb",
         "db90eb607bcb",
-        "f9033352c13f"
+        "f9033352c13f",
+        "3c0569749972",
+        "5fd9613616e1",
+        "6ce1df0a456b"
       ]
     }
   ],
@@ -142,7 +179,8 @@
       "name": "Reconciliation tests",
       "content": "test_reconciliation.md",
       "describes": [
-        "2b5158af774b"
+        "2b5158af774b",
+        "3c0569749972"
       ]
     },
     {
@@ -151,7 +189,9 @@
       "content": "test_consistency_invariants.md",
       "describes": [
         "2b5158af774b",
-        "f85bd2f94aeb"
+        "f85bd2f94aeb",
+        "5fd9613616e1",
+        "6ce1df0a456b"
       ]
     },
     {
@@ -160,7 +200,8 @@
       "content": "test_partial_run_recovery.md",
       "describes": [
         "2b5158af774b",
-        "f85bd2f94aeb"
+        "f85bd2f94aeb",
+        "3c0569749972"
       ]
     },
     {

@@ -121,7 +121,8 @@ added component's create receipt
 **Then** the journal gains the added component's change event and `task_created` receipt
 (Reconciler's behavior), and the snapshot rebuild absorbs the content-only drift on the snapshot
 side — but no journal event is appended for the receipt-less drifted leaf, because the Reconciler
-only appends for ops; recording receipt-less drift is exactly what refresh mode exists for
+path only appends for ops and marked absorb entries; recording unmarked receipt-less drift is
+exactly what refresh mode exists for
 **And in a separate scenario**, the same fixture with the drift reverted and no new component
 refreshes as a no-op
 
