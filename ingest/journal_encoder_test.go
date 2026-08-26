@@ -9,12 +9,16 @@ import (
 )
 
 // Unit tests for spec/ingest/arch_journal_encoder.md, calling
-// JournalEncoder.Encode and JournalEncoder.Validate directly rather than
-// through Reconciler.Apply or RefreshHandler.Apply. The integration-level
-// "Invariant 5" scenarios (schema-invalid line refused mid-run, the
-// encoder refusing at its own boundary) run in
-// consistency_invariants_test.go; these tests pin the encoder's own wire
-// shapes and validation behavior independently of any caller.
+// JournalEncoder.Encode and JournalEncoder.Validate directly to pin the
+// encoder's own wire shapes and validation behavior, independent of any
+// caller. The spec's "Invariant 5" scenarios live at other call sites:
+// "schema-invalid line refused" is TestCheckInvariant5_SchemaInvalidLine
+// in reconciler_test.go, calling checkInvariant5 directly; "the encoder
+// refuses at its own boundary" is
+// TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary in
+// consistency_invariants_test.go, which — like these tests — calls
+// NewJournalEncoder().Validate directly, with no changeset or
+// reconciliation run around it.
 
 // TestJournalEncoder_Encode_ChangeEvent covers the added/modified/removed
 // wire shape: all ten required keys present, before/after admitting null.
