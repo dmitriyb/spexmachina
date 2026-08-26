@@ -18,16 +18,17 @@
 //     change events and task receipts, with event ids derived from
 //     (git_head, op_id) — dropping any line whose eid (or, for cleanup
 //     and proposal-epic creates, whose fold entry) the journal already
-//     carries. Construction, invariant checking and line encoding have
-//     declared contracts — EventBuilder, InvariantChecker and
-//     JournalEncoder — not yet wired in here (see "Reconciler
-//     decomposition" below); Reconciler still performs each inline and
-//     remains the one place the run's sequence lives. Only once the
-//     batch is complete does it assert invariants 1, 2 and 5 over
-//     journal-plus-batch (invariant 3 — re-running
-//     appends nothing — falls out of the dedup construction itself;
-//     invariant 4 — snapshot saved iff complete — is SnapshotSaver's
-//     gate), then commits the append atomically.
+//     carries. Construction and invariant checking have declared
+//     contracts — EventBuilder and InvariantChecker — not yet wired in
+//     here (see "Reconciler decomposition" below); Reconciler still
+//     performs each inline and remains the one place the run's sequence
+//     lives. Line encoding is JournalEncoder's: invariant 5 is asserted
+//     by delegating each candidate line to JournalEncoder.Validate.
+//     Only once the batch is complete does it assert invariants 1, 2
+//     and 5 over journal-plus-batch (invariant 3 — re-running appends
+//     nothing — falls out of the dedup construction itself; invariant 4
+//     — snapshot saved iff complete — is SnapshotSaver's gate), then
+//     commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
 //     leave the snapshot untouched so the next spex plan recomputes
@@ -106,10 +107,15 @@
 // schema validation — invariant 5, shared with RefreshHandler,
 // arch_journal_encoder.md). EventBuilder's construction paths
 // (event_builder.go) and InvariantChecker's invariants 1 and 2
-// (invariant_checker.go) are extracted and independently tested;
-// JournalEncoder still carries only its type-level contract, pending
-// extraction by spexmachina-ugrs.4. Reconciler still carries its own
-// inline copy of every path (ingest/reconciler.go) pending its own
-// rewiring by spexmachina-ugrs.5 to dispatch through these
-// components instead.
+// (invariant_checker.go) are extracted and independently tested, as is
+// JournalEncoder's Encode/Validate (journal_encoder.go,
+// spexmachina-ugrs.4) — the wire-shape types, checkInvariant5 and the
+// compiled schema now live there, and checkInvariant5 (called by both
+// Reconciler and RefreshHandler) delegates line-by-line to
+// JournalEncoder.Validate rather than carrying its own copy, so both
+// pathways already inherit the gate from the one component that owns
+// it. Reconciler still carries its own inline copy of every
+// construction and invariant-1/2 path (ingest/reconciler.go) pending
+// its own rewiring by spexmachina-ugrs.5 to dispatch through
+// EventBuilder and InvariantChecker instead.
 package ingest

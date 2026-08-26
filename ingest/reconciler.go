@@ -1,20 +1,14 @@
 package ingest
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-
-	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/plan"
-	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // SpecGraph supplies the spec-side metadata the Reconciler needs to build a
@@ -807,158 +801,12 @@ func checkInvariant2(existing, batch []mapping.Event) error {
 	return nil
 }
 
-// checkInvariant5 asserts that every line in the batch validates against
-// the journal-line schema before any of it is written.
-func checkInvariant5(batch []mapping.Event) error {
-	sch, err := getLineSchema()
-	if err != nil {
-		return err
-	}
-	for _, ev := range batch {
-		raw, err := encodeLine(ev)
-		if err != nil {
-			return fmt.Errorf("ingest: reconcile: invariant 5: %w", err)
-		}
-		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-		if err != nil {
-			return fmt.Errorf("ingest: reconcile: invariant 5: %w", err)
-		}
-		if err := sch.Validate(doc); err != nil {
-			return fmt.Errorf("ingest: reconcile: invariant 5: %s: %w", ev.Event, err)
-		}
-	}
-	return nil
-}
-
-var (
-	lineSchema     *jsonschema.Schema
-	lineSchemaErr  error
-	lineSchemaOnce sync.Once
-)
-
-// getLineSchema compiles the embedded journal-line schema once and caches
-// it. Reconciler owns its own compiled copy rather than reaching into
-// mapping's — MappingStore's is a read-time internal, and Reconciler
-// (with RefreshHandler) is the format's only writer.
-func getLineSchema() (*jsonschema.Schema, error) {
-	lineSchemaOnce.Do(func() {
-		raw, err := schema.BeadMapSchema()
-		if err != nil {
-			lineSchemaErr = fmt.Errorf("load journal-line schema: %w", err)
-			return
-		}
-		doc, err := jsonschema.UnmarshalJSON(bytes.NewReader(raw))
-		if err != nil {
-			lineSchemaErr = fmt.Errorf("parse journal-line schema: %w", err)
-			return
-		}
-		c := jsonschema.NewCompiler()
-		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
-			lineSchemaErr = fmt.Errorf("add journal-line schema: %w", err)
-			return
-		}
-		lineSchema, lineSchemaErr = c.Compile("bead-map.schema.json")
-	})
-	return lineSchema, lineSchemaErr
-}
-
-// changeEventLine, registeredEventLine, taskReceiptLine and
-// taskRetargetedLine mirror the journal-line shapes in
-// schema/bead-map.schema.json exactly — changeEventLine always serialises
-// its ten required keys (before/after admit null); taskReceiptLine omits
-// whichever of for/proposal does not apply, since additionalProperties is
-// false on every shape. registeredEventLine has no writer in this
-// package — the proposal Registrar appends it through MappingStore
-// directly — but Reconciler's tests seed one to exercise the epic-create
-// referent lookup, and checkInvariant5 must be able to validate one if it
-// ever appeared in a batch.
-type changeEventLine struct {
-	Event    string  `json:"event"`
-	EID      string  `json:"eid"`
-	Node     string  `json:"node"`
-	Name     string  `json:"name"`
-	NodeType string  `json:"node_type"`
-	Module   string  `json:"module"`
-	Before   *string `json:"before"`
-	After    *string `json:"after"`
-	GitHead  string  `json:"git_head"`
-	Proposal string  `json:"proposal"`
-	Path     string  `json:"path,omitempty"`
-}
-
-type taskReceiptLine struct {
-	Event    string `json:"event"`
-	TaskID   string `json:"task_id"`
-	For      string `json:"for,omitempty"`
-	Proposal string `json:"proposal,omitempty"`
-}
-
-// taskRetargetedLine mirrors the taskRetargetedReceipt journal-line shape
-// exactly: for is always required (no legacy proposal-slug arm ever
-// existed for this kind — see arch_reconciler.md "Retarget Ops") and no
-// proposal field is admitted at all.
-type taskRetargetedLine struct {
-	Event  string `json:"event"`
-	TaskID string `json:"task_id"`
-	For    string `json:"for"`
-}
-
-type registeredEventLine struct {
-	Event    string `json:"event"`
-	EID      string `json:"eid"`
-	Proposal string `json:"proposal"`
-	GitHead  string `json:"git_head"`
-}
-
-// refreshReceiptLine mirrors the refreshReceipt journal-line shape exactly:
-// git_head is nullable (a refresh run with no --git-head records the
-// absence as JSON null, not empty string) and absorbed always serialises
-// as an array, even when empty — RefreshHandler is this line kind's only
-// writer, see arch_refresh.md.
-type refreshReceiptLine struct {
-	Event    string   `json:"event"`
-	GitHead  *string  `json:"git_head"`
-	Absorbed []string `json:"absorbed"`
-}
-
-// encodeLine renders one mapping.Event as the wire JSON its event kind
-// requires. Reconciler and RefreshHandler each use it, via checkInvariant5,
-// to schema-validate a batch before committing it through MappingStore's
-// Append — the journal's one write path (see arch_reconciler.md "One write
-// path, no tracker"). The two components share this encoder so they can
-// never drift apart on wire shape.
-func encodeLine(ev mapping.Event) ([]byte, error) {
-	switch ev.Event {
-	case "added", "modified", "removed":
-		return json.Marshal(changeEventLine{
-			Event: ev.Event, EID: ev.EID, Node: ev.Node, Name: ev.Name,
-			NodeType: ev.NodeType, Module: ev.Module, Before: ev.Before, After: ev.After,
-			GitHead: ev.GitHead, Proposal: ev.Proposal, Path: ev.Path,
-		})
-	case "registered":
-		return json.Marshal(registeredEventLine{
-			Event: ev.Event, EID: ev.EID, Proposal: ev.Proposal, GitHead: ev.GitHead,
-		})
-	case "task_created", "task_closed":
-		return json.Marshal(taskReceiptLine{
-			Event: ev.Event, TaskID: ev.TaskID, For: ev.For, Proposal: ev.Proposal,
-		})
-	case "task_retargeted":
-		return json.Marshal(taskRetargetedLine{Event: ev.Event, TaskID: ev.TaskID, For: ev.For})
-	case "refresh":
-		var gitHead *string
-		if ev.GitHead != "" {
-			gitHead = strPtr(ev.GitHead)
-		}
-		absorbed := ev.Absorbed
-		if absorbed == nil {
-			absorbed = []string{}
-		}
-		return json.Marshal(refreshReceiptLine{Event: ev.Event, GitHead: gitHead, Absorbed: absorbed})
-	default:
-		return nil, fmt.Errorf("unknown journal line kind %q", ev.Event)
-	}
-}
+// checkInvariant5, the wire-shape types (changeEventLine and friends) and
+// encodeLine moved to journal_encoder.go as JournalEncoder's own contract
+// (spexmachina-ugrs.4) — checkInvariant5 now delegates line-by-line to
+// JournalEncoder.Validate instead of carrying its own schema-compile and
+// encode logic, so this file and refresh.go both inherit the gate rather
+// than re-implementing it.
 
 func strPtr(s string) *string { return &s }
 
