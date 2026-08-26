@@ -973,3 +973,30 @@
 {"event":"modified","eid":"1a2eb07:op-3","node":"f3c4a2c35344","name":"Classification tests","node_type":"test_section","module":"plan","before":"e2f3af5ae0aa013810c65418e496aaaa07d58135b4e7058bdf1a2cdfc45527ea","after":"822a33739f6c05df5e507b001fddb8b90dc66a5a7e2d18d04dfc4aaa4fa9f345","git_head":"1a2eb07","proposal":"2026-08-23-plan-describes-deps","path":"spec/plan/test_classification.md"}
 {"event":"task_closed","task_id":"spexmachina-f6eh.46","for":"1a2eb07:op-3"}
 {"event":"task_created","task_id":"spexmachina-2n4z.2","for":"1a2eb07:op-3"}
+{"event":"registered","eid":"1e3e2df:2026-08-20-reconciler-split","proposal":"2026-08-20-reconciler-split","git_head":"1e3e2df"}
+{"event":"task_created","task_id":"spexmachina-ugrs","for":"1e3e2df:2026-08-20-reconciler-split"}
+{"event":"modified","eid":"1e3e2df:op-02","node":"6fd1f0cbb76c","name":"Ingest flow","node_type":"data_flow","module":"ingest","before":"0ab5f154e1be80e6716752f0c6ce421b2c41cdd12aebc4fc8e1729edc5bbc68e","after":"17a351be46782aab584e7230225525aac06785f50403b78ee5505f68166497cd","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/flow_ingest.md"}
+{"event":"task_closed","task_id":"spexmachina-f6eh.6","for":"1e3e2df:op-02"}
+{"event":"task_created","task_id":"spexmachina-ugrs.1","for":"1e3e2df:op-02"}
+{"event":"added","eid":"1e3e2df:op-03","node":"3c0569749972","name":"EventBuilder","node_type":"component","module":"ingest","before":null,"after":"b958b7014079761e2d7e59dd13e225b0ac917c9873a3d8ff22fb8ff70f8c8088","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/arch_event_builder.md"}
+{"event":"task_created","task_id":"spexmachina-ugrs.2","for":"1e3e2df:op-03"}
+{"event":"added","eid":"1e3e2df:op-04","node":"5fd9613616e1","name":"InvariantChecker","node_type":"component","module":"ingest","before":null,"after":"0eadc772fdcb0a435aec37ccc64f64e686a9541c230ccc07b846c3a6500b262d","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/arch_invariant_checker.md"}
+{"event":"task_created","task_id":"spexmachina-ugrs.3","for":"1e3e2df:op-04"}
+{"event":"added","eid":"1e3e2df:op-05","node":"6ce1df0a456b","name":"JournalEncoder","node_type":"component","module":"ingest","before":null,"after":"e967dd8ee01b731ab83d34b29baf2c40049c3776659f31eaf54bee5bcd3a8b8f","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/arch_journal_encoder.md"}
+{"event":"task_created","task_id":"spexmachina-ugrs.4","for":"1e3e2df:op-05"}
+{"event":"modified","eid":"1e3e2df:op-06","node":"2b5158af774b","name":"Reconciler","node_type":"component","module":"ingest","before":"c5b7bc61bc183d0a67445f499840eba779078da1cc395109628a26c880c6b6c4","after":"03bbcf7c7c06bd55e6f5dadd949dd48ed642ec9142c7bd485a34a6d11cc0dca6","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/arch_reconciler.md"}
+{"event":"task_closed","task_id":"spexmachina-f6eh.28","for":"1e3e2df:op-06"}
+{"event":"task_created","task_id":"spexmachina-ugrs.5","for":"1e3e2df:op-06"}
+{"event":"modified","eid":"1e3e2df:op-07","node":"f9033352c13f","name":"RefreshHandler","node_type":"component","module":"ingest","before":"8386df73425e13a0c33cf0b16d0e2dd24f8ceb83c64017f06b85e365de59a07a","after":"62562ad96fec4b765a0ffed660a007ce1737b281abc6ad1f68fbb0594d7c356e","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/arch_refresh.md"}
+{"event":"task_closed","task_id":"spexmachina-uiei.12","for":"1e3e2df:op-07"}
+{"event":"task_created","task_id":"spexmachina-ugrs.6","for":"1e3e2df:op-07"}
+{"event":"modified","eid":"1e3e2df:op-08","node":"2515c91337a5","name":"Partial run recovery tests","node_type":"test_section","module":"ingest","before":"796186368d0f382de80931261ece51eccc3cf34b4d1c52e27f8d767b4d918827","after":"665d9a368408e20ba6405bd24a8e30263e135a446e4c115aea7f38f8a2736170","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/test_partial_run_recovery.md"}
+{"event":"task_closed","task_id":"spexmachina-hdkq.23","for":"1e3e2df:op-08"}
+{"event":"task_created","task_id":"spexmachina-ugrs.7","for":"1e3e2df:op-08"}
+{"event":"modified","eid":"1e3e2df:op-09","node":"2cd902e10873","name":"Consistency invariants","node_type":"test_section","module":"ingest","before":"e34342ae55151e5d18a7191194e84fc43177c8ca9c83d7788f5a80651cb06426","after":"0303a3d9db74c1ae8c7b28fdc0d6710302fb96ff8b64640769e741974db69af8","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/test_consistency_invariants.md"}
+{"event":"task_closed","task_id":"spexmachina-f6eh.32","for":"1e3e2df:op-09"}
+{"event":"task_created","task_id":"spexmachina-ugrs.8","for":"1e3e2df:op-09"}
+{"event":"added","eid":"1e3e2df:op-10","node":"425f743382a7","name":"Reconciliation tests","node_type":"test_section","module":"ingest","before":null,"after":"46481e6ece3eb646385d72a1e5f2c38c44267369e6f00db8ec08d0db7da2fdd4","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/test_reconciliation.md"}
+{"event":"task_created","task_id":"spexmachina-ugrs.9","for":"1e3e2df:op-10"}
+{"event":"modified","eid":"refresh:a483524c406c:809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4:14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491","node":"a483524c406c","name":"Refresh mode tests","node_type":"test_section","module":"ingest","before":"809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4","after":"14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/test_refresh.md"}
+{"event":"refresh","git_head":"1e3e2df","absorbed":["refresh:a483524c406c:809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4:14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491"]}
