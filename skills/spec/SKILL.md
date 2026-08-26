@@ -336,6 +336,25 @@ Each markdown file is a content leaf. Write substantive content — these are th
 
 ## Workflow
 
+### Before anything: the working branch
+
+The spec is authored on a dedicated working branch, cut as the first tool call of the run —
+before the log, before reading the proposal:
+
+```bash
+git fetch origin && git switch -c spec/<slug> origin/main
+```
+
+`<slug>` is the proposal stem without its date prefix (`2026-08-20-reconciler-split` →
+`spec/reconciler-split`). A failed fetch is a hard stop: report it and wait — the branch is cut
+from a freshly fetched `origin/main`. A session already on a non-main branch carrying this
+proposal's work stays on it.
+
+The expected end state: every edit of this run sits on that branch, and `main` receives it
+through a PR. In an interactive session this step is the sole carrier of that state — the
+portitor gate binds the autonomous boxes — so the branch exists before the first spec file is
+written.
+
 ### 0. Maintain an authoring log
 
 Throughout this run, keep an in-memory append-only log of every spec node you create or modify. Each entry records:
@@ -524,7 +543,7 @@ Tell the user:
 - Any `<!-- TODO -->` markers that need follow-up
 - In a module-scoped run, the project-level or sibling-module edits the proposal still needs, and any out-of-scope gate findings left in place
 - Which nodes look like absorb candidates and why — advisory only; the classification itself is `/mint`'s Step 2, made against the committed diff
-- Remind them to review the spec and commit it to git. The mint runs against that commit, so the SHA the user hands `spex plan --git-head` is the one carrying these edits
+- Remind them to review the spec and commit it to git **on the working branch, landing on `main` via PR**. The mint runs against that commit, so the SHA the user hands `spex plan --git-head` is the one carrying these edits
 
 ## Alter Mode Details
 

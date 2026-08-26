@@ -1,6 +1,6 @@
 ---
 name: spec-review
-description: "Audit the spec for internal inconsistencies (no code reading) and draft a correction proposal in plan mode if findings exist"
+description: "Audit the spec against itself for internal inconsistencies, present findings, and fix the spec in-session after explicit approval"
 argument-hint: "[module-name]"
 ---
 
@@ -13,8 +13,8 @@ the implementation. Where a rule below cites a `.go` path it is recording where 
 handing you a file to open; a finding is never derived from source. No skill in this repo audits
 code-vs-spec alignment; if that is what the user wants, say so and stop.
 
-If findings exist, draft a correction proposal in plan mode. If nothing is actionable, exit with a
-one-line confirmation.
+If findings exist, present them and stop; after the user's explicit go, fix the spec in this same
+session. If nothing is actionable, exit with a one-line confirmation.
 
 ## Step 1: Resolve scope
 
@@ -49,7 +49,7 @@ it is the only place two whole classes of error appear:
   `module.json` / `project.json` envelope), with no matching content-leaf change. **`spex validate`
   cannot see this and never will**: every checker takes a spec directory and nothing else, so none of
   them has a baseline to compare against. A spec can report `"valid": true, "error_count": 0` and
-  still fail `diff` with exit 2. That combination is the most common way a correction proposal
+  still fail `diff` with exit 2. That combination is the most common way a correction run
   stalls — check for it explicitly rather than assuming a clean `validate` means a clean tree.
 - **exit 2, `errors[].type == "surviving_name"`** — a removed `api` or `component` whose declared
   name is still written somewhere in the spec corpus. It fires *only while the removal is still in
@@ -118,7 +118,7 @@ For each module in scope, read:
 3. `spec/project.json`, for the `implements → preq_id → project requirement` chain
 
 Keep a name→hash table open. You need it to check link display text and to cite nodes in the
-proposal:
+findings report:
 
 ```bash
 bin/spex render --format json --slim | jq -r '.nodes[] | "\(.type)\t\(.module // "-")\t\(.id)\t\(.name)"'
@@ -231,7 +231,7 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
   description against the arch leaves of the components in `provided_by`, and against the surface the
   name claims.
 - Renaming an api is delete-plus-create, so a proposed rename must also survive the removal-time name
-  sweep. Say so in the proposal.
+  sweep. Say so in the findings report.
 
 **Data flow (`flow_*.md`)**
 
@@ -283,63 +283,41 @@ structural additions and removals of an explicit type list (`ingest/refresh.go`,
 
 So:
 
-- Findings on bead-producing leaves → normal pipeline (`diff → plan → <adapter> → ingest`).
-- Findings on both kinds → normal pipeline. The bead-producing changes drive the lifecycle; refresh
-  mode would be wrong.
-- Findings confined to the absorbable set → the proposal declares `mode: refresh` in its frontmatter.
-  Nothing in `spex` parses that frontmatter; it is a signal to whoever runs the pipeline
-  (`spec/ingest/arch_refresh.md`).
-- **Refresh runs neither `spex validate` nor the completeness checker.** Never propose a refresh-mode
-  change without either showing both Step 2 gates green on the proposed end state, or explicitly
-  declaring the one exception: the hand-verified completeness override the `/mint` skill
-  documents (per-entry discharge of a meta-sweep obligation, recorded in the PR description).
-  Refresh will happily baseline a tree that `diff` would have rejected with exit 2, hiding it
-  from every downstream tool — a red diff blocks the mint path structurally (`spex plan` refuses
-  it), while on the refresh path "gates green" is doctrine, not a gate.
-- Refresh also refuses a non-empty changeset or receipts and any orphan mapping record — exit 1
-  is an input error, exit 2 a refusal. A missing pre-existing snapshot never reaches it: the
-  lifecycle pre-flight refuses first with the not-a-spex-project code, naming `spex doctor`.
+- Findings on bead-producing leaves → the fix owes beads; say so in the Step 7 report.
+- Findings on both kinds → the bead-producing changes drive the lifecycle; the fix owes beads.
+- Findings confined to the absorbable set → the fix owes none; say so in the Step 7 report.
 
-## Step 7: Draft the proposal in plan mode (if findings)
+## Step 7: Present findings and stop (if findings)
 
-Enter plan mode and write a plan file with an instructions header (Part 1) and the proposal content
-(Part 2), separated by `---`.
+The findings report is the deliverable of the audit. Present it as a table, one row per finding:
 
-Get the proposal skeleton from the tool rather than copying one from this file:
+| # | Node | File | Lens/gate | Defect | Bucket |
+|---|------|------|-----------|--------|--------|
 
-```bash
-bin/spex template change
-```
+`Node` carries the full node name with the identity hash in parentheses — `Action Classifier
+(72ab19c303f1)`. `Bucket` is the Step 6 lifecycle bucket (bead-producing or absorbable), so the
+user sees what each fix will owe downstream.
 
-Fill it in as:
+Below the table, per finding: the exact spec edit that resolves it — which field, which prose
+paragraph — and, where the correct resolution needs a decision the spec does not record, the
+open question stated as a question for the user to settle.
 
-- **Context** — every finding, cited by file path, by identity hash for a JSON node, and by which
-  check would have caught it if any check could.
-- **Proposed change** — the exact spec edit that resolves each one: which field, which prose
-  paragraph.
-- **Impact expectation** — the spec nodes touched, the lifecycle (normal-mode with a bead lifecycle,
-  or refresh-mode with a hash-only update), and the `spex diff` outcome you expect.
+**Then stop and wait for the user's explicit go** — fixing is a second, separately authorized act.
+Partial approval is normal: fix what was approved and list the rest as declined-or-deferred in the
+final report.
 
-If refresh mode applies, prepend YAML frontmatter to the proposal:
+## Step 8: Fix in-session (after the go)
 
-```yaml
----
-mode: refresh
----
-```
+- The fixes land on the current working branch: spec-review runs after `/spec` or `/drift-fix`
+  and rides that run's branch. A standalone audit whose approved findings warrant structural
+  rework ends in a review proposal — hand the findings to `/propose`.
+- Apply the approved corrections with `/spec` discipline: ids via `bin/spex hash-id`, the
+  per-node check after each edited leaf.
+- Re-run both Step 2 gates. The run ends with both green, or with every residual finding reported
+  verbatim, with the command that produced it, named as another run's work.
+- Report what changed, then remind the user to review and commit on the branch, landing via PR.
 
-The plan file's instructions header MUST contain the post-write step: `After writing the file, tell
-the user the file path and remind them to review and commit to git.`
-
-## Step 8: Exit plan mode and write the proposal file
-
-After user approval, write to `spec/proposals/YYYY-MM-DD-spec-review-<scope>.md` — today's date and a
-slug from the audit scope (`spec-review-plan` for one module, `spec-review-all` for a full audit).
-
-Tell the user the file path and remind them to review + commit + run `/spec` on it to apply.
-
-**STOP after writing the file.** Do not run `/spec`. Do not run `spex plan`, `spex ingest` or an
-adapter. The author reviews first.
+The run ends there.
 
 ## Step 9: No-findings exit
 
@@ -358,7 +336,7 @@ spec-review: no actionable findings (N nodes audited across M modules)
 ```
 
 Where N and M come from the audit scope. A clean verdict asserts only "nothing found at these
-counts and depth" — never "no defects exist". If a lens was inapplicable, say so with a reason. Exit without entering plan mode and without writing a file.
+counts and depth" — never "no defects exist". If a lens was inapplicable, say so with a reason. Exit there; the audit leaves every spec file as it found it.
 
 ## Out of scope
 
@@ -366,4 +344,3 @@ counts and depth" — never "no defects exist". If a lens was inapplicable, say 
   provenance for a rule, never a reading assignment — and no skill in this repo audits code-vs-spec
   alignment.
 - Anything `spex validate` or `spex diff` already reports (Step 3). Surface it; never re-derive it.
-- Applying corrections. `/spec` does that, from the drafted proposal.
