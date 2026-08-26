@@ -18,12 +18,13 @@
 //     change events and task receipts, with event ids derived from
 //     (git_head, op_id) — dropping any line whose eid (or, for cleanup
 //     and proposal-epic creates, whose fold entry) the journal already
-//     carries. Construction, invariant checking and line encoding are
-//     carved out into EventBuilder, InvariantChecker and JournalEncoder
-//     respectively (see "Contract surface" below); Reconciler builds
-//     each once per run and remains the one place the run's sequence
-//     lives. Only once the batch is complete does it assert invariants
-//     1, 2 and 5 over journal-plus-batch (invariant 3 — re-running
+//     carries. Construction, invariant checking and line encoding have
+//     declared contracts — EventBuilder, InvariantChecker and
+//     JournalEncoder — not yet wired in here (see "Reconciler
+//     decomposition" below); Reconciler still performs each inline and
+//     remains the one place the run's sequence lives. Only once the
+//     batch is complete does it assert invariants 1, 2 and 5 over
+//     journal-plus-batch (invariant 3 — re-running
 //     appends nothing — falls out of the dedup construction itself;
 //     invariant 4 — snapshot saved iff complete — is SnapshotSaver's
 //     gate), then commits the append atomically.
