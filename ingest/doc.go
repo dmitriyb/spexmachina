@@ -104,9 +104,11 @@
 // (construction, arch_event_builder.md), InvariantChecker (invariants
 // 1 and 2, arch_invariant_checker.md) and JournalEncoder (encode plus
 // schema validation — invariant 5, shared with RefreshHandler,
-// arch_journal_encoder.md). Their type-level contracts are declared in
-// event_builder.go, invariant_checker.go and journal_encoder.go;
-// Reconciler still carries the working logic inline
-// (ingest/reconciler.go) pending extraction by spexmachina-ugrs.2/.3/.4
-// and Reconciler's own rewiring by spexmachina-ugrs.5.
+// arch_journal_encoder.md). EventBuilder's construction paths are
+// extracted and independently tested (event_builder.go); InvariantChecker
+// and JournalEncoder still carry only their type-level contracts,
+// pending extraction by spexmachina-ugrs.3/.4. Reconciler still carries
+// its own inline copy of every path (ingest/reconciler.go) pending its
+// own rewiring by spexmachina-ugrs.5 to dispatch through these
+// components instead.
 package ingest
