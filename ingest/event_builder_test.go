@@ -15,8 +15,8 @@ import (
 // the per-op construction table is this component's own contract, and
 // these tests pin it independently of how Reconciler eventually
 // dispatches to it (spexmachina-ugrs.5). Scenarios mirror
-// test_reconciliation.md and test_partial_run_recovery.md's "Eid
-// predicate sees the journal and the in-flight batch".
+// test_reconciliation.md, including its "Eid predicate sees the
+// journal and the in-flight batch".
 
 // newTestEventBuilder seeds a temp journal with journalLines (empty
 // journal when none given), folds it exactly as production code would,
