@@ -88,9 +88,8 @@ func (b *EventBuilder) BuildCreate(cs plan.Changeset, op plan.Op, receipt adapte
 	default:
 		if oldBeadID, ok := blocksDepBeadID(op); ok {
 			// Recorded so a later call to BuildClose for oldBeadID's close
-			// op can recognise the pair already built, even though
-			// BuildClose itself resolves "claimed at all" straight off
-			// cs.Ops rather than off this set (see BuildClose).
+			// op short-circuits without constructing anything — the pair
+			// is already built. See BuildClose.
 			b.State.ModifiedHandled[oldBeadID] = true
 			return b.buildModifiedPair(cs, op, receipt, oldBeadID)
 		}
@@ -103,10 +102,13 @@ func (b *EventBuilder) BuildCreate(cs plan.Changeset, op plan.Op, receipt adapte
 // when no create in the batch claimed the bead — the modified event
 // plus task_closed on a "Spec node modified" reason. When a create in
 // the batch does claim the bead (via a `blocks` dep), this call
-// constructs nothing: either that create already built the whole pair
-// (ok), or it errored/was skipped and the pair stays incomplete for
-// this partial run — either way there is nothing left for the close to
-// add. See "The Modified-Node Pair" in arch_event_builder.md.
+// constructs nothing: either that create already built the whole pair,
+// recognised here via EventBuilderState.ModifiedHandled (ok), or it
+// errored/was skipped — never reaching BuildCreate, so ModifiedHandled
+// stays unset — and the claim is instead recognised by the static
+// changeset scan, so the pair stays incomplete for this partial run —
+// either way there is nothing left for the close to add. See "The
+// Modified-Node Pair" in arch_event_builder.md.
 func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	switch {
 	case strings.HasPrefix(op.Reason, ReasonRemovedPrefix):
@@ -114,6 +116,9 @@ func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapter
 	case strings.HasPrefix(op.Reason, ReasonModifiedPrefix):
 		if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
 			return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
+		}
+		if b.State.ModifiedHandled[op.Target.BeadID] {
+			return nil, nil
 		}
 		if claimedByCreate(cs, op.Target.BeadID) {
 			return nil, nil
@@ -343,9 +348,10 @@ func (b *EventBuilder) buildModifiedFromClose(cs plan.Changeset, op plan.Op, rec
 
 // claimedByCreate reports whether any create op in the changeset — ok,
 // error or skipped alike — claims beadID via a `blocks` dep. BuildClose
-// uses this, not EventBuilderState.ModifiedHandled, to decide whether a
-// "Spec node modified" close constructs anything: the answer is a
-// static property of the changeset, not of how much of the batch has
+// falls back to this once EventBuilderState.ModifiedHandled has nothing
+// to say — the errored/skipped-create case, since such a create never
+// reaches BuildCreate and so never sets ModifiedHandled: the answer is
+// a static property of the changeset, not of how much of the batch has
 // been processed so far, so it does not matter whether the claiming
 // create ran before or after this close in op order.
 func claimedByCreate(cs plan.Changeset, beadID string) bool {

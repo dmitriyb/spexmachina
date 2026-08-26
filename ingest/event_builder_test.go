@@ -355,35 +355,69 @@ func TestEventBuilder_BuildClose_Removed(t *testing.T) {
 // by a create in this batch" rows in the per-op construction table:
 // whether that create's own receipt was ok or errored, the close's own
 // call constructs nothing — the create either already built the whole
-// pair, or the pair stays incomplete for this partial run.
+// pair, or the pair stays incomplete for this partial run. The two
+// subtests are distinguished by whether BuildCreate is actually called
+// for op-1 first: the ok case sets EventBuilderState.ModifiedHandled,
+// which BuildClose must consult (see event_builder.go); the errored case
+// leaves op-1 unbuilt — its receipt never reaches BuildCreate — so
+// BuildClose must fall back to the static changeset scan instead.
 func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
 	const node = "bbbbbbbbbbbb"
-	for _, claimingStatus := range []string{"succeeded-elsewhere", "errored"} {
-		t.Run(claimingStatus, func(t *testing.T) {
-			graph := newFakeSpecGraph()
-			b, _ := newTestEventBuilder(t, graph,
-				mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
-				mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
-			)
-			cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{
-				{
-					OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
-					Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
-				},
-				{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"},
-			}}
-			closeOp := cs.Ops[1]
-			receipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"}
-
-			lines, err := b.BuildClose(cs, closeOp, receipt)
-			if err != nil {
-				t.Fatalf("BuildClose: %v", err)
-			}
-			if len(lines) != 0 {
-				t.Fatalf("BuildClose returned %d lines, want 0 (owned by the paired create): %+v", len(lines), lines)
-			}
-		})
+	createOp := plan.Op{
+		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
+		Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 	}
+	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"}
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{createOp, closeOp}}
+	closeReceipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"}
+
+	t.Run("ok", func(t *testing.T) {
+		graph := newFakeSpecGraph()
+		graph.nodes[node] = NodeMetadata{Module: "m", Component: "B", ContentFile: "B.md", SpecHash: "h-new", NodeType: "component"}
+		b, _ := newTestEventBuilder(t, graph,
+			mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
+			mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
+		)
+		createReceipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"}
+		createLines, err := b.BuildCreate(cs, createOp, createReceipt)
+		if err != nil {
+			t.Fatalf("BuildCreate: %v", err)
+		}
+		if len(createLines) == 0 {
+			t.Fatalf("BuildCreate returned no lines, want the built pair")
+		}
+		if !b.State.ModifiedHandled["br-old"] {
+			t.Fatalf("ModifiedHandled[br-old] not set after BuildCreate")
+		}
+
+		lines, err := b.BuildClose(cs, closeOp, closeReceipt)
+		if err != nil {
+			t.Fatalf("BuildClose: %v", err)
+		}
+		if len(lines) != 0 {
+			t.Fatalf("BuildClose returned %d lines, want 0 (owned by the paired create): %+v", len(lines), lines)
+		}
+	})
+
+	t.Run("errored", func(t *testing.T) {
+		graph := newFakeSpecGraph()
+		b, _ := newTestEventBuilder(t, graph,
+			mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
+			mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
+		)
+		// op-1's own receipt was error/skipped, so per the per-op
+		// construction table BuildCreate is never called for it —
+		// ModifiedHandled stays unset, and BuildClose must recognise the
+		// claim via the static changeset scan instead.
+
+		lines, err := b.BuildClose(cs, closeOp, closeReceipt)
+		if err != nil {
+			t.Fatalf("BuildClose: %v", err)
+		}
+		if len(lines) != 0 {
+			t.Fatalf("BuildClose returned %d lines, want 0 (partial run — paired create errored/skipped): %+v", len(lines), lines)
+		}
+	})
 }
 
 // TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead covers
