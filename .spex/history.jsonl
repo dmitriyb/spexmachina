@@ -1000,3 +1000,103 @@
 {"event":"task_created","task_id":"spexmachina-ugrs.9","for":"1e3e2df:op-10"}
 {"event":"modified","eid":"refresh:a483524c406c:809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4:14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491","node":"a483524c406c","name":"Refresh mode tests","node_type":"test_section","module":"ingest","before":"809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4","after":"14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491","git_head":"1e3e2df","proposal":"2026-08-20-reconciler-split","path":"spec/ingest/test_refresh.md"}
 {"event":"refresh","git_head":"1e3e2df","absorbed":["refresh:a483524c406c:809614b75a813f67d311a070c8dd5a8eede54a3b0d6ca410f6ac93372243f3f4:14edc5e607e3b2eefa31231877465f000ddbb945732e6bf946cd5aed49eee491"]}
+{"event":"registered","eid":"4d37093:2026-08-20-declarative-profile","proposal":"2026-08-20-declarative-profile","git_head":"4d37093"}
+{"event":"task_created","task_id":"spexmachina-h4gv","for":"4d37093:2026-08-20-declarative-profile"}
+{"event":"modified","eid":"4d37093:op-02","node":"78883b84c32d","name":"ModuleSchema","node_type":"component","module":"schema","before":"40cf1c91980a09d30e760dcb8df2fdd6c6f601ae0c1de8df2bca87bb3900072b","after":"f70540bd77658c23684d592c9ae5760ea8ac5e372ad5785e02bbf8740668e4de","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/arch_module_schema.md"}
+{"event":"task_closed","task_id":"spexmachina-y0wc.6","for":"4d37093:op-02"}
+{"event":"task_created","task_id":"spexmachina-h4gv.1","for":"4d37093:op-02"}
+{"event":"modified","eid":"4d37093:op-03","node":"79946d618829","name":"ProjectSchema","node_type":"component","module":"schema","before":"5cbf48b2893071116ef2fbf2606ccacfa5231b7268dfd03a2e585fa914de051b","after":"8c221695daef10c287a7202fc4fb27079212d251b44eb697dc01bef0146e0d78","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/arch_project_schema.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.2","for":"4d37093:op-03"}
+{"event":"task_created","task_id":"spexmachina-h4gv.2","for":"4d37093:op-03"}
+{"event":"modified","eid":"4d37093:op-04","node":"832e170fa3c0","name":"Validation pipeline","node_type":"data_flow","module":"validator","before":"075f38e4700063b9932eb3108d3c2d075caaf1dc929b2e913290b0e3a6a501ae","after":"5ceb4b71ad54d10a17c51c62c5407d89c3e63d9c84cb50ef6ea60fc4c93a558a","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/flow_validation_pipeline.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.3","for":"4d37093:op-04"}
+{"event":"task_created","task_id":"spexmachina-h4gv.3","for":"4d37093:op-04"}
+{"event":"added","eid":"4d37093:op-05","node":"8fa7d21ec7f0","name":"Render pipeline","node_type":"data_flow","module":"render","before":null,"after":"ee142dab8c48931779cf051a5adcacc39325a3d39e5fb4d53ede4a3c79e350a7","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/flow_render_pipeline.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.4","for":"4d37093:op-05"}
+{"event":"added","eid":"4d37093:op-06","node":"cd726f8b088b","name":"ProfileLoader","node_type":"component","module":"schema","before":null,"after":"e14ae01639e64d8224439051068b42373eb8d49c7c70517fd25bd51b190ef051","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/arch_profile_loader.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.5","for":"4d37093:op-06"}
+{"event":"modified","eid":"4d37093:op-07","node":"ee88263d6555","name":"SchemaLoader","node_type":"component","module":"schema","before":"87b20235fca2b8287791390db3d5c79e2edf560da498d1cbf06d0f550727cc54","after":"4c0108bd2c0ac5a32d12b183fb14e663eb5a5accbb5ddd4188e6293f846f103f","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/arch_schema_loader.md"}
+{"event":"task_closed","task_id":"spexmachina-y0wc.13","for":"4d37093:op-07"}
+{"event":"task_created","task_id":"spexmachina-h4gv.6","for":"4d37093:op-07"}
+{"event":"modified","eid":"4d37093:op-08","node":"7d1150c19724","name":"SpecReader","node_type":"component","module":"render","before":"716716ca18a2640ccacb4cc8bfd94cfd9ac3e2b6ac5d15f5d55e1c094dfc4e27","after":"c87a3fe106e4ad23e88034b7167f4fad1fa664d1f3bc546c29e177ee6a8c7d73","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/arch_spec_reader.md"}
+{"event":"task_closed","task_id":"spexmachina-rjg","for":"4d37093:op-08"}
+{"event":"task_created","task_id":"spexmachina-h4gv.7","for":"4d37093:op-08"}
+{"event":"modified","eid":"4d37093:op-09","node":"172d16ca0eac","name":"JSONRenderer","node_type":"component","module":"render","before":"3ed9f5554a7811786b8fc34ee066f895728a6720500a0f786f9f94fc69ced5d3","after":"8b619d8d2d755ecca3cbbc6ea6d7cee8003e9f0b727563c4515004b9b1dd29f6","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/arch_json_renderer.md"}
+{"event":"task_closed","task_id":"spexmachina-69y","for":"4d37093:op-09"}
+{"event":"task_created","task_id":"spexmachina-h4gv.8","for":"4d37093:op-09"}
+{"event":"modified","eid":"4d37093:op-10","node":"45331bdc0bd0","name":"DOTRenderer","node_type":"component","module":"render","before":"a4255e119b9024ebd16318673bf50a4484c825fdf80e33207a3bd103514172ec","after":"f578965f5bbdc5a14b1d8a2cf8d58fd0335277abfba8d719971e9c9aa4c7c47b","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/arch_dot_renderer.md"}
+{"event":"task_closed","task_id":"spexmachina-spl","for":"4d37093:op-10"}
+{"event":"task_created","task_id":"spexmachina-h4gv.9","for":"4d37093:op-10"}
+{"event":"modified","eid":"4d37093:op-11","node":"a338e50fec70","name":"HashIDCommand","node_type":"component","module":"cli","before":"a47a49e640439742fa028c95b893f0affdc18f8414d579c100e54e0fb82d02bf","after":"cadce719492f05c99726d0fd084fd6be87083d7f7bfe0df0ec47c55cd8dad4ef","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/cli/arch_hash_id_command.md"}
+{"event":"task_closed","task_id":"spexmachina-y0wc.10","for":"4d37093:op-11"}
+{"event":"task_created","task_id":"spexmachina-h4gv.10","for":"4d37093:op-11"}
+{"event":"modified","eid":"4d37093:op-12","node":"b4b4eba6b551","name":"MarkdownRenderer","node_type":"component","module":"render","before":"fdff9690af13b3c6c78da5f1b76f7b8675ce3f37995ef264849a987db37f1fac","after":"cccb210f7561a9a9f0e0501d69cad28cd8f53da09d50f617f3f704d80365580c","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/arch_markdown_renderer.md"}
+{"event":"task_closed","task_id":"spexmachina-qpn","for":"4d37093:op-12"}
+{"event":"task_created","task_id":"spexmachina-h4gv.11","for":"4d37093:op-12"}
+{"event":"modified","eid":"4d37093:op-13","node":"c56eefd05f42","name":"RenderCommand","node_type":"component","module":"render","before":"06188fce8d96a25c82a37865f275d054796cf51cdb020d4877903939c99b5f9a","after":"d3197f1f9770996a1352dec99f961b1789fc2c4d8efa5764aa28b5b5deb170c4","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/arch_render_command.md"}
+{"event":"task_closed","task_id":"spexmachina-1no","for":"4d37093:op-13"}
+{"event":"task_created","task_id":"spexmachina-h4gv.12","for":"4d37093:op-13"}
+{"event":"modified","eid":"4d37093:op-14","node":"dfe1467b7a4b","name":"TreeBuilder","node_type":"component","module":"merkle","before":"948977c5a2f350a2721948828d03f3a76eb2e90785f90aaa79e83944675d5b18","after":"eff3a73b98590426390df5a0fdce35c77cfdb2737ca5b207afeaf43032c5270f","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/arch_tree_builder.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.4","for":"4d37093:op-14"}
+{"event":"task_created","task_id":"spexmachina-h4gv.13","for":"4d37093:op-14"}
+{"event":"modified","eid":"4d37093:op-15","node":"f1a672216ce9","name":"ImpactClassifier","node_type":"component","module":"merkle","before":"27a7aaf1612e0e2af44d74acc3d92e12be320ee14003159be2173435059c39bc","after":"b0833d77be45ab60f9906493522d1b73108019e912f9ebd183c70c09147d1dfa","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/arch_impact_classifier.md"}
+{"event":"task_closed","task_id":"spexmachina-phb.8","for":"4d37093:op-15"}
+{"event":"task_created","task_id":"spexmachina-h4gv.14","for":"4d37093:op-15"}
+{"event":"modified","eid":"4d37093:op-16","node":"de3309dfbd3c","name":"CompletenessChecker","node_type":"component","module":"merkle","before":"c4b99e33b4864509b451dde8728cd19cdf17185f19797376b1a4f860bab93013","after":"843cc85086bd62fce242877eb9aec037cf32565b2ebfa6b5ffa5eb806c6ad702","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/arch_completeness_checker.md"}
+{"event":"task_closed","task_id":"spexmachina-phb.9","for":"4d37093:op-16"}
+{"event":"task_created","task_id":"spexmachina-h4gv.15","for":"4d37093:op-16"}
+{"event":"modified","eid":"4d37093:op-17","node":"c8b958ec310d","name":"DiffCommand","node_type":"component","module":"merkle","before":"d708927e6a836b188c03a2cb4b700001c5d7f23c27baf268a740068dc60b4235","after":"01ecc533db637f8073d379e118b41300bce3ca736107e6a591701cd46802ec02","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/arch_diff_command.md"}
+{"event":"task_closed","task_id":"spexmachina-uiei.4","for":"4d37093:op-17"}
+{"event":"task_created","task_id":"spexmachina-h4gv.16","for":"4d37093:op-17"}
+{"event":"modified","eid":"4d37093:op-18","node":"00beeeda5ddd","name":"IDValidator","node_type":"component","module":"validator","before":"97cf6ef57c557e2afc006701e5bd541efe5892580950cf186829c13bf986f2d9","after":"53e851f7b7fe5d601eebaa331d6e6a0eb2978d2dba53f94684ede5b707c31daf","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_id_validator.md"}
+{"event":"task_closed","task_id":"spexmachina-qg2","for":"4d37093:op-18"}
+{"event":"task_created","task_id":"spexmachina-h4gv.17","for":"4d37093:op-18"}
+{"event":"modified","eid":"4d37093:op-19","node":"5dcca0dab9bd","name":"ContentResolver","node_type":"component","module":"validator","before":"938203a5f4e1fdf46e697083b636b155346333497530b3929dd974dbad7d6805","after":"70009a6af067765b521e0d87b160eba1ebe8eaca0807221fecc09f4db0f83b05","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_content_resolver.md"}
+{"event":"task_closed","task_id":"spexmachina-2dv","for":"4d37093:op-19"}
+{"event":"task_created","task_id":"spexmachina-h4gv.18","for":"4d37093:op-19"}
+{"event":"modified","eid":"4d37093:op-20","node":"651d5315eebf","name":"SchemaChecker","node_type":"component","module":"validator","before":"bbb7e92acae56f9b904e0303abe6f2139ec8770b7be48a581291704453e154a3","after":"5ab8ea9de03e6f61a760f95538f043ee7d90561ca950862b63ea45379c1cd7f0","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_schema_checker.md"}
+{"event":"task_closed","task_id":"spexmachina-w3f","for":"4d37093:op-20"}
+{"event":"task_created","task_id":"spexmachina-h4gv.19","for":"4d37093:op-20"}
+{"event":"modified","eid":"4d37093:op-21","node":"8aa1ab5ac102","name":"ActionClassifier","node_type":"component","module":"plan","before":"a6799fd8bdcebc95c85dbb51a3d847e6488874daf2034b8f5a8d7a176350532c","after":"6fd41a12642ccdbb543b4c829250c2bc982d6150e83cf2aa8427483ce07ffd9c","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/plan/arch_action_classifier.md"}
+{"event":"task_closed","task_id":"spexmachina-2n4z.1","for":"4d37093:op-21"}
+{"event":"task_created","task_id":"spexmachina-h4gv.20","for":"4d37093:op-21"}
+{"event":"modified","eid":"4d37093:op-22","node":"4c1146bb7287","name":"ChangesetBuilder","node_type":"component","module":"plan","before":"599342a6d305ccad49564d5380eaebd23f33da7533a5bd133d91d1159d4fef5f","after":"80b7a570bd208b38a603e951a350a8d9dbc6946d044da71516a0135781663d63","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/plan/arch_changeset_builder.md"}
+{"event":"task_closed","task_id":"spexmachina-f6eh.47","for":"4d37093:op-22"}
+{"event":"task_created","task_id":"spexmachina-h4gv.21","for":"4d37093:op-22"}
+{"event":"modified","eid":"4d37093:op-23","node":"c6c770a59d68","name":"DAGChecker","node_type":"component","module":"validator","before":"2be4e5e6abe1edb41609772c7a4e6fe321803bbd023710164265884c4505def9","after":"7f0fd25dbd1b68bd4ad060443dc97c60522cba635aa4f3d239e47ede872c38f0","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_dag_checker.md"}
+{"event":"task_closed","task_id":"spexmachina-3id","for":"4d37093:op-23"}
+{"event":"task_created","task_id":"spexmachina-h4gv.22","for":"4d37093:op-23"}
+{"event":"modified","eid":"4d37093:op-24","node":"c7d0282b0e05","name":"RequirementCoverageChecker","node_type":"component","module":"validator","before":"1bae8bdb703e77b861d52a2edd74bc14710e0661791a6f4d5f7f90f706a75483","after":"ab52c2f4fdc029d61ebcec863e15c9a490f3fe30be6092741b23cbb7ab998de7","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_requirement_coverage_checker.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.6","for":"4d37093:op-24"}
+{"event":"task_created","task_id":"spexmachina-h4gv.23","for":"4d37093:op-24"}
+{"event":"modified","eid":"4d37093:op-25","node":"ed7a40b68995","name":"TestCoverageChecker","node_type":"component","module":"validator","before":"aef33f9286137e26281f1e8e017bdee5100375856280042ca6312c9001dd393b","after":"72fecc7350715724774620bbf7c5146d1436da903d4df0f0e0d475969d666572","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/arch_test_coverage_checker.md"}
+{"event":"task_closed","task_id":"spexmachina-2yf","for":"4d37093:op-25"}
+{"event":"task_created","task_id":"spexmachina-h4gv.24","for":"4d37093:op-25"}
+{"event":"modified","eid":"4d37093:op-26","node":"f9033352c13f","name":"RefreshHandler","node_type":"component","module":"ingest","before":"62562ad96fec4b765a0ffed660a007ce1737b281abc6ad1f68fbb0594d7c356e","after":"001a02b2bd6ab54f88ccce4c7d6ed82f0663cbb0453f12b96a25700c9d59e8e8","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/ingest/arch_refresh.md"}
+{"event":"task_closed","task_id":"spexmachina-ugrs.6","for":"4d37093:op-26"}
+{"event":"task_created","task_id":"spexmachina-h4gv.25","for":"4d37093:op-26"}
+{"event":"added","eid":"4d37093:op-27","node":"15019980fcea","name":"Conformance and content tests","node_type":"test_section","module":"validator","before":null,"after":"65ada2c9793890e3b23740f938d0b4e951ee8bfd5ee4b57274af108302b3f23d","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/test_conformance_and_content.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.26","for":"4d37093:op-27"}
+{"event":"modified","eid":"4d37093:op-28","node":"15d919047039","name":"Name and coverage tests","node_type":"test_section","module":"validator","before":"16b93c4cba3bab863cd18453c5537e1fcee554ea17293bfb31158733890e7a4d","after":"b87404949dab7a2a81e7dee0ea09414dd4a71b4fdbb8c7c1d396df40465b849a","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/test_name_and_coverage.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.8","for":"4d37093:op-28"}
+{"event":"task_created","task_id":"spexmachina-h4gv.27","for":"4d37093:op-28"}
+{"event":"added","eid":"4d37093:op-29","node":"23b86e6f80c7","name":"Renderer tests","node_type":"test_section","module":"render","before":null,"after":"3c7a4cdb7cfa3b22c378deffeb31619621c8fbd140e5e1a33614428950c87908","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/render/test_renderers.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.28","for":"4d37093:op-29"}
+{"event":"modified","eid":"4d37093:op-30","node":"31b096a76fd4","name":"Hashing tests","node_type":"test_section","module":"merkle","before":"399156bfe6e0b289e2bc9a5e6c20c739e4ccc264f7903b51731051a5d1b9dbb6","after":"8f23521e49134a7729f665a30925b0526f76af475dfec888ab521e784aa0fe35","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/test_hashing.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.10","for":"4d37093:op-30"}
+{"event":"task_created","task_id":"spexmachina-h4gv.29","for":"4d37093:op-30"}
+{"event":"modified","eid":"4d37093:op-31","node":"338edabe0796","name":"Changeset builder tests","node_type":"test_section","module":"plan","before":"ff6e410453a79e94d70ea1ddd2e053b08396a8c7599d2096517d378e377da53d","after":"9712468acc89600b398309602e15288232031184a8ab7480022bf7c6e3cfb4f0","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/plan/test_changeset_builder.md"}
+{"event":"task_closed","task_id":"spexmachina-f6eh.49","for":"4d37093:op-31"}
+{"event":"task_created","task_id":"spexmachina-h4gv.30","for":"4d37093:op-31"}
+{"event":"added","eid":"4d37093:op-32","node":"78ac211428bb","name":"Graph structure tests","node_type":"test_section","module":"validator","before":null,"after":"fa017535e1deb582aca9a07e742c56d128708cbe31ecc732c4e861f71a023f7a","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/validator/test_graph_structure.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.31","for":"4d37093:op-32"}
+{"event":"added","eid":"4d37093:op-33","node":"8719672c7580","name":"Schema loading tests","node_type":"test_section","module":"schema","before":null,"after":"da286334b7441c72257742ded2a3f3ad8f3ec5b88d7de6bc5061c71f1ed30d92","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/test_schema_loading.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.32","for":"4d37093:op-33"}
+{"event":"added","eid":"4d37093:op-34","node":"95a279cbdcbc","name":"Diff and classification tests","node_type":"test_section","module":"merkle","before":null,"after":"885569f501e3b775fe8aaad0cf6afd8805a146492e452133233cefa639d4f4e4","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/merkle/test_diff_classification.md"}
+{"event":"task_created","task_id":"spexmachina-h4gv.33","for":"4d37093:op-34"}
+{"event":"modified","eid":"4d37093:op-35","node":"96f944302b78","name":"Schema validation tests","node_type":"test_section","module":"schema","before":"705d933b878cfd08d20914e1b082871df087c4bb264f8ee02467d8a2ae358a20","after":"e7b9d81c73adec7d091317ba2e713517b467ae5abf77748f5a16afdfd7b4592d","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/schema/test_schema_validation.md"}
+{"event":"task_closed","task_id":"spexmachina-okib.11","for":"4d37093:op-35"}
+{"event":"task_created","task_id":"spexmachina-h4gv.34","for":"4d37093:op-35"}
+{"event":"modified","eid":"4d37093:op-36","node":"f3c4a2c35344","name":"Classification tests","node_type":"test_section","module":"plan","before":"822a33739f6c05df5e507b001fddb8b90dc66a5a7e2d18d04dfc4aaa4fa9f345","after":"eedfaf8372b4a68ef94fcd3eb6e55f427651671c1a756eb41a407c7da35a9cd9","git_head":"4d37093","proposal":"2026-08-20-declarative-profile","path":"spec/plan/test_classification.md"}
+{"event":"task_closed","task_id":"spexmachina-2n4z.2","for":"4d37093:op-36"}
+{"event":"task_created","task_id":"spexmachina-h4gv.35","for":"4d37093:op-36"}
