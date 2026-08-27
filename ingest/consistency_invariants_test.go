@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -314,6 +315,28 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 		if e.Key == hexM && e.TaskID != "br-new" {
 			t.Errorf("fold[M].TaskID = %q, want br-new", e.TaskID)
 		}
+	}
+}
+
+// TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary covers
+// "Invariant 5: the encoder refuses at its own boundary": handing
+// JournalEncoder a deliberately schema-invalid event directly — no
+// changeset, no reconciliation run around it — refuses the line naming
+// the violated constraint before any write path is reached. This
+// exercises invariant 5 against the component that owns it rather than
+// only through the integrated Reconciler.Apply run above, so a future
+// caller of the encoder inherits the gate rather than re-implementing it.
+func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing.T) {
+	invalid := mapping.Event{
+		Event: "added", EID: "e1", Node: "", Name: "x", NodeType: "component",
+		Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p",
+	}
+	err := NewJournalEncoder().Validate(invalid)
+	if err == nil {
+		t.Fatal("Validate: want error for schema-invalid line, got nil")
+	}
+	if !strings.Contains(err.Error(), "node") {
+		t.Errorf("Validate error = %v, want it to name the violated constraint (node)", err)
 	}
 }
 
