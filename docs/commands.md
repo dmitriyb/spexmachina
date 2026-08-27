@@ -183,11 +183,11 @@ spex render --format json --slim | jq -r '.nodes[] | "\(.name)\t\(.id)"'
 
 ### `spex hash-id`
 
-Computes the identity hash for a node without touching the spec.
+Computes the identity hash for a node. It reads `spec/profile.json` under `--spec-dir` when that file is present and uses the built-in default profile otherwise; that resolution is the only spec access it makes. Given the resolved profile the output is a pure function of the three flags.
 
 | Flag | Purpose |
 |---|---|
-| `--type <type>` | `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
+| `--type <type>` | A node type the resolved profile declares, plus the fixed `module` type. Under the default profile: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
 | `--name <name>` | Node name or title |
 | `--module <module>` | Required for module-scoped node types |
 
