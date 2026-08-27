@@ -114,8 +114,9 @@
 // Reconciler and RefreshHandler) delegates line-by-line to
 // JournalEncoder.Validate rather than carrying its own copy, so both
 // pathways already inherit the gate from the one component that owns
-// it. Reconciler still carries its own inline copy of every
-// construction and invariant-1/2 path (ingest/reconciler.go) pending
-// its own rewiring by spexmachina-ugrs.5 to dispatch through
-// EventBuilder and InvariantChecker instead.
+// it. Reconciler (reconciler.go, spexmachina-ugrs.5) assembles the
+// per-run state, constructs one EventBuilder and dispatches every op to
+// it, runs InvariantChecker over journal-plus-batch, then encodes and
+// commits — it no longer carries its own copy of construction or
+// invariant-1/2 logic.
 package ingest

@@ -1262,93 +1262,11 @@ func TestApply_Absorbed_ReRun_Idempotent(t *testing.T) {
 }
 
 // ---- Invariant unit tests (direct, low-level) ----
-
-// TestCheckInvariant1_DoublePairing covers "Invariant 1: double pairing
-// refused": two task_created receipts pairing with the same change event.
-func TestCheckInvariant1_DoublePairing(t *testing.T) {
-	batch := []mapping.Event{
-		{Event: "task_created", TaskID: "t1", For: "eid-1"},
-		{Event: "task_created", TaskID: "t2", For: "eid-1"},
-	}
-	err := checkInvariant1(nil, batch)
-	if err == nil || !strings.Contains(err.Error(), "invariant 1") {
-		t.Fatalf("checkInvariant1: got %v, want invariant 1 error", err)
-	}
-}
-
-// TestCheckInvariant1_ProposalDoublePairing covers the epic analogue: two
-// task_created receipts both claiming the same proposal slug.
-func TestCheckInvariant1_ProposalDoublePairing(t *testing.T) {
-	batch := []mapping.Event{
-		{Event: "task_created", TaskID: "t1", Proposal: "stem"},
-		{Event: "task_created", TaskID: "t2", Proposal: "stem"},
-	}
-	err := checkInvariant1(nil, batch)
-	if err == nil || !strings.Contains(err.Error(), "invariant 1") {
-		t.Fatalf("checkInvariant1: got %v, want invariant 1 error", err)
-	}
-}
-
-// TestCheckInvariant1_RetargetDoublePairing covers the retarget analogue:
-// two task_retargeted receipts pairing with the same modified event.
-func TestCheckInvariant1_RetargetDoublePairing(t *testing.T) {
-	batch := []mapping.Event{
-		{Event: "task_retargeted", TaskID: "t1", For: "eid-1"},
-		{Event: "task_retargeted", TaskID: "t2", For: "eid-1"},
-	}
-	err := checkInvariant1(nil, batch)
-	if err == nil || !strings.Contains(err.Error(), "invariant 1") {
-		t.Fatalf("checkInvariant1: got %v, want invariant 1 error", err)
-	}
-}
-
-// TestCheckInvariant2_DanglingReference covers "Invariant 2: dangling
-// receipt reference".
-func TestCheckInvariant2_DanglingReference(t *testing.T) {
-	batch := []mapping.Event{{Event: "task_created", TaskID: "t1", For: "missing-eid"}}
-	err := checkInvariant2(nil, batch)
-	want := "ingest: receipt references unknown event missing-eid"
-	if err == nil || err.Error() != want {
-		t.Fatalf("checkInvariant2: got %v, want %q", err, want)
-	}
-}
-
-// TestCheckInvariant2_RetargetDanglingReference covers the retarget
-// analogue: a task_retargeted receipt's for names an eid neither the
-// journal nor the batch contains.
-func TestCheckInvariant2_RetargetDanglingReference(t *testing.T) {
-	batch := []mapping.Event{{Event: "task_retargeted", TaskID: "t1", For: "missing-eid"}}
-	err := checkInvariant2(nil, batch)
-	want := "ingest: receipt references unknown event missing-eid"
-	if err == nil || err.Error() != want {
-		t.Fatalf("checkInvariant2: got %v, want %q", err, want)
-	}
-}
-
-// TestCheckInvariant2_AbsorbedDanglingReference covers "Invariant 2's
-// no-unknown-referent rule covers the absorbed list exactly as it covers
-// for": a refresh receipt naming an eid no absorbed event carries.
-func TestCheckInvariant2_AbsorbedDanglingReference(t *testing.T) {
-	batch := []mapping.Event{
-		{Event: "modified", EID: "e1"},
-		{Event: "refresh", GitHead: "g", Absorbed: []string{"e1", "missing-eid"}},
-	}
-	err := checkInvariant2(nil, batch)
-	want := "ingest: receipt references unknown event missing-eid"
-	if err == nil || err.Error() != want {
-		t.Fatalf("checkInvariant2: got %v, want %q", err, want)
-	}
-}
-
-// TestCheckInvariant2_KnownAgainstExisting confirms a receipt whose for
-// resolves against the EXISTING journal (not just the batch) passes.
-func TestCheckInvariant2_KnownAgainstExisting(t *testing.T) {
-	existing := []mapping.Event{{Event: "added", EID: "E1"}}
-	batch := []mapping.Event{{Event: "task_created", TaskID: "t1", For: "E1"}}
-	if err := checkInvariant2(existing, batch); err != nil {
-		t.Fatalf("checkInvariant2: unexpected error %v", err)
-	}
-}
+//
+// Invariants 1 and 2 are exercised directly against InvariantChecker in
+// invariant_checker_test.go (TestInvariantChecker_Invariant1_*,
+// TestInvariantChecker_Invariant2_*) — this file no longer carries its own
+// copy of checkInvariant1/checkInvariant2 to test.
 
 // TestCheckInvariant5_SchemaInvalidLine covers "Invariant 5:
 // schema-invalid line refused": a change event with an invalid node hash

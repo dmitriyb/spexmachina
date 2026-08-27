@@ -16,17 +16,18 @@ import (
 	"github.com/dmitriyb/spexmachina/plan"
 )
 
-// Tests for spec/ingest/test_consistency_invariants.md. Invariants 1, 2,
-// 3 and 5 — the ones Reconciler itself asserts — are exercised in
-// isolation in reconciler_test.go (TestCheckInvariant1_*,
-// TestCheckInvariant2_*, TestApply_Idempotent_RerunAppendsNothing,
-// TestCheckInvariant5_*) and the "lineage replaces the rebind invariant"
-// property is proven by TestApply_ModifiedPair_LineageExtendedNotRebound.
-// What only emerges when Reconciler.Apply and SnapshotSaver.Save run
-// together against shared on-disk state is invariant 4 (snapshot saved
-// iff complete) and the spec's Happy Path acceptance — that is what the
-// tests below cover. "One snapshot format across both writers" lives in
-// snapshot_format_test.go.
+// Tests for spec/ingest/test_consistency_invariants.md. Invariants 1 and 2
+// are exercised in isolation, against InvariantChecker directly, in
+// invariant_checker_test.go (TestInvariantChecker_Invariant1_*,
+// TestInvariantChecker_Invariant2_*); invariant 3 by
+// TestApply_Idempotent_RerunAppendsNothing and invariant 5 by
+// TestCheckInvariant5_* (reconciler_test.go), and the "lineage replaces
+// the rebind invariant" property is proven by
+// TestApply_ModifiedPair_LineageExtendedNotRebound. What only emerges when
+// Reconciler.Apply and SnapshotSaver.Save run together against shared
+// on-disk state is invariant 4 (snapshot saved iff complete) and the
+// spec's Happy Path acceptance — that is what the tests below cover. "One
+// snapshot format across both writers" lives in snapshot_format_test.go.
 
 // resolvedProjectContext seeds an empty .spex/ state directory beside the
 // fixture project's own spec tree (specDir's parent, the sibling layout
@@ -388,8 +389,8 @@ func TestConsistencyInvariants_Invariant1_RetargetPairing(t *testing.T) {
 	// The dangling variant: a task_retargeted whose for names an eid
 	// neither the journal nor the batch contains.
 	dangling := []mapping.Event{{Event: "task_retargeted", TaskID: "br-open", For: "no-such-eid"}}
-	if err := checkInvariant2(journal, dangling); err == nil {
-		t.Fatal("checkInvariant2: want error for dangling task_retargeted referent, got nil")
+	if err := NewInvariantChecker().Check(journal, dangling); err == nil {
+		t.Fatal("InvariantChecker.Check: want error for dangling task_retargeted referent, got nil")
 	}
 }
 
@@ -436,7 +437,7 @@ func TestConsistencyInvariants_Invariant1_AbsorbedBatchClosesUnderOneRefreshRece
 	// The dangling variant: a refresh receipt naming an eid no absorbed
 	// event carries.
 	dangling := []mapping.Event{{Event: "refresh", GitHead: "g", Absorbed: []string{journal[0].EID, "no-such-eid"}}}
-	if err := checkInvariant2(journal, dangling); err == nil {
-		t.Fatal("checkInvariant2: want error for dangling absorbed referent, got nil")
+	if err := NewInvariantChecker().Check(journal, dangling); err == nil {
+		t.Fatal("InvariantChecker.Check: want error for dangling absorbed referent, got nil")
 	}
 }
