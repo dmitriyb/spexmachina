@@ -201,11 +201,15 @@ func buildTypeNodes(raw map[string]json.RawMessage, nt schema.NodeType, baseDir,
 // hashFields creates a leaf node for a JSON-backed spec node — a
 // requirement, an api, or any other non-content-bearing type the resolved
 // profile declares — by hashing a deterministic serialization of the fields
-// named in allowlist. A field absent from entry, or present with a zero
-// value, is excluded — matching omitempty semantics — so the leaf hash
-// reflects only fields the author actually set. Marshaling a
-// map[string]interface{} sorts keys, so the serialization is sorted by
-// construction.
+// named in allowlist. A field absent from entry is excluded, and a string,
+// array or object field present with its zero value is excluded too —
+// matching the omitempty behavior of a plain Go value field. A numeric
+// field is excluded only when absent: the source structs that predate this
+// profile-driven rewrite hold optional numbers (e.g. a requirement's
+// priority) behind a pointer specifically so an explicit 0 survives
+// omitempty, so a decoded float64(0) is only "unset" when the key was never
+// there — see isZeroJSONValue. Marshaling a map[string]interface{} sorts
+// keys, so the serialization is sorted by construction.
 func hashFields(entry map[string]interface{}, allowlist []string, key, nodeType, module string) (*Node, error) {
 	fields := map[string]interface{}{}
 	for _, name := range allowlist {
@@ -231,15 +235,18 @@ func hashFields(entry map[string]interface{}, allowlist []string, key, nodeType,
 
 // isZeroJSONValue reports whether v — a value decoded from JSON into
 // interface{} — is the zero value for its JSON type: absent (nil), an empty
-// string, the number zero, or an empty array/object.
+// string, or an empty array/object. A JSON number is never reported zero
+// here: hashFields already excludes a field absent from entry via its own
+// map-key check, and treating a *present* 0 as zero too would make
+// "priority": 0 hash identically to no priority at all — indistinguishable
+// from the pre-profile behavior, which serialized any explicitly-set
+// priority (0 included) and omitted only a truly absent one.
 func isZeroJSONValue(v interface{}) bool {
 	switch x := v.(type) {
 	case nil:
 		return true
 	case string:
 		return x == ""
-	case float64:
-		return x == 0
 	case []interface{}:
 		return len(x) == 0
 	case map[string]interface{}:
