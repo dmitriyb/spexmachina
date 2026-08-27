@@ -51,13 +51,6 @@ type EventBuilderState struct {
 // per run and calls it once per op. See
 // spec/ingest/arch_event_builder.md and requirements 539030e8c5a4,
 // 7191a50f7447, 7900dcd38c4a, fd6f08ef34fa in spec/ingest/module.json.
-//
-// The working logic for these paths still also lives inline as
-// Reconciler's buildCreate/buildRemoved/buildModifiedPair/
-// buildModifiedFromClose/buildRetarget/buildAbsorbed helpers
-// (ingest/reconciler.go) until spexmachina-ugrs.5 rewires
-// Reconciler.Apply to dispatch through the methods below instead and
-// retires its own copies.
 type EventBuilder struct {
 	State EventBuilderState
 }
@@ -364,6 +357,67 @@ func claimedByCreate(cs plan.Changeset, beadID string) bool {
 		}
 	}
 	return false
+}
+
+// buildEpicCreate builds the one-line receipt a proposal-epic create
+// implies: a task_created whose for names the proposal's registered event.
+// Dedup is fold-based, not eid-based: an epic's task_created has no change
+// event of its own to key an eid off, so a re-run recognises an existing
+// epic by its slug already appearing in the fold, keyed there off the
+// registered event's referent. A stem with no registered event in the
+// journal is a malformed changeset — plan refuses to build such an op, so
+// its arrival here is an invariant failure, not a fallback. See
+// arch_event_builder.md "Proposal-Epic Ops".
+func buildEpicCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, registeredByStem map[string]string) ([]mapping.Event, error) {
+	stem := op.SpecNodeID
+	for _, e := range fold.Entries {
+		if e.Key == stem {
+			return nil, nil // idempotent no-op: the epic already exists
+		}
+	}
+	eid, ok := registeredByStem[stem]
+	if !ok {
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: proposal-epic %s: no registered event in journal", op.OpID, stem)
+	}
+	return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: eid}}, nil
+}
+
+// buildCleanupCreate builds the one-line receipt a cleanup create implies:
+// a task_created whose for names the removed node's own removal event.
+// The journal is checked first — a live (not yet removed) fold entry for
+// the hash means the removal is still pending in this same batch, so it
+// falls through to sameBatchRemovals; a hash that matches neither is a
+// malformed changeset, not a fallback. See arch_event_builder.md
+// "Cleanup-Create Ops".
+func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, sameBatchRemovals map[string]string) ([]mapping.Event, error) {
+	hash := op.SpecNodeID
+	for _, e := range fold.Entries {
+		if e.Key != hash || !e.Removed {
+			continue
+		}
+		if e.TaskID != "" {
+			return nil, nil // idempotent no-op: cleanup already landed for this removal
+		}
+		return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: e.Source.EID}}, nil
+	}
+	if eid, ok := sameBatchRemovals[hash]; ok {
+		return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: eid}}, nil
+	}
+	return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no removed event", op.OpID, hash)
+}
+
+// blocksDepBeadID reports the old bead id an op's lineage dep names, if
+// any. ChangesetBuilder attaches this dep to every create replacing an
+// obsoleted bead — cleanup and modify-pair creates alike — so its
+// presence alone does not select modify-pair handling; BuildCreate only
+// consults it once cleanup and proposal_epic have been ruled out.
+func blocksDepBeadID(op plan.Op) (string, bool) {
+	for _, d := range op.Deps {
+		if d.Kind == plan.RefBead && d.EdgeType == "blocks" {
+			return d.BeadID, true
+		}
+	}
+	return "", false
 }
 
 // foldEntryByTask finds the fold entry currently reachable by taskID —

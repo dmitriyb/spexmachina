@@ -3,7 +3,6 @@ package ingest
 import (
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/adapters"
@@ -14,7 +13,7 @@ import (
 // SpecGraph supplies the spec-side metadata the Reconciler needs to build a
 // fresh or modified node's change event: its name, kind and module.
 // Cleanup and proposal-epic creates never reach it — see
-// spec/ingest/arch_reconciler.md "Proposal-Epic Ops" and "Cleanup-Create
+// spec/ingest/arch_event_builder.md "Proposal-Epic Ops" and "Cleanup-Create
 // Ops".
 type SpecGraph interface {
 	NodeMetadata(specNodeID string) (NodeMetadata, error)
@@ -32,13 +31,14 @@ type NodeMetadata struct {
 }
 
 // ReconcileSummary is the per-op tally Reconciler.Apply returns. The CLI
-// folds OkCreates+OkCloses into Summary.Ok before serialising to stdout.
-// EventsAppended and ReceiptsAppended count only lines that actually
-// landed on this call — an idempotent re-run reports zero of each even
-// though every op still counts as ok.
+// folds OkCreates+OkCloses+OkRetargets into Summary.Ok before serialising
+// to stdout. EventsAppended and ReceiptsAppended count only lines that
+// actually landed on this call — an idempotent re-run reports zero of
+// each even though every op still counts as ok.
 type ReconcileSummary struct {
 	OkCreates        int
 	OkCloses         int
+	OkRetargets      int
 	Skipped          int
 	Errors           int
 	EventsAppended   int
@@ -65,10 +65,13 @@ type Reconciler struct {
 	SpecGraph SpecGraph
 }
 
-// Apply pairs each changeset op with its receipt, constructs the journal
-// lines each ok op implies against an in-memory copy of the journal,
-// asserts the invariants over journal-plus-batch, then commits the whole
-// batch atomically. On any error the on-disk journal is untouched.
+// Apply pairs each changeset op with its receipt, assembles the per-run
+// state and hands it to one EventBuilder, dispatches every op (and the
+// changeset's absorbed entries) to it in changeset order, then runs
+// InvariantChecker and JournalEncoder over the constructed batch before
+// committing it atomically through MappingStore. On any error the on-disk
+// journal is untouched. See arch_reconciler.md, "Interface" and
+// "Transaction Semantics".
 func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSummary, error) {
 	receiptsByOp, err := pairReceipts(cs, rc)
 	if err != nil {
@@ -102,14 +105,17 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 	batchEIDs := map[string]bool{}
 	hasEID := func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] }
 
-	removals := sameBatchRemovals(cs, receiptsByOp, fold)
-	claimedByCreate := modifiedPairClaims(cs)
+	builder := NewEventBuilder(EventBuilderState{
+		SpecGraph:         r.SpecGraph,
+		Fold:              fold,
+		SameBatchRemovals: sameBatchRemovals(cs, receiptsByOp, fold),
+		RegisteredByStem:  registeredByStem,
+		HasEID:            hasEID,
+	})
 
 	var (
-		sum             ReconcileSummary
-		batch           []mapping.Event
-		modifiedHandled = map[string]bool{}
-		pendingModified = map[string]plan.Op{}
+		sum   ReconcileSummary
+		batch []mapping.Event
 	)
 	appendBatch := func(lines []mapping.Event) {
 		for _, ev := range lines {
@@ -131,28 +137,19 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 			switch opRC.Status {
 			case adapters.OpStatusOk:
 				sum.OkCloses++
-				switch {
-				case strings.HasPrefix(op.Reason, ReasonRemovedPrefix):
-					lines, err := r.buildRemoved(cs, op, opRC, fold, hasEID)
-					if err != nil {
-						return ReconcileSummary{}, err
-					}
-					appendBatch(lines)
-				case strings.HasPrefix(op.Reason, ReasonModifiedPrefix):
-					if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-						return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
-					}
-					// Plan orders the paired create before this close (see
-					// arch_reconciler.md "Ordering"), so the create has
-					// already built the modified event and both receipts
-					// by the time this close is reached — unless no such
-					// create exists in the batch, which is checked once
-					// the whole batch is processed. See "The Modified-Node
-					// Pair".
-					if !modifiedHandled[op.Target.BeadID] {
-						pendingModified[op.Target.BeadID] = op
-					}
+				// Plan orders the paired create before this close (see
+				// arch_reconciler.md "Ordering"), so an ok create earlier
+				// in this same loop has already set ModifiedHandled for
+				// its blocks-dep bead by the time BuildClose runs — and
+				// BuildClose's own claimedByCreate fallback answers the
+				// errored/skipped-create case by scanning the whole
+				// changeset rather than depending on order. See "The
+				// Modified-Node Pair" in arch_event_builder.md.
+				lines, err := builder.BuildClose(cs, op, opRC)
+				if err != nil {
+					return ReconcileSummary{}, err
 				}
+				appendBatch(lines)
 			case adapters.OpStatusError:
 				sum.Errors++
 			case adapters.OpStatusSkipped:
@@ -165,7 +162,7 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 			switch opRC.Status {
 			case adapters.OpStatusOk:
 				sum.OkCreates++
-				lines, err := r.buildCreate(cs, op, opRC, fold, modifiedHandled, removals, registeredByStem, hasEID)
+				lines, err := builder.BuildCreate(cs, op, opRC)
 				if err != nil {
 					return ReconcileSummary{}, err
 				}
@@ -181,10 +178,8 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		case plan.OpRetarget:
 			switch opRC.Status {
 			case adapters.OpStatusOk:
-				// Ok retargets are not folded into OkCreates/OkCloses — the
-				// summary's ok count aggregates only creates and closes, per
-				// arch_reconciler.md "Interface".
-				lines, err := r.buildRetarget(cs, op, fold, hasEID)
+				sum.OkRetargets++
+				lines, err := builder.BuildRetarget(cs, op, opRC)
 				if err != nil {
 					return ReconcileSummary{}, err
 				}
@@ -202,49 +197,18 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		}
 	}
 
-	if len(pendingModified) > 0 {
-		beadIDs := make([]string, 0, len(pendingModified))
-		for beadID := range pendingModified {
-			beadIDs = append(beadIDs, beadID)
-		}
-		sort.Strings(beadIDs)
-		for _, beadID := range beadIDs {
-			op := pendingModified[beadID]
-			if claimedByCreate[beadID] {
-				// The paired create exists in this batch but its receipt
-				// was error/skipped — a partial run. Construct nothing for
-				// the pair and let the rest of the batch land; see
-				// arch_reconciler.md "The Modified-Node Pair".
-				continue
-			}
-			// No create in the batch ever claimed this bead: the shape
-			// ActionClassifier emits for a coupled test_section edit (an
-			// obsolete with no replacement create). The node still exists,
-			// so build the modified event straight from the close, off the
-			// fold's live entry for the bead.
-			lines, err := r.buildModifiedFromClose(cs, op, receiptsByOp[op.OpID], fold, hasEID)
-			if err != nil {
-				return ReconcileSummary{}, err
-			}
-			appendBatch(lines)
-		}
-	}
-
 	// The changeset's top-level absorbed array is not receipt-gated — it
 	// describes spec state rather than tracker work, so it is processed
-	// regardless of what the ops loop above found. See arch_reconciler.md
-	// "Absorbed Entries".
-	absorbedLines, err := r.buildAbsorbed(cs, hasEID)
+	// regardless of what the ops loop above found. See
+	// arch_event_builder.md "Absorbed Entries".
+	absorbedLines, err := builder.BuildAbsorbed(cs)
 	if err != nil {
 		return ReconcileSummary{}, err
 	}
 	appendBatch(absorbedLines)
 
 	if len(batch) > 0 {
-		if err := checkInvariant1(existing, batch); err != nil {
-			return ReconcileSummary{}, err
-		}
-		if err := checkInvariant2(existing, batch); err != nil {
+		if err := NewInvariantChecker().Check(existing, batch); err != nil {
 			return ReconcileSummary{}, err
 		}
 		if err := checkInvariant5(batch); err != nil {
@@ -264,31 +228,6 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		}
 	}
 	return sum, nil
-}
-
-// buildCreate discriminates a create op's spec_node_kind before anything
-// else, per arch_reconciler.md — a proposal-epic's spec_node_id is a
-// proposal stem, not an identity hash, and a cleanup's spec_node_id names
-// an already-removed node; neither may reach the spec graph.
-func (r *Reconciler) buildCreate(cs plan.Changeset, op plan.Op, opRC adapters.OpReceipt, fold mapping.Fold, modifiedHandled map[string]bool, removals map[string]string, registeredByStem map[string]string, hasEID func(string) bool) ([]mapping.Event, error) {
-	switch op.SpecNodeKind {
-	case "proposal_epic":
-		return buildEpicCreate(op, opRC, fold, registeredByStem)
-	case "cleanup":
-		return buildCleanupCreate(op, opRC, fold, removals)
-	default:
-		if oldBeadID, ok := blocksDepBeadID(op); ok {
-			// Plan orders this create before the close that retires
-			// oldBeadID (see arch_reconciler.md "Ordering"), so the pair
-			// is built here, off the create's own blocks dep, rather
-			// than waiting for the close. Marking it handled lets the
-			// later close recognise the pairing already happened instead
-			// of parking itself as unconsumed.
-			modifiedHandled[oldBeadID] = true
-			return r.buildModifiedPair(cs, op, opRC, oldBeadID, fold, hasEID)
-		}
-		return r.buildFreshCreate(cs, op, opRC, hasEID)
-	}
 }
 
 // sameBatchRemovals maps every node identity hash this batch's ok
@@ -319,362 +258,6 @@ func sameBatchRemovals(cs plan.Changeset, receiptsByOp map[string]adapters.OpRec
 		}
 	}
 	return out
-}
-
-// buildEpicCreate builds the one-line receipt a proposal-epic create
-// implies: a task_created whose for names the proposal's registered event.
-// Dedup is fold-based, not eid-based: an epic's task_created has no change
-// event of its own to key an eid off, so a re-run recognises an existing
-// epic by its slug already appearing in the fold, keyed there off the
-// registered event's referent. A stem with no registered event in the
-// journal is a malformed changeset — plan refuses to build such an op, so
-// its arrival here is an invariant failure, not a fallback. See
-// arch_reconciler.md "Proposal-Epic Ops".
-func buildEpicCreate(op plan.Op, opRC adapters.OpReceipt, fold mapping.Fold, registeredByStem map[string]string) ([]mapping.Event, error) {
-	stem := op.SpecNodeID
-	for _, e := range fold.Entries {
-		if e.Key == stem {
-			return nil, nil // idempotent no-op: the epic already exists
-		}
-	}
-	eid, ok := registeredByStem[stem]
-	if !ok {
-		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: proposal-epic %s: no registered event in journal", op.OpID, stem)
-	}
-	return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: eid}}, nil
-}
-
-// buildCleanupCreate builds the one-line receipt a cleanup create implies:
-// a task_created whose for names the removed node's own removal event.
-// The journal is checked first — a live (not yet removed) fold entry for
-// the hash means the removal is still pending in this same batch, so it
-// falls through to removals, the precomputed same-batch removal map (see
-// sameBatchRemovals); a hash that matches neither is a malformed
-// changeset, not a fallback. See arch_reconciler.md "Cleanup-Create Ops".
-func buildCleanupCreate(op plan.Op, opRC adapters.OpReceipt, fold mapping.Fold, removals map[string]string) ([]mapping.Event, error) {
-	hash := op.SpecNodeID
-	for _, e := range fold.Entries {
-		if e.Key != hash || !e.Removed {
-			continue
-		}
-		if e.TaskID != "" {
-			return nil, nil // idempotent no-op: cleanup already landed for this removal
-		}
-		return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: e.Source.EID}}, nil
-	}
-	if eid, ok := removals[hash]; ok {
-		return []mapping.Event{{Event: "task_created", TaskID: opRC.BeadID, For: eid}}, nil
-	}
-	return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no removed event", op.OpID, hash)
-}
-
-// buildFreshCreate builds the added event plus its task_created for a
-// plain new node — not a cleanup, not an epic, not paired with a close.
-func (r *Reconciler) buildFreshCreate(cs plan.Changeset, op plan.Op, opRC adapters.OpReceipt, hasEID func(string) bool) ([]mapping.Event, error) {
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if hasEID(eid) {
-		return nil, nil
-	}
-	md, err := r.lookupMetadata(op.SpecNodeID)
-	if err != nil {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
-	}
-	ev := mapping.Event{
-		Event:    "added",
-		EID:      eid,
-		Node:     op.SpecNodeID,
-		Name:     nonEmpty(md.Component, op.Title),
-		NodeType: nonEmpty(md.NodeType, op.SpecNodeKind),
-		Module:   md.Module,
-		Before:   nil,
-		After:    strPtr(md.SpecHash),
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     md.ContentFile,
-	}
-	created := mapping.Event{Event: "task_created", TaskID: opRC.BeadID, For: eid}
-	return []mapping.Event{ev, created}, nil
-}
-
-// buildModifiedPair builds the one modified event plus both receipts for
-// a create+close pair replacing the same node identity. The eid derives
-// from the create op's id — the pair is one event, not two — and the
-// before-hash comes from the node's current live fold entry (its content
-// hash prior to this change). oldBeadID is the retiring task, read off
-// the create op's own `blocks` dep — the paired close need not have been
-// processed yet. See arch_reconciler.md "The Modified-Node Pair".
-func (r *Reconciler) buildModifiedPair(cs plan.Changeset, op plan.Op, opRC adapters.OpReceipt, oldBeadID string, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if hasEID(eid) {
-		return nil, nil
-	}
-	md, err := r.lookupMetadata(op.SpecNodeID)
-	if err != nil {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
-	}
-
-	var before *string
-	for _, e := range fold.Entries {
-		if e.Key == op.SpecNodeID {
-			before = e.Source.After
-			break
-		}
-	}
-
-	ev := mapping.Event{
-		Event:    "modified",
-		EID:      eid,
-		Node:     op.SpecNodeID,
-		Name:     nonEmpty(md.Component, op.Title),
-		NodeType: nonEmpty(md.NodeType, op.SpecNodeKind),
-		Module:   md.Module,
-		Before:   before,
-		After:    strPtr(md.SpecHash),
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     md.ContentFile,
-	}
-	closed := mapping.Event{Event: "task_closed", TaskID: oldBeadID, For: eid}
-	created := mapping.Event{Event: "task_created", TaskID: opRC.BeadID, For: eid}
-	return []mapping.Event{ev, closed, created}, nil
-}
-
-// buildRemoved builds the removed event plus its task_closed for an
-// ok close whose reason is "Spec node removed". The node's identity and
-// biography (name, node_type, module, path, last content hash) come from
-// the journal's live fold entry for the bead being closed — the spec no
-// longer carries the node, so this is the only place left to ask.
-func (r *Reconciler) buildRemoved(cs plan.Changeset, op plan.Op, opRC adapters.OpReceipt, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
-	if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
-	}
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if hasEID(eid) {
-		return nil, nil
-	}
-
-	var entry mapping.FoldEntry
-	found := false
-	for _, e := range fold.Entries {
-		if e.TaskID == op.Target.BeadID {
-			entry, found = e, true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.BeadID)
-	}
-
-	ev := mapping.Event{
-		Event:    "removed",
-		EID:      eid,
-		Node:     entry.Key,
-		Name:     entry.Source.Name,
-		NodeType: entry.Source.NodeType,
-		Module:   entry.Source.Module,
-		Before:   entry.Source.After,
-		After:    nil,
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     entry.Source.Path,
-	}
-	closed := mapping.Event{Event: "task_closed", TaskID: opRC.BeadID, For: eid}
-	return []mapping.Event{ev, closed}, nil
-}
-
-// modifiedPairClaims maps every old bead id a create op in this batch
-// claims via its `blocks` dep — regardless of that create's own receipt
-// status. A "Spec node modified" close whose bead appears here but is
-// still unhandled after the batch loop lost its pairing to a create that
-// errored or was skipped (a partial run); a close whose bead does not
-// appear here at all was never paired with a create in the batch at all.
-// See arch_reconciler.md "The Modified-Node Pair".
-func modifiedPairClaims(cs plan.Changeset) map[string]bool {
-	out := map[string]bool{}
-	for _, op := range cs.Ops {
-		if op.Type != plan.OpCreate {
-			continue
-		}
-		if oldBeadID, ok := blocksDepBeadID(op); ok {
-			out[oldBeadID] = true
-		}
-	}
-	return out
-}
-
-// buildModifiedFromClose builds the modified event plus its task_closed for
-// an ok "Spec node modified" close whose bead no create op in the batch
-// ever claimed via a `blocks` dep — the shape ActionClassifier emits for a
-// coupled test_section edit (an obsolete action with no replacement
-// create). The node still exists post-edit, so its current metadata comes
-// from the spec graph; its identity and prior hash come from the journal's
-// live fold entry for the bead being closed, exactly as buildRemoved
-// resolves a removed node's identity. No task_created is built — there is
-// no successor task to pair. See arch_reconciler.md "The Modified-Node
-// Pair".
-func (r *Reconciler) buildModifiedFromClose(cs plan.Changeset, op plan.Op, opRC adapters.OpReceipt, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
-	if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
-	}
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if hasEID(eid) {
-		return nil, nil
-	}
-
-	var entry mapping.FoldEntry
-	found := false
-	for _, e := range fold.Entries {
-		if e.TaskID == op.Target.BeadID {
-			entry, found = e, true
-			break
-		}
-	}
-	if !found {
-		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.BeadID)
-	}
-
-	md, err := r.lookupMetadata(entry.Key)
-	if err != nil {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
-	}
-
-	ev := mapping.Event{
-		Event:    "modified",
-		EID:      eid,
-		Node:     entry.Key,
-		Name:     nonEmpty(md.Component, entry.Source.Name),
-		NodeType: nonEmpty(md.NodeType, entry.Source.NodeType),
-		Module:   md.Module,
-		Before:   entry.Source.After,
-		After:    strPtr(md.SpecHash),
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     md.ContentFile,
-	}
-	closed := mapping.Event{Event: "task_closed", TaskID: opRC.BeadID, For: eid}
-	return []mapping.Event{ev, closed}, nil
-}
-
-// buildRetarget builds the one modified event plus the task_retargeted
-// receipt an ok retarget op implies. The eid derives from the retarget
-// op's own id exactly as a create op's eid does; node identity and the
-// after-hash come straight off the op (SpecNodeID, SpecHash) rather than
-// the spec graph — a retarget carries no cleanup or proposal-epic shape
-// to discriminate first. Name, kind and module still come from the spec
-// graph, and the before-hash is the node's prior content hash off the
-// journal's live fold entry, exactly as buildModifiedPair sources it. No
-// bead dies and none is born: task_id is the existing task the op already
-// targets, not a freshly assigned one. See arch_reconciler.md "Retarget
-// Ops".
-func (r *Reconciler) buildRetarget(cs plan.Changeset, op plan.Op, fold mapping.Fold, hasEID func(string) bool) ([]mapping.Event, error) {
-	if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: retarget target must be ref:bead", op.OpID)
-	}
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if hasEID(eid) {
-		return nil, nil
-	}
-	md, err := r.lookupMetadata(op.SpecNodeID)
-	if err != nil {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
-	}
-
-	var before *string
-	for _, e := range fold.Entries {
-		if e.Key == op.SpecNodeID {
-			before = e.Source.After
-			break
-		}
-	}
-
-	ev := mapping.Event{
-		Event:    "modified",
-		EID:      eid,
-		Node:     op.SpecNodeID,
-		Name:     nonEmpty(md.Component, ""),
-		NodeType: nonEmpty(md.NodeType, ""),
-		Module:   md.Module,
-		Before:   before,
-		After:    strPtr(op.SpecHash),
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     md.ContentFile,
-	}
-	retargeted := mapping.Event{Event: "task_retargeted", TaskID: op.Target.BeadID, For: eid}
-	return []mapping.Event{ev, retargeted}, nil
-}
-
-// buildAbsorbed builds one modified event per entry in the changeset's
-// top-level absorbed array, plus the single refresh receipt naming the
-// batch's newly-built absorbed eids. Absorbed entries are not receipt-
-// gated — they describe spec state, not tracker work, so they land
-// alongside ok ops on a partial run just the same. Eid derivation is
-// shared with RefreshHandler's own (node, before, after) scheme, so a
-// per-node absorption is indistinguishable, on the wire, from whole-run
-// refresh absorption. An empty absorbed array, or one whose every derived
-// eid the journal already carries, constructs nothing — not an empty
-// receipt. See arch_reconciler.md "Absorbed Entries".
-func (r *Reconciler) buildAbsorbed(cs plan.Changeset, hasEID func(string) bool) ([]mapping.Event, error) {
-	var lines []mapping.Event
-	var eids []string
-	for _, entry := range cs.Absorbed {
-		before, after := entry.Before, entry.After
-		eid := deriveRefreshEID(entry.Node, &before, &after)
-		if hasEID(eid) {
-			continue
-		}
-		md, err := r.lookupMetadata(entry.Node)
-		if err != nil {
-			return nil, fmt.Errorf("ingest: reconcile: absorbed %s: %w", entry.Node, err)
-		}
-		lines = append(lines, mapping.Event{
-			Event:    "modified",
-			EID:      eid,
-			Node:     entry.Node,
-			Name:     nonEmpty(md.Component, ""),
-			NodeType: nonEmpty(md.NodeType, ""),
-			Module:   md.Module,
-			Before:   strPtr(entry.Before),
-			After:    strPtr(entry.After),
-			GitHead:  cs.GitHead,
-			Proposal: cs.Proposal,
-			Path:     md.ContentFile,
-		})
-		eids = append(eids, eid)
-	}
-	if len(eids) == 0 {
-		return lines, nil
-	}
-	lines = append(lines, mapping.Event{Event: "refresh", GitHead: cs.GitHead, Absorbed: eids})
-	return lines, nil
-}
-
-// blocksDepBeadID reports the old bead id an op's lineage dep names, if
-// any. ChangesetBuilder attaches this dep to every create replacing an
-// obsoleted bead — cleanup and modify-pair creates alike — so its
-// presence alone does not select modify-pair handling; buildCreate only
-// consults it once cleanup and proposal_epic have been ruled out.
-func blocksDepBeadID(op plan.Op) (string, bool) {
-	for _, d := range op.Deps {
-		if d.Kind == plan.RefBead && d.EdgeType == "blocks" {
-			return d.BeadID, true
-		}
-	}
-	return "", false
-}
-
-// lookupMetadata turns a missing SpecGraph or a missing node into a
-// clearly wrapped error. Only fresh and modify-pair creates call this —
-// cleanup and proposal_epic creates skip the spec graph entirely.
-func (r *Reconciler) lookupMetadata(specNodeID string) (NodeMetadata, error) {
-	if r.SpecGraph == nil {
-		return NodeMetadata{}, fmt.Errorf("spec graph not configured")
-	}
-	md, err := r.SpecGraph.NodeMetadata(specNodeID)
-	if err != nil {
-		return NodeMetadata{}, fmt.Errorf("spec graph: %w", err)
-	}
-	return md, nil
 }
 
 // pairReceipts builds an op_id → OpReceipt index after asserting that the
@@ -712,98 +295,11 @@ func deriveEID(gitHead, opID string) string {
 	return gitHead + ":" + opID
 }
 
-// checkInvariant1 asserts that every task_created line — across the
-// existing journal and the batch under construction — pairs with exactly
-// one referent: no two task_created lines may share a for-eid. The
-// proposal-slug arm guards only legacy lines already on disk (see
-// arch_reconciler.md "Proposal-Epic Ops") — new epic receipts always
-// carry for, never proposal. It asserts the same one-referent property,
-// in its own namespace, for task_retargeted — a retarget's modified event
-// is never the referent of a task_created, so the two kinds are checked
-// separately rather than sharing one seen-set. Missing-referent failures
-// are caught earlier, during construction (a cleanup with no matching
-// removed event, an epic with no registered event, a close-removed with
-// no journal entry for its bead) — this pass catches the aggregate
-// double-pairing case construction cannot see one op at a time.
-func checkInvariant1(existing, batch []mapping.Event) error {
-	seenFor := map[string]bool{}
-	seenProposal := map[string]bool{}
-	seenRetargetFor := map[string]bool{}
-	check := func(ev mapping.Event) error {
-		switch ev.Event {
-		case "task_created":
-			if ev.Proposal != "" {
-				if seenProposal[ev.Proposal] {
-					return fmt.Errorf("ingest: reconcile: invariant 1: proposal %s paired by more than one task_created", ev.Proposal)
-				}
-				seenProposal[ev.Proposal] = true
-				return nil
-			}
-			if ev.For != "" {
-				if seenFor[ev.For] {
-					return fmt.Errorf("ingest: reconcile: invariant 1: event %s paired by more than one task_created", ev.For)
-				}
-				seenFor[ev.For] = true
-			}
-		case "task_retargeted":
-			if ev.For != "" {
-				if seenRetargetFor[ev.For] {
-					return fmt.Errorf("ingest: reconcile: invariant 1: event %s paired by more than one task_retargeted", ev.For)
-				}
-				seenRetargetFor[ev.For] = true
-			}
-		}
-		return nil
-	}
-	for _, ev := range existing {
-		if err := check(ev); err != nil {
-			return err
-		}
-	}
-	for _, ev := range batch {
-		if err := check(ev); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// checkInvariant2 asserts that every receipt's for-eid, in the batch under
-// construction, names an event id present in the journal-plus-batch —
-// task_created, task_closed and task_retargeted alike — and that every
-// eid a refresh receipt's absorbed list names does too.
-func checkInvariant2(existing, batch []mapping.Event) error {
-	known := map[string]bool{}
-	for _, ev := range existing {
-		if ev.EID != "" {
-			known[ev.EID] = true
-		}
-	}
-	for _, ev := range batch {
-		if ev.EID != "" {
-			known[ev.EID] = true
-		}
-	}
-	for _, ev := range batch {
-		switch ev.Event {
-		case "task_created", "task_closed", "task_retargeted":
-			if ev.For != "" && !known[ev.For] {
-				return fmt.Errorf("ingest: receipt references unknown event %s", ev.For)
-			}
-		case "refresh":
-			for _, a := range ev.Absorbed {
-				if !known[a] {
-					return fmt.Errorf("ingest: receipt references unknown event %s", a)
-				}
-			}
-		}
-	}
-	return nil
-}
-
+// Invariants 1 and 2 (double-pairing and dangling referents) are
+// InvariantChecker's contract now — see invariant_checker.go.
 // checkInvariant5, the wire-shape types (changeEventLine and friends) and
 // encodeLine moved to journal_encoder.go as JournalEncoder's own contract
-// (spexmachina-ugrs.4) — checkInvariant5 now delegates line-by-line to
+// (spexmachina-ugrs.4) — checkInvariant5 delegates line-by-line to
 // JournalEncoder.Validate instead of carrying its own schema-compile and
 // encode logic, so this file and refresh.go both inherit the gate rather
 // than re-implementing it.

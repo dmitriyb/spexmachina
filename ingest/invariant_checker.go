@@ -34,12 +34,6 @@ import (
 // numbered invariants the requirement states and to the test section
 // titled for them, so checks 3, 4 and 5 stay named here even though
 // their enforcement lives elsewhere.
-//
-// The working logic for checks 1 and 2 still also lives inline as
-// Reconciler's checkInvariant1/checkInvariant2 package functions
-// (ingest/reconciler.go) until spexmachina-ugrs.5 rewires
-// Reconciler.Apply to dispatch through the methods below instead and
-// retires its own copies.
 type InvariantChecker struct{}
 
 // NewInvariantChecker constructs an InvariantChecker.
