@@ -1294,3 +1294,155 @@ func TestREQ7_BuildTree_ProjectRequirementDerivationInvariant(t *testing.T) {
 		t.Fatal("alpha module hash should be unaffected by a project-level derivation field")
 	}
 }
+
+// TestS10_BuildTree_ExplicitDefaultProfileMatchesImplicitDefault covers
+// test_hashing.md S10: a spec/profile.json byte-identical to the built-in
+// default declaration must produce the exact same tree as no profile.json
+// at all, because the allowlists and declared types TreeBuilder serializes
+// each leaf through are read from whichever profile resolves — the default
+// profile just happens to declare today's policy.
+func TestS10_BuildTree_ExplicitDefaultProfileMatchesImplicitDefault(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	rootImplicit, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree (implicit default profile): %v", err)
+	}
+
+	profileJSON, err := json.Marshal(schema.DefaultProfile())
+	if err != nil {
+		t.Fatalf("marshal default profile: %v", err)
+	}
+	writeFile(t, specDir, "profile.json", string(profileJSON))
+
+	rootExplicit, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree (explicit default profile): %v", err)
+	}
+
+	if rootImplicit.Hash != rootExplicit.Hash {
+		t.Fatalf("root hash moved under an explicit byte-identical default profile: implicit=%s explicit=%s", rootImplicit.Hash, rootExplicit.Hash)
+	}
+
+	implicitHashes := map[string]string{}
+	collectHashesByKey(rootImplicit, implicitHashes)
+	explicitHashes := map[string]string{}
+	collectHashesByKey(rootExplicit, explicitHashes)
+
+	if len(implicitHashes) != len(explicitHashes) {
+		t.Fatalf("node count differs: implicit=%d explicit=%d", len(implicitHashes), len(explicitHashes))
+	}
+	for key, hash := range implicitHashes {
+		if explicitHashes[key] != hash {
+			t.Errorf("hash moved at key %s: implicit=%s explicit=%s", key, hash, explicitHashes[key])
+		}
+	}
+}
+
+// TestS10_BuildTree_ReproducesCommittedSnapshot covers the second half of
+// S10: building this repository's own spec under the default profile must
+// reproduce every identity hash and every leaf hash the committed snapshot
+// records. Spex Machina is self-hosting, so its own spec/.spex/snapshot.json
+// pair is the golden fixture — a TreeBuilder that derives its allowlists or
+// declared types from the profile incorrectly surfaces here as a moved hash.
+func TestS10_BuildTree_ReproducesCommittedSnapshot(t *testing.T) {
+	root, err := BuildTree("../spec")
+	if err != nil {
+		t.Fatalf("BuildTree(repo spec): %v", err)
+	}
+	snapTree, err := Load("../.spex/snapshot.json")
+	if err != nil {
+		t.Fatalf("Load(repo snapshot): %v", err)
+	}
+
+	if root.Hash != snapTree.Hash {
+		t.Fatalf("root hash mismatch: built=%s snapshot=%s", root.Hash, snapTree.Hash)
+	}
+
+	built := map[string]string{}
+	collectHashesByKey(root, built)
+	snapped := map[string]string{}
+	collectHashesByKey(snapTree, snapped)
+
+	if len(built) != len(snapped) {
+		t.Fatalf("node count mismatch: built=%d snapshot=%d", len(built), len(snapped))
+	}
+	for key, hash := range snapped {
+		if built[key] != hash {
+			t.Errorf("hash moved at key %s: snapshot=%s built=%s", key, hash, built[key])
+		}
+	}
+}
+
+// TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf covers test_hashing.md
+// S11: a profile declaring a new content-bearing, module-scoped type
+// ("endpoint") must get exactly the same treatment as a built-in type — one
+// leaf per entry, keyed by identity hash, hashed from its content file. The
+// tree shape is fixed; only the set of leaves that exist is profile-driven.
+func TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	modID := schema.IdentityHash("module", "API")
+	endpointID := schema.IdentityHash("api", "endpoint", "GET /v1/widgets")
+
+	proj := `{
+		"name": "endpoint-project",
+		"modules": [{"id": "` + modID + `", "name": "API", "path": "api"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+
+	modDir := filepath.Join(dir, "api")
+	must(t, os.MkdirAll(modDir, 0755))
+	modJSON := `{
+		"name": "api",
+		"endpoints": [
+			{"id": "` + endpointID + `", "name": "GET /v1/widgets", "content": "endpoint_widgets.md"}
+		]
+	}`
+	writeFile(t, modDir, "module.json", modJSON)
+	writeFile(t, modDir, "endpoint_widgets.md", "# GET /v1/widgets\n")
+
+	root, err := BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	mod := findChild(t, root, modID)
+	endpoint := findChild(t, mod, endpointID)
+
+	if endpoint.NodeType != "endpoint" {
+		t.Fatalf("endpoint node_type: want endpoint, got %s", endpoint.NodeType)
+	}
+	if endpoint.Type != "leaf" {
+		t.Fatalf("endpoint type: want leaf, got %s", endpoint.Type)
+	}
+	if endpoint.Module != modID {
+		t.Fatalf("endpoint module: want %s, got %q", modID, endpoint.Module)
+	}
+
+	want, err := HashFile(filepath.Join(modDir, "endpoint_widgets.md"))
+	if err != nil {
+		t.Fatalf("HashFile: %v", err)
+	}
+	if endpoint.Hash != want {
+		t.Fatalf("endpoint hash: want %s, got %s", want, endpoint.Hash)
+	}
+
+	// meta leaf + the one endpoint leaf, nothing else.
+	if len(mod.Children) != 2 {
+		t.Fatalf("module children: want 2, got %d", len(mod.Children))
+	}
+}

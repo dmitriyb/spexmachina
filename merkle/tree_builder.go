@@ -39,12 +39,13 @@ func ModuleNames(tree *Node) map[string]string {
 	return names
 }
 
-// BuildTree constructs a merkle tree from the spec directory. It reads
-// project.json to discover modules, then module.json files to discover
-// content files, and hashes everything bottom-up. Nodes are keyed by
-// identity hash.
+// BuildTree constructs a merkle tree from the spec directory. It resolves
+// the spec profile to learn which node types exist and how each JSON-backed
+// type's leaf hashes, reads project.json to discover modules, then
+// module.json files to discover content files, and hashes everything
+// bottom-up. Nodes are keyed by identity hash.
 func BuildTree(specDir string) (*Node, error) {
-	proj, err := readProject(specDir)
+	profile, err := schema.ResolveProfile(specDir)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
@@ -55,18 +56,31 @@ func BuildTree(specDir string) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
-	var projReqNodes []*Node
-	for _, req := range proj.Requirements {
-		node, err := hashRequirement(req, req.ID, "")
+	rawProj, err := readRawFields(projectJSONPath)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: build tree: %w", err)
+	}
+
+	modules, err := extractModules(rawProj)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: build tree: %w", err)
+	}
+
+	var projNodes []*Node
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope != "project" {
+			continue
+		}
+		nodes, err := buildTypeNodes(rawProj, nt, specDir, "", profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
-		projReqNodes = append(projReqNodes, node)
+		projNodes = append(projNodes, nodes...)
 	}
 
 	var moduleNodes []*Node
-	for _, mod := range proj.Modules {
-		mNode, err := buildModule(specDir, mod)
+	for _, mod := range modules {
+		mNode, err := buildModule(specDir, mod, profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
@@ -74,7 +88,7 @@ func BuildTree(specDir string) (*Node, error) {
 	}
 
 	children := []*Node{projLeaf}
-	children = append(children, projReqNodes...)
+	children = append(children, projNodes...)
 	children = append(children, moduleNodes...)
 
 	sort.Slice(children, func(i, j int) bool {
@@ -91,14 +105,9 @@ func BuildTree(specDir string) (*Node, error) {
 	}, nil
 }
 
-func buildModule(specDir string, mod schema.Module) (*Node, error) {
+func buildModule(specDir string, mod schema.Module, profile *schema.Profile) (*Node, error) {
 	modDir := filepath.Join(specDir, mod.Path)
 	modJSONPath := filepath.Join(modDir, "module.json")
-
-	modSpec, err := readModuleSpec(modJSONPath)
-	if err != nil {
-		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-	}
 
 	moduleHash := mod.ID
 
@@ -108,55 +117,22 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
+	rawMod, err := readRawFields(modJSONPath)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
+	}
+
 	children := []*Node{modLeaf}
 
-	for _, req := range modSpec.Requirements {
-		node, err := hashModuleRequirement(req, req.ID, moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, node)
-	}
-
-	for _, api := range modSpec.APIs {
-		node, err := hashAPI(api, api.ID, moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, node)
-	}
-
-	for _, c := range modSpec.Components {
-		if c.Content == "" {
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope != "module" {
 			continue
 		}
-		leaf, err := hashLeaf(filepath.Join(modDir, c.Content), c.ID, "component", moduleHash)
+		nodes, err := buildTypeNodes(rawMod, nt, modDir, moduleHash, profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
-		children = append(children, leaf)
-	}
-
-	for _, f := range modSpec.DataFlows {
-		if f.Content == "" {
-			continue
-		}
-		leaf, err := hashLeaf(filepath.Join(modDir, f.Content), f.ID, "data_flow", moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, leaf)
-	}
-
-	for _, ts := range modSpec.TestSections {
-		if ts.Content == "" {
-			continue
-		}
-		leaf, err := hashLeaf(filepath.Join(modDir, ts.Content), ts.ID, "test_section", moduleHash)
-		if err != nil {
-			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
-		}
-		children = append(children, leaf)
+		children = append(children, nodes...)
 	}
 
 	// Sort leaf children by key for deterministic hashing.
@@ -176,68 +152,132 @@ func buildModule(specDir string, mod schema.Module) (*Node, error) {
 	}, nil
 }
 
-func hashModuleRequirement(req schema.ModuleRequirement, key string, module string) (*Node, error) {
-	fields := map[string]interface{}{}
-	if len(req.DependsOn) > 0 {
-		fields["depends_on"] = req.DependsOn
+// buildTypeNodes builds one leaf node per entry of a single profile-declared
+// node type, found under its plural key in raw (project.json's or a
+// module.json's top-level fields). A content-bearing type hashes each
+// entry's referenced file, resolved against baseDir; a non-content type
+// hashes a deterministic JSON serialization of the fields the resolved
+// profile's allowlist names for "<scope>:<name>". An entry whose content
+// field is the empty string is skipped silently — see "Empty content is not
+// a node" in arch_tree_builder.md. A type absent from raw (no module in this
+// spec declares it) contributes no nodes.
+func buildTypeNodes(raw map[string]json.RawMessage, nt schema.NodeType, baseDir, moduleHash string, profile *schema.Profile) ([]*Node, error) {
+	data, ok := raw[nt.PluralKey]
+	if !ok {
+		return nil, nil
 	}
-	if req.Description != "" {
-		fields["description"] = req.Description
+	var entries []map[string]interface{}
+	if err := json.Unmarshal(data, &entries); err != nil {
+		return nil, fmt.Errorf("merkle: parse %s: %w", nt.PluralKey, err)
 	}
-	fields["id"] = req.ID
-	if req.PreqID != "" {
-		fields["preq_id"] = req.PreqID
-	}
-	if req.Title != "" {
-		fields["title"] = req.Title
-	}
-	fields["type"] = req.Type
 
-	data, err := json.Marshal(fields)
-	if err != nil {
-		return nil, fmt.Errorf("merkle: hash requirement %s: %w", key, err)
+	var nodes []*Node
+	for _, entry := range entries {
+		id, _ := entry["id"].(string)
+
+		if nt.RequiresContent {
+			content, _ := entry["content"].(string)
+			if content == "" {
+				continue
+			}
+			node, err := hashLeaf(filepath.Join(baseDir, content), id, nt.Name, moduleHash)
+			if err != nil {
+				return nil, err
+			}
+			nodes = append(nodes, node)
+			continue
+		}
+
+		allowlist := profile.HashedFields[nt.Scope+":"+nt.Name]
+		node, err := hashFields(entry, allowlist, id, nt.Name, moduleHash)
+		if err != nil {
+			return nil, err
+		}
+		nodes = append(nodes, node)
 	}
-	h := HashBytes(data)
-	return &Node{
-		Key:      key,
-		Hash:     h,
-		Type:     "leaf",
-		NodeType: "requirement",
-		Module:   module,
-	}, nil
+	return nodes, nil
 }
 
-// hashAPI creates a leaf node for a module-level api by hashing its
-// deterministic JSON serialization. APIs have no content file, so — exactly as
-// for requirements — the JSON fields are the content. Fields are sorted by key
-// and zero-value fields are excluded (matching omitempty semantics).
-func hashAPI(api schema.API, key string, module string) (*Node, error) {
+// hashFields creates a leaf node for a JSON-backed spec node — a
+// requirement, an api, or any other non-content-bearing type the resolved
+// profile declares — by hashing a deterministic serialization of the fields
+// named in allowlist. A field absent from entry, or present with a zero
+// value, is excluded — matching omitempty semantics — so the leaf hash
+// reflects only fields the author actually set. Marshaling a
+// map[string]interface{} sorts keys, so the serialization is sorted by
+// construction.
+func hashFields(entry map[string]interface{}, allowlist []string, key, nodeType, module string) (*Node, error) {
 	fields := map[string]interface{}{}
-	if api.Description != "" {
-		fields["description"] = api.Description
-	}
-	if api.Group != "" {
-		fields["group"] = api.Group
-	}
-	fields["id"] = api.ID
-	if api.Name != "" {
-		fields["name"] = api.Name
-	}
-	if len(api.ProvidedBy) > 0 {
-		fields["provided_by"] = api.ProvidedBy
+	for _, name := range allowlist {
+		v, ok := entry[name]
+		if !ok || isZeroJSONValue(v) {
+			continue
+		}
+		fields[name] = v
 	}
 
 	data, err := json.Marshal(fields)
 	if err != nil {
-		return nil, fmt.Errorf("merkle: hash api %s: %w", key, err)
+		return nil, fmt.Errorf("merkle: hash %s %s: %w", nodeType, key, err)
 	}
 	return &Node{
 		Key:      key,
 		Hash:     HashBytes(data),
 		Type:     "leaf",
-		NodeType: "api",
+		NodeType: nodeType,
 		Module:   module,
 	}, nil
+}
+
+// isZeroJSONValue reports whether v — a value decoded from JSON into
+// interface{} — is the zero value for its JSON type: absent (nil), an empty
+// string, the number zero, or an empty array/object.
+func isZeroJSONValue(v interface{}) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case string:
+		return x == ""
+	case float64:
+		return x == 0
+	case []interface{}:
+		return len(x) == 0
+	case map[string]interface{}:
+		return len(x) == 0
+	default:
+		return false
+	}
+}
+
+// readRawFields reads a JSON file into its top-level fields, left
+// unparsed as json.RawMessage, so a profile-declared array can be decoded
+// generically by its plural key without a fixed Go struct field for every
+// possible node type.
+func readRawFields(path string) (map[string]json.RawMessage, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("merkle: read %s: %w", path, err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("merkle: parse %s: %w", path, err)
+	}
+	return raw, nil
+}
+
+// extractModules decodes project.json's "modules" array. Modules are the
+// fixed interior-node concept — not a profile-declarable node type — so
+// they are always read the same way regardless of the resolved profile.
+func extractModules(raw map[string]json.RawMessage) ([]schema.Module, error) {
+	data, ok := raw["modules"]
+	if !ok {
+		return nil, nil
+	}
+	var modules []schema.Module
+	if err := json.Unmarshal(data, &modules); err != nil {
+		return nil, fmt.Errorf("merkle: parse modules: %w", err)
+	}
+	return modules, nil
 }
 
 func hashLeaf(path, key, nodeType string, module string) (*Node, error) {
@@ -260,44 +300,6 @@ func collectHashes(nodes []*Node) []string {
 		hashes[i] = n.Hash
 	}
 	return hashes
-}
-
-// hashRequirement creates a leaf node for a project-level requirement by
-// hashing its deterministic JSON serialization. Fields are sorted by key
-// and zero-value fields are excluded (matching omitempty semantics).
-func hashRequirement(req schema.Requirement, key string, module string) (*Node, error) {
-	fields := map[string]interface{}{}
-	if len(req.DependsOn) > 0 {
-		fields["depends_on"] = req.DependsOn
-	}
-	if req.Description != "" {
-		fields["description"] = req.Description
-	}
-	fields["id"] = req.ID
-	if req.PreqID != "" {
-		fields["preq_id"] = req.PreqID
-	}
-	if req.Priority != nil {
-		fields["priority"] = *req.Priority
-	}
-	if req.Title != "" {
-		fields["title"] = req.Title
-	}
-	if req.Type != "" {
-		fields["type"] = req.Type
-	}
-
-	data, err := json.Marshal(fields)
-	if err != nil {
-		return nil, fmt.Errorf("merkle: hash requirement %s: %w", key, err)
-	}
-	return &Node{
-		Key:      key,
-		Hash:     HashBytes(data),
-		Type:     "leaf",
-		NodeType: "requirement",
-		Module:   module,
-	}, nil
 }
 
 func readProject(specDir string) (*schema.Project, error) {
