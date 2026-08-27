@@ -973,6 +973,70 @@ func TestApply_RejectsExtraReceipt(t *testing.T) {
 	}
 }
 
+// TestApply_EidPredicate_SeesJournalAndBatch covers "Eid predicate sees
+// the journal and the in-flight batch" at the Apply level: the predicate
+// Reconciler wires into EventBuilder must dedup a journal-side duplicate
+// (A) and a duplicate constructed earlier in this same batch (the
+// colliding third op), not just what a hand-built batch-eid map exercises
+// in the EventBuilder unit test.
+func TestApply_EidPredicate_SeesJournalAndBatch(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", NodeType: "component", SpecHash: "hA"}
+	graph.nodes[hexB] = NodeMetadata{Module: "m", Component: "B", NodeType: "component", SpecHash: "hB"}
+	r, dir := newTestReconciler(t, graph)
+
+	gitHead := "cafe1234"
+	eidA := deriveEID(gitHead, "op-a")
+	seedJournal(t, dir,
+		mapping.Event{Event: "added", EID: eidA, Node: hexA, Name: "A", NodeType: "component", Module: "m", After: strPtr("hA"), GitHead: gitHead, Proposal: "p"},
+		mapping.Event{Event: "task_created", TaskID: "br-A", For: eidA},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: gitHead, Proposal: "p",
+		Ops: []plan.Op{
+			// Re-emission of A's own create — a journal-side duplicate.
+			{OpID: "op-a", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + eidA)},
+			// B is fresh and lands.
+			{OpID: "op-b", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + deriveEID(gitHead, "op-b"))},
+			// Same op_id as B's create, so its derived eid collides with
+			// the one the batch just constructed for B.
+			{OpID: "op-b", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + deriveEID(gitHead, "op-b"))},
+		},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{
+			{OpID: "op-a", Status: adapters.OpStatusOk, BeadID: "br-A", WasExisting: true},
+			{OpID: "op-b", Status: adapters.OpStatusOk, BeadID: "br-B", WasExisting: false},
+		},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.OkCreates != 3 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 3 ok creates / 1 event / 1 receipt appended", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 4 {
+		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
+	}
+	if journal[0].Event != "added" || journal[0].Node != hexA || journal[1].Event != "task_created" || journal[1].TaskID != "br-A" {
+		t.Errorf("seed lines mutated: %+v / %+v", journal[0], journal[1])
+	}
+	added := journal[2]
+	if added.Event != "added" || added.Node != hexB {
+		t.Fatalf("line 3 = %+v, want added event for %s", added, hexB)
+	}
+	created := journal[3]
+	if created.Event != "task_created" || created.TaskID != "br-B" || created.For != added.EID {
+		t.Errorf("task_created = %+v, want for=%s task_id=br-B", created, added.EID)
+	}
+}
+
 // TestDeriveEID_DeterministicAndDistinct covers "eid derived from
 // (git_head, op_id)": stable across calls, distinct per input.
 func TestDeriveEID_DeterministicAndDistinct(t *testing.T) {
