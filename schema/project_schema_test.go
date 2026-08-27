@@ -784,6 +784,130 @@ func TestFR1_ProjectSchemaNonTrivialSize(t *testing.T) {
 	}
 }
 
+// TestFR1_S27_ProjectProfileDeclaredArrayAccepted mirrors the module side's
+// S27 (TestFR2_S27_ProfileDeclaredArrayAccepted) for the project schema: a
+// profile-declared project-scoped type gets an array validated with the
+// generic envelope, and additionalProperties:false still rejects any array
+// no profile declares.
+func TestFR1_S27_ProjectProfileDeclaredArrayAccepted(t *testing.T) {
+	types := append(DefaultProjectNodeTypes(), ProjectNodeType{
+		Name:            "milestone",
+		PluralKey:       "milestones",
+		RequiresContent: false,
+	})
+	data, err := ComposeProjectSchema(types)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	t.Run("declared array passes", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"milestones": [{"id": "000000000002", "name": "M1"}]
+		}`)
+		if err != nil {
+			t.Fatalf("profile-declared milestones array should pass: %v", err)
+		}
+	})
+
+	t.Run("undeclared array still rejected", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"milestones": [{"id": "000000000002", "name": "M1"}],
+			"widgets": []
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for undeclared widgets array, got nil")
+		}
+	})
+
+	t.Run("declared array enforces envelope constraints", func(t *testing.T) {
+		tests := []struct {
+			name string
+			doc  string
+		}{
+			{"missing id", `{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "milestones": [{"name": "M1"}]}`},
+			{"missing name", `{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "milestones": [{"id": "000000000002"}]}`},
+			{"non-identity-hash id", `{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "milestones": [{"id": "one", "name": "M1"}]}`},
+			{"extra field", `{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "milestones": [{"id": "000000000002", "name": "M1", "status": "done"}]}`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := validateProject(t, sch, tt.doc); err == nil {
+					t.Fatalf("expected validation error, got nil")
+				}
+			})
+		}
+	})
+}
+
+// TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures checks that
+// composing from DefaultProjectNodeTypes yields a schema that still accepts
+// the same known-good project fixtures the static schema accepts (S1, S2),
+// since the default type name (requirement) resolves to the frame's
+// existing $defs entry. It validates fixtures only — it does not compare
+// the composed document against the shipped static project.schema.json
+// byte-for-byte; that golden comparison is scenario P2 in
+// test_schema_loading.md, owned by SchemaLoader.
+func TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
+	data, err := ComposeProjectSchema(DefaultProjectNodeTypes())
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	full := readTestdata(t, "valid_project.json")
+	var v any
+	if err := json.Unmarshal(full, &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := sch.Validate(v); err != nil {
+		t.Fatalf("default-profile composed schema should accept valid_project.json: %v", err)
+	}
+
+	minimal := readTestdata(t, "minimal_project.json")
+	if err := json.Unmarshal(minimal, &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := sch.Validate(v); err != nil {
+		t.Fatalf("default-profile composed schema should accept minimal_project.json: %v", err)
+	}
+}
+
+// TestFR1_ComposeProjectSchemaNoContentPropertyWhenNotRequired pins the
+// other half of the generic envelope: a project-scoped type declared
+// without RequiresContent gets no content property at all, mirroring the
+// module side's TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired.
+func TestFR1_ComposeProjectSchemaNoContentPropertyWhenNotRequired(t *testing.T) {
+	types := []ProjectNodeType{{Name: "milestone", PluralKey: "milestones"}}
+	data, err := ComposeProjectSchema(types)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"milestones": [{"id": "000000000002", "name": "M1"}]
+	}`)
+	if err != nil {
+		t.Fatalf("node type without RequiresContent should pass without content: %v", err)
+	}
+
+	err = validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"milestones": [{"id": "000000000002", "name": "M1", "content": "m1.md"}]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error: content is not a declared property for this type")
+	}
+}
+
 func TestFR1_ProjectSchemaSelfContainedRefs(t *testing.T) {
 	data, err := ProjectSchema()
 	if err != nil {
