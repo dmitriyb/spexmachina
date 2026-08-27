@@ -19,6 +19,11 @@ import (
 //go:embed project.schema.json module.schema.json bead-map.schema.json
 var schemaFS embed.FS
 
+// identityHashPattern is the pattern every node id and cross-reference field
+// carries: a 12-character lowercase hex string, matching what [IdentityHash]
+// produces.
+const identityHashPattern = "^[a-f0-9]{12}$"
+
 // ProjectSchema returns the raw JSON Schema bytes for project.json.
 func ProjectSchema() ([]byte, error) {
 	return schemaFS.ReadFile("project.schema.json")
