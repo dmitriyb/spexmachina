@@ -17,6 +17,13 @@ func compileModuleSchema(t *testing.T) *jsonschema.Schema {
 	if err != nil {
 		t.Fatalf("ModuleSchema(): %v", err)
 	}
+	return compileSchemaFromBytes(t, data)
+}
+
+// compileSchemaFromBytes compiles a raw module schema document (static or
+// composed) for validation.
+func compileSchemaFromBytes(t *testing.T, data []byte) *jsonschema.Schema {
+	t.Helper()
 	var doc any
 	if err := json.Unmarshal(data, &doc); err != nil {
 		t.Fatalf("unmarshal module schema: %v", err)
@@ -748,5 +755,119 @@ func TestFR2_ModuleSchemaE6_SelfContainedRefs(t *testing.T) {
 	defs := raw["$defs"].(map[string]any)
 	if defs["component"] == nil {
 		t.Fatal("$defs/component missing")
+	}
+}
+
+// TestFR2_S27_ProfileDeclaredArrayAccepted composes the module schema from
+// the default profile plus a novel "endpoint" type and checks both halves
+// of S27: the profile-supplied array validates with the generic envelope,
+// and an array no profile declares is still rejected by the frame's
+// root-level additionalProperties:false.
+func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
+	types := append(DefaultModuleNodeTypes(), ModuleNodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		RequiresContent: true,
+	})
+	data, err := ComposeModuleSchema(types)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	t.Run("declared array passes", func(t *testing.T) {
+		err := validateModule(t, sch, `{
+			"name": "m",
+			"endpoints": [
+				{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md"}
+			]
+		}`)
+		if err != nil {
+			t.Fatalf("profile-declared endpoints array should pass: %v", err)
+		}
+	})
+
+	t.Run("undeclared array still rejected", func(t *testing.T) {
+		err := validateModule(t, sch, `{
+			"name": "m",
+			"endpoints": [
+				{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md"}
+			],
+			"widgets": []
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for undeclared widgets array, got nil")
+		}
+	})
+
+	t.Run("declared array enforces envelope constraints", func(t *testing.T) {
+		tests := []struct {
+			name string
+			doc  string
+		}{
+			{"missing id", `{"name": "m", "endpoints": [{"name": "GET /things", "content": "endpoint_things.md"}]}`},
+			{"missing name", `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "content": "endpoint_things.md"}]}`},
+			{"missing content", `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "GET /things"}]}`},
+			{"non-identity-hash id", `{"name": "m", "endpoints": [{"id": "one", "name": "GET /things", "content": "endpoint_things.md"}]}`},
+			{"extra field", `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "verb": "GET"}]}`},
+		}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				if err := validateModule(t, sch, tt.doc); err == nil {
+					t.Fatalf("expected validation error, got nil")
+				}
+			})
+		}
+	})
+}
+
+// TestFR2_ComposeModuleSchemaDefaultMatchesStatic verifies the design
+// rationale behind S27: composing from DefaultModuleNodeTypes reproduces a
+// schema that accepts exactly what the shipped static module.schema.json
+// accepts, since every default type name resolves to the frame's existing
+// $defs entry.
+func TestFR2_ComposeModuleSchemaDefaultMatchesStatic(t *testing.T) {
+	data, err := ComposeModuleSchema(DefaultModuleNodeTypes())
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	full := readTestdata(t, "valid_module.json")
+	var v any
+	if err := json.Unmarshal(full, &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := sch.Validate(v); err != nil {
+		t.Fatalf("default-profile composed schema should accept valid_module.json: %v", err)
+	}
+
+	minimal := readTestdata(t, "minimal_module.json")
+	if err := json.Unmarshal(minimal, &v); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if err := sch.Validate(v); err != nil {
+		t.Fatalf("default-profile composed schema should accept minimal_module.json: %v", err)
+	}
+}
+
+// TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired pins the
+// other half of the generic envelope: a type declared without
+// RequiresContent gets no content property at all, the same shape an api
+// entry has, rather than an optional one.
+func TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired(t *testing.T) {
+	types := []ModuleNodeType{{Name: "milestone", PluralKey: "milestones"}}
+	data, err := ComposeModuleSchema(types)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	if err := validateModule(t, sch, `{"name": "m", "milestones": [{"id": "aabbccddeeff", "name": "M1"}]}`); err != nil {
+		t.Fatalf("node type without RequiresContent should pass without content: %v", err)
+	}
+
+	if err := validateModule(t, sch, `{"name": "m", "milestones": [{"id": "aabbccddeeff", "name": "M1", "content": "m1.md"}]}`); err == nil {
+		t.Fatal("expected validation error: content is not a declared property for this type")
 	}
 }
