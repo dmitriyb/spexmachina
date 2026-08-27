@@ -1,6 +1,6 @@
 package merkle
 
-import "github.com/dmitriyb/spexmachina/schema"
+// TODO(bead:spexmachina-s85): review after spexmachina-kdb changed Module from int to string
 
 // ImpactLevel represents the severity of a spec change. Ordering (lowest to
 // highest) is impl_only < contract < arch_impl < structural — the int value
@@ -40,57 +40,29 @@ type ClassifiedChange struct {
 // node metadata (NodeType, Module) carried by each Change from the DiffEngine.
 // The moduleNames map resolves module IDs to human-readable names. If nil,
 // the module ID string is used as-is.
-//
-// The node-type-to-level mapping comes from the resolved profile's
-// ImpactLevels declaration, passed as the optional profile argument; the
-// default profile is used when it is omitted. This lets every existing call
-// site keep calling Classify(changes, moduleNames) unchanged while a
-// profile-aware caller can supply the resolved profile explicitly.
-func Classify(changes []Change, moduleNames map[string]string, profile ...*schema.Profile) []ClassifiedChange {
-	p := resolveProfileArg(profile)
+func Classify(changes []Change, moduleNames map[string]string) []ClassifiedChange {
 	result := make([]ClassifiedChange, len(changes))
 	for i, c := range changes {
 		result[i] = ClassifiedChange{
 			Change: c,
-			Impact: classifyNodeType(c.NodeType, p),
+			Impact: classifyNodeType(c.NodeType),
 			Module: resolveModule(c.Module, moduleNames),
 		}
 	}
 	return result
 }
 
-// resolveProfileArg extracts the optional profile argument, defaulting to
-// the built-in profile when none was supplied.
-func resolveProfileArg(profile []*schema.Profile) *schema.Profile {
-	if len(profile) > 0 && profile[0] != nil {
-		return profile[0]
-	}
-	return schema.DefaultProfile()
-}
-
-// classifyNodeType determines the impact level from node metadata. "meta" is
-// the frame's fixed rule — always structural, regardless of profile — since
-// module.json/project.json envelopes are not a profile-declarable node type.
-// Every other node type is classified by the resolved profile's
-// ImpactLevels mapping; a type the profile does not declare (or maps to a
-// string outside the four fixed levels) gets no level at all, reported as
-// "unknown".
-func classifyNodeType(nodeType string, profile *schema.Profile) ImpactLevel {
-	if nodeType == "meta" {
-		return Structural
-	}
-	level, ok := profile.ImpactLevels[nodeType]
-	if !ok {
-		return 0
-	}
-	switch level {
-	case "impl_only":
+// classifyNodeType determines the impact level from node metadata.
+func classifyNodeType(nodeType string) ImpactLevel {
+	switch nodeType {
+	case "test_section":
 		return ImplOnly
-	case "contract":
+	// Both are contract surfaces: data_flow between components, api to callers.
+	case "data_flow", "api":
 		return Contract
-	case "arch_impl":
+	case "component":
 		return ArchImpl
-	case "structural":
+	case "meta", "requirement":
 		return Structural
 	default:
 		return 0
