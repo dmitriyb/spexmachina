@@ -5,6 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"sync"
@@ -713,4 +716,361 @@ func TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries(t *testing.T) {
 	if err := validateJSON(t, sch, []byte(emptyNode)); err == nil {
 		t.Fatal("empty node should fail validation")
 	}
+}
+
+// --- ProfileLoader tests (P1-P5) ---
+
+// jsonEqual compares two JSON documents structurally, ignoring key order —
+// the composed schemas re-marshal from map[string]any, whose keys
+// encoding/json always emits sorted, so a byte-for-byte comparison against
+// the hand-authored shipped documents would fail on ordering alone even
+// when the content is identical.
+func jsonEqual(t *testing.T, a, b []byte) bool {
+	t.Helper()
+	var va, vb any
+	if err := json.Unmarshal(a, &va); err != nil {
+		t.Fatalf("unmarshal a: %v", err)
+	}
+	if err := json.Unmarshal(b, &vb); err != nil {
+		t.Fatalf("unmarshal b: %v", err)
+	}
+	return reflect.DeepEqual(va, vb)
+}
+
+func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
+	dir := t.TempDir()
+
+	p, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile over spec dir with no profile.json: %v", err)
+	}
+
+	if !reflect.DeepEqual(p, DefaultProfile()) {
+		t.Fatalf("resolved profile over an absent profile.json should equal DefaultProfile()")
+	}
+
+	names := map[string]bool{}
+	completenessTrigger := map[string]bool{}
+	nameDeclarable := map[string]bool{}
+	for _, nt := range p.NodeTypes {
+		names[nt.Name] = true
+		if nt.CompletenessTrigger {
+			completenessTrigger[nt.Name] = true
+		}
+		if nt.NameDeclarable {
+			nameDeclarable[nt.Name] = true
+		}
+	}
+	wantNames := []string{"requirement", "component", "data_flow", "test_section", "api"}
+	if len(names) != len(wantNames) {
+		t.Fatalf("node type names = %v, want exactly %v", names, wantNames)
+	}
+	for _, n := range wantNames {
+		if !names[n] {
+			t.Fatalf("node types missing %q: %v", n, names)
+		}
+	}
+	if !completenessTrigger["requirement"] || len(completenessTrigger) != 1 {
+		t.Fatalf("completeness trigger should be marked on exactly requirement, got %v", completenessTrigger)
+	}
+	if len(nameDeclarable) != 2 || !nameDeclarable["component"] || !nameDeclarable["api"] {
+		t.Fatalf("name-declarable role should be marked on exactly component and api, got %v", nameDeclarable)
+	}
+
+	if len(p.Edges) != 7 {
+		t.Fatalf("edges = %d, want 7", len(p.Edges))
+	}
+	wantEdgeKinds := map[string]bool{
+		"preq_id": true, "implements": true, "uses": true, "provided_by": true,
+		"describes": true, "depends_on": true, "requires_module": true,
+	}
+	for _, e := range p.Edges {
+		if !wantEdgeKinds[e.Kind] {
+			t.Fatalf("unexpected edge kind %q", e.Kind)
+		}
+		if e.Cyclic {
+			t.Fatalf("edge %q should not carry the cyclic exemption under the default profile", e.Kind)
+		}
+	}
+
+	if len(p.CoverageChains) != 3 {
+		t.Fatalf("coverage chains = %d, want 3", len(p.CoverageChains))
+	}
+
+	wantPlanRelevant := map[string]bool{"component": true, "data_flow": true, "test_section": true}
+	if len(p.PlanRelevant) != len(wantPlanRelevant) {
+		t.Fatalf("plan-relevant set = %v, want %v", p.PlanRelevant, wantPlanRelevant)
+	}
+	for _, n := range p.PlanRelevant {
+		if !wantPlanRelevant[n] {
+			t.Fatalf("plan-relevant set has unexpected member %q", n)
+		}
+	}
+
+	wantImpact := map[string]string{
+		"test_section": "impl_only",
+		"data_flow":    "contract",
+		"api":          "contract",
+		"component":    "arch_impl",
+		"requirement":  "structural",
+	}
+	if !reflect.DeepEqual(p.ImpactLevels, wantImpact) {
+		t.Fatalf("impact levels = %v, want %v", p.ImpactLevels, wantImpact)
+	}
+
+	wantHashedFields := map[string][]string{
+		"project:requirement": {"depends_on", "description", "id", "priority", "title", "type"},
+		"module:requirement":  {"depends_on", "description", "id", "preq_id", "title", "type"},
+		"module:api":          {"description", "group", "id", "name", "provided_by"},
+	}
+	if !reflect.DeepEqual(p.HashedFields, wantHashedFields) {
+		t.Fatalf("hashed field allowlists = %v, want %v", p.HashedFields, wantHashedFields)
+	}
+
+	wantAbsorbable := map[string]AbsorbDirections{
+		"requirement":  {Added: true, Removed: true},
+		"api":          {Added: true, Removed: true},
+		"component":    {Added: false, Removed: true},
+		"data_flow":    {Added: false, Removed: false},
+		"test_section": {Added: false, Removed: false},
+	}
+	if !reflect.DeepEqual(p.Absorbable, wantAbsorbable) {
+		t.Fatalf("absorbable directions = %v, want %v", p.Absorbable, wantAbsorbable)
+	}
+}
+
+// TestFR9_P2_ComposedSchemasEqualShippedGolden is the acceptance criterion
+// from arch_profile_loader.md's "The default profile is the golden policy
+// record": composing project and module schemas from the profile resolved
+// over an absent profile.json must reproduce the shipped static schema
+// documents exactly.
+func TestFR9_P2_ComposedSchemasEqualShippedGolden(t *testing.T) {
+	p, err := ResolveProfile(t.TempDir())
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+
+	composedProject, err := ComposeProjectSchema(p.ProjectNodeTypes())
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	shippedProject, err := ProjectSchema()
+	if err != nil {
+		t.Fatalf("ProjectSchema: %v", err)
+	}
+	if !jsonEqual(t, composedProject, shippedProject) {
+		t.Fatalf("project schema composed from the default profile does not reproduce the shipped document")
+	}
+
+	composedModule, err := ComposeModuleSchema(p.ModuleNodeTypes())
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	shippedModule, err := ModuleSchema()
+	if err != nil {
+		t.Fatalf("ModuleSchema: %v", err)
+	}
+	if !jsonEqual(t, composedModule, shippedModule) {
+		t.Fatalf("module schema composed from the default profile does not reproduce the shipped document")
+	}
+}
+
+func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
+	t.Run("unparseable JSON", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte("{invalid json"), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving an unparseable profile.json, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+	})
+
+	t.Run("node type with no plural array key", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "endpoint", "scope": "module"}
+			],
+			"edges": [],
+			"coverage_chains": [],
+			"plan_relevant": [],
+			"impact_levels": {},
+			"hashed_fields": {},
+			"absorbable": {}
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with a node type missing plural_key, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "plural_key") {
+			t.Fatalf("error should name the defect (plural_key), got: %v", err)
+		}
+	})
+
+	t.Run("hashed_fields key is not scope:name", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module"}
+			],
+			"edges": [],
+			"coverage_chains": [],
+			"plan_relevant": [],
+			"impact_levels": {},
+			"hashed_fields": {"widget": ["id"]},
+			"absorbable": {}
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with a malformed hashed_fields key, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "hashed_fields") {
+			t.Fatalf("error should name the defect (hashed_fields), got: %v", err)
+		}
+	})
+
+	t.Run("hashed_fields scope:name typo is not a declared type", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module"}
+			],
+			"edges": [],
+			"coverage_chains": [],
+			"plan_relevant": [],
+			"impact_levels": {},
+			"hashed_fields": {"module:gadget": ["id"]},
+			"absorbable": {}
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with an undeclared hashed_fields node type, got nil")
+		}
+		if !strings.Contains(err.Error(), "gadget") {
+			t.Fatalf("error should name the undeclared type (gadget), got: %v", err)
+		}
+	})
+}
+
+// TestFR9_P4_DeclaredCustomTypeReachesComposedSchema declares a custom
+// "endpoint" type in spec/profile.json and checks that it reaches the
+// composed module schema with the same generic envelope constraints
+// built-in types get, while additionalProperties:false still rejects any
+// array the profile does not declare.
+func TestFR9_P4_DeclaredCustomTypeReachesComposedSchema(t *testing.T) {
+	profile := DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+
+	dir := t.TempDir()
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		t.Fatalf("write profile.json: %v", err)
+	}
+
+	resolved, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+
+	composed, err := ComposeModuleSchema(resolved.ModuleNodeTypes())
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, composed)
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"endpoints": [
+			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md"}
+		]
+	}`); err != nil {
+		t.Fatalf("profile-declared endpoints array should pass: %v", err)
+	}
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"widgets": []
+	}`); err == nil {
+		t.Fatal("expected validation error for an array the profile does not declare")
+	}
+}
+
+func TestFR9_P5_ResolutionIsDeterministic(t *testing.T) {
+	t.Run("default profile", func(t *testing.T) {
+		dir := t.TempDir()
+		p1, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile #1: %v", err)
+		}
+		p2, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile #2: %v", err)
+		}
+		if !reflect.DeepEqual(p1, p2) {
+			t.Fatal("resolving the default profile twice should be byte-identical")
+		}
+
+		c1, err := ComposeModuleSchema(p1.ModuleNodeTypes())
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema #1: %v", err)
+		}
+		c2, err := ComposeModuleSchema(p2.ModuleNodeTypes())
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema #2: %v", err)
+		}
+		if !bytes.Equal(c1, c2) {
+			t.Fatal("composing the module schema from the default profile twice should be byte-identical")
+		}
+	})
+
+	t.Run("file-backed profile", func(t *testing.T) {
+		dir := t.TempDir()
+		data, err := json.Marshal(DefaultProfile())
+		if err != nil {
+			t.Fatalf("marshal profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+
+		p1, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile #1: %v", err)
+		}
+		p2, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile #2: %v", err)
+		}
+		if !reflect.DeepEqual(p1, p2) {
+			t.Fatal("resolving the same file-backed profile twice should be byte-identical")
+		}
+	})
 }
