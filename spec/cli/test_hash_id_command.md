@@ -4,7 +4,7 @@ Integration and acceptance tests for HashIDCommand (component 3).
 
 ## Setup
 
-Tests invoke the compiled `spex` binary (or the cobra command directly via Go test) with various flag combinations. No spec directory or external files needed — the command is a pure function of its flags.
+Tests invoke the compiled `spex` binary (or the cobra command directly via Go test) with various flag combinations. Most scenarios run with no `spec/profile.json` under the spec directory, so the built-in default profile resolves; E4b is the one that places a profile file. Given the resolved profile, the output is a pure function of the flags.
 
 ## Scenarios
 
@@ -88,7 +88,13 @@ Assert exit code is 1 and stderr contains `--module is required for type "compon
 
 Run `spex hash-id --type bogus --name Foo`.
 
-Assert exit code is 1 and stderr lists valid types.
+Assert exit code is 1 and stderr lists valid types. The valid list is the node types the resolved profile declares plus the fixed `module` type, not a fixed switch: under the default profile it is today's list (requirement, component, data_flow, test_section, api, module), and the assertion compares stderr against the resolved profile's declaration plus `module` rather than a literal.
+
+### E4b: Profile-declared type accepted
+
+With a `spec/profile.json` declaring an `endpoint` type, run `spex hash-id --module alpha --type endpoint --name Foo`.
+
+Assert stdout equals `schema.IdentityHash("alpha", "endpoint", "Foo")` and exit code is 0 — the identity string uses the declared type name as its middle part, through the same unchanged IdentityHash function. Without the profile file the same invocation exits 1 as an unknown type.
 
 ### E5: --module flag silently ignored for project-level types
 

@@ -130,6 +130,22 @@ refreshes as a no-op
 whatever bead lifecycle they process; refresh is the pathway when there is *only* driftwork, and
 its receipt is what keeps that absorption accountable.
 
+### The absorbable table is the resolved profile's declaration
+
+**Given** the absorbable-set fixture above, run once with no profile file and once with a
+`spec/profile.json` byte-identical to the default declaration
+**When** `runIngest("--mode", "refresh", ...)` is called on each
+**Then** both runs absorb and refuse identically — requirement and api in either direction,
+component on removal only — because the table RefreshHandler consults is read from the resolved
+profile's per-type, per-direction absorbable declarations, and the default profile declares
+exactly the previous built-in set
+**And** with a profile declaring an `endpoint` type absorbable in neither direction, an added
+endpoint refuses the run with the same "use the normal pipeline" error the non-absorbable
+built-ins draw
+
+**Rationale**: the gate's policy moved from code to the profile without moving the gate; a
+default-profile run must be indistinguishable from the pre-profile binary.
+
 ## Edge cases
 
 ### Refresh refuses on an empty journal — the bootstrap guard

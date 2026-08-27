@@ -29,6 +29,8 @@ Every entry in the tree is one of the following, and its key, level and hash sou
 
 A module's children are its own envelope leaf plus the requirement, api, component, data_flow and test_section entries that `module.json` declares — with the one exception described under "Empty content is not a node" below. The root's children are the project envelope leaf, the project requirement leaves, and one interior node per module. The root and the module interiors carry no node type at all; every leaf carries one.
 
+Which leaves exist is the resolved profile's declaration: TreeBuilder creates one leaf per node of each declared type — a profile-declared content-bearing type's nodes hash from their content files, a declared non-content type's from their JSON fields — while the tree shape itself (project root, module interiors, identity-hash keys, the synthetic meta leaves) is fixed and not declarable. Under the default profile the declared types are exactly the five in the table above, so no existing tree changes shape and no existing hash moves.
+
 The only synthetic keys are for the JSON envelope leaves that have no `id` field of their own:
 
 - `meta/project` — for `project.json` itself
@@ -94,7 +96,7 @@ Earlier versions used path-style keys like `module/3/component/2` built from int
 
 ## Requirement Leaf Hashing
 
-Requirements do not have content files. Their content hash is computed from a deterministic JSON serialization of the requirement's fields. Fields are sorted by key and zero-value/omitted fields are excluded (matching `omitempty` semantics).
+Requirements do not have content files. Their content hash is computed from a deterministic JSON serialization of the requirement's fields. Fields are sorted by key and zero-value/omitted fields are excluded (matching `omitempty` semantics). The per-type field allowlists below — the policy deciding what counts as a semantic change on a JSON-backed leaf — are read from the resolved profile, and the default profile declares exactly these lists, so they are stated here as the default declaration rather than as compiled-in constants.
 
 For module-level requirements, the serialized fields are: `depends_on`, `description`, `id`, `preq_id`, `title`, `type`.
 

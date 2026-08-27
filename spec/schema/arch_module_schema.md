@@ -2,6 +2,8 @@
 
 The module.json JSON Schema (`schema/module.schema.json`) defines the structure of each module within a spec — [[eed2cf85d5c3|what one module file may declare]], and which of it a module cannot leave out.
 
+The effective document is composed, not fixed: the shipped schema is the frame, and the resolved profile supplies one array property per module-scoped node type it declares, keyed by that type's plural key, each validated with the same envelope constraints. The default profile declares today's five arrays, and the composed document it yields is identical to the shipped one — a golden test asserts it — so the on-disk shape of every existing module.json is unchanged, while a project declaring an `endpoint` type gets an `endpoints` array validated exactly as `components` is.
+
 ## Structure
 
 ```json

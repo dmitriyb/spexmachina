@@ -51,7 +51,7 @@ document it produces, and the two checks — `link` and `id_derivation` — that
 sequence but that this module declares no component for.
 
 [[651d5315eebf|SchemaChecker]] validates `project.json` and each `module.json` against the
-embedded JSON Schemas. [[5dcca0dab9bd|ContentResolver]] asks whether every declared `content`
+composed JSON Schemas. [[5dcca0dab9bd|ContentResolver]] asks whether every declared `content`
 path resolves to a file, without opening any of them. [[00beeeda5ddd|IDValidator]] covers
 identity-hash uniqueness, cross-reference targets, mandatory `preq_id` and `priority`
 presence. [[c6c770a59d68|DAGChecker]] walks the module, requirement and component dependency

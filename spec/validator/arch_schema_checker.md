@@ -1,13 +1,15 @@
 # SchemaChecker
 
-Checks `project.json` and every `module.json` against the JSON Schemas the tool ships with, which is the whole of [[8599f07272ad|JSON schema conformance]].
+Checks `project.json` and every `module.json` against the effective JSON Schemas — the documents the schema module composes from the resolved profile — which is the whole of [[8599f07272ad|JSON schema conformance]].
 
 ## Responsibilities
 
-- Load the project and module schemas embedded in the binary — a spec directory supplies neither
-- Parse and validate `spec/project.json` against the project schema
-- Parse and validate each `spec/<module>/module.json` against the module schema
+- Obtain the composed project and module schemas from the schema module — a spec directory supplies only the optional profile the composition reads; under the default profile the composed documents equal the previously shipped static ones
+- Parse and validate `spec/project.json` against the composed project schema
+- Parse and validate each `spec/<module>/module.json` against the composed module schema
 - Collect all schema violations as structured errors
+
+A malformed profile never reaches this checker as a conformance error: composition happens before any check runs, so a broken profile is a single early failure naming the profile file, and no half-composed schema is ever validated against.
 
 ## Interface
 
@@ -23,11 +25,11 @@ The spec directory is an input rather than a fixed location, and no path inside 
 4. Validate each against the module schema
 5. Return all violations — do not stop at the first error
 
-The embedded schemas are compiled once per process and then reused, and each file is validated in a single pass, so a spec of a hundred modules costs one compilation and one validation call per file — well inside the budget [[b42c5cdf874b|fast validation]] sets.
+The composed schemas are compiled once per process and then reused, and each file is validated in a single pass, so a spec of a hundred modules costs one compilation and one validation call per file — well inside the budget [[b42c5cdf874b|fast validation]] sets.
 
 ## Error Format
 
 Each error includes:
 - `path`: the file's display path — `project.json`, or `<module-path>/module.json` — followed by a JSON pointer to the violating field when the violation locates one (e.g., `project.json:/modules/0/name`)
 - `message`: Human-readable description of the violation
-- `schema_path`: JSON Schema path that was violated
+- `schema_path`: JSON Schema path that was violated. The path points into the composed document, not a committed file, so the resolved profile is part of what a reader needs to interpret it — under the default profile it reads exactly as it always has

@@ -1,16 +1,17 @@
 # SchemaLoader
 
-The `spex` binary's own copy of the three JSON Schema documents, and the one function that says what a spec node ID is. It opens no file at runtime: every answer it gives was compiled in.
+The `spex` binary's schema authority: the composer of the effective project and module schemas, the carrier of the journal-line schema, and the one function that says what a spec node ID is. The frame documents and the default profile are compiled in; the only file it may consult at runtime is `spec/profile.json`, through the resolution [[cd726f8b088b|ProfileLoader]] owns.
 
 ## Responsibilities
 
-- Carry [[79946d618829|ProjectSchema]], [[78883b84c32d|ModuleSchema]] and [[d125b5e775b4|BeadMapSchema]] inside the binary — [[b7c3bccd7c64|the schemas travel with the executable]], so validation needs no file beside it and no network.
-- Hand each document back exactly as it was committed under `schema/`, unparsed. Compiling one is the caller's work — the validator for the project and module schemas, the mapping store for the journal-line schema — and leaving it there is what keeps this side of the boundary free of a JSON Schema library.
+- Compose the effective [[79946d618829|ProjectSchema]] and [[78883b84c32d|ModuleSchema]] documents from the resolved profile, once per run and before any check — [[ef55248cb3ca|the schemas are generated from the profile]], with the embedded frame supplying envelope fields, the identity-hash pattern and `additionalProperties: false`, and the profile supplying the array properties per declared node type. Under the default profile the composition reproduces the shipped static documents byte-for-byte, which the golden test asserts.
+- Carry the frame documents, the built-in default profile and [[d125b5e775b4|BeadMapSchema]] inside the binary — [[b7c3bccd7c64|the schemas travel with the executable]], so validation needs no file beside it and no network.
+- Hand each document back unparsed. Compiling one is the caller's work — the validator for the composed project and module schemas, the mapping store for the journal-line schema — and leaving it there is what keeps this side of the boundary free of a JSON Schema library.
 - Compute identity hashes for the callers that derive an ID rather than carry one.
 
 ## Interface
 
-Three reads, one per embedded document. Each hands back that file's bytes as committed, and hands back the same bytes on every call, in every process and on every platform: the content sits in the binary's read-only data, so a read is a copy out of memory rather than a file open, there is no cache to warm, and no read leaves state behind for the next one. Concurrent reads need no coordination for the same reason.
+Three reads, one per schema. The journal-line read hands back the committed file's bytes; the project and module reads hand back the composed documents. Each read returns the same bytes on every call, in every process and on every platform: composition happens once per run from the resolved profile, the inputs sit in the binary's read-only data plus the profile file when one exists, there is no cache to warm, and no read leaves state behind for the next one. Concurrent reads need no coordination for the same reason. A malformed profile fails the composition itself — one early, distinct error before any conformance check, never a cascade of confusing schema errors.
 
 The fourth entry point is behaviour rather than data. [[cdc9c58ba097|Identity hash algorithm]] is stated as an algorithm, so it is stated here as one:
 
@@ -39,7 +40,7 @@ Nothing positional goes in: no array index, no sibling order, no body text. Reor
 
 ## Design Rationale
 
-Embedding schemas in the binary eliminates external file dependencies. The `spex` binary is self-contained — it carries the schema definitions it validates against. This supports the deterministic requirement: the same binary version always validates against the same schema.
+Embedding the frame and the default profile in the binary eliminates external file dependencies. The `spex` binary is self-contained — it carries everything it needs to compose the schemas it validates against, and the one optional input, `spec/profile.json`, is a committed spec file like the documents it governs. This supports the deterministic requirement: the same binary version plus the same profile always validates against the same composed schema.
 
 `IdentityHash` lives in this package because the schema is what *defines* what an ID is — the hex pattern in the JSON Schema and the algorithm that produces strings matching that pattern are two halves of one contract. Co-locating them keeps that contract honest.
 

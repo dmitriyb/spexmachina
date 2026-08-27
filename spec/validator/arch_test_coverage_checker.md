@@ -2,6 +2,8 @@
 
 Validates that every component in each module is described by at least one `test_section`, which is what [[a88e6fb4463d|test coverage checking]] requires of a spec.
 
+The rule is a declared coverage chain read from the resolved profile — covered type, edge kind, covering type — with the checker owning the enforcement and the profile owning the triple. The default profile declares the component-describes-test_section link, so everything below describes the default declaration; the declared type names are interpolated into the error shape, and a profile that drops the link drops the check.
+
 ## Responsibilities
 
 - Walk all modules and their components

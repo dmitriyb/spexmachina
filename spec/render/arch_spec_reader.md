@@ -5,7 +5,7 @@ Reads and parses the spec directory into an in-memory graph structure.
 ## Responsibilities
 
 - Read `project.json` and every `module.json` it declares
-- Parse each file into the typed spec nodes the renderers read
+- Parse each file into the typed spec nodes the renderers read — the arrays walked are the ones the resolved profile declares, so a profile-declared type's nodes are read on the same terms as the built-in types', and under the default profile the walked set is exactly today's arrays
 - Read all referenced markdown content files
 - Build an in-memory graph with nodes, edges, and inline content
 
@@ -19,7 +19,7 @@ One reader serves three outputs. [[8828685278e9|Render markdown]], [[a596d8caefb
 
 ## Content Inlining
 
-Markdown content files are read into memory and stored under their relative path — the same string the declaring node's `content` field holds. Three kinds of declaration can carry a `content` field, and every one of them that fills it has that file read: components, data flows and test sections. Renderers then ask for a node's content by the path that node declared.
+Markdown content files are read into memory and stored under their relative path — the same string the declaring node's `content` field holds. The declarations that carry a `content` field are the resolved profile's content-bearing types — under the default profile: components, data flows and test sections — and every one of them that fills it has that file read. Renderers then ask for a node's content by the path that node declared.
 
 ## Nodes Without Content
 

@@ -8,19 +8,19 @@
 spex hash-id --module <module> --type <type> --name <name>
 ```
 
-Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing else reaches stdout, so the output can be substituted straight into a spec file. The command reads no spec directory and opens no file — it is a pure function of its three flags. It is a child of [[b6758cdfabc4|RootCommand]] and inherits the root's persistent flags, but consults none of them: `--spec-dir` has no effect here.
+Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing else reaches stdout, so the output can be substituted straight into a spec file. The command resolves the profile through `--spec-dir`: it is a child of [[b6758cdfabc4|RootCommand]] and takes the spec directory from the root's persistent flag, reads `spec/profile.json` under it when the file is present, and uses the built-in default profile otherwise. That resolution is the only spec access it makes — it reads no other spec file, and given the resolved profile the output is a pure function of its three flags.
 
 ## Flags
 
 | Flag | Required | Description |
 |---|---|---|
 | `--module` | for module-scoped nodes | Module name (e.g., `plan`). Omit for project-level nodes. |
-| `--type` | yes | Node type: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
+| `--type` | yes | A node type the resolved profile declares, plus the fixed `module` type. Under the default profile: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
 | `--name` | yes | Node name or title (the human-readable identifier) |
 
 ## Identity String Construction
 
-The command maps `--type` onto the identity string the schema defines for that node type, then hashes it. The table below is the whole mapping; there is no fallback branch behind it, so the set of types that produce a hash is exactly the set of rows here.
+The command maps `--type` onto the identity string the schema defines for that node type, then hashes it. `--type` is validated against the node types the resolved profile declares, plus the fixed `module` type, rather than a fixed switch — a profile-declared type hashes as `<module>/<type>/<name>` with its declared name as the middle part, through the same unchanged IdentityHash function — and the rejection for an unknown type lists that same set. `module` is not the profile's to declare: its identity string `module/<name>` does not fit the generic pattern, because a module is an interior node of the merkle tree — frame, not vocabulary. The table below is the default profile's whole mapping; there is no fallback branch behind it, so the set of types that produce a hash is exactly the set the profile declares plus `module`.
 
 | --type | --module required? | Identity string |
 |---|---|---|

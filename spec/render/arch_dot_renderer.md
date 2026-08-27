@@ -28,6 +28,8 @@ The renderer is handed the graph [[7d1150c19724|SpecReader]] parsed and the stre
 
 Section nodes are drawn too and are covered by § Sections below, because they are placed differently rather than shaped differently. Two declared things are left out of the graph altogether: test sections, which are given no shape here and reach only the JSON output, and the project root itself, which gets no node of its own — its requirements and its sections stand for it at the top level.
 
+The kinds drawn are the node types the resolved profile declares minus this format's own projection — test sections stay excluded, per above, whatever profile resolves. The table is the default profile's drawn set, and a profile-declared type's nodes are drawn with a shape distinct from the built-in kinds', its declared edges as labelled arrows, so a custom vocabulary reaches the picture without renderer changes.
+
 Every node's label is the name a reader would recognise — a requirement's title, everything else's name. An api's description and group are not drawn; the graph is a shape, and the prose belongs to the other two formats.
 
 ## Edge Mapping

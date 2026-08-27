@@ -4,7 +4,7 @@ Validates that all `content` paths in module.json files resolve to existing mark
 
 ## Responsibilities
 
-- Walk all `content` fields in components, data_flows, and test_sections
+- Walk all `content` fields in the node types the resolved profile declares as content-bearing — under the default profile that is components, data_flows, and test_sections, and a profile-declared content-bearing type is walked on the same terms
 - Resolve each path relative to its module directory
 - Report missing files as validation errors
 
@@ -17,7 +17,7 @@ Given the path to a spec directory, the checker returns a flat list of validatio
 ## Behavior
 
 1. For each module in `project.json`, read its `module.json`
-2. For each component, data_flow, and test_section with a `content` field:
+2. For each node of a content-bearing declared type with a `content` field:
    - Form the full path from the spec directory, the module's `path`, and the `content` value
    - Check if the file exists
 3. Report each missing file with the module name and node that references it

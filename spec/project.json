@@ -201,6 +201,7 @@
       "path": "plan",
       "description": "Decides the next bead-action changeset deterministically, in one pass from the merkle diff: reads bead metadata, matches changed nodes against the task journal, classifies actions (create, obsolete, retarget), and composes changeset.json v3 \u2014 an ordered, tool-agnostic operation list with forward-reference encoding \u2014 that an external adapter consumes. Pure function over the diff, the caller-supplied tracker listing, the task journal, the spec directory, an optional absorb list, and a caller-supplied git HEAD SHA.",
       "requires_module": [
+        "f03774b40bd5",
         "085966b6bfa1",
         "fb20a21b62f1"
       ]
@@ -211,6 +212,7 @@
       "path": "ingest",
       "description": "Records the outcome of an adapter run. Pure function over changeset.json, receipts.json, the task journal and the spec directory. Appends journal events (change events and task receipts, idempotent by derived event id) and saves the new merkle snapshot when the run is complete. Tolerates partial receipts so unfinished operations resurface on the next plan run via the idempotency path.",
       "requires_module": [
+        "f03774b40bd5",
         "67c525e9288d",
         "fb20a21b62f1",
         "085966b6bfa1",
@@ -245,7 +247,10 @@
       "id": "430f8b037415",
       "name": "cli",
       "path": "cli",
-      "description": "Cross-cutting CLI infrastructure. Provides the root command, the version and hash-id subcommands, and the subcommand registration framework using cobra."
+      "description": "Cross-cutting CLI infrastructure. Provides the root command, the version and hash-id subcommands, and the subcommand registration framework using cobra.",
+      "requires_module": [
+        "f03774b40bd5"
+      ]
     },
     {
       "id": "fb20a21b62f1",

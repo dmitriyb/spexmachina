@@ -7,28 +7,28 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define project schema",
-      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4, and an optional derivation field whose only permitted value is 'pending', declaring a requirement not yet derived into any module), and module declarations with inter-module dependencies. The derivation field is project-scoped only: a module requirement derives by construction through its required preq_id, so the module schema carries no such field. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4, and an optional derivation field whose only permitted value is 'pending', declaring a requirement not yet derived into any module), and module declarations with inter-module dependencies. The derivation field is project-scoped only: a module requirement derives by construction through its required preq_id, so the module schema carries no such field. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$). The document is composed at load time from the resolved profile's project-scoped node types: the shipped schema is the frame — envelope fields, the identity-hash pattern, additionalProperties false — and the profile supplies the array properties. Under the default profile the composed document is identical to the previous static one."
     },
     {
       "id": "eed2cf85d5c3",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Define module schema",
-      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$)."
+      "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$). The document is composed at load time from the resolved profile's module-scoped node types and their plural array keys: the shipped schema is the frame, the profile supplies the arrays and their per-type constraints, and a project declaring an additional type gets its array validated the same way. Under the default profile the composed document is identical to the previous static one, so the on-disk shape of every existing module.json is unchanged."
     },
     {
       "id": "b7c3bccd7c64",
       "preq_id": "6faeb216618a",
       "type": "functional",
       "title": "Embed schemas in binary",
-      "description": "Make schemas available programmatically via go:embed so the validator can use them without external file dependencies."
+      "description": "Make schemas available programmatically via go:embed so the validator can use them without external file dependencies. The embedded artifacts are the schema frame plus the built-in default profile; the loader composes the effective project and module schemas from the resolved profile once per run, before any check, so consumers still carry no external file dependency and a malformed profile fails early and distinctly rather than as a cascade of conformance errors."
     },
     {
       "id": "237fd8ffb610",
       "preq_id": "d5a8407d38e1",
       "type": "non_functional",
       "title": "Identity hash ID constraints",
-      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/<title>'; modules use 'module/<name>'; module requirements use '<module>/requirement/<title>'; components use '<module>/component/<name>'; data_flows use '<module>/data_flow/<name>'; test_sections use '<module>/test_section/<name>'; apis use '<module>/api/<name>'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions."
+      "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/<title>'; modules use 'module/<name>'; module requirements use '<module>/requirement/<title>'; components use '<module>/component/<name>'; data_flows use '<module>/data_flow/<name>'; test_sections use '<module>/test_section/<name>'; apis use '<module>/api/<name>'. Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions. The hex pattern and per-array uniqueness are part of the fixed schema frame: they bind every node type the resolved profile declares — a profile-declared type's identity string is '<module>/<type>/<name>' with its declared type name as the middle part — and are not themselves declarable, which is why no existing hash moves when the type vocabulary becomes data."
     },
     {
       "id": "80debf6eb776",
@@ -57,6 +57,27 @@
       "type": "functional",
       "title": "Define section.schema.json convention",
       "description": "Document and enforce the convention that coupled modules provide a section.schema.json in their spec directory. This file is a standard JSON Schema that validates the freeform content of the module's project-level section."
+    },
+    {
+      "id": "5392cca550c4",
+      "preq_id": "d5a8407d38e1",
+      "type": "functional",
+      "title": "Declare the node taxonomy",
+      "description": "The node-type vocabulary of a spec is data, not code: an authored file, spec/profile.json, sitting beside project.json, declares for each node type its name, the plural key naming its array in project.json or module.json, whether it is project-scoped or module-scoped, whether it requires a content leaf, and two per-type role flags: whether the type triggers the requirement completeness rules, and whether its names are declarable — checked for recoverability at declaration and swept by the removed-name machinery. It also declares the legal edges — which reference fields a type may carry and what node types they may point at; an edge declaration may carry an optional boolean cyclic: true, marking a descriptive edge exempt from the cycle check, and an omitted flag means the edge kind is cycle-checked. A project with no spec/profile.json gets the built-in default profile, which declares today's ontology: requirement, component, data_flow, test_section, api, and today's edge set (preq_id, implements, uses, provided_by, describes, depends_on, requires_module) with the cyclic flag omitted on all seven; the completeness-trigger role is marked on requirement and the name-declarable role on exactly component and api. The profile is a description of a vocabulary, not a place to put behaviour, and it cannot reach the fixed points: the identity hash algorithm, the name tokenization rule, the merkle tree shape, and the journal event format are not declarable."
+    },
+    {
+      "id": "ef55248cb3ca",
+      "preq_id": "d5a8407d38e1",
+      "type": "functional",
+      "title": "Generate schemas from the profile",
+      "description": "The effective project and module JSON Schemas are composed from the resolved profile at load time rather than loaded as two fixed documents. The shipped schemas are the frame — envelope fields, the identity-hash pattern, additionalProperties false — and the profile supplies the array properties and their per-type constraints, so a project declaring an endpoint type gets an endpoints array validated the same way today's components array is. Composition happens once per run, before any check, so a malformed profile is a distinct and early failure rather than a cascade of conformance errors. The schemas composed from the default profile are golden-tested against the shipped static documents: if composition does not reproduce them byte-for-byte, the test fails."
+    },
+    {
+      "id": "91270a8a2b57",
+      "preq_id": "d5a8407d38e1",
+      "type": "functional",
+      "title": "Declare graph rules",
+      "description": "The profile declares the graph policy consumers currently compile in: the coverage chains, each the triple 'every node of type A must be the target of at least one edge of kind E from some node of type B'; the plan-relevant set — which node types produce beads; the per-type impact-level mapping that assigns each declared type one of the four fixed impact levels; the per-type hashed field allowlist that decides what counts as a semantic change; and the per-type, per-direction absorbable set that refresh honours. The built-in default profile declares today's three coverage links, today's plan-relevant set, today's impact levels, today's allowlists and today's absorbable directions, so it is itself the golden record of the policy previously spread across the code: one document a reviewer can read to see the whole policy. The DAG check enforces acyclicity over every edge kind the profile declares that is not marked cyclic — the taxonomy's per-edge exemption flag — rather than over a fixed edge set."
     },
     {
       "id": "cdc9c58ba097",
@@ -93,16 +114,29 @@
     {
       "id": "ee88263d6555",
       "name": "SchemaLoader",
-      "description": "Go package that embeds JSON Schema files — project, module, and the journal-line schema — and exposes them for programmatic use by the validator and other modules. Also exposes the IdentityHash utility function used to compute deterministic 12-character hex node IDs from identity strings.",
+      "description": "Go package that embeds the schema frame and the journal-line schema, composes the effective project and module schemas from the resolved profile once per run, and exposes them for programmatic use by the validator and other modules. Also exposes the IdentityHash utility function used to compute deterministic 12-character hex node IDs from identity strings.",
       "content": "arch_schema_loader.md",
       "implements": [
         "b7c3bccd7c64",
+        "ef55248cb3ca",
         "cdc9c58ba097"
       ],
       "uses": [
         "79946d618829",
         "78883b84c32d",
-        "d125b5e775b4"
+        "d125b5e775b4",
+        "cd726f8b088b"
+      ]
+    },
+    {
+      "id": "cd726f8b088b",
+      "name": "ProfileLoader",
+      "description": "Reads spec/profile.json or falls back to the built-in default profile, validates the profile document, and exposes the resolved profile — node types, legal edges, coverage chains, plan-relevant set, hashed field allowlists, absorbable directions — to every consumer. A malformed profile is a distinct early failure surfaced before any check runs.",
+      "content": "arch_profile_loader.md",
+      "implements": [
+        "5392cca550c4",
+        "ef55248cb3ca",
+        "91270a8a2b57"
       ]
     },
     {
@@ -130,7 +164,8 @@
       "name": "Schema loading tests",
       "content": "test_schema_loading.md",
       "describes": [
-        "ee88263d6555"
+        "ee88263d6555",
+        "cd726f8b088b"
       ]
     },
     {

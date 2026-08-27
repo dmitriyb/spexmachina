@@ -159,6 +159,15 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 
 **Rationale**: Full pipeline integration: DiffEngine produces raw changes carrying node metadata (Key, NodeType, Module), ImpactClassifier annotates them from that metadata. This is the exact data path described in `flow_diff_classification.md`.
 
+### S15: Impact levels and completeness triggers follow the profile's declarations
+
+**Given** the classify fixtures above, run once under the default profile and once under a `spec/profile.json` declaring an `endpoint` type mapped to the `contract` level
+**When** `Classify` is called on a change carrying `NodeType: "endpoint"`
+**Then** the change is classified `contract` — the mapping from declared node type to impact level is read from the resolved profile's graph rules; the four levels themselves are fixed, `meta`'s `structural` classification is the frame's fixed rule, and under the default profile S7–S13 and R1–R2 hold byte-for-byte because the default assigns today's types to today's levels
+**And** the completeness scenarios (C1–C11) likewise hold unchanged under the default profile, because the requirement-leaf trigger is a per-type role flag the default profile marks on requirement, read by CompletenessChecker rather than compiled in — while the meta-envelope sweep runs on the fixed meta leaves under any profile
+
+**Rationale**: The classifier and the completeness checker branch on the profile's declarations — plus the frame's fixed meta rules — never on hard-coded declared-type names, and the default profile is the golden record of the previous constants.
+
 ## Edge Cases
 
 ### E1: Diff with identical trees returns empty, Classify with empty returns empty

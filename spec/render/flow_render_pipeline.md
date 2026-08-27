@@ -70,9 +70,10 @@ only what the reader put here — a node type the reader drops is invisible to a
 
 - MarkdownRenderer: a single UTF-8 document, project scope first and then one block per module.
 - DOTRenderer: a single `digraph` block. Node IDs are identity hashes and labels are node names, so a
-  hand-written diagram and a generated one name the same node by the same string. Edge kinds
-  (`implements`, `uses`, `provided_by`, `requires_module`, `preq_id`, `depends_on`,
-  `coupled`) become DOT edge attributes.
+  hand-written diagram and a generated one name the same node by the same string. The edge kinds that
+  become DOT edge attributes are the edges the resolved profile declares, as this format projects
+  them, plus the synthetic `coupled` edge — under the default profile: `implements`, `uses`,
+  `provided_by`, `requires_module`, `preq_id`, `depends_on`, `coupled`.
 - JSONRenderer:
   - nodes: list of {id, type, name} plus description, content, module and group where the declaration
     carries them
@@ -81,6 +82,8 @@ only what the reader put here — a node type the reader drops is invisible to a
 
 ### Shape contract
 
-Field renames, additions, or removals in the parsed graph require updates to all renderers. A new
-spec node type requires matching handling in all three render formats — a type the reader surfaces
-and a renderer ignores is dropped silently, since there is no missing file for anything to report.
+Field renames, additions, or removals in the parsed graph require updates to all renderers. A
+declared node type, by contrast, needs no per-type code anywhere: the reader walks the arrays the
+resolved profile declares, and each renderer iterates the declared types it projects, so a new type
+flows through the whole pipeline as data. What a format omits is its declared projection — test
+sections reach the JSON output alone — never a silent drop.
