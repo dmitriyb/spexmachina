@@ -104,7 +104,7 @@ Exit codes:
 			}
 
 			final := ingest.Summary{
-				Ok:               sum.OkCreates + sum.OkCloses,
+				Ok:               sum.OkCreates + sum.OkCloses + sum.OkRetargets,
 				Skipped:          sum.Skipped,
 				Errors:           sum.Errors,
 				EventsAppended:   sum.EventsAppended,

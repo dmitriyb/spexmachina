@@ -189,6 +189,91 @@ func TestIngestCommand_HappyPath_CompleteRun(t *testing.T) {
 	}
 }
 
+// TestIngestCommand_OkRetarget_CountedInSummary covers arch_reconciler.md
+// "Interface": the summary's ok count folds in ok retargets alongside ok
+// creates and ok closes. A retarget-only changeset must not report ok=0.
+func TestIngestCommand_OkRetarget_CountedInSummary(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+
+	modID := schema.IdentityHash("module", "alpha")
+	compID := schema.IdentityHash("alpha", "component", "Comp1")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	proj := `{
+		"name": "test-ingest",
+		"modules": [{"id": "` + modID + `", "name": "alpha", "path": "alpha"}]
+	}`
+	writeTestFile(t, specDir, "project.json", proj)
+
+	mod := `{
+		"name": "alpha",
+		"components": [{"id": "` + compID + `", "name": "Comp1", "content": "arch_comp1.md"}]
+	}`
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
+
+	oldHash := "old-hash"
+	_, journalPath := seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+	if err := mapping.NewMappingStore(journalPath).Append([]mapping.Event{
+		{Event: "added", EID: "seed1", Node: compID, Name: "Comp1", NodeType: "component", Module: "alpha", After: &oldHash, GitHead: "seedhead", Proposal: "seed-p", Path: "arch_comp1.md"},
+		{Event: "task_created", TaskID: "bead-1", For: "seed1"},
+	}); err != nil {
+		t.Fatalf("seed journal: %v", err)
+	}
+
+	cs := plan.Changeset{
+		Version:  plan.ChangesetVersion,
+		GitHead:  "cafe1234",
+		Proposal: "test-proposal",
+		Ops: []plan.Op{{
+			OpID:       "op-0001",
+			Type:       plan.OpRetarget,
+			SpecNodeID: compID,
+			SpecHash:   "new-hash",
+			Target:     &plan.Ref{Kind: plan.RefBead, BeadID: "bead-1"},
+			Labels:     []string{"spex:cafe1234:op-0001"},
+		}},
+	}
+	csPath := filepath.Join(dir, "changeset.json")
+	writeJSON(t, csPath, cs)
+
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion,
+		Status:  adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{
+			OpID:   "op-0001",
+			Status: adapters.OpStatusOk,
+			BeadID: "bead-1",
+		}},
+	}
+	rcPath := filepath.Join(dir, "receipts.json")
+	writeJSON(t, rcPath, rc)
+
+	stdout, stderr, exit, err := runIngest(t,
+		"--spec-dir", specDir,
+		"--changeset", csPath,
+		"--receipts", rcPath,
+	)
+	if err != nil {
+		t.Fatalf("ingest failed: %v\nstderr: %s", err, stderr)
+	}
+	if exit != 0 {
+		t.Errorf("want exit 0, got %d", exit)
+	}
+
+	var sum ingest.Summary
+	if err := json.Unmarshal([]byte(stdout), &sum); err != nil {
+		t.Fatalf("decode summary: %v\nstdout: %s", err, stdout)
+	}
+	if sum.Ok != 1 {
+		t.Errorf("want ok=1 for a retarget-only changeset, got %d (summary=%+v)", sum.Ok, sum)
+	}
+}
+
 func TestIngestCommand_PartialRun_SkipsSnapshot(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusPartial)
 

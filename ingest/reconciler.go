@@ -13,7 +13,7 @@ import (
 // SpecGraph supplies the spec-side metadata the Reconciler needs to build a
 // fresh or modified node's change event: its name, kind and module.
 // Cleanup and proposal-epic creates never reach it — see
-// spec/ingest/arch_reconciler.md "Proposal-Epic Ops" and "Cleanup-Create
+// spec/ingest/arch_event_builder.md "Proposal-Epic Ops" and "Cleanup-Create
 // Ops".
 type SpecGraph interface {
 	NodeMetadata(specNodeID string) (NodeMetadata, error)
@@ -31,13 +31,14 @@ type NodeMetadata struct {
 }
 
 // ReconcileSummary is the per-op tally Reconciler.Apply returns. The CLI
-// folds OkCreates+OkCloses into Summary.Ok before serialising to stdout.
-// EventsAppended and ReceiptsAppended count only lines that actually
-// landed on this call — an idempotent re-run reports zero of each even
-// though every op still counts as ok.
+// folds OkCreates+OkCloses+OkRetargets into Summary.Ok before serialising
+// to stdout. EventsAppended and ReceiptsAppended count only lines that
+// actually landed on this call — an idempotent re-run reports zero of
+// each even though every op still counts as ok.
 type ReconcileSummary struct {
 	OkCreates        int
 	OkCloses         int
+	OkRetargets      int
 	Skipped          int
 	Errors           int
 	EventsAppended   int
@@ -177,9 +178,7 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		case plan.OpRetarget:
 			switch opRC.Status {
 			case adapters.OpStatusOk:
-				// Ok retargets are not folded into OkCreates/OkCloses — the
-				// summary's ok count aggregates only creates and closes, per
-				// arch_reconciler.md "Interface".
+				sum.OkRetargets++
 				lines, err := builder.BuildRetarget(cs, op, opRC)
 				if err != nil {
 					return ReconcileSummary{}, err
@@ -200,8 +199,8 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 
 	// The changeset's top-level absorbed array is not receipt-gated — it
 	// describes spec state rather than tracker work, so it is processed
-	// regardless of what the ops loop above found. See arch_reconciler.md
-	// "Absorbed Entries".
+	// regardless of what the ops loop above found. See
+	// arch_event_builder.md "Absorbed Entries".
 	absorbedLines, err := builder.BuildAbsorbed(cs)
 	if err != nil {
 		return ReconcileSummary{}, err

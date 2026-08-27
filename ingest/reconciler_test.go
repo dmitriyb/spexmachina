@@ -1018,8 +1018,8 @@ func TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
-		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
+	if sum.OkRetargets != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 ok retarget / 1 event / 1 receipt", sum)
 	}
 
 	journal := readJournal(t, dir)
@@ -1091,8 +1091,8 @@ func TestApply_Retarget_ReRun_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second Apply: %v", err)
 	}
-	if sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
-		t.Errorf("second Apply summary = %+v, want zero appends", sum)
+	if sum.OkRetargets != 1 || sum.EventsAppended != 0 || sum.ReceiptsAppended != 0 {
+		t.Errorf("second Apply summary = %+v, want 1 ok retarget, zero appends", sum)
 	}
 	after := journalBytes(t, dir)
 	if !bytes.Equal(before, after) {
