@@ -1,8 +1,11 @@
 // Package schema defines JSON Schema documents and Go types for Spex Machina
 // spec files (project.json and module.json).
 //
-// The JSON Schema files are embedded and accessible via [ProjectSchema] and
-// [ModuleSchema]. The Go types mirror the schema structure for unmarshaling.
+// [ProjectSchema] and [ModuleSchema] compose the effective project and
+// module schemas from the resolved profile on every call, rather than
+// loading two fixed documents; [BeadMapSchema] hands back the embedded
+// journal-line schema unparsed. The Go types mirror the schema structure
+// for unmarshaling.
 //
 // Node types: requirement, component, data_flow, api, module, test_section.
 // Edge types: implements, uses, describes, described_in, provided_by, depends_on, requires_module.
