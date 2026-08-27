@@ -821,7 +821,6 @@ func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
 	})
 }
 
-// TestFR2_ComposeModuleSchemaDefaultMatchesStatic verifies the design
 // TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultModuleNodeTypes yields a schema that still accepts
 // the same known-good module fixtures the static schema accepts (S3, S4),
