@@ -109,7 +109,7 @@ func ComposeProjectSchema(types []ProjectNodeType) ([]byte, error) {
 // built-in type can have its original array property restored unchanged
 // rather than overwritten with a synthesized one.
 func projectSchemaFrame() (map[string]any, map[string]any, error) {
-	data, err := ProjectSchema()
+	data, err := projectSchemaBytes()
 	if err != nil {
 		return nil, nil, err
 	}

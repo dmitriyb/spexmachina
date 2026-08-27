@@ -1,0 +1,12 @@
+{
+  "bead": "spexmachina-h4gv.6",
+  "node": "ee88263d6555",
+  "files": [
+    "spec/schema/arch_schema_loader.md"
+  ],
+  "claim": "arch_schema_loader.md:7: 'Under the default profile the composition reproduces the shipped static documents byte-for-byte, which the golden test asserts.'",
+  "authoritative_source": "TestFR9_P2_ComposedSchemasEqualShippedGolden (schema/schema_loader_test.go), the only golden test in the repo, compares composed output to the shipped embed via jsonEqual — an unmarshal-and-compare-values check, not a byte comparison.",
+  "evidence": "The composed and shipped documents are structurally identical but never byte-identical: ComposeProjectSchema/ComposeModuleSchema build the result as map[string]any and marshal it with json.Marshal, which emits compact, alphabetically-key-sorted output, while the shipped project.schema.json/module.schema.json are hand-formatted with 2-space indentation and an intentional (non-alphabetical) key order. Measured sizes: project 3201 bytes composed vs 4366 bytes shipped, module 5656 vs 7885. Reproducing byte-for-byte would require an ordered encoding (preserving each document's original key order and indentation) through the whole compose pipeline, which map[string]any-based composition does not provide and no scenario in test_schema_loading.md asks for.",
+  "blocking": false,
+  "proposed_fix": "Reword arch_schema_loader.md:7 to say the composition reproduces the shipped documents' content (structural/value equality, as jsonEqual checks), not 'byte-for-byte'. Byte-for-byte reproduction is achievable but only by rewriting the compose pipeline around an order-preserving encoding — not warranted unless a caller actually needs byte-identical output rather than schema-equivalent output."
+}

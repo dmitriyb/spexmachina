@@ -854,9 +854,9 @@ func TestFR9_P2_ComposedSchemasEqualShippedGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComposeProjectSchema: %v", err)
 	}
-	shippedProject, err := ProjectSchema()
+	shippedProject, err := projectSchemaBytes()
 	if err != nil {
-		t.Fatalf("ProjectSchema: %v", err)
+		t.Fatalf("projectSchemaBytes: %v", err)
 	}
 	if !jsonEqual(t, composedProject, shippedProject) {
 		t.Fatalf("project schema composed from the default profile does not reproduce the shipped document")
@@ -866,9 +866,9 @@ func TestFR9_P2_ComposedSchemasEqualShippedGolden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
-	shippedModule, err := ModuleSchema()
+	shippedModule, err := moduleSchemaBytes()
 	if err != nil {
-		t.Fatalf("ModuleSchema: %v", err)
+		t.Fatalf("moduleSchemaBytes: %v", err)
 	}
 	if !jsonEqual(t, composedModule, shippedModule) {
 		t.Fatalf("module schema composed from the default profile does not reproduce the shipped document")
