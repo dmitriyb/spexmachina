@@ -818,17 +818,24 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		t.Fatalf("impact levels = %v, want %v", p.ImpactLevels, wantImpact)
 	}
 
-	if len(p.HashedFields) == 0 {
-		t.Fatal("hashed field allowlists should be non-empty under the default profile")
+	wantHashedFields := map[string][]string{
+		"project:requirement": {"depends_on", "description", "id", "priority", "title", "type"},
+		"module:requirement":  {"depends_on", "description", "id", "preq_id", "title", "type"},
+		"module:api":          {"description", "group", "id", "name", "provided_by"},
 	}
-	if _, ok := p.Absorbable["component"]; !ok {
-		t.Fatal("absorbable directions should declare component under the default profile")
+	if !reflect.DeepEqual(p.HashedFields, wantHashedFields) {
+		t.Fatalf("hashed field allowlists = %v, want %v", p.HashedFields, wantHashedFields)
 	}
-	if p.Absorbable["component"].Added {
-		t.Fatal("component addition should be refused, not absorbed, under the default profile")
+
+	wantAbsorbable := map[string]AbsorbDirections{
+		"requirement":  {Added: true, Removed: true},
+		"api":          {Added: true, Removed: true},
+		"component":    {Added: false, Removed: true},
+		"data_flow":    {Added: false, Removed: false},
+		"test_section": {Added: false, Removed: false},
 	}
-	if !p.Absorbable["component"].Removed {
-		t.Fatal("component removal should be absorbed under the default profile")
+	if !reflect.DeepEqual(p.Absorbable, wantAbsorbable) {
+		t.Fatalf("absorbable directions = %v, want %v", p.Absorbable, wantAbsorbable)
 	}
 }
 
@@ -908,6 +915,59 @@ func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
 		}
 		if !strings.Contains(err.Error(), "plural_key") {
 			t.Fatalf("error should name the defect (plural_key), got: %v", err)
+		}
+	})
+
+	t.Run("hashed_fields names an undeclared node type", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module"}
+			],
+			"edges": [],
+			"coverage_chains": [],
+			"plan_relevant": [],
+			"impact_levels": {},
+			"hashed_fields": {"widget": ["id"]},
+			"absorbable": {}
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with a malformed hashed_fields key, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "hashed_fields") {
+			t.Fatalf("error should name the defect (hashed_fields), got: %v", err)
+		}
+	})
+
+	t.Run("hashed_fields scope:name typo is not a declared type", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module"}
+			],
+			"edges": [],
+			"coverage_chains": [],
+			"plan_relevant": [],
+			"impact_levels": {},
+			"hashed_fields": {"module:gadget": ["id"]},
+			"absorbable": {}
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with an undeclared hashed_fields node type, got nil")
+		}
+		if !strings.Contains(err.Error(), "gadget") {
+			t.Fatalf("error should name the undeclared type (gadget), got: %v", err)
 		}
 	})
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // NodeType declares one node type in the resolved profile's vocabulary: its
@@ -178,6 +179,15 @@ func (p *Profile) Validate() error {
 	}
 	for name := range p.Absorbable {
 		check(declared[name], "absorbable", fmt.Sprintf("undeclared node type %q", name))
+	}
+	for key := range p.HashedFields {
+		scope, name, ok := strings.Cut(key, ":")
+		if !ok {
+			errs = append(errs, fmt.Errorf("hashed_fields: key %q: must be \"<scope>:<name>\"", key))
+			continue
+		}
+		check(scope == "project" || scope == "module", "hashed_fields", fmt.Sprintf("key %q: scope must be \"project\" or \"module\"", key))
+		check(seenScoped[scope+":"+name], "hashed_fields", fmt.Sprintf("key %q: undeclared node type %q for scope %q", key, name, scope))
 	}
 
 	return errors.Join(errs...)
