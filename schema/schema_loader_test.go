@@ -918,7 +918,7 @@ func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
 		}
 	})
 
-	t.Run("hashed_fields names an undeclared node type", func(t *testing.T) {
+	t.Run("hashed_fields key is not scope:name", func(t *testing.T) {
 		dir := t.TempDir()
 		doc := `{
 			"node_types": [
