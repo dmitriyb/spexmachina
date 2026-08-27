@@ -24,13 +24,35 @@ var schemaFS embed.FS
 // produces.
 const identityHashPattern = "^[a-f0-9]{12}$"
 
-// ProjectSchema returns the raw JSON Schema bytes for project.json.
+// ProjectSchema returns the effective JSON Schema for project.json, composed
+// from the built-in default profile — the embedded frame supplying the
+// envelope fields, the identity-hash pattern and additionalProperties:false,
+// the default profile supplying the array properties. Composition happens
+// on every call from the same embedded inputs, so the result is byte-
+// identical across calls, processes and platforms; under the default
+// profile it reproduces the shipped project.schema.json document.
 func ProjectSchema() ([]byte, error) {
+	return ComposeProjectSchema(DefaultProfile().ProjectNodeTypes())
+}
+
+// ModuleSchema returns the effective JSON Schema for module.json, composed
+// from the built-in default profile the same way [ProjectSchema] composes
+// the project schema.
+func ModuleSchema() ([]byte, error) {
+	return ComposeModuleSchema(DefaultProfile().ModuleNodeTypes())
+}
+
+// projectSchemaBytes returns the raw embedded project.schema.json frame
+// document, bypassing composition. projectSchemaFrame uses this instead of
+// [ProjectSchema] to avoid recomposing what it is itself building.
+func projectSchemaBytes() ([]byte, error) {
 	return schemaFS.ReadFile("project.schema.json")
 }
 
-// ModuleSchema returns the raw JSON Schema bytes for module.json.
-func ModuleSchema() ([]byte, error) {
+// moduleSchemaBytes returns the raw embedded module.schema.json frame
+// document, bypassing composition. moduleSchemaFrame uses this instead of
+// [ModuleSchema] to avoid recomposing what it is itself building.
+func moduleSchemaBytes() ([]byte, error) {
 	return schemaFS.ReadFile("module.schema.json")
 }
 

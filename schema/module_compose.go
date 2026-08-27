@@ -111,7 +111,7 @@ func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
 // property restored unchanged rather than overwritten with a synthesized
 // one.
 func moduleSchemaFrame() (map[string]any, map[string]any, error) {
-	data, err := ModuleSchema()
+	data, err := moduleSchemaBytes()
 	if err != nil {
 		return nil, nil, err
 	}
