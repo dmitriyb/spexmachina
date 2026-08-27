@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -180,6 +183,41 @@ func TestFR58_E4_UnknownType(t *testing.T) {
 		if !strings.Contains(msg, want) {
 			t.Errorf("expected error listing valid types, missing %q in %q", want, msg)
 		}
+	}
+}
+
+// TestFR58_E4b_ProfileDeclaredTypeAccepted pins that --type validates
+// against the resolved profile's declared node types rather than a fixed
+// switch: a spec/profile.json declaring a custom "endpoint" type makes
+// that type hash, and the same invocation is an unknown type without it.
+func TestFR58_E4b_ProfileDeclaredTypeAccepted(t *testing.T) {
+	dir := t.TempDir()
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:      "endpoint",
+		PluralKey: "endpoints",
+		Scope:     "module",
+	})
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		t.Fatalf("write profile.json: %v", err)
+	}
+
+	stdout, _, err := runHashID(t, "--spec-dir", dir, "--module", "alpha", "--type", "endpoint", "--name", "Foo")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := schema.IdentityHash("alpha", "endpoint", "Foo")
+	if got := strings.TrimSpace(stdout); got != want {
+		t.Errorf("want %q, got %q", want, got)
+	}
+
+	_, _, err = runHashID(t, "--module", "alpha", "--type", "endpoint", "--name", "Foo")
+	if err == nil {
+		t.Fatal("expected error: endpoint type is not declared without the profile file")
 	}
 }
 
