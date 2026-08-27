@@ -7,21 +7,21 @@
       "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render markdown",
-      "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files."
+      "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files. The sections iterate the node types the resolved profile declares, so a profile-declared type's nodes reach the document without renderer changes; the default profile yields today's structure unchanged."
     },
     {
       "id": "a596d8caefb1",
       "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render DOT",
-      "description": "Generate a graphviz DOT graph of spec nodes and edges. Node kinds are distinguished by shape and fill, and every edge carries a label naming its kind, so a rendering that drops colour still shows the relationship. Which kinds reach the graph, and how each is drawn, is DOTRenderer's contract rather than a list held here."
+      "description": "Generate a graphviz DOT graph of spec nodes and edges. Node kinds are distinguished by shape and fill, and every edge carries a label naming its kind, so a rendering that drops colour still shows the relationship. Which kinds reach the graph, and how each is drawn, is DOTRenderer's contract rather than a list held here — and the kinds themselves are the node types and edges the resolved profile declares, so a profile-declared type reaches the graph without renderer changes."
     },
     {
       "id": "1078c088e0c6",
       "preq_id": "6b00623735ac",
       "type": "functional",
       "title": "Render JSON",
-      "description": "Generate a machine-readable JSON graph of the full spec. All nodes and edges in a single JSON document for piping to other tools."
+      "description": "Generate a machine-readable JSON graph of the full spec. All nodes and edges in a single JSON document for piping to other tools. The node table emits every node type the resolved profile declares — the spec is read through the profile's declared arrays, so a profile-declared type's nodes appear in the graph exactly as the built-in types do."
     },
     {
       "id": "8d441659a190",

@@ -114,6 +114,21 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 
 **Rationale**: two rules meet in this fixture and the scenario pins both. `derivation` is deliberately absent from the project-requirement field allowlist in `arch_tree_builder.md`, so declaring a gap and later graduating out of it moves no requirement leaf — that is what fails if the exclusion is implemented wrongly, since a serializer that hashes whatever fields it finds would move the leaf on both edits. The `meta/project` envelope leaf is hashed from `project.json`'s literal bytes, so it necessarily *does* move on the `pending` variant; asserting that it is the only leaf that moves is what keeps the exclusion honest, because a `derivation` leaked into the requirement serialization would surface here as a second differing key. The root-hash equality is therefore asserted between the first and third trees rather than across all three: an assertion that all three roots agree would contradict the envelope's raw-bytes rule in the same leaf and cannot hold. What the exclusion buys is stated in `arch_tree_builder.md` — the envelope entry is `structural`, so it is filtered before matching and obliges nothing downstream.
 
+### S10: Per-type hashed field allowlists are read from the resolved profile
+
+**Given** the fixture directory, built once under the default profile and once under a `spec/profile.json` byte-identical to the default declaration
+**When** `BuildTree` is called on each
+**Then** every leaf hash and the root are identical across the two trees — the allowlists TreeBuilder serializes each JSON-backed leaf through come from the resolved profile, and the default profile declares exactly the allowlists previously compiled in
+**And** building this repository's own spec under the default profile reproduces every identity hash and every leaf hash the current snapshot records
+
+**Rationale**: The acceptance criterion that no existing hash moves when the taxonomy becomes data. The hash inputs — identity strings and per-type field allowlists — are unchanged under the default profile, so an implementation that derived either from the profile incorrectly surfaces here as a moved hash. Hasher itself is deliberately untouched: file, byte and child hashing are type-agnostic and read nothing from the profile.
+
+### S11: A profile-declared type gets a leaf like any built-in type
+
+**Given** a profile declaring an `endpoint` type (content-bearing, module-scoped) and a fixture module carrying one endpoint with a content file
+**When** `BuildTree` is called
+**Then** the module node holds one leaf for the endpoint, keyed by its identity hash, hashed from its content file and its declared hashed fields — the tree shape (project root, module interiors, identity-hash-keyed leaves, the synthetic meta leaf) is fixed, and the profile only decides what leaves exist.
+
 ## Edge Cases
 
 ### E1: HashFile on non-existent file

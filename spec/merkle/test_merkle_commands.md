@@ -159,6 +159,23 @@ merkle module's CLI surface. Proves that diff-then-ingest-then-diff converges
 steady-state share the same component composition. There is no separate
 "hash" step; ingest is the only path that writes the snapshot.
 
+### S8: The removed-name sweep iterates the profile's name-declarable types
+
+**Given** the fixture directory with a snapshot, edited so that one component is
+removed from `alpha/module.json` while another leaf's prose still names it — and,
+in a second variant with a `spec/profile.json` declaring an `endpoint` type
+marked name-declarable, the same shape with a removed endpoint
+**When** `runDiff(tmpdir)` is called on each
+**Then** both variants report a `surviving_name` error naming the removed node,
+because the sweep iterates the node types the resolved profile marks
+name-declarable rather than a fixed pair; the default profile marks exactly
+components and apis, so the swept set is unchanged and every sweep assertion
+above holds
+
+**Rationale**: A flagged type's removals must be as sweepable as the built-in
+types' — the name tokenization rule is a fixed point precisely so that the sweep
+works for every type the profile can mark.
+
 ## Edge Cases
 
 ### E1: `spex diff` on invalid spec directory

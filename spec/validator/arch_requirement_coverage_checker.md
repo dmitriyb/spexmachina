@@ -2,6 +2,8 @@
 
 Validates that every requirement in the spec is covered by implementation: project requirements must be derived into module requirements, and module requirements must be implemented by components. That two-link chain is what [[168ae8fde8e2|requirement coverage validation]] asks the spec to hold.
 
+The two links are declared coverage chains read from the resolved profile — each the triple of covered type, edge kind and covering type — not constants of the checker. The default profile declares exactly these two, so everything below describes the default declaration; a profile that drops one drops its check, and a profile that renames a type sees its declared name interpolated into the same message shapes.
+
 ## Responsibilities
 
 - Check that every project requirement has at least one module requirement with a matching `preq_id`

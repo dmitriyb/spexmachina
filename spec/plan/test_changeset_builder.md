@@ -229,6 +229,21 @@ implementation bead.
   - `Builder.Build()` returns a non-nil error naming both spec_node_ids in the cycle.
   - No partial `changeset.json` is written (Builder either writes the full file or no file).
 
+### Cross-component scenario: spec_node_kind per declared type comes from the profile
+
+- **Setup**: an action batch carrying one create per plan-relevant node type, built once under
+  the default profile and once under a profile declaring an additional plan-relevant `endpoint`
+  type.
+- **Components exercised together**: ChangesetBuilder fills each op's `spec_node_kind` from the
+  action's node type; the profile declares only which types are plan-relevant — no bead types.
+- **Assertions**:
+  - Under the default profile, every op's `spec_node_kind` matches today's vocabulary exactly —
+    the output is byte-identical to the pre-profile builder's over the same batch.
+  - Under the extended profile, the endpoint create's op carries the declared `spec_node_kind`
+    (`"endpoint"`) unchanged, composed through the same canonical field order with no new op
+    shape; the kind-to-bead-type mapping is the adapter's, whose default arm files the unknown
+    kind as `feature`.
+
 ## Fixtures
 
 In-code Go fixtures, no on-disk testdata (the package convention). The tests in

@@ -21,7 +21,7 @@
       "preq_id": "c87aa373c2ed",
       "type": "functional",
       "title": "Identity hash computation command",
-      "description": "`spex hash-id --module <module> --type <type> --name <name>` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing."
+      "description": "`spex hash-id --module <module> --type <type> --name <name>` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing. --type is validated against the node types the resolved profile declares rather than a fixed switch, and the rejection message lists the profile's valid types; the default profile declares today's list."
     },
     {
       "id": "293b27f73924",

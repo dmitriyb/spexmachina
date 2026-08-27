@@ -184,6 +184,20 @@ tmp/spec/
 **When** `CheckIDs(specDir)` is called.
 **Then** one error for the dangling data_flow `uses` reference.
 
+#### I18: Cross-reference integrity over profile-declared edges
+
+**Given** a `spec/profile.json` declaring an `endpoint` type carrying a `serves` reference field pointing at components, and alpha's endpoint has `serves: [99]` with no component 99.
+**When** `CheckIDs(specDir)` is called.
+**Then** one error for the dangling `serves` reference. The reference fields a type may carry, and what each may point at, are the resolved profile's legal edges — the checks above are the default profile's edge set, and a declared edge is checked with the same set-membership machinery.
+
+#### D9: Acyclicity over profile-declared edges
+
+**Given** the same profile, where two endpoints reference each other through `serves`-style edges the profile declares without a `cyclic` flag.
+**When** `CheckDAG(specDir)` is called.
+**Then** one cycle error naming the two nodes. The DAG check enforces acyclicity over every edge kind the resolved profile declares that is not marked `cyclic: true`; under the default profile — which omits the flag on all seven edge kinds — the graphs that can actually cycle are exactly the three the scenarios above exercise, the other four passing vacuously.
+
+In a further variant the profile marks the endpoints' edge `cyclic: true`: the same loop then validates with zero DAG errors — a `cyclic` edge is descriptive, exempt from the cycle check.
+
 ---
 
 ## Edge Cases

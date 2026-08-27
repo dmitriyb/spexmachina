@@ -97,6 +97,8 @@ following is true:
 
 ### The absorbable set
 
+The per-type, per-direction table is read from the resolved profile's absorbable declarations rather than compiled into the handler — the profile declares directions for the node types it declares, and a profile-declared type is refused in both directions unless the profile declares otherwise. The `meta` and `module` rows are not the profile's to declare: both are the frame's fixed leaves, and their both-directions refusal is the handler's own fixed rule. The default profile declares exactly the declared-type rows below, so a default-profile run absorbs and refuses precisely as the handler always has.
+
 | Node type | `added` | `removed` |
 |-----------|---------|-----------|
 | `requirement`   | absorbed | absorbed |
@@ -104,7 +106,7 @@ following is true:
 | `component`     | **refused** | absorbed |
 | `data_flow`, `test_section`, `meta`, `module` | refused | refused |
 
-The set is written out explicitly rather than derived by negating plan's bead-producing types.
+The set is written out explicitly — in the profile, as declarations the handler reads — rather than derived by negating plan's bead-producing types.
 That negation would also admit `meta` — the `project.json` / `module.json` envelope leaf — and
 refresh runs neither `spex validate` nor the completeness checker: baselining a meta addition or
 removal would hide a whole module appearing or vanishing from every downstream tool.

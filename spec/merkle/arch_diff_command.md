@@ -49,7 +49,13 @@ Their findings live under the top-level `errors` array (never `warnings`) and
 the per-entry `type` says which gate raised it: `incomplete_change` from
 CompletenessChecker, and `surviving_name` from the removal-name sweep, raised
 when a node the diff reports as removed is still named somewhere in the spec
-corpus. The downstream pipeline step (`spex plan`) treats a non-empty
+corpus. The sweep iterates the node types the resolved profile marks
+name-declarable — the same per-type role flag the validator's name-shape check
+keys on — rather than a fixed pair, so a flagged profile-declared type's
+removals are swept on the same terms as the built-in ones; the name
+tokenization rule being a fixed point is what keeps every flagged type's names
+recoverable. The default profile marks exactly components and apis, so the
+swept set is unchanged. The downstream pipeline step (`spex plan`) treats a non-empty
 `errors` array as a halt signal — the pipeline does
 not advance until errors clear.
 

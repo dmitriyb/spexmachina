@@ -5,7 +5,7 @@ Validates identity-hash uniqueness, cross-reference integrity, mandatory `preq_i
 ## Responsibilities
 
 ### ID Uniqueness
-- [[707094f8868b|ID uniqueness]] is scoped to one array: every identity hash must be unique within the array that contains it, and nowhere wider. In project.json the checked arrays are `requirements`, `modules` and `sections`; in each module.json they are `requirements`, `components`, `data_flows`, `test_sections` and `apis`
+- [[707094f8868b|ID uniqueness]] is scoped to one array: every identity hash must be unique within the array that contains it, and nowhere wider. The checked arrays are the ones the resolved profile declares; under the default profile that is `requirements`, `modules` and `sections` in project.json, and `requirements`, `components`, `data_flows`, `test_sections` and `apis` in each module.json
 - Uniqueness is checked by tallying each hash in a per-array set of strings — any hash counted more than once is reported with its array location and the offending hash
 - Collisions across distinct logical nodes are mathematically improbable in the 48-bit hash space, but the validator still checks them so hand-edited or hand-merged files cannot smuggle a stale ID into a new node
 
@@ -17,12 +17,12 @@ This is the only cross-file uniqueness check in this component. Every other one 
 
 ### API Name Recoverability
 
-A declared api or component name is rejected unless tokenizing it the way the removal-time corpus scan tokenizes prose reproduces it exactly, in at least one and at most six whitespace-separated words. The rule is not a style preference: it is the corpus scan's reachability condition applied at the point of declaration. Every phrase that scan builds is a join of corpus tokens with single spaces, so a name that is not itself such a join is a name no candidate phrase can equal — the node would be unsweepable from the moment it was declared, and nothing would say so.
+A declared name of any type the resolved profile marks name-declarable — the same per-type role flag the removal-name sweep iterates; under the default profile, apis and components — is rejected unless tokenizing it the way the removal-time corpus scan tokenizes prose reproduces it exactly, in at least one and at most six whitespace-separated words. The rule is not a style preference: it is the corpus scan's reachability condition applied at the point of declaration. Every phrase that scan builds is a join of corpus tokens with single spaces, so a name that is not itself such a join is a name no candidate phrase can equal — the node would be unsweepable from the moment it was declared, and nothing would say so.
 
 `spex validate [--json]` is the shape this rejects: the brackets are stripped by the tokenizer, so the declared name and the phrase the scan rebuilds differ. `spex validate --json` is declarable; so is `spex map get`. The api name is the surface string alone — never a signature, never an argument placeholder.
 
 ### Cross-Reference Integrity
-[[4b399b1c568f|Cross-reference integrity]] holds when every edge in the spec names a node that exists. All references are identity hash strings, validated by string set membership against the appropriate per-array set:
+[[4b399b1c568f|Cross-reference integrity]] holds when every edge in the spec names a node that exists. The edge set checked is the resolved profile's declaration — which reference fields a type may carry and what node type each points at — so a profile-declared edge is resolved by the same set-membership machinery, and an id whose type the profile does not declare has no array to resolve against. All references are identity hash strings, validated by string set membership against the appropriate per-array set. Under the default profile the declared edges are:
 
 - `implements`: component → requirement identity hashes within the same module
 - `uses` (component): component → component identity hashes within the same module
@@ -55,6 +55,8 @@ Uniqueness and name shape run before cross-reference resolution, and the two pha
 Modules are visited in sorted name order, so the same spec always produces the same entries in the same sequence.
 
 Every ID and cross-reference field is a string end to end — the loaded spec carries identity hashes as text, so the checker compares them directly with no conversion, parsing or decomposition.
+
+Id derivation runs over the node types the resolved profile declares: each module-scoped node's declared id is recomputed from its identity string, whose middle part is the declared type name, so a profile-declared node's id is derived and checked exactly as a built-in one's. Under the default profile the derived set is today's five module-scoped types.
 
 ## Error Format
 

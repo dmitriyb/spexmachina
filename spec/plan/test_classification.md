@@ -46,6 +46,13 @@ A Match entry whose change type is `added` but whose pairing records a different
 
 An unmatched `added` api yields zero actions; a test_section with `len(describes) == 1` is skipped; a data_flow always produces a task action. The retarget split lives inside the matched path only and the gate in front of the unmatched path is exactly what it was.
 
+### S5b: The gate's admitted set is the profile's plan-relevant declaration
+
+The bead-producing set the node-type gate consults is read from the resolved profile rather than from a compiled-in constant. Two arms:
+
+- Under the default profile, S5's verdicts hold byte-for-byte — the default declares today's plan-relevant set, so api stays outside it, data_flow always produces, and the describes-length rule binds test_section.
+- Under a profile declaring an `endpoint` type as plan-relevant, an unmatched `added` endpoint produces one create whose op carries `spec_node_kind: "endpoint"` — the bead type it is filed as is the adapter's mapping, not the op's; a profile leaving `endpoint` outside the set yields zero actions for the same change. The classifier branches on the declaration, never on the type name.
+
 ### S6: Resolver recomputes a retarget's deps add-only
 
 Given a retarget action for component X whose `uses` now names Y (in-batch create) and Z (open task in the fold):

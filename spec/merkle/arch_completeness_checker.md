@@ -25,6 +25,8 @@ the contract.
 
 All checks operate on identity hashes. The diff change keys, the `implements` arrays in `module.json`, and the keys in the resolved component map are all hex strings — comparison is exact-match.
 
+Which node types trigger the rules is the resolved profile's declaration, not a compiled-in pair: the requirement-leaf checks fire on the type the profile assigns that role, and the meta-envelope sweep on the fixed `meta` leaves, with the implementing edge and the content-bearing types likewise read from the profile's declarations. The default profile declares exactly the triggers described below, so every rule reads under it as it always has.
+
 ### Modified requirement → implementing component content must change
 
 When a requirement leaf changed (a change whose key is the requirement's identity hash and whose node type is `requirement`), resolve which components implement that requirement by scanning every component's `implements` array for that hash. For each such component, its content leaf must also appear as a change in the diff (looked up by the component's identity hash).

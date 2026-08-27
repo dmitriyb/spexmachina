@@ -17,6 +17,8 @@
 | `arch_impl` | Node type is `component` | Architecture changed, dependent modules may be affected |
 | `structural` | Node type is `meta` or `requirement` | Spec structure changed — new/removed nodes, changed edges, changed requirements |
 
+The four levels are fixed; the mapping from declared node type to level is the resolved profile's graph-rules declaration, joined by one fixed rule — `meta` leaves are the frame's, always `structural` — and the table above states the default profile's assignment: a profile-declared type is classified by its declared level through the same rules, and under the default profile every built-in type lands exactly where it always has.
+
 The `contract` level sits between `impl_only` and `arch_impl`: contract changes are not purely local to one component (so `impl_only` is wrong), but they also do not rewire graph topology (so `arch_impl` is wrong). `data_flow` and `api` land there together because they are the same kind of surface seen from two sides — a data_flow is a shape agreed between components inside the module, an api is a surface the module declares to its callers — and neither belongs to a single component. Downstream node matchers skip `structural` changes but forward `contract` changes so a dedicated data_flow task bead is produced.
 
 ## Interface
@@ -29,7 +31,7 @@ The module association already travels with each change from [[cb262b280963|Diff
 
 ## Rules
 
-Classification reads the node metadata the DiffEngine attached to each change — its `node_type` and its `module` — and never a path:
+Classification reads the node metadata the DiffEngine attached to each change — its `node_type` and its `module` — and never a path. The rules are the profile's type-to-level assignments plus the fixed `meta` rule; under the default profile they are:
 
 1. If a change's `node_type` is `test_section` → `impl_only`
 2. If it is `data_flow` or `api` → `contract`
@@ -37,7 +39,7 @@ Classification reads the node metadata the DiffEngine attached to each change �
 4. If it is `meta` (module.json or project.json) → `structural`
 5. If it is `requirement` → `structural`
 
-A `node_type` that none of those five rules names gets no level at all and is reported as `unknown` —
+A `node_type` the resolved profile does not declare (and that is not `meta`) gets no level at all and is reported as `unknown` —
 on the change's own line in both output formats, and in the JSON summary's per-impact counts.
 TreeBuilder never produces such a type, because it stamps every leaf it creates with one of the node
 types the rules already cover. It is reachable anyway: a removed leaf takes its node type from the

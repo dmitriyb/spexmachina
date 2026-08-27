@@ -197,6 +197,28 @@ tmp/spec/
 **When** the check runs twice.
 **Then** both runs return the same three notes in declaration order.
 
+### Declared Coverage Chain Scenarios
+
+The coverage rules both checkers enforce are declared chains read from the resolved profile — each the triple "every node of type A must be the target of at least one edge of kind E from some node of type B". These scenarios exercise the declaration; every scenario above runs under the default profile, whose three declared links reproduce the fixed rules byte-for-byte.
+
+#### CC1: Dropping a declared link removes the check
+
+**Given** a `spec/profile.json` identical to the default except the component-to-test_section coverage link is absent, over a fixture with an uncovered component.
+**When** the validation pipeline runs.
+**Then** zero test-coverage errors — the checker enforces only the chains the profile declares. The same fixture under the default profile yields the T2 error unchanged.
+
+#### CC2: Declared type names are interpolated into the error shapes
+
+**Given** a profile that renames `component` to `endpoint` (same shape, different name), over a fixture with an uncovered endpoint.
+**When** the coverage checks run.
+**Then** the error carries the same shape as T2 with the declared type names interpolated — the uncovered node named as an endpoint, the covering type as declared — rather than the literal words "component" and "test_section".
+
+#### CC3: A spec validates under its own profile and fails under the default
+
+**Given** a fixture spec authored against a deliberately different profile — one type renamed, one coverage link dropped — with the profile file in place.
+**When** the full validation pipeline runs, then runs again with the profile file removed.
+**Then** the first run reports zero errors; the second reports schema-conformance errors for the renamed type's array and would report the dropped link's coverage errors. This is the acceptance test that the profile is load-bearing, not decorative.
+
 ---
 
 ## Edge Cases

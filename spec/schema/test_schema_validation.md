@@ -1,6 +1,6 @@
 # Schema Validation Tests
 
-Integration and acceptance tests for ProjectSchema (component 1) and ModuleSchema (component 2). These tests verify that the JSON Schema definitions correctly accept valid specs, reject invalid specs, and enforce all constraints defined in `project.schema.json` and `module.schema.json`.
+Integration and acceptance tests for ProjectSchema (component 1) and ModuleSchema (component 2). These tests verify that the JSON Schema definitions correctly accept valid specs, reject invalid specs, and enforce all constraints. Both documents are composed from the resolved profile at load time; every scenario below runs against the schemas composed from the default profile, which are golden-tested elsewhere to equal the previous static documents, so the assertions here hold byte-for-byte identically to the pre-profile behaviour.
 
 All scenarios below assume a JSON Schema validator is available (e.g., `santhosh-tekuri/jsonschema` or equivalent). The validator is loaded with the embedded schema and then asked to validate JSON documents. "Passes validation" means zero errors; "fails validation" means one or more structured errors with paths.
 
@@ -570,6 +570,26 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 }
 ```
 **Expected:** Validation fails. The module-level requirement definition does not include `derivation` — a module requirement derives by construction through its required `preq_id` — and `additionalProperties: false` rejects it. Like E8 in the opposite direction, this verifies the two requirement definitions stay correctly separated.
+
+### S27: Profile-declared array accepted, undeclared array still rejected
+
+**Steps:** Compose the module schema from a profile that declares an additional module-scoped `endpoint` type with plural key `endpoints` and a required content leaf. Validate two documents against the composed schema:
+
+**Input (declared array):**
+```json
+{
+  "name": "m",
+  "endpoints": [
+    { "id": "000000000001", "name": "GET /things", "content": "endpoint_things.md" }
+  ]
+}
+```
+**Expected:** Validation passes — the profile-supplied array gets the same envelope constraints (identity-hash id, non-empty name, required content) the built-in types get.
+
+**Input (undeclared array):** the same document with `"widgets": []` added.
+**Expected:** Validation fails at the root — `additionalProperties: false` is part of the fixed frame, so an array no profile declares is rejected exactly as it always was.
+
+**Verifies:** The frame-plus-vocabulary split — the profile supplies array properties, the frame supplies everything else, and declaring a type is the only way to open an array.
 
 ### E11: Section with arbitrary content properties passes schema validation
 

@@ -1,8 +1,8 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader (component 3). The SchemaLoader is the Go package (`schema/schema.go`) that embeds `project.schema.json`, `module.schema.json`, and the journal-line schema `bead-map.schema.json` via `go:embed` and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like.
+Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas from the resolved profile, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader resolves the profile SchemaLoader composes from: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile to every consumer.
 
-These tests verify that the embedding works correctly, that the loaded schemas are structurally sound, that they can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
+These tests verify that the embedding works correctly, that the composed schemas are structurally sound and reproduce the shipped static documents under the default profile, that profile resolution and fallback behave as declared, that the composed schemas can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
 ## Setup
 
@@ -284,6 +284,37 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 **Expected:** Each call returns *some* 12-char hex string, all three are distinct, and none panic. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
 
 **Verifies:** The function does not crash on degenerate input. It also does not silently treat empty strings as identical to absent parts.
+
+## ProfileLoader Scenarios
+
+These scenarios cover profile resolution and the composition acceptance criterion. The spec directory used is a fixture; "the default profile" means the built-in declaration of today's ontology.
+
+### P1: Absent profile file resolves to the default profile
+
+**Steps:** Resolve the profile over a spec directory containing no `spec/profile.json`.
+**Expected:** Resolution succeeds; the resolved profile declares exactly the five built-in node types (requirement, component, data_flow, test_section, api) with today's per-type role flags — the completeness trigger on requirement, the name-declarable role on exactly component and api — the seven edge kinds with the `cyclic` flag omitted on every one, the three coverage links, the plan-relevant set, the per-type impact-level mapping, the hashed field allowlists, and refresh's absorbable directions.
+**Verifies:** Absence of the file is the supported default, not an error — an existing project adopts the profile mechanism by doing nothing.
+
+### P2: Composed schemas equal the shipped static documents (golden test)
+
+**Steps:** Resolve the default profile, compose the project and module schemas from it, and compare each against the shipped static schema document as a golden file.
+**Expected:** Both composed documents reproduce the shipped documents; a composition that does not is a test failure, not a tolerated drift.
+**Verifies:** The acceptance criterion that the default profile reproduces current behaviour exactly — the on-disk shape of every existing project.json and module.json is unchanged.
+
+### P3: Malformed profile is a distinct early failure
+
+**Steps:** Place a `spec/profile.json` containing `{invalid json` (and, in a second case, a well-formed JSON document that violates the profile's own constraints, e.g. a node type with no plural array key). Resolve the profile.
+**Expected:** Resolution fails with one error naming the profile file and the defect. No composed schema is produced and no downstream conformance check runs, so the failure is never reported as a cascade of confusing schema-conformance errors.
+
+### P4: A declared custom type reaches the composed schema
+
+**Steps:** Place a valid `spec/profile.json` declaring an `endpoint` type, module-scoped, plural key `endpoints`, content leaf required. Resolve and compose the module schema.
+**Expected:** The composed module schema's `properties` contains an `endpoints` array validated with the same envelope constraints (identity-hash id, name, required content) the built-in types get; `additionalProperties: false` still rejects any array the profile does not declare.
+
+### P5: Resolution is deterministic
+
+**Steps:** Resolve the same profile (default and file-backed) twice.
+**Expected:** Byte-identical resolved profiles and byte-identical composed schemas across runs.
 
 ## BeadMapSchema Scenarios
 

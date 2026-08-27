@@ -498,3 +498,18 @@ Verify ordering by checking that the byte offset of each section heading is stri
 **When** `RenderMarkdown(spec, &buf)` is called.
 
 **Then:** No `## Sections` heading appears. The output is identical to current behavior for specs without sections.
+
+## Declared Type Scenarios
+
+### DT1: All three renderers emit a profile-declared type's nodes
+
+**Given** a graph read under a profile declaring an `endpoint` type, holding two endpoint nodes with content.
+
+**When** `RenderMarkdown`, `RenderDOT` and `RenderJSON` are each called.
+
+**Then:**
+- MarkdownRenderer: the endpoints appear under the owning module with their content inlined, in the same per-type sectioning the built-in types get
+- DOTRenderer: each endpoint is declared by its quoted identity hash with a shape distinct from the built-in kinds' shapes, and its profile-declared edges carry labelled edge lines
+- JSONRenderer: the nodes array carries one entry per endpoint with `"type": "endpoint"`, and the slim node table lists them beside the built-in types — the table the authoring skills read, so a declared type is loggable and linkable like any other
+
+**Rationale**: the renderers iterate the resolved profile's declared types rather than a fixed five; under the default profile every scenario above holds byte-for-byte.
