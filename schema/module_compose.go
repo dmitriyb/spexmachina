@@ -35,19 +35,32 @@ func DefaultModuleNodeTypes() []ModuleNodeType {
 	}
 }
 
+// defaultArrayKeyByTypeName maps each built-in default type name to the
+// plural key its array property carries in the shipped frame — the lookup
+// that lets ComposeModuleSchema find a built-in type's original array
+// property definition to restore unchanged.
+func defaultArrayKeyByTypeName() map[string]string {
+	keys := make(map[string]string, len(moduleProfileArrays))
+	for _, t := range DefaultModuleNodeTypes() {
+		keys[t.Name] = t.PluralKey
+	}
+	return keys
+}
+
 // ComposeModuleSchema composes the effective module.json JSON Schema from
 // the shipped frame plus one array property per given module-scoped node
 // type, keyed by its plural key. A type whose name matches one of the
 // frame's built-in $defs (requirement, component, data_flow, test_section,
-// api) reuses that definition unchanged. Any other name gets a generic
-// envelope definition — an identity-hash id, a non-empty name, and, only
-// when RequiresContent is set, a required content path — the same
-// constraints today's components array enforces. additionalProperties:false
-// at the root, inherited unchanged from the frame, is what rejects any
-// array no passed type declares. Composing with DefaultModuleNodeTypes
-// reproduces the shipped module.schema.json.
+// api) reuses that definition, and its array property, unchanged from the
+// frame. Any other name gets a generic envelope definition — an
+// identity-hash id, a non-empty name, and, only when RequiresContent is
+// set, a required content path — the same constraints today's components
+// array enforces, and a synthesized array property description.
+// additionalProperties:false at the root, inherited unchanged from the
+// frame, is what rejects any array no passed type declares. Composing with
+// DefaultModuleNodeTypes reproduces the shipped module.schema.json.
 func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
-	frame, err := moduleSchemaFrame()
+	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
 		return nil, fmt.Errorf("schema: compose module schema: %w", err)
 	}
@@ -60,10 +73,20 @@ func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
 	if !ok {
 		return nil, fmt.Errorf("schema: compose module schema: frame has no $defs object")
 	}
+	defaultKeys := defaultArrayKeyByTypeName()
 
 	for _, t := range types {
-		if _, declared := defs[t.Name]; !declared {
+		_, declared := defs[t.Name]
+		if !declared {
 			defs[t.Name] = genericNodeDef(t)
+		}
+		if declared {
+			if origKey, ok := defaultKeys[t.Name]; ok {
+				if orig, ok := originalArrays[origKey]; ok {
+					props[t.PluralKey] = orig
+					continue
+				}
+			}
 		}
 		props[t.PluralKey] = map[string]any{
 			"type":        "array",
@@ -83,24 +106,31 @@ func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
 // profile-supplied array properties, leaving the envelope fields, the
 // identity-hash pattern, additionalProperties:false, and the $defs library
 // of built-in node-type shapes — the frame a resolved profile composes
-// against.
-func moduleSchemaFrame() (map[string]any, error) {
+// against. It also returns the stripped array properties, keyed by their
+// original plural key, so a built-in type can have its original array
+// property restored unchanged rather than overwritten with a synthesized
+// one.
+func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 	data, err := ModuleSchema()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var frame map[string]any
 	if err := json.Unmarshal(data, &frame); err != nil {
-		return nil, fmt.Errorf("unmarshal module schema: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal module schema: %w", err)
 	}
 	props, ok := frame["properties"].(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("module schema has no properties object")
+		return nil, nil, fmt.Errorf("module schema has no properties object")
 	}
+	original := make(map[string]any, len(moduleProfileArrays))
 	for _, key := range moduleProfileArrays {
+		if v, ok := props[key]; ok {
+			original[key] = v
+		}
 		delete(props, key)
 	}
-	return frame, nil
+	return frame, original, nil
 }
 
 // genericNodeDef synthesizes the JSON Schema definition for a module-scoped

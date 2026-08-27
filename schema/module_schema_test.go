@@ -822,11 +822,15 @@ func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
 }
 
 // TestFR2_ComposeModuleSchemaDefaultMatchesStatic verifies the design
-// rationale behind S27: composing from DefaultModuleNodeTypes reproduces a
-// schema that accepts exactly what the shipped static module.schema.json
-// accepts, since every default type name resolves to the frame's existing
-// $defs entry.
-func TestFR2_ComposeModuleSchemaDefaultMatchesStatic(t *testing.T) {
+// TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures checks that
+// composing from DefaultModuleNodeTypes yields a schema that still accepts
+// the same known-good module fixtures the static schema accepts (S3, S4),
+// since every default type name resolves to the frame's existing $defs
+// entry. It validates fixtures only — it does not compare the composed
+// document against the shipped static module.schema.json byte-for-byte;
+// that golden comparison is scenario P2 in test_schema_loading.md, owned by
+// SchemaLoader.
+func TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 	data, err := ComposeModuleSchema(DefaultModuleNodeTypes())
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
