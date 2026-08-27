@@ -179,7 +179,17 @@ func TestFR58_E4_UnknownType(t *testing.T) {
 		t.Fatal("expected error, got nil")
 	}
 	msg := err.Error()
-	for _, want := range []string{"requirement", "component", "data_flow", "test_section", "api", "module"} {
+	seen := make(map[string]bool)
+	var wants []string
+	for _, nt := range schema.DefaultProfile().NodeTypes {
+		if seen[nt.Name] {
+			continue
+		}
+		seen[nt.Name] = true
+		wants = append(wants, nt.Name)
+	}
+	wants = append(wants, "module")
+	for _, want := range wants {
 		if !strings.Contains(msg, want) {
 			t.Errorf("expected error listing valid types, missing %q in %q", want, msg)
 		}
@@ -218,6 +228,9 @@ func TestFR58_E4b_ProfileDeclaredTypeAccepted(t *testing.T) {
 	_, _, err = runHashID(t, "--module", "alpha", "--type", "endpoint", "--name", "Foo")
 	if err == nil {
 		t.Fatal("expected error: endpoint type is not declared without the profile file")
+	}
+	if want := "unknown type"; !strings.Contains(err.Error(), want) {
+		t.Errorf("want error containing %q, got %q", want, err)
 	}
 }
 
