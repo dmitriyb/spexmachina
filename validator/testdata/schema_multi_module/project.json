@@ -1,0 +1,27 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    },
+    {
+      "id": "000000000002",
+      "name": "beta",
+      "path": "beta"
+    }
+  ],
+  "name": "schema-multi-module",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "title": "Feature A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "title": "Feature B",
+      "type": "functional"
+    }
+  ]
+}

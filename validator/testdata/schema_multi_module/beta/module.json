@@ -1,0 +1,17 @@
+{
+  "components": [
+    {
+      "content": "arch_compb.md",
+      "name": "CompB"
+    }
+  ],
+  "name": "beta",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000002",
+      "title": "Beta Feat",
+      "type": "functional"
+    }
+  ]
+}

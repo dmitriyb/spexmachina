@@ -1,0 +1,16 @@
+{
+  "name": "alpha",
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "Widget",
+      "content": "arch_widget.md"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "000000000001",
+      "name": "Get widget"
+    }
+  ]
+}

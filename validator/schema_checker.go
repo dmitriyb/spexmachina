@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/dmitriyb/spexmachina/schema"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
@@ -18,27 +17,19 @@ type compiledSchemas struct {
 	module  *jsonschema.Schema
 }
 
-var (
-	cachedSchemas    *compiledSchemas
-	cachedSchemasErr error
-	schemasOnce      sync.Once
-)
-
-// getSchemas compiles the embedded JSON Schemas once and caches the result.
-func getSchemas() (*compiledSchemas, error) {
-	schemasOnce.Do(func() {
-		cachedSchemas, cachedSchemasErr = compileSchemas()
-	})
-	return cachedSchemas, cachedSchemasErr
-}
-
-// compileSchemas loads and compiles the embedded JSON Schemas.
-func compileSchemas() (*compiledSchemas, error) {
+// compileSchemas composes the project and module JSON Schemas from the
+// given resolved profile and compiles them. Composition and compilation
+// happen once per CheckSchema call and are reused for every file that call
+// validates, so a spec of a hundred modules costs one compilation and one
+// validation call per file. The result is not cached across calls: the
+// composed schema depends on the profile the caller's spec directory
+// resolves, which can differ from one call to the next.
+func compileSchemas(profile *schema.Profile) (*compiledSchemas, error) {
 	c := jsonschema.NewCompiler()
 
-	projBytes, err := schema.ProjectSchema()
+	projBytes, err := schema.ComposeProjectSchema(profile.ProjectNodeTypes())
 	if err != nil {
-		return nil, fmt.Errorf("validator: load project schema: %w", err)
+		return nil, fmt.Errorf("validator: compose project schema: %w", err)
 	}
 	projDoc, err := jsonschema.UnmarshalJSON(bytes.NewReader(projBytes))
 	if err != nil {
@@ -48,9 +39,9 @@ func compileSchemas() (*compiledSchemas, error) {
 		return nil, fmt.Errorf("validator: add project schema: %w", err)
 	}
 
-	modBytes, err := schema.ModuleSchema()
+	modBytes, err := schema.ComposeModuleSchema(profile.ModuleNodeTypes())
 	if err != nil {
-		return nil, fmt.Errorf("validator: load module schema: %w", err)
+		return nil, fmt.Errorf("validator: compose module schema: %w", err)
 	}
 	modDoc, err := jsonschema.UnmarshalJSON(bytes.NewReader(modBytes))
 	if err != nil {
@@ -73,9 +64,25 @@ func compileSchemas() (*compiledSchemas, error) {
 }
 
 // CheckSchema validates project.json and all module.json files in specDir
-// against the embedded JSON Schemas. It returns all violations found.
+// against the JSON Schemas composed from the spec directory's resolved
+// profile. It returns all violations found.
+//
+// The profile is resolved before any schema is compiled, so a malformed
+// profile.json is reported as a single early failure naming the profile
+// file, never as a cascade of conformance errors against a half-composed
+// schema.
 func CheckSchema(specDir string) []ValidationError {
-	schemas, err := getSchemas()
+	profile, perr := schema.ResolveProfile(specDir)
+	if perr != nil {
+		return []ValidationError{{
+			Check:    "schema",
+			Severity: "error",
+			Path:     "profile.json",
+			Message:  perr.Error(),
+		}}
+	}
+
+	schemas, err := compileSchemas(profile)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "schema",
