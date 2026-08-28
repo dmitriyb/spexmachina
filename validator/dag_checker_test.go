@@ -113,6 +113,53 @@ func TestREQ3_AllDAGErrorsTagged(t *testing.T) {
 	}
 }
 
+// D9: Acyclicity over profile-declared edges — the DAG check enforces
+// acyclicity over every edge kind the resolved profile declares that is not
+// marked cyclic: true, not over a fixed edge set. A profile declaring an
+// "endpoint" type carrying a "serves" edge to other endpoints exercises that
+// with a graph the three built-in fast paths never walk.
+func TestREQ3_ProfileDeclaredEdgeCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_edge_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for the profile-declared serves edge, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "serves cycle") {
+			found = true
+			if !strings.Contains(e.Message, "Get widget") || !strings.Contains(e.Message, "Give widget") {
+				t.Fatalf("cycle path should name both endpoints, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a serves cycle error, got: %v", errs)
+	}
+}
+
+// D9 variant: the same loop, but the profile marks the serves edge
+// cyclic: true — a cyclic edge is descriptive, exempt from the cycle check,
+// so the same data validates with zero DAG errors.
+func TestREQ3_ProfileDeclaredEdgeCyclicExempt(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_edge_cyclic_exempt"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for a cyclic-exempt profile-declared edge, got %d: %v", len(errs), errs)
+	}
+}
+
+// A built-in edge kind (requires_module) marked cyclic: true in the resolved
+// profile is exempt from the cycle check the same way a profile-declared
+// edge is: the flag applies uniformly, not only to graphs built generically.
+func TestREQ3_BuiltinEdgeCyclicExempt(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_builtin_exempt"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors when requires_module is marked cyclic: true, got %d: %v", len(errs), errs)
+	}
+}
+
 func TestREQ3_SelfValidateDAG(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)

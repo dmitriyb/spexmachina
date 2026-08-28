@@ -1,0 +1,19 @@
+{
+  "name": "alpha",
+  "endpoints": [
+    {
+      "id": "0000000000e1",
+      "name": "Get widget",
+      "serves": [
+        "0000000000e2"
+      ]
+    },
+    {
+      "id": "0000000000e2",
+      "name": "Give widget",
+      "serves": [
+        "0000000000e1"
+      ]
+    }
+  ]
+}

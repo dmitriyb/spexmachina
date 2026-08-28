@@ -1,0 +1,20 @@
+{
+  "node_types": [
+    {
+      "name": "endpoint",
+      "plural_key": "endpoints",
+      "scope": "module"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "serves",
+      "from": [
+        "endpoint"
+      ],
+      "to": [
+        "endpoint"
+      ]
+    }
+  ]
+}

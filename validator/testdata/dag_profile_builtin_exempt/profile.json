@@ -1,0 +1,21 @@
+{
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "requires_module",
+      "from": [
+        "module"
+      ],
+      "to": [
+        "module"
+      ],
+      "cyclic": true
+    }
+  ]
+}
