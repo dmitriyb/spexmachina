@@ -93,8 +93,8 @@ func parseImpactLevel(name string) ImpactLevel {
 	}
 }
 
-// resolveModule maps a module ID to a name. Returns "" for project-level nodes
-// (module ID 0).
+// resolveModule maps a module identity hash to a name. Returns "" for
+// project-level nodes, which carry an empty module hash.
 func resolveModule(moduleHash string, moduleNames map[string]string) string {
 	if moduleHash == "" {
 		return ""
