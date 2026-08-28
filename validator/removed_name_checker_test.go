@@ -664,7 +664,7 @@ func TestREQ_6f8284df92a2_SelfCheckRealCorpus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load snapshot: %v", err)
 	}
-	classified := merkle.Classify(merkle.Diff(current, snapshot), merkle.ModuleNames(current))
+	classified := merkle.Classify(merkle.Diff(current, snapshot), merkle.ModuleNames(current), schema.DefaultProfile())
 
 	report, err := CheckRemovedNames(specDir, filepath.Join(stateDir, lifecycle.JournalFileName), classified)
 	if err != nil {

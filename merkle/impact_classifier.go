@@ -1,14 +1,16 @@
 package merkle
 
-// TODO(bead:spexmachina-s85): review after spexmachina-kdb changed Module from int to string
+import "github.com/dmitriyb/spexmachina/schema"
 
 // ImpactLevel represents the severity of a spec change. Ordering (lowest to
-// highest) is impl_only < contract < arch_impl < structural — the int value
-// reflects this so a numeric max yields the aggregate module impact.
+// highest) is unknown < impl_only < contract < arch_impl < structural — the
+// int value reflects this so a numeric max yields the aggregate module
+// impact.
 type ImpactLevel int
 
 const (
-	ImplOnly ImpactLevel = iota + 1
+	Unknown ImpactLevel = iota
+	ImplOnly
 	Contract
 	ArchImpl
 	Structural
@@ -36,41 +38,63 @@ type ClassifiedChange struct {
 	Module string // module name; empty for project-level changes
 }
 
-// Classify assigns an impact level and owning module to each change based on
-// node metadata (NodeType, Module) carried by each Change from the DiffEngine.
-// The moduleNames map resolves module IDs to human-readable names. If nil,
-// the module ID string is used as-is.
-func Classify(changes []Change, moduleNames map[string]string) []ClassifiedChange {
+// Classify assigns an impact level and owning module name to each change,
+// one classification per change, in the order handed in. The level comes
+// from node metadata (NodeType) each Change already carries from the
+// DiffEngine — never a path — read against profile's type-to-level mapping,
+// joined by the one fixed rule: a "meta" node type is always Structural,
+// regardless of what the profile declares. A node type that is neither
+// "meta" nor declared by the profile classifies Unknown. moduleNames
+// resolves a module identity hash to its name; a hash the map does not
+// cover, or a nil map, passes through as the hash itself, and a
+// project-level change (empty Module) stays empty. Classify has no failure
+// mode: resolving profile is the caller's job, done before this call.
+func Classify(changes []Change, moduleNames map[string]string, profile *schema.Profile) []ClassifiedChange {
 	result := make([]ClassifiedChange, len(changes))
 	for i, c := range changes {
 		result[i] = ClassifiedChange{
 			Change: c,
-			Impact: classifyNodeType(c.NodeType),
+			Impact: classifyNodeType(c.NodeType, profile),
 			Module: resolveModule(c.Module, moduleNames),
 		}
 	}
 	return result
 }
 
-// classifyNodeType determines the impact level from node metadata.
-func classifyNodeType(nodeType string) ImpactLevel {
-	switch nodeType {
-	case "test_section":
+// classifyNodeType determines the impact level for a node type: the fixed
+// meta rule first, then the resolved profile's declared mapping, and
+// Unknown for a type neither covers.
+func classifyNodeType(nodeType string, profile *schema.Profile) ImpactLevel {
+	if nodeType == "meta" {
+		return Structural
+	}
+	levelName, ok := profile.ImpactLevels[nodeType]
+	if !ok {
+		return Unknown
+	}
+	return parseImpactLevel(levelName)
+}
+
+// parseImpactLevel converts a profile-declared impact_levels value into its
+// ImpactLevel constant. Unknown covers a malformed declaration the same way
+// it covers an undeclared node type — Classify itself never fails.
+func parseImpactLevel(name string) ImpactLevel {
+	switch name {
+	case "impl_only":
 		return ImplOnly
-	// Both are contract surfaces: data_flow between components, api to callers.
-	case "data_flow", "api":
+	case "contract":
 		return Contract
-	case "component":
+	case "arch_impl":
 		return ArchImpl
-	case "meta", "requirement":
+	case "structural":
 		return Structural
 	default:
-		return 0
+		return Unknown
 	}
 }
 
-// resolveModule maps a module ID to a name. Returns "" for project-level nodes
-// (module ID 0).
+// resolveModule maps a module identity hash to a name. Returns "" for
+// project-level nodes, which carry an empty module hash.
 func resolveModule(moduleHash string, moduleNames map[string]string) string {
 	if moduleHash == "" {
 		return ""

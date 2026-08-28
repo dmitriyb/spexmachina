@@ -6,6 +6,7 @@ import (
 
 	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/dmitriyb/spexmachina/validator"
 	"github.com/spf13/cobra"
 )
@@ -62,9 +63,17 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("diff: %w", err)
 	}
 
+	// TODO(bead:spexmachina-h4gv.16): move this resolution ahead of the
+	// snapshot/tree loading above so a malformed profile.json is refused in
+	// one early error before any tree is built, per arch_diff_command.md.
+	profile, err := schema.ResolveProfile(specDir)
+	if err != nil {
+		return fmt.Errorf("diff: %w", err)
+	}
+
 	changes := merkle.Diff(current, snapshot)
 	moduleNames := merkle.ModuleNames(current)
-	classified := merkle.Classify(changes, moduleNames)
+	classified := merkle.Classify(changes, moduleNames, profile)
 	completenessErrors := merkle.CheckCompleteness(classified, specDir)
 
 	// Removal-time name checking. It belongs here rather than in `spex
