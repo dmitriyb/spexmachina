@@ -19,14 +19,24 @@ var builtinModuleTypeNames = map[string]bool{
 	"test_section": true, "api": true,
 }
 
-// builtinEdgeKinds are the reference fields checkProjectRefs and
-// checkModuleRefs already resolve by name. A profile-declared edge whose
-// kind is not one of these is resolved generically by
-// checkExtraModuleEdges.
-var builtinEdgeKinds = map[string]bool{
-	"implements": true, "uses": true, "describes": true,
-	"provided_by": true, "depends_on": true, "requires_module": true,
-	"preq_id": true,
+// builtinEdgeCoverage is the (kind, from-type) pairs checkProjectRefs and
+// checkModuleRefs already resolve by name — the eight pairs DefaultProfile's
+// seven edge kinds expand to ("uses" carries two: component and data_flow).
+// A profile-declared edge covers a (kind, from-type) pair outside this set —
+// whether its kind is altogether new or shares a name with a built-in kind
+// but is declared from a type the built-in checks don't enumerate — and is
+// resolved generically by checkExtraModuleEdges instead. Partitioning on
+// kind name alone would miss the second case: a profile can declare
+// "uses" from a type neither checkModuleRefs loop reads, and that edge
+// would go unchecked by both the hardcoded path and the generic one.
+var builtinEdgeCoverage = map[string]map[string]bool{
+	"implements":      {"component": true},
+	"uses":            {"component": true, "data_flow": true},
+	"describes":       {"test_section": true},
+	"provided_by":     {"api": true},
+	"depends_on":      {"requirement": true},
+	"requires_module": {"module": true},
+	"preq_id":         {"requirement": true},
 }
 
 // CheckIDs validates identity-hash uniqueness within each array and
@@ -41,10 +51,12 @@ var builtinEdgeKinds = map[string]bool{
 //
 // The checked arrays and edges are the resolved profile's declaration. The
 // five built-in module-scoped types (requirement, component, data_flow,
-// test_section, api) and the seven built-in edge kinds are checked via
-// schema.ModuleSpec's typed fields, unchanged from before profiles existed.
-// Anything the resolved profile declares beyond that — a node type with no
-// dedicated Go field, or an edge kind beyond the built-in seven — is
+// test_section, api) and the eight built-in (edge kind, from-type) pairs are
+// checked via schema.ModuleSpec's typed fields, unchanged from before
+// profiles existed. Anything the resolved profile declares beyond that — a
+// node type with no dedicated Go field, or an (edge kind, from-type) pair
+// beyond the built-in eight, including a profile-declared edge that reuses a
+// built-in kind name from a type the hardcoded checks don't enumerate — is
 // checked generically, by parsing the raw JSON array the profile names.
 func CheckIDs(specDir string) []ValidationError {
 	project, modules, errs := loadSpec(specDir, "id")
@@ -497,17 +509,19 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 	return errs
 }
 
-// checkExtraModuleEdges checks cross-reference integrity for edges the
-// resolved profile declares beyond the seven built-in kinds — e.g. a project
-// profile declaring a "serves" edge from a custom "endpoint" type to
-// components. Resolution uses the same string set-membership machinery as
-// the built-in edges; the source array is read generically regardless of
-// whether its node type is built-in, because a profile-declared edge kind
-// has no dedicated Go field on any type. The target set prefers a module-
-// local array — every edge among today's declared kinds that is not
-// project-wide (requires_module) or cross-file (preq_id) resolves within the
-// same module, and both of those stay hardcoded in checkProjectRefs and
-// checkModuleRefs above rather than going through this generic path.
+// checkExtraModuleEdges checks cross-reference integrity for (edge kind,
+// from-type) pairs the resolved profile declares beyond the built-in eight —
+// e.g. a project profile declaring a "serves" edge from a custom "endpoint"
+// type to components, or reusing the built-in "uses" kind from a type the
+// hardcoded checkModuleRefs loops don't enumerate. Resolution uses the same
+// string set-membership machinery as the built-in edges; the source array is
+// read generically regardless of whether its node type is built-in, because
+// a profile-declared (kind, from-type) pair has no dedicated Go loop. The
+// target set prefers a module-local array — every edge among today's
+// declared kinds that is not project-wide (requires_module) or cross-file
+// (preq_id) resolves within the same module, and both of those stay
+// hardcoded in checkProjectRefs and checkModuleRefs above rather than going
+// through this generic path.
 func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
@@ -565,15 +579,30 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 	return errs
 }
 
-// extraEdgeKinds returns the resolved profile's declared edges whose kind is
-// not one of the seven built-in ones checkProjectRefs and checkModuleRefs
-// already resolve.
+// extraEdgeKinds returns the resolved profile's declared edges reduced to
+// the (kind, from-type) pairs checkProjectRefs and checkModuleRefs do not
+// already resolve. An edge whose kind matches a built-in one is not
+// automatically covered: it is only covered for the specific from-types
+// builtinEdgeCoverage lists, so a profile that adds a from-type to a
+// built-in kind (a second "uses" edge declared from a profile-declared
+// type, say) still surfaces that from-type here even though the kind name
+// itself is not new.
 func extraEdgeKinds(profile *schema.Profile) []schema.Edge {
 	var out []schema.Edge
 	for _, e := range profile.Edges {
-		if !builtinEdgeKinds[e.Kind] {
-			out = append(out, e)
+		covered := builtinEdgeCoverage[e.Kind]
+		var from []string
+		for _, f := range e.From {
+			if !covered[f] {
+				from = append(from, f)
+			}
 		}
+		if len(from) == 0 {
+			continue
+		}
+		extra := e
+		extra.From = from
+		out = append(out, extra)
 	}
 	return out
 }

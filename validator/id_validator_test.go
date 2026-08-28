@@ -454,6 +454,29 @@ func TestREQ6_DanglingProfileDeclaredEdge(t *testing.T) {
 	}
 }
 
+// TestREQ6_DanglingProfileDeclaredEdgeSharesBuiltinKind: a profile can
+// declare a second "uses" edge from a profile-declared type ("endpoint")
+// alongside the built-in "uses" edge from component/data_flow. Partitioning
+// coverage on kind name alone would treat "uses" as fully built-in and skip
+// this from-type entirely, leaving the dangling reference unchecked by both
+// the hardcoded path and the generic one. Coverage must be per (kind,
+// from-type) pair.
+func TestREQ6_DanglingProfileDeclaredEdgeSharesBuiltinKind(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_uses_second_from"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "uses references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling uses error for profile-declared endpoint from-type sharing the built-in \"uses\" kind, got %v", errs)
+	}
+}
+
 // TestREQ5_ProfileDeclaredNameDeclarableTypeChecked: checkNameRecoverability
 // used to iterate a hardcoded component/api pair. A profile that marks a
 // third module-scoped type ("endpoint") name-declarable via NodeType.
