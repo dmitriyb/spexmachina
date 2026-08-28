@@ -14,20 +14,26 @@ import (
 // builtinDAGEdgeCoverage is the (kind, from-type) pairs checkModuleDAG,
 // checkRequirementDAG and checkComponentDAG already resolve by name — the
 // three edge kinds the default profile declares that can actually close a
-// loop. A profile-declared edge covers a (kind, from-type) pair outside this
-// set — a new edge kind entirely, or a from-type added to a kind these three
-// don't already walk — and is checked generically instead, via
-// checkExtraModuleDAGEdges or checkExtraProjectDAGEdges depending on the
-// from-type's scope. This mirrors builtinEdgeCoverage in id_validator.go,
-// which partitions the same way for reference-integrity checking; the DAG
-// checker's own set is narrower because only three of the default profile's
-// seven edge kinds can close a loop (the other four connect node types that
-// never point back at each other) — see arch_dag_checker.md "Graphs
-// Checked".
+// loop. "uses" carries two from-types under the default profile
+// (component, data_flow), but checkComponentDAG walks uses from components
+// only, so this map names component alone; a data_flow-sourced uses edge is
+// left to the generic path even under the default profile, where it is
+// vacuous (data_flow.uses targets component, which cannot close a loop back
+// to a data_flow) but is not vacuous under a profile that declares a
+// data_flow-to-data_flow uses edge. A profile-declared edge covers a (kind,
+// from-type) pair outside this set — a new edge kind entirely, or a
+// from-type added to a kind these three don't already walk — and is checked
+// generically instead, via checkExtraModuleDAGEdges or
+// checkExtraProjectDAGEdges depending on the from-type's scope. This
+// mirrors builtinEdgeCoverage in id_validator.go, which partitions the same
+// way for reference-integrity checking; the DAG checker's own set is
+// narrower because only three of the default profile's seven edge kinds can
+// close a loop (the other four connect node types that never point back at
+// each other) — see arch_dag_checker.md "Graphs Checked".
 var builtinDAGEdgeCoverage = map[string]map[string]bool{
 	"requires_module": {"module": true},
 	"depends_on":      {"requirement": true},
-	"uses":            {"component": true, "data_flow": true},
+	"uses":            {"component": true},
 }
 
 // CheckDAG builds dependency graphs from the spec and checks each for

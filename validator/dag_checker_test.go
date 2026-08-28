@@ -172,6 +172,36 @@ func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
 	}
 }
 
+// D9 variant: a profile-declared uses edge sourced from data_flow, not
+// component. checkComponentDAG's built-in fast path only walks uses from
+// components, so builtinDAGEdgeCoverage must not claim data_flow as covered
+// by it — otherwise a data_flow-to-data_flow uses cycle is excluded from
+// the generic path and walked by nothing at all.
+func TestREQ3_ProfileDeclaredDataFlowUsesEdgeCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_data_flow_uses_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for the data_flow-sourced uses edge, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "uses cycle") {
+			found = true
+			if !strings.Contains(e.Path, "alpha/module.json:/data_flows") {
+				t.Fatalf("expected path to reference alpha/module.json:/data_flows, got: %s", e.Path)
+			}
+			if !strings.Contains(e.Message, "Flow A") || !strings.Contains(e.Message, "Flow B") {
+				t.Fatalf("cycle path should name both data flows, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a uses cycle error, got: %v", errs)
+	}
+}
+
 func TestREQ3_SelfValidateDAG(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)

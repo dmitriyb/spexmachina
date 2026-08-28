@@ -1,0 +1,27 @@
+{
+  "node_types": [
+    {
+      "name": "component",
+      "plural_key": "components",
+      "scope": "module"
+    },
+    {
+      "name": "data_flow",
+      "plural_key": "data_flows",
+      "scope": "module"
+    }
+  ],
+  "edges": [
+    {
+      "kind": "uses",
+      "from": [
+        "component",
+        "data_flow"
+      ],
+      "to": [
+        "component",
+        "data_flow"
+      ]
+    }
+  ]
+}
