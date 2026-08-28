@@ -12,28 +12,36 @@ import (
 )
 
 // builtinDAGEdgeCoverage is the (kind, from-type) pairs checkModuleDAG,
-// checkRequirementDAG and checkComponentDAG already resolve by name — the
-// three edge kinds the default profile declares that can actually close a
-// loop. "uses" carries two from-types under the default profile
-// (component, data_flow), but checkComponentDAG walks uses from components
-// only, so this map names component alone; a data_flow-sourced uses edge is
-// left to the generic path even under the default profile, where it is
-// vacuous (data_flow.uses targets component, which cannot close a loop back
-// to a data_flow) but is not vacuous under a profile that declares a
-// data_flow-to-data_flow uses edge. A profile-declared edge covers a (kind,
-// from-type) pair outside this set — a new edge kind entirely, or a
-// from-type added to a kind these three don't already walk — and is checked
-// generically instead, via checkExtraModuleDAGEdges or
-// checkExtraProjectDAGEdges depending on the from-type's scope. This
-// mirrors builtinEdgeCoverage in id_validator.go, which partitions the same
-// way for reference-integrity checking; the DAG checker's own set is
-// narrower because only three of the default profile's seven edge kinds can
-// close a loop (the other four connect node types that never point back at
-// each other) — see arch_dag_checker.md "Graphs Checked".
-var builtinDAGEdgeCoverage = map[string]map[string]bool{
-	"requires_module": {"module": true},
-	"depends_on":      {"requirement": true},
-	"uses":            {"component": true},
+// checkRequirementDAG and checkComponentDAG already resolve by name, each
+// mapped to the scope its fast path actually walks — not every scope the
+// from-type name might be declared at. "uses" carries two from-types under
+// the default profile (component, data_flow), but checkComponentDAG walks
+// uses from components only, so this map names component alone; a
+// data_flow-sourced uses edge is left to the generic path even under the
+// default profile, where it is vacuous (data_flow.uses targets component,
+// which cannot close a loop back to a data_flow) but is not vacuous under a
+// profile that declares a data_flow-to-data_flow uses edge. "requirement" is
+// scoped to "module" because checkRequirementDAG walks each module's own
+// requirements only: the default profile declares "requirement" at project
+// scope too (project.json's top-level requirements, see I11), and that
+// occurrence's depends_on cycles are walked by nothing built-in, so they
+// must fall through to the generic path rather than be silently dropped
+// alongside the module-scoped occurrence that shares the same name. A
+// profile-declared edge covers a (kind, from-type, scope) triple outside
+// this set — a new edge kind entirely, a from-type added to a kind these
+// three don't already walk, or a from-type's occurrence at a scope the fast
+// path doesn't reach — and is checked generically instead, via
+// checkExtraModuleDAGEdges or checkExtraProjectDAGEdges depending on the
+// from-type's scope. This mirrors builtinEdgeCoverage in id_validator.go,
+// which partitions the same way for reference-integrity checking; the DAG
+// checker's own set is narrower because only three of the default profile's
+// seven edge kinds can close a loop (the other four connect node types that
+// never point back at each other) — see arch_dag_checker.md "Graphs
+// Checked".
+var builtinDAGEdgeCoverage = map[string]map[string]string{
+	"requires_module": {"module": "project"},
+	"depends_on":      {"requirement": "module"},
+	"uses":            {"component": "module"},
 }
 
 // CheckDAG builds dependency graphs from the spec and checks each for
@@ -115,11 +123,19 @@ func edgeActive(profile *schema.Profile, kind, fromType string) bool {
 	return false
 }
 
-// extraCycleEdges returns the resolved profile's declared edges, reduced to
-// the (kind, from-type) pairs the three built-in graphs do not already
-// check, with any edge kind marked cyclic: true dropped entirely — that
-// edge closes no graph at all, built-in coverage aside.
-func extraCycleEdges(profile *schema.Profile) []schema.Edge {
+// extraCycleEdgesForScope returns the resolved profile's declared edges,
+// reduced to the (kind, from-type) pairs not already covered, at the given
+// scope, by one of the three built-in graphs — with any edge kind marked
+// cyclic: true dropped entirely, since that edge closes no graph at all,
+// built-in coverage aside. Scoping the reduction matters because a from-type
+// name like "requirement" can be declared at both scopes under one shared
+// edge declaration: filtering on name alone would drop the project-scoped
+// occurrence too, even though only the module-scoped one is actually walked
+// by checkRequirementDAG. Called once per scope by checkExtraModuleDAGEdges
+// and checkExtraProjectDAGEdges; a from-type this leaves in that has no
+// occurrence at the caller's scope is simply skipped downstream by
+// findModuleNodeType/projectEdgeSourceKey, so over-including here is safe.
+func extraCycleEdgesForScope(profile *schema.Profile, scope string) []schema.Edge {
 	var out []schema.Edge
 	for _, e := range profile.Edges {
 		if e.Cyclic {
@@ -128,9 +144,10 @@ func extraCycleEdges(profile *schema.Profile) []schema.Edge {
 		covered := builtinDAGEdgeCoverage[e.Kind]
 		var from []string
 		for _, f := range e.From {
-			if !covered[f] {
-				from = append(from, f)
+			if covered[f] == scope {
+				continue
 			}
+			from = append(from, f)
 		}
 		if len(from) == 0 {
 			continue
@@ -143,8 +160,8 @@ func extraCycleEdges(profile *schema.Profile) []schema.Edge {
 }
 
 // checkExtraModuleDAGEdges builds and walks a cycle graph for each
-// (edge kind, from-type) pair extraCycleEdges returns whose from-type is
-// module-scoped, one graph per module — mirroring checkRequirementDAG and
+// (edge kind, from-type) pair extraCycleEdgesForScope returns for module
+// scope, one graph per module — mirroring checkRequirementDAG and
 // checkComponentDAG's own per-module scoping. Nodes and edges are read
 // generically off module.json, since a profile-declared type carries no
 // dedicated Go field; an edge target that does not name another node in the
@@ -152,7 +169,7 @@ func extraCycleEdges(profile *schema.Profile) []schema.Edge {
 // a loop within this graph and cross-reference integrity is CheckIDs' job,
 // not this checker's.
 func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
-	edges := extraCycleEdges(profile)
+	edges := extraCycleEdgesForScope(profile, "module")
 	if len(edges) == 0 {
 		return nil
 	}
@@ -186,14 +203,17 @@ func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema
 
 // checkExtraProjectDAGEdges is checkExtraModuleDAGEdges' project-scoped
 // counterpart: it builds and walks a cycle graph, once for the whole
-// project, for each (edge kind, from-type) pair extraCycleEdges returns
-// whose from-type is not module-scoped — a profile-declared project-scoped
-// type, or the fixed "module" concept requires_module already covers under
-// the default profile. projectEdgeSourceKey (declared in id_validator.go)
-// resolves both the same way checkExtraProjectEdges does for
-// reference-integrity checking.
+// project, for each (edge kind, from-type) pair extraCycleEdgesForScope
+// returns for project scope — a profile-declared project-scoped type, or a
+// project-scoped occurrence of a from-type name whose module-scoped
+// occurrence one of the three built-in fast paths already covers (e.g.
+// "requirement": module-scoped requirements are checkRequirementDAG's, but
+// the default profile's project-scoped requirements, with their own
+// depends_on edges, are not). projectEdgeSourceKey (declared in
+// id_validator.go) resolves both the same way checkExtraProjectEdges does
+// for reference-integrity checking.
 func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
-	edges := extraCycleEdges(profile)
+	edges := extraCycleEdgesForScope(profile, "project")
 	if len(edges) == 0 {
 		return nil
 	}

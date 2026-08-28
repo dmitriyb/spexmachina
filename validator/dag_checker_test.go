@@ -202,6 +202,39 @@ func TestREQ3_ProfileDeclaredDataFlowUsesEdgeCycle(t *testing.T) {
 	}
 }
 
+// The default profile declares "requirement" at both scopes under one
+// shared depends_on edge: checkRequirementDAG only walks each module's own
+// requirements, so a cycle among project.json's top-level requirements must
+// fall through to the generic path rather than be dropped alongside the
+// module-scoped occurrence builtinDAGEdgeCoverage marks covered.
+func TestREQ3_ProjectRequirementDependencyCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_project_req_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for project-scoped requirement dependencies, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "depends_on cycle") {
+			found = true
+			if e.Path != "project.json:/requirements" {
+				t.Fatalf("expected path project.json:/requirements, got: %s", e.Path)
+			}
+			if !strings.Contains(e.Message, "000000000001") || !strings.Contains(e.Message, "000000000002") {
+				t.Fatalf("cycle path should name both project requirement ids, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a depends_on cycle error, got: %v", errs)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly one cycle error (no double-report from a module-scope fast path), got %d: %v", len(errs), errs)
+	}
+}
+
 func TestREQ3_SelfValidateDAG(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)

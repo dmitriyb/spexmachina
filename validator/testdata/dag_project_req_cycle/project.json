@@ -1,0 +1,28 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
+  "name": "project-req-cycle-test",
+  "requirements": [
+    {
+      "depends_on": [
+        "000000000002"
+      ],
+      "id": "000000000001",
+      "title": "Project requirement A",
+      "type": "functional"
+    },
+    {
+      "depends_on": [
+        "000000000001"
+      ],
+      "id": "000000000002",
+      "title": "Project requirement B",
+      "type": "functional"
+    }
+  ]
+}
