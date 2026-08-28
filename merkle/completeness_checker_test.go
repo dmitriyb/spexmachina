@@ -121,7 +121,7 @@ func TestREQ8_C1_ModifiedRequirementWithComponentChanged(t *testing.T) {
 		compChange(fx.comp1Hash, fx.alphaHash, Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
@@ -136,7 +136,7 @@ func TestREQ8_C2_ModifiedRequirementWithoutComponentChanged(t *testing.T) {
 		reqChange(fx.req1Hash, fx.alphaHash, Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -163,7 +163,7 @@ func TestREQ8_C3_AddedRequirementNoImplementor(t *testing.T) {
 		reqChange(orphanHash, fx.alphaHash, Added),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -185,7 +185,7 @@ func TestREQ8_C4_AddedRequirementImplementorUnchanged(t *testing.T) {
 		reqChange(fx.req2Hash, fx.alphaHash, Added),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
 	}
@@ -209,7 +209,7 @@ func TestREQ8_C5_RemovedRequirementStillReferenced(t *testing.T) {
 		reqChange(fx.req2Hash, fx.alphaHash, Removed),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	// CompB and CompC still reference req2.
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
@@ -230,7 +230,7 @@ func TestREQ8_C6_ProjectRequirementNoModuleDerivation(t *testing.T) {
 		reqChange(fx.projReq5ID, "", Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -255,7 +255,7 @@ func TestREQ8_C7_ProjectRequirementChainIncomplete(t *testing.T) {
 		reqChange(fx.projReq1ID, "", Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 3 {
 		t.Fatalf("expected 3 errors (CompA, CompB, CompC), got %d: %v", len(errs), errs)
 	}
@@ -289,7 +289,7 @@ func TestREQ8_C8_ProjectRequirementChainComplete(t *testing.T) {
 		compChange(fx.comp3Hash, fx.alphaHash, Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
@@ -307,7 +307,7 @@ func TestREQ8_C9_MetaChangedWithoutRequirementChanges(t *testing.T) {
 		},
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	// All 3 components should be flagged since none of their content leaves changed.
 	if len(errs) != 3 {
 		t.Fatalf("expected 3 errors (one per component), got %d: %v", len(errs), errs)
@@ -332,7 +332,7 @@ func TestREQ8_C10_MultipleRequirementsPartialCoverage(t *testing.T) {
 		compChange(fx.comp1Hash, fx.alphaHash, Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 2 {
 		t.Fatalf("expected 2 errors, got %d: %v", len(errs), errs)
 	}
@@ -363,15 +363,64 @@ func TestREQ8_C11_NoStructuralOrRequirementChanges(t *testing.T) {
 		compChange(fx.comp1Hash, fx.alphaHash, Modified),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
 }
 
+// TestREQ8_S15_CompletenessTriggerFollowsProfile covers S15: which node type
+// triggers the requirement-leaf rules is read from the resolved profile's
+// per-type CompletenessTrigger flag, not compiled in as the literal
+// "requirement". A profile that turns the trigger off for module-scoped
+// "requirement" and on for a project-declared "objective" type must let a
+// requirement change pass unchecked while treating an objective change the
+// same way C2 treats a modified requirement.
+func TestREQ8_S15_CompletenessTriggerFollowsProfile(t *testing.T) {
+	fx := setupCompletenessSpecDir(t)
+
+	profile := schema.DefaultProfile()
+	for i := range profile.NodeTypes {
+		if profile.NodeTypes[i].Name == "requirement" && profile.NodeTypes[i].Scope == "module" {
+			profile.NodeTypes[i].CompletenessTrigger = false
+		}
+	}
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name: "objective", PluralKey: "objectives", Scope: "module", CompletenessTrigger: true,
+	})
+
+	// A modified requirement no longer triggers anything under this profile,
+	// even though CompA (which implements it) never changed.
+	reqOnly := []ClassifiedChange{
+		reqChange(fx.req1Hash, fx.alphaHash, Modified),
+	}
+	if errs := CheckCompleteness(reqOnly, fx.specDir, profile); errs != nil {
+		t.Fatalf("expected no errors for requirement change under a profile without the trigger, got %v", errs)
+	}
+
+	// The same identity hash, reported as an "objective" change instead,
+	// triggers the rule the profile now assigns to that type.
+	objChange := []ClassifiedChange{
+		{
+			Change: Change{Key: fx.req1Hash, Type: Modified, NodeType: "objective", Module: fx.alphaHash},
+			Impact: Structural,
+		},
+	}
+	errs := CheckCompleteness(objChange, fx.specDir, profile)
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error for objective-type completeness trigger, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Path != fx.req1Hash {
+		t.Errorf("expected path %s, got %q", fx.req1Hash, errs[0].Path)
+	}
+	if len(errs[0].Related) != 1 || errs[0].Related[0] != fx.comp1Hash {
+		t.Errorf("expected related [%s], got %v", fx.comp1Hash, errs[0].Related)
+	}
+}
+
 // TestREQ8_CheckCompleteness_NilChanges verifies that nil input returns nil.
 func TestREQ8_CheckCompleteness_NilChanges(t *testing.T) {
-	errs := CheckCompleteness(nil, "")
+	errs := CheckCompleteness(nil, "", schema.DefaultProfile())
 	if errs != nil {
 		t.Fatalf("expected nil for nil input, got %v", errs)
 	}
@@ -379,7 +428,7 @@ func TestREQ8_CheckCompleteness_NilChanges(t *testing.T) {
 
 // TestREQ8_CheckCompleteness_EmptyChanges verifies that empty input returns nil.
 func TestREQ8_CheckCompleteness_EmptyChanges(t *testing.T) {
-	errs := CheckCompleteness([]ClassifiedChange{}, "")
+	errs := CheckCompleteness([]ClassifiedChange{}, "", schema.DefaultProfile())
 	if errs != nil {
 		t.Fatalf("expected nil for empty input, got %v", errs)
 	}
@@ -394,7 +443,7 @@ func TestREQ8_ProjectRequirement_Added_NoDerivation(t *testing.T) {
 		reqChange(fx.projReq5ID, "", Added),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -413,7 +462,7 @@ func TestREQ8_ProjectRequirement_Removed_StillReferenced(t *testing.T) {
 		reqChange(fx.projReq1ID, "", Removed),
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) != 3 {
 		t.Fatalf("expected 3 errors (one per derived module requirement), got %d: %v", len(errs), errs)
 	}
@@ -484,7 +533,7 @@ func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 		compChange(compID, schema.IdentityHash("module", "Alpha"), Modified),
 	}
 
-	errs := CheckCompleteness(changes, dir)
+	errs := CheckCompleteness(changes, dir, schema.DefaultProfile())
 	if len(errs) != 0 {
 		t.Fatalf("expected no errors (module req derives from project req via raw preq_id), got %d: %v", len(errs), errs)
 	}
@@ -512,7 +561,7 @@ func TestREQ8_ErrorFields_AreIdentityHashesInSpec(t *testing.T) {
 		},
 	}
 
-	errs := CheckCompleteness(changes, fx.specDir)
+	errs := CheckCompleteness(changes, fx.specDir, schema.DefaultProfile())
 	if len(errs) == 0 {
 		t.Fatalf("expected errors across every branch, got 0")
 	}
@@ -577,7 +626,7 @@ func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
 		reqChange(fx.req99Hash, fx.alphaHash, Added),   // added req, no implementor
 		reqChange(fx.req2Hash, fx.alphaHash, Removed),  // removed req, still referenced
 		reqChange(fx.projReq5ID, "", Modified),        // project req, no derivation
-	}, fx.specDir)
+	}, fx.specDir, schema.DefaultProfile())
 	assertTyped(t, "requirement branches", reqErrs)
 
 	// Drive the meta/component-edge branch in isolation. Per
@@ -591,7 +640,7 @@ func TestREQ8_FindingsAreTypedErrors(t *testing.T) {
 			Change: Change{Key: "meta/" + fx.alphaHash, Type: Modified, NodeType: "meta", Module: fx.alphaHash},
 			Impact: Structural,
 		},
-	}, fx.specDir)
+	}, fx.specDir, schema.DefaultProfile())
 	assertTyped(t, "meta/component-edge branch", metaErrs)
 }
 
