@@ -187,7 +187,7 @@ func removedChange(module, nodeType, name string) merkle.ClassifiedChange {
 
 func mustReport(t *testing.T, dir string, changes ...merkle.ClassifiedChange) RemovedNameReport {
 	t.Helper()
-	report, err := CheckRemovedNames(dir, journalFilePath(dir), changes)
+	report, err := CheckRemovedNames(dir, journalFilePath(dir), changes, schema.DefaultProfile())
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}
@@ -618,7 +618,7 @@ func TestREQ_6f8284df92a2_MissingJournalIsNotAnError(t *testing.T) {
 
 	report, err := CheckRemovedNames(dir, journalFilePath(dir), []merkle.ClassifiedChange{
 		removedChange("validator", "component", "OrphanDetector"),
-	})
+	}, schema.DefaultProfile())
 	if err != nil {
 		t.Fatalf("no journal on disk: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestREQ_6f8284df92a2_SelfCheckRealCorpus(t *testing.T) {
 	}
 	classified := merkle.Classify(merkle.Diff(current, snapshot), merkle.ModuleNames(current), schema.DefaultProfile())
 
-	report, err := CheckRemovedNames(specDir, filepath.Join(stateDir, lifecycle.JournalFileName), classified)
+	report, err := CheckRemovedNames(specDir, filepath.Join(stateDir, lifecycle.JournalFileName), classified, schema.DefaultProfile())
 	if err != nil {
 		t.Fatalf("CheckRemovedNames: %v", err)
 	}
