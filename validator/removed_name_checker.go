@@ -91,10 +91,16 @@ type RemovedNameReport struct {
 // degrades to "no names known" the same way a missing file does — the
 // journal can only strengthen removal detection, never gate it.
 //
-// Only api and component names are searched. Other node types carry generic
-// noun phrases for names — "Hash computation" alone survives sixteen times in
-// another module's test leaves — and searching them would report the corpus
-// as broken on every removal.
+// Which node types are searched is read from the resolved profile's
+// per-type NameDeclarable flag — the same per-type role flag
+// checkNameRecoverability keys on — rather than a fixed pair. The default
+// profile marks exactly component and api, so the swept set is unchanged;
+// a project profile that flags another module-scoped type name-declarable
+// (e.g. an "endpoint" type) gets that type's removals swept on the same
+// terms. Every other node type carries generic noun phrases for names —
+// "Hash computation" alone survives sixteen times in another module's test
+// leaves — and searching them would report the corpus as broken on every
+// removal.
 //
 // # Recovering the name of a node that no longer exists
 //
@@ -148,15 +154,16 @@ type RemovedNameReport struct {
 // The journal may be absent — `spex diff` runs in trees that have never been
 // ingested — and a malformed journal degrades the same way: either way the
 // sweep falls back to the corpus alone, never failing the run over it.
-func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedChange) (RemovedNameReport, error) {
+func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedChange, profile *schema.Profile) (RemovedNameReport, error) {
 	var report RemovedNameReport
 
-	targets := removedNameTargets(changes)
+	declarable := nameDeclarableNodeTypes(profile)
+	targets := removedNameTargets(changes, declarable)
 	if len(targets) == 0 {
 		return report, nil
 	}
 
-	project, modules, errs := loadSpec(specDir, "removed_name")
+	project, _, errs := loadSpec(specDir, "removed_name")
 	if len(errs) > 0 {
 		return report, fmt.Errorf("validator: removed-name check: %s", errs[0].Message)
 	}
@@ -165,15 +172,12 @@ func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedC
 	known := map[string]bool{}
 	for _, mod := range project.Modules {
 		known[mod.Name] = true
-		modSpec, ok := modules[mod.Name]
-		if !ok {
-			continue
+		entries, err := liveDeclarableNames(filepath.Join(specDir, mod.Path, "module.json"), declarable)
+		if err != nil {
+			return report, err
 		}
-		for _, c := range modSpec.Components {
-			live[c.Name] = append(live[c.Name], liveNode{module: mod.Name, nodeType: "component"})
-		}
-		for _, a := range modSpec.APIs {
-			live[a.Name] = append(live[a.Name], liveNode{module: mod.Name, nodeType: "api"})
+		for _, e := range entries {
+			live[e.name] = append(live[e.name], liveNode{module: mod.Name, nodeType: e.nodeType})
 		}
 	}
 
@@ -262,16 +266,79 @@ func (g nameTargetGroup) sortedKeys() []string {
 	return keys
 }
 
-// removedNameTargets selects the removed api and component changes and groups
-// them by (module name, node type).
-func removedNameTargets(changes []merkle.ClassifiedChange) []nameTargetGroup {
+// nameDeclarableNodeTypes returns the module-scoped node types the resolved
+// profile marks name-declarable — the same per-type role flag
+// checkNameRecoverability keys on (arch_id_validator.md) — rather than a
+// fixed pair. Under the default profile this is exactly component and api.
+func nameDeclarableNodeTypes(profile *schema.Profile) []schema.NodeType {
+	var out []schema.NodeType
+	for _, t := range profile.NodeTypes {
+		if t.Scope == "module" && t.NameDeclarable {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
+// liveEntry is one live node's declared name and node type, read generically
+// off a module.json for the profile-driven removal sweep.
+type liveEntry struct {
+	name     string
+	nodeType string
+}
+
+// liveDeclarableNames reads one module.json and returns the (name, node
+// type) pairs for every entry of every node type in declarable. It reads
+// each type's plural key directly off the raw document — the same
+// generic-array technique TreeBuilder uses to build a tree node for any
+// profile-declared type — because a type beyond the built-in component and
+// api (a project profile can flag any module-scoped type name-declarable)
+// has no dedicated field on schema.ModuleSpec.
+func liveDeclarableNames(modJSONPath string, declarable []schema.NodeType) ([]liveEntry, error) {
+	data, err := os.ReadFile(modJSONPath)
+	if err != nil {
+		return nil, fmt.Errorf("validator: removed-name check: read %s: %w", modJSONPath, err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, fmt.Errorf("validator: removed-name check: parse %s: %w", modJSONPath, err)
+	}
+
+	var out []liveEntry
+	for _, nt := range declarable {
+		arr, ok := raw[nt.PluralKey]
+		if !ok {
+			continue
+		}
+		var entries []struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(arr, &entries); err != nil {
+			return nil, fmt.Errorf("validator: removed-name check: parse %s %s: %w", modJSONPath, nt.PluralKey, err)
+		}
+		for _, e := range entries {
+			out = append(out, liveEntry{name: e.Name, nodeType: nt.Name})
+		}
+	}
+	return out, nil
+}
+
+// removedNameTargets selects the removed changes whose node type the
+// resolved profile marks name-declarable, and groups them by (module name,
+// node type).
+func removedNameTargets(changes []merkle.ClassifiedChange, declarable []schema.NodeType) []nameTargetGroup {
+	types := make(map[string]bool, len(declarable))
+	for _, t := range declarable {
+		types[t.Name] = true
+	}
+
 	index := map[string]*nameTargetGroup{}
 	var order []string
 	for _, c := range changes {
 		if c.Type != merkle.Removed {
 			continue
 		}
-		if c.NodeType != "api" && c.NodeType != "component" {
+		if !types[c.NodeType] {
 			continue
 		}
 		if c.Module == "" {

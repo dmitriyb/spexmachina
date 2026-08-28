@@ -461,6 +461,40 @@ func TestFR4_E2_DiffCommand_CorruptedSnapshot(t *testing.T) {
 	}
 }
 
+// E2b: a malformed spec/profile.json is a single early refusal. The profile
+// is resolved ahead of any tree building, so the failure surfaces as one
+// error naming the profile file, before a diff report ever reaches stdout —
+// never as a cascade of downstream node-type-lookup failures.
+func TestFR4_E2b_DiffCommand_MalformedProfile(t *testing.T) {
+	specDir := setupTestSpec(t)
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+
+	profilePath := filepath.Join(specDir, "profile.json")
+	writeTestFile(t, specDir, "profile.json", "{not valid json")
+
+	out, stderr, exitCode := runDiff(t, "--spec-dir", specDir)
+	if exitCode != 1 {
+		t.Fatalf("want exit 1 for a malformed profile, got %d\nstderr: %s", exitCode, stderr)
+	}
+	if out != "" {
+		t.Fatalf("no diff report should print once the profile fails to resolve, got stdout: %s", out)
+	}
+	if !strings.Contains(stderr, profilePath) {
+		t.Fatalf("stderr should name the profile file %q, got: %s", profilePath, stderr)
+	}
+	// The resolution's own single early error, not a tree-builder failure
+	// wrapping it: profile resolution must run (and fail) before
+	// merkle.BuildTree is ever called, not merely happen to be caught by
+	// BuildTree's own internal (and redundant, for this failure) profile
+	// resolution once tree building is already underway.
+	if strings.Contains(stderr, "build tree") {
+		t.Fatalf("profile resolution must fail ahead of tree building, not surface through it, got: %s", stderr)
+	}
+	if !strings.Contains(stderr, "diff: schema: resolve profile") {
+		t.Fatalf("stderr should be the profile resolution's own single early error, got: %s", stderr)
+	}
+}
+
 // setupTestSpecWithRequirements creates a spec fixture with requirements and
 // implements edges so completeness checking can detect incomplete changes.
 // Each entity uses a distinct identity hash so that merkle leaf keys do not
@@ -981,6 +1015,103 @@ func TestFR8_DiffCommand_SweptRemovalPasses(t *testing.T) {
 	}
 	if len(result.Errors) != 0 {
 		t.Fatalf("want no errors once the mention is swept, got: %+v", result.Errors)
+	}
+}
+
+// setupProfileEndpointRemovalSpec builds a fixture whose spec/profile.json —
+// the default profile plus one added type, mirroring
+// TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf's fixture — declares
+// a content-bearing, module-scoped "endpoint" type marked name-declarable.
+// The endpoint is live at snapshot time and its name survives in prose
+// elsewhere in the module; the caller then removes it to exercise the same
+// sweep the built-in component/api pair gets, per test_merkle_commands.md's
+// second S8: "the sweep iterates the node types the resolved profile marks
+// name-declarable ... rather than a fixed pair".
+func setupProfileEndpointRemovalSpec(t *testing.T) (specDir, endpointHash string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+		NameDeclarable:  true,
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, dir, "profile.json", string(profileJSON))
+
+	modID := schema.IdentityHash("module", "api")
+	endpointHash = schema.IdentityHash("api", "endpoint", "GET /v1/widgets")
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [{"id": "`+modID+`", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, modDir, "module.json", `{
+		"name": "api",
+		"endpoints": [
+			{"id": "`+endpointHash+`", "name": "GET /v1/widgets", "content": "endpoint_widgets.md"}
+		]
+	}`)
+	writeTestFile(t, modDir, "endpoint_widgets.md", "# GET /v1/widgets\n")
+	writeTestFile(t, modDir, "arch_notes.md", "GET /v1/widgets is documented here.\n")
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+
+	// Remove the endpoint; arch_notes.md still names it.
+	writeTestFile(t, modDir, "module.json", `{"name": "api"}`)
+	if err := os.Remove(filepath.Join(modDir, "endpoint_widgets.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	return dir, endpointHash
+}
+
+// TestFR8_S8_DiffCommand_ProfileDeclaredTypeSwept covers test_merkle_commands.md's
+// second S8: a profile-declared type flagged name-declarable is swept on the
+// same terms as the built-in component/api pair, because the sweep iterates
+// profile.NodeTypes' NameDeclarable flag rather than a fixed pair.
+func TestFR8_S8_DiffCommand_ProfileDeclaredTypeSwept(t *testing.T) {
+	specDir, endpointHash := setupProfileEndpointRemovalSpec(t)
+
+	out, _, exitCode := runDiff(t, "--json", "--spec-dir", specDir)
+	if exitCode != 2 {
+		t.Fatalf("want exit 2 while a removed endpoint's name survives, got %d\noutput: %s", exitCode, out)
+	}
+
+	var result diffOutput
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("invalid JSON: %v\noutput: %s", err, out)
+	}
+
+	var found *merkle.DiffError
+	for i, e := range result.Errors {
+		if e.Type == "surviving_name" {
+			found = &result.Errors[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("want a surviving_name error for the profile-declared endpoint type, got: %+v", result.Errors)
+	}
+	if !strings.Contains(found.Message, `endpoint "GET /v1/widgets"`) || !strings.Contains(found.Message, endpointHash) {
+		t.Fatalf("message must name the node and its hash, got %q", found.Message)
+	}
+	if found.Path != "api/arch_notes.md:1" {
+		t.Fatalf("want the surviving mention as the path, got %q", found.Path)
 	}
 }
 

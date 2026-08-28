@@ -48,6 +48,17 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("diff: %w", err)
 	}
 
+	// The profile is resolved once per invocation, ahead of the snapshot and
+	// tree loading below: a malformed profile.json is refused here, in one
+	// early error, on the same pre-flight-style path as the lifecycle check
+	// above — never as a cascade of node-type-lookup failures once
+	// TreeBuilder and its consumers start reading it. See
+	// arch_diff_command.md "Resolve the profile once per invocation".
+	profile, err := schema.ResolveProfile(specDir)
+	if err != nil {
+		return fmt.Errorf("diff: %w", err)
+	}
+
 	snapshotFlag, _ := cmd.Flags().GetString("snapshot")
 	snapshotPath := ctx.SnapshotPath
 	if snapshotFlag != "" {
@@ -59,14 +70,6 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	}
 
 	current, err := merkle.BuildTree(specDir)
-	if err != nil {
-		return fmt.Errorf("diff: %w", err)
-	}
-
-	// TODO(bead:spexmachina-h4gv.16): move this resolution ahead of the
-	// snapshot/tree loading above so a malformed profile.json is refused in
-	// one early error before any tree is built, per arch_diff_command.md.
-	profile, err := schema.ResolveProfile(specDir)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}
@@ -90,7 +93,7 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	// diff can only report as a hash. It is read, never written, and an
 	// absent (or malformed) journal is not an error — `spex diff` runs in
 	// trees that have never been ingested.
-	removed, err := validator.CheckRemovedNames(specDir, ctx.JournalPath, classified)
+	removed, err := validator.CheckRemovedNames(specDir, ctx.JournalPath, classified, profile)
 	if err != nil {
 		return fmt.Errorf("diff: %w", err)
 	}
