@@ -44,8 +44,9 @@ const (
 	NoteSuppressedByLiveName = "suppressed_by_live_name"
 )
 
-// SurvivingName is one removed api or component whose declared name is still
-// written somewhere in the spec corpus.
+// SurvivingName is one removed node, of any module-scoped type the resolved
+// profile marks name-declarable, whose declared name is still written
+// somewhere in the spec corpus.
 //
 // Name is recovered, not remembered: see CheckRemovedNames.
 type SurvivingName struct {
@@ -53,7 +54,8 @@ type SurvivingName struct {
 	Key string
 	// Name is the node's declared name, recovered from the corpus.
 	Name string
-	// NodeType is "api" or "component".
+	// NodeType is the removed node's type: any module-scoped type the
+	// resolved profile marks name-declarable.
 	NodeType string
 	// Module is the name of the module that declared the node.
 	Module string
@@ -127,8 +129,8 @@ type RemovedNameReport struct {
 //
 // # Longest-match-first
 //
-// A hit is discarded when a live api or component name covers the same words
-// and is at least as long. "spex map" occurs 34 times in this corpus, 29 of
+// A hit is discarded when a live name-declarable node's name covers the same
+// words and is at least as long. "spex map" occurs 34 times in this corpus, 29 of
 // them inside "spex map get", "spex map list" or "spex map context"; without
 // the subtraction, removing the bare "spex map" api would report 34 survivors
 // for 5 real ones. The "at least as long" half covers the degenerate case
@@ -241,8 +243,8 @@ func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedC
 	return report, nil
 }
 
-// liveNode identifies one api or component that still exists, so a note can
-// name the node that consumed a hit rather than only the string it shares.
+// liveNode identifies one name-declarable node that still exists, so a note
+// can name the node that consumed a hit rather than only the string it shares.
 type liveNode struct {
 	module   string
 	nodeType string
@@ -592,8 +594,8 @@ type corpusHit struct {
 	key   string
 }
 
-// liveSpan is one occurrence of a live api or component name, held as a token
-// span plus the name itself so a suppression note can identify it.
+// liveSpan is one occurrence of a live name-declarable node's name, held as a
+// token span plus the name itself so a suppression note can identify it.
 type liveSpan struct {
 	words int
 	name  string
@@ -726,8 +728,8 @@ func (s *corpusScan) suppressionNotes() []RemovedNameNote {
 	return notes
 }
 
-// coveringLiveName reports the live api or component name occupying a span
-// that contains the hit and is at least as long, if there is one.
+// coveringLiveName reports the live name-declarable node's name occupying a
+// span that contains the hit and is at least as long, if there is one.
 func coveringLiveName(h corpusHit, liveSpans map[int][]liveSpan) (string, bool) {
 	first := h.start - maxNameWords + 1
 	if first < 0 {
