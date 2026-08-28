@@ -194,6 +194,15 @@ works for every type the profile can mark.
 `spex doctor` — the state directory exists, so this is a broken project,
 never a "run init" situation
 
+### E2b: `spex diff` on a malformed profile is a single early refusal
+
+**Given** an initialised project whose `spec/profile.json` is malformed (unparseable JSON, or a declaration the profile validation rejects)
+**When** `runDiff(tmpdir)` is called
+**Then** exit code is 1
+**And** stderr carries the profile resolution's own single early error naming the profile file — no tree is built, no diff report is printed, and no cascade of downstream errors follows
+
+**Rationale**: Per `arch_diff_command.md`, the command resolves the profile once per invocation before any tree is built and refuses a malformed one on the same pre-flight-style path as its other setup failures.
+
 ### E3: `spex diff` with no arguments defaults to current directory
 
 **Given** the working directory is the fixture spec root

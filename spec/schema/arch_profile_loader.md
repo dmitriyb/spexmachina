@@ -10,7 +10,7 @@ ProfileLoader owns the resolution of the project's spec profile: the declarative
 
 ## The default profile is the golden policy record
 
-The built-in default declares today's ontology exactly: the five node types with today's role flags, today's edge set with the `cyclic` flag omitted on every kind, the three coverage links, today's plan-relevant set, impact levels, allowlists and absorbable directions. It is the single document recording the policy previously spread across seven modules — a reviewer reads it instead of grepping the code — and it is the fixture the golden tests compare against. Under the default profile, every identity hash in this repository's own spec is unchanged, `spex validate` emits a byte-identical report, and `spex diff` against the current snapshot reports no changes.
+The built-in default declares today's ontology exactly: the five node types with today's role flags, today's edge set with the `cyclic` flag omitted on every kind, the three coverage links, today's plan-relevant set, impact levels, allowlists and absorbable directions. It is the single document recording the policy previously spread across seven modules — a reviewer reads it instead of grepping the code — and it is the fixture the golden tests compare against. Each golden comparison uses the equality its artifact warrants: hashes and reports match byte-identically, while the composed schemas match the shipped documents as JSON values, since the shipped copies are hand-formatted and nothing consumes them as bytes. Under the default profile, every identity hash in this repository's own spec is unchanged, `spex validate` emits a byte-identical report, and `spex diff` against the current snapshot reports no changes.
 
 ## Fixed points
 

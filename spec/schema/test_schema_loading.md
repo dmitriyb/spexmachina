@@ -1,6 +1,6 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas from the resolved profile, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader resolves the profile SchemaLoader composes from: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile to every consumer.
+Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions — the two composed reads take no arguments and always compose from the built-in default profile, consulting no file. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader owns the file-backed resolution: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile. A caller that needs a project's own profile reflected in the composed schemas takes the resolve-then-compose path — ProfileLoader's resolution handed to the composition entry points directly — which the P-scenarios below exercise; the zero-argument reads are the default-profile convenience over the same composition.
 
 These tests verify that the embedding works correctly, that the composed schemas are structurally sound and reproduce the shipped static documents under the default profile, that profile resolution and fallback behave as declared, that the composed schemas can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
@@ -36,7 +36,7 @@ The following fixture files live in `schema/testdata/`:
 - `data` is non-empty (length > 0).
 - `data` is valid JSON (unmarshals into `map[string]any` without error).
 
-**Verifies:** The `go:embed` directive for `project.schema.json` works and the file content is accessible at runtime.
+**Verifies:** The composition path behind the zero-argument read works at runtime — the embedded frame and default profile are accessible and yield a well-formed document.
 
 ### S2: ModuleSchema() loads without error
 
@@ -46,7 +46,7 @@ The following fixture files live in `schema/testdata/`:
 - `data` is non-empty (length > 0).
 - `data` is valid JSON (unmarshals into `map[string]any` without error).
 
-**Verifies:** The `go:embed` directive for `module.schema.json` works and the file content is accessible at runtime.
+**Verifies:** The composition path behind the zero-argument read works at runtime — the embedded frame and default profile are accessible and yield a well-formed document.
 
 ### S3: ProjectSchema() returns valid JSON Schema document
 
@@ -61,7 +61,7 @@ The following fixture files live in `schema/testdata/`:
 - `properties` object contains keys: `name`, `description`, `version`, `requirements`, `modules`, `sections`.
 - `$defs` object contains keys: `identityHash`, `requirement`, `module`, `section` — and nothing else.
 
-**Verifies:** The embedded file is the actual project schema (not a stale copy or wrong file) and carries the `sections` array. The `$defs` assertion is exhaustive on purpose: it is what catches a retired node type (`milestone`, `test_scenario`) coming back through a stale embed.
+**Verifies:** The composed document is the actual project schema (not a stale frame or wrong composition) and carries the `sections` array. The `$defs` assertion is exhaustive on purpose: it is what catches a retired node type (`milestone`, `test_scenario`) coming back through a stale embed.
 
 ### S4: ModuleSchema() returns valid JSON Schema document
 
@@ -297,8 +297,8 @@ These scenarios cover profile resolution and the composition acceptance criterio
 
 ### P2: Composed schemas equal the shipped static documents (golden test)
 
-**Steps:** Resolve the default profile, compose the project and module schemas from it, and compare each against the shipped static schema document as a golden file.
-**Expected:** Both composed documents reproduce the shipped documents; a composition that does not is a test failure, not a tolerated drift.
+**Steps:** Resolve the default profile, compose the project and module schemas from it, and compare each against the shipped static schema document as a golden record — equal as JSON values, independent of formatting and key order, since the shipped copies are hand-formatted and the composer emits compact key-sorted JSON.
+**Expected:** Both composed documents reproduce the shipped documents' content; a composition that does not is a test failure, not a tolerated drift.
 **Verifies:** The acceptance criterion that the default profile reproduces current behaviour exactly — the on-disk shape of every existing project.json and module.json is unchanged.
 
 ### P3: Malformed profile is a distinct early failure

@@ -4,7 +4,7 @@ Checks `project.json` and every `module.json` against the effective JSON Schemas
 
 ## Responsibilities
 
-- Obtain the composed project and module schemas from the schema module — a spec directory supplies only the optional profile the composition reads; under the default profile the composed documents equal the previously shipped static ones
+- Obtain the composed project and module schemas from the schema module by the resolve-then-compose path: resolve the spec directory's profile through the schema module's resolution and hand the result to its composition entry points. The zero-argument schema reads compose from the built-in default profile only, so they are not this checker's path — a spec directory supplies only the optional profile the composition reads; under the default profile the composed documents equal the previously shipped static ones
 - Parse and validate `spec/project.json` against the composed project schema
 - Parse and validate each `spec/<module>/module.json` against the composed module schema
 - Collect all schema violations as structured errors

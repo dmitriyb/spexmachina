@@ -66,7 +66,7 @@ The project envelope carries no such obligation at all. Only meta changes that n
 
 ## Interface
 
-One call, over the classified changes and the path to the spec directory, returning the errors it found — and an empty result when every change is complete.
+One call, over three inputs — the classified changes, the path to the spec directory, and the resolved profile whose declarations carry the per-type triggers — returning the errors it found, and an empty result when every change is complete. The profile is handed in by the caller: `spex diff` resolves it once per invocation and this checker, like the classifier, consults no profile file of its own.
 
 It runs over the classified list but reads none of the classification. What it takes from each entry is four of the fields [[cb262b280963|DiffEngine]] sets — the key, the kind of change, the node type and the owning module's identity hash — and none of what [[f1a672216ce9|ImpactClassifier]] adds: the impact level goes unread, and the human-readable module name is passed over in favour of the identity hash underneath it, because the hash is what `module.json` can be looked up by. The two hash fields DiffEngine also sets, the old and the new content hash, are never read here either: that a leaf changed is the whole of what this check needs from it.
 

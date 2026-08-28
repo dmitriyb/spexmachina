@@ -7,7 +7,7 @@ Integration and acceptance tests for the DiffEngine (component 4), ImpactClassif
 This leaf covers three test files that fixture themselves differently, and the distinction matters when reading the scenarios below.
 
 - The **Diff** scenarios (S1–S5, E-cases) are backed by `merkle/diff_engine_test.go`, which writes a real spec directory with `setupSpecDir(t)` and produces both trees from it with `BuildTree`, so the keys under test are real identity hashes. `findChild(t, parent *Node, key string) *Node` locates a child by key; changes are located by inline loops over the returned slice.
-- The **Classify** scenarios (S7–S13, R1–R2) are backed by `merkle/impact_classifier_test.go`, which passes synthetic `[]Change` literals straight into `Classify` and builds no tree for them. That is why they can exercise a `data_flow` node type, which `setupSpecDir` does not declare. The one test in that file that does build trees is S14, the end-to-end `Diff`-then-`Classify` pairing (`merkle/impact_classifier_test.go:175`). R3–R5 are Diff scenarios, not Classify ones.
+- The **Classify** scenarios (S7–S13, R1–R2) are backed by `merkle/impact_classifier_test.go`, which passes synthetic `[]Change` literals straight into `Classify` and builds no tree for them. That is why they can exercise a `data_flow` node type, which `setupSpecDir` does not declare. `Classify` takes the resolved profile as its required third argument; in the call shapes below `defaultProfile` stands for `schema.DefaultProfile()`, and every scenario passes it unless the scenario says otherwise (S15 is the one that does). The one test in that file that does build trees is S14, the end-to-end `Diff`-then-`Classify` pairing (`merkle/impact_classifier_test.go:175`). R3–R5 are Diff scenarios, not Classify ones.
 - The **Completeness** scenarios (C1–C11) are backed by `merkle/completeness_checker_test.go`, whose `TestREQ8_C1`…`TestREQ8_C11` functions carry them one-for-one.
 
 The listing below is the abstract leaf shape the scenarios reason about, with placeholder keys standing in for identity hashes — not a transcript of `setupSpecDir`, which declares two project requirements, two alpha requirements, two alpha components, one alpha test_section and one beta component, and no data_flow.
@@ -86,7 +86,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ### S7: Classify impl_only change
 
 **Given** changes: `[{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
-**When** `Classify(changes, moduleNames)` is called
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`impl_only` and Module=`"Alpha"`
 
 **Rationale**: Classification reads the node metadata (NodeType, Module) carried on each Change — never the filename or path. `test_section` is the one node type that reaches `impl_only` per `arch_impact_classifier.md`.
@@ -94,7 +94,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ### S8: Classify data_flow as contract
 
 **Given** changes: `[{Key: FLOW1_HASH, Type: "modified", NodeType: "data_flow", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
-**When** `Classify(changes, moduleNames)` is called
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`contract` and Module=`"Alpha"`
 
 **Rationale**: Per the data-flow-contract-layer proposal (and requirement `425146f32e96`), data_flow nodes are inter-component contracts: a changed flow can invalidate its consumers, so it ranks above `impl_only` while below `arch_impl`.
@@ -102,7 +102,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ### S9: Classify arch_impl change
 
 **Given** changes: `[{Key: COMP1_HASH, Type: "modified", NodeType: "component", Module: BETA_HASH}]` and `moduleNames = {BETA_HASH: "Beta"}`
-**When** `Classify(changes, moduleNames)` is called
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`arch_impl` and Module=`"Beta"`
 
 **Rationale**: `component` nodes are architecture contracts whose changes may affect dependent modules.
@@ -110,7 +110,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ### S10: Classify structural change — module envelope
 
 **Given** changes: `[{Key: "meta/" + ALPHA_HASH, Type: "modified", NodeType: "meta", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
-**When** `Classify(changes, moduleNames)` is called
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
 **Rationale**: A modified `meta/<module-hash>` envelope means module.json itself changed — the spec graph was altered (added/removed nodes, changed edges).
@@ -118,7 +118,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 ### S11: Classify structural change — project envelope
 
 **Given** changes: `[{Key: "meta/project", Type: "modified", NodeType: "meta", Module: ""}]`
-**When** `Classify(changes, nil)` is called
+**When** `Classify(changes, nil, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`""` (project-level, no specific module)
 
 **Rationale**: `project.json` changes affect the entire project structure (modules added or removed).
@@ -128,7 +128,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 **Given** changes within the same module alpha:
 - `{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}`
 - `{Key: COMP2_HASH, Type: "modified", NodeType: "component", Module: ALPHA_HASH}`
-**When** `Classify(changes, moduleNames)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames, defaultProfile)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
 **Then** both changes carry Module=`"Alpha"`
 **And** the test_section change is classified `impl_only` and the component change `arch_impl` — one classification per change, no aggregation
 
@@ -140,7 +140,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 - `{Key: TEST1_HASH, Type: "modified", NodeType: "test_section", Module: ALPHA_HASH}`
 - `{Key: COMP2_HASH, Type: "modified", NodeType: "component", Module: ALPHA_HASH}`
 - `{Key: "meta/" + ALPHA_HASH, Type: "modified", NodeType: "meta", Module: ALPHA_HASH}`
-**When** `Classify(changes, moduleNames)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
+**When** `Classify(changes, moduleNames, defaultProfile)` is called with `moduleNames = {ALPHA_HASH: "Alpha"}`
 **Then** each change keeps its own level (`impl_only`, `arch_impl`, `structural` respectively)
 **And** a locally computed per-module max over those results is `structural`
 
@@ -152,7 +152,7 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 - alpha's test_section leaf (`TEST1_HASH`) hash changed
 - beta's component leaf (`COMP1_HASH`) hash changed
 - a new module gamma appears, adding its `meta/<GAMMA_HASH>` envelope leaf
-**When** `Diff(current, snapshot)` is called, then `Classify(changes, ModuleNames(current))` is called on the result
+**When** `Diff(current, snapshot)` is called, then `Classify(changes, ModuleNames(current), defaultProfile)` is called on the result
 **Then** the test_section change is classified as `impl_only`
 **And** the component change is classified as `arch_impl`
 **And** gamma's envelope change is classified as `structural`
@@ -161,19 +161,27 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 
 ### S15: Impact levels and completeness triggers follow the profile's declarations
 
-**Given** the classify fixtures above, run once under the default profile and once under a `spec/profile.json` declaring an `endpoint` type mapped to the `contract` level
-**When** `Classify` is called on a change carrying `NodeType: "endpoint"`
-**Then** the change is classified `contract` — the mapping from declared node type to impact level is read from the resolved profile's graph rules; the four levels themselves are fixed, `meta`'s `structural` classification is the frame's fixed rule, and under the default profile S7–S13 and R1–R2 hold byte-for-byte because the default assigns today's types to today's levels
+**Given** the classify fixtures above, run once with `defaultProfile` and once with a resolved profile declaring an `endpoint` type mapped to the `contract` level (the shape a project's `spec/profile.json` would resolve to)
+**When** `Classify` is called with that profile as its third argument on a change carrying `NodeType: "endpoint"`
+**Then** the change is classified `contract` — the mapping from declared node type to impact level is read from the profile handed in; the four levels themselves are fixed, `meta`'s `structural` classification is the frame's fixed rule, and under the default profile S7–S13 and R1–R2 hold byte-for-byte because the default assigns today's types to today's levels
 **And** the completeness scenarios (C1–C11) likewise hold unchanged under the default profile, because the requirement-leaf trigger is a per-type role flag the default profile marks on requirement, read by CompletenessChecker rather than compiled in — while the meta-envelope sweep runs on the fixed meta leaves under any profile
 
 **Rationale**: The classifier and the completeness checker branch on the profile's declarations — plus the frame's fixed meta rules — never on hard-coded declared-type names, and the default profile is the golden record of the previous constants.
+
+### S16: Undeclared node type classifies as unknown
+
+**Given** changes: `[{Key: FLOW1_HASH, Type: "removed", NodeType: "endpoint", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}` — a removed leaf takes its node type from the snapshot side verbatim, so a type outside the resolved profile's declarations is reachable
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
+**Then** the result contains one ClassifiedChange with Impact=`unknown` and Module=`"Alpha"` — no level from the profile's rules, and no failure
+
+**Rationale**: Per `arch_impact_classifier.md`, a node_type the resolved profile does not declare (and that is not `meta`) gets no level at all and is reported as `unknown`; the classifier still has no failure mode.
 
 ## Edge Cases
 
 ### E1: Diff with identical trees returns empty, Classify with empty returns empty
 
 **Given** an empty changes slice
-**When** `Classify([]Change{}, nil)` is called — and, as `TestREQ5_Classify_EmptyChanges` also covers, `Classify(nil, nil)`
+**When** `Classify([]Change{}, nil, defaultProfile)` is called — and, as `TestREQ5_Classify_EmptyChanges` also covers, `Classify(nil, nil, defaultProfile)`
 **Then** the result is an empty slice
 
 **Rationale**: No changes means no impact. Classify must not panic or inject synthetic entries.
@@ -218,7 +226,7 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 ### R1: Classify requirement change as structural
 
 **Given** changes: `[{Key: REQ2_HASH, Type: "modified", NodeType: "requirement", Module: ALPHA_HASH}]` and `moduleNames = {ALPHA_HASH: "Alpha"}`
-**When** `Classify(changes, moduleNames)` is called
+**When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
 **Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (plan module) skips structural changes, so requirement leaf changes do not produce bead actions.
@@ -226,7 +234,7 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 ### R2: Classify project requirement change as structural
 
 **Given** changes: `[{Key: PROJ_REQ1_HASH, Type: "modified", NodeType: "requirement", Module: ""}]`
-**When** `Classify(changes, nil)` is called
+**When** `Classify(changes, nil, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`""`
 
 ### R3: Requirement leaf added in diff

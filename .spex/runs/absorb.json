@@ -1,6 +1,26 @@
 [
   {
-    "node": "a483524c406c",
-    "reason": "reconciler-split: test_refresh.md's single edit rewords one Then-clause rationale in the mixed drift-plus-receipt scenario ('Reconciler only appends for ops' becomes 'Reconciler path only appends for ops and marked absorb entries'); the asserted outcome - no journal event for the unmarked receipt-less drifted leaf - is unchanged, and no Given/When/Then scenario changes. The corrected text records shipped behaviour: marked absorb entries appending without receipts is pinned by TestApply_Absorbed_LandOnPartialRuns and TestApply_Absorbed_ModifiedEventAndRefreshReceiptAppended (ingest/reconciler_test.go), and the unmarked-drift refresh path by TestIngestCommand_RefreshMode_AbsorbsDrift (cmd/spex/ingest_test.go). No test code owed."
+    "node": "35f39388bc76",
+    "reason": "h4gv.13 triage: flow_hash_computation.md Data Shapes widens node_type from a closed six-value enum to the open per-profile vocabulary (default profile's five declared names plus fixed meta), adding the snapshot-side verbatim-load note. Records shipped behaviour: merkle/tree_builder.go stamps every profile-declared type's name into node_type, pinned by TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf (merkle/tree_builder_test.go); snapshot round-trip of an unknown type string is pinned by the test_snapshots E4 scenario's test. No code owed."
+  },
+  {
+    "node": "ee88263d6555",
+    "reason": "h4gv.6 triage: arch_schema_loader.md drops the byte-for-byte golden claim for content (JSON value) equality, and states that the zero-argument ProjectSchema()/ModuleSchema() reads compose from the built-in default profile with resolve-then-compose as the project-specific path. Records shipped behaviour: schema/schema.go composes the zero-arg reads from DefaultProfile(), pinned by TestFR3_S1/S2/S3 (zero-arg call shape and structure) and TestFR9_P2_ComposedSchemasEqualShippedGolden (value-equality golden via jsonEqual, resolve-then-compose shape). No code owed."
+  },
+  {
+    "node": "cd726f8b088b",
+    "reason": "h4gv.6 triage: arch_profile_loader.md's golden-record section gains one sentence stating each golden comparison's equality mode - hashes and reports byte-identical, composed schemas compared as JSON values. Records shipped behaviour pinned by TestFR9_P2_ComposedSchemasEqualShippedGolden (jsonEqual). No code owed."
+  },
+  {
+    "node": "79946d618829",
+    "reason": "h4gv.6 triage sweep: arch_project_schema.md qualifies 'identical to the shipped one' as identical in content (same JSON value, golden test asserts structurally). Same stale-claim class as the triaged golden-bytes report; pinned by TestFR9_P2_ComposedSchemasEqualShippedGolden. No code owed."
+  },
+  {
+    "node": "78883b84c32d",
+    "reason": "h4gv.6 triage sweep: arch_module_schema.md qualifies 'identical to the shipped one' as identical in content (same JSON value, golden test asserts structurally). Same stale-claim class as the triaged golden-bytes report; pinned by TestFR9_P2_ComposedSchemasEqualShippedGolden. No code owed."
+  },
+  {
+    "node": "8719672c7580",
+    "reason": "h4gv.6 triage: test_schema_loading.md intro separates the zero-arg default-profile reads from the resolve-then-compose path, S1-S3 Verifies prose speaks of the composed document instead of embedded file content, and P2 states the golden comparison mode (JSON values, formatting-independent). No Call/Expected assertion changes; the described behaviour is shipped and pinned by TestFR3_S1/S2/S3 and TestFR9_P2_ComposedSchemasEqualShippedGolden. Open bead spexmachina-h4gv.32's obligations are unchanged. No code owed."
   }
 ]
