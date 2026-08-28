@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,10 +11,39 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dmitriyb/spexmachina/cli"
 	"github.com/dmitriyb/spexmachina/internal/perf"
 	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/dmitriyb/spexmachina/validator"
 )
+
+// runValidate executes `spex validate` with the given args and returns
+// stdout, stderr, and the process exit code, mirroring main.go's exit-code
+// and stderr handling — see diff_test.go's runDiff, which this follows.
+func runValidate(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	rootCmd := cli.NewRootCmd()
+	rootCmd.AddCommand(newValidateCmd())
+
+	errBuf := new(bytes.Buffer)
+	rootCmd.SetErr(errBuf)
+	rootCmd.SetArgs(append([]string{"validate"}, args...))
+
+	var execErr error
+	stdout = captureStdout(t, func() {
+		execErr = rootCmd.Execute()
+	})
+
+	if execErr != nil {
+		fmt.Fprintln(errBuf, execErr)
+		exitCode = 1
+		var ec interface{ ExitCode() int }
+		if errors.As(execErr, &ec) {
+			exitCode = ec.ExitCode()
+		}
+	}
+	return stdout, errBuf.String(), exitCode
+}
 
 // parseReport unmarshals a validate command's stdout into a ValidationReport,
 // failing the test if the output is not valid JSON.
@@ -406,6 +437,31 @@ func TestFR7_ValidateCommand_ChecksRunInFixedOrder(t *testing.T) {
 		if !gotChecks[c] {
 			t.Errorf("missing entry from checker %q", c)
 		}
+	}
+}
+
+// S17: a malformed spec/profile.json is a single early refusal, resolved
+// once ahead of any check — never a per-check cascade of schema-conformance
+// errors once each checker resolves the profile for itself. Mirrors
+// diff_test.go's TestFR4_E2b_DiffCommand_MalformedProfile.
+func TestFR7_S17_ValidateCommand_MalformedProfile(t *testing.T) {
+	specDir := setupTestSpec(t)
+
+	profilePath := filepath.Join(specDir, "profile.json")
+	writeTestFile(t, specDir, "profile.json", "{not valid json")
+
+	out, stderr, exitCode := runValidate(t, "--spec-dir", specDir)
+	if exitCode != 1 {
+		t.Fatalf("want exit 1 for a malformed profile, got %d\nstderr: %s", exitCode, stderr)
+	}
+	if out != "" {
+		t.Fatalf("no validation report should print once the profile fails to resolve, got stdout: %s", out)
+	}
+	if !strings.Contains(stderr, profilePath) {
+		t.Fatalf("stderr should name the profile file %q, got: %s", profilePath, stderr)
+	}
+	if !strings.Contains(stderr, "validate: schema: resolve profile") {
+		t.Fatalf("stderr should be the profile resolution's own single early error, got: %s", stderr)
 	}
 }
 

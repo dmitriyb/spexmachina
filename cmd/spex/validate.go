@@ -6,6 +6,7 @@ import (
 
 	"golang.org/x/term"
 
+	"github.com/dmitriyb/spexmachina/schema"
 	"github.com/dmitriyb/spexmachina/validator"
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,16 @@ func runValidateE(cmd *cobra.Command, args []string) error {
 	specDir, err := resolveSpecDir(cmd)
 	if err != nil {
 		return err
+	}
+
+	// The profile is resolved once per invocation, ahead of any check: a
+	// malformed profile.json is refused here, in one early error, rather
+	// than surfacing as a cascade of per-check schema-conformance failures
+	// once every checker resolves it internally. See
+	// arch_profile_loader.md "Resolution happens once per run before any
+	// check" and diff.go's identical pre-flight.
+	if _, err := schema.ResolveProfile(specDir); err != nil {
+		return fmt.Errorf("validate: %w", err)
 	}
 
 	var errs []validator.ValidationError
