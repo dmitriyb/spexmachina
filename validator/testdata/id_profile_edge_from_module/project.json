@@ -1,0 +1,13 @@
+{
+  "name": "profile-edge-from-module-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha",
+      "owns": [
+        "000000000099"
+      ]
+    }
+  ]
+}

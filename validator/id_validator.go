@@ -57,8 +57,11 @@ var builtinEdgeCoverage = map[string]map[string]bool{
 // profiles existed. Anything the resolved profile declares beyond that — a
 // node type with no dedicated Go field, or an (edge kind, from-type) pair
 // beyond the built-in eight, including a profile-declared edge that reuses a
-// built-in kind name from a type the hardcoded checks don't enumerate — is
-// checked generically, by parsing the raw JSON array the profile names.
+// built-in kind name from a type the hardcoded checks don't enumerate, or
+// one declared from the fixed "module" concept (legal per Profile.Validate
+// though "module" is not itself a declared node type) — is checked
+// generically, by parsing the raw JSON array the profile names, or, for
+// "module", project.json's fixed "modules" array.
 func CheckIDs(specDir string) []ValidationError {
 	project, modules, errs := loadSpec(specDir, "id")
 	if len(errs) > 0 {
@@ -517,8 +520,13 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 // "serves" edge from a custom "endpoint" type to components, or reusing the
 // built-in "uses" kind from a type the hardcoded checkModuleRefs loops don't
 // enumerate. checkExtraProjectEdges is this function's project-scoped
-// counterpart; together the two cover every from-type extraEdgeKinds can
-// return. Resolution uses the same string set-membership machinery as the
+// counterpart, and together the two cover every from-type extraEdgeKinds can
+// return: a from-type is either module-scoped (resolved here via
+// findModuleNodeType) or not — and "not module-scoped" means either a
+// profile-declared project-scoped NodeType or the fixed "module" concept,
+// which Profile.Validate accepts as a legal from-type even though it is not
+// itself a NodeTypes entry; checkExtraProjectEdges' projectEdgeSourceKey
+// resolves both. Resolution uses the same string set-membership machinery as the
 // built-in edges; the source array is read generically regardless of
 // whether its node type is built-in, because a profile-declared (kind,
 // from-type) pair has no dedicated Go loop. The target set prefers a
@@ -573,12 +581,14 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 // checkExtraProjectEdges is checkExtraModuleEdges' project-scoped
 // counterpart: it checks cross-reference integrity for (edge kind,
 // from-type) pairs the resolved profile declares beyond the built-in eight,
-// where the from-type is project-scoped — e.g. a profile declaring a
+// where the from-type is not module-scoped — e.g. a profile declaring a
 // "groups" edge from a custom project-scoped "milestone" type to
-// requirements. A project-scoped source has no owning module, so its
-// sources are read once from project.json rather than once per module, and
-// its targets resolve at project scope only via projectEdgeTargetSet —
-// there is no module to scope a module-local target within.
+// requirements, or an edge declared from the fixed "module" concept itself
+// (projectEdgeSourceKey resolves both). A project-scoped source has no
+// owning module, so its sources are read once from project.json rather than
+// once per module, and its targets resolve at project scope only via
+// projectEdgeTargetSet — there is no module to scope a module-local target
+// within.
 func checkExtraProjectEdges(specDir string, project *schema.Project, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
@@ -588,11 +598,11 @@ func checkExtraProjectEdges(specDir string, project *schema.Project, profile *sc
 	var errs []ValidationError
 	for _, edge := range edges {
 		for _, fromName := range edge.From {
-			nt, ok := findProjectNodeType(profile, fromName)
+			pluralKey, ok := projectEdgeSourceKey(profile, fromName)
 			if !ok {
 				continue
 			}
-			sources, err := rawProjectEntries(specDir, nt.PluralKey)
+			sources, err := rawProjectEntries(specDir, pluralKey)
 			if err != nil || len(sources) == 0 {
 				continue
 			}
@@ -608,10 +618,32 @@ func checkExtraProjectEdges(specDir string, project *schema.Project, profile *sc
 				}
 			}
 
-			errs = append(errs, checkEdgeSources("project.json:", nt.PluralKey, edge.Kind, edge.To, sources, targets)...)
+			errs = append(errs, checkEdgeSources("project.json:", pluralKey, edge.Kind, edge.To, sources, targets)...)
 		}
 	}
 	return errs
+}
+
+// projectEdgeSourceKey resolves an edge's project-scoped from-type name to
+// the project.json array key its source entries are read from generically:
+// a profile-declared project-scoped NodeType's own PluralKey, or the fixed
+// "modules" key for the "module" concept. "module" is legal as an edge
+// from-type per Profile.Validate's validRef even though it is not itself a
+// profile.NodeTypes entry, so findProjectNodeType cannot resolve it — and
+// schema.Module's typed struct carries no generic reference fields, so a
+// profile-declared edge naming "module" as its source (e.g. "owns") must
+// still be read generically here, exactly as a profile-declared type would
+// be, rather than through the typed field projectTypeIDSet uses to resolve
+// "module" on the target side.
+func projectEdgeSourceKey(profile *schema.Profile, fromName string) (string, bool) {
+	if fromName == "module" {
+		return "modules", true
+	}
+	nt, ok := findProjectNodeType(profile, fromName)
+	if !ok {
+		return "", false
+	}
+	return nt.PluralKey, true
 }
 
 // checkEdgeSources reports each source entry's edge.Kind reference field
