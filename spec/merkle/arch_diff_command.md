@@ -5,10 +5,11 @@ CLI entry point for [[d487fc9c4fa5|`spex diff`]]. It [[f223179a540a|compares the
 ## Responsibilities
 
 - Run the lifecycle pre-flight ([[a9aa93774cc2|ProjectResolver]]) to obtain the project context — the resolved snapshot and journal locations — refusing an uninitialised or broken project with the pre-flight's own error and exit code instead of guessing; resolve the spec directory from the root command's `--spec-dir`, and parse its own flags: snapshot path (optional, overriding the resolved location), output format
+- Resolve the profile once per invocation, through the schema module's resolution (`spec/profile.json` when present, the built-in default otherwise). A malformed profile is refused before any tree is built, with the resolution's own single early error and exit code 1 — the same pre-flight-style refusal path other setup failures take. The one resolved profile serves every profile consumer in the invocation: the classifier's type-to-level rules, the completeness checker's per-type triggers, and the removal-name sweep's name-declarable set
 - Build the current tree with TreeBuilder, and ask [[b2fcd9457a28|SnapshotStore]] for the previous one
 - Hand both trees to [[cb262b280963|DiffEngine]] and take back the list of changed leaves
 - Read the module identity hash → module name map off the tree TreeBuilder just built; without it the report would name each module by its identity hash instead
-- Hand that list and that map to [[f1a672216ce9|ImpactClassifier]] and take back the same list with a level on each entry (`impl_only`, `contract`, `arch_impl`, `structural`)
+- Hand that list, that map and the resolved profile to [[f1a672216ce9|ImpactClassifier]] and take back the same list with a level on each entry (`impl_only`, `contract`, `arch_impl`, `structural` — or `unknown`, when the profile does not declare a change's node type)
 - Hand the classified list to [[de3309dfbd3c|CompletenessChecker]] and collect the errors it reports
 - Run the removal-name sweep over the same classified list, and append what it finds to that error list, its disclosures to a separate notes list
 - Emit changes, errors and any notes together as one report, and let the errors decide the exit code

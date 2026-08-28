@@ -5,7 +5,7 @@
 ## Responsibilities
 
 - Analyze each change's node metadata to determine the spec layer affected
-- Classify into four impact levels
+- Classify into the four impact levels the profile's rules assign — or report `unknown` for a node type the profile does not declare
 - Attach impact classification to each change for downstream consumption
 
 ## Impact Levels
@@ -23,7 +23,7 @@ The `contract` level sits between `impl_only` and `arch_impl`: contract changes 
 
 ## Interface
 
-One call, taking the diff's changes together with a map from module identity hash to module name. It returns one classified change per change it was handed, in the order it was handed them, and has no failure mode.
+One call, taking three inputs: the diff's changes, a map from module identity hash to module name, and the resolved profile whose graph rules carry the type-to-level assignments. It returns one classified change per change it was handed, in the order it was handed them, and has no failure mode — resolving the profile is the caller's step, done before this call, and a malformed `spec/profile.json` fails there, never here. The classifier receives a profile that already resolved; it consults no file and never falls back to a different profile than the one it was handed.
 
 Each returned change carries everything the diff change carried plus its impact level. One field does not survive untouched: the owning module arrives as an identity hash and leaves as the module's name, so a report says `merkle` where the diff said a hash. A hash the name map does not cover is passed through as the hash, and a project-level change keeps its empty module.
 
@@ -49,8 +49,10 @@ carry a type no spec directory would produce.
 
 ## Call site
 
-ImpactClassifier is invoked from `spex diff` only. The diff command builds
-the classified-changes list once per invocation and writes it under the
+ImpactClassifier is invoked from `spex diff` only. The diff command resolves
+the profile once per invocation — the same resolution whose result drives its
+removal-name sweep — and hands it in as the third input; it builds the
+classified-changes list once per invocation and writes it under the
 top-level `changes` array of the diff JSON output. The downstream consumer
 (`spex plan`) reads the classification through that JSON;
 ImpactClassifier itself has no separate CLI surface and is not called
@@ -58,8 +60,8 @@ during snapshot persistence (`spex ingest`'s SnapshotSaver only rebuilds
 the tree, not the classification).
 
 Classification is strictly per change. Each change gets its level from its own
-node type and from nothing else, and the five rules above are the whole of the
-mapping: a module whose changes land on several levels is given no combined
+node type and from nothing else, and the profile's assignments — the five rules
+above, under the default profile — are the whole of the mapping: a module whose changes land on several levels is given no combined
 level here, no change is widened to a second node, and a structural change in
 one module is not propagated here to the modules that depend on it. Any
 aggregating or propagating belongs downstream, to a consumer reading the

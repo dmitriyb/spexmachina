@@ -44,7 +44,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "title": "Classify impact",
-      "description": "Classify each change by its impact level: impl_only (only test_section leaves changed), contract (data_flow or api leaves changed — a surface shared beyond one component, either a cross-component shape inside the module or a surface the module declares to its callers), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between impl_only and arch_impl: data_flow and api changes are not purely local to a single component, nor do they rewire graph topology like component or meta changes — a data_flow change alters the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created. The four levels are fixed; which declared node type maps to which level is read from the resolved profile, and the default profile assigns today's types to today's levels unchanged.",
+      "description": "Classify each change by its impact level: impl_only (only test_section leaves changed), contract (data_flow or api leaves changed — a surface shared beyond one component, either a cross-component shape inside the module or a surface the module declares to its callers), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between impl_only and arch_impl: data_flow and api changes are not purely local to a single component, nor do they rewire graph topology like component or meta changes — a data_flow change alters the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created. The four levels are fixed; which declared node type maps to which level is read from the resolved profile, the default profile assigns today's types to today's levels unchanged, and a node type the resolved profile does not declare (and that is not meta) is classified unknown — reported on the change's own line in both output formats and in the JSON summary's per-impact counts.",
       "depends_on": [
         "f223179a540a"
       ]
@@ -123,7 +123,7 @@
     {
       "id": "f1a672216ce9",
       "name": "ImpactClassifier",
-      "description": "Analyzes diff results to classify changes by their impact level: impl_only (test_section), contract (data_flow, api), arch_impl (component), or structural (module.json, project.json, requirement). The contract level is distinct from impl_only because data_flow and api changes describe surfaces shared beyond one component — downstream matchers must not skip them. Uses node metadata (type, module association) instead of parsing path prefixes.",
+      "description": "Analyzes diff results to classify changes by their impact level. The four levels are fixed; the mapping from declared node type to level is read from the resolved profile handed in as the third input, joined by the fixed meta rule, and the default profile assigns impl_only (test_section), contract (data_flow, api), arch_impl (component) and structural (module.json, project.json, requirement). A node type the profile does not declare is reported as unknown. The contract level is distinct from impl_only because data_flow and api changes describe surfaces shared beyond one component — downstream matchers must not skip them. Uses node metadata (type, module association) instead of parsing path prefixes.",
       "content": "arch_impact_classifier.md",
       "implements": [
         "425146f32e96"
@@ -135,7 +135,7 @@
     {
       "id": "c8b958ec310d",
       "name": "DiffCommand",
-      "description": "CLI entry point for spex diff. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker. Outputs changes and errors in JSON or human-readable format.",
+      "description": "CLI entry point for spex diff. Resolves the profile once per invocation, refusing a malformed one with a single early error before any tree is built. Compares current merkle tree against stored snapshot via DiffEngine, classifies impact via ImpactClassifier, runs change completeness validation via CompletenessChecker — both handed the one resolved profile. Outputs changes and errors in JSON or human-readable format.",
       "content": "arch_diff_command.md",
       "implements": [
         "f223179a540a",

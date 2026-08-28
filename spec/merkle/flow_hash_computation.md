@@ -115,9 +115,13 @@ here is a contract change: all three components must be updated in lockstep.
     for module.json envelopes; `meta/project` for project.json envelope
   - hash: string, 64-character lowercase hex SHA-256 digest
   - type: string enum — `leaf` | `module` | `project`
-  - node_type: string enum — `component` | `requirement` | `data_flow` |
-    `test_section` | `api` | `meta` (for envelope leaves); absent on
-    the root and on module interior nodes
+  - node_type: string — a type name the resolved profile declares, or `meta` for
+    envelope leaves; absent on the root and on module interior nodes. The
+    vocabulary is open per profile: the default profile declares exactly
+    `component` | `requirement` | `data_flow` | `test_section` | `api`, and a
+    profile-declared type stamps its declared name here, keyed and hashed like
+    any built-in type. Node types load out of the snapshot file verbatim, so on
+    the load side a stored name is carried as written, whatever profile wrote it
   - module: string — identity_hash of the parent module; empty string for
     project-level nodes
   - children: list of Node — empty for leaves; sorted by `key` ascending for
