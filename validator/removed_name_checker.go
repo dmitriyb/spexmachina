@@ -92,15 +92,20 @@ type RemovedNameReport struct {
 // journal can only strengthen removal detection, never gate it.
 //
 // Which node types are searched is read from the resolved profile's
-// per-type NameDeclarable flag — the same per-type role flag
-// checkNameRecoverability keys on — rather than a fixed pair. The default
-// profile marks exactly component and api, so the swept set is unchanged;
-// a project profile that flags another module-scoped type name-declarable
-// (e.g. an "endpoint" type) gets that type's removals swept on the same
-// terms. Every other node type carries generic noun phrases for names —
-// "Hash computation" alone survives sixteen times in another module's test
-// leaves — and searching them would report the corpus as broken on every
-// removal.
+// per-type NameDeclarable flag, rather than a fixed pair: the flag marks
+// which module-scoped types declare a name at all. The default profile
+// marks exactly component and api, so the swept set is unchanged; a project
+// profile that flags another module-scoped type name-declarable (e.g. an
+// "endpoint" type) gets that type's removals swept on the same terms — even
+// though checkNameRecoverability (arch_id_validator.md) does not yet read
+// this flag; it still enforces the declaration-time shape gate only for the
+// hardcoded component/api pair, so a profile-declared type can be marked
+// name-declarable and swept here without ever being shape-checked at
+// declaration time. Widening checkNameRecoverability to read NameDeclarable
+// is spexmachina-h4gv.17's work. Every other node type carries generic noun
+// phrases for names — "Hash computation" alone survives sixteen times in
+// another module's test leaves — and searching them would report the corpus
+// as broken on every removal.
 //
 // # Recovering the name of a node that no longer exists
 //
@@ -267,9 +272,11 @@ func (g nameTargetGroup) sortedKeys() []string {
 }
 
 // nameDeclarableNodeTypes returns the module-scoped node types the resolved
-// profile marks name-declarable — the same per-type role flag
-// checkNameRecoverability keys on (arch_id_validator.md) — rather than a
-// fixed pair. Under the default profile this is exactly component and api.
+// profile marks name-declarable, rather than a fixed pair. Under the default
+// profile this is exactly component and api. checkNameRecoverability
+// (arch_id_validator.md) does not yet read this flag — it still enforces the
+// declaration-time shape gate only for the hardcoded component/api pair;
+// widening it to read NameDeclarable is spexmachina-h4gv.17's work.
 func nameDeclarableNodeTypes(profile *schema.Profile) []schema.NodeType {
 	var out []schema.NodeType
 	for _, t := range profile.NodeTypes {
