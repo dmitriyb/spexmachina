@@ -173,11 +173,11 @@ func isTestSectionFoldback(change merkle.ClassifiedChange, graph SpecGraph) bool
 // (graph.profileOrDefault().PlanRelevant), not a compiled-in constant — a
 // profile is free to name a type the default profile never declared (an
 // "endpoint", say), and the classifier admits it the same way it admits
-// "component" under the default. "module" is the one fixed exception: it is
-// not a declarable node type in any profile (the profile's own Validate
-// rejects an attempt to name it), so no change ever carries it, and the
-// admission is a hardcoded no-op preserved only so this table agrees with
-// the flow leaf's shorter one that still lists it.
+// "component" under the default. "module" is the one fixed exception: a
+// module is an interior node of the merkle tree, never diffed as a leaf, so
+// no change ever reaches this gate carrying it, and the admission is a
+// hardcoded no-op preserved only so this table agrees with the flow leaf's
+// shorter one that still lists it.
 func gateAdmits(change merkle.ClassifiedChange, graph SpecGraph) bool {
 	if change.NodeType == "module" {
 		return true

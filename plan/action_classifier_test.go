@@ -151,26 +151,35 @@ func TestGateAdmits_TestSection_UnestablishedCouplingIsAdmitted(t *testing.T) {
 // single verdict from the zero-value (no profile attached) graph, which
 // falls back to the same default — the admitted set is read from the
 // profile, but the default profile reproduces the old compiled-in set
-// byte-for-byte.
+// byte-for-byte. Each case carries its own expected verdict (matching
+// TestGateAdmits_NodeTypeTable) so a change that quietly widened the
+// admitted set would fail here even though zero-value and explicit-default
+// still agreed with each other.
 func TestGateAdmits_S5b_DefaultProfileMatchesHardcodedTable(t *testing.T) {
 	f := newClassifierFixture()
 	withDefault := f.Graph.WithProfile(schema.DefaultProfile())
 
-	cases := []merkle.ClassifiedChange{
-		change(f.CompX, "plan", "component", merkle.Added, "", "h"),
-		change(f.FlowF, "plan", "data_flow", merkle.Added, "", "h"),
-		change(f.TSMany, "plan", "test_section", merkle.Added, "", "h"),
-		change(f.TSOne, "plan", "test_section", merkle.Added, "", "h"),
-		change("api-1", "plan", "api", merkle.Added, "", "h"),
-		change("meta-1", "plan", "meta", merkle.Added, "", "h"),
-		change("req-1", "plan", "requirement", merkle.Added, "", "h"),
+	cases := []struct {
+		change merkle.ClassifiedChange
+		want   bool
+	}{
+		{change(f.CompX, "plan", "component", merkle.Added, "", "h"), true},
+		{change(f.FlowF, "plan", "data_flow", merkle.Added, "", "h"), true},
+		{change(f.TSMany, "plan", "test_section", merkle.Added, "", "h"), true},
+		{change(f.TSOne, "plan", "test_section", merkle.Added, "", "h"), false},
+		{change("api-1", "plan", "api", merkle.Added, "", "h"), false},
+		{change("meta-1", "plan", "meta", merkle.Added, "", "h"), false},
+		{change("req-1", "plan", "requirement", merkle.Added, "", "h"), false},
 	}
-	for _, c := range cases {
-		t.Run(c.NodeType, func(t *testing.T) {
-			zeroValue := gateAdmits(c, f.Graph)
-			explicit := gateAdmits(c, withDefault)
-			if zeroValue != explicit {
-				t.Errorf("gateAdmits(%s): no-profile=%v, explicit default=%v — must agree", c.NodeType, zeroValue, explicit)
+	for _, tc := range cases {
+		t.Run(tc.change.NodeType, func(t *testing.T) {
+			zeroValue := gateAdmits(tc.change, f.Graph)
+			explicit := gateAdmits(tc.change, withDefault)
+			if zeroValue != tc.want {
+				t.Errorf("gateAdmits(%s) no-profile: got %v want %v", tc.change.NodeType, zeroValue, tc.want)
+			}
+			if explicit != tc.want {
+				t.Errorf("gateAdmits(%s) explicit default: got %v want %v", tc.change.NodeType, explicit, tc.want)
 			}
 		})
 	}
