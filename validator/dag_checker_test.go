@@ -160,6 +160,18 @@ func TestREQ3_BuiltinEdgeCyclicExempt(t *testing.T) {
 	}
 }
 
+// A profile that declares none of requires_module, depends_on or uses must
+// not have the built-in module/requirement/component graphs built and
+// walked anyway: the checker holds no fixed edge list of its own, so an
+// edge kind the resolved profile omits entirely gets no graph, the same as
+// one it declares cyclic: true.
+func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_omits_builtin_edges"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors when the profile declares none of requires_module, depends_on or uses, got %d: %v", len(errs), errs)
+	}
+}
+
 func TestREQ3_SelfValidateDAG(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)

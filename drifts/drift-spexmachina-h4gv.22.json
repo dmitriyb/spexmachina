@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-h4gv.22",
+  "node": "78ac211428bb",
+  "files": [
+    "spec/validator/test_graph_structure.md",
+    "validator/dag_checker_test.go"
+  ],
+  "claim": "test_graph_structure.md's Setup paragraph says: \"DAGChecker fixtures cover four shapes only — `dag_valid` ..., `dag_module_cycle` ..., `dag_req_cycle` and `dag_comp_cycle`; the remaining DAG scenarios have no dedicated fixture, and each carries a note below saying what covers it, if anything.\"",
+  "authoritative_source": "This bead's own D9 scenario (\"Acyclicity over profile-declared edges\") and its two variants, further down the same leaf, describe behavior that the fixtures `dag_profile_edge_cycle`, `dag_profile_edge_cyclic_exempt` and `dag_profile_builtin_exempt` now realize end-to-end in validator/dag_checker_test.go.",
+  "evidence": "This PR adds three checked-in fixture directories under validator/testdata/ — dag_profile_edge_cycle, dag_profile_edge_cyclic_exempt and dag_profile_builtin_exempt — driven by new tests exercising D9's profile-declared-edge cycle, its cyclic-exempt variant, and the gating fix for undeclared built-in edge kinds. That makes seven DAGChecker fixture shapes, not four, and D9 — one of \"the remaining DAG scenarios [with] no dedicated fixture\" per the Setup paragraph — now has one. The enumeration in Setup was accurate at origin/main and is now stale relative to what shipped in this bead's own scope.",
+  "blocking": false,
+  "proposed_fix": "Update the Setup paragraph's fixture enumeration to name all seven DAGChecker fixture shapes (dag_valid, dag_module_cycle, dag_req_cycle, dag_comp_cycle, dag_profile_edge_cycle, dag_profile_edge_cyclic_exempt, dag_profile_builtin_exempt), and remove D9 from \"the remaining DAG scenarios have no dedicated fixture\" since it is now covered by dag_profile_edge_cycle and dag_profile_edge_cyclic_exempt."
+}

@@ -60,7 +60,7 @@ func CheckDAG(specDir string) []ValidationError {
 	}
 
 	var result []ValidationError
-	if !edgeCyclic(profile, "requires_module") {
+	if edgeActive(profile, "requires_module", "module") {
 		result = append(result, checkModuleDAG(project)...)
 	}
 
@@ -70,14 +70,14 @@ func CheckDAG(specDir string) []ValidationError {
 	}
 	slices.Sort(modNames)
 
-	reqExempt := edgeCyclic(profile, "depends_on")
-	usesExempt := edgeCyclic(profile, "uses")
+	reqActive := edgeActive(profile, "depends_on", "requirement")
+	usesActive := edgeActive(profile, "uses", "component")
 	for _, modName := range modNames {
 		mod := modules[modName]
-		if !reqExempt {
+		if reqActive {
 			result = append(result, checkRequirementDAG(modName, mod)...)
 		}
-		if !usesExempt {
+		if usesActive {
 			result = append(result, checkComponentDAG(modName, mod)...)
 		}
 	}
@@ -88,15 +88,23 @@ func CheckDAG(specDir string) []ValidationError {
 	return result
 }
 
-// edgeCyclic reports whether the resolved profile marks the named edge kind
-// cyclic: true, exempting it from the cycle check. An edge kind the profile
-// does not declare at all is treated as not exempt — it simply has no
-// entries to form edges from, so its graph is vacuously empty either way.
-func edgeCyclic(profile *schema.Profile, kind string) bool {
+// edgeActive reports whether a built-in fast path should build and walk its
+// graph: the resolved profile must declare the given edge kind carried from
+// the given from-type, and that declaration must not be marked cyclic: true.
+// An edge kind the profile does not declare for that from-type at all is
+// inactive — the checker holds no fixed edge list of its own, so an
+// undeclared (kind, from-type) pair is skipped here exactly as it would be
+// by the generic checkExtra*DAGEdges path, rather than walked anyway using
+// the built-in struct field regardless of what the profile says.
+func edgeActive(profile *schema.Profile, kind, fromType string) bool {
 	for _, e := range profile.Edges {
-		if e.Kind == kind {
-			return e.Cyclic
+		if e.Kind != kind {
+			continue
 		}
+		if !slices.Contains(e.From, fromType) {
+			continue
+		}
+		return !e.Cyclic
 	}
 	return false
 }
