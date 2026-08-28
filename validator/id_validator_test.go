@@ -539,6 +539,41 @@ func TestREQ6_DanglingProfileDeclaredEdgeFromModule(t *testing.T) {
 	}
 }
 
+// TestREQ6_ProfileDeclaredEdgeFromProjectScopeToModuleScope: a profile can
+// declare an edge whose from-type is project-scoped ("milestone") but whose
+// to-type is module-scoped ("component") — Profile.Validate's validRef is
+// scope-agnostic, so this is a legal profile even though the source has no
+// owning module to scope the target lookup within. projectEdgeTargetSet used
+// to only resolve project-scoped targets and return an error for a
+// module-scoped one, which checkExtraProjectEdges' caller swallowed with
+// continue — leaving targets empty and every reference reported as dangling
+// even when the target genuinely existed. It now falls back to the union of
+// every module's array. The fixture pins both directions: a milestone
+// grouping an existing component must NOT be reported dangling, and a
+// milestone grouping a nonexistent one still must be.
+func TestREQ6_ProfileDeclaredEdgeFromProjectScopeToModuleScope(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_project_scope_to_module"))
+
+	for _, e := range errs {
+		if e.Check == "id" && e.Path == "project.json:/milestones/0000000000m1" {
+			t.Fatalf("milestone 0000000000m1 groups an existing component; want no error, got %v", e)
+		}
+	}
+
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "project.json:/milestones/0000000000m2" &&
+			strings.Contains(e.Message, "groups references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling groups error for milestone 0000000000m2, got %v", errs)
+	}
+}
+
 // TestREQ5_ProfileDeclaredNameDeclarableTypeChecked: checkNameRecoverability
 // used to iterate a hardcoded component/api pair. A profile that marks a
 // third module-scoped type ("endpoint") name-declarable via NodeType.

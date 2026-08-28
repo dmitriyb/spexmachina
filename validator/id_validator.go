@@ -106,7 +106,7 @@ func CheckIDs(specDir string) []ValidationError {
 		result = append(result, checkModuleRefs(modName, modules[modName], project)...)
 	}
 	result = append(result, checkExtraModuleEdges(specDir, modNames, project, modules, profile)...)
-	result = append(result, checkExtraProjectEdges(specDir, project, profile)...)
+	result = append(result, checkExtraProjectEdges(specDir, modNames, project, modules, profile)...)
 
 	return result
 }
@@ -586,10 +586,12 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 // requirements, or an edge declared from the fixed "module" concept itself
 // (projectEdgeSourceKey resolves both). A project-scoped source has no
 // owning module, so its sources are read once from project.json rather than
-// once per module, and its targets resolve at project scope only via
-// projectEdgeTargetSet — there is no module to scope a module-local target
-// within.
-func checkExtraProjectEdges(specDir string, project *schema.Project, profile *schema.Profile) []ValidationError {
+// once per module. Its targets resolve via projectEdgeTargetSet, which
+// covers project scope directly and falls back to the union of every
+// module's array when the "to" type is module-scoped — a project-scoped
+// source has no owning module to scope a module-local target within, so the
+// union is the only meaningful set to check such a reference against.
+func checkExtraProjectEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
 		return nil
@@ -609,7 +611,7 @@ func checkExtraProjectEdges(specDir string, project *schema.Project, profile *sc
 
 			targets := map[string]bool{}
 			for _, toName := range edge.To {
-				set, err := projectEdgeTargetSet(specDir, project, profile, toName)
+				set, err := projectEdgeTargetSet(specDir, modNames, project, modules, profile, toName)
 				if err != nil {
 					continue
 				}
@@ -750,11 +752,15 @@ func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *sch
 
 // projectEdgeTargetSet is edgeTargetSet's project-scoped counterpart, used
 // by checkExtraProjectEdges: a project-scoped source has no owning module,
-// so a target can only resolve against project.json — the built-in
+// so a target resolves against project.json first — the built-in
 // requirement/module concepts typed via projectTypeIDSet, or a
-// profile-declared project-scoped type read generically. Unlike
-// edgeTargetSet, there is no module-scoped array to fall back to.
-func projectEdgeTargetSet(specDir string, project *schema.Project, profile *schema.Profile, typeName string) (map[string]bool, error) {
+// profile-declared project-scoped type read generically. Profile.Validate's
+// validRef is scope-agnostic, though, so a project-scoped source can legally
+// point at a module-scoped type too (e.g. a project-scoped "milestone"
+// declaring "groups" to module-scoped "component"); with no owning module to
+// scope that lookup within, moduleUnionTypeIDSet resolves it against the
+// union of every module's array instead.
+func projectEdgeTargetSet(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
 	if set, ok := projectTypeIDSet(project, typeName); ok {
 		return set, nil
 	}
@@ -765,7 +771,44 @@ func projectEdgeTargetSet(specDir string, project *schema.Project, profile *sche
 		}
 		return entriesIDSet(entries), nil
 	}
-	return nil, fmt.Errorf("no array declared for node type %q", typeName)
+	return moduleUnionTypeIDSet(specDir, modNames, project, modules, profile, typeName)
+}
+
+// moduleUnionTypeIDSet resolves typeName as a module-scoped node type
+// (typed via moduleTypeIDSet if it is one of the five built-ins, generic via
+// findModuleNodeType/rawModuleEntries otherwise) and unions its identity
+// hashes across every module in the project. It is projectEdgeTargetSet's
+// last resort for a module-scoped "to" type: a project-scoped source has no
+// owning module to scope the lookup within, so the union across all modules
+// is the only meaningful set to validate such a reference against.
+func moduleUnionTypeIDSet(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
+	nt, generic := findModuleNodeType(profile, typeName)
+	if !generic && !builtinModuleTypeNames[typeName] {
+		return nil, fmt.Errorf("no array declared for node type %q", typeName)
+	}
+
+	union := map[string]bool{}
+	for _, modName := range modNames {
+		mod := modules[modName]
+		if mod == nil {
+			continue
+		}
+		if set, ok := moduleTypeIDSet(mod, typeName); ok {
+			for id := range set {
+				union[id] = true
+			}
+			continue
+		}
+		modPath := modulePathByName(project, modName)
+		entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+		if err != nil {
+			return nil, err
+		}
+		for id := range entriesIDSet(entries) {
+			union[id] = true
+		}
+	}
+	return union, nil
 }
 
 // moduleTypeIDSet returns the set of identity hashes for one of the five
