@@ -170,6 +170,27 @@ func TestREQ11_TestSectionPathTraversal(t *testing.T) {
 	}
 }
 
+// S18: ContentResolver walks whichever module-scoped types the resolved
+// profile marks content-bearing, not a fixed three.
+
+func TestS18_ProfileDeclaredContentBearingTypeWalked(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_profile_endpoint"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error for the endpoint's missing content, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "content" {
+		t.Fatalf("expected check=content, got %q", e.Check)
+	}
+	wantPath := "core/module.json:/endpoints/Get widget/content"
+	if e.Path != wantPath {
+		t.Fatalf("expected path %q, got %q", wantPath, e.Path)
+	}
+	if !strings.Contains(e.Message, "endpoint_get_widget.md") {
+		t.Fatalf("expected message mentioning endpoint_get_widget.md, got: %q", e.Message)
+	}
+}
+
 func TestREQ2_SelfValidateContent(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckContentPaths(specDir)
