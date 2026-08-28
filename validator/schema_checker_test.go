@@ -210,6 +210,29 @@ func TestS17_MalformedProfileFailsBeforeConformance(t *testing.T) {
 	}
 }
 
+// S15: schema checks run across multiple modules with per-module error
+// attribution — alpha is fully valid, beta carries a schema violation, and
+// the errors returned name only the module that actually violates the schema.
+
+func TestS15_SchemaChecksAcrossMultipleModules(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "schema_multi_module"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if !strings.Contains(e.Path, "beta/module.json") {
+		t.Fatalf("expected error referencing beta/module.json, got %q", e.Path)
+	}
+	for _, e := range errs {
+		if strings.Contains(e.Path, "alpha") {
+			t.Fatalf("expected no error referencing alpha, got: %v", errs)
+		}
+	}
+}
+
 func TestREQ9_SelfValidate(t *testing.T) {
 	// Validate spex-machina's own spec directory.
 	specDir := filepath.Join("..", "spec")
