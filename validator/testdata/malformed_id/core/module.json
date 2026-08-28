@@ -1,0 +1,11 @@
+{
+  "name": "core",
+  "requirements": [
+    {
+      "id": "one",
+      "preq_id": "000000000001",
+      "title": "Do something",
+      "type": "functional"
+    }
+  ]
+}

@@ -112,6 +112,104 @@ func TestREQ1_AllErrorsHaveSchemaCheck(t *testing.T) {
 	}
 }
 
+// S5: module.json with malformed identity-hash id — every id field is a
+// string constrained by the identity-hash pattern, so a value that doesn't
+// match it is reported as a pattern violation, not a type mismatch.
+
+func TestS5_MalformedIdentityHashID(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "malformed_id"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if !strings.Contains(e.Path, "requirements/0/id") {
+		t.Fatalf("expected path referencing requirements/0/id, got %q", e.Path)
+	}
+}
+
+// S6: project.json with an unknown extra field — the schema forbids
+// additional properties at the root, so the extra field is one violation.
+
+func TestS6_UnknownExtraFieldRejected(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "extra_field"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if e.Path != "project.json" {
+		t.Fatalf("expected path %q, got %q", "project.json", e.Path)
+	}
+}
+
+// E2: project.json is not valid JSON — a parse failure, not a panic, and no
+// module.json is opened since the module list can't be discovered.
+
+func TestE2_ProjectJSONParseFailure(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "invalid_json"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if e.Path != "project.json" {
+		t.Fatalf("expected path %q, got %q", "project.json", e.Path)
+	}
+	if !strings.Contains(e.Message, "invalid JSON") {
+		t.Fatalf("expected a JSON parse failure message, got %q", e.Message)
+	}
+}
+
+// S16: conformance runs against the profile-composed schemas — a profile
+// declaring an additional module-scoped type is accepted, and the same
+// module.json fails under the default profile once the profile is removed.
+
+func TestS16_ConformanceAgainstProfileComposedSchema(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "schema_profile_endpoint"))
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors with the profile declaring 'endpoint', got %d: %v", len(errs), errs)
+	}
+}
+
+func TestS16_SameModuleFailsUnderDefaultProfile(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "schema_profile_endpoint_no_profile"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error without the profile, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if !strings.Contains(e.Path, "alpha/module.json") {
+		t.Fatalf("expected path referencing alpha/module.json, got %q", e.Path)
+	}
+}
+
+// S17: a malformed profile fails before any conformance check runs — one
+// error naming profile.json, and zero schema-conformance errors even though
+// the baseline project.json and module.json are otherwise valid.
+
+func TestS17_MalformedProfileFailsBeforeConformance(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "schema_profile_malformed"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
+	}
+	if e.Path != "profile.json" {
+		t.Fatalf("expected path %q, got %q", "profile.json", e.Path)
+	}
+}
+
 func TestREQ9_SelfValidate(t *testing.T) {
 	// Validate spex-machina's own spec directory.
 	specDir := filepath.Join("..", "spec")
