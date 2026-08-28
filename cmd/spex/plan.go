@@ -220,6 +220,10 @@ func applyAbsorb(entries []absorbInput, changes []merkle.ClassifiedChange) ([]pl
 // as plan.NewSpecGraph expects (spec/plan/arch_plan_command.md, pre-flight
 // step 4). A module.json that does not exist on disk is skipped rather than
 // treated as fatal, inherited from the spec graph loader this command replaced.
+// It also resolves the project's profile (profile.json beside project.json,
+// or the built-in default) and attaches it, so ActionClassifier's node-type
+// gate reads this project's own plan-relevant declaration
+// (spec/plan/arch_action_classifier.md, "Node-Type Gate").
 func loadPlanSpecGraph(specDir string) (plan.SpecGraph, error) {
 	projData, err := os.ReadFile(filepath.Join(specDir, "project.json"))
 	if err != nil {
@@ -246,7 +250,13 @@ func loadPlanSpecGraph(specDir string) (plan.SpecGraph, error) {
 		}
 		specs[mod.ID] = ms
 	}
-	return plan.NewSpecGraph(proj, specs), nil
+
+	profile, err := schema.ResolveProfile(specDir)
+	if err != nil {
+		return plan.SpecGraph{}, fmt.Errorf("resolve profile: %w", err)
+	}
+
+	return plan.NewSpecGraph(proj, specs).WithProfile(profile), nil
 }
 
 // resolvePlanRegistration finds the run's registration: the eid of the

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // ClassifyActions turns NodeMatcher's three lists into a flat, ordered list
@@ -167,16 +168,24 @@ func isTestSectionFoldback(change merkle.ClassifiedChange, graph SpecGraph) bool
 
 // gateAdmits applies the node-type gate to an unmatched change: the one
 // path where node type decides whether a change produces an action at all
-// (spec/plan/arch_action_classifier.md, "Node-Type Gate").
+// (spec/plan/arch_action_classifier.md, "Node-Type Gate"). The admitted set
+// is the resolved profile's plan-relevant declaration
+// (graph.profileOrDefault().PlanRelevant), not a compiled-in constant — a
+// profile is free to name a type the default profile never declared (an
+// "endpoint", say), and the classifier admits it the same way it admits
+// "component" under the default. "module" is the one fixed exception: it is
+// not a declarable node type in any profile (the profile's own Validate
+// rejects an attempt to name it), so no change ever carries it, and the
+// admission is a hardcoded no-op preserved only so this table agrees with
+// the flow leaf's shorter one that still lists it.
 func gateAdmits(change merkle.ClassifiedChange, graph SpecGraph) bool {
-	switch change.NodeType {
-	case "component", "data_flow":
+	if change.NodeType == "module" {
 		return true
-	case "module":
-		// Admitted per the gate table, though no change ever carries this
-		// node type — a module is an interior merkle node, never a leaf.
-		return true
-	case "test_section":
+	}
+	if !planRelevant(graph.profileOrDefault(), change.NodeType) {
+		return false
+	}
+	if change.NodeType == "test_section" {
 		mod, ok := graph.moduleByName(change.Module)
 		if !ok {
 			return true // coupling cannot be established: admitted
@@ -186,9 +195,19 @@ func gateAdmits(change merkle.ClassifiedChange, graph SpecGraph) bool {
 			return true
 		}
 		return len(ts.Describes) >= 2
-	default: // api, meta, requirement
-		return false
 	}
+	return true
+}
+
+// planRelevant reports whether the resolved profile declares nodeType as
+// bead-producing.
+func planRelevant(profile *schema.Profile, nodeType string) bool {
+	for _, t := range profile.PlanRelevant {
+		if t == nodeType {
+			return true
+		}
+	}
+	return false
 }
 
 // nodeName resolves an added or modified node's human-readable name from

@@ -23,6 +23,12 @@ type SpecGraph struct {
 	// priority walk (implements -> preq_id -> priority) is the only reader;
 	// nothing else in the package needs a project requirement's fields.
 	projectReqs map[string]schema.Requirement
+	// profile is the resolved project profile ActionClassifier's node-type
+	// gate reads its admitted set from (WithProfile). Left nil by
+	// NewSpecGraph's zero-config callers — profile() falls back to
+	// schema.DefaultProfile(), the same admitted set the gate hardcoded
+	// before it became profile-driven.
+	profile *schema.Profile
 }
 
 // moduleEntry pairs a module's project.json declaration (id, name,
@@ -45,6 +51,25 @@ func NewSpecGraph(proj schema.Project, specs map[string]schema.ModuleSpec) SpecG
 		g.projectReqs[req.ID] = req
 	}
 	return g
+}
+
+// WithProfile returns g with the resolved project profile attached.
+// PlanCommand calls this once per run, after schema.ResolveProfile, so the
+// node-type gate reads the project's own plan-relevant declaration rather
+// than the compiled-in default.
+func (g SpecGraph) WithProfile(p *schema.Profile) SpecGraph {
+	g.profile = p
+	return g
+}
+
+// profile returns the graph's resolved profile, defaulting to
+// schema.DefaultProfile() when none was attached — the same admitted set
+// ("component", "data_flow", "test_section") the gate used to hardcode.
+func (g SpecGraph) profileOrDefault() *schema.Profile {
+	if g.profile != nil {
+		return g.profile
+	}
+	return schema.DefaultProfile()
 }
 
 func (g SpecGraph) moduleByName(name string) (moduleEntry, bool) {
