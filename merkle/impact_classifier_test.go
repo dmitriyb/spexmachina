@@ -1,6 +1,7 @@
 package merkle
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -179,7 +180,10 @@ func TestREQ5_S13_StructuralAlongsideLowerImpacts(t *testing.T) {
 // TestREQ5_S14_DiffThenClassifyEndToEnd covers S14, the one Classify
 // scenario that builds real trees: DiffEngine produces raw changes carrying
 // node metadata, and ImpactClassifier annotates them from that metadata —
-// the exact data path flow_diff_classification.md describes.
+// the exact data path flow_diff_classification.md describes. All three S14
+// Then clauses are exercised: alpha's test_section change (impl_only),
+// beta's component change (arch_impl), and a new module gamma's envelope
+// change (structural).
 func TestREQ5_S14_DiffThenClassifyEndToEnd(t *testing.T) {
 	specDir := setupSpecDir(t)
 	snapshot, err := BuildTree(specDir)
@@ -191,6 +195,25 @@ func TestREQ5_S14_DiffThenClassifyEndToEnd(t *testing.T) {
 	writeFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Modified tests\n")
 	writeFile(t, filepath.Join(specDir, "beta"), "arch_beta.md", "# Modified beta arch\n")
 
+	// A new module gamma appears, adding its meta/<GAMMA_HASH> envelope leaf.
+	gammaModID := schema.IdentityHash("module", "Gamma")
+	proj := `{
+		"name": "test-project",
+		"requirements": [
+			{"id": "` + fixtureProjReq1ID + `", "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": "` + fixtureProjReq2ID + `", "type": "non_functional", "title": "Be fast", "priority": 2}
+		],
+		"modules": [
+			{"id": "` + classifyAlphaHash + `", "name": "Alpha", "path": "alpha"},
+			{"id": "` + classifyBetaHash + `", "name": "Beta", "path": "beta"},
+			{"id": "` + gammaModID + `", "name": "Gamma", "path": "gamma"}
+		]
+	}`
+	writeFile(t, specDir, "project.json", proj)
+	gammaDir := filepath.Join(specDir, "gamma")
+	must(t, os.MkdirAll(gammaDir, 0755))
+	writeFile(t, gammaDir, "module.json", `{"name": "gamma"}`)
+
 	current, err := BuildTree(specDir)
 	if err != nil {
 		t.Fatalf("BuildTree: %v", err)
@@ -201,8 +224,9 @@ func TestREQ5_S14_DiffThenClassifyEndToEnd(t *testing.T) {
 
 	test1Key := schema.IdentityHash("alpha", "test_section", "Test1")
 	betaCompKey := schema.IdentityHash("beta", "component", "BetaComp")
+	gammaMetaKey := "meta/" + gammaModID
 
-	var sawImplOnly, sawArchImpl bool
+	var sawImplOnly, sawArchImpl, sawGammaStructural bool
 	for _, c := range classified {
 		if c.Key == test1Key {
 			sawImplOnly = c.Impact == ImplOnly
@@ -210,12 +234,18 @@ func TestREQ5_S14_DiffThenClassifyEndToEnd(t *testing.T) {
 		if c.Key == betaCompKey {
 			sawArchImpl = c.Impact == ArchImpl
 		}
+		if c.Key == gammaMetaKey {
+			sawGammaStructural = c.Impact == Structural
+		}
 	}
 	if !sawImplOnly {
 		t.Errorf("expected impl_only change for %s", test1Key)
 	}
 	if !sawArchImpl {
 		t.Errorf("expected arch_impl change for %s", betaCompKey)
+	}
+	if !sawGammaStructural {
+		t.Errorf("expected structural change for gamma envelope %s", gammaMetaKey)
 	}
 }
 
@@ -310,9 +340,11 @@ func TestREQ5_R2_ProjectRequirementIsStructural(t *testing.T) {
 	}
 }
 
-// TestREQ5_E1_EmptyChanges covers E1: Classify on an empty or nil slice
-// returns an empty slice and never panics or injects synthetic entries.
-func TestREQ5_E1_EmptyChanges(t *testing.T) {
+// TestREQ5_Classify_EmptyChanges covers E1: Classify on an empty or nil
+// slice returns an empty slice and never panics or injects synthetic
+// entries. Named per test_diff_classification.md line 184, which cites this
+// exact test name for E1's Classify(nil, ...) arm.
+func TestREQ5_Classify_EmptyChanges(t *testing.T) {
 	classified := Classify([]Change{}, nil, schema.DefaultProfile())
 	if len(classified) != 0 {
 		t.Fatalf("expected 0 classified changes for empty input, got %d", len(classified))
