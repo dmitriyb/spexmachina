@@ -1,0 +1,43 @@
+{
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project"
+    },
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "module"
+    },
+    {
+      "name": "component",
+      "plural_key": "components",
+      "scope": "module",
+      "requires_content": true
+    },
+    {
+      "name": "data_flow",
+      "plural_key": "data_flows",
+      "scope": "module",
+      "requires_content": true
+    },
+    {
+      "name": "test_section",
+      "plural_key": "test_sections",
+      "scope": "module",
+      "requires_content": true
+    },
+    {
+      "name": "api",
+      "plural_key": "apis",
+      "scope": "module"
+    },
+    {
+      "name": "endpoint",
+      "plural_key": "endpoints",
+      "scope": "module",
+      "requires_content": true
+    }
+  ]
+}

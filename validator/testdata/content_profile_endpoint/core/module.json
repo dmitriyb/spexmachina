@@ -1,0 +1,16 @@
+{
+  "name": "core",
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "Widget"
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "000000000001",
+      "name": "Get widget",
+      "content": "endpoint_get_widget.md"
+    }
+  ]
+}
