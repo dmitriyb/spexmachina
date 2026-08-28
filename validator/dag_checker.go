@@ -241,16 +241,23 @@ func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schem
 // adjacency map keyed by identity hash, and a parallel id-to-label map used
 // to spell a found cycle out by name. An edge whose target id is not itself
 // an entry in the same slice is dropped: it cannot participate in a cycle
-// confined to this graph.
+// confined to this graph. A node's declared-identity field is "name" for
+// every built-in type but one — a requirement's is "title" (see
+// moduleTypedEntries in id_validator.go, and project.schema.json's required
+// ["id", "type", "title"] with no "name" property at all) — so the label
+// falls back to "title" before falling back to the raw id.
 func genericCycleAdjacency(entries []rawEntry, edgeKind string) (map[string][]string, map[string]string) {
 	ids := make(map[string]bool, len(entries))
 	labels := make(map[string]string, len(entries))
 	for _, e := range entries {
 		id := e.str("id")
 		ids[id] = true
-		if name := e.str("name"); name != "" {
-			labels[id] = name
-		} else {
+		switch {
+		case e.str("name") != "":
+			labels[id] = e.str("name")
+		case e.str("title") != "":
+			labels[id] = e.str("title")
+		default:
 			labels[id] = id
 		}
 	}

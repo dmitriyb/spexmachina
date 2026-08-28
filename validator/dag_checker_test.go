@@ -222,8 +222,8 @@ func TestREQ3_ProjectRequirementDependencyCycle(t *testing.T) {
 			if e.Path != "project.json:/requirements" {
 				t.Fatalf("expected path project.json:/requirements, got: %s", e.Path)
 			}
-			if !strings.Contains(e.Message, "000000000001") || !strings.Contains(e.Message, "000000000002") {
-				t.Fatalf("cycle path should name both project requirement ids, got: %s", e.Message)
+			if !strings.Contains(e.Message, "Project requirement A") || !strings.Contains(e.Message, "Project requirement B") {
+				t.Fatalf("cycle path should name both project requirement titles, got: %s", e.Message)
 			}
 		}
 	}
