@@ -430,6 +430,71 @@ func TestREQ6_ProvidedByIsModuleLocal(t *testing.T) {
 	}
 }
 
+// --- I18: Cross-reference integrity over profile-declared edges ---
+
+// TestREQ6_DanglingProfileDeclaredEdge: spec/profile.json declares a custom
+// "endpoint" type carrying a "serves" edge to components — a reference field
+// no built-in type has. The dangling target is still caught, resolved by
+// the same set-membership machinery as implements/uses/describes/
+// provided_by, because a profile-declared edge is not a fixed set of seven
+// field names; it is whatever the resolved profile lists.
+func TestREQ6_DanglingProfileDeclaredEdge(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_serves"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "serves references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling serves error for profile-declared endpoint type, got %v", errs)
+	}
+}
+
+// TestREQ5_ProfileDeclaredNameDeclarableTypeChecked: checkNameRecoverability
+// used to iterate a hardcoded component/api pair. A profile that marks a
+// third module-scoped type ("endpoint") name-declarable via NodeType.
+// NameDeclarable gets that type's names shape-checked too, using the same
+// per-type flag CheckRemovedNames already reads for the removal sweep
+// (nameDeclarableNodeTypes) — the two can no longer drift apart.
+func TestREQ5_ProfileDeclaredNameDeclarableTypeChecked(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_name_declarable"))
+	if len(errs) != 1 {
+		t.Fatalf("want exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Check != "id" || errs[0].Severity != "error" {
+		t.Fatalf("want check=id severity=error, got %+v", errs[0])
+	}
+	if !strings.Contains(errs[0].Message, `endpoint name "Widget (v2)" is not its own corpus tokenization`) {
+		t.Fatalf("want the endpoint name-shape error, got %q", errs[0].Message)
+	}
+	if errs[0].Path != "alpha/module.json:/endpoints/0000000000e1" {
+		t.Fatalf("want the declaring entry in the path, got %q", errs[0].Path)
+	}
+}
+
+// TestREQ5_ProfileDeclaredTypeUniquenessChecked: ID uniqueness used to be
+// checked only for the five arrays schema.ModuleSpec has typed fields for. A
+// profile-declared type beyond those five (here "endpoint", read generically
+// off raw JSON) still gets its array checked for duplicate ids.
+func TestREQ5_ProfileDeclaredTypeUniquenessChecked(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_extra_dup"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" && e.Path == "alpha/module.json:/endpoints" &&
+			strings.Contains(e.Message, "duplicate ID 0000000000e1") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected duplicate ID error for profile-declared endpoint type, got %v", errs)
+	}
+}
+
 // --- Structural tests ---
 
 func TestREQ5_DuplicatesBlockRefChecks(t *testing.T) {

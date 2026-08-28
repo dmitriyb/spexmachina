@@ -1,0 +1,9 @@
+{
+  "name": "alpha",
+  "endpoints": [
+    {
+      "id": "0000000000e1",
+      "name": "Widget (v2)"
+    }
+  ]
+}

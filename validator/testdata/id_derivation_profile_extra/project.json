@@ -1,0 +1,10 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
+  "name": "id-derivation-profile-extra-test"
+}

@@ -1,12 +1,33 @@
 package validator
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
+
+// builtinModuleTypeNames are the module-scoped node types schema.ModuleSpec
+// carries as dedicated typed fields. A profile-declared type outside this
+// set has no such field and is read generically off raw JSON instead.
+var builtinModuleTypeNames = map[string]bool{
+	"requirement": true, "component": true, "data_flow": true,
+	"test_section": true, "api": true,
+}
+
+// builtinEdgeKinds are the reference fields checkProjectRefs and
+// checkModuleRefs already resolve by name. A profile-declared edge whose
+// kind is not one of these is resolved generically by
+// checkExtraModuleEdges.
+var builtinEdgeKinds = map[string]bool{
+	"implements": true, "uses": true, "describes": true,
+	"provided_by": true, "depends_on": true, "requires_module": true,
+	"preq_id": true,
+}
 
 // CheckIDs validates identity-hash uniqueness within each array and
 // cross-reference integrity across the spec. It runs uniqueness checks
@@ -17,10 +38,28 @@ import (
 // integer parsing, no path decomposition, and no comparison across
 // types — references are identity hashes looked up against per-array
 // sets.
+//
+// The checked arrays and edges are the resolved profile's declaration. The
+// five built-in module-scoped types (requirement, component, data_flow,
+// test_section, api) and the seven built-in edge kinds are checked via
+// schema.ModuleSpec's typed fields, unchanged from before profiles existed.
+// Anything the resolved profile declares beyond that — a node type with no
+// dedicated Go field, or an edge kind beyond the built-in seven — is
+// checked generically, by parsing the raw JSON array the profile names.
 func CheckIDs(specDir string) []ValidationError {
 	project, modules, errs := loadSpec(specDir, "id")
 	if len(errs) > 0 {
 		return errs
+	}
+
+	profile, perr := schema.ResolveProfile(specDir)
+	if perr != nil {
+		return []ValidationError{{
+			Check:    "id",
+			Severity: "error",
+			Path:     "profile.json",
+			Message:  perr.Error(),
+		}}
 	}
 
 	var result []ValidationError
@@ -36,8 +75,10 @@ func CheckIDs(specDir string) []ValidationError {
 	for _, modName := range modNames {
 		result = append(result, checkModuleUniqueness(modName, modules[modName])...)
 	}
+	result = append(result, checkExtraModuleUniqueness(specDir, modNames, project, extraModuleNodeTypes(profile))...)
+	result = append(result, checkExtraProjectUniqueness(specDir, extraProjectNodeTypes(profile))...)
 	result = append(result, checkAPINameUniqueness(modNames, modules)...)
-	result = append(result, checkNameRecoverability(modNames, modules)...)
+	result = append(result, checkNameRecoverability(specDir, modNames, modules, project, profile)...)
 
 	if len(result) > 0 {
 		return result
@@ -48,6 +89,7 @@ func CheckIDs(specDir string) []ValidationError {
 	for _, modName := range modNames {
 		result = append(result, checkModuleRefs(modName, modules[modName], project)...)
 	}
+	result = append(result, checkExtraModuleEdges(specDir, modNames, project, modules, profile)...)
 
 	return result
 }
@@ -72,6 +114,91 @@ func checkModuleUniqueness(modName string, mod *schema.ModuleSpec) []ValidationE
 	errs = append(errs, checkDuplicateIDs(prefix+"/test_sections", testSectionIDs(mod.TestSections))...)
 	errs = append(errs, checkDuplicateIDs(prefix+"/apis", apiIDs(mod.APIs))...)
 
+	return errs
+}
+
+// extraModuleNodeTypes returns the module-scoped node types the resolved
+// profile declares beyond the five built into schema.ModuleSpec.
+func extraModuleNodeTypes(profile *schema.Profile) []schema.NodeType {
+	var out []schema.NodeType
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope == "module" && !builtinModuleTypeNames[nt.Name] {
+			out = append(out, nt)
+		}
+	}
+	return out
+}
+
+// extraProjectNodeTypes returns the project-scoped node types the resolved
+// profile declares beyond "requirement", the one project.json carries a
+// typed field for.
+func extraProjectNodeTypes(profile *schema.Profile) []schema.NodeType {
+	var out []schema.NodeType
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope == "project" && nt.Name != "requirement" {
+			out = append(out, nt)
+		}
+	}
+	return out
+}
+
+// moduleScopedNodeTypes returns every module-scoped node type the resolved
+// profile declares, built-in and profile-declared alike, in declared order.
+func moduleScopedNodeTypes(profile *schema.Profile) []schema.NodeType {
+	var out []schema.NodeType
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope == "module" {
+			out = append(out, nt)
+		}
+	}
+	return out
+}
+
+// checkExtraModuleUniqueness checks ID uniqueness for module-scoped node
+// types the resolved profile declares beyond the five built into
+// schema.ModuleSpec — reached only by parsing module.json generically, since
+// those types have no dedicated Go field.
+func checkExtraModuleUniqueness(specDir string, modNames []string, project *schema.Project, extraTypes []schema.NodeType) []ValidationError {
+	if len(extraTypes) == 0 {
+		return nil
+	}
+	var errs []ValidationError
+	for _, modName := range modNames {
+		modPath := modulePathByName(project, modName)
+		prefix := modName + "/module.json:"
+		for _, nt := range extraTypes {
+			entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+			if err != nil {
+				continue
+			}
+			ids := make([]string, len(entries))
+			for i, e := range entries {
+				ids[i] = e.str("id")
+			}
+			errs = append(errs, checkDuplicateIDs(prefix+"/"+nt.PluralKey, ids)...)
+		}
+	}
+	return errs
+}
+
+// checkExtraProjectUniqueness checks ID uniqueness for project-scoped node
+// types the resolved profile declares beyond "requirement".
+func checkExtraProjectUniqueness(specDir string, extraTypes []schema.NodeType) []ValidationError {
+	if len(extraTypes) == 0 {
+		return nil
+	}
+	var errs []ValidationError
+	for _, nt := range extraTypes {
+		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		if err != nil {
+			continue
+		}
+		ids := make([]string, len(entries))
+		for i, e := range entries {
+			ids[i] = e.str("id")
+		}
+		errs = append(errs, checkDuplicateIDs("project.json:/"+nt.PluralKey, ids)...)
+	}
 	return errs
 }
 
@@ -113,15 +240,12 @@ func checkAPINameUniqueness(modNames []string, modules map[string]*schema.Module
 	return errs
 }
 
-// checkNameRecoverability enforces the shape an api or component name must
-// have for the removal-time sweep to be able to find it again.
-//
-// The sweep recovers a removed node's name by hashing corpus phrases against
-// its key (CheckRemovedNames), and every phrase it builds is a join of
-// tokenizeCorpus tokens with single spaces. So the set of findable names is
-// exactly the set of names that survive that tokenization unchanged, and this
-// check is that predicate applied at the point of declaration: declarableName,
-// the same function stated in terms of the same tokenizer the sweep uses.
+// checkNameRecoverability enforces the shape a name must have for the
+// removal-time sweep to be able to find it again, for every node type the
+// resolved profile marks name-declarable — the same per-type NameDeclarable
+// flag nameDeclarableNodeTypes reads for CheckRemovedNames. Under the
+// default profile that is exactly component and api, matching this check's
+// original hardcoded pair.
 //
 // The two halves cannot drift, because there is only one half. Before this,
 // the validator enforced strings.Fields normalization and the word bound while
@@ -132,7 +256,8 @@ func checkAPINameUniqueness(modNames []string, modules map[string]*schema.Module
 // Enforcing the bound here rather than raising it in the scan is what keeps
 // the two in agreement: the constant they share means an unsweepable name
 // cannot be authored in the first place.
-func checkNameRecoverability(modNames []string, modules map[string]*schema.ModuleSpec) []ValidationError {
+func checkNameRecoverability(specDir string, modNames []string, modules map[string]*schema.ModuleSpec, project *schema.Project, profile *schema.Profile) []ValidationError {
+	declarable := nameDeclarableNodeTypes(profile)
 	var errs []ValidationError
 	for _, modName := range modNames {
 		mod := modules[modName]
@@ -140,11 +265,18 @@ func checkNameRecoverability(modNames []string, modules map[string]*schema.Modul
 			continue
 		}
 		prefix := modName + "/module.json:"
-		for _, comp := range mod.Components {
-			errs = append(errs, nameShapeError(prefix, "components", "component", comp.Name, comp.ID)...)
-		}
-		for _, api := range mod.APIs {
-			errs = append(errs, nameShapeError(prefix, "apis", "api", api.Name, api.ID)...)
+		for _, nt := range declarable {
+			entries, ok := moduleTypedEntries(mod, nt.Name)
+			if !ok {
+				raw, err := rawModuleEntries(specDir, modulePathByName(project, modName), nt.PluralKey)
+				if err != nil {
+					continue
+				}
+				entries = namedEntriesFromRaw(raw)
+			}
+			for _, e := range entries {
+				errs = append(errs, nameShapeError(prefix, nt.PluralKey, nt.Name, e.name, e.id)...)
+			}
 		}
 	}
 	return errs
@@ -363,6 +495,322 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 	}
 
 	return errs
+}
+
+// checkExtraModuleEdges checks cross-reference integrity for edges the
+// resolved profile declares beyond the seven built-in kinds — e.g. a project
+// profile declaring a "serves" edge from a custom "endpoint" type to
+// components. Resolution uses the same string set-membership machinery as
+// the built-in edges; the source array is read generically regardless of
+// whether its node type is built-in, because a profile-declared edge kind
+// has no dedicated Go field on any type. The target set prefers a module-
+// local array — every edge among today's declared kinds that is not
+// project-wide (requires_module) or cross-file (preq_id) resolves within the
+// same module, and both of those stay hardcoded in checkProjectRefs and
+// checkModuleRefs above rather than going through this generic path.
+func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+	edges := extraEdgeKinds(profile)
+	if len(edges) == 0 {
+		return nil
+	}
+
+	var errs []ValidationError
+	for _, modName := range modNames {
+		mod := modules[modName]
+		if mod == nil {
+			continue
+		}
+		modPath := modulePathByName(project, modName)
+		prefix := modName + "/module.json:"
+
+		for _, edge := range edges {
+			for _, fromName := range edge.From {
+				nt, ok := findModuleNodeType(profile, fromName)
+				if !ok {
+					continue
+				}
+				sources, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+				if err != nil || len(sources) == 0 {
+					continue
+				}
+
+				targets := map[string]bool{}
+				for _, toName := range edge.To {
+					set, err := edgeTargetSet(specDir, modPath, mod, project, profile, toName)
+					if err != nil {
+						continue
+					}
+					for id := range set {
+						targets[id] = true
+					}
+				}
+
+				for _, src := range sources {
+					srcID := src.str("id")
+					for _, targetID := range src.strSlice(edge.Kind) {
+						if !targets[targetID] {
+							errs = append(errs, ValidationError{
+								Check:    "id",
+								Severity: "error",
+								Path:     fmt.Sprintf("%s/%s/%s", prefix, nt.PluralKey, srcID),
+								Message: fmt.Sprintf("%s references non-existent %s %s",
+									edge.Kind, strings.Join(edge.To, "/"), targetID),
+							})
+						}
+					}
+				}
+			}
+		}
+	}
+	return errs
+}
+
+// extraEdgeKinds returns the resolved profile's declared edges whose kind is
+// not one of the seven built-in ones checkProjectRefs and checkModuleRefs
+// already resolve.
+func extraEdgeKinds(profile *schema.Profile) []schema.Edge {
+	var out []schema.Edge
+	for _, e := range profile.Edges {
+		if !builtinEdgeKinds[e.Kind] {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// findModuleNodeType returns the module-scoped NodeType named name, if the
+// resolved profile declares one.
+func findModuleNodeType(profile *schema.Profile, name string) (schema.NodeType, bool) {
+	for _, nt := range profile.NodeTypes {
+		if nt.Name == name && nt.Scope == "module" {
+			return nt, true
+		}
+	}
+	return schema.NodeType{}, false
+}
+
+// findProjectNodeType returns the project-scoped NodeType named name, if the
+// resolved profile declares one.
+func findProjectNodeType(profile *schema.Profile, name string) (schema.NodeType, bool) {
+	for _, nt := range profile.NodeTypes {
+		if nt.Name == name && nt.Scope == "project" {
+			return nt, true
+		}
+	}
+	return schema.NodeType{}, false
+}
+
+// edgeTargetSet returns the set of identity hashes an edge's "to" type name
+// resolves against for one module: that module's own array when the type is
+// module-scoped (typed if it is one of the five built-ins, generic
+// otherwise), else project.json's array when the type is project-scoped.
+func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *schema.Project, profile *schema.Profile, typeName string) (map[string]bool, error) {
+	if set, ok := moduleTypeIDSet(mod, typeName); ok {
+		return set, nil
+	}
+	if nt, ok := findModuleNodeType(profile, typeName); ok {
+		entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+		if err != nil {
+			return nil, err
+		}
+		return entriesIDSet(entries), nil
+	}
+	if set, ok := projectTypeIDSet(project, typeName); ok {
+		return set, nil
+	}
+	if nt, ok := findProjectNodeType(profile, typeName); ok {
+		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		if err != nil {
+			return nil, err
+		}
+		return entriesIDSet(entries), nil
+	}
+	return nil, fmt.Errorf("no array declared for node type %q", typeName)
+}
+
+// moduleTypeIDSet returns the set of identity hashes for one of the five
+// built-in module-scoped node types, read from schema.ModuleSpec's typed
+// fields.
+func moduleTypeIDSet(mod *schema.ModuleSpec, typeName string) (map[string]bool, bool) {
+	switch typeName {
+	case "component":
+		return idSet(compIDs(mod.Components)), true
+	case "data_flow":
+		return idSet(flowIDs(mod.DataFlows)), true
+	case "test_section":
+		return idSet(testSectionIDs(mod.TestSections)), true
+	case "api":
+		return idSet(apiIDs(mod.APIs)), true
+	case "requirement":
+		return idSet(moduleReqIDs(mod.Requirements)), true
+	}
+	return nil, false
+}
+
+// projectTypeIDSet returns the set of identity hashes for a built-in
+// project-scoped concept: "requirement" (project.json's typed field) or
+// "module" (the fixed interior-node concept requires_module points at).
+func projectTypeIDSet(project *schema.Project, typeName string) (map[string]bool, bool) {
+	switch typeName {
+	case "requirement":
+		return idSet(reqIDs(project.Requirements)), true
+	case "module":
+		return idSet(moduleIDs(project.Modules)), true
+	}
+	return nil, false
+}
+
+// modulePathByName looks up a module's directory path from project.json's
+// module list.
+func modulePathByName(project *schema.Project, modName string) string {
+	for _, m := range project.Modules {
+		if m.Name == modName {
+			return m.Path
+		}
+	}
+	return modName
+}
+
+// namedEntry is one node's (id, name) pair, the input CheckIDDerivation
+// hashes and nameShapeError inspects, sourced either from a typed
+// schema.ModuleSpec field or generically from raw JSON for a
+// profile-declared type schema.ModuleSpec has no field for.
+type namedEntry struct {
+	id   string
+	name string
+}
+
+// moduleTypedEntries returns the (id, name) pairs schema.ModuleSpec already
+// carries typed for one of the five built-in module-scoped node types. A
+// requirement's declaration name is its title — the one built-in type with
+// no Name field of its own — every other type uses its Name field directly.
+// Shared by checkNameRecoverability (which reads name-declarable types) and
+// CheckIDDerivation (which reads every module-scoped type): both need one
+// (id, name) pair per node, from the field carrying its declared identity.
+func moduleTypedEntries(mod *schema.ModuleSpec, typeName string) ([]namedEntry, bool) {
+	switch typeName {
+	case "requirement":
+		out := make([]namedEntry, len(mod.Requirements))
+		for i, r := range mod.Requirements {
+			out[i] = namedEntry{id: r.ID, name: r.Title}
+		}
+		return out, true
+	case "component":
+		out := make([]namedEntry, len(mod.Components))
+		for i, c := range mod.Components {
+			out[i] = namedEntry{id: c.ID, name: c.Name}
+		}
+		return out, true
+	case "data_flow":
+		out := make([]namedEntry, len(mod.DataFlows))
+		for i, f := range mod.DataFlows {
+			out[i] = namedEntry{id: f.ID, name: f.Name}
+		}
+		return out, true
+	case "test_section":
+		out := make([]namedEntry, len(mod.TestSections))
+		for i, t := range mod.TestSections {
+			out[i] = namedEntry{id: t.ID, name: t.Name}
+		}
+		return out, true
+	case "api":
+		out := make([]namedEntry, len(mod.APIs))
+		for i, a := range mod.APIs {
+			out[i] = namedEntry{id: a.ID, name: a.Name}
+		}
+		return out, true
+	}
+	return nil, false
+}
+
+// rawEntry is one array element read directly off a module.json or
+// project.json document, used for a node type the resolved profile declares
+// beyond the ones schema.ModuleSpec and schema.Project carry dedicated Go
+// fields for.
+type rawEntry map[string]json.RawMessage
+
+// str reads field as a JSON string, returning "" if absent or not a string.
+func (e rawEntry) str(field string) string {
+	v, ok := e[field]
+	if !ok {
+		return ""
+	}
+	var s string
+	_ = json.Unmarshal(v, &s)
+	return s
+}
+
+// strSlice reads field as a JSON array of strings, returning nil if absent
+// or not shaped that way.
+func (e rawEntry) strSlice(field string) []string {
+	v, ok := e[field]
+	if !ok {
+		return nil
+	}
+	var s []string
+	_ = json.Unmarshal(v, &s)
+	return s
+}
+
+// namedEntriesFromRaw converts generically-read entries to namedEntry pairs
+// using each entry's "id" and "name" fields.
+func namedEntriesFromRaw(raw []rawEntry) []namedEntry {
+	out := make([]namedEntry, len(raw))
+	for i, e := range raw {
+		out[i] = namedEntry{id: e.str("id"), name: e.str("name")}
+	}
+	return out
+}
+
+// entriesIDSet collects the "id" field of a slice of generically-read
+// entries into a set.
+func entriesIDSet(entries []rawEntry) map[string]bool {
+	set := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		set[e.str("id")] = true
+	}
+	return set
+}
+
+// rawModuleEntries reads one module's module.json array at pluralKey
+// generically, for a node type the resolved profile declares beyond the
+// five built into schema.ModuleSpec.
+func rawModuleEntries(specDir, modPath, pluralKey string) ([]rawEntry, error) {
+	data, err := os.ReadFile(filepath.Join(specDir, modPath, "module.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read module.json: %w", err)
+	}
+	return rawArrayEntries(data, pluralKey)
+}
+
+// rawProjectEntries reads project.json's array at pluralKey generically, for
+// a project-scoped node type the resolved profile declares beyond
+// "requirement".
+func rawProjectEntries(specDir, pluralKey string) ([]rawEntry, error) {
+	data, err := os.ReadFile(filepath.Join(specDir, "project.json"))
+	if err != nil {
+		return nil, fmt.Errorf("read project.json: %w", err)
+	}
+	return rawArrayEntries(data, pluralKey)
+}
+
+// rawArrayEntries decodes the array at pluralKey in a JSON document into
+// generic entries. A document carrying no such array yields no entries and
+// no error — the array is simply empty or the type has no instances yet.
+func rawArrayEntries(doc []byte, pluralKey string) ([]rawEntry, error) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(doc, &top); err != nil {
+		return nil, err
+	}
+	arr, ok := top[pluralKey]
+	if !ok {
+		return nil, nil
+	}
+	var entries []rawEntry
+	if err := json.Unmarshal(arr, &entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // ID extraction helpers. All return slices of identity-hash strings.

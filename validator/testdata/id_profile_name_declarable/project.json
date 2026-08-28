@@ -1,0 +1,10 @@
+{
+  "name": "profile-name-declarable-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ]
+}

@@ -47,10 +47,26 @@ import (
 // module-name recovery in CheckRemovedNames can fail on a spec whose module
 // ids were hand-written, which is exactly when it emits a
 // NoteUnverifiableModule note instead of a silent skip.
+// Which node types are checked is read from the resolved profile's declared
+// module-scoped node types, rather than a fixed five: a profile-declared
+// type beyond the built-in five (schema.ModuleSpec has no Go field for one)
+// is read generically off raw JSON and derived exactly the same way. Under
+// the default profile the derived set is today's five module-scoped types,
+// in the same order this check has always used.
 func CheckIDDerivation(specDir string) []ValidationError {
 	project, modules, errs := loadSpec(specDir, "id_derivation")
 	if len(errs) > 0 {
 		return errs
+	}
+
+	profile, perr := schema.ResolveProfile(specDir)
+	if perr != nil {
+		return []ValidationError{{
+			Check:    "id_derivation",
+			Severity: "error",
+			Path:     "profile.json",
+			Message:  perr.Error(),
+		}}
 	}
 
 	var result []ValidationError
@@ -61,20 +77,18 @@ func CheckIDDerivation(specDir string) []ValidationError {
 		}
 		prefix := mod.Name + "/module.json:"
 
-		for _, r := range modSpec.Requirements {
-			result = append(result, derivedIDError(prefix, "requirements", mod.Name, "requirement", r.Title, r.ID)...)
-		}
-		for _, c := range modSpec.Components {
-			result = append(result, derivedIDError(prefix, "components", mod.Name, "component", c.Name, c.ID)...)
-		}
-		for _, f := range modSpec.DataFlows {
-			result = append(result, derivedIDError(prefix, "data_flows", mod.Name, "data_flow", f.Name, f.ID)...)
-		}
-		for _, ts := range modSpec.TestSections {
-			result = append(result, derivedIDError(prefix, "test_sections", mod.Name, "test_section", ts.Name, ts.ID)...)
-		}
-		for _, a := range modSpec.APIs {
-			result = append(result, derivedIDError(prefix, "apis", mod.Name, "api", a.Name, a.ID)...)
+		for _, nt := range moduleScopedNodeTypes(profile) {
+			entries, ok := moduleTypedEntries(modSpec, nt.Name)
+			if !ok {
+				raw, rerr := rawModuleEntries(specDir, mod.Path, nt.PluralKey)
+				if rerr != nil {
+					continue
+				}
+				entries = namedEntriesFromRaw(raw)
+			}
+			for _, e := range entries {
+				result = append(result, derivedIDError(prefix, nt.PluralKey, mod.Name, nt.Name, e.name, e.id)...)
+			}
 		}
 	}
 	return result
