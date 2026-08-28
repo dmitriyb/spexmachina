@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-h4gv.15",
+  "node": "de3309dfbd3c",
+  "files": [
+    "spec/merkle/arch_completeness_checker.md",
+    "spec/merkle/module.json"
+  ],
+  "claim": "arch_completeness_checker.md:28 says: \"Which node types trigger the rules is the resolved profile's declaration, not a compiled-in pair: the requirement-leaf checks fire on the type the profile assigns that role, and the meta-envelope sweep on the fixed `meta` leaves, with the implementing edge and the content-bearing types likewise read from the profile's declarations.\" The clause after the comma claims the implementing edge (the `implements` array) and the content-bearing type (components) are also read from the profile's declarations, not compiled in.",
+  "authoritative_source": "Requirement 6f8284df92a2, the arch's own ## Interface paragraph (\"the resolved profile whose declarations carry the per-type triggers\" — trigger, singular), and test leaf S15 in test_diff_classification.md all describe only the requirement-leaf trigger as profile-declared. None of the three mentions a profile-declared implementing edge or content-bearing type.",
+  "evidence": "CheckCompleteness reads exactly one profile field, CompletenessTrigger (completeness_checker.go, completenessTriggerTypes). The implementing edge stays compiled in as comp.Implements and the content-bearing type as modSpec.Components throughout the checker — under a profile that declared a different implementing-edge kind or covering type, the checker's behavior would be identical. The typed schema.ModuleSpec also exposes no generic plural-key/edge accessor that a profile-driven read of either could use, so honouring the clause as written is not just unimplemented but not supported by the current schema shape.",
+  "blocking": false,
+  "proposed_fix": "Trim line 28 to describe only the trigger as profile-declared, e.g.: \"Which node types trigger the rules is the resolved profile's declaration, not a compiled-in pair: the requirement-leaf checks fire on the type the profile assigns that role, and the meta-envelope sweep runs on the fixed `meta` leaves under any profile.\" Drop the \"with the implementing edge and the content-bearing types likewise read from the profile's declarations\" clause — it over-claims against the rest of the contract."
+}
