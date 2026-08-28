@@ -1180,6 +1180,68 @@ func TestBuild_CrossComponent_CycleErrorNamesBothNodes(t *testing.T) {
 	}
 }
 
+// --- Cross-component: spec_node_kind per declared type comes from the profile ---
+
+// TestBuild_CrossComponent_SpecNodeKindPerProfileDeclaredType covers the
+// default-profile half of test_changeset_builder.md's "spec_node_kind per
+// declared type comes from the profile" scenario: ChangesetBuilder copies
+// Action.NodeType into spec_node_kind verbatim and validates nothing
+// against the vocabulary table (arch_changeset_builder.md, "spec_node_kind
+// vocabulary": "the closure is upstream, not here"), so under the default
+// profile every create carries exactly the kind ActionClassifier assigned
+// it.
+//
+// The scenario's extended-profile half — a create whose NodeType names a
+// profile-declared type outside today's four-entry vocabulary (e.g.
+// "endpoint") — cannot be exercised through Build(): TopologicalSorter's
+// tier table is a fixed four-entry map with no profile awareness, and its
+// own arch (arch_topological_sorter.md, arch_resolver.md) documents that it
+// refuses to tier a create whose kind it does not recognise — confirmed by
+// probing Build() with such an action, which errors "belongs to no tier"
+// rather than composing an op. See drifts/drift-spexmachina-h4gv.21.json.
+func TestBuild_CrossComponent_SpecNodeKindPerProfileDeclaredType(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		sampleComponentCreate("c1", "m", "C", nil),
+		{
+			Type:       ActionCreate,
+			Module:     "m",
+			Node:       "F",
+			NodeType:   KindDataFlow,
+			SpecNodeID: "f1",
+			SpecHash:   "h-f1",
+			Reason:     "New spec node: m/F",
+		},
+		{
+			Type:       ActionCreate,
+			Module:     "m",
+			Node:       "T",
+			NodeType:   KindTestSection,
+			SpecNodeID: "t1",
+			SpecHash:   "h-t1",
+			Reason:     "New spec node: m/T",
+		},
+	}
+	cs, err := env.build(actions, "p", "deadbeefcafe")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	c := findOp(t, cs.Ops, "c1")
+	if c.SpecNodeKind != KindComponent {
+		t.Errorf("c1 spec_node_kind: want %q, got %q", KindComponent, c.SpecNodeKind)
+	}
+	f := findOp(t, cs.Ops, "f1")
+	if f.SpecNodeKind != KindDataFlow {
+		t.Errorf("f1 spec_node_kind: want %q, got %q", KindDataFlow, f.SpecNodeKind)
+	}
+	ts := findOp(t, cs.Ops, "t1")
+	if ts.SpecNodeKind != KindTestSection {
+		t.Errorf("t1 spec_node_kind: want %q, got %q", KindTestSection, ts.SpecNodeKind)
+	}
+}
+
 // --- Edge cases ---
 
 func TestBuild_EmptyBatchWithExistingEpicYieldsNoOps(t *testing.T) {
