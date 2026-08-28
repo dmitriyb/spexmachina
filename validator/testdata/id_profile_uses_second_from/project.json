@@ -1,0 +1,10 @@
+{
+  "name": "profile-uses-second-from-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ]
+}

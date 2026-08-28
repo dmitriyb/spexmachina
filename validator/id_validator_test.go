@@ -430,6 +430,191 @@ func TestREQ6_ProvidedByIsModuleLocal(t *testing.T) {
 	}
 }
 
+// --- I18: Cross-reference integrity over profile-declared edges ---
+
+// TestREQ6_DanglingProfileDeclaredEdge: spec/profile.json declares a custom
+// "endpoint" type carrying a "serves" edge to components — a reference field
+// no built-in type has. The dangling target is still caught, resolved by
+// the same set-membership machinery as implements/uses/describes/
+// provided_by, because a profile-declared edge is not a fixed set of seven
+// field names; it is whatever the resolved profile lists.
+func TestREQ6_DanglingProfileDeclaredEdge(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_serves"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "serves references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling serves error for profile-declared endpoint type, got %v", errs)
+	}
+}
+
+// TestREQ6_DanglingProfileDeclaredEdgeSharesBuiltinKind: a profile can
+// declare a second "uses" edge from a profile-declared type ("endpoint")
+// alongside the built-in "uses" edge from component/data_flow. Partitioning
+// coverage on kind name alone would treat "uses" as fully built-in and skip
+// this from-type entirely, leaving the dangling reference unchecked by both
+// the hardcoded path and the generic one. Coverage must be per (kind,
+// from-type) pair.
+func TestREQ6_DanglingProfileDeclaredEdgeSharesBuiltinKind(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_uses_second_from"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "uses references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling uses error for profile-declared endpoint from-type sharing the built-in \"uses\" kind, got %v", errs)
+	}
+}
+
+// TestREQ6_DanglingProfileDeclaredEdgeFromProjectScope: a profile can
+// declare an edge whose from-type is project-scoped (here "milestone",
+// carrying a "groups" edge to requirements) rather than module-scoped. The
+// generic edge-resolution path used to only ever look up from-types among
+// module-scoped node types, so a project-scoped from-type was skipped and
+// checked by nothing — a source-side asymmetry, since the target side
+// already resolved project scope via findProjectNodeType/rawProjectEntries.
+// The fixture also carries the module-scoped "serves" edge from
+// id_profile_serves, whose dangling target already reported correctly, to
+// pin that the fix does not regress the already-working half.
+func TestREQ6_DanglingProfileDeclaredEdgeFromProjectScope(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_project_scope_from"))
+
+	foundGroups := false
+	foundServes := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "project.json:/milestones/0000000000m1" &&
+			strings.Contains(e.Message, "groups references non-existent requirement 000000000099") {
+			foundGroups = true
+		}
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "serves references non-existent component 000000000099") {
+			foundServes = true
+		}
+	}
+	if !foundGroups {
+		t.Fatalf("expected dangling groups error for profile-declared project-scoped milestone from-type, got %v", errs)
+	}
+	if !foundServes {
+		t.Fatalf("expected the already-working module-scoped serves error to still report, got %v", errs)
+	}
+}
+
+// TestREQ6_DanglingProfileDeclaredEdgeFromModule: a profile can declare an
+// edge from the fixed "module" concept itself (e.g. "owns"), which
+// Profile.Validate accepts as a legal from-type even though "module" is not
+// itself a profile.NodeTypes entry. findModuleNodeType only matches a
+// module-scoped NodeType, and findProjectNodeType only matches a
+// project-scoped NodeType — neither matches the bare string "module" — so
+// this from-type used to be resolved by neither checkExtraModuleEdges nor
+// checkExtraProjectEdges and the edge went unchecked, even though
+// projectTypeIDSet already resolved "module" generically on the target
+// side. checkExtraProjectEdges' projectEdgeSourceKey now resolves it against
+// project.json's fixed "modules" array.
+func TestREQ6_DanglingProfileDeclaredEdgeFromModule(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_from_module"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "project.json:/modules/000000000001" &&
+			strings.Contains(e.Message, "owns references non-existent requirement 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling owns error for profile-declared edge from the fixed \"module\" concept, got %v", errs)
+	}
+}
+
+// TestREQ6_ProfileDeclaredEdgeFromProjectScopeToModuleScope: a profile can
+// declare an edge whose from-type is project-scoped ("milestone") but whose
+// to-type is module-scoped ("component") — Profile.Validate's validRef is
+// scope-agnostic, so this is a legal profile even though the source has no
+// owning module to scope the target lookup within. projectEdgeTargetSet used
+// to only resolve project-scoped targets and return an error for a
+// module-scoped one, which checkExtraProjectEdges' caller swallowed with
+// continue — leaving targets empty and every reference reported as dangling
+// even when the target genuinely existed. It now falls back to the union of
+// every module's array. The fixture pins both directions: a milestone
+// grouping an existing component must NOT be reported dangling, and a
+// milestone grouping a nonexistent one still must be.
+func TestREQ6_ProfileDeclaredEdgeFromProjectScopeToModuleScope(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_project_scope_to_module"))
+
+	for _, e := range errs {
+		if e.Check == "id" && e.Path == "project.json:/milestones/0000000000m1" {
+			t.Fatalf("milestone 0000000000m1 groups an existing component; want no error, got %v", e)
+		}
+	}
+
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "project.json:/milestones/0000000000m2" &&
+			strings.Contains(e.Message, "groups references non-existent component 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling groups error for milestone 0000000000m2, got %v", errs)
+	}
+}
+
+// TestREQ5_ProfileDeclaredNameDeclarableTypeChecked: checkNameRecoverability
+// used to iterate a hardcoded component/api pair. A profile that marks a
+// third module-scoped type ("endpoint") name-declarable via NodeType.
+// NameDeclarable gets that type's names shape-checked too, using the same
+// per-type flag CheckRemovedNames already reads for the removal sweep
+// (nameDeclarableNodeTypes) — the two can no longer drift apart.
+func TestREQ5_ProfileDeclaredNameDeclarableTypeChecked(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_name_declarable"))
+	if len(errs) != 1 {
+		t.Fatalf("want exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	if errs[0].Check != "id" || errs[0].Severity != "error" {
+		t.Fatalf("want check=id severity=error, got %+v", errs[0])
+	}
+	if !strings.Contains(errs[0].Message, `endpoint name "Widget (v2)" is not its own corpus tokenization`) {
+		t.Fatalf("want the endpoint name-shape error, got %q", errs[0].Message)
+	}
+	if errs[0].Path != "alpha/module.json:/endpoints/0000000000e1" {
+		t.Fatalf("want the declaring entry in the path, got %q", errs[0].Path)
+	}
+}
+
+// TestREQ5_ProfileDeclaredTypeUniquenessChecked: ID uniqueness used to be
+// checked only for the five arrays schema.ModuleSpec has typed fields for. A
+// profile-declared type beyond those five (here "endpoint", read generically
+// off raw JSON) still gets its array checked for duplicate ids.
+func TestREQ5_ProfileDeclaredTypeUniquenessChecked(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_extra_dup"))
+	found := false
+	for _, e := range errs {
+		if e.Check == "id" && e.Path == "alpha/module.json:/endpoints" &&
+			strings.Contains(e.Message, "duplicate ID 0000000000e1") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected duplicate ID error for profile-declared endpoint type, got %v", errs)
+	}
+}
+
 // --- Structural tests ---
 
 func TestREQ5_DuplicatesBlockRefChecks(t *testing.T) {

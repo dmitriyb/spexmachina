@@ -1,0 +1,21 @@
+{
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project",
+      "completeness_trigger": true
+    }
+  ],
+  "edges": [
+    {
+      "kind": "owns",
+      "from": [
+        "module"
+      ],
+      "to": [
+        "requirement"
+      ]
+    }
+  ]
+}

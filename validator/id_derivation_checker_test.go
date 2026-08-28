@@ -99,6 +99,30 @@ func TestREQ5_ProjectLevelIDsExempt(t *testing.T) {
 	}
 }
 
+// TestREQ5_ProfileDeclaredTypeDerivationChecked: CheckIDDerivation used to
+// walk a hardcoded five-array list. A profile declaring a module-scoped type
+// beyond those five (here "endpoint", with no dedicated schema.ModuleSpec
+// field) still gets its declared ids checked against
+// IdentityHash(module, type, name), read generically off raw JSON the same
+// way the five built-in types are checked off their typed fields.
+func TestREQ5_ProfileDeclaredTypeDerivationChecked(t *testing.T) {
+	errs := CheckIDDerivation(filepath.Join("testdata", "id_derivation_profile_extra"))
+	if len(errs) != 1 {
+		t.Fatalf("want exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "id_derivation" || e.Severity != "error" {
+		t.Fatalf("want check=id_derivation severity=error, got %+v", e)
+	}
+	want := schema.IdentityHash("core", "endpoint", "Get widget")
+	if !strings.Contains(e.Message, "declares id 0000000000e1") || !strings.Contains(e.Message, want) {
+		t.Fatalf("message must carry both the declared and the derived hash, got %q", e.Message)
+	}
+	if e.Path != "core/module.json:/endpoints/0000000000e1" {
+		t.Fatalf("want the declaring entry in the path, got %q", e.Path)
+	}
+}
+
 // TestREQ5_SelfValidateIDDerivation is the claim that makes the removal sweep
 // sound on this corpus: all 237 module-scoped nodes derive, so every one of
 // their names can be recovered from its hash.

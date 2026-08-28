@@ -1,0 +1,9 @@
+{
+  "name": "core",
+  "endpoints": [
+    {
+      "id": "0000000000e1",
+      "name": "Get widget"
+    }
+  ]
+}
