@@ -25,7 +25,8 @@ var builtinModuleTypeNames = map[string]bool{
 // A profile-declared edge covers a (kind, from-type) pair outside this set —
 // whether its kind is altogether new or shares a name with a built-in kind
 // but is declared from a type the built-in checks don't enumerate — and is
-// resolved generically by checkExtraModuleEdges instead. Partitioning on
+// resolved generically by checkExtraModuleEdges or checkExtraProjectEdges
+// instead, depending on the from-type's scope. Partitioning on
 // kind name alone would miss the second case: a profile can declare
 // "uses" from a type neither checkModuleRefs loop reads, and that edge
 // would go unchecked by both the hardcoded path and the generic one.
@@ -102,6 +103,7 @@ func CheckIDs(specDir string) []ValidationError {
 		result = append(result, checkModuleRefs(modName, modules[modName], project)...)
 	}
 	result = append(result, checkExtraModuleEdges(specDir, modNames, project, modules, profile)...)
+	result = append(result, checkExtraProjectEdges(specDir, project, profile)...)
 
 	return result
 }
@@ -510,18 +512,20 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 }
 
 // checkExtraModuleEdges checks cross-reference integrity for (edge kind,
-// from-type) pairs the resolved profile declares beyond the built-in eight —
-// e.g. a project profile declaring a "serves" edge from a custom "endpoint"
-// type to components, or reusing the built-in "uses" kind from a type the
-// hardcoded checkModuleRefs loops don't enumerate. Resolution uses the same
-// string set-membership machinery as the built-in edges; the source array is
-// read generically regardless of whether its node type is built-in, because
-// a profile-declared (kind, from-type) pair has no dedicated Go loop. The
-// target set prefers a module-local array — every edge among today's
-// declared kinds that is not project-wide (requires_module) or cross-file
-// (preq_id) resolves within the same module, and both of those stay
-// hardcoded in checkProjectRefs and checkModuleRefs above rather than going
-// through this generic path.
+// from-type) pairs the resolved profile declares beyond the built-in eight,
+// where the from-type is module-scoped — e.g. a project profile declaring a
+// "serves" edge from a custom "endpoint" type to components, or reusing the
+// built-in "uses" kind from a type the hardcoded checkModuleRefs loops don't
+// enumerate. checkExtraProjectEdges is this function's project-scoped
+// counterpart; together the two cover every from-type extraEdgeKinds can
+// return. Resolution uses the same string set-membership machinery as the
+// built-in edges; the source array is read generically regardless of
+// whether its node type is built-in, because a profile-declared (kind,
+// from-type) pair has no dedicated Go loop. The target set prefers a
+// module-local array — every edge among today's declared kinds that is not
+// project-wide (requires_module) or cross-file (preq_id) resolves within the
+// same module, and both of those stay hardcoded in checkProjectRefs and
+// checkModuleRefs above rather than going through this generic path.
 func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
@@ -559,20 +563,75 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 					}
 				}
 
-				for _, src := range sources {
-					srcID := src.str("id")
-					for _, targetID := range src.strSlice(edge.Kind) {
-						if !targets[targetID] {
-							errs = append(errs, ValidationError{
-								Check:    "id",
-								Severity: "error",
-								Path:     fmt.Sprintf("%s/%s/%s", prefix, nt.PluralKey, srcID),
-								Message: fmt.Sprintf("%s references non-existent %s %s",
-									edge.Kind, strings.Join(edge.To, "/"), targetID),
-							})
-						}
-					}
+				errs = append(errs, checkEdgeSources(prefix, nt.PluralKey, edge.Kind, edge.To, sources, targets)...)
+			}
+		}
+	}
+	return errs
+}
+
+// checkExtraProjectEdges is checkExtraModuleEdges' project-scoped
+// counterpart: it checks cross-reference integrity for (edge kind,
+// from-type) pairs the resolved profile declares beyond the built-in eight,
+// where the from-type is project-scoped — e.g. a profile declaring a
+// "groups" edge from a custom project-scoped "milestone" type to
+// requirements. A project-scoped source has no owning module, so its
+// sources are read once from project.json rather than once per module, and
+// its targets resolve at project scope only via projectEdgeTargetSet —
+// there is no module to scope a module-local target within.
+func checkExtraProjectEdges(specDir string, project *schema.Project, profile *schema.Profile) []ValidationError {
+	edges := extraEdgeKinds(profile)
+	if len(edges) == 0 {
+		return nil
+	}
+
+	var errs []ValidationError
+	for _, edge := range edges {
+		for _, fromName := range edge.From {
+			nt, ok := findProjectNodeType(profile, fromName)
+			if !ok {
+				continue
+			}
+			sources, err := rawProjectEntries(specDir, nt.PluralKey)
+			if err != nil || len(sources) == 0 {
+				continue
+			}
+
+			targets := map[string]bool{}
+			for _, toName := range edge.To {
+				set, err := projectEdgeTargetSet(specDir, project, profile, toName)
+				if err != nil {
+					continue
 				}
+				for id := range set {
+					targets[id] = true
+				}
+			}
+
+			errs = append(errs, checkEdgeSources("project.json:", nt.PluralKey, edge.Kind, edge.To, sources, targets)...)
+		}
+	}
+	return errs
+}
+
+// checkEdgeSources reports each source entry's edge.Kind reference field
+// values that are not present in targets. Shared by checkExtraModuleEdges
+// and checkExtraProjectEdges — the two differ only in where sources and
+// targets are resolved from, never in how a resolved (sources, targets) pair
+// is turned into errors.
+func checkEdgeSources(prefix, pluralKey, edgeKind string, to []string, sources []rawEntry, targets map[string]bool) []ValidationError {
+	var errs []ValidationError
+	for _, src := range sources {
+		srcID := src.str("id")
+		for _, targetID := range src.strSlice(edgeKind) {
+			if !targets[targetID] {
+				errs = append(errs, ValidationError{
+					Check:    "id",
+					Severity: "error",
+					Path:     fmt.Sprintf("%s/%s/%s", prefix, pluralKey, srcID),
+					Message: fmt.Sprintf("%s references non-existent %s %s",
+						edgeKind, strings.Join(to, "/"), targetID),
+				})
 			}
 		}
 	}
@@ -644,6 +703,26 @@ func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *sch
 		}
 		return entriesIDSet(entries), nil
 	}
+	if set, ok := projectTypeIDSet(project, typeName); ok {
+		return set, nil
+	}
+	if nt, ok := findProjectNodeType(profile, typeName); ok {
+		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		if err != nil {
+			return nil, err
+		}
+		return entriesIDSet(entries), nil
+	}
+	return nil, fmt.Errorf("no array declared for node type %q", typeName)
+}
+
+// projectEdgeTargetSet is edgeTargetSet's project-scoped counterpart, used
+// by checkExtraProjectEdges: a project-scoped source has no owning module,
+// so a target can only resolve against project.json — the built-in
+// requirement/module concepts typed via projectTypeIDSet, or a
+// profile-declared project-scoped type read generically. Unlike
+// edgeTargetSet, there is no module-scoped array to fall back to.
+func projectEdgeTargetSet(specDir string, project *schema.Project, profile *schema.Profile, typeName string) (map[string]bool, error) {
 	if set, ok := projectTypeIDSet(project, typeName); ok {
 		return set, nil
 	}

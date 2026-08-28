@@ -1,0 +1,19 @@
+{
+  "name": "profile-edge-project-scope-from-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "milestones": [
+    {
+      "id": "0000000000m1",
+      "name": "Launch",
+      "groups": [
+        "000000000099"
+      ]
+    }
+  ]
+}

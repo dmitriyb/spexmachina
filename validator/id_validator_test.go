@@ -477,6 +477,41 @@ func TestREQ6_DanglingProfileDeclaredEdgeSharesBuiltinKind(t *testing.T) {
 	}
 }
 
+// TestREQ6_DanglingProfileDeclaredEdgeFromProjectScope: a profile can
+// declare an edge whose from-type is project-scoped (here "milestone",
+// carrying a "groups" edge to requirements) rather than module-scoped. The
+// generic edge-resolution path used to only ever look up from-types among
+// module-scoped node types, so a project-scoped from-type was skipped and
+// checked by nothing — a source-side asymmetry, since the target side
+// already resolved project scope via findProjectNodeType/rawProjectEntries.
+// The fixture also carries the module-scoped "serves" edge from
+// id_profile_serves, whose dangling target already reported correctly, to
+// pin that the fix does not regress the already-working half.
+func TestREQ6_DanglingProfileDeclaredEdgeFromProjectScope(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_project_scope_from"))
+
+	foundGroups := false
+	foundServes := false
+	for _, e := range errs {
+		if e.Check == "id" &&
+			e.Path == "project.json:/milestones/0000000000m1" &&
+			strings.Contains(e.Message, "groups references non-existent requirement 000000000099") {
+			foundGroups = true
+		}
+		if e.Check == "id" &&
+			e.Path == "alpha/module.json:/endpoints/0000000000e1" &&
+			strings.Contains(e.Message, "serves references non-existent component 000000000099") {
+			foundServes = true
+		}
+	}
+	if !foundGroups {
+		t.Fatalf("expected dangling groups error for profile-declared project-scoped milestone from-type, got %v", errs)
+	}
+	if !foundServes {
+		t.Fatalf("expected the already-working module-scoped serves error to still report, got %v", errs)
+	}
+}
+
 // TestREQ5_ProfileDeclaredNameDeclarableTypeChecked: checkNameRecoverability
 // used to iterate a hardcoded component/api pair. A profile that marks a
 // third module-scoped type ("endpoint") name-declarable via NodeType.
