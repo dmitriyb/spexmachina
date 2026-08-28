@@ -74,7 +74,7 @@ func runDiffE(cmd *cobra.Command, args []string) error {
 	changes := merkle.Diff(current, snapshot)
 	moduleNames := merkle.ModuleNames(current)
 	classified := merkle.Classify(changes, moduleNames, profile)
-	completenessErrors := merkle.CheckCompleteness(classified, specDir)
+	completenessErrors := merkle.CheckCompleteness(classified, specDir, profile)
 
 	// Removal-time name checking. It belongs here rather than in `spex
 	// validate` because it is the only check in the system that is

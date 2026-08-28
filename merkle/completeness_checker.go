@@ -19,12 +19,17 @@ type DiffError struct {
 // accompanied by corresponding component content leaf changes. It reads the
 // current spec graph (project.json, module.json) to resolve requirement-to-component
 // edges via implements arrays. All cross-references are compared as identity
-// hashes (the 12-char hex strings used throughout the merkle tree). Returns
-// nil if all changes are complete.
-func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
+// hashes (the 12-char hex strings used throughout the merkle tree). Which
+// node type triggers the requirement-leaf rules is read from profile's
+// per-type CompletenessTrigger flag rather than compiled in; the
+// meta-envelope sweep runs on the fixed "meta" node type under any profile.
+// Returns nil if all changes are complete.
+func CheckCompleteness(changes []ClassifiedChange, specDir string, profile *schema.Profile) []DiffError {
 	if len(changes) == 0 {
 		return nil
 	}
+
+	triggers := completenessTriggerTypes(profile)
 
 	changedPaths := make(map[string]bool, len(changes))
 	for _, c := range changes {
@@ -38,10 +43,10 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string) []DiffError {
 
 	for _, c := range changes {
 		switch {
-		case c.NodeType == "requirement" && c.Change.Module != "":
+		case triggers.module[c.NodeType] && c.Change.Module != "":
 			moduleReqChanges = append(moduleReqChanges, c)
 			reqModules[c.Change.Module] = true
-		case c.NodeType == "requirement" && c.Change.Module == "":
+		case triggers.project[c.NodeType] && c.Change.Module == "":
 			projectReqChanges = append(projectReqChanges, c)
 		case c.NodeType == "meta" && c.Change.Module != "":
 			metaModules[c.Change.Module] = true
@@ -324,6 +329,34 @@ func implementsReq(comp schema.Component, reqHash string) bool {
 		}
 	}
 	return false
+}
+
+// completenessTriggers holds the node type names the resolved profile marks
+// as a completeness trigger, split by scope: "requirement" is declared once
+// per scope, and each declaration's flag gates that scope independently.
+type completenessTriggers struct {
+	project map[string]bool
+	module  map[string]bool
+}
+
+// completenessTriggerTypes reads the resolved profile's per-type
+// CompletenessTrigger flag into a scope-split lookup. The default profile
+// marks "requirement" in both scopes, so under it a requirement leaf change
+// triggers the rule whichever scope it changed in.
+func completenessTriggerTypes(profile *schema.Profile) completenessTriggers {
+	triggers := completenessTriggers{project: make(map[string]bool), module: make(map[string]bool)}
+	for _, t := range profile.NodeTypes {
+		if !t.CompletenessTrigger {
+			continue
+		}
+		switch t.Scope {
+		case "project":
+			triggers.project[t.Name] = true
+		case "module":
+			triggers.module[t.Name] = true
+		}
+	}
+	return triggers
 }
 
 func findRequirementTitle(modSpec *schema.ModuleSpec, reqHash string) string {
