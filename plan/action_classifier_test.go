@@ -146,6 +146,96 @@ func TestGateAdmits_TestSection_UnestablishedCouplingIsAdmitted(t *testing.T) {
 	}
 }
 
+// TestGateAdmits_S5b_DefaultProfileMatchesHardcodedTable pins S5b's first
+// arm: attaching schema.DefaultProfile() explicitly must not change a
+// single verdict from the zero-value (no profile attached) graph, which
+// falls back to the same default — the admitted set is read from the
+// profile, but the default profile reproduces the old compiled-in set
+// byte-for-byte. Each case carries its own expected verdict (matching
+// TestGateAdmits_NodeTypeTable) so a change that quietly widened the
+// admitted set would fail here even though zero-value and explicit-default
+// still agreed with each other.
+func TestGateAdmits_S5b_DefaultProfileMatchesHardcodedTable(t *testing.T) {
+	f := newClassifierFixture()
+	withDefault := f.Graph.WithProfile(schema.DefaultProfile())
+
+	cases := []struct {
+		change merkle.ClassifiedChange
+		want   bool
+	}{
+		{change(f.CompX, "plan", "component", merkle.Added, "", "h"), true},
+		{change(f.FlowF, "plan", "data_flow", merkle.Added, "", "h"), true},
+		{change(f.TSMany, "plan", "test_section", merkle.Added, "", "h"), true},
+		{change(f.TSOne, "plan", "test_section", merkle.Added, "", "h"), false},
+		{change("api-1", "plan", "api", merkle.Added, "", "h"), false},
+		{change("meta-1", "plan", "meta", merkle.Added, "", "h"), false},
+		{change("req-1", "plan", "requirement", merkle.Added, "", "h"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.change.NodeType, func(t *testing.T) {
+			zeroValue := gateAdmits(tc.change, f.Graph)
+			explicit := gateAdmits(tc.change, withDefault)
+			if zeroValue != tc.want {
+				t.Errorf("gateAdmits(%s) no-profile: got %v want %v", tc.change.NodeType, zeroValue, tc.want)
+			}
+			if explicit != tc.want {
+				t.Errorf("gateAdmits(%s) explicit default: got %v want %v", tc.change.NodeType, explicit, tc.want)
+			}
+		})
+	}
+}
+
+// TestGateAdmits_S5b_ProfileDeclaredTypeBranchesOnDeclaration pins S5b's
+// second arm: a profile naming a type the default never declared —
+// "endpoint" — is admitted when that profile lists it in PlanRelevant, and
+// the very same change is dropped under the default profile. The
+// classifier never branches on the type name "endpoint" itself, only on
+// whether the resolved profile declares it.
+func TestGateAdmits_S5b_ProfileDeclaredTypeBranchesOnDeclaration(t *testing.T) {
+	f := newClassifierFixture()
+	endpointChange := change("endpoint-1", "plan", "endpoint", merkle.Added, "", "eh")
+
+	withEndpoint := f.Graph.WithProfile(&schema.Profile{
+		PlanRelevant: []string{"component", "data_flow", "test_section", "endpoint"},
+	})
+
+	t.Run("default_profile_drops_endpoint", func(t *testing.T) {
+		u := Unmatched{Change: endpointChange}
+		actions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if len(actions) != 0 {
+			t.Fatalf("want 0 actions under the default profile, got %+v", actions)
+		}
+	})
+
+	t.Run("declaring_profile_admits_endpoint", func(t *testing.T) {
+		u := Unmatched{Change: endpointChange}
+		actions, err := ClassifyActions(nil, []Unmatched{u}, nil, withEndpoint)
+		if err != nil {
+			t.Fatalf("err: %v", err)
+		}
+		if len(actions) != 1 {
+			t.Fatalf("want 1 create action, got %+v", actions)
+		}
+		if actions[0].Type != ActionCreate || actions[0].NodeType != "endpoint" {
+			t.Fatalf("want create action carrying node type %q, got %+v", "endpoint", actions[0])
+		}
+	})
+
+	t.Run("s5_verdicts_unaffected_by_endpoint_declaration", func(t *testing.T) {
+		// The custom profile still declares component/data_flow/test_section,
+		// so S5's admitted set holds alongside the new endpoint entry.
+		if !gateAdmits(change(f.CompX, "plan", "component", merkle.Added, "", "h"), withEndpoint) {
+			t.Errorf("want component still admitted")
+		}
+		if gateAdmits(change("api-1", "plan", "api", merkle.Added, "", "h"), withEndpoint) {
+			t.Errorf("want api still dropped — the custom profile never declared it plan-relevant")
+		}
+	})
+}
+
 // --- Unmatched path: create actions and their reasons ---
 
 func TestClassifyUnmatched_AddedProducesCreateWithNewSpecNodeReason(t *testing.T) {
