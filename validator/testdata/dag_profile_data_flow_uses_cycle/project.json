@@ -1,0 +1,10 @@
+{
+  "name": "dag-profile-data-flow-uses-cycle-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ]
+}

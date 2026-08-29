@@ -113,6 +113,128 @@ func TestREQ3_AllDAGErrorsTagged(t *testing.T) {
 	}
 }
 
+// D9: Acyclicity over profile-declared edges — the DAG check enforces
+// acyclicity over every edge kind the resolved profile declares that is not
+// marked cyclic: true, not over a fixed edge set. A profile declaring an
+// "endpoint" type carrying a "serves" edge to other endpoints exercises that
+// with a graph the three built-in fast paths never walk.
+func TestREQ3_ProfileDeclaredEdgeCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_edge_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for the profile-declared serves edge, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "serves cycle") {
+			found = true
+			if !strings.Contains(e.Message, "Get widget") || !strings.Contains(e.Message, "Give widget") {
+				t.Fatalf("cycle path should name both endpoints, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a serves cycle error, got: %v", errs)
+	}
+}
+
+// D9 variant: the same loop, but the profile marks the serves edge
+// cyclic: true — a cyclic edge is descriptive, exempt from the cycle check,
+// so the same data validates with zero DAG errors.
+func TestREQ3_ProfileDeclaredEdgeCyclicExempt(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_edge_cyclic_exempt"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for a cyclic-exempt profile-declared edge, got %d: %v", len(errs), errs)
+	}
+}
+
+// A built-in edge kind (requires_module) marked cyclic: true in the resolved
+// profile is exempt from the cycle check the same way a profile-declared
+// edge is: the flag applies uniformly, not only to graphs built generically.
+func TestREQ3_BuiltinEdgeCyclicExempt(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_builtin_exempt"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors when requires_module is marked cyclic: true, got %d: %v", len(errs), errs)
+	}
+}
+
+// A profile that declares none of requires_module, depends_on or uses must
+// not have the built-in module/requirement/component graphs built and
+// walked anyway: the checker holds no fixed edge list of its own, so an
+// edge kind the resolved profile omits entirely gets no graph, the same as
+// one it declares cyclic: true.
+func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_omits_builtin_edges"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors when the profile declares none of requires_module, depends_on or uses, got %d: %v", len(errs), errs)
+	}
+}
+
+// D9 variant: a profile-declared uses edge sourced from data_flow, not
+// component. checkComponentDAG's built-in fast path only walks uses from
+// components, so builtinDAGEdgeCoverage must not claim data_flow as covered
+// by it — otherwise a data_flow-to-data_flow uses cycle is excluded from
+// the generic path and walked by nothing at all.
+func TestREQ3_ProfileDeclaredDataFlowUsesEdgeCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_data_flow_uses_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for the data_flow-sourced uses edge, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "uses cycle") {
+			found = true
+			if !strings.Contains(e.Path, "alpha/module.json:/data_flows") {
+				t.Fatalf("expected path to reference alpha/module.json:/data_flows, got: %s", e.Path)
+			}
+			if !strings.Contains(e.Message, "Flow A") || !strings.Contains(e.Message, "Flow B") {
+				t.Fatalf("cycle path should name both data flows, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a uses cycle error, got: %v", errs)
+	}
+}
+
+// The default profile declares "requirement" at both scopes under one
+// shared depends_on edge: checkRequirementDAG only walks each module's own
+// requirements, so a cycle among project.json's top-level requirements must
+// fall through to the generic path rather than be dropped alongside the
+// module-scoped occurrence builtinDAGEdgeCoverage marks covered.
+func TestREQ3_ProjectRequirementDependencyCycle(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_project_req_cycle"))
+	if len(errs) == 0 {
+		t.Fatal("expected a cycle error for project-scoped requirement dependencies, got none")
+	}
+	found := false
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q", e.Check)
+		}
+		if strings.Contains(e.Message, "depends_on cycle") {
+			found = true
+			if e.Path != "project.json:/requirements" {
+				t.Fatalf("expected path project.json:/requirements, got: %s", e.Path)
+			}
+			if !strings.Contains(e.Message, "Project requirement A") || !strings.Contains(e.Message, "Project requirement B") {
+				t.Fatalf("cycle path should name both project requirement titles, got: %s", e.Message)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected a depends_on cycle error, got: %v", errs)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly one cycle error (no double-report from a module-scope fast path), got %d: %v", len(errs), errs)
+	}
+}
+
 func TestREQ3_SelfValidateDAG(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckDAG(specDir)

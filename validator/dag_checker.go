@@ -11,19 +11,72 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
-// CheckDAG builds dependency graphs from the spec and checks each for cycles.
-// It checks three graph types:
+// builtinDAGEdgeCoverage is the (kind, from-type) pairs checkModuleDAG,
+// checkRequirementDAG and checkComponentDAG already resolve by name, each
+// mapped to the scope its fast path actually walks — not every scope the
+// from-type name might be declared at. "uses" carries two from-types under
+// the default profile (component, data_flow), but checkComponentDAG walks
+// uses from components only, so this map names component alone; a
+// data_flow-sourced uses edge is left to the generic path even under the
+// default profile, where it is vacuous (data_flow.uses targets component,
+// which cannot close a loop back to a data_flow) but is not vacuous under a
+// profile that declares a data_flow-to-data_flow uses edge. "requirement" is
+// scoped to "module" because checkRequirementDAG walks each module's own
+// requirements only: the default profile declares "requirement" at project
+// scope too (project.json's top-level requirements, see I11), and that
+// occurrence's depends_on cycles are walked by nothing built-in, so they
+// must fall through to the generic path rather than be silently dropped
+// alongside the module-scoped occurrence that shares the same name. A
+// profile-declared edge covers a (kind, from-type, scope) triple outside
+// this set — a new edge kind entirely, a from-type added to a kind these
+// three don't already walk, or a from-type's occurrence at a scope the fast
+// path doesn't reach — and is checked generically instead, via
+// checkExtraModuleDAGEdges or checkExtraProjectDAGEdges depending on the
+// from-type's scope. This mirrors builtinEdgeCoverage in id_validator.go,
+// which partitions the same way for reference-integrity checking; the DAG
+// checker's own set is narrower because only three of the default profile's
+// seven edge kinds can close a loop (the other four connect node types that
+// never point back at each other) — see arch_dag_checker.md "Graphs
+// Checked".
+var builtinDAGEdgeCoverage = map[string]map[string]string{
+	"requires_module": {"module": "project"},
+	"depends_on":      {"requirement": "module"},
+	"uses":            {"component": "module"},
+}
+
+// CheckDAG builds dependency graphs from the spec and checks each for
+// cycles. The graphs checked are the edge kinds the resolved profile
+// declares, minus those marked cyclic: true. Three built-in graphs cover the
+// edge kinds that can actually close a loop under the default profile:
 //  1. Module dependency graph (project-wide): edges from requires_module
 //  2. Requirement dependency graph (per module): edges from depends_on
 //  3. Component dependency graph (per module): edges from uses
+//
+// Any other edge kind the resolved profile declares — new, or an added
+// from-type on one of the three kinds above — is built and walked by the
+// same cycle-detection machinery via checkExtraModuleDAGEdges and
+// checkExtraProjectDAGEdges; the checker holds no fixed edge list of its
+// own beyond these three fast paths.
 func CheckDAG(specDir string) []ValidationError {
 	project, modules, errs := loadSpec(specDir, "dag")
 	if len(errs) > 0 {
 		return errs
 	}
 
+	profile, perr := schema.ResolveProfile(specDir)
+	if perr != nil {
+		return []ValidationError{{
+			Check:    "dag",
+			Severity: "error",
+			Path:     "profile.json",
+			Message:  perr.Error(),
+		}}
+	}
+
 	var result []ValidationError
-	result = append(result, checkModuleDAG(project)...)
+	if edgeActive(profile, "requires_module", "module") {
+		result = append(result, checkModuleDAG(project)...)
+	}
 
 	modNames := make([]string, 0, len(modules))
 	for name := range modules {
@@ -31,13 +84,217 @@ func CheckDAG(specDir string) []ValidationError {
 	}
 	slices.Sort(modNames)
 
+	reqActive := edgeActive(profile, "depends_on", "requirement")
+	usesActive := edgeActive(profile, "uses", "component")
 	for _, modName := range modNames {
 		mod := modules[modName]
-		result = append(result, checkRequirementDAG(modName, mod)...)
-		result = append(result, checkComponentDAG(modName, mod)...)
+		if reqActive {
+			result = append(result, checkRequirementDAG(modName, mod)...)
+		}
+		if usesActive {
+			result = append(result, checkComponentDAG(modName, mod)...)
+		}
 	}
 
+	result = append(result, checkExtraModuleDAGEdges(specDir, modNames, project, modules, profile)...)
+	result = append(result, checkExtraProjectDAGEdges(specDir, modNames, project, modules, profile)...)
+
 	return result
+}
+
+// edgeActive reports whether a built-in fast path should build and walk its
+// graph: the resolved profile must declare the given edge kind carried from
+// the given from-type, and that declaration must not be marked cyclic: true.
+// An edge kind the profile does not declare for that from-type at all is
+// inactive — the checker holds no fixed edge list of its own, so an
+// undeclared (kind, from-type) pair is skipped here exactly as it would be
+// by the generic checkExtra*DAGEdges path, rather than walked anyway using
+// the built-in struct field regardless of what the profile says.
+func edgeActive(profile *schema.Profile, kind, fromType string) bool {
+	for _, e := range profile.Edges {
+		if e.Kind != kind {
+			continue
+		}
+		if !slices.Contains(e.From, fromType) {
+			continue
+		}
+		return !e.Cyclic
+	}
+	return false
+}
+
+// extraCycleEdgesForScope returns the resolved profile's declared edges,
+// reduced to the (kind, from-type) pairs not already covered, at the given
+// scope, by one of the three built-in graphs — with any edge kind marked
+// cyclic: true dropped entirely, since that edge closes no graph at all,
+// built-in coverage aside. Scoping the reduction matters because a from-type
+// name like "requirement" can be declared at both scopes under one shared
+// edge declaration: filtering on name alone would drop the project-scoped
+// occurrence too, even though only the module-scoped one is actually walked
+// by checkRequirementDAG. Called once per scope by checkExtraModuleDAGEdges
+// and checkExtraProjectDAGEdges; a from-type this leaves in that has no
+// occurrence at the caller's scope is simply skipped downstream by
+// findModuleNodeType/projectEdgeSourceKey, so over-including here is safe.
+func extraCycleEdgesForScope(profile *schema.Profile, scope string) []schema.Edge {
+	var out []schema.Edge
+	for _, e := range profile.Edges {
+		if e.Cyclic {
+			continue
+		}
+		covered := builtinDAGEdgeCoverage[e.Kind]
+		var from []string
+		for _, f := range e.From {
+			if covered[f] == scope {
+				continue
+			}
+			from = append(from, f)
+		}
+		if len(from) == 0 {
+			continue
+		}
+		extra := e
+		extra.From = from
+		out = append(out, extra)
+	}
+	return out
+}
+
+// checkExtraModuleDAGEdges builds and walks a cycle graph for each
+// (edge kind, from-type) pair extraCycleEdgesForScope returns for module
+// scope, one graph per module — mirroring checkRequirementDAG and
+// checkComponentDAG's own per-module scoping. Nodes and edges are read
+// generically off module.json, since a profile-declared type carries no
+// dedicated Go field; an edge target that does not name another node in the
+// same array is dropped rather than reported here, because it cannot close
+// a loop within this graph and cross-reference integrity is CheckIDs' job,
+// not this checker's.
+func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+	edges := extraCycleEdgesForScope(profile, "module")
+	if len(edges) == 0 {
+		return nil
+	}
+
+	var errs []ValidationError
+	for _, modName := range modNames {
+		mod := modules[modName]
+		if mod == nil {
+			continue
+		}
+		modPath := modulePathByName(project, modName)
+
+		for _, edge := range edges {
+			for _, fromName := range edge.From {
+				nt, ok := findModuleNodeType(profile, fromName)
+				if !ok {
+					continue
+				}
+				entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+				if err != nil || len(entries) == 0 {
+					continue
+				}
+				adj, labels := genericCycleAdjacency(entries, edge.Kind)
+				path := modName + "/module.json:/" + nt.PluralKey
+				errs = append(errs, reportCycles(detectStringCycles(adj), labels, edge.Kind, path)...)
+			}
+		}
+	}
+	return errs
+}
+
+// checkExtraProjectDAGEdges is checkExtraModuleDAGEdges' project-scoped
+// counterpart: it builds and walks a cycle graph, once for the whole
+// project, for each (edge kind, from-type) pair extraCycleEdgesForScope
+// returns for project scope — a profile-declared project-scoped type, or a
+// project-scoped occurrence of a from-type name whose module-scoped
+// occurrence one of the three built-in fast paths already covers (e.g.
+// "requirement": module-scoped requirements are checkRequirementDAG's, but
+// the default profile's project-scoped requirements, with their own
+// depends_on edges, are not). projectEdgeSourceKey (declared in
+// id_validator.go) resolves both the same way checkExtraProjectEdges does
+// for reference-integrity checking.
+func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+	edges := extraCycleEdgesForScope(profile, "project")
+	if len(edges) == 0 {
+		return nil
+	}
+
+	var errs []ValidationError
+	for _, edge := range edges {
+		for _, fromName := range edge.From {
+			pluralKey, ok := projectEdgeSourceKey(profile, fromName)
+			if !ok {
+				continue
+			}
+			entries, err := rawProjectEntries(specDir, pluralKey)
+			if err != nil || len(entries) == 0 {
+				continue
+			}
+			adj, labels := genericCycleAdjacency(entries, edge.Kind)
+			path := "project.json:/" + pluralKey
+			errs = append(errs, reportCycles(detectStringCycles(adj), labels, edge.Kind, path)...)
+		}
+	}
+	return errs
+}
+
+// genericCycleAdjacency turns a slice of generically-read entries into an
+// adjacency map keyed by identity hash, and a parallel id-to-label map used
+// to spell a found cycle out by name. An edge whose target id is not itself
+// an entry in the same slice is dropped: it cannot participate in a cycle
+// confined to this graph. A node's declared-identity field is "name" for
+// every built-in type but one — a requirement's is "title" (see
+// moduleTypedEntries in id_validator.go, and project.schema.json's required
+// ["id", "type", "title"] with no "name" property at all) — so the label
+// falls back to "title" before falling back to the raw id.
+func genericCycleAdjacency(entries []rawEntry, edgeKind string) (map[string][]string, map[string]string) {
+	ids := make(map[string]bool, len(entries))
+	labels := make(map[string]string, len(entries))
+	for _, e := range entries {
+		id := e.str("id")
+		ids[id] = true
+		switch {
+		case e.str("name") != "":
+			labels[id] = e.str("name")
+		case e.str("title") != "":
+			labels[id] = e.str("title")
+		default:
+			labels[id] = id
+		}
+	}
+
+	adj := make(map[string][]string, len(entries))
+	for _, e := range entries {
+		id := e.str("id")
+		var targets []string
+		for _, target := range e.strSlice(edgeKind) {
+			if ids[target] {
+				targets = append(targets, target)
+			}
+		}
+		adj[id] = targets
+	}
+	return adj, labels
+}
+
+// reportCycles turns detectStringCycles' output into validation entries,
+// naming the edge kind the graph was built from and spelling the cycle out
+// by the labels map — the same shape checkModuleDAG, checkRequirementDAG
+// and checkComponentDAG produce for the three built-in graphs.
+func reportCycles(cycles [][]string, labels map[string]string, edgeKind, path string) []ValidationError {
+	var errs []ValidationError
+	for _, cycle := range cycles {
+		names := make([]string, len(cycle))
+		for i, id := range cycle {
+			names[i] = labels[id]
+		}
+		errs = append(errs, ValidationError{
+			Check:    "dag",
+			Severity: "error",
+			Path:     path,
+			Message:  fmt.Sprintf("%s cycle: %s", edgeKind, strings.Join(names, " -> ")),
+		})
+	}
+	return errs
 }
 
 // loadSpec reads project.json and all referenced module.json files, returning

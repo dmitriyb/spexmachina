@@ -1,0 +1,31 @@
+{
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000011",
+      "preq_id": "000000000091",
+      "type": "functional",
+      "title": "Req A",
+      "depends_on": ["000000000012"]
+    },
+    {
+      "id": "000000000012",
+      "preq_id": "000000000092",
+      "type": "functional",
+      "title": "Req B",
+      "depends_on": ["000000000011"]
+    }
+  ],
+  "components": [
+    {
+      "id": "000000000021",
+      "name": "Comp A",
+      "uses": ["000000000022"]
+    },
+    {
+      "id": "000000000022",
+      "name": "Comp B",
+      "uses": ["000000000021"]
+    }
+  ]
+}
