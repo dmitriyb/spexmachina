@@ -1082,6 +1082,27 @@ func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 	}
 }
 
+// E2: Component with no uses edges
+func TestFR2_E2_NoUsesEdges(t *testing.T) {
+	spec := fixtureGraph()
+	var buf bytes.Buffer
+	if err := RenderDOT(spec, &buf); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	// Parser (c1c1c1c1c1c1) declares uses: [] — it still appears as a node...
+	if !strings.Contains(out, `"c1c1c1c1c1c1" [label="Parser"`) {
+		t.Fatalf("Parser node should still appear, got:\n%s", out)
+	}
+	// ...but emits no uses edge of its own (Builder's uses edge targets
+	// Parser, so this checks the edge's source, not just its absence).
+	noUsesFromParser := regexp.MustCompile(`"c1c1c1c1c1c1" -> "[0-9a-f]{12}" \[label="uses"`)
+	if noUsesFromParser.MatchString(out) {
+		t.Fatalf("Parser has uses: [], should emit no uses edges, got:\n%s", out)
+	}
+}
+
 // E3: Content containing JSON-special characters
 func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 	modSpec := schema.ModuleSpec{
@@ -1116,6 +1137,99 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 	// that the document parses.
 	if !strings.Contains(buf.String(), `\"quotes\" and \\backslashes and {braces}`) {
 		t.Fatalf("expected escaped special characters in output, got:\n%s", buf.String())
+	}
+}
+
+// E4: Very large spec with many modules
+func TestFR1_FR2_FR3_E4_LargeSpec(t *testing.T) {
+	const numModules = 20
+	const numComponents = 10
+	const numRequirements = 5
+	const numDataFlows = 3
+
+	var counter uint64
+	nextID := func() string {
+		counter++
+		return fmt.Sprintf("%012x", counter)
+	}
+
+	proj := schema.Project{Name: "large"}
+	modules := make([]ModuleGraph, 0, numModules)
+	for i := 0; i < numModules; i++ {
+		modName := fmt.Sprintf("mod%d", i)
+		modID := nextID()
+
+		modSpec := schema.ModuleSpec{Name: modName}
+		content := map[string]string{}
+		for r := 0; r < numRequirements; r++ {
+			modSpec.Requirements = append(modSpec.Requirements, schema.ModuleRequirement{
+				ID: nextID(), Type: "functional", Title: fmt.Sprintf("req%d", r),
+			})
+		}
+		for c := 0; c < numComponents; c++ {
+			cfile := fmt.Sprintf("arch_%d.md", c)
+			modSpec.Components = append(modSpec.Components, schema.Component{
+				ID: nextID(), Name: fmt.Sprintf("Comp%d", c), Content: cfile,
+			})
+			content[cfile] = "# Comp\n"
+		}
+		for f := 0; f < numDataFlows; f++ {
+			modSpec.DataFlows = append(modSpec.DataFlows, schema.DataFlow{
+				ID: nextID(), Name: fmt.Sprintf("Flow%d", f),
+			})
+		}
+
+		modules = append(modules, ModuleGraph{
+			Module:  schema.Module{ID: modID, Name: modName, Path: modName},
+			Spec:    modSpec,
+			Nodes:   nodesFromJSON(modSpec, "module", modName),
+			Content: content,
+		})
+		proj.Modules = append(proj.Modules, schema.Module{ID: modID, Name: modName, Path: modName})
+	}
+
+	spec := &SpecGraph{
+		Project:      proj,
+		Profile:      schema.DefaultProfile(),
+		ProjectNodes: nodesFromJSON(proj, "project", ""),
+		Modules:      modules,
+	}
+
+	var mdBuf bytes.Buffer
+	if err := RenderMarkdown(spec, &mdBuf); err != nil {
+		t.Fatalf("markdown render error: %v", err)
+	}
+	for i := 0; i < numModules; i++ {
+		if !strings.Contains(mdBuf.String(), fmt.Sprintf("## Module: mod%d", i)) {
+			t.Errorf("markdown missing module mod%d", i)
+		}
+	}
+
+	var dotBuf bytes.Buffer
+	if err := RenderDOT(spec, &dotBuf); err != nil {
+		t.Fatalf("dot render error: %v", err)
+	}
+	for i := 0; i < numModules; i++ {
+		if !strings.Contains(dotBuf.String(), fmt.Sprintf("subgraph cluster_mod%d {", i)) {
+			t.Errorf("dot missing subgraph cluster for mod%d", i)
+		}
+	}
+
+	var jsonBuf bytes.Buffer
+	if err := RenderJSON(spec, &jsonBuf); err != nil {
+		t.Fatalf("json render error: %v", err)
+	}
+	var result struct {
+		Nodes []GraphNode `json:"nodes"`
+		Edges []GraphEdge `json:"edges"`
+	}
+	if err := json.Unmarshal(jsonBuf.Bytes(), &result); err != nil {
+		t.Fatalf("invalid json: %v", err)
+	}
+	// project root + per module: module node + requirements + components + data flows
+	wantNodes := 1 + numModules*(1+numRequirements+numComponents+numDataFlows)
+	if len(result.Nodes) != wantNodes {
+		t.Errorf("want %d nodes, got %d", wantNodes, len(result.Nodes))
 	}
 }
 
