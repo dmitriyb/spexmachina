@@ -241,31 +241,36 @@ func TestFR1_M6_ModuleRequirementsNumbered(t *testing.T) {
 
 // SM1: Markdown renders sections after requirements
 func TestFR1_SM1_MarkdownSections(t *testing.T) {
-	spec := &SpecGraph{
-		Project: schema.Project{
-			Name:        "delivery-test",
-			Description: "Test project with sections",
-			Requirements: []schema.Requirement{
-				{ID: "112233445566", Type: "functional", Title: "Deploy", Description: "Ship the thing."},
-			},
-			Modules: []schema.Module{{ID: "delivery0001", Name: "delivery", Path: "delivery"}},
-			Sections: []schema.Section{{
-				ID:   "section00001",
-				Name: "delivery",
-				Type: "coupled",
-				Raw: json.RawMessage(`{
-					"id": "section00001",
-					"name": "delivery",
-					"type": "coupled",
-					"versioning": {"scheme": "semver", "source": "git-tag"},
-					"artifacts": ["app-binary", "cli"],
-					"channels": ["stable", "edge"]
-				}`),
-			}},
+	proj := schema.Project{
+		Name:        "delivery-test",
+		Description: "Test project with sections",
+		Requirements: []schema.Requirement{
+			{ID: "112233445566", Type: "functional", Title: "Deploy", Description: "Ship the thing."},
 		},
+		Modules: []schema.Module{{ID: "delivery0001", Name: "delivery", Path: "delivery"}},
+		Sections: []schema.Section{{
+			ID:   "section00001",
+			Name: "delivery",
+			Type: "coupled",
+			Raw: json.RawMessage(`{
+				"id": "section00001",
+				"name": "delivery",
+				"type": "coupled",
+				"versioning": {"scheme": "semver", "source": "git-tag"},
+				"artifacts": ["app-binary", "cli"],
+				"channels": ["stable", "edge"]
+			}`),
+		}},
+	}
+	deliverySpec := schema.ModuleSpec{Name: "delivery", Description: "Delivery module"}
+	spec := &SpecGraph{
+		Project:      proj,
+		Profile:      schema.DefaultProfile(),
+		ProjectNodes: nodesFromJSON(proj, "project", ""),
 		Modules: []ModuleGraph{{
 			Module:  schema.Module{ID: "delivery0001", Name: "delivery", Path: "delivery"},
-			Spec:    schema.ModuleSpec{Name: "delivery", Description: "Delivery module"},
+			Spec:    deliverySpec,
+			Nodes:   nodesFromJSON(deliverySpec, "module", "delivery"),
 			Content: map[string]string{},
 		}},
 	}
@@ -1116,14 +1121,17 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 
 // E5: Content with deeply nested headings
 func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
+	deepSpec := schema.ModuleSpec{
+		Name:       "m",
+		Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
+	}
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "deep", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
+		Profile: schema.DefaultProfile(),
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
-			Spec: schema.ModuleSpec{
-				Name:       "m",
-				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
-			},
+			Spec:   deepSpec,
+			Nodes:  nodesFromJSON(deepSpec, "module", "m"),
 			Content: map[string]string{
 				"arch.md": "# Level 1\n\n## Level 2\n\n### Level 3\n\n#### Level 4\n",
 			},
@@ -2038,6 +2046,81 @@ func TestFR1_M7_APIsInMarkdown(t *testing.T) {
 	}
 	if strings.Contains(plain.String(), "### APIs") {
 		t.Error("a module without apis should not emit an APIs heading")
+	}
+}
+
+// DT1 (Markdown slice): a graph read under a profile declaring an
+// "endpoint" type gets its own per-type section, content inlined exactly as
+// Architecture inlines components — the same fixture
+// TestFR2_DT1_ProfileDeclaredTypeDOT and TestFR3_DT1_ProfileDeclaredTypeJSON
+// carry for DOT and JSON.
+func TestFR1_DT1_ProfileDeclaredTypeMarkdown(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profile.Edges = append(profile.Edges, schema.Edge{
+		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "endpoint-project",
+		"modules": [{"id": "api0000api00", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, modDir, "module.json", `{
+		"name": "api",
+		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
+		"endpoints": [
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]},
+			{"id": "665544332211", "name": "POST /v1/widgets", "content": "endpoint_post_widgets.md", "calls": ["aabbccddeeff"]}
+		]
+	}`)
+	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n\nServes widget requests.\n")
+	writeFile(t, modDir, "endpoint_get_widgets.md", "# GET /v1/widgets\n\nLists widgets.\n")
+	writeFile(t, modDir, "endpoint_post_widgets.md", "# POST /v1/widgets\n\nCreates a widget.\n")
+
+	spec, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("ReadSpec: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RenderMarkdown(spec, &buf); err != nil {
+		t.Fatalf("RenderMarkdown: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "### Endpoints") {
+		t.Fatalf("missing '### Endpoints' heading for the profile-declared type, got:\n%s", out)
+	}
+	if !strings.Contains(out, "#### GET /v1/widgets\n\nLists widgets.") {
+		t.Errorf("endpoint content should be inlined with its heading adjusted, got:\n%s", out)
+	}
+	if !strings.Contains(out, "#### POST /v1/widgets\n\nCreates a widget.") {
+		t.Errorf("endpoint content should be inlined with its heading adjusted, got:\n%s", out)
+	}
+
+	// Endpoints render alongside the built-in Architecture section, both
+	// reached by the same per-type sectioning.
+	archIdx := strings.Index(out, "### Architecture")
+	epIdx := strings.Index(out, "### Endpoints")
+	if archIdx < 0 || epIdx < 0 || archIdx >= epIdx {
+		t.Fatalf("want '### Architecture' before '### Endpoints', got:\n%s", out)
 	}
 }
 

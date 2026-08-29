@@ -12,157 +12,106 @@ import (
 
 // RenderMarkdown generates a collated markdown document from the spec graph.
 //
-// TODO(bead:spexmachina-h4gv.11): writeModule and its helpers walk the five
-// built-in node types by their fixed schema.ModuleSpec fields, so a
-// profile-declared type beyond those five never reaches this document.
-// spec.Modules[].Nodes and spec.ProjectNodes carry the same declarations
-// generically, keyed by spec.Profile's node types, each Node's Fields
-// carrying its own non-envelope declared fields (e.g. a requirement's own
-// "type": "functional"/"non_functional", which Node.Type cannot carry since
-// Type already holds the profile's node-type name) and spec.Content holding
-// project-scoped content leaves — walk those instead so a profile-declared
-// type reaches the document without renderer changes, per flow_render_
-// pipeline.md "Shape contract".
+// Only requirement is read off spec.ProjectNodes: arch_markdown_renderer.md
+// fixes the project scope at Requirements and Sections and gives a
+// profile-declared type no other project-scope home, so that is the whole
+// of this format's project-scope projection. Within each module, apis and
+// content-bearing sections (Architecture, Data Flows, and any
+// profile-declared module-scoped type beyond those two) are read off
+// mg.Nodes — the profile-generic node list ReadSpec built — rather than off
+// the fixed schema.ModuleSpec fields, so a module-scoped profile-declared
+// type reaches this document without renderer changes (flow_render_pipeline.md
+// "Shape contract"). test_section is the one module-scoped declarable type
+// this format omits, matching DOTRenderer: it reaches the JSON output
+// alone.
 func RenderMarkdown(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "# %s\n\n", spec.Project.Name)
 	if spec.Project.Description != "" {
 		fmt.Fprintf(w, "%s\n\n", spec.Project.Description)
 	}
 
-	writeProjectRequirements(w, spec.Project.Requirements)
+	writeRequirements(w, "## Requirements", filterNodesByType(spec.ProjectNodes, "requirement"), true)
 
 	if err := writeSections(w, spec.Project.Sections); err != nil {
 		return err
 	}
 
 	for _, mg := range spec.Modules {
-		writeModule(w, &mg)
+		writeModule(w, &mg, spec.Profile)
 	}
 
 	return nil
 }
 
-func writeProjectRequirements(w io.Writer, reqs []schema.Requirement) {
-	if len(reqs) == 0 {
+// writeRequirements renders one requirement block: a heading, then
+// functional requirements before non-functional, each group in declaration
+// order — "FR"/"NFR" are positional labels, not identities. subheadings
+// splits the two groups under their own "### Functional"/"### Non-functional"
+// headings (the project scope), where the non-functional list continues the
+// numbering the functional list ended on; the module scope renders one flat
+// list instead, with both groups restarting at 1.
+func writeRequirements(w io.Writer, heading string, nodes []Node, subheadings bool) {
+	if len(nodes) == 0 {
 		return
 	}
 
-	fmt.Fprintf(w, "## Requirements\n\n")
-
-	var functional, nonFunctional []schema.Requirement
-	for _, r := range reqs {
-		if r.Type == "non_functional" {
-			nonFunctional = append(nonFunctional, r)
+	var functional, nonFunctional []Node
+	for _, n := range nodes {
+		if str(n.Fields, "type") == "non_functional" {
+			nonFunctional = append(nonFunctional, n)
 		} else {
-			functional = append(functional, r)
+			functional = append(functional, n)
 		}
 	}
 
-	if len(functional) > 0 {
-		fmt.Fprintf(w, "### Functional\n\n")
-		for i, r := range functional {
-			fmt.Fprintf(w, "- FR%d: %s", i+1, r.Title)
-			if r.Description != "" {
-				fmt.Fprintf(w, " — %s", r.Description)
-			}
+	fmt.Fprintf(w, "%s\n\n", heading)
+
+	if subheadings {
+		if len(functional) > 0 {
+			fmt.Fprintf(w, "### Functional\n\n")
+			writeRequirementList(w, functional, "FR", 0)
 			fmt.Fprintf(w, "\n")
-			if i == len(functional)-1 {
-				fmt.Fprintf(w, "\n")
-			}
 		}
+		if len(nonFunctional) > 0 {
+			fmt.Fprintf(w, "### Non-functional\n\n")
+			writeRequirementList(w, nonFunctional, "NFR", len(functional))
+			fmt.Fprintf(w, "\n")
+		}
+		return
 	}
 
-	if len(nonFunctional) > 0 {
-		fmt.Fprintf(w, "### Non-functional\n\n")
-		for i, r := range nonFunctional {
-			fmt.Fprintf(w, "- NFR%d: %s", i+len(functional)+1, r.Title)
-			if r.Description != "" {
-				fmt.Fprintf(w, " — %s", r.Description)
-			}
-			fmt.Fprintf(w, "\n")
-			if i == len(nonFunctional)-1 {
-				fmt.Fprintf(w, "\n")
-			}
+	writeRequirementList(w, functional, "FR", 0)
+	writeRequirementList(w, nonFunctional, "NFR", 0)
+	fmt.Fprintf(w, "\n")
+}
+
+// writeRequirementList writes one bullet per requirement node, numbered
+// prefix+(offset+1), prefix+(offset+2), ...
+func writeRequirementList(w io.Writer, nodes []Node, prefix string, offset int) {
+	for i, n := range nodes {
+		fmt.Fprintf(w, "- %s%d: %s", prefix, offset+i+1, n.Name)
+		if n.Description != "" {
+			fmt.Fprintf(w, " — %s", n.Description)
 		}
+		fmt.Fprintf(w, "\n")
 	}
 }
 
-func writeModule(w io.Writer, mg *ModuleGraph) {
+func writeModule(w io.Writer, mg *ModuleGraph, profile *schema.Profile) {
 	fmt.Fprintf(w, "## Module: %s\n\n", mg.Module.Name)
 	if mg.Spec.Description != "" {
 		fmt.Fprintf(w, "%s\n\n", mg.Spec.Description)
 	}
 
-	writeModuleRequirements(w, mg.Spec.Requirements)
-	writeModuleAPIs(w, mg.Spec.APIs)
-
-	if len(mg.Spec.Components) > 0 {
-		fmt.Fprintf(w, "### Architecture\n\n")
-		for _, c := range mg.Spec.Components {
-			if c.Content != "" {
-				if content, ok := mg.Content[c.Content]; ok && content != "" {
-					fmt.Fprintf(w, "%s\n", adjustHeadings(content, 3))
-				}
-			} else {
-				fmt.Fprintf(w, "#### %s\n\n", c.Name)
-			}
-		}
-	}
-
-	if len(mg.Spec.DataFlows) > 0 {
-		fmt.Fprintf(w, "### Data Flows\n\n")
-		for _, f := range mg.Spec.DataFlows {
-			if f.Content != "" {
-				if content, ok := mg.Content[f.Content]; ok && content != "" {
-					fmt.Fprintf(w, "%s\n", adjustHeadings(content, 3))
-				}
-			} else {
-				fmt.Fprintf(w, "#### %s\n\n", f.Name)
-			}
-		}
-	}
-}
-
-// writeModuleRequirements enumerates each module's requirements locally as
-// FR1, FR2, ... NFR1, NFR2, ... — module-scoped numbering, independent of
-// the 12-char identity hash IDs.
-func writeModuleRequirements(w io.Writer, reqs []schema.ModuleRequirement) {
-	if len(reqs) == 0 {
-		return
-	}
-
-	fmt.Fprintf(w, "### Requirements\n\n")
-
-	var functional, nonFunctional []schema.ModuleRequirement
-	for _, r := range reqs {
-		if r.Type == "non_functional" {
-			nonFunctional = append(nonFunctional, r)
-		} else {
-			functional = append(functional, r)
-		}
-	}
-
-	for i, r := range functional {
-		fmt.Fprintf(w, "- FR%d: %s", i+1, r.Title)
-		if r.Description != "" {
-			fmt.Fprintf(w, " — %s", r.Description)
-		}
-		fmt.Fprintf(w, "\n")
-	}
-	for i, r := range nonFunctional {
-		fmt.Fprintf(w, "- NFR%d: %s", i+1, r.Title)
-		if r.Description != "" {
-			fmt.Fprintf(w, " — %s", r.Description)
-		}
-		fmt.Fprintf(w, "\n")
-	}
-	fmt.Fprintf(w, "\n")
+	writeRequirements(w, "### Requirements", filterNodesByType(mg.Nodes, "requirement"), false)
+	writeModuleAPIs(w, filterNodesByType(mg.Nodes, "api"))
+	writeModuleContentSections(w, mg, profile)
 }
 
 // writeModuleAPIs lists the module's external surface in declaration order.
 // An api has no content leaf, so the whole node renders on one line: the exact
 // surface string, its freeform group when set, and its description.
-func writeModuleAPIs(w io.Writer, apis []schema.API) {
+func writeModuleAPIs(w io.Writer, apis []Node) {
 	if len(apis) == 0 {
 		return
 	}
@@ -179,6 +128,92 @@ func writeModuleAPIs(w io.Writer, apis []schema.API) {
 		fmt.Fprintf(w, "\n")
 	}
 	fmt.Fprintf(w, "\n")
+}
+
+// builtinMarkdownHeadings maps a module-scoped, content-bearing node type to
+// the fixed English heading arch_markdown_renderer.md's Document Structure
+// gives it. A type absent here (data_flow, or any profile-declared type
+// beyond the built-in five) gets a heading humanized from its plural key
+// instead — data_flow's own plural key "data_flows" already humanizes to
+// "Data Flows", so only "component" needs an override.
+var builtinMarkdownHeadings = map[string]string{
+	"component": "Architecture",
+}
+
+// writeModuleContentSections renders one "###" heading per module-scoped,
+// content-bearing node type the resolved profile declares, in profile
+// declaration order — Architecture and Data Flows under the default
+// profile, plus any profile-declared type beyond those two (see
+// arch_markdown_renderer.md "Document Structure" and its Declared Type
+// scenario). requirement and api are excluded — each already got its own
+// fixed-heading treatment above — and so is test_section, this format's own
+// excluded projection (it reaches the JSON output alone). A type with no
+// nodes in this module contributes no heading at all.
+func writeModuleContentSections(w io.Writer, mg *ModuleGraph, profile *schema.Profile) {
+	if profile == nil {
+		return
+	}
+	for _, nt := range profile.NodeTypes {
+		if nt.Scope != "module" {
+			continue
+		}
+		if nt.Name == "requirement" || nt.Name == "api" || nt.Name == "test_section" {
+			continue
+		}
+
+		nodes := filterNodesByType(mg.Nodes, nt.Name)
+		if len(nodes) == 0 {
+			continue
+		}
+
+		heading, ok := builtinMarkdownHeadings[nt.Name]
+		if !ok {
+			heading = humanizeHeading(nt.PluralKey)
+		}
+		fmt.Fprintf(w, "### %s\n\n", heading)
+		for _, n := range nodes {
+			writeContentNode(w, mg, n)
+		}
+	}
+}
+
+// writeContentNode inlines n's content leaf, heading-adjusted, under its
+// owning section — or, when n declares no content file, a bare "####
+// <name>" with nothing beneath it.
+func writeContentNode(w io.Writer, mg *ModuleGraph, n Node) {
+	if n.Content != "" {
+		if content, ok := mg.Content[n.Content]; ok && content != "" {
+			fmt.Fprintf(w, "%s\n", adjustHeadings(content, 3))
+		}
+		return
+	}
+	fmt.Fprintf(w, "#### %s\n\n", n.Name)
+}
+
+// filterNodesByType returns the subset of nodes whose Type matches, in
+// their original order.
+func filterNodesByType(nodes []Node, typ string) []Node {
+	var out []Node
+	for _, n := range nodes {
+		if n.Type == typ {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// humanizeHeading turns a profile-declared plural key ("endpoints",
+// "data_flows") into a readable heading ("Endpoints", "Data Flows") by
+// splitting on underscores and capitalizing each word.
+func humanizeHeading(pluralKey string) string {
+	words := strings.Split(pluralKey, "_")
+	for i, word := range words {
+		if word == "" {
+			continue
+		}
+		words[i] = strings.ToUpper(word[:1]) + word[1:]
+	}
+	return strings.Join(words, " ")
 }
 
 // writeSections emits the `## Sections` heading followed by each section's
