@@ -1079,14 +1079,17 @@ func TestFR1_E1_Renderer_EmptyRequirements(t *testing.T) {
 
 // E3: Content containing JSON-special characters
 func TestFR3_E3_JSONSpecialChars(t *testing.T) {
+	modSpec := schema.ModuleSpec{
+		Name:       "m",
+		Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
+	}
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "special", Modules: []schema.Module{{ID: "m00000000001", Name: "m", Path: "m"}}},
+		Profile: schema.DefaultProfile(),
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: "m00000000001", Name: "m", Path: "m"},
-			Spec: schema.ModuleSpec{
-				Name:       "m",
-				Components: []schema.Component{{ID: "aabbccddeeff", Name: "C", Content: "arch.md"}},
-			},
+			Spec:   modSpec,
+			Nodes:  nodesFromJSON(modSpec, "module", "m"),
 			Content: map[string]string{
 				"arch.md": `"quotes" and \backslashes and {braces}`,
 			},
@@ -1102,6 +1105,12 @@ func TestFR3_E3_JSONSpecialChars(t *testing.T) {
 	var result map[string]json.RawMessage
 	if err := json.Unmarshal(buf.Bytes(), &result); err != nil {
 		t.Fatalf("output should be valid JSON: %v\n%s", err, buf.String())
+	}
+
+	// Verify the escaped content actually reached the output — not just
+	// that the document parses.
+	if !strings.Contains(buf.String(), `\"quotes\" and \\backslashes and {braces}`) {
+		t.Fatalf("expected escaped special characters in output, got:\n%s", buf.String())
 	}
 }
 
