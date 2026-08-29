@@ -184,6 +184,17 @@ func TestFR1_S4_ProjectRequirements(t *testing.T) {
 		t.Fatalf("want 3 project requirements, got %d", len(graph.Project.Requirements))
 	}
 
+	wantReqs := []schema.Requirement{
+		{ID: "112233445566", Type: "functional", Title: "Parse input", Description: "Accept structured input and parse it."},
+		{ID: "665544332211", Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
+		{ID: "778899aabbcc", Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
+	}
+	for i, want := range wantReqs {
+		got := graph.Project.Requirements[i]
+		if got.ID != want.ID || got.Type != want.Type || got.Title != want.Title || got.Description != want.Description {
+			t.Fatalf("requirement %d: want %+v, got %+v", i, want, got)
+		}
+	}
 }
 
 // S5: All module-level edge types preserved
@@ -316,18 +327,31 @@ func TestFR1_E5_MalformedModuleJSON(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "project.json", `{
 		"name": "test",
-		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
+		"modules": [
+			{"id": "aa0000000001", "name": "alpha", "path": "alpha"},
+			{"id": "bb0000000001", "name": "gremlin", "path": "gremlin"}
+		]
 	}`)
-	modDir := filepath.Join(dir, "m")
-	os.MkdirAll(modDir, 0755)
-	writeFile(t, modDir, "module.json", `{bad json`)
+	alphaDir := filepath.Join(dir, "alpha")
+	os.MkdirAll(alphaDir, 0755)
+	writeFile(t, alphaDir, "module.json", `{"name": "alpha"}`)
 
-	_, err := ReadSpec(dir)
+	gremlinDir := filepath.Join(dir, "gremlin")
+	os.MkdirAll(gremlinDir, 0755)
+	writeFile(t, gremlinDir, "module.json", `{bad json`)
+
+	graph, err := ReadSpec(dir)
 	if err == nil {
 		t.Fatal("want error for malformed module.json")
 	}
-	if !strings.Contains(err.Error(), "m") {
-		t.Fatalf("error should identify module, got: %v", err)
+	if !strings.Contains(err.Error(), "gremlin") {
+		t.Fatalf("error should identify the failing module 'gremlin', got: %v", err)
+	}
+	if strings.Contains(err.Error(), "alpha") {
+		t.Fatalf("error should not implicate the well-formed module 'alpha', got: %v", err)
+	}
+	if graph != nil {
+		t.Fatal("want nil graph when a module fails to parse, not partial results")
 	}
 }
 
