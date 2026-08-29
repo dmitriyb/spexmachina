@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -46,20 +47,109 @@ type slimOutput struct {
 	Nodes []SlimNode `json:"nodes"`
 }
 
+// nodeIDAbbrev maps a built-in node-type name to the abbreviated kind used
+// in synthetic node IDs (module:<name>:<kind>:<id>). A profile-declared type
+// outside this set uses its own type name as the kind instead, so a new
+// type reaches the graph with a readable ID without renderer changes.
+var nodeIDAbbrev = map[string]string{
+	"requirement":  "req",
+	"component":    "comp",
+	"data_flow":    "flow",
+	"test_section": "test",
+}
+
+func nodeIDKind(nodeType string) string {
+	if abbr, ok := nodeIDAbbrev[nodeType]; ok {
+		return abbr
+	}
+	return nodeType
+}
+
+// nodeIndex resolves a node's declared identity hash to the synthetic ID
+// RenderJSON gives it, so an edge naming a raw hash target can be rewritten
+// to the same synthetic ID its node carries — across module boundaries,
+// since preq_id points from a module requirement to a project one.
+type nodeIndex map[string]string
+
+// buildNodeIndex indexes every node RenderJSON will emit — the project's
+// own nodes, every module, and every node each module declares — before any
+// node or edge is written, so an edge encountered anywhere in the walk can
+// already resolve any target.
+func buildNodeIndex(spec *SpecGraph) nodeIndex {
+	idx := make(nodeIndex)
+	for _, n := range spec.ProjectNodes {
+		idx[n.ID] = fmt.Sprintf("project:%s:%s", nodeIDKind(n.Type), n.ID)
+	}
+	for _, mg := range spec.Modules {
+		idx[mg.Module.ID] = fmt.Sprintf("module:%s", mg.Module.Name)
+		for _, n := range mg.Nodes {
+			idx[n.ID] = fmt.Sprintf("module:%s:%s:%s", mg.Module.Name, nodeIDKind(n.Type), n.ID)
+		}
+	}
+	return idx
+}
+
+// graphNode converts one generically-read Node into the JSON envelope,
+// resolving its own synthetic ID via idx and inlining content looked up
+// from content, the same content map ReadSpec built alongside n.
+func graphNode(n Node, idx nodeIndex, content map[string]string) GraphNode {
+	gn := GraphNode{
+		ID:          idx[n.ID],
+		Type:        n.Type,
+		Name:        n.Name,
+		Description: n.Description,
+		Module:      n.Module,
+		Group:       n.Group,
+	}
+	if n.Content != "" {
+		gn.Content = content[n.Content]
+	}
+	return gn
+}
+
+// nodeEdges emits one GraphEdge per (edge kind, target) pair n declares. It
+// walks the resolved profile's edge declarations, in their declared order,
+// rather than n.Edges directly: n.Edges is a map, and Go map iteration
+// order is randomized, which would make two renderings of one unchanged
+// spec byte-different. A target absent from idx is skipped rather than
+// emitted as a bare hash — a dangling reference is a validator concern, not
+// a rendering one.
+func nodeEdges(n Node, idx nodeIndex, profile *schema.Profile) []GraphEdge {
+	fromID, ok := idx[n.ID]
+	if !ok {
+		return nil
+	}
+	var edges []GraphEdge
+	for _, e := range profile.Edges {
+		if !slices.Contains(e.From, n.Type) {
+			continue
+		}
+		for _, target := range n.Edges[e.Kind] {
+			toID, ok := idx[target]
+			if !ok {
+				continue
+			}
+			edges = append(edges, GraphEdge{From: fromID, To: toID, Type: e.Kind})
+		}
+	}
+	return edges
+}
+
 // RenderJSON generates a machine-readable JSON graph from the spec.
 //
-// TODO(bead:spexmachina-h4gv.8): the loops below walk the five built-in
-// node types by their fixed schema.ModuleSpec fields, so a profile-declared
-// type beyond those five never reaches this graph. spec.Modules[].Nodes and
-// spec.ProjectNodes carry the same declarations generically, keyed by
-// spec.Profile's node types, already shaped as {id, type, name,
-// description, content, module, group} plus Edges and Fields (the entry's
-// own raw declared fields, for a projection a named field doesn't cover),
-// and spec.Content holds project-scoped content leaves — walk those instead
-// so a profile-declared type reaches the graph without renderer changes,
-// per flow_render_pipeline.md "Shape contract".
+// Both arrays follow one declaration walk: the project node, the project's
+// generic nodes and sections, then each module in turn contributing its own
+// node and its declared nodes in the resolved profile's node-type order.
+// Node envelopes and edges are read off spec.ProjectNodes and
+// spec.Modules[].Nodes — the profile-generic node lists ReadSpec built —
+// rather than off the fixed schema.ModuleSpec fields, so a profile-declared
+// type reaches the graph exactly as the built-in five do (see
+// flow_render_pipeline.md "Shape contract"). requires_module is the one
+// edge kept off the generic node walk: "module" is a fixed interior
+// concept the resolved profile's node types never declare.
 func RenderJSON(spec *SpecGraph, w io.Writer) error {
 	out := graphOutput{}
+	idx := buildNodeIndex(spec)
 
 	// Project node
 	out.Nodes = append(out.Nodes, GraphNode{
@@ -69,14 +159,11 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 		Description: spec.Project.Description,
 	})
 
-	// Project-level requirements
-	for _, r := range spec.Project.Requirements {
-		out.Nodes = append(out.Nodes, GraphNode{
-			ID:          fmt.Sprintf("project:req:%s", r.ID),
-			Type:        "requirement",
-			Name:        r.Title,
-			Description: r.Description,
-		})
+	// Project-scoped nodes (requirements, and any profile-declared
+	// project-scoped type)
+	for _, n := range spec.ProjectNodes {
+		out.Nodes = append(out.Nodes, graphNode(n, idx, spec.Content))
+		out.Edges = append(out.Edges, nodeEdges(n, idx, spec.Profile)...)
 	}
 
 	// Project-level sections (generic, iterate by name)
@@ -119,129 +206,12 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 			}
 		}
 
-		// Requirements
-		for _, r := range mg.Spec.Requirements {
-			nodeID := fmt.Sprintf("module:%s:req:%s", modName, r.ID)
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:          nodeID,
-				Type:        "requirement",
-				Name:        r.Title,
-				Description: r.Description,
-				Module:      modName,
-			})
-			if r.PreqID != "" {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("project:req:%s", r.PreqID),
-					Type: "preq_id",
-				})
-			}
-			for _, depID := range r.DependsOn {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:req:%s", modName, depID),
-					Type: "depends_on",
-				})
-			}
-		}
-
-		// Components
-		for _, c := range mg.Spec.Components {
-			nodeID := fmt.Sprintf("module:%s:comp:%s", modName, c.ID)
-			contentText := ""
-			if c.Content != "" {
-				contentText = mg.Content[c.Content]
-			}
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:          nodeID,
-				Type:        "component",
-				Name:        c.Name,
-				Description: c.Description,
-				Content:     contentText,
-				Module:      modName,
-			})
-			for _, reqID := range c.Implements {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:req:%s", modName, reqID),
-					Type: "implements",
-				})
-			}
-			for _, useID := range c.Uses {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%s", modName, useID),
-					Type: "uses",
-				})
-			}
-		}
-
-		// Data flows
-		for _, f := range mg.Spec.DataFlows {
-			nodeID := fmt.Sprintf("module:%s:flow:%s", modName, f.ID)
-			contentText := ""
-			if f.Content != "" {
-				contentText = mg.Content[f.Content]
-			}
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:          nodeID,
-				Type:        "data_flow",
-				Name:        f.Name,
-				Description: f.Description,
-				Content:     contentText,
-				Module:      modName,
-			})
-			for _, compID := range f.Uses {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
-					Type: "uses",
-				})
-			}
-		}
-
-		// Test sections
-		for _, ts := range mg.Spec.TestSections {
-			nodeID := fmt.Sprintf("module:%s:test:%s", modName, ts.ID)
-			contentText := ""
-			if ts.Content != "" {
-				contentText = mg.Content[ts.Content]
-			}
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:      nodeID,
-				Type:    "test_section",
-				Name:    ts.Name,
-				Content: contentText,
-				Module:  modName,
-			})
-			for _, compID := range ts.Describes {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
-					Type: "describes",
-				})
-			}
-		}
-
-		// APIs. An api has no content leaf; it hashes from its JSON fields
-		// alone, so only the envelope and its provided_by edges are emitted.
-		for _, a := range mg.Spec.APIs {
-			nodeID := fmt.Sprintf("module:%s:api:%s", modName, a.ID)
-			out.Nodes = append(out.Nodes, GraphNode{
-				ID:          nodeID,
-				Type:        "api",
-				Name:        a.Name,
-				Description: a.Description,
-				Module:      modName,
-				Group:       a.Group,
-			})
-			for _, compID := range a.ProvidedBy {
-				out.Edges = append(out.Edges, GraphEdge{
-					From: nodeID,
-					To:   fmt.Sprintf("module:%s:comp:%s", modName, compID),
-					Type: "provided_by",
-				})
-			}
+		// This module's declared nodes, in the resolved profile's
+		// node-type order — under the default profile: requirements,
+		// components, data flows, test sections, apis.
+		for _, n := range mg.Nodes {
+			out.Nodes = append(out.Nodes, graphNode(n, idx, mg.Content))
+			out.Edges = append(out.Edges, nodeEdges(n, idx, spec.Profile)...)
 		}
 	}
 
@@ -255,11 +225,9 @@ func RenderJSON(spec *SpecGraph, w io.Writer) error {
 
 // RenderJSONSlim writes the nodes-only view of the spec: every node type
 // [RenderJSON] emits, reduced to {id, type, name, module}. The project root is
-// not a slim node — it has no identity hash. Milestones and test_plan scenarios
-// are not slim nodes either: [RenderJSON] omits them, and the slim view mirrors
-// it rather than inventing node types no other render output carries. Output is
-// compact — this is a lookup table, not a document — and carries no edges,
-// which callers read from module.json directly.
+// not a slim node — it has no identity hash. Output is compact — this is a
+// lookup table, not a document — and carries no edges, which callers read
+// from module.json directly.
 func RenderJSONSlim(spec *SpecGraph, w io.Writer) error {
 	out := slimOutput{Nodes: slimNodes(spec)}
 
@@ -271,20 +239,20 @@ func RenderJSONSlim(spec *SpecGraph, w io.Writer) error {
 }
 
 // slimNodes walks the spec graph in declaration order and returns one
-// [SlimNode] per node [RenderJSON] emits, bar the project root.
+// [SlimNode] per node [RenderJSON] emits, bar the project root. It reads
+// spec.ProjectNodes and spec.Modules[].Nodes — the same profile-generic
+// node lists RenderJSON walks — so a profile-declared type reaches the
+// slim lookup table beside the built-in five.
 //
 // Every ID is the declared ID copied verbatim. Identity hashes are read out of
 // the spec, never recomputed from the node's name — legacy IDs that predate the
 // current identity string (15 of them in this project's own project.json) must
 // survive a render untouched or every consumer keyed on them breaks.
-//
-// TODO(bead:spexmachina-h4gv.8): also walks the fixed five types only —
-// see RenderJSON's TODO above.
 func slimNodes(spec *SpecGraph) []SlimNode {
 	nodes := make([]SlimNode, 0, 64)
 
-	for _, r := range spec.Project.Requirements {
-		nodes = append(nodes, SlimNode{ID: r.ID, Type: "requirement", Name: r.Title})
+	for _, n := range spec.ProjectNodes {
+		nodes = append(nodes, SlimNode{ID: n.ID, Type: n.Type, Name: n.Name})
 	}
 	for _, s := range spec.Project.Sections {
 		nodes = append(nodes, SlimNode{ID: s.ID, Type: "section", Name: s.Name})
@@ -294,20 +262,8 @@ func slimNodes(spec *SpecGraph) []SlimNode {
 		modName := mg.Module.Name
 		nodes = append(nodes, SlimNode{ID: mg.Module.ID, Type: "module", Name: modName})
 
-		for _, r := range mg.Spec.Requirements {
-			nodes = append(nodes, SlimNode{ID: r.ID, Type: "requirement", Name: r.Title, Module: modName})
-		}
-		for _, c := range mg.Spec.Components {
-			nodes = append(nodes, SlimNode{ID: c.ID, Type: "component", Name: c.Name, Module: modName})
-		}
-		for _, f := range mg.Spec.DataFlows {
-			nodes = append(nodes, SlimNode{ID: f.ID, Type: "data_flow", Name: f.Name, Module: modName})
-		}
-		for _, ts := range mg.Spec.TestSections {
-			nodes = append(nodes, SlimNode{ID: ts.ID, Type: "test_section", Name: ts.Name, Module: modName})
-		}
-		for _, a := range mg.Spec.APIs {
-			nodes = append(nodes, SlimNode{ID: a.ID, Type: "api", Name: a.Name, Module: modName})
+		for _, n := range mg.Nodes {
+			nodes = append(nodes, SlimNode{ID: n.ID, Type: n.Type, Name: n.Name, Module: modName})
 		}
 	}
 

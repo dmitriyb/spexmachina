@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
@@ -11,40 +13,78 @@ import (
 	"github.com/dmitriyb/spexmachina/schema"
 )
 
+// nodesFromJSON derives the profile-generic Node list a hand-built fixture
+// would get from ReadSpec, by round-tripping v (a schema.Project or
+// schema.ModuleSpec) through JSON and the same nodesForScope logic
+// ReadSpec calls. This keeps a fixture's generic Nodes/ProjectNodes always
+// consistent with its fixed schema fields without hand-duplicating every
+// edge map.
+func nodesFromJSON(v any, scope, moduleName string) []Node {
+	data, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	raw, err := rawTopLevelFields(data)
+	if err != nil {
+		panic(err)
+	}
+	nodes, err := nodesForScope(raw, schema.DefaultProfile(), scope, moduleName)
+	if err != nil {
+		panic(err)
+	}
+	return nodes
+}
+
 // fixtureGraph builds the test SpecGraph described in test_renderers.md.
 //
 // Identity hashes are globally unique across node types, as they are in a real
 // spec (the identity string embeds the node type), so that renderers keying on
 // the bare hash cannot conflate a requirement with a component.
 func fixtureGraph() *SpecGraph {
-	return &SpecGraph{
-		Project: schema.Project{
-			Name:        "test-project",
-			Description: "A test spec",
-			Requirements: []schema.Requirement{
-				{ID: "112233445566", Type: "functional", Title: "Parse input", Description: "Accept structured input and parse it."},
-				{ID: "665544332211", Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
-				{ID: "778899aabbcc", Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
-			},
+	proj := schema.Project{
+		Name:        "test-project",
+		Description: "A test spec",
+		Requirements: []schema.Requirement{
+			{ID: "112233445566", Type: "functional", Title: "Parse input", Description: "Accept structured input and parse it."},
+			{ID: "665544332211", Type: "functional", Title: "Build output", Description: "Build output from parsed input."},
+			{ID: "778899aabbcc", Type: "non_functional", Title: "Performance", Description: "Complete within 2 seconds."},
 		},
+	}
+	alphaSpec := schema.ModuleSpec{
+		Name:        "alpha",
+		Description: "Alpha module description",
+		Requirements: []schema.ModuleRequirement{
+			{ID: "a1a1a1a1a1a1", Type: "functional", Title: "Parse", PreqID: "112233445566"},
+			{ID: "a2a2a2a2a2a2", Type: "functional", Title: "Build", PreqID: "665544332211"},
+		},
+		Components: []schema.Component{
+			{ID: "c1c1c1c1c1c1", Name: "Parser", Description: "Parses input into AST.", Content: "arch_parser.md", Implements: []string{"a1a1a1a1a1a1"}},
+			{ID: "c2c2c2c2c2c2", Name: "Builder", Description: "Builds output from AST.", Content: "arch_builder.md", Implements: []string{"a2a2a2a2a2a2"}, Uses: []string{"c1c1c1c1c1c1"}},
+		},
+		DataFlows: []schema.DataFlow{
+			{ID: "f1f1f1f1f1f1", Name: "Build Pipeline", Description: "Parse then build.", Content: "flow_build_pipeline.md", Uses: []string{"c1c1c1c1c1c1", "c2c2c2c2c2c2"}},
+		},
+	}
+	betaSpec := schema.ModuleSpec{
+		Name:        "beta",
+		Description: "Beta module description",
+		Requirements: []schema.ModuleRequirement{
+			{ID: "b1b1b1b1b1b1", Type: "functional", Title: "Consume", PreqID: "112233445566"},
+		},
+		Components: []schema.Component{
+			{ID: "c3c3c3c3c3c3", Name: "Consumer", Description: "Consumes built output.", Content: "arch_consumer.md", Implements: []string{"b1b1b1b1b1b1"}},
+		},
+	}
+
+	return &SpecGraph{
+		Project:      proj,
+		Profile:      schema.DefaultProfile(),
+		ProjectNodes: nodesFromJSON(proj, "project", ""),
 		Modules: []ModuleGraph{
 			{
 				Module: schema.Module{ID: "111111111111", Name: "alpha", Path: "alpha", Description: "Alpha module"},
-				Spec: schema.ModuleSpec{
-					Name:        "alpha",
-					Description: "Alpha module description",
-					Requirements: []schema.ModuleRequirement{
-						{ID: "a1a1a1a1a1a1", Type: "functional", Title: "Parse", PreqID: "112233445566"},
-						{ID: "a2a2a2a2a2a2", Type: "functional", Title: "Build", PreqID: "665544332211"},
-					},
-					Components: []schema.Component{
-						{ID: "c1c1c1c1c1c1", Name: "Parser", Description: "Parses input into AST.", Content: "arch_parser.md", Implements: []string{"a1a1a1a1a1a1"}},
-						{ID: "c2c2c2c2c2c2", Name: "Builder", Description: "Builds output from AST.", Content: "arch_builder.md", Implements: []string{"a2a2a2a2a2a2"}, Uses: []string{"c1c1c1c1c1c1"}},
-					},
-					DataFlows: []schema.DataFlow{
-						{ID: "f1f1f1f1f1f1", Name: "Build Pipeline", Description: "Parse then build.", Content: "flow_build_pipeline.md", Uses: []string{"c1c1c1c1c1c1", "c2c2c2c2c2c2"}},
-					},
-				},
+				Spec:   alphaSpec,
+				Nodes:  nodesFromJSON(alphaSpec, "module", "alpha"),
 				Content: map[string]string{
 					"arch_parser.md":         "# Parser\n\nParses input into AST.\n",
 					"arch_builder.md":        "# Builder\n\nBuilds output from AST.\n\n## Algorithm\n\nWalk the tree depth-first.\n",
@@ -53,18 +93,10 @@ func fixtureGraph() *SpecGraph {
 			},
 			{
 				Module: schema.Module{ID: "222222222222", Name: "beta", Path: "beta", Description: "Beta module", RequiresModule: []string{"111111111111"}},
-				Spec: schema.ModuleSpec{
-					Name:        "beta",
-					Description: "Beta module description",
-					Requirements: []schema.ModuleRequirement{
-						{ID: "b1b1b1b1b1b1", Type: "functional", Title: "Consume", PreqID: "112233445566"},
-					},
-					Components: []schema.Component{
-						{ID: "c3c3c3c3c3c3", Name: "Consumer", Description: "Consumes built output.", Content: "arch_consumer.md", Implements: []string{"b1b1b1b1b1b1"}},
-					},
-				},
+				Spec:   betaSpec,
+				Nodes:  nodesFromJSON(betaSpec, "module", "beta"),
 				Content: map[string]string{
-					"arch_consumer.md":    "# Consumer\n\nConsumes built output.\n",
+					"arch_consumer.md": "# Consumer\n\nConsumes built output.\n",
 				},
 			},
 		},
@@ -1210,43 +1242,49 @@ func surfaceGraph() *SpecGraph {
 	flowID := schema.IdentityHash(mod, "data_flow", "Request path")
 	testID := schema.IdentityHash(mod, "test_section", "Server tests")
 
-	return &SpecGraph{
-		Project: schema.Project{
-			Name:         "surface-test",
-			Requirements: []schema.Requirement{{ID: projReqID, Type: "functional", Title: "Expose a surface"}},
-			Modules:      []schema.Module{{ID: modID, Name: mod, Path: mod}},
+	proj := schema.Project{
+		Name:         "surface-test",
+		Requirements: []schema.Requirement{{ID: projReqID, Type: "functional", Title: "Expose a surface"}},
+		Modules:      []schema.Module{{ID: modID, Name: mod, Path: mod}},
+	}
+	modSpec := schema.ModuleSpec{
+		Name: mod,
+		Requirements: []schema.ModuleRequirement{
+			{ID: reqID, PreqID: projReqID, Type: "functional", Title: "Serve requests"},
 		},
+		Components: []schema.Component{
+			{ID: compID, Name: "Server", Description: "Serves requests.", Content: "arch_server.md", Implements: []string{reqID}},
+		},
+		DataFlows: []schema.DataFlow{
+			{ID: flowID, Name: "Request path", Description: "Request in, response out.", Content: "flow_request_path.md", Uses: []string{compID}},
+		},
+		TestSections: []schema.TestSection{
+			{ID: testID, Name: "Server tests", Content: "test_server.md", Describes: []string{compID}},
+		},
+		APIs: []schema.API{
+			{
+				ID:          schema.IdentityHash(mod, "api", "spex serve"),
+				Name:        "spex serve",
+				Description: "Start the server.",
+				ProvidedBy:  []string{compID},
+				Group:       "cli",
+			},
+			{
+				ID:    schema.IdentityHash(mod, "api", "GET /v1/specs/{id}"),
+				Name:  "GET /v1/specs/{id}",
+				Group: "http",
+			},
+		},
+	}
+
+	return &SpecGraph{
+		Project:      proj,
+		Profile:      schema.DefaultProfile(),
+		ProjectNodes: nodesFromJSON(proj, "project", ""),
 		Modules: []ModuleGraph{{
 			Module: schema.Module{ID: modID, Name: mod, Path: mod},
-			Spec: schema.ModuleSpec{
-				Name: mod,
-				Requirements: []schema.ModuleRequirement{
-					{ID: reqID, PreqID: projReqID, Type: "functional", Title: "Serve requests"},
-				},
-				Components: []schema.Component{
-					{ID: compID, Name: "Server", Description: "Serves requests.", Content: "arch_server.md", Implements: []string{reqID}},
-				},
-				DataFlows: []schema.DataFlow{
-					{ID: flowID, Name: "Request path", Description: "Request in, response out.", Content: "flow_request_path.md", Uses: []string{compID}},
-				},
-				TestSections: []schema.TestSection{
-					{ID: testID, Name: "Server tests", Content: "test_server.md", Describes: []string{compID}},
-				},
-				APIs: []schema.API{
-					{
-						ID:          schema.IdentityHash(mod, "api", "spex serve"),
-						Name:        "spex serve",
-						Description: "Start the server.",
-						ProvidedBy:  []string{compID},
-						Group:       "cli",
-					},
-					{
-						ID:    schema.IdentityHash(mod, "api", "GET /v1/specs/{id}"),
-						Name:  "GET /v1/specs/{id}",
-						Group: "http",
-					},
-				},
-			},
+			Spec:   modSpec,
+			Nodes:  nodesFromJSON(modSpec, "module", mod),
 			Content: map[string]string{
 				"arch_server.md":       "# Server\n\nServes requests.\n",
 				"flow_request_path.md": "# Request path\n\nRequest in, response out.\n",
@@ -1594,6 +1632,121 @@ func TestFR3_J14_APINodesInFullJSON(t *testing.T) {
 	want := GraphEdge{From: wantID, To: "module:gamma:comp:" + compID, Type: "provided_by"}
 	if !hasEdge(result.Edges, want) {
 		t.Errorf("missing provided_by edge %+v in %+v", want, result.Edges)
+	}
+}
+
+// DT1 (JSON slice): a graph read under a profile declaring an "endpoint"
+// type carries its nodes in the full JSON graph, typed "endpoint", and
+// beside the built-in types in the slim node table — the renderer's own
+// share of a scenario the three renderer beads split between them (see
+// TestFR1_S9_ProfileDeclaredTypeFlowsGenerically for SpecReader's share).
+func TestFR3_DT1_ProfileDeclaredTypeJSON(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profile.Edges = append(profile.Edges, schema.Edge{
+		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "endpoint-project",
+		"modules": [{"id": "api0000api00", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, modDir, "module.json", `{
+		"name": "api",
+		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
+		"endpoints": [
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]},
+			{"id": "665544332211", "name": "POST /v1/widgets", "content": "endpoint_post_widgets.md", "calls": ["aabbccddeeff"]}
+		]
+	}`)
+	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n")
+	writeFile(t, modDir, "endpoint_get_widgets.md", "# GET /v1/widgets\n")
+	writeFile(t, modDir, "endpoint_post_widgets.md", "# POST /v1/widgets\n")
+
+	spec, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("ReadSpec: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RenderJSON(spec, &buf); err != nil {
+		t.Fatalf("RenderJSON: %v", err)
+	}
+	var full struct {
+		Nodes []GraphNode `json:"nodes"`
+		Edges []GraphEdge `json:"edges"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &full); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, buf.String())
+	}
+
+	endpoints := map[string]GraphNode{}
+	for _, n := range full.Nodes {
+		if n.Type == "endpoint" {
+			endpoints[n.ID] = n
+		}
+	}
+	if len(endpoints) != 2 {
+		t.Fatalf("want 2 endpoint nodes in the full JSON graph, got %d: %+v", len(endpoints), full.Nodes)
+	}
+	get, ok := endpoints["module:api:endpoint:112233445566"]
+	if !ok {
+		t.Fatalf("want endpoint node module:api:endpoint:112233445566, got %+v", endpoints)
+	}
+	if get.Name != "GET /v1/widgets" || get.Module != "api" {
+		t.Errorf("GET endpoint node = %+v", get)
+	}
+	if !strings.Contains(get.Content, "GET /v1/widgets") {
+		t.Errorf("GET endpoint should inline its content leaf, got %q", get.Content)
+	}
+
+	want := GraphEdge{From: "module:api:endpoint:112233445566", To: "module:api:comp:aabbccddeeff", Type: "calls"}
+	if !hasEdge(full.Edges, want) {
+		t.Errorf("missing calls edge %+v in %+v", want, full.Edges)
+	}
+
+	var slimBuf bytes.Buffer
+	if err := RenderJSONSlim(spec, &slimBuf); err != nil {
+		t.Fatalf("RenderJSONSlim: %v", err)
+	}
+	var slim struct {
+		Nodes []SlimNode `json:"nodes"`
+	}
+	if err := json.Unmarshal(slimBuf.Bytes(), &slim); err != nil {
+		t.Fatalf("invalid slim JSON: %v\n%s", err, slimBuf.String())
+	}
+	slimEndpoints := 0
+	slimComponents := 0
+	for _, n := range slim.Nodes {
+		switch n.Type {
+		case "endpoint":
+			slimEndpoints++
+		case "component":
+			slimComponents++
+		}
+	}
+	if slimEndpoints != 2 {
+		t.Errorf("want 2 endpoint nodes in the slim table beside the built-in types, got %d: %+v", slimEndpoints, slim.Nodes)
+	}
+	if slimComponents != 1 {
+		t.Errorf("want the built-in component node still in the slim table, got %d: %+v", slimComponents, slim.Nodes)
 	}
 }
 
