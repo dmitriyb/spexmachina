@@ -199,6 +199,54 @@ func TestREQ2_BuildTree_Structure(t *testing.T) {
 	}
 }
 
+// TestS5_BuildTree_NoGroupNodesOrPathStyleKeys covers test_hashing.md S5: the
+// full fixture tree has exactly the shape the flat identity-hash scheme
+// promises — a project root with five children (the meta/project envelope,
+// two project requirement leaves, and the alpha/beta module nodes), and each
+// module's children are flat leaves (its meta envelope plus one leaf per
+// spec node) with no per-type interior group node anywhere in the tree and
+// no key using a path-style separator other than the fixed "meta/" prefix.
+func TestS5_BuildTree_NoGroupNodesOrPathStyleKeys(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+
+	if root.Type != "project" {
+		t.Fatalf("root type: want project, got %s", root.Type)
+	}
+	if len(root.Children) != 5 {
+		t.Fatalf("root children: want 5, got %d", len(root.Children))
+	}
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	alpha := findChild(t, root, alphaHash)
+	if len(alpha.Children) != 6 {
+		t.Fatalf("alpha children: want 6, got %d", len(alpha.Children))
+	}
+
+	// Walk the whole tree: every node's Type is one of the three fixed
+	// levels (no per-type "arch"/"flow"/"test" group node), and no key
+	// contains a path separator except the synthetic meta leaves.
+	var walk func(*Node)
+	walk = func(n *Node) {
+		switch n.Type {
+		case "project", "module", "leaf":
+		default:
+			t.Errorf("node %q: unexpected type %q (no per-type group nodes allowed)", n.Key, n.Type)
+		}
+		if n.Key != "project" && strings.Contains(n.Key, "/") && !strings.HasPrefix(n.Key, "meta/") {
+			t.Errorf("node %q: path-style key not allowed", n.Key)
+		}
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(root)
+}
+
 func TestREQ7_BuildTree_FlatModuleChildren(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -361,6 +409,59 @@ func TestS7_BuildTree_DeterministicAcrossSeparateDirs(t *testing.T) {
 	}
 }
 
+// TestS8_BuildTree_MultiModuleIsolationAndRootRecomposition covers
+// test_hashing.md S8: with two modules alpha and beta each carrying distinct
+// content, editing a leaf under alpha changes alpha's subtree and the root
+// but leaves beta's module hash untouched, and the root hash equals
+// HashChildren recomputed independently over the (post-edit) children's
+// hashes — module hashes are combined in sorted order at the root level.
+func TestS8_BuildTree_MultiModuleIsolationAndRootRecomposition(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	root1, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("first build: %v", err)
+	}
+
+	writeFile(t, filepath.Join(specDir, "alpha"), "arch_comp2.md", "# Updated Comp2\n")
+
+	root2, err := BuildTree(specDir)
+	if err != nil {
+		t.Fatalf("second build: %v", err)
+	}
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+
+	alpha1 := findChild(t, root1, alphaHash)
+	alpha2 := findChild(t, root2, alphaHash)
+	if alpha1.Hash == alpha2.Hash {
+		t.Fatal("alpha module hash should change after editing an alpha content file")
+	}
+
+	beta1 := findChild(t, root1, betaHash)
+	beta2 := findChild(t, root2, betaHash)
+	if beta1.Hash != beta2.Hash {
+		t.Fatal("beta module hash should be unaffected by an edit under alpha")
+	}
+
+	if root1.Hash == root2.Hash {
+		t.Fatal("root hash should change when a module subtree changes")
+	}
+
+	if len(root2.Children) != 5 {
+		t.Fatalf("root children: want 5, got %d", len(root2.Children))
+	}
+	childHashes := make([]string, len(root2.Children))
+	for i, c := range root2.Children {
+		childHashes[i] = c.Hash
+	}
+	wantRootHash := HashChildren(childHashes)
+	if root2.Hash != wantRootHash {
+		t.Fatalf("root hash: want %s (HashChildren over children), got %s", wantRootHash, root2.Hash)
+	}
+}
+
 func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -399,6 +500,9 @@ func TestREQ2_BuildTree_HashChangesOnFileEdit(t *testing.T) {
 	}
 }
 
+// TestREQ2_BuildTree_MissingContentFile also covers test_hashing.md E3: a
+// module.json referencing a content file absent from disk aborts BuildTree
+// with an error naming that file's path, and no partial tree is returned.
 func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	dir := t.TempDir()
 
@@ -426,6 +530,10 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), ghostComp) {
 		t.Fatalf("error should mention spec key %s, got: %v", ghostComp, err)
+	}
+	wantPath := filepath.Join(badDir, "arch_ghost.md")
+	if !strings.Contains(err.Error(), wantPath) {
+		t.Fatalf("error should mention missing content file path %s, got: %v", wantPath, err)
 	}
 	if root != nil {
 		t.Fatalf("want no partial tree on error, got: %+v", root)
@@ -1164,6 +1272,10 @@ func TestREQ7_BuildTree_ModuleNamesMap(t *testing.T) {
 	}
 }
 
+// TestREQ7_BuildTree_IgnoresExtraneousFiles also covers test_hashing.md E4:
+// a file not referenced by any module.json content field is invisible to the
+// tree — content files are discovered from module.json, never from a
+// directory listing.
 func TestREQ7_BuildTree_IgnoresExtraneousFiles(t *testing.T) {
 	specDir := setupSpecDir(t)
 
@@ -1184,6 +1296,9 @@ func TestREQ7_BuildTree_IgnoresExtraneousFiles(t *testing.T) {
 	}
 }
 
+// TestREQ2_BuildTree_ComponentWithEmptyContentFile also covers
+// test_hashing.md E5: a content file that exists with zero bytes is a valid
+// leaf, hashing to sha256Hex(""), and the tree still builds successfully.
 func TestREQ2_BuildTree_ComponentWithEmptyContentFile(t *testing.T) {
 	specDir := setupSpecDir(t)
 

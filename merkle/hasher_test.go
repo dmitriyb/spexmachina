@@ -64,6 +64,32 @@ func TestS1_HashFile_MatchesIndependentSHA256(t *testing.T) {
 	}
 }
 
+// TestS2_HashFile_StreamsOrdinarySizeFile covers test_hashing.md S2: HashFile
+// on a file of ordinary size returns a valid 64-character hex hash with no
+// error, and that hash matches sha256Hex of the same content. HashFile
+// streams via io.Copy (merkle/hasher.go:21); no test here exercises a large
+// file, per the scenario's own note.
+func TestS2_HashFile_StreamsOrdinarySizeFile(t *testing.T) {
+	dir := t.TempDir()
+	content := strings.Repeat("The quick brown fox jumps over the lazy dog.\n", 200)
+	path := filepath.Join(dir, "ordinary.txt")
+	writeFile(t, dir, "ordinary.txt", content)
+
+	got, err := HashFile(path)
+	if err != nil {
+		t.Fatalf("HashFile: %v", err)
+	}
+	if len(got) != 64 {
+		t.Fatalf("hash length: want 64, got %d", len(got))
+	}
+
+	s := sha256.Sum256([]byte(content))
+	want := hex.EncodeToString(s[:])
+	if got != want {
+		t.Fatalf("want %s, got %s", want, got)
+	}
+}
+
 func TestREQ1_HashFile_DifferentContent(t *testing.T) {
 	dir := t.TempDir()
 	p1 := filepath.Join(dir, "a.txt")
@@ -216,6 +242,30 @@ func TestS4_HashChildren_SingleChild(t *testing.T) {
 	}
 }
 
+// TestS3_HashChildren_SortsBeforeConcatenation covers test_hashing.md S3:
+// HashChildren("cccc", "aaaa", "bbbb") equals sha256Hex("aaaabbbbcccc") — the
+// exact ascending-sorted concatenation, not merely order-independence.
+// A consistently-wrong sort direction would still be order-independent (it
+// would pass TestREQ6_HashChildren_OrderIndependent) but would fail this
+// exact-value check.
+func TestS3_HashChildren_SortsBeforeConcatenation(t *testing.T) {
+	got := HashChildren([]string{"cccc", "aaaa", "bbbb"})
+
+	s := sha256.Sum256([]byte("aaaabbbbcccc"))
+	want := hex.EncodeToString(s[:])
+	if got != want {
+		t.Fatalf("want %s, got %s", want, got)
+	}
+
+	gotAlreadySorted := HashChildren([]string{"aaaa", "bbbb", "cccc"})
+	if got != gotAlreadySorted {
+		t.Fatalf("sorted vs unsorted input mismatch: %s != %s", got, gotAlreadySorted)
+	}
+}
+
+// TestREQ6_HashChildren_Empty also covers test_hashing.md E2: HashChildren on
+// an empty slice returns sha256Hex("") — the degenerate case for a module
+// with no content files.
 func TestREQ6_HashChildren_Empty(t *testing.T) {
 	h1 := HashChildren([]string{})
 	h2 := HashChildren(nil)
