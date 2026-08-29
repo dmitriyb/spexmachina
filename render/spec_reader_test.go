@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func writeFile(t *testing.T, dir, name, content string) {
@@ -433,6 +435,248 @@ func TestFR1_S8_SectionsAbsent(t *testing.T) {
 	}
 	if len(graph.Project.Sections) != 0 {
 		t.Fatalf("want no sections, got %d", len(graph.Project.Sections))
+	}
+}
+
+// S9: a profile declaring a new content-bearing, module-scoped type
+// ("endpoint") with its own edge kind must reach the generic Nodes list —
+// name, content, module and edge target — and have its content leaf read
+// into the module's Content map, exactly as a built-in type does, for
+// every entry the module declares (test_spec_reading.md S9 uses two
+// endpoints precisely so "both endpoint nodes" is a real assertion, not
+// a single-entry loop that would pass even if only the first entry were
+// read). Mirrors merkle's TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf.
+func TestFR1_S9_ProfileDeclaredTypeFlowsGenerically(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profile.Edges = append(profile.Edges, schema.Edge{
+		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "endpoint-project",
+		"modules": [{"id": "api0000api00", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{
+		"name": "api",
+		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
+		"endpoints": [
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]},
+			{"id": "665544332211", "name": "POST /v1/widgets", "content": "endpoint_post_widgets.md", "calls": ["aabbccddeeff"]}
+		]
+	}`)
+	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n")
+	writeFile(t, modDir, "endpoint_get_widgets.md", "# GET /v1/widgets\n")
+	writeFile(t, modDir, "endpoint_post_widgets.md", "# POST /v1/widgets\n")
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if graph.Profile == nil {
+		t.Fatal("want resolved Profile on SpecGraph")
+	}
+
+	endpoints := make(map[string]*Node)
+	for i := range graph.Modules[0].Nodes {
+		if graph.Modules[0].Nodes[i].Type == "endpoint" {
+			endpoints[graph.Modules[0].Nodes[i].ID] = &graph.Modules[0].Nodes[i]
+		}
+	}
+	if len(endpoints) != 2 {
+		t.Fatalf("want both endpoint Nodes in the module's generic Nodes list, got %d", len(endpoints))
+	}
+
+	get := endpoints["112233445566"]
+	if get == nil {
+		t.Fatal("want the GET endpoint Node")
+	}
+	if get.Name != "GET /v1/widgets" {
+		t.Fatalf("GET endpoint name: want 'GET /v1/widgets', got %q", get.Name)
+	}
+	if get.Module != "api" {
+		t.Fatalf("GET endpoint module: want 'api', got %q", get.Module)
+	}
+	if get.Content != "endpoint_get_widgets.md" {
+		t.Fatalf("GET endpoint content ref: want 'endpoint_get_widgets.md', got %q", get.Content)
+	}
+	if got := get.Edges["calls"]; len(got) != 1 || got[0] != "aabbccddeeff" {
+		t.Fatalf("GET endpoint calls edge: want [aabbccddeeff], got %v", got)
+	}
+	if content, ok := graph.Modules[0].Content["endpoint_get_widgets.md"]; !ok || content != "# GET /v1/widgets\n" {
+		t.Fatalf("GET endpoint content leaf not read into module Content map, got %q (ok=%v)", content, ok)
+	}
+
+	post := endpoints["665544332211"]
+	if post == nil {
+		t.Fatal("want the POST endpoint Node")
+	}
+	if post.Name != "POST /v1/widgets" {
+		t.Fatalf("POST endpoint name: want 'POST /v1/widgets', got %q", post.Name)
+	}
+	if post.Content != "endpoint_post_widgets.md" {
+		t.Fatalf("POST endpoint content ref: want 'endpoint_post_widgets.md', got %q", post.Content)
+	}
+	if content, ok := graph.Modules[0].Content["endpoint_post_widgets.md"]; !ok || content != "# POST /v1/widgets\n" {
+		t.Fatalf("POST endpoint content leaf not read into module Content map, got %q (ok=%v)", content, ok)
+	}
+}
+
+// Not a numbered test_spec_reading.md scenario: S9 covers a profile-declared
+// type beyond the built-in five; this checks the other direction it implies
+// but does not itself spell out — that the built-in five keep flowing
+// through the generic Nodes/ProjectNodes lists too, not only through the
+// fixed Project/ModuleSpec fields, so a renderer walking Nodes sees the same
+// declarations a renderer walking the fixed fields sees.
+func TestFR1_BuiltinTypesFlowGenerically(t *testing.T) {
+	dir := setupMultiModuleSpec(t)
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(graph.ProjectNodes) != 3 {
+		t.Fatalf("want 3 generic project nodes (requirements), got %d", len(graph.ProjectNodes))
+	}
+	for _, n := range graph.ProjectNodes {
+		if n.Type != "requirement" {
+			t.Fatalf("want project node type 'requirement', got %q", n.Type)
+		}
+	}
+	if graph.ProjectNodes[0].Name != "Parse input" {
+		t.Fatalf("project requirement name falls back to title: want 'Parse input', got %q", graph.ProjectNodes[0].Name)
+	}
+
+	alpha := graph.Modules[0]
+	var componentTypeCount, dataFlowTypeCount, testSectionTypeCount int
+	var parser *Node
+	for i := range alpha.Nodes {
+		switch alpha.Nodes[i].Type {
+		case "component":
+			componentTypeCount++
+			if alpha.Nodes[i].Name == "Parser" {
+				parser = &alpha.Nodes[i]
+			}
+		case "data_flow":
+			dataFlowTypeCount++
+		case "test_section":
+			testSectionTypeCount++
+		}
+	}
+	if componentTypeCount != 2 {
+		t.Fatalf("want 2 generic component nodes, got %d", componentTypeCount)
+	}
+	if dataFlowTypeCount != 1 {
+		t.Fatalf("want 1 generic data_flow node, got %d", dataFlowTypeCount)
+	}
+	if testSectionTypeCount != 1 {
+		t.Fatalf("want 1 generic test_section node, got %d", testSectionTypeCount)
+	}
+	if parser == nil {
+		t.Fatal("want a generic node named 'Parser'")
+	}
+	if got := parser.Edges["implements"]; len(got) != 1 || got[0] != "aabbccddeeff" {
+		t.Fatalf("Parser implements edge: want [aabbccddeeff], got %v", got)
+	}
+}
+
+// Not a numbered test_spec_reading.md scenario: no edge case there covers
+// profile.json itself (it predates the profile), but the same contract
+// those do applies — a malformed profile.json is one failure off ReadSpec,
+// named as the spec directory's own parse failure rather than a downstream
+// lookup failure once a renderer starts walking the (never-produced) graph.
+func TestFR1_MalformedProfileJSON(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "profile.json", "{not valid json")
+	writeFile(t, dir, "project.json", `{
+		"name": "test",
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
+	}`)
+	modDir := filepath.Join(dir, "m")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	_, err := ReadSpec(dir)
+	if err == nil {
+		t.Fatal("want error for malformed profile.json")
+	}
+	if !strings.Contains(err.Error(), "profile.json") {
+		t.Fatalf("error should mention profile.json, got: %v", err)
+	}
+}
+
+// Not a numbered test_spec_reading.md scenario: a profile-declared,
+// project-scoped, content-bearing type (ComposeProjectSchema allows one when
+// RequiresContent is set) must have its content leaf read too, exactly as a
+// module-scoped one does — the failure flow_render_pipeline.md names is
+// content invisible to all three formats at once with no missing-file error,
+// which a Node with a populated Content path but no read behind it produces
+// silently.
+func TestFR1_ProjectScopedContentTypeIsRead(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "policy",
+		PluralKey:       "policies",
+		Scope:           "project",
+		RequiresContent: true,
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "policy-project",
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}],
+		"policies": [
+			{"id": "aabbccddeeff", "name": "Retention", "content": "policy_retention.md"}
+		]
+	}`)
+	writeFile(t, dir, "policy_retention.md", "# Retention\n")
+
+	modDir := filepath.Join(dir, "m")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	var policy *Node
+	for i := range graph.ProjectNodes {
+		if graph.ProjectNodes[i].Type == "policy" {
+			policy = &graph.ProjectNodes[i]
+		}
+	}
+	if policy == nil {
+		t.Fatal("want a Node of type 'policy' in ProjectNodes")
+	}
+	if policy.Content != "policy_retention.md" {
+		t.Fatalf("policy content ref: want 'policy_retention.md', got %q", policy.Content)
+	}
+	if content, ok := graph.Content["policy_retention.md"]; !ok || content != "# Retention\n" {
+		t.Fatalf("policy content leaf not read into SpecGraph.Content, got %q (ok=%v)", content, ok)
 	}
 }
 

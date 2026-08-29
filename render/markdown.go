@@ -11,6 +11,18 @@ import (
 )
 
 // RenderMarkdown generates a collated markdown document from the spec graph.
+//
+// TODO(bead:spexmachina-h4gv.11): writeModule and its helpers walk the five
+// built-in node types by their fixed schema.ModuleSpec fields, so a
+// profile-declared type beyond those five never reaches this document.
+// spec.Modules[].Nodes and spec.ProjectNodes carry the same declarations
+// generically, keyed by spec.Profile's node types, each Node's Fields
+// carrying its own non-envelope declared fields (e.g. a requirement's own
+// "type": "functional"/"non_functional", which Node.Type cannot carry since
+// Type already holds the profile's node-type name) and spec.Content holding
+// project-scoped content leaves — walk those instead so a profile-declared
+// type reaches the document without renderer changes, per flow_render_
+// pipeline.md "Shape contract".
 func RenderMarkdown(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "# %s\n\n", spec.Project.Name)
 	if spec.Project.Description != "" {
