@@ -12,14 +12,18 @@ import (
 
 // RenderMarkdown generates a collated markdown document from the spec graph.
 //
-// Requirements, apis and content-bearing sections (Architecture, Data Flows,
-// and any profile-declared type beyond those two) are all read off
-// spec.ProjectNodes and spec.Modules[].Nodes — the profile-generic node
-// lists ReadSpec built — rather than off the fixed schema.ModuleSpec fields,
-// so a profile-declared type reaches this document without renderer
-// changes (flow_render_pipeline.md "Shape contract"). test_section is the
-// one declarable type this format omits, matching DOTRenderer: it reaches
-// the JSON output alone.
+// Only requirement is read off spec.ProjectNodes: arch_markdown_renderer.md
+// fixes the project scope at Requirements and Sections and gives a
+// profile-declared type no other project-scope home, so that is the whole
+// of this format's project-scope projection. Within each module, apis and
+// content-bearing sections (Architecture, Data Flows, and any
+// profile-declared module-scoped type beyond those two) are read off
+// mg.Nodes — the profile-generic node list ReadSpec built — rather than off
+// the fixed schema.ModuleSpec fields, so a module-scoped profile-declared
+// type reaches this document without renderer changes (flow_render_pipeline.md
+// "Shape contract"). test_section is the one module-scoped declarable type
+// this format omits, matching DOTRenderer: it reaches the JSON output
+// alone.
 func RenderMarkdown(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "# %s\n\n", spec.Project.Name)
 	if spec.Project.Description != "" {
