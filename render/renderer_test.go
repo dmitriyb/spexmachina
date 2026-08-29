@@ -116,11 +116,16 @@ func TestFR1_M1_MarkdownStructureAndOrdering(t *testing.T) {
 
 	sections := []string{
 		"# test-project",
+		"A test spec",
 		"## Requirements",
 		"### Functional",
 		"### Non-functional",
 		"## Module: alpha",
+		"Alpha module description",
+		"### Requirements",
 		"### Architecture",
+		"#### Parser",
+		"#### Builder",
 		"### Data Flows",
 		"## Module: beta",
 	}
@@ -602,10 +607,15 @@ func TestFR3_J1_TopLevelStructure(t *testing.T) {
 		t.Fatalf("want exactly 2 top-level keys, got %d", len(result))
 	}
 
-	// Check 2-space indentation
+	// Check 2-space indentation: the first nested key must be preceded by
+	// exactly two spaces, not merely "two or more".
 	out := buf.String()
-	if !strings.Contains(out, "  ") {
-		t.Fatal("JSON should use 2-space indentation")
+	indent := regexp.MustCompile(`(?m)^( +)"`).FindStringSubmatch(out)
+	if indent == nil {
+		t.Fatalf("expected an indented nested key in output:\n%s", out)
+	}
+	if len(indent[1]) != 2 {
+		t.Fatalf("want first nested key indented by exactly 2 spaces, got %d spaces", len(indent[1]))
 	}
 }
 
@@ -1161,21 +1171,27 @@ func TestFR1_FR2_FR3_E4_LargeSpec(t *testing.T) {
 
 		modSpec := schema.ModuleSpec{Name: modName}
 		content := map[string]string{}
+		reqIDs := make([]string, numRequirements)
 		for r := 0; r < numRequirements; r++ {
+			reqIDs[r] = nextID()
 			modSpec.Requirements = append(modSpec.Requirements, schema.ModuleRequirement{
-				ID: nextID(), Type: "functional", Title: fmt.Sprintf("req%d", r),
+				ID: reqIDs[r], Type: "functional", Title: fmt.Sprintf("req%d", r),
 			})
 		}
+		compIDs := make([]string, numComponents)
 		for c := 0; c < numComponents; c++ {
 			cfile := fmt.Sprintf("arch_%d.md", c)
+			compIDs[c] = nextID()
 			modSpec.Components = append(modSpec.Components, schema.Component{
-				ID: nextID(), Name: fmt.Sprintf("Comp%d", c), Content: cfile,
+				ID: compIDs[c], Name: fmt.Sprintf("Comp%d", c), Content: cfile,
+				Implements: []string{reqIDs[c%numRequirements]},
 			})
 			content[cfile] = "# Comp\n"
 		}
 		for f := 0; f < numDataFlows; f++ {
 			modSpec.DataFlows = append(modSpec.DataFlows, schema.DataFlow{
 				ID: nextID(), Name: fmt.Sprintf("Flow%d", f),
+				Uses: []string{compIDs[f%numComponents]},
 			})
 		}
 
@@ -1230,6 +1246,14 @@ func TestFR1_FR2_FR3_E4_LargeSpec(t *testing.T) {
 	wantNodes := 1 + numModules*(1+numRequirements+numComponents+numDataFlows)
 	if len(result.Nodes) != wantNodes {
 		t.Errorf("want %d nodes, got %d", wantNodes, len(result.Nodes))
+	}
+
+	// Every component implements one of its module's requirements, and
+	// every data flow uses one of its module's components: no nodes or
+	// edges are dropped, so the edge count must match exactly.
+	wantEdges := numModules * (numComponents + numDataFlows)
+	if len(result.Edges) != wantEdges {
+		t.Errorf("want %d edges, got %d", wantEdges, len(result.Edges))
 	}
 }
 
