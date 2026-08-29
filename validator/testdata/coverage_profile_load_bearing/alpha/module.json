@@ -1,0 +1,10 @@
+{
+  "name": "alpha",
+  "endpoints": [
+    {
+      "id": "000000000001",
+      "name": "GetWidget",
+      "content": "arch_get_widget.md"
+    }
+  ]
+}

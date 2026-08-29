@@ -1,0 +1,43 @@
+{
+  "components": [
+    {
+      "id": "000000000001",
+      "implements": [
+        "000000000001"
+      ],
+      "name": "Parser"
+    },
+    {
+      "id": "000000000002",
+      "implements": [
+        "000000000002"
+      ],
+      "name": "Renderer"
+    }
+  ],
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000001",
+      "title": "Feat A",
+      "type": "functional"
+    },
+    {
+      "id": "000000000002",
+      "preq_id": "000000000001",
+      "title": "Feat B",
+      "type": "functional"
+    }
+  ],
+  "test_sections": [
+    {
+      "content": "test_parser.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Parser tests"
+    }
+  ]
+}

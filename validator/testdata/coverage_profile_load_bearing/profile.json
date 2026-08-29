@@ -1,0 +1,9 @@
+{
+  "node_types": [
+    { "name": "requirement", "plural_key": "requirements", "scope": "project" },
+    { "name": "requirement", "plural_key": "requirements", "scope": "module" },
+    { "name": "endpoint", "plural_key": "endpoints", "scope": "module", "requires_content": true }
+  ],
+  "edges": [],
+  "coverage_chains": []
+}

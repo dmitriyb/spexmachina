@@ -1,0 +1,12 @@
+{
+  "node_types": [
+    { "name": "endpoint", "plural_key": "endpoints", "scope": "module", "requires_content": true },
+    { "name": "test_section", "plural_key": "test_sections", "scope": "module", "requires_content": true }
+  ],
+  "edges": [
+    { "kind": "describes", "from": ["test_section"], "to": ["endpoint"] }
+  ],
+  "coverage_chains": [
+    { "covered_type": "endpoint", "edge": "describes", "covering_type": "test_section" }
+  ]
+}
