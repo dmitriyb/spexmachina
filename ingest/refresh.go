@@ -97,6 +97,27 @@ type liveMetadata struct {
 	Path string
 }
 
+// isAbsorbable reports whether the structural gate absorbs a node type in
+// the given direction: the fixed "meta"/"module" refusal first — the
+// frame's own rule, never the profile's to grant, checked ahead of the
+// profile lookup so a profile.json cannot smuggle either name into the
+// absorbable table — then the resolved profile's own declaration for
+// every other type. A type the profile does not declare defaults to
+// refused (the zero-value AbsorbDirections).
+func isAbsorbable(nodeType string, dir merkle.ChangeType, profile *schema.Profile) bool {
+	if nodeType == "meta" || nodeType == "module" {
+		return false
+	}
+	switch dir {
+	case merkle.Added:
+		return profile.Absorbable[nodeType].Added
+	case merkle.Removed:
+		return profile.Absorbable[nodeType].Removed
+	default:
+		return false
+	}
+}
+
 // Apply runs the refresh-mode pathway end-to-end: pre-flight, the diff
 // against the pre-refresh snapshot, the structural and live-pairing
 // gates, event construction, and the atomic paired commit of the
@@ -139,11 +160,14 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	// The structural gate's per-type, per-direction table is the resolved
 	// profile's own declaration, not a table compiled into this handler —
 	// a profile-declared type is refused in both directions unless the
-	// profile says otherwise. "meta" and "module" are never a declarable
-	// NodeType (schema.Profile.Validate rejects an absorbable entry for
-	// either), so they always miss this map and stay refused in both
-	// directions regardless of what the profile declares — the frame's
-	// own fixed rule, not the profile's to grant.
+	// profile says otherwise. "meta" and "module" are the frame's fixed
+	// leaves, not the profile's to declare: nothing in
+	// schema.Profile.Validate stops a profile.json from declaring a
+	// node_types entry named "meta" or "module" and marking it absorbable
+	// (Validate only rejects an absorbable key naming a type the profile
+	// never declared), so isAbsorbable below checks both names itself,
+	// ahead of the profile lookup, and refuses them in both directions
+	// unconditionally.
 	profile, err := schema.ResolveProfile(specDir)
 	if err != nil {
 		return summary, fmt.Errorf("ingest: refresh: %w", err)
@@ -171,11 +195,11 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
-			if !profile.Absorbable[c.NodeType].Added {
+			if !isAbsorbable(c.NodeType, merkle.Added, profile) {
 				addedRefused = append(addedRefused, c.Key)
 			}
 		case merkle.Removed:
-			if !profile.Absorbable[c.NodeType].Removed {
+			if !isAbsorbable(c.NodeType, merkle.Removed, profile) {
 				removedRefused = append(removedRefused, c.Key)
 			}
 		}

@@ -1304,8 +1304,12 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 // the live example: merkle labels interior module nodes with Type
 // "module" but leaves their NodeType empty, and Diff reports leaves
 // only, so DefaultProfile().Absorbable["module"] could never be looked
-// up — and Profile.Validate would refuse a profile.json that tried to
-// declare it anyway, since "module" is never a declarable NodeType.
+// up — the default profile's table simply carries no "module" row.
+// Nothing in Profile.Validate would stop a profile.json from declaring a
+// node_types entry named "module" (or "meta") and an absorbable entry
+// for it; isAbsorbable refuses both names unconditionally, ahead of the
+// profile lookup, regardless of what any profile declares — see
+// TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections.
 func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T) {
 	variants := []string{
 		"module_requirement", "project_requirement",
@@ -1327,6 +1331,98 @@ func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T
 			t.Errorf("the default profile's absorbable table names %q, a node type no merkle diff carries: "+
 				"the entry is unreachable, so its added/removed decision is never consulted", nodeType)
 		}
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections
+// proves the "meta"/"module" refusal is the handler's own fixed rule,
+// not merely an artefact of the default profile omitting the two names:
+// nothing in schema.Profile.Validate stops a profile.json from declaring
+// a node_types entry named "meta" or "module" and marking it absorbable
+// in both directions — Validate only rejects an absorbable key naming a
+// type the profile never declared (schema/profile.go:180-182) — so a
+// careless or malicious profile.json must not be able to grant either
+// absorption. The "meta" half is exercised end-to-end: the module
+// envelope leaf the gamma toggle adds/removes is a diff entry merkle
+// actually emits with NodeType "meta" (tree_builder.go:54, :115), and
+// refresh must refuse it despite the profile's explicit grant. "module"
+// is never a NodeType a merkle diff entry carries (Diff reports leaves
+// only — see AbsorbableNamesOnlyReachableTypes above), so its half is
+// checked directly against isAbsorbable, the same function the gate
+// calls.
+func TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections(t *testing.T) {
+	maliciousProfileJSON := `{
+		"node_types": [
+			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true},
+			{"name": "meta", "plural_key": "metas", "scope": "module"},
+			{"name": "module", "plural_key": "modules_extra", "scope": "module"}
+		],
+		"absorbable": {
+			"component": {"added": true, "removed": true},
+			"meta": {"added": true, "removed": true},
+			"module": {"added": true, "removed": true}
+		}
+	}`
+
+	var maliciousProfile schema.Profile
+	if err := json.Unmarshal([]byte(maliciousProfileJSON), &maliciousProfile); err != nil {
+		t.Fatal(err)
+	}
+	if err := maliciousProfile.Validate(); err != nil {
+		t.Fatalf("a profile declaring \"meta\" and \"module\" node types must validate cleanly — that is the exploit this test guards against: %v", err)
+	}
+
+	for _, nodeType := range []string{"meta", "module"} {
+		for _, dir := range []merkle.ChangeType{merkle.Added, merkle.Removed} {
+			if isAbsorbable(nodeType, dir, &maliciousProfile) {
+				t.Errorf("isAbsorbable(%q, %v, profile) = true against a profile that declares it absorbable; want the fixed rule to refuse regardless of the profile", nodeType, dir)
+			}
+		}
+	}
+
+	for _, added := range []bool{true, false} {
+		name, wantKind := "meta added", "added_entries"
+		if !added {
+			name, wantKind = "meta removed", "removed_entries"
+		}
+		t.Run(name, func(t *testing.T) {
+			specDir := t.TempDir()
+			writeFile(t, specDir, "profile.json", maliciousProfileJSON)
+			writeRefreshTypeSpec(t, specDir, "meta", !added)
+
+			anchorHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_anchor.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedJournal(t, specDir, mapping.Event{
+				Event: "added", EID: "bootstrap0:op-anchor", Node: refreshTypeAnchorID,
+				Name: "Anchor", NodeType: "component", Module: refreshTypeAlphaID,
+				After: strPtr(anchorHash), GitHead: "bootstrap0", Path: "spec/alpha/arch_anchor.md",
+			})
+
+			snapPath := filepath.Join(specDir, ".snapshot.json")
+			if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+				t.Fatalf("seed snapshot: %v", err)
+			}
+
+			writeRefreshTypeSpec(t, specDir, "meta", added)
+
+			h := &RefreshHandler{
+				SnapshotPath: snapPath,
+				Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
+				Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
+				Now:          refreshClock,
+			}
+			_, err = h.Apply(specDir)
+
+			var refusal *RefreshRefusal
+			if !errors.As(err, &refusal) || refusal.Kind != wantKind {
+				t.Fatalf("want RefreshRefusal %s despite the profile declaring \"meta\" absorbable in both directions, got %v", wantKind, err)
+			}
+			if !strings.Contains(err.Error(), "meta/"+refreshTypeGammaID) {
+				t.Errorf("refusal must name the meta entry: %v", err)
+			}
+		})
 	}
 }
 
