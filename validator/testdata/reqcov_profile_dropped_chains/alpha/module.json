@@ -1,0 +1,10 @@
+{
+  "name": "alpha",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "title": "Mod Feat A",
+      "type": "functional"
+    }
+  ]
+}

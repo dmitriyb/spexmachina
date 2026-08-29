@@ -207,3 +207,52 @@ func TestREQ14_RC5_NotesDeterministicAndOrdered(t *testing.T) {
 		}
 	}
 }
+
+// RC6: a profile renaming the module-level covering type (component ->
+// endpoint) drives the scan off the covering type's plural_key and the
+// chain's edge instead of the literal components/implements fields; data
+// where every module requirement is implemented by an endpoint produces no
+// false positive.
+func TestREQ14_RC6_ProfileRenamedCoveringTypeFullyCovered(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_profile_renamed_covered"))
+	if len(errs) != 0 {
+		t.Fatalf("expected 0 errors, got %d: %v", len(errs), errs)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+}
+
+// RC7: under the same renamed profile, a module requirement no endpoint
+// implements is still reported, with the renamed covering type's declared
+// name interpolated into the same message shape RC4 uses for "component".
+func TestREQ14_RC7_ProfileRenamedCoveringTypeUncovered(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_profile_renamed_uncovered"))
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `alpha requirement 000000000002 "Mod Feat B" is not implemented by any endpoint`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "alpha/module.json" {
+		t.Fatalf("expected path=alpha/module.json, got %q", errs[0].Path)
+	}
+}
+
+// RC8: a profile declaring no coverage chains (and no completeness-trigger
+// types) drops both checks entirely — a project requirement with no
+// deriving module requirement and a module requirement with no implementer
+// both produce nothing, since neither chain resolves.
+func TestREQ14_RC8_ProfileDroppedChainsSkipsBothChecks(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_profile_dropped_chains"))
+	if len(errs) != 0 {
+		t.Fatalf("expected 0 errors, got %d: %v", len(errs), errs)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+}
