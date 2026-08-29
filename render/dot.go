@@ -13,6 +13,14 @@ import (
 // They are always quoted: a hash such as "8f2beb43e606" starts with a digit
 // and is not a legal bare DOT identifier. Cluster names keep the readable
 // module name — a cluster is not a node.
+//
+// TODO(bead:spexmachina-h4gv.9): the loops below walk the five built-in
+// node types by their fixed schema.ModuleSpec fields, so a profile-declared
+// type beyond those five never reaches this graph. spec.Modules[].Nodes and
+// spec.ProjectNodes carry the same declarations generically, keyed by
+// spec.Profile's node types — walk those instead so a profile-declared type
+// reaches the graph without renderer changes, per flow_render_pipeline.md
+// "Shape contract".
 func RenderDOT(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "digraph spec {\n")
 	fmt.Fprintf(w, "  rankdir=LR;\n")

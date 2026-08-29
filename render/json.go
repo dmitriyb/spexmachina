@@ -47,6 +47,15 @@ type slimOutput struct {
 }
 
 // RenderJSON generates a machine-readable JSON graph from the spec.
+//
+// TODO(bead:spexmachina-h4gv.8): the loops below walk the five built-in
+// node types by their fixed schema.ModuleSpec fields, so a profile-declared
+// type beyond those five never reaches this graph. spec.Modules[].Nodes and
+// spec.ProjectNodes carry the same declarations generically, keyed by
+// spec.Profile's node types, already shaped as {id, type, name,
+// description, content, module, group} plus Edges — walk those instead so
+// a profile-declared type reaches the graph without renderer changes, per
+// flow_render_pipeline.md "Shape contract".
 func RenderJSON(spec *SpecGraph, w io.Writer) error {
 	out := graphOutput{}
 
@@ -266,6 +275,9 @@ func RenderJSONSlim(spec *SpecGraph, w io.Writer) error {
 // the spec, never recomputed from the node's name — legacy IDs that predate the
 // current identity string (15 of them in this project's own project.json) must
 // survive a render untouched or every consumer keyed on them breaks.
+//
+// TODO(bead:spexmachina-h4gv.8): also walks the fixed five types only —
+// see RenderJSON's TODO above.
 func slimNodes(spec *SpecGraph) []SlimNode {
 	nodes := make([]SlimNode, 0, 64)
 

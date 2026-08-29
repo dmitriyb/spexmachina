@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 func writeFile(t *testing.T, dir, name, content string) {
@@ -433,6 +435,166 @@ func TestFR1_S8_SectionsAbsent(t *testing.T) {
 	}
 	if len(graph.Project.Sections) != 0 {
 		t.Fatalf("want no sections, got %d", len(graph.Project.Sections))
+	}
+}
+
+// S9: a profile declaring a new content-bearing, module-scoped type
+// ("endpoint") with its own edge kind must reach the generic Nodes list —
+// name, content, module and edge target — and have its content leaf read
+// into the module's Content map, exactly as a built-in type does. Mirrors
+// merkle's TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf.
+func TestFR1_S9_ProfileDeclaredTypeFlowsGenerically(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profile.Edges = append(profile.Edges, schema.Edge{
+		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "endpoint-project",
+		"modules": [{"id": "api0000api00", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{
+		"name": "api",
+		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
+		"endpoints": [
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_widgets.md", "calls": ["aabbccddeeff"]}
+		]
+	}`)
+	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n")
+	writeFile(t, modDir, "endpoint_widgets.md", "# GET /v1/widgets\n")
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if graph.Profile == nil {
+		t.Fatal("want resolved Profile on SpecGraph")
+	}
+
+	var endpoint *Node
+	for i := range graph.Modules[0].Nodes {
+		if graph.Modules[0].Nodes[i].Type == "endpoint" {
+			endpoint = &graph.Modules[0].Nodes[i]
+		}
+	}
+	if endpoint == nil {
+		t.Fatal("want a Node of type 'endpoint' in the module's generic Nodes list")
+	}
+	if endpoint.ID != "112233445566" {
+		t.Fatalf("endpoint id: want 112233445566, got %s", endpoint.ID)
+	}
+	if endpoint.Name != "GET /v1/widgets" {
+		t.Fatalf("endpoint name: want 'GET /v1/widgets', got %q", endpoint.Name)
+	}
+	if endpoint.Module != "api" {
+		t.Fatalf("endpoint module: want 'api', got %q", endpoint.Module)
+	}
+	if endpoint.Content != "endpoint_widgets.md" {
+		t.Fatalf("endpoint content ref: want 'endpoint_widgets.md', got %q", endpoint.Content)
+	}
+	if got := endpoint.Edges["calls"]; len(got) != 1 || got[0] != "aabbccddeeff" {
+		t.Fatalf("endpoint calls edge: want [aabbccddeeff], got %v", got)
+	}
+
+	if content, ok := graph.Modules[0].Content["endpoint_widgets.md"]; !ok || content != "# GET /v1/widgets\n" {
+		t.Fatalf("endpoint content leaf not read into module Content map, got %q (ok=%v)", content, ok)
+	}
+}
+
+// S10: the built-in node types flow through the generic Nodes/ProjectNodes
+// lists too, not only through the fixed Project/ModuleSpec fields — a
+// renderer walking Nodes must see the same declarations a renderer walking
+// the fixed fields sees.
+func TestFR1_S10_BuiltinTypesFlowGenerically(t *testing.T) {
+	dir := setupMultiModuleSpec(t)
+
+	graph, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(graph.ProjectNodes) != 3 {
+		t.Fatalf("want 3 generic project nodes (requirements), got %d", len(graph.ProjectNodes))
+	}
+	for _, n := range graph.ProjectNodes {
+		if n.Type != "requirement" {
+			t.Fatalf("want project node type 'requirement', got %q", n.Type)
+		}
+	}
+	if graph.ProjectNodes[0].Name != "Parse input" {
+		t.Fatalf("project requirement name falls back to title: want 'Parse input', got %q", graph.ProjectNodes[0].Name)
+	}
+
+	alpha := graph.Modules[0]
+	var componentTypeCount, dataFlowTypeCount, testSectionTypeCount int
+	var parser *Node
+	for i := range alpha.Nodes {
+		switch alpha.Nodes[i].Type {
+		case "component":
+			componentTypeCount++
+			if alpha.Nodes[i].Name == "Parser" {
+				parser = &alpha.Nodes[i]
+			}
+		case "data_flow":
+			dataFlowTypeCount++
+		case "test_section":
+			testSectionTypeCount++
+		}
+	}
+	if componentTypeCount != 2 {
+		t.Fatalf("want 2 generic component nodes, got %d", componentTypeCount)
+	}
+	if dataFlowTypeCount != 1 {
+		t.Fatalf("want 1 generic data_flow node, got %d", dataFlowTypeCount)
+	}
+	if testSectionTypeCount != 1 {
+		t.Fatalf("want 1 generic test_section node, got %d", testSectionTypeCount)
+	}
+	if parser == nil {
+		t.Fatal("want a generic node named 'Parser'")
+	}
+	if got := parser.Edges["implements"]; len(got) != 1 || got[0] != "aabbccddeeff" {
+		t.Fatalf("Parser implements edge: want [aabbccddeeff], got %v", got)
+	}
+}
+
+// E9: a malformed profile.json is one failure off ReadSpec, named as the
+// spec directory's own parse failure rather than a downstream lookup
+// failure once a renderer starts walking the (never-produced) graph.
+func TestFR1_E9_MalformedProfile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "profile.json", "{not valid json")
+	writeFile(t, dir, "project.json", `{
+		"name": "test",
+		"modules": [{"id": "m00000000001", "name": "m", "path": "m"}]
+	}`)
+	modDir := filepath.Join(dir, "m")
+	os.MkdirAll(modDir, 0755)
+	writeFile(t, modDir, "module.json", `{"name": "m"}`)
+
+	_, err := ReadSpec(dir)
+	if err == nil {
+		t.Fatal("want error for malformed profile.json")
+	}
+	if !strings.Contains(err.Error(), "profile.json") {
+		t.Fatalf("error should mention profile.json, got: %v", err)
 	}
 }
 
