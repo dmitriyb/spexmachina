@@ -1800,11 +1800,13 @@ func TestFR2_DT1_ProfileDeclaredTypeDOT(t *testing.T) {
 		"name": "api",
 		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
 		"endpoints": [
-			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]}
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]},
+			{"id": "665544332211", "name": "POST /v1/widgets", "content": "endpoint_post_widgets.md", "calls": ["aabbccddeeff"]}
 		]
 	}`)
 	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n")
 	writeFile(t, modDir, "endpoint_get_widgets.md", "# GET /v1/widgets\n")
+	writeFile(t, modDir, "endpoint_post_widgets.md", "# POST /v1/widgets\n")
 
 	spec, err := ReadSpec(dir)
 	if err != nil {
@@ -1817,23 +1819,33 @@ func TestFR2_DT1_ProfileDeclaredTypeDOT(t *testing.T) {
 	}
 	out := buf.String()
 
-	if !strings.Contains(out, `"112233445566" [label="GET /v1/widgets"`) {
-		t.Fatalf("endpoint node not declared, got:\n%s", out)
-	}
-	for _, builtin := range []string{"shape=box", "shape=folder", "shape=component", "shape=ellipse", "shape=cds", "shape=tab"} {
-		endpointLine := ""
+	for _, ep := range []struct{ id, label string }{
+		{"112233445566", "GET /v1/widgets"},
+		{"665544332211", "POST /v1/widgets"},
+	} {
+		if !strings.Contains(out, `"`+ep.id+`" [label="`+ep.label+`"`) {
+			t.Fatalf("endpoint node %s not declared, got:\n%s", ep.id, out)
+		}
+
+		declLine := ""
 		for _, line := range strings.Split(out, "\n") {
-			if strings.Contains(line, `"112233445566"`) {
-				endpointLine = line
+			if strings.Contains(line, `"`+ep.id+`" [`) {
+				declLine = line
+				break
 			}
 		}
-		if strings.Contains(endpointLine, builtin) {
-			t.Errorf("endpoint node should use a shape distinct from built-in kinds, got %q which contains %q", endpointLine, builtin)
+		if declLine == "" {
+			t.Fatalf("endpoint node %s declaration line not found, got:\n%s", ep.id, out)
 		}
-	}
+		for _, builtin := range []string{"shape=box", "shape=folder", "shape=component", "shape=ellipse", "shape=cds", "shape=tab"} {
+			if strings.Contains(declLine, builtin) {
+				t.Errorf("endpoint node %s should use a shape distinct from built-in kinds, got %q which contains %q", ep.id, declLine, builtin)
+			}
+		}
 
-	if !strings.Contains(out, `"112233445566" -> "aabbccddeeff" [label="calls"];`) {
-		t.Errorf("missing labelled calls edge from endpoint to component, got:\n%s", out)
+		if !strings.Contains(out, `"`+ep.id+`" -> "aabbccddeeff" [label="calls"];`) {
+			t.Errorf("missing labelled calls edge from endpoint %s to component, got:\n%s", ep.id, out)
+		}
 	}
 }
 
