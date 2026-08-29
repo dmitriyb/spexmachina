@@ -16,12 +16,17 @@ import (
 // ProjectNodes and Modules[].Nodes are the same declarations read
 // generically off the resolved profile's declared arrays, so a
 // profile-declared type beyond the built-in five — invisible to the fixed
-// fields — still reaches a renderer that walks Nodes instead.
+// fields — still reaches a renderer that walks Nodes instead. Content holds
+// the text of every content leaf a project-scoped node names, keyed the same
+// way as ModuleGraph.Content — a project-scoped type can be content-bearing
+// too (ComposeProjectSchema gives one a required content path when
+// RequiresContent is set), and this is the one place the pipeline reads it.
 type SpecGraph struct {
 	Project      schema.Project
 	Modules      []ModuleGraph
 	Profile      *schema.Profile
 	ProjectNodes []Node
+	Content      map[string]string // relative path → markdown content, project-scoped nodes
 }
 
 // ModuleGraph holds a parsed module and its content leaves. Spec is the
@@ -68,7 +73,27 @@ func ReadSpec(specDir string) (*SpecGraph, error) {
 		return nil, fmt.Errorf("render: parse %s: %w", projPath, err)
 	}
 
-	graph := &SpecGraph{Project: proj, Profile: profile, ProjectNodes: projectNodes}
+	// Content is collected off the generic project node list, the same way
+	// a module's is below: a profile-declared project-scoped type carrying
+	// a non-empty "content" path gets its leaf read here, resolved against
+	// specDir, so it is not invisible to every format for want of a reader.
+	projectContent := make(map[string]string)
+	for _, n := range projectNodes {
+		if n.Content == "" {
+			continue
+		}
+		if _, ok := projectContent[n.Content]; ok {
+			continue
+		}
+		contentPath := filepath.Join(specDir, n.Content)
+		data, err := os.ReadFile(contentPath)
+		if err != nil {
+			return nil, fmt.Errorf("render: read content %s (project): %w", contentPath, err)
+		}
+		projectContent[n.Content] = string(data)
+	}
+
+	graph := &SpecGraph{Project: proj, Profile: profile, ProjectNodes: projectNodes, Content: projectContent}
 
 	for _, mod := range proj.Modules {
 		modDir := filepath.Join(specDir, mod.Path)

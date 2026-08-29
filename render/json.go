@@ -53,9 +53,11 @@ type slimOutput struct {
 // type beyond those five never reaches this graph. spec.Modules[].Nodes and
 // spec.ProjectNodes carry the same declarations generically, keyed by
 // spec.Profile's node types, already shaped as {id, type, name,
-// description, content, module, group} plus Edges — walk those instead so
-// a profile-declared type reaches the graph without renderer changes, per
-// flow_render_pipeline.md "Shape contract".
+// description, content, module, group} plus Edges and Fields (the entry's
+// own raw declared fields, for a projection a named field doesn't cover),
+// and spec.Content holds project-scoped content leaves — walk those instead
+// so a profile-declared type reaches the graph without renderer changes,
+// per flow_render_pipeline.md "Shape contract".
 func RenderJSON(spec *SpecGraph, w io.Writer) error {
 	out := graphOutput{}
 

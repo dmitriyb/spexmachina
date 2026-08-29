@@ -18,9 +18,11 @@ import (
 // node types by their fixed schema.ModuleSpec fields, so a profile-declared
 // type beyond those five never reaches this graph. spec.Modules[].Nodes and
 // spec.ProjectNodes carry the same declarations generically, keyed by
-// spec.Profile's node types — walk those instead so a profile-declared type
-// reaches the graph without renderer changes, per flow_render_pipeline.md
-// "Shape contract".
+// spec.Profile's node types, each Node's Fields carrying its own
+// non-envelope declared fields and spec.Content holding project-scoped
+// content leaves — walk those instead so a profile-declared type reaches
+// the graph without renderer changes, per flow_render_pipeline.md "Shape
+// contract".
 func RenderDOT(spec *SpecGraph, w io.Writer) error {
 	fmt.Fprintf(w, "digraph spec {\n")
 	fmt.Fprintf(w, "  rankdir=LR;\n")

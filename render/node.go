@@ -21,6 +21,15 @@ import (
 // Edges maps each edge kind the node's JSON carries to its identity-hash
 // targets, whether the resolved profile declares the field as a single
 // string (preq_id) or an array of strings (implements, uses, ...).
+//
+// Fields is the entry's full raw decoded JSON object, so a declared field
+// the envelope above does not name its own — a requirement's own "type"
+// ("functional"/"non_functional"), for instance, which Type here cannot
+// carry since Type already holds the profile's node-type name — is still
+// reachable. This is what makes the envelope non-lossy: flow_render_
+// pipeline.md's Data Shapes says the graph carries "everything its
+// module.json declares", and a renderer that projects a field the named
+// fields don't cover reads it off Fields instead.
 type Node struct {
 	ID          string
 	Type        string
@@ -30,6 +39,7 @@ type Node struct {
 	Module      string
 	Group       string
 	Edges       map[string][]string
+	Fields      map[string]any
 }
 
 // rawTopLevelFields decodes data's top-level JSON object into its raw
@@ -86,6 +96,7 @@ func nodeFromEntry(entry map[string]any, nt schema.NodeType, edges []schema.Edge
 		Content:     str(entry, "content"),
 		Module:      moduleName,
 		Group:       str(entry, "group"),
+		Fields:      entry,
 	}
 	if n.Name == "" {
 		n.Name = str(entry, "title")
