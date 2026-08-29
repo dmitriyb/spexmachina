@@ -271,8 +271,9 @@ Bead-producing node types are **`component`, `data_flow`, and `test_section` wit
 bead.
 
 `spex ingest --mode refresh` **has shipped.** It absorbs content-only edits to any leaf, plus
-structural additions and removals of an explicit type list (`ingest/refresh.go`,
-`refreshAbsorbable`):
+structural additions and removals of an explicit type list, read from the resolved profile's
+`absorbable` declarations (`ingest/refresh.go`, `schema.Profile.Absorbable`); the default profile
+declares the table below:
 
 | node type | added | removed |
 |---|---|---|

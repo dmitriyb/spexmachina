@@ -33,38 +33,6 @@ var (
 	ErrRefreshNoCompletedCycle = errors.New("ingest: refresh requires a completed cycle; run the normal pipeline first")
 )
 
-// refreshDirections records, for one node type, which structural diff
-// directions refresh may absorb.
-type refreshDirections struct {
-	added   bool
-	removed bool
-}
-
-// refreshAbsorbable is the allow-list of node types whose structural
-// addition or removal refresh absorbs; every type absent from it — and
-// in particular "meta", "module", "data_flow" and "test_section" — is
-// refused in both directions.
-//
-// The list is deliberately written out rather than derived by negating
-// the classifier's bead-producing set. Relative to that negation, the only type
-// the explicit list excludes is "meta", the project.json / module.json
-// envelope leaf: absorbing an added or removed meta leaf would baseline
-// a whole module appearing or vanishing without any gate seeing it.
-//
-// "component" is removal-only. A removed component's task already
-// exists, and absorbing the node's disappearance is safe only because
-// the live-pairing gate below still demands the task be closed first.
-// An *added* component is a bead that was never created; baselining it
-// into the snapshot would remove it from `spex diff` permanently, which
-// is precisely the bead lifecycle refresh must not bypass. component is
-// on the list at all only because retiring a spec component whose code
-// is gone is a structural removal with no bead work left to do.
-var refreshAbsorbable = map[string]refreshDirections{
-	"requirement": {added: true, removed: true},
-	"api":         {added: true, removed: true},
-	"component":   {added: false, removed: true},
-}
-
 // RefreshRefusal is the typed error for the refresh gates: structural
 // diff entries or a live task pairing on a removed node. IngestCommand
 // maps it to a non-zero exit with a structured stderr message naming
@@ -93,11 +61,11 @@ type RefreshSummary struct {
 
 // RefreshHandler is the refresh-mode ingest pathway: it absorbs drift
 // that owes no bead work — content edits to any leaf, plus additions
-// and removals of the node types on refreshAbsorbable — by appending
-// one change event per absorbed drift entry to the task journal, closed
-// by one refresh receipt, and rewriting the snapshot — atomically, with
-// no bead lifecycle. See spec/ingest/arch_refresh.md for the refusal
-// contract.
+// and removals of the node types the resolved profile declares
+// absorbable — by appending one change event per absorbed drift entry to
+// the task journal, closed by one refresh receipt, and rewriting the
+// snapshot — atomically, with no bead lifecycle. See
+// spec/ingest/arch_refresh.md for the refusal contract.
 type RefreshHandler struct {
 	// SnapshotPath is the diff baseline and rewrite target. Defaults to
 	// <specDir>/.snapshot.json when empty.
@@ -168,6 +136,19 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		snapPath = filepath.Join(specDir, ".snapshot.json")
 	}
 
+	// The structural gate's per-type, per-direction table is the resolved
+	// profile's own declaration, not a table compiled into this handler —
+	// a profile-declared type is refused in both directions unless the
+	// profile says otherwise. "meta" and "module" are never a declarable
+	// NodeType (schema.Profile.Validate rejects an absorbable entry for
+	// either), so they always miss this map and stay refused in both
+	// directions regardless of what the profile declares — the frame's
+	// own fixed rule, not the profile's to grant.
+	profile, err := schema.ResolveProfile(specDir)
+	if err != nil {
+		return summary, fmt.Errorf("ingest: refresh: %w", err)
+	}
+
 	tree, err := merkle.BuildTree(specDir)
 	if err != nil {
 		return summary, fmt.Errorf("ingest: refresh: %w", err)
@@ -190,11 +171,11 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	for _, c := range changes {
 		switch c.Type {
 		case merkle.Added:
-			if !refreshAbsorbable[c.NodeType].added {
+			if !profile.Absorbable[c.NodeType].Added {
 				addedRefused = append(addedRefused, c.Key)
 			}
 		case merkle.Removed:
-			if !refreshAbsorbable[c.NodeType].removed {
+			if !profile.Absorbable[c.NodeType].Removed {
 				removedRefused = append(removedRefused, c.Key)
 			}
 		}

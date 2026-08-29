@@ -1,6 +1,7 @@
 package ingest
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -13,6 +14,7 @@ import (
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // refreshFixture bundles the state a RefreshHandler test needs: a spec
@@ -1165,8 +1167,9 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 	}
 }
 
-// TestREQ_e68653819f38_Refresh_TypeFilterMatrix pins refreshAbsorbable
-// cell by cell: for every node type a merkle diff can carry, in both
+// TestREQ_e68653819f38_Refresh_TypeFilterMatrix pins the default
+// profile's absorbable table cell by cell: for every node type a merkle
+// diff can carry, in both
 // structural directions, refresh either absorbs the change or refuses it
 // with a specific RefreshRefusal.Kind. Any single-cell edit to the
 // allow-list — dropping an admitted direction, or admitting a refused
@@ -1288,18 +1291,21 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 }
 
 // TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes guards
-// the allow-list's *domain*, which the matrix above cannot: a key naming
-// a node type no merkle diff can carry is dead configuration. It reads
-// as a deliberate decision about both directions of that type while the
-// gate never consults it, and it drops silently out of the matrix, which
-// can only cover types the tree builder actually emits.
+// the default profile's absorbable table's *domain*, which the matrix
+// above cannot: a key naming a node type no merkle diff can carry is dead
+// configuration. It reads as a deliberate decision about both directions
+// of that type while the gate never consults it, and it drops silently
+// out of the matrix, which can only cover types the tree builder
+// actually emits.
 //
 // The reachable set is observed rather than asserted — it is whatever
 // node types the type-filter fixture's own variants produce — so growing
 // merkle's leaf vocabulary relaxes this guard automatically. "module" is
 // the live example: merkle labels interior module nodes with Type
 // "module" but leaves their NodeType empty, and Diff reports leaves
-// only, so refreshAbsorbable["module"] could never be looked up.
+// only, so DefaultProfile().Absorbable["module"] could never be looked
+// up — and Profile.Validate would refuse a profile.json that tried to
+// declare it anyway, since "module" is never a declarable NodeType.
 func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T) {
 	variants := []string{
 		"module_requirement", "project_requirement",
@@ -1316,11 +1322,280 @@ func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T
 		}
 	}
 
-	for nodeType := range refreshAbsorbable {
+	for nodeType := range schema.DefaultProfile().Absorbable {
 		if !reachable[nodeType] {
-			t.Errorf("refreshAbsorbable names %q, a node type no merkle diff carries: "+
+			t.Errorf("the default profile's absorbable table names %q, a node type no merkle diff carries: "+
 				"the entry is unreachable, so its added/removed decision is never consulted", nodeType)
 		}
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbableTableIsResolvedProfileDeclaration
+// covers arch_refresh.md's "The absorbable table is the resolved
+// profile's declaration": the per-type, per-direction table
+// RefreshHandler consults is read off schema.ResolveProfile's Absorbable
+// map, not compiled into the handler. A representative sample of the
+// type-filter matrix — an absorbed api addition and a refused component
+// addition — must behave identically whether profile.json is absent (the
+// built-in default) or present and byte-identical to
+// schema.DefaultProfile(): a default-profile run must be
+// indistinguishable from the pre-profile binary.
+func TestREQ_e68653819f38_Refresh_AbsorbableTableIsResolvedProfileDeclaration(t *testing.T) {
+	defaultProfileJSON, err := json.Marshal(schema.DefaultProfile())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name     string
+		variant  string
+		key      string
+		added    bool
+		wantKind string
+	}{
+		{"api added: absorbed", "api", refreshTypeAPIID, true, ""},
+		{"component added: refused", "component", refreshTypeComponentID, true, "added_entries"},
+	}
+
+	for _, tc := range cases {
+		for _, withProfile := range []bool{false, true} {
+			profileLabel := "no profile.json"
+			if withProfile {
+				profileLabel = "profile.json byte-identical to default"
+			}
+			t.Run(tc.name+"/"+profileLabel, func(t *testing.T) {
+				specDir := t.TempDir()
+				if withProfile {
+					writeFile(t, specDir, "profile.json", string(defaultProfileJSON))
+				}
+				writeRefreshTypeSpec(t, specDir, tc.variant, !tc.added)
+
+				anchorHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_anchor.md"))
+				if err != nil {
+					t.Fatal(err)
+				}
+				seedJournal(t, specDir, mapping.Event{
+					Event: "added", EID: "bootstrap0:op-anchor", Node: refreshTypeAnchorID,
+					Name: "Anchor", NodeType: "component", Module: refreshTypeAlphaID,
+					After: strPtr(anchorHash), GitHead: "bootstrap0", Path: "spec/alpha/arch_anchor.md",
+				})
+
+				snapPath := filepath.Join(specDir, ".snapshot.json")
+				if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+					t.Fatalf("seed snapshot: %v", err)
+				}
+
+				writeRefreshTypeSpec(t, specDir, tc.variant, tc.added)
+
+				h := &RefreshHandler{
+					SnapshotPath: snapPath,
+					Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
+					Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
+					Now:          refreshClock,
+				}
+				summary, err := h.Apply(specDir)
+
+				if tc.wantKind == "" {
+					if err != nil {
+						t.Fatalf("want the %s addition absorbed, got %v", tc.variant, err)
+					}
+					if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+						t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+					}
+					return
+				}
+
+				var refusal *RefreshRefusal
+				if !errors.As(err, &refusal) || refusal.Kind != tc.wantKind {
+					t.Fatalf("want RefreshRefusal %s, got %v", tc.wantKind, err)
+				}
+				if !strings.Contains(err.Error(), tc.key) {
+					t.Errorf("refusal must name the %s entry %s: %v", tc.variant, tc.key, err)
+				}
+			})
+		}
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections
+// covers the other half of the same scenario: a profile declaring a
+// node type ("endpoint") the built-in default never heard of, absorbable
+// in neither direction, refuses an added endpoint with the same
+// "use the normal pipeline" error the non-absorbable built-ins draw —
+// the gate's policy is entirely the profile's declaration, not a
+// hardcoded set of known type names.
+func TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections(t *testing.T) {
+	const alphaID = "aabbccddee10"
+	const anchorID = "aabbccddee11"
+	const endpointID = "aabbccddee61"
+
+	specDir := t.TempDir()
+	writeFile(t, specDir, "profile.json", `{
+		"node_types": [
+			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true},
+			{"name": "endpoint", "plural_key": "endpoints", "scope": "module", "requires_content": true}
+		],
+		"absorbable": {
+			"component": {"added": false, "removed": true},
+			"endpoint": {"added": false, "removed": false}
+		}
+	}`)
+
+	writeEndpointSpec := func(withEndpoint bool) {
+		writeFile(t, specDir, "project.json", `{
+			"name": "profile-endpoint-fixture",
+			"modules": [{"id": "`+alphaID+`", "name": "alpha", "path": "alpha"}]
+		}`)
+		alphaDir := filepath.Join(specDir, "alpha")
+		if err := os.MkdirAll(alphaDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		endpoints := ""
+		if withEndpoint {
+			endpoints = `,"endpoints": [{"id": "` + endpointID + `", "name": "Get widget", "content": "endpoint_get_widget.md"}]`
+		}
+		writeFile(t, alphaDir, "module.json", `{
+			"name": "alpha",
+			"components": [{"id": "`+anchorID+`", "name": "Anchor", "content": "arch_anchor.md"}]`+endpoints+`
+		}`)
+		writeFile(t, alphaDir, "arch_anchor.md", "# Anchor\n")
+		setContentFile(t, alphaDir, "endpoint_get_widget.md", "# Get widget\n", withEndpoint)
+	}
+
+	writeEndpointSpec(false)
+
+	anchorHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_anchor.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedJournal(t, specDir, mapping.Event{
+		Event: "added", EID: "bootstrap0:op-anchor", Node: anchorID,
+		Name: "Anchor", NodeType: "component", Module: alphaID,
+		After: strPtr(anchorHash), GitHead: "bootstrap0", Path: "spec/alpha/arch_anchor.md",
+	})
+
+	snapPath := filepath.Join(specDir, ".snapshot.json")
+	if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+		t.Fatalf("seed snapshot: %v", err)
+	}
+
+	writeEndpointSpec(true)
+
+	journalBefore := journalBytes(t, specDir)
+	snapBefore := readBytes(t, snapPath)
+
+	h := &RefreshHandler{
+		SnapshotPath: snapPath,
+		Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
+		Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
+		Now:          refreshClock,
+	}
+	_, err = h.Apply(specDir)
+
+	var refusal *RefreshRefusal
+	if !errors.As(err, &refusal) || refusal.Kind != "added_entries" {
+		t.Fatalf("want RefreshRefusal added_entries, got %v", err)
+	}
+	if !strings.Contains(err.Error(), endpointID) {
+		t.Errorf("refusal must name the added endpoint entry: %v", err)
+	}
+	if !strings.Contains(err.Error(), "normal pipeline") {
+		t.Errorf("refusal must point at the normal pipeline: %v", err)
+	}
+	if got := journalBytes(t, specDir); string(got) != string(journalBefore) {
+		t.Error("journal must be byte-identical after refusal")
+	}
+	if got := readBytes(t, snapPath); string(got) != string(snapBefore) {
+		t.Error("snapshot must be byte-identical after refusal")
+	}
+}
+
+// TestREQ_e68653819f38_Refresh_AbsorbableTableOverridesBuiltInDefault
+// proves the gate reads the resolved profile rather than a table
+// compiled into the handler: a profile that flips a built-in default —
+// declaring "api" absorbable in neither direction, and "component"
+// absorbable on addition too — must flip RefreshHandler's behavior
+// accordingly. A hardcoded fallback would refuse the component addition
+// and absorb the api addition regardless of what any profile.json says;
+// only reading the table off the resolved profile changes the outcome
+// with it.
+func TestREQ_e68653819f38_Refresh_AbsorbableTableOverridesBuiltInDefault(t *testing.T) {
+	cases := []struct {
+		name    string
+		variant string
+		key     string
+	}{
+		{"api addition, declared unabsorbable, refuses despite default absorbing it", "api", refreshTypeAPIID},
+		{"component addition, declared absorbable, absorbs despite default refusing it", "component", refreshTypeComponentID},
+	}
+
+	overriddenProfileJSON := `{
+		"node_types": [
+			{"name": "requirement", "plural_key": "requirements", "scope": "project"},
+			{"name": "requirement", "plural_key": "requirements", "scope": "module"},
+			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true},
+			{"name": "data_flow", "plural_key": "data_flows", "scope": "module", "requires_content": true},
+			{"name": "test_section", "plural_key": "test_sections", "scope": "module", "requires_content": true},
+			{"name": "api", "plural_key": "apis", "scope": "module"}
+		],
+		"absorbable": {
+			"requirement": {"added": true, "removed": true},
+			"api": {"added": false, "removed": false},
+			"component": {"added": true, "removed": true},
+			"data_flow": {"added": false, "removed": false},
+			"test_section": {"added": false, "removed": false}
+		}
+	}`
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			specDir := t.TempDir()
+			writeFile(t, specDir, "profile.json", overriddenProfileJSON)
+			writeRefreshTypeSpec(t, specDir, tc.variant, false)
+
+			anchorHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_anchor.md"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			seedJournal(t, specDir, mapping.Event{
+				Event: "added", EID: "bootstrap0:op-anchor", Node: refreshTypeAnchorID,
+				Name: "Anchor", NodeType: "component", Module: refreshTypeAlphaID,
+				After: strPtr(anchorHash), GitHead: "bootstrap0", Path: "spec/alpha/arch_anchor.md",
+			})
+
+			snapPath := filepath.Join(specDir, ".snapshot.json")
+			if err := writeAtomic(snapPath, buildFixtureTree(t, specDir), refreshClock()); err != nil {
+				t.Fatalf("seed snapshot: %v", err)
+			}
+
+			writeRefreshTypeSpec(t, specDir, tc.variant, true)
+
+			h := &RefreshHandler{
+				SnapshotPath: snapPath,
+				Changeset:    &plan.Changeset{Version: plan.ChangesetVersion},
+				Receipts:     &adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete},
+				Now:          refreshClock,
+			}
+			summary, err := h.Apply(specDir)
+
+			switch tc.variant {
+			case "api":
+				var refusal *RefreshRefusal
+				if !errors.As(err, &refusal) || refusal.Kind != "added_entries" {
+					t.Fatalf("want RefreshRefusal added_entries (profile declares api unabsorbable), got %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.key) {
+					t.Errorf("refusal must name the added entry %s: %v", tc.key, err)
+				}
+			case "component":
+				if err != nil {
+					t.Fatalf("want component addition absorbed (profile declares it absorbable), got %v", err)
+				}
+				if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+					t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+				}
+			}
+		})
 	}
 }
 

@@ -38,11 +38,11 @@
 // # Mode: refresh
 //
 // Absorbs spec drift that owes no bead work — content edits to any
-// leaf, plus additions and removals of the node types on
-// RefreshHandler's absorbable list (requirements and apis in either
-// direction, component removals) — without any bead lifecycle running.
-// The changeset and receipts must be empty; the pre-refresh snapshot is
-// the diff baseline and must exist:
+// leaf, plus additions and removals of the node types the resolved
+// profile declares absorbable (requirements and apis in either
+// direction, component removals, in the default profile) — without any
+// bead lifecycle running. The changeset and receipts must be empty; the
+// pre-refresh snapshot is the diff baseline and must exist:
 //
 //  1. Pre-flight: both artifacts empty, snapshot present.
 //  2. Compute the diff: rebuild the current tree, load the snapshot,
