@@ -1155,14 +1155,17 @@ func TestFR1_E5_DeeplyNestedHeadings(t *testing.T) {
 
 // E6: Module name with special characters in DOT
 func TestFR2_E6_HyphenatedModuleName(t *testing.T) {
+	modSpec := schema.ModuleSpec{
+		Name:       "data-pipeline",
+		Components: []schema.Component{{ID: "aabbccddeeff", Name: "Ingest"}},
+	}
 	spec := &SpecGraph{
 		Project: schema.Project{Name: "test", Modules: []schema.Module{{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"}}},
+		Profile: schema.DefaultProfile(),
 		Modules: []ModuleGraph{{
-			Module: schema.Module{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"},
-			Spec: schema.ModuleSpec{
-				Name:       "data-pipeline",
-				Components: []schema.Component{{ID: "aabbccddeeff", Name: "Ingest"}},
-			},
+			Module:  schema.Module{ID: "datapipe0001", Name: "data-pipeline", Path: "data-pipeline"},
+			Spec:    modSpec,
+			Nodes:   nodesFromJSON(modSpec, "module", "data-pipeline"),
 			Content: map[string]string{},
 		}},
 	}
@@ -1756,6 +1759,93 @@ func TestFR3_DT1_ProfileDeclaredTypeJSON(t *testing.T) {
 	}
 	if slimComponents != 1 {
 		t.Errorf("want the built-in component node still in the slim table, got %d: %+v", slimComponents, slim.Nodes)
+	}
+}
+
+// DT1 (DOT slice): a graph read under a profile declaring an "endpoint"
+// type is drawn with a shape distinct from every built-in kind's, and its
+// profile-declared "calls" edge reaches the picture as a labelled arrow —
+// the DOT renderer's own share of the scenario TestFR3_DT1_ProfileDeclared-
+// TypeJSON carries for JSON and TestFR1_S9_ProfileDeclaredTypeFlows-
+// Generically carries for SpecReader.
+func TestFR2_DT1_ProfileDeclaredTypeDOT(t *testing.T) {
+	dir := t.TempDir()
+
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	profile.Edges = append(profile.Edges, schema.Edge{
+		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	writeFile(t, dir, "project.json", `{
+		"name": "endpoint-project",
+		"modules": [{"id": "api0000api00", "name": "api", "path": "api"}]
+	}`)
+
+	modDir := filepath.Join(dir, "api")
+	if err := os.MkdirAll(modDir, 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeFile(t, modDir, "module.json", `{
+		"name": "api",
+		"components": [{"id": "aabbccddeeff", "name": "Widgets", "content": "arch_widgets.md"}],
+		"endpoints": [
+			{"id": "112233445566", "name": "GET /v1/widgets", "content": "endpoint_get_widgets.md", "calls": ["aabbccddeeff"]},
+			{"id": "665544332211", "name": "POST /v1/widgets", "content": "endpoint_post_widgets.md", "calls": ["aabbccddeeff"]}
+		]
+	}`)
+	writeFile(t, modDir, "arch_widgets.md", "# Widgets\n")
+	writeFile(t, modDir, "endpoint_get_widgets.md", "# GET /v1/widgets\n")
+	writeFile(t, modDir, "endpoint_post_widgets.md", "# POST /v1/widgets\n")
+
+	spec, err := ReadSpec(dir)
+	if err != nil {
+		t.Fatalf("ReadSpec: %v", err)
+	}
+
+	var buf bytes.Buffer
+	if err := RenderDOT(spec, &buf); err != nil {
+		t.Fatalf("RenderDOT: %v", err)
+	}
+	out := buf.String()
+
+	for _, ep := range []struct{ id, label string }{
+		{"112233445566", "GET /v1/widgets"},
+		{"665544332211", "POST /v1/widgets"},
+	} {
+		if !strings.Contains(out, `"`+ep.id+`" [label="`+ep.label+`"`) {
+			t.Fatalf("endpoint node %s not declared, got:\n%s", ep.id, out)
+		}
+
+		declLine := ""
+		for _, line := range strings.Split(out, "\n") {
+			if strings.Contains(line, `"`+ep.id+`" [`) {
+				declLine = line
+				break
+			}
+		}
+		if declLine == "" {
+			t.Fatalf("endpoint node %s declaration line not found, got:\n%s", ep.id, out)
+		}
+		for _, builtin := range []string{"shape=box", "shape=folder", "shape=component", "shape=ellipse", "shape=cds", "shape=tab"} {
+			if strings.Contains(declLine, builtin) {
+				t.Errorf("endpoint node %s should use a shape distinct from built-in kinds, got %q which contains %q", ep.id, declLine, builtin)
+			}
+		}
+
+		if !strings.Contains(out, `"`+ep.id+`" -> "aabbccddeeff" [label="calls"];`) {
+			t.Errorf("missing labelled calls edge from endpoint %s to component, got:\n%s", ep.id, out)
+		}
 	}
 }
 
