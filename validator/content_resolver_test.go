@@ -191,6 +191,50 @@ func TestS18_ProfileDeclaredContentBearingTypeWalked(t *testing.T) {
 	}
 }
 
+// E4: a content file that exists but is empty is not an error — ContentResolver
+// only checks existence, never opens the file.
+
+func TestE4_EmptyContentFileNotAnError(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_empty_file"))
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for an empty but present content file, got %d: %v", len(errs), errs)
+	}
+}
+
+// E6: Unicode file names resolve correctly.
+
+func TestE6_UnicodeContentFileNameResolves(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_unicode"))
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for a unicode content file name, got %d: %v", len(errs), errs)
+	}
+}
+
+// S15: content checks run across multiple modules — a missing file in one
+// module is reported, and no error references the other, fully valid module.
+
+func TestS15_ContentChecksAcrossMultipleModules(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_multi_module"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "content" {
+		t.Fatalf("expected check=content, got %q", e.Check)
+	}
+	if !strings.Contains(e.Message, "arch_compb.md") {
+		t.Fatalf("expected error mentioning arch_compb.md, got: %v", e)
+	}
+	if !strings.Contains(e.Path, "beta/module.json") {
+		t.Fatalf("expected path referencing beta/module.json, got %q", e.Path)
+	}
+	for _, e := range errs {
+		if strings.Contains(e.Path, "alpha") {
+			t.Fatalf("expected no error referencing alpha, got: %v", errs)
+		}
+	}
+}
+
 func TestREQ2_SelfValidateContent(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckContentPaths(specDir)

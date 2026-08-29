@@ -210,6 +210,31 @@ func TestS17_MalformedProfileFailsBeforeConformance(t *testing.T) {
 	}
 }
 
+// S4: violations in project.json and in a module.json are both reported —
+// not just the first file examined.
+
+func TestS4_MultipleViolationsAcrossFiles(t *testing.T) {
+	errs := CheckSchema(filepath.Join("testdata", "s4_multi_file_errors"))
+	if len(errs) < 2 {
+		t.Fatalf("expected at least 2 errors, one per file, got %d: %v", len(errs), errs)
+	}
+	var sawProject, sawModule bool
+	for _, e := range errs {
+		if e.Path == "project.json" {
+			sawProject = true
+		}
+		if strings.Contains(e.Path, "alpha/module.json") {
+			sawModule = true
+		}
+	}
+	if !sawProject {
+		t.Fatalf("expected an error referencing project.json, got: %v", errs)
+	}
+	if !sawModule {
+		t.Fatalf("expected an error referencing alpha/module.json, got: %v", errs)
+	}
+}
+
 // S15: schema checks run across multiple modules with per-module error
 // attribution — alpha is fully valid, beta carries a schema violation, and
 // the errors returned name only the module that actually violates the schema.
