@@ -1,0 +1,17 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "core",
+      "path": "core"
+    }
+  ],
+  "name": "content-empty-file",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "title": "Project requirement",
+      "type": "functional"
+    }
+  ]
+}

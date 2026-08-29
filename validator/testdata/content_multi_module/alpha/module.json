@@ -1,0 +1,10 @@
+{
+  "components": [
+    {
+      "content": "arch_compa.md",
+      "id": "000000000001",
+      "name": "CompA"
+    }
+  ],
+  "name": "alpha"
+}

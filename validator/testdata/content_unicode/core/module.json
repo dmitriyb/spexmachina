@@ -1,0 +1,10 @@
+{
+  "components": [
+    {
+      "content": "arch_widget_ü.md",
+      "id": "000000000001",
+      "name": "Widget"
+    }
+  ],
+  "name": "core"
+}
