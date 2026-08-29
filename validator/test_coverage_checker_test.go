@@ -205,6 +205,127 @@ func TestREQ12_LargeModuleCountPerformance(t *testing.T) {
 	}
 }
 
+// CC1: a profile identical to the default except the component-to-
+// test_section coverage link is absent drops the check entirely — the same
+// two-component, one-covered fixture that yields the T2 error under the
+// default profile (coverage_one_uncovered) yields zero errors here, because
+// the checker enforces only the chains the profile declares.
+func TestREQ12_CC1_DroppedChainSkipsCheck(t *testing.T) {
+	errs := CheckTestCoverage(filepath.Join("testdata", "coverage_profile_dropped"))
+	if len(errs) != 0 {
+		t.Fatalf("expected 0 errors under profile dropping the link, got %d: %v", len(errs), errs)
+	}
+
+	defaultErrs := CheckTestCoverage(filepath.Join("testdata", "coverage_one_uncovered"))
+	if len(defaultErrs) != 1 {
+		t.Fatalf("expected the same fixture shape to still yield 1 error under the default profile, got %d: %v", len(defaultErrs), defaultErrs)
+	}
+}
+
+// CC2: a profile that renames "component" to "endpoint" (same shape,
+// different name) is still enforced — the error carries T2's shape with the
+// declared type names interpolated, naming the uncovered node an "endpoint"
+// rather than the literal word "component".
+func TestREQ12_CC2_RenamedCoveredTypeInterpolated(t *testing.T) {
+	errs := CheckTestCoverage(filepath.Join("testdata", "coverage_profile_renamed"))
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `endpoint PostWidget (id:000000000002) has no test_section coverage`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "alpha/module.json:/endpoints/000000000002" {
+		t.Fatalf("unexpected path: %s", errs[0].Path)
+	}
+}
+
+// CC3: the acceptance test that the profile is load-bearing, not decorative.
+// A fixture authored against a profile that both renames the covered type
+// and drops the coverage chain validates cleanly under that profile under
+// the full ten-check pipeline, and fails schema conformance once the profile
+// file is removed and the spec is judged against the default profile's
+// "components" array instead.
+func TestREQ12_CC3_ProfileIsLoadBearing(t *testing.T) {
+	dir := filepath.Join("testdata", "coverage_profile_load_bearing")
+
+	withProfile := runValidationPipeline(dir)
+	if len(withProfile) != 0 {
+		t.Fatalf("expected 0 errors with profile.json in place, got %d: %v", len(withProfile), withProfile)
+	}
+
+	tmp := t.TempDir()
+	copyDirExceptProfile(t, dir, tmp)
+
+	withoutProfile := runValidationPipeline(tmp)
+	if len(withoutProfile) == 0 {
+		t.Fatalf("expected errors once profile.json is removed and the default profile applies")
+	}
+
+	found := false
+	for _, e := range withoutProfile {
+		if e.Check == "schema" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected a schema-conformance error for the renamed type's array, got: %v", withoutProfile)
+	}
+}
+
+// runValidationPipeline runs the full ten-check validation pipeline
+// flow_validation_pipeline.md declares, in the same order cmd/spex's
+// validate command does, discarding disclosure notes — CC3's concern is
+// only whether the entry list is empty.
+func runValidationPipeline(specDir string) []ValidationError {
+	var errs []ValidationError
+	errs = append(errs, CheckSchema(specDir)...)
+	errs = append(errs, CheckContentPaths(specDir)...)
+	errs = append(errs, CheckLinks(specDir)...)
+	errs = append(errs, CheckIDs(specDir)...)
+	errs = append(errs, CheckIDDerivation(specDir)...)
+	errs = append(errs, CheckDAG(specDir)...)
+	errs = append(errs, CheckNameConsistency(specDir)...)
+	errs = append(errs, CheckTestCoverage(specDir)...)
+	reqCovErrs, _ := CheckRequirementCoverage(specDir)
+	errs = append(errs, reqCovErrs...)
+	errs = append(errs, CheckCoupledSections(specDir)...)
+	return errs
+}
+
+// copyDirExceptProfile copies src into dst, skipping profile.json — used by
+// CC3 to reproduce a fixture without its profile file so the default
+// profile applies instead.
+func copyDirExceptProfile(t *testing.T, src, dst string) {
+	t.Helper()
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		t.Fatalf("read dir %s: %v", src, err)
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if entry.IsDir() {
+			if err := os.MkdirAll(dstPath, 0755); err != nil {
+				t.Fatalf("mkdir %s: %v", dstPath, err)
+			}
+			copyDirExceptProfile(t, srcPath, dstPath)
+			continue
+		}
+		if entry.Name() == "profile.json" {
+			continue
+		}
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			t.Fatalf("read %s: %v", srcPath, err)
+		}
+		if err := os.WriteFile(dstPath, data, 0644); err != nil {
+			t.Fatalf("write %s: %v", dstPath, err)
+		}
+	}
+}
+
 func TestREQ12_SelfValidateTestCoverage(t *testing.T) {
 	specDir := filepath.Join("..", "spec")
 	errs := CheckTestCoverage(specDir)

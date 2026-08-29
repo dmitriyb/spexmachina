@@ -1,0 +1,18 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "coverage-profile-dropped-test",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "priority": 1,
+      "title": "Req",
+      "type": "functional"
+    }
+  ]
+}

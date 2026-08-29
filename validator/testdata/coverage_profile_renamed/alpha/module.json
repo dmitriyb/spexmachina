@@ -1,0 +1,23 @@
+{
+  "name": "alpha",
+  "endpoints": [
+    {
+      "id": "000000000001",
+      "name": "GetWidget"
+    },
+    {
+      "id": "000000000002",
+      "name": "PostWidget"
+    }
+  ],
+  "test_sections": [
+    {
+      "content": "test_widget.md",
+      "describes": [
+        "000000000001"
+      ],
+      "id": "000000000001",
+      "name": "Widget tests"
+    }
+  ]
+}
