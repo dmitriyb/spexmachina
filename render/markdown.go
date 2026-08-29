@@ -41,12 +41,11 @@ func RenderMarkdown(spec *SpecGraph, w io.Writer) error {
 
 // writeRequirements renders one requirement block: a heading, then
 // functional requirements before non-functional, each group in declaration
-// order and numbered from 1 within its own group — "FR"/"NFR" are
-// positional labels, not identities. subheadings splits the two groups
-// under their own "### Functional"/"### Non-functional" headings (the
-// project scope); the module scope renders one flat list instead, with
-// non-functional numbering continuing where functional left off would be
-// wrong at module scope, so it also restarts at 1 there.
+// order — "FR"/"NFR" are positional labels, not identities. subheadings
+// splits the two groups under their own "### Functional"/"### Non-functional"
+// headings (the project scope), where the non-functional list continues the
+// numbering the functional list ended on; the module scope renders one flat
+// list instead, with both groups restarting at 1.
 func writeRequirements(w io.Writer, heading string, nodes []Node, subheadings bool) {
 	if len(nodes) == 0 {
 		return
