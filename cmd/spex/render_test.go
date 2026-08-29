@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/dmitriyb/spexmachina/cli"
+	"github.com/dmitriyb/spexmachina/internal/perf"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // setupRenderSpec creates a multi-module fixture for render CLI tests.
@@ -46,12 +50,16 @@ func setupRenderSpec(t *testing.T) string {
 		],
 		"data_flows": [
 			{"id": "aabbccddeeff", "name": "Build Pipeline", "content": "flow_build.md", "uses": ["aabbccddeeff", "ffeeddccbbaa"]}
+		],
+		"test_sections": [
+			{"id": "112233445566", "name": "Parser Tests", "content": "test_parser.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, alphaDir, "module.json", alphaMod)
 	writeTestFile(t, alphaDir, "arch_parser.md", "# Parser\n\nParses input.\n")
 	writeTestFile(t, alphaDir, "arch_builder.md", "# Builder\n\nBuilds output.\n")
 	writeTestFile(t, alphaDir, "flow_build.md", "# Build Pipeline\n\nData flow.\n")
+	writeTestFile(t, alphaDir, "test_parser.md", "# Parser Tests\n\nTests the parser.\n")
 
 	betaDir := filepath.Join(dir, "beta")
 	os.MkdirAll(betaDir, 0755)
@@ -63,10 +71,14 @@ func setupRenderSpec(t *testing.T) string {
 		],
 		"components": [
 			{"id": "aabbccddeeff", "name": "Consumer", "content": "arch_consumer.md", "implements": ["aabbccddeeff"]}
+		],
+		"test_sections": [
+			{"id": "223344556677", "name": "Consumer Tests", "content": "test_consumer.md", "describes": ["aabbccddeeff"]}
 		]
 	}`
 	writeTestFile(t, betaDir, "module.json", betaMod)
 	writeTestFile(t, betaDir, "arch_consumer.md", "# Consumer\n\nConsumes output.\n")
+	writeTestFile(t, betaDir, "test_consumer.md", "# Consumer Tests\n\nTests the consumer.\n")
 
 	return dir
 }
@@ -180,7 +192,7 @@ func TestFR3_S4_JSONFormat(t *testing.T) {
 		json.Unmarshal(raw, &n)
 		types[n.Type] = true
 	}
-	for _, typ := range []string{"project", "module", "requirement", "component", "data_flow"} {
+	for _, typ := range []string{"project", "module", "requirement", "component", "data_flow", "test_section"} {
 		if !types[typ] {
 			t.Errorf("missing node type %q", typ)
 		}
@@ -289,6 +301,9 @@ func TestFR1_E2_NonExistentDir(t *testing.T) {
 	if out != "" {
 		t.Fatal("stdout should be empty on error")
 	}
+	if !strings.Contains(err.Error(), "no such file or directory") {
+		t.Fatalf("error should indicate the directory does not exist, got: %v", err)
+	}
 }
 
 // E3: Spec directory missing project.json
@@ -381,8 +396,13 @@ func TestFR1_E9_HelpFlag(t *testing.T) {
 	if !strings.Contains(helpOut, "render") {
 		t.Fatal("help should describe the render command")
 	}
-	if !strings.Contains(helpOut, "format") {
-		t.Fatal("help should mention --format flag")
+	for _, format := range []string{"markdown", "dot", "json"} {
+		if !strings.Contains(helpOut, format) {
+			t.Fatalf("help should list %q as an available --format option, got: %s", format, helpOut)
+		}
+	}
+	if !strings.Contains(helpOut, "Usage:\n  spex render [flags]") {
+		t.Fatalf("usage line should name the command and flags only, with no positional argument, got: %s", helpOut)
 	}
 }
 
@@ -426,6 +446,114 @@ func TestFR3_S11_SlimJSONFlag(t *testing.T) {
 	if strings.Contains(out, "Parses input.") {
 		t.Errorf("--slim must not inline content leaves, got:\n%s", out)
 	}
+}
+
+// E5: Large spec performance — 15 modules, 8 components each, content
+// leaves averaging 2KB, renders within the 2-second budget and every
+// module, component and content leaf reaches the output.
+func TestFR3_E5_LargeSpecPerformance(t *testing.T) {
+	const modules = 15
+	const compsPerModule = 8
+	dir := buildLargeRenderSpec(t, modules, compsPerModule)
+
+	var (
+		out string
+		err error
+	)
+	perf.Within(t, 2*time.Second, func() {
+		out, _, err = runRenderSpex(t, "render", "--spec-dir", dir, "--format", "json")
+	})
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+
+	var result struct {
+		Nodes []struct {
+			Type    string `json:"type"`
+			Content string `json:"content"`
+		} `json:"nodes"`
+	}
+	if err := json.Unmarshal([]byte(out), &result); err != nil {
+		t.Fatalf("output should be valid JSON: %v", err)
+	}
+
+	var moduleCount, compCount int
+	for _, n := range result.Nodes {
+		switch n.Type {
+		case "module":
+			moduleCount++
+		case "component":
+			compCount++
+			if len(n.Content) < 2000 {
+				t.Fatalf("component node missing its inlined ~2KB content: got %d bytes", len(n.Content))
+			}
+		}
+	}
+	if moduleCount != modules {
+		t.Fatalf("want %d module nodes in the output, got %d", modules, moduleCount)
+	}
+	if compCount != modules*compsPerModule {
+		t.Fatalf("want %d component nodes in the output, got %d", modules*compsPerModule, compCount)
+	}
+}
+
+// buildLargeRenderSpec writes a spec with the given number of modules, each
+// carrying compsPerModule components with a content leaf averaging 2KB, per
+// test_render_command.md E5's fixture.
+func buildLargeRenderSpec(t *testing.T, modules, compsPerModule int) string {
+	t.Helper()
+	dir := t.TempDir()
+
+	proj := schema.Project{Name: "large-project"}
+	for m := 0; m < modules; m++ {
+		modName := fmt.Sprintf("module%d", m)
+		modID := fmt.Sprintf("%012x", m+1)
+		proj.Modules = append(proj.Modules, schema.Module{ID: modID, Name: modName, Path: modName})
+
+		modDir := filepath.Join(dir, modName)
+		if err := os.MkdirAll(modDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		modSpec := schema.ModuleSpec{Name: modName}
+		for c := 0; c < compsPerModule; c++ {
+			name := fmt.Sprintf("Comp%d", c)
+			id := schema.IdentityHash(modName, "component", name)
+			content := fmt.Sprintf("arch_comp%d.md", c)
+			modSpec.Components = append(modSpec.Components, schema.Component{
+				ID:      id,
+				Name:    name,
+				Content: content,
+			})
+			writeTestFile(t, modDir, content, largeContentLeaf(name))
+		}
+
+		modBytes, err := json.Marshal(modSpec)
+		if err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, modDir, "module.json", string(modBytes))
+	}
+
+	projBytes, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, dir, "project.json", string(projBytes))
+
+	return dir
+}
+
+// largeContentLeaf returns a ~2KB markdown body for name, matching E5's
+// "content leaves averaging 2KB" fixture.
+func largeContentLeaf(name string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "# %s architecture\n\n", name)
+	const line = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n"
+	for b.Len() < 2000 {
+		b.WriteString(line)
+	}
+	return b.String()
 }
 
 // E10: --slim is rejected for non-JSON formats
