@@ -1,0 +1,40 @@
+{
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project",
+      "completeness_trigger": true
+    },
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "module",
+      "completeness_trigger": true
+    },
+    {
+      "name": "endpoint",
+      "plural_key": "endpoints",
+      "scope": "module"
+    }
+  ],
+  "edges": [
+    { "kind": "preq_id", "from": ["requirement"], "to": ["requirement"] },
+    { "kind": "implements", "from": ["endpoint"], "to": ["requirement"] }
+  ],
+  "coverage_chains": [
+    {
+      "covered_type": "requirement",
+      "covered_scope": "project",
+      "edge": "preq_id",
+      "covering_type": "requirement",
+      "covering_scope": "module"
+    },
+    {
+      "covered_type": "requirement",
+      "covered_scope": "module",
+      "edge": "implements",
+      "covering_type": "endpoint"
+    }
+  ]
+}

@@ -40,7 +40,7 @@ func CheckRequirementCoverage(specDir string) ([]ValidationError, []ValidationNo
 	var notes []ValidationNote
 
 	if chain, ok := projectDerivationChain(profile); ok {
-		errs, ns := checkProjectRequirementCoverage(project, modules, chain)
+		errs, ns := checkProjectRequirementCoverage(specDir, profile, project, modules, chain)
 		result = append(result, errs...)
 		notes = append(notes, ns...)
 	}
@@ -53,7 +53,8 @@ func CheckRequirementCoverage(specDir string) ([]ValidationError, []ValidationNo
 		slices.Sort(modNames)
 
 		for _, modName := range modNames {
-			result = append(result, detectUncoveredRequirements(modName, modules[modName], chain)...)
+			modPath := modulePathByName(project, modName)
+			result = append(result, detectUncoveredRequirements(specDir, modPath, modName, modules[modName], profile, chain)...)
 		}
 	}
 
@@ -110,17 +111,36 @@ func findCoverageChain(profile *schema.Profile, coveredType, coveredScope string
 }
 
 // checkProjectRequirementCoverage finds project requirements with no module
-// requirement deriving from them (via preq_id), reporting each as an error
-// unless it declares derivation "pending", in which case a disclosure note
-// stands in the error's place. chain's declared type and scope names are
-// interpolated into both message shapes.
-func checkProjectRequirementCoverage(project *schema.Project, modules map[string]*schema.ModuleSpec, chain schema.CoverageChain) ([]ValidationError, []ValidationNote) {
+// requirement deriving from them (via chain.Edge, "preq_id" under the
+// default profile), reporting each as an error unless it declares
+// derivation "pending", in which case a disclosure note stands in the
+// error's place. chain's declared type and scope names are interpolated
+// into both message shapes. Both the covered side (project.json's array)
+// and the covering side (every module's array) are read off the chain's
+// declared plural keys and edge field — the typed schema.Project/
+// schema.ModuleSpec fields are used as a fast path only when the chain
+// still names the default profile's type and edge, generically off raw JSON
+// otherwise, so a profile renaming either type is still scanned correctly.
+func checkProjectRequirementCoverage(specDir string, profile *schema.Profile, project *schema.Project, modules map[string]*schema.ModuleSpec, chain schema.CoverageChain) ([]ValidationError, []ValidationNote) {
+	covered, err := projectCoveredEntries(specDir, profile, project, chain)
+	if err != nil {
+		return []ValidationError{{
+			Check:    "requirement_coverage",
+			Severity: "error",
+			Path:     "project.json",
+			Message:  err.Error(),
+		}}, nil
+	}
+
 	coveredProjectReqs := make(map[string]bool)
-	for _, mod := range modules {
-		for _, req := range mod.Requirements {
-			if req.PreqID != "" {
-				coveredProjectReqs[req.PreqID] = true
-			}
+	for modName, mod := range modules {
+		modPath := modulePathByName(project, modName)
+		targets, err := coveringEdgeTargets(specDir, modPath, mod, profile, chain)
+		if err != nil {
+			continue
+		}
+		for _, id := range targets {
+			coveredProjectReqs[id] = true
 		}
 	}
 
@@ -129,15 +149,15 @@ func checkProjectRequirementCoverage(project *schema.Project, modules map[string
 
 	var result []ValidationError
 	var notes []ValidationNote
-	for _, req := range project.Requirements {
-		if coveredProjectReqs[req.ID] {
+	for _, req := range covered {
+		if coveredProjectReqs[req.id] {
 			continue
 		}
-		if req.Derivation == "pending" {
+		if req.derivation == "pending" {
 			notes = append(notes, ValidationNote{
 				Type:    "pending_derivation",
-				Message: fmt.Sprintf("%s %s %q declares derivation pending and is not derived into any %s", coveredLabel, req.ID, req.Title, coveringLabel),
-				Related: []string{req.ID},
+				Message: fmt.Sprintf("%s %s %q declares derivation pending and is not derived into any %s", coveredLabel, req.id, req.title, coveringLabel),
+				Related: []string{req.id},
 			})
 			continue
 		}
@@ -145,10 +165,137 @@ func checkProjectRequirementCoverage(project *schema.Project, modules map[string
 			Check:    "requirement_coverage",
 			Severity: "error",
 			Path:     "project.json",
-			Message:  fmt.Sprintf("%s %s %q is not derived into any %s", coveredLabel, req.ID, req.Title, coveringLabel),
+			Message:  fmt.Sprintf("%s %s %q is not derived into any %s", coveredLabel, req.id, req.title, coveringLabel),
 		})
 	}
 	return result, notes
+}
+
+// coverageNode is one covered-side node's (id, title) pair, plus —
+// project-scope only — its declared derivation state, read either from a
+// typed schema field or generically off raw JSON for a chain naming a
+// profile-renamed type.
+type coverageNode struct {
+	id         string
+	title      string
+	derivation string
+}
+
+// projectCoveredEntries returns the coverage chain's covered-side nodes at
+// project scope: schema.Project's typed Requirements field when the chain
+// still names the default profile's project-scoped completeness-trigger
+// type ("requirement"), generically off project.json's array at the
+// resolved NodeType's plural_key otherwise.
+func projectCoveredEntries(specDir string, profile *schema.Profile, project *schema.Project, chain schema.CoverageChain) ([]coverageNode, error) {
+	if chain.CoveredType == "requirement" {
+		out := make([]coverageNode, len(project.Requirements))
+		for i, r := range project.Requirements {
+			out[i] = coverageNode{id: r.ID, title: r.Title, derivation: r.Derivation}
+		}
+		return out, nil
+	}
+
+	nt, ok := findProjectNodeType(profile, chain.CoveredType)
+	if !ok {
+		return nil, nil
+	}
+	entries, err := rawProjectEntries(specDir, nt.PluralKey)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]coverageNode, len(entries))
+	for i, e := range entries {
+		out[i] = coverageNode{id: e.str("id"), title: e.str("title"), derivation: e.str("derivation")}
+	}
+	return out, nil
+}
+
+// moduleCoveredEntries is projectCoveredEntries' module-scoped counterpart,
+// used by the module-requirement-to-component link: schema.ModuleSpec's
+// typed Requirements field when the chain still names the default profile's
+// module-scoped completeness-trigger type ("requirement"), generically off
+// module.json's array at the resolved NodeType's plural_key otherwise. The
+// module-level link admits no derivation exemption, so no derivation field
+// is read here.
+func moduleCoveredEntries(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]coverageNode, error) {
+	if chain.CoveredType == "requirement" {
+		out := make([]coverageNode, len(mod.Requirements))
+		for i, r := range mod.Requirements {
+			out[i] = coverageNode{id: r.ID, title: r.Title}
+		}
+		return out, nil
+	}
+
+	nt, ok := findModuleNodeType(profile, chain.CoveredType)
+	if !ok {
+		return nil, nil
+	}
+	entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]coverageNode, len(entries))
+	for i, e := range entries {
+		out[i] = coverageNode{id: e.str("id"), title: e.str("title")}
+	}
+	return out, nil
+}
+
+// coveringEdgeTargets returns the ids one module's covering-side entries
+// reference via the coverage chain's declared edge field — component's
+// Implements or module requirement's PreqID via the typed schema.ModuleSpec
+// fields as a fast path, used only when the chain still names the default
+// profile's covering type and edge for that link (component/implements,
+// requirement/preq_id); generically off the resolved covering NodeType's
+// plural_key and the chain's edge field otherwise, exactly as
+// checkExtraModuleDAGEdges reads a profile-declared edge kind. Both links'
+// covering side is always module-scoped, so the covering type is always
+// resolved via findModuleNodeType regardless of chain.CoveringScope, which
+// only exists to disambiguate a shared type name in messages.
+func coveringEdgeTargets(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]string, error) {
+	switch {
+	case chain.CoveringType == "component" && chain.Edge == "implements":
+		var out []string
+		for _, c := range mod.Components {
+			out = append(out, c.Implements...)
+		}
+		return out, nil
+	case chain.CoveringType == "requirement" && chain.Edge == "preq_id":
+		var out []string
+		for _, r := range mod.Requirements {
+			if r.PreqID != "" {
+				out = append(out, r.PreqID)
+			}
+		}
+		return out, nil
+	}
+
+	nt, ok := findModuleNodeType(profile, chain.CoveringType)
+	if !ok {
+		return nil, nil
+	}
+	entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, e := range entries {
+		out = append(out, e.edgeTargets(chain.Edge)...)
+	}
+	return out, nil
+}
+
+// edgeTargets reads a raw entry's edge field generically as a slice of
+// target ids: a scalar string field (e.g. "preq_id") yields one entry, a
+// string-array field (e.g. "implements") yields all of them, and an absent
+// or differently-shaped field yields none. str and strSlice each fail
+// silently on the other's shape, so trying both covers either encoding
+// without needing to know up front which one a given edge uses.
+func (e rawEntry) edgeTargets(field string) []string {
+	if s := e.str(field); s != "" {
+		return []string{s}
+	}
+	return e.strSlice(field)
 }
 
 // coverageLabel joins a coverage chain's scope and type name into the
@@ -163,25 +310,44 @@ func coverageLabel(scope, typeName string) string {
 }
 
 // detectUncoveredRequirements finds module requirements not referenced by
-// any component's implements array within the module. chain's declared
-// covered/covering type names are interpolated into the message; the module
-// name itself — not a scope word — leads it, per arch_requirement_coverage_checker.md.
-func detectUncoveredRequirements(modName string, mod *schema.ModuleSpec, chain schema.CoverageChain) []ValidationError {
-	coveredReqs := make(map[string]bool)
-	for _, comp := range mod.Components {
-		for _, reqID := range comp.Implements {
-			coveredReqs[reqID] = true
-		}
+// any covering entry's edge field within the module — comp.Implements under
+// the default profile, or a profile-renamed covering type's edge field read
+// generically. chain's declared covered/covering type names are
+// interpolated into the message; the module name itself — not a scope word
+// — leads it, per arch_requirement_coverage_checker.md.
+func detectUncoveredRequirements(specDir, modPath, modName string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) []ValidationError {
+	covered, err := moduleCoveredEntries(specDir, modPath, mod, profile, chain)
+	if err != nil {
+		return []ValidationError{{
+			Check:    "requirement_coverage",
+			Severity: "error",
+			Path:     fmt.Sprintf("%s/module.json", modName),
+			Message:  err.Error(),
+		}}
+	}
+	targets, err := coveringEdgeTargets(specDir, modPath, mod, profile, chain)
+	if err != nil {
+		return []ValidationError{{
+			Check:    "requirement_coverage",
+			Severity: "error",
+			Path:     fmt.Sprintf("%s/module.json", modName),
+			Message:  err.Error(),
+		}}
+	}
+
+	coveredReqs := make(map[string]bool, len(targets))
+	for _, id := range targets {
+		coveredReqs[id] = true
 	}
 
 	var errs []ValidationError
-	for _, req := range mod.Requirements {
-		if !coveredReqs[req.ID] {
+	for _, req := range covered {
+		if !coveredReqs[req.id] {
 			errs = append(errs, ValidationError{
 				Check:    "requirement_coverage",
 				Severity: "error",
 				Path:     fmt.Sprintf("%s/module.json", modName),
-				Message:  fmt.Sprintf("%s %s %s %q is not implemented by any %s", modName, chain.CoveredType, req.ID, req.Title, chain.CoveringType),
+				Message:  fmt.Sprintf("%s %s %s %q is not implemented by any %s", modName, chain.CoveredType, req.id, req.title, chain.CoveringType),
 			})
 		}
 	}
