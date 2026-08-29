@@ -235,22 +235,21 @@ func TestREQ12_CC2_RenamedCoveredTypeInterpolated(t *testing.T) {
 	if errs[0].Message != want {
 		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
 	}
-	if errs[0].Path != "alpha/module.json:/components/000000000002" {
+	if errs[0].Path != "alpha/module.json:/endpoints/000000000002" {
 		t.Fatalf("unexpected path: %s", errs[0].Path)
 	}
 }
 
 // CC3: the acceptance test that the profile is load-bearing, not decorative.
 // A fixture authored against a profile that both renames the covered type
-// and drops the coverage chain validates cleanly under that profile, and
-// fails schema conformance once the profile file is removed and the spec is
-// judged against the default profile's "components" array instead.
+// and drops the coverage chain validates cleanly under that profile under
+// the full ten-check pipeline, and fails schema conformance once the profile
+// file is removed and the spec is judged against the default profile's
+// "components" array instead.
 func TestREQ12_CC3_ProfileIsLoadBearing(t *testing.T) {
 	dir := filepath.Join("testdata", "coverage_profile_load_bearing")
 
-	var withProfile []ValidationError
-	withProfile = append(withProfile, CheckSchema(dir)...)
-	withProfile = append(withProfile, CheckTestCoverage(dir)...)
+	withProfile := runValidationPipeline(dir)
 	if len(withProfile) != 0 {
 		t.Fatalf("expected 0 errors with profile.json in place, got %d: %v", len(withProfile), withProfile)
 	}
@@ -258,9 +257,7 @@ func TestREQ12_CC3_ProfileIsLoadBearing(t *testing.T) {
 	tmp := t.TempDir()
 	copyDirExceptProfile(t, dir, tmp)
 
-	var withoutProfile []ValidationError
-	withoutProfile = append(withoutProfile, CheckSchema(tmp)...)
-	withoutProfile = append(withoutProfile, CheckTestCoverage(tmp)...)
+	withoutProfile := runValidationPipeline(tmp)
 	if len(withoutProfile) == 0 {
 		t.Fatalf("expected errors once profile.json is removed and the default profile applies")
 	}
@@ -275,6 +272,26 @@ func TestREQ12_CC3_ProfileIsLoadBearing(t *testing.T) {
 	if !found {
 		t.Fatalf("expected a schema-conformance error for the renamed type's array, got: %v", withoutProfile)
 	}
+}
+
+// runValidationPipeline runs the full ten-check validation pipeline
+// flow_validation_pipeline.md declares, in the same order cmd/spex's
+// validate command does, discarding disclosure notes — CC3's concern is
+// only whether the entry list is empty.
+func runValidationPipeline(specDir string) []ValidationError {
+	var errs []ValidationError
+	errs = append(errs, CheckSchema(specDir)...)
+	errs = append(errs, CheckContentPaths(specDir)...)
+	errs = append(errs, CheckLinks(specDir)...)
+	errs = append(errs, CheckIDs(specDir)...)
+	errs = append(errs, CheckIDDerivation(specDir)...)
+	errs = append(errs, CheckDAG(specDir)...)
+	errs = append(errs, CheckNameConsistency(specDir)...)
+	errs = append(errs, CheckTestCoverage(specDir)...)
+	reqCovErrs, _ := CheckRequirementCoverage(specDir)
+	errs = append(errs, reqCovErrs...)
+	errs = append(errs, CheckCoupledSections(specDir)...)
+	return errs
 }
 
 // copyDirExceptProfile copies src into dst, skipping profile.json — used by

@@ -95,18 +95,33 @@ func detectUncoveredComponents(specDir, modPath, modName string, mod *schema.Mod
 		}}
 	}
 
+	pluralKey := coveredTypePluralKey(profile, chain.CoveredType)
+
 	var errs []ValidationError
 	for _, comp := range covered {
 		if !coveredIDs[comp.id] {
 			errs = append(errs, ValidationError{
 				Check:    "test_coverage",
 				Severity: "error",
-				Path:     fmt.Sprintf("%s/module.json:/components/%s", modName, comp.id),
+				Path:     fmt.Sprintf("%s/module.json:/%s/%s", modName, pluralKey, comp.id),
 				Message:  fmt.Sprintf("%s %s (id:%s) has no %s coverage", chain.CoveredType, comp.name, comp.id, chain.CoveringType),
 			})
 		}
 	}
 	return errs
+}
+
+// coveredTypePluralKey resolves the coverage chain's covered type to the
+// array key that names it in module.json — the resolved profile's declared
+// plural_key for that NodeType, "components" when the profile is silent
+// (unreachable in practice, since a chain's covered type is always a
+// declared node type), so a renamed covered type locates its own array
+// rather than the default profile's.
+func coveredTypePluralKey(profile *schema.Profile, coveredType string) string {
+	if nt, ok := findModuleNodeType(profile, coveredType); ok {
+		return nt.PluralKey
+	}
+	return "components"
 }
 
 // coveredComponentEntries returns the coverage chain's covered-side nodes

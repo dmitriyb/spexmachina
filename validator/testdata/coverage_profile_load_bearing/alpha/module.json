@@ -2,7 +2,7 @@
   "name": "alpha",
   "endpoints": [
     {
-      "id": "000000000001",
+      "id": "78f6c82e150a",
       "name": "GetWidget",
       "content": "arch_get_widget.md"
     }
