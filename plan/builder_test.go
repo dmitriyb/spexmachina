@@ -1236,6 +1236,7 @@ func TestBuild_SpecNodeKindMatchesPlanRelevantTypesUnderDefaultProfile(t *testin
 // kind, with no partial changeset.
 func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors(t *testing.T) {
 	env := newBuilderEnv()
+	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section", "endpoint"}})
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
 		{Type: ActionCreate, Module: "m", Node: "EP", NodeType: "endpoint", SpecNodeID: "e1", SpecHash: "h-e1", Reason: "New spec node: m/EP"},
