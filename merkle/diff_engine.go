@@ -28,7 +28,7 @@ func (ct ChangeType) String() string {
 type Change struct {
 	Key      string     // identity hash key
 	Type     ChangeType // Added, Removed, or Modified
-	NodeType string     // "component", "data_flow", "test_section", "api", "meta", "requirement"
+	NodeType string     // type name the resolved profile declares, or "meta" for envelope leaves; vocabulary is open per profile (default profile: "component", "data_flow", "test_section", "api", "meta", "requirement"). A removed leaf carries whatever the snapshot recorded, which may fall outside the current profile's declarations.
 	Module   string     // identity hash of parent module ("" for project-level nodes)
 	OldHash  string     // empty for Added
 	NewHash  string     // empty for Removed
