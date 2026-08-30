@@ -1,6 +1,7 @@
 package merkle
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -428,6 +429,454 @@ func TestREQ7_Diff_MetadataOnAllNodeTypes(t *testing.T) {
 	for _, want := range []string{"component", "test_section", "meta"} {
 		if !nodeTypes[want] {
 			t.Errorf("expected at least one %s node type in changes", want)
+		}
+	}
+}
+
+// TestREQ4_Diff_S5_MultipleChangesAcrossModules covers test_diff_classification.md
+// S5: a modified leaf in alpha and an added/removed pair in beta, all in one
+// Diff call, sorted ascending by key.
+func TestREQ4_Diff_S5_MultipleChangesAcrossModules(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	// alpha's test1 content changes (modified).
+	writeFile(t, filepath.Join(specDir, "alpha"), "test_comp1.md", "# Comp1 tests v2\n")
+
+	// beta's only component is replaced by a differently-identified one — a
+	// removal and an addition in the same Diff call, alongside alpha's
+	// change, so the diff spans both modules.
+	betaComp3 := schema.IdentityHash("beta", "component", "BetaComp3")
+	betaMod := `{
+		"name": "beta",
+		"components": [
+			{"id": "` + betaComp3 + `", "name": "BetaComp3", "content": "arch_beta3.md"}
+		]
+	}`
+	betaDir := filepath.Join(specDir, "beta")
+	writeFile(t, betaDir, "module.json", betaMod)
+	writeFile(t, betaDir, "arch_beta3.md", "# Beta3 architecture\n")
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+
+	// Editing beta's component list necessarily rewrites module.json's
+	// bytes, so beta's own meta envelope also shows up modified alongside
+	// the three leaf-level changes the scenario names.
+	if len(changes) != 4 {
+		t.Fatalf("expected exactly 4 changes (3 leaf changes + beta's meta envelope), got %d: %v", len(changes), changes)
+	}
+
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+	betaComp := schema.IdentityHash("beta", "component", "BetaComp")
+	betaHash := schema.IdentityHash("module", "Beta")
+	betaMetaKey := "meta/" + betaHash
+
+	byKey := map[string]Change{}
+	for _, c := range changes {
+		byKey[c.Key] = c
+	}
+	if c, ok := byKey[alphaTest1]; !ok || c.Type != Modified {
+		t.Errorf("expected %s modified, got %+v (present=%v)", alphaTest1, c, ok)
+	}
+	if c, ok := byKey[betaComp]; !ok || c.Type != Removed {
+		t.Errorf("expected %s removed, got %+v (present=%v)", betaComp, c, ok)
+	}
+	if c, ok := byKey[betaComp3]; !ok || c.Type != Added {
+		t.Errorf("expected %s added, got %+v (present=%v)", betaComp3, c, ok)
+	}
+	if c, ok := byKey[betaMetaKey]; !ok || c.Type != Modified {
+		t.Errorf("expected %s modified, got %+v (present=%v)", betaMetaKey, c, ok)
+	}
+
+	for i := 1; i < len(changes); i++ {
+		if changes[i].Key < changes[i-1].Key {
+			t.Errorf("changes not sorted ascending by key: %q before %q", changes[i-1].Key, changes[i].Key)
+		}
+	}
+}
+
+// TestREQ4_Diff_R3_RequirementAdded covers R3: a new requirement leaf in the
+// current tree appears as Added.
+func TestREQ4_Diff_R3_RequirementAdded(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	alphaReq3 := schema.IdentityHash("alpha", "requirement", "Alpha req 3")
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	comp2Hash := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + fixtureProjReq1ID + `"},
+			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]},
+			{"id": "` + alphaReq3 + `", "type": "functional", "title": "Alpha req 3"}
+		],
+		"components": [
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "` + comp2Hash + `", "name": "Comp2", "content": "arch_comp2.md"}
+		],
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
+		]
+	}`
+	writeFile(t, filepath.Join(specDir, "alpha"), "module.json", alphaMod)
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+
+	var found *Change
+	for i, c := range changes {
+		if c.Key == alphaReq3 {
+			found = &changes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected added change for %s, changes: %v", alphaReq3, changes)
+	}
+	if found.Type != Added {
+		t.Errorf("expected Added, got %v", found.Type)
+	}
+	if found.NodeType != "requirement" {
+		t.Errorf("expected NodeType requirement, got %q", found.NodeType)
+	}
+}
+
+// TestREQ4_Diff_R4_RequirementRemoved covers R4: a requirement leaf dropped
+// from the current tree appears as Removed.
+func TestREQ4_Diff_R4_RequirementRemoved(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	comp2Hash := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + fixtureProjReq1ID + `"}
+		],
+		"components": [
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "` + comp2Hash + `", "name": "Comp2", "content": "arch_comp2.md"}
+		],
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
+		]
+	}`
+	writeFile(t, filepath.Join(specDir, "alpha"), "module.json", alphaMod)
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+
+	var found *Change
+	for i, c := range changes {
+		if c.Key == alphaReq2 {
+			found = &changes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected removed change for %s, changes: %v", alphaReq2, changes)
+	}
+	if found.Type != Removed {
+		t.Errorf("expected Removed, got %v", found.Type)
+	}
+}
+
+// TestREQ4_Diff_R5_RequirementDescriptionModified covers R5: the same
+// identity hash (title unchanged) with a changed description produces a
+// Modified change with distinct OldHash/NewHash.
+func TestREQ4_Diff_R5_RequirementDescriptionModified(t *testing.T) {
+	specDir := setupSpecDir(t)
+
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	comp2Hash := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+
+	alphaModWithDescription := func(desc string) string {
+		return `{
+			"name": "alpha",
+			"requirements": [
+				{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + fixtureProjReq1ID + `", "description": "` + desc + `"},
+				{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
+			],
+			"components": [
+				{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"},
+				{"id": "` + comp2Hash + `", "name": "Comp2", "content": "arch_comp2.md"}
+			],
+			"test_sections": [
+				{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
+			]
+		}`
+	}
+
+	writeFile(t, filepath.Join(specDir, "alpha"), "module.json", alphaModWithDescription("original"))
+	snapshot := mustBuildTree(t, specDir)
+
+	writeFile(t, filepath.Join(specDir, "alpha"), "module.json", alphaModWithDescription("updated"))
+	current := mustBuildTree(t, specDir)
+
+	changes := Diff(current, snapshot)
+
+	var found *Change
+	for i, c := range changes {
+		if c.Key == alphaReq1 {
+			found = &changes[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("expected modified change for %s, changes: %v", alphaReq1, changes)
+	}
+	if found.Type != Modified {
+		t.Errorf("expected Modified, got %v", found.Type)
+	}
+	if found.OldHash == "" || found.NewHash == "" || found.OldHash == found.NewHash {
+		t.Errorf("expected distinct non-empty OldHash/NewHash, got old=%q new=%q", found.OldHash, found.NewHash)
+	}
+}
+
+// TestREQ4_Diff_E2_AddedLeafInNewModule covers E2: a brand-new module
+// contributes both a structural envelope change and an arch_impl component
+// change, resolved to the new module's own name.
+func TestREQ4_Diff_E2_AddedLeafInNewModule(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	betaHash := schema.IdentityHash("module", "Beta")
+	gammaHash := schema.IdentityHash("module", "Gamma")
+	gammaComp := schema.IdentityHash("gamma", "component", "GammaComp")
+
+	proj := `{
+		"name": "test-project",
+		"requirements": [
+			{"id": "` + fixtureProjReq1ID + `", "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": "` + fixtureProjReq2ID + `", "type": "non_functional", "title": "Be fast", "priority": 2}
+		],
+		"modules": [
+			{"id": "` + alphaHash + `", "name": "Alpha", "path": "alpha"},
+			{"id": "` + betaHash + `", "name": "Beta", "path": "beta"},
+			{"id": "` + gammaHash + `", "name": "Gamma", "path": "gamma"}
+		]
+	}`
+	writeFile(t, specDir, "project.json", proj)
+
+	gammaDir := filepath.Join(specDir, "gamma")
+	must(t, os.MkdirAll(gammaDir, 0755))
+	gammaMod := `{
+		"name": "gamma",
+		"components": [
+			{"id": "` + gammaComp + `", "name": "GammaComp", "content": "arch_gamma.md"}
+		]
+	}`
+	writeFile(t, gammaDir, "module.json", gammaMod)
+	writeFile(t, gammaDir, "arch_gamma.md", "# Gamma architecture\n")
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+	classified := Classify(changes, ModuleNames(current), schema.DefaultProfile())
+
+	gammaMetaKey := "meta/" + gammaHash
+	var sawStructuralEnvelope, sawArchImplComponent bool
+	var componentModule string
+	for _, c := range classified {
+		if c.Key == gammaMetaKey && c.Impact == Structural {
+			sawStructuralEnvelope = true
+		}
+		if c.Key == gammaComp {
+			sawArchImplComponent = c.Impact == ArchImpl
+			componentModule = c.Module
+		}
+	}
+	if !sawStructuralEnvelope {
+		t.Errorf("expected structural change for gamma envelope %s", gammaMetaKey)
+	}
+	if !sawArchImplComponent {
+		t.Errorf("expected arch_impl change for gamma component %s", gammaComp)
+	}
+	if componentModule != "Gamma" {
+		t.Errorf("expected gamma component's module resolved to %q, got %q", "Gamma", componentModule)
+	}
+}
+
+// TestREQ4_Diff_E3_RemovedEntireModule covers E3: dropping beta entirely
+// reports every one of its leaves as removed, and the removed module
+// envelope classifies structural.
+func TestREQ4_Diff_E3_RemovedEntireModule(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	alphaHash := schema.IdentityHash("module", "Alpha")
+	proj := `{
+		"name": "test-project",
+		"requirements": [
+			{"id": "` + fixtureProjReq1ID + `", "type": "functional", "title": "Do stuff", "description": "The system must do stuff.", "priority": 1},
+			{"id": "` + fixtureProjReq2ID + `", "type": "non_functional", "title": "Be fast", "priority": 2}
+		],
+		"modules": [
+			{"id": "` + alphaHash + `", "name": "Alpha", "path": "alpha"}
+		]
+	}`
+	writeFile(t, specDir, "project.json", proj)
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+
+	betaHash := schema.IdentityHash("module", "Beta")
+	betaMetaKey := "meta/" + betaHash
+	betaComp := schema.IdentityHash("beta", "component", "BetaComp")
+
+	// Every one of beta's own nodes appears as removed. (project.json's own
+	// envelope also changes, since the modules array shrank — that's a
+	// separate, project-level Modified change, not one of beta's nodes.)
+	byKey := map[string]Change{}
+	for _, c := range changes {
+		byKey[c.Key] = c
+	}
+	if c, ok := byKey[betaMetaKey]; !ok || c.Type != Removed {
+		t.Errorf("expected %s removed, got %+v (present=%v)", betaMetaKey, c, ok)
+	}
+	if c, ok := byKey[betaComp]; !ok || c.Type != Removed {
+		t.Errorf("expected %s removed, got %+v (present=%v)", betaComp, c, ok)
+	}
+
+	classified := Classify(changes, ModuleNames(current), schema.DefaultProfile())
+	var sawBetaMetaStructural bool
+	for _, c := range classified {
+		if c.Key == betaMetaKey {
+			sawBetaMetaStructural = c.Impact == Structural
+		}
+	}
+	if !sawBetaMetaStructural {
+		t.Errorf("expected structural classification for removed beta envelope %s", betaMetaKey)
+	}
+}
+
+// TestREQ4_Diff_E4_NodeRenamed covers E4: DiffEngine compares keys, not
+// content, so a rename (new id, same file content) surfaces as an
+// unrelated-looking removed+added pair with equal content digests.
+func TestREQ4_Diff_E4_NodeRenamed(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	comp2Hash := schema.IdentityHash("alpha", "component", "Comp2")
+	comp1RenamedHash := schema.IdentityHash("alpha", "component", "Component1")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+
+	// Comp1 keeps its content file unchanged but takes a new id and name —
+	// the diff has no way to tell this apart from a genuine delete+add pair.
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + fixtureProjReq1ID + `"},
+			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
+		],
+		"components": [
+			{"id": "` + comp1RenamedHash + `", "name": "Component1", "content": "arch_comp1.md"},
+			{"id": "` + comp2Hash + `", "name": "Comp2", "content": "arch_comp2.md"}
+		],
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
+		]
+	}`
+	writeFile(t, filepath.Join(specDir, "alpha"), "module.json", alphaMod)
+
+	current := mustBuildTree(t, specDir)
+	changes := Diff(current, snapshot)
+
+	var removed, added *Change
+	for i, c := range changes {
+		if c.Key == comp1Hash {
+			removed = &changes[i]
+		}
+		if c.Key == comp1RenamedHash {
+			added = &changes[i]
+		}
+	}
+	if removed == nil || removed.Type != Removed {
+		t.Fatalf("expected %s removed, got %+v", comp1Hash, removed)
+	}
+	if added == nil || added.Type != Added {
+		t.Fatalf("expected %s added, got %+v", comp1RenamedHash, added)
+	}
+	if removed.OldHash == "" || added.NewHash == "" || removed.OldHash != added.NewHash {
+		t.Errorf("expected equal content digests for the renamed node: removed.OldHash=%q added.NewHash=%q", removed.OldHash, added.NewHash)
+	}
+	for _, c := range changes {
+		if c.Type == Modified && (c.Key == comp1Hash || c.Key == comp1RenamedHash) {
+			t.Errorf("DiffEngine must not perform rename detection — got a Modified change for %s", c.Key)
+		}
+	}
+}
+
+// TestREQ4_Diff_E5_DeterministicOrderingMultiModule covers E5: two identical
+// Diff runs over a change set spanning both modules produce the exact same
+// sorted change list.
+func TestREQ4_Diff_E5_DeterministicOrderingMultiModule(t *testing.T) {
+	specDir := setupSpecDir(t)
+	snapshot := mustBuildTree(t, specDir)
+
+	// Touch both modules: alpha gains a component, beta's component content
+	// changes — a richer, cross-module change set than
+	// TestREQ4_Diff_Deterministic's single-file mutation.
+	alphaComp3 := schema.IdentityHash("alpha", "component", "Comp3")
+	alphaReq1 := schema.IdentityHash("alpha", "requirement", "Alpha req 1")
+	alphaReq2 := schema.IdentityHash("alpha", "requirement", "Alpha req 2")
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	comp2Hash := schema.IdentityHash("alpha", "component", "Comp2")
+	alphaTest1 := schema.IdentityHash("alpha", "test_section", "Test1")
+
+	alphaMod := `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + alphaReq1 + `", "type": "functional", "title": "Alpha req 1", "preq_id": "` + fixtureProjReq1ID + `"},
+			{"id": "` + alphaReq2 + `", "type": "functional", "title": "Alpha req 2", "description": "Details here", "depends_on": ["` + alphaReq1 + `"]}
+		],
+		"components": [
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"},
+			{"id": "` + comp2Hash + `", "name": "Comp2", "content": "arch_comp2.md"},
+			{"id": "` + alphaComp3 + `", "name": "Comp3", "content": "arch_comp3.md"}
+		],
+		"test_sections": [
+			{"id": "` + alphaTest1 + `", "name": "Test1", "content": "test_comp1.md"}
+		]
+	}`
+	alphaDir := filepath.Join(specDir, "alpha")
+	writeFile(t, alphaDir, "module.json", alphaMod)
+	writeFile(t, alphaDir, "arch_comp3.md", "# Comp3 architecture\n")
+	writeFile(t, filepath.Join(specDir, "beta"), "arch_beta.md", "# Beta architecture v2\n")
+
+	current := mustBuildTree(t, specDir)
+
+	changes1 := Diff(current, snapshot)
+	changes2 := Diff(current, snapshot)
+
+	if len(changes1) < 2 {
+		t.Fatalf("expected multiple changes across the two-module fixture, got %d", len(changes1))
+	}
+	if len(changes1) != len(changes2) {
+		t.Fatalf("non-deterministic: run1 has %d changes, run2 has %d", len(changes1), len(changes2))
+	}
+	for i := range changes1 {
+		if changes1[i] != changes2[i] {
+			t.Errorf("non-deterministic at index %d: %v vs %v", i, changes1[i], changes2[i])
+		}
+	}
+	for i := 1; i < len(changes1); i++ {
+		if changes1[i].Key < changes1[i-1].Key {
+			t.Errorf("changes not sorted ascending: %q before %q", changes1[i-1].Key, changes1[i].Key)
 		}
 	}
 }
