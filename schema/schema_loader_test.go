@@ -5,7 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
@@ -603,6 +605,75 @@ func TestFR3_E2_SchemaStartsWithJSONObject(t *testing.T) {
 				t.Fatalf("%s schema does not start with '{'", load.name)
 			}
 		})
+	}
+}
+
+// TestFR3_E3_SchemaContentDeterministicAcrossBuilds compiles and runs a
+// throwaway helper program that hashes ProjectSchema()'s output, twice from
+// the same source, and checks the two builds print the same hash. This
+// matters because the merkle module hashes schema files — a non-deterministic
+// embed would break snapshot reproducibility.
+func TestFR3_E3_SchemaContentDeterministicAcrossBuilds(t *testing.T) {
+	repoRoot, err := filepath.Abs("..")
+	if err != nil {
+		t.Fatalf("resolve repo root: %v", err)
+	}
+
+	// Built and run inside the repo tree (not t.TempDir(), which some
+	// sandboxes mount noexec) so the built binary can actually execute.
+	workDir, err := os.MkdirTemp(repoRoot, "e3-build-")
+	if err != nil {
+		t.Fatalf("mkdir workdir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(workDir) })
+
+	src := `package main
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"os"
+
+	"github.com/dmitriyb/spexmachina/schema"
+)
+
+func main() {
+	data, err := schema.ProjectSchema()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+	sum := sha256.Sum256(data)
+	fmt.Print(hex.EncodeToString(sum[:]))
+}
+`
+	mainPath := filepath.Join(workDir, "main.go")
+	if err := os.WriteFile(mainPath, []byte(src), 0o644); err != nil {
+		t.Fatalf("write helper source: %v", err)
+	}
+
+	build := func(n int) string {
+		t.Helper()
+		outPath := filepath.Join(workDir, fmt.Sprintf("schemahash%d", n))
+		cmd := exec.Command("go", "build", "-o", outPath, mainPath)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("go build #%d: %v\n%s", n, err, out)
+		}
+		out, err := exec.Command(outPath).Output()
+		if err != nil {
+			t.Fatalf("run build #%d: %v", n, err)
+		}
+		return string(out)
+	}
+
+	hash1 := build(1)
+	hash2 := build(2)
+	if hash1 == "" {
+		t.Fatal("empty hash from build #1")
+	}
+	if hash1 != hash2 {
+		t.Fatalf("build #1 hash %q differs from build #2 hash %q", hash1, hash2)
 	}
 }
 
