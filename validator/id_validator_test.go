@@ -185,6 +185,28 @@ func TestREQ6_DanglingPreqID(t *testing.T) {
 	}
 }
 
+// --- I11: Project requirement depends_on references non-existent project requirement ---
+
+// TestREQ6_DanglingProjectRequirementDependsOn is the project-level
+// counterpart of I9 (TestREQ6_DanglingDependsOn), which covers the same
+// field inside a module. project.json's own requirement 000000000001
+// depends_on a nonexistent 000000000099, distinct from core/module.json's
+// module-scoped depends_on dangling reference covered by I9.
+func TestREQ6_DanglingProjectRequirementDependsOn(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "id_dangling"))
+	found := false
+	for _, e := range errs {
+		if e.Path == "project.json:/requirements/000000000001" &&
+			strings.Contains(e.Message, "depends_on references non-existent requirement 000000000099") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected dangling project-level depends_on error, got %v", errs)
+	}
+}
+
 // --- I13: Multiple dangling references in one module ---
 
 func TestREQ6_MultipleDanglingRefsReported(t *testing.T) {
@@ -301,6 +323,19 @@ func TestREQ5_SameIDacrossTypesIsValid(t *testing.T) {
 	errs := CheckIDs(filepath.Join("testdata", "id_valid"))
 	if len(errs) > 0 {
 		t.Fatalf("same ID across different array types should be valid, got errors: %v", errs)
+	}
+}
+
+// --- E1: Module with empty arrays ---
+
+// TestREQ5_EmptyArraysReturnsEmpty: a module declaring no requirements,
+// components or test_sections has no IDs to duplicate and no references to
+// dangle, so IDValidator reports zero errors — the DAGChecker half of the
+// same Given is TestREQ3_EmptyArraysNoErrors in dag_checker_test.go.
+func TestREQ5_EmptyArraysReturnsEmpty(t *testing.T) {
+	errs := CheckIDs(filepath.Join("testdata", "empty_arrays"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for module with empty arrays, got %d: %v", len(errs), errs)
 	}
 }
 
