@@ -182,13 +182,21 @@ func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema
 		}
 		modPath := modulePathByName(project, modName)
 
+		// One read+decode of module.json per module, however many
+		// (edge, from-type) pairs below ask it for entries: the large-graph
+		// perf budget doesn't survive one full file re-read per pair.
+		doc, err := loadRawDoc(filepath.Join(specDir, modPath, "module.json"))
+		if err != nil {
+			continue
+		}
+
 		for _, edge := range edges {
 			for _, fromName := range edge.From {
 				nt, ok := findModuleNodeType(profile, fromName)
 				if !ok {
 					continue
 				}
-				entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+				entries, err := doc.entries(nt.PluralKey)
 				if err != nil || len(entries) == 0 {
 					continue
 				}
@@ -218,6 +226,11 @@ func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schem
 		return nil
 	}
 
+	doc, err := loadRawDoc(filepath.Join(specDir, "project.json"))
+	if err != nil {
+		return nil
+	}
+
 	var errs []ValidationError
 	for _, edge := range edges {
 		for _, fromName := range edge.From {
@@ -225,7 +238,7 @@ func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schem
 			if !ok {
 				continue
 			}
-			entries, err := rawProjectEntries(specDir, pluralKey)
+			entries, err := doc.entries(pluralKey)
 			if err != nil || len(entries) == 0 {
 				continue
 			}
@@ -235,6 +248,42 @@ func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schem
 		}
 	}
 	return errs
+}
+
+// rawDocCache holds one JSON document's top-level fields, decoded once, so
+// repeated lookups of different array keys (one per (edge, from-type) pair
+// checkExtraModuleDAGEdges or checkExtraProjectDAGEdges is asked about) cost
+// a cheap map lookup plus a small array unmarshal instead of a fresh
+// os.ReadFile and full-document json.Unmarshal apiece.
+type rawDocCache struct {
+	top map[string]json.RawMessage
+}
+
+// loadRawDoc reads and top-level-decodes the JSON document at path.
+func loadRawDoc(path string) (*rawDocCache, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("read %s: %w", filepath.Base(path), err)
+	}
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(data, &top); err != nil {
+		return nil, err
+	}
+	return &rawDocCache{top: top}, nil
+}
+
+// entries decodes the array at pluralKey, if present. A document carrying
+// no such array yields no entries and no error, matching rawArrayEntries.
+func (c *rawDocCache) entries(pluralKey string) ([]rawEntry, error) {
+	arr, ok := c.top[pluralKey]
+	if !ok {
+		return nil, nil
+	}
+	var entries []rawEntry
+	if err := json.Unmarshal(arr, &entries); err != nil {
+		return nil, err
+	}
+	return entries, nil
 }
 
 // genericCycleAdjacency turns a slice of generically-read entries into an
