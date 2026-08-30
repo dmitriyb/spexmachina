@@ -620,8 +620,19 @@ func TestFR3_E3_SchemaContentDeterministicAcrossBuilds(t *testing.T) {
 	}
 
 	// Built and run inside the repo tree (not t.TempDir(), which some
-	// sandboxes mount noexec) so the built binary can actually execute.
-	workDir, err := os.MkdirTemp(repoRoot, "e3-build-")
+	// sandboxes mount noexec) so the built binary can actually execute, but
+	// under .gotmp/ (repo-local, gitignored) rather than the repo root
+	// itself: an untracked dir directly in the tracked tree flips
+	// `go build`'s vcs.modified stamp for any OTHER build with cmd.Dir at
+	// the repo root running concurrently (go test ./... parallelizes
+	// packages), making that build non-reproducible. .gotmp/ is ignored, so
+	// it never dirties the tree. See scripts/spec-gate_test.sh for the same
+	// noexec-/tmp rationale and precedent.
+	gotmp := filepath.Join(repoRoot, ".gotmp")
+	if err := os.MkdirAll(gotmp, 0o755); err != nil {
+		t.Fatalf("mkdir .gotmp: %v", err)
+	}
+	workDir, err := os.MkdirTemp(gotmp, "e3-build-")
 	if err != nil {
 		t.Fatalf("mkdir workdir: %v", err)
 	}
