@@ -1,0 +1,11 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "empty-arrays-test",
+  "requirements": []
+}

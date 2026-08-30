@@ -1,9 +1,16 @@
 package validator
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/dmitriyb/spexmachina/internal/perf"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // REQ-3: DAG checking — build dependency graphs from module, requirement, and
@@ -232,6 +239,109 @@ func TestREQ3_ProjectRequirementDependencyCycle(t *testing.T) {
 	}
 	if len(errs) != 1 {
 		t.Fatalf("expected exactly one cycle error (no double-report from a module-scope fast path), got %d: %v", len(errs), errs)
+	}
+}
+
+// E1: Module with empty arrays — no requirements, components or
+// test_sections means no edges to form cycles. The IDValidator half of the
+// same Given is TestREQ5_EmptyArraysReturnsEmpty in id_validator_test.go.
+func TestREQ3_EmptyArraysNoErrors(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "empty_arrays"))
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for module with empty arrays, got %d: %v", len(errs), errs)
+	}
+}
+
+// E3: Large graph performance — 50 modules, each with 20 requirements and 10
+// components, forming a deep but acyclic dependency chain, completes in
+// under 100ms and returns zero errors.
+func TestREQ3_LargeGraphPerformance(t *testing.T) {
+	const numModules = 50
+	const numRequirements = 20
+	const numComponents = 10
+
+	dir := t.TempDir()
+	proj := schema.Project{Name: "perf-dag-test"}
+
+	var prevModuleID string
+	for m := 0; m < numModules; m++ {
+		modName := fmt.Sprintf("module%03d", m)
+		modID := schema.IdentityHash("module", modName)
+		mod := schema.Module{
+			ID:   modID,
+			Name: modName,
+			Path: modName,
+		}
+		if prevModuleID != "" {
+			mod.RequiresModule = []string{prevModuleID}
+		}
+		proj.Modules = append(proj.Modules, mod)
+		prevModuleID = modID
+
+		spec := schema.ModuleSpec{Name: modName}
+
+		var prevReqID string
+		for r := 0; r < numRequirements; r++ {
+			reqName := fmt.Sprintf("req%03d", r)
+			reqID := schema.IdentityHash(modName, "requirement", reqName)
+			req := schema.ModuleRequirement{
+				ID:     reqID,
+				PreqID: schema.IdentityHash("project", "requirement", "root"),
+				Type:   "functional",
+				Title:  reqName,
+			}
+			if prevReqID != "" {
+				req.DependsOn = []string{prevReqID}
+			}
+			spec.Requirements = append(spec.Requirements, req)
+			prevReqID = reqID
+		}
+
+		var prevCompID string
+		for c := 0; c < numComponents; c++ {
+			compName := fmt.Sprintf("comp%03d", c)
+			compID := schema.IdentityHash(modName, "component", compName)
+			comp := schema.Component{
+				ID:   compID,
+				Name: compName,
+			}
+			if prevCompID != "" {
+				comp.Uses = []string{prevCompID}
+			}
+			spec.Components = append(spec.Components, comp)
+			prevCompID = compID
+		}
+
+		modDir := filepath.Join(dir, modName)
+		if err := os.MkdirAll(modDir, 0755); err != nil {
+			t.Fatalf("mkdir: %v", err)
+		}
+		specData, err := json.Marshal(spec)
+		if err != nil {
+			t.Fatalf("marshal module: %v", err)
+		}
+		writeFile(t, modDir, "module.json", string(specData))
+	}
+
+	proj.Requirements = []schema.Requirement{{
+		ID:    schema.IdentityHash("project", "requirement", "root"),
+		Type:  "functional",
+		Title: "root",
+	}}
+
+	projData, err := json.Marshal(proj)
+	if err != nil {
+		t.Fatalf("marshal project: %v", err)
+	}
+	writeProject(t, dir, string(projData))
+
+	var errs []ValidationError
+	perf.Within(t, 100*time.Millisecond, func() {
+		errs = CheckDAG(dir)
+	})
+
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors, got %d: %v", len(errs), errs)
 	}
 }
 
