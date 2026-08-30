@@ -657,6 +657,12 @@ func main() {
 		t.Helper()
 		outPath := filepath.Join(workDir, fmt.Sprintf("schemahash%d", n))
 		cmd := exec.Command("go", "build", "-o", outPath, mainPath)
+		// Each build gets its own GOCACHE. Sharing the ambient one would let
+		// the second build serve as a cache hit for the first, so the two
+		// runs would never actually re-execute the embed and the comparison
+		// below could never fail. See delivery/release_build_test.go's
+		// buildSpex for the same hazard and fix.
+		cmd.Env = append(os.Environ(), "GOCACHE="+filepath.Join(workDir, fmt.Sprintf("cache%d", n)))
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("go build #%d: %v\n%s", n, err, out)
 		}
