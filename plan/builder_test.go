@@ -1180,6 +1180,79 @@ func TestBuild_CrossComponent_CycleErrorNamesBothNodes(t *testing.T) {
 	}
 }
 
+// --- Cross-component: spec_node_kind per declared type comes from the profile ---
+
+// TestBuild_SpecNodeKindMatchesPlanRelevantTypesUnderDefaultProfile pins the
+// default-profile half of "spec_node_kind per declared type comes from the
+// profile": the default profile's plan-relevant set is exactly component,
+// data_flow, test_section (schema.DefaultProfile), and a create's
+// spec_node_kind is Action.NodeType copied verbatim, so the emitted
+// vocabulary matches today's arch_changeset_builder.md table exactly —
+// byte-identical to the pre-profile builder's over the same batch, since
+// nothing about this composition depends on the profile at all.
+func TestBuild_SpecNodeKindMatchesPlanRelevantTypesUnderDefaultProfile(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		sampleComponentCreate("c1", "m", "C1", nil),
+		{Type: ActionCreate, Module: "m", Node: "Flow", NodeType: KindDataFlow, SpecNodeID: "f1", SpecHash: "h-f1", Reason: "New spec node: m/Flow"},
+		{Type: ActionCreate, Module: "m", Node: "Sec", NodeType: KindTestSection, SpecNodeID: "t1", SpecHash: "h-t1", Reason: "New spec node: m/Sec"},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, want := range []struct{ specID, kind string }{
+		{"c1", KindComponent},
+		{"f1", KindDataFlow},
+		{"t1", KindTestSection},
+	} {
+		op := findOp(t, cs.Ops, want.specID)
+		if op.SpecNodeKind != want.kind {
+			t.Errorf("%s: spec_node_kind want %q, got %q", want.specID, want.kind, op.SpecNodeKind)
+		}
+		assertCanonicalFieldOrder(t, op)
+	}
+}
+
+// TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors pins the
+// extended-profile half's actual, current behavior rather than the
+// scenario's literal premise. test_changeset_builder.md asserts Build()
+// succeeds end to end for a create whose NodeType is a profile-declared
+// plan-relevant type outside today's four-entry tier table (e.g.
+// "endpoint"), carrying that kind straight through to spec_node_kind. But
+// TopologicalSorter — a sibling component with its own owning bead and
+// arch/test leaves, not this one — refuses any create whose kind belongs to
+// no tier (arch_topological_sorter.md, "Interface": "a create whose spec
+// node kind belongs to no tier"), and its tier table (plan/sorter.go,
+// tierOf) has no profile awareness; ActionClassifier's plan-relevant gate
+// does (graph.profileOrDefault().PlanRelevant) but the sorter's tiering
+// does not. This exact gap is a filed, non-blocking drift —
+// drifts/drift-spexmachina-h4gv.21.json — because resolving it means either
+// teaching TopologicalSorter to consult a profile-declared tier mapping or
+// narrowing the scenario, and neither is authorized by this bead's leaves.
+// Until /drift-fix triages that report, this test pins ChangesetBuilder's
+// actual composed behavior: the whole build refuses, naming the untiered
+// kind, with no partial changeset.
+func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors(t *testing.T) {
+	env := newBuilderEnv()
+	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section", "endpoint"}})
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "EP", NodeType: "endpoint", SpecNodeID: "e1", SpecHash: "h-e1", Reason: "New spec node: m/EP"},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
+	if err == nil {
+		t.Fatalf("Build: want error for untiered profile-declared kind \"endpoint\", got %d ops", len(cs.Ops))
+	}
+	if !strings.Contains(err.Error(), "endpoint") {
+		t.Errorf("error must name the untiered kind: %v", err)
+	}
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset: got %d ops", len(cs.Ops))
+	}
+}
+
 // --- Edge cases ---
 
 func TestBuild_EmptyBatchWithExistingEpicYieldsNoOps(t *testing.T) {
