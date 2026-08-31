@@ -235,6 +235,6 @@ These are contracts, not preferences — each is a requirement in
 The spec is the truth, and it changes only in the authoring loop — the skills
 described in [`skills.md`](skills.md). Automated implementer contexts never
 write `spec/`; one that finds a spec defect files a drift report under
-`drifts/` instead, which `/drift-fix` later triages. The baseline in
+`drifts/` instead, which `/drift` later triages. The baseline in
 `spec/.snapshot.json` moves only deliberately, and every refresh states its
 reason.

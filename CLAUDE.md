@@ -52,10 +52,10 @@ Your task's spec context is provided on input, and the spec files are the source
 
 ## Spec Change Doctrine
 
-- **The spec is the truth; it changes only in the authoring loop** (interactive sessions using `/propose`, `/spec`, `/spec-review`, `/drift-fix`). Implementer boxes never write `spec/` — the portitor gate denies it structurally.
-- **An implementer that finds a spec defect files a drift report**, `drifts/drift-<bead-id>.json` (schema: `schema/drift.schema.json`), never a spec edit. Non-blocking reports ride along in the bead's own PR and are triaged after the epic. A blocking report (the bead's own contract is ambiguous) travels as its own PR — the drift file plus the bead's return to `open` in the same commit — and stops the epic via the settle sentinel; the reviewer of that PR validates the drift claim itself. `/drift-fix` consumes all reports.
+- **The spec is the truth; it changes only in the authoring loop** (interactive sessions using `/propose`, `/spec`, `/spec-review`, `/drift` — orchestrated by the user-level `/drift-workflow`). Implementer boxes never write `spec/` — the portitor gate denies it structurally.
+- **An implementer that finds a spec defect files a drift report**, `drifts/drift-<bead-id>.json` (schema: `schema/drift.schema.json`), never a spec edit. Non-blocking reports ride along in the bead's own PR and are triaged after the epic. A blocking report (the bead's own contract is ambiguous) travels as its own PR — the drift file plus the bead's return to `open` in the same commit — and stops the epic via the settle sentinel; the reviewer of that PR validates the drift claim itself. `/drift` (via `/drift-workflow`) consumes all reports.
 - **The baseline (`spec/.snapshot.json`) moves only deliberately** — a mint when work is born, a refresh when a correction owes none — always in the authoring loop, never automated, never in a box. Every refresh states its reason.
-- **An epic whose drifts/ is non-empty is not closed** until `/drift-fix` has triaged the reports.
+- **An epic whose drifts/ is non-empty is not closed** until `/drift` has triaged the reports.
 
 ## Organizational Constraints
 
@@ -64,6 +64,6 @@ Your task's spec context is provided on input, and the spec files are the source
 
 ## Where to Find Details
 
-- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency), `/mint` (move the baseline: per-node mint-vs-absorb assessment, pipeline or refresh), `/drift-fix` (triage implementer drift reports).
+- **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency), `/mint` (move the baseline: per-node mint-vs-absorb assessment, pipeline or refresh), `/drift` (triage implementer drift reports; the sequence through `/spec-review` and `/mint` is the user-level `/drift-workflow`).
 - **Proposals**: `spec/proposals/`
 - **Beads**: `.beads/`

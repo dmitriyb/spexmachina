@@ -132,7 +132,7 @@ Everything is pipeable and every subcommand documents its exit codes; see [`docs
 - [`docs/architecture.md`](docs/architecture.md) — the module pipeline, the merkle model, how impact is classified, and where the snapshot fits.
 - [`docs/configuration.md`](docs/configuration.md) — the spec format: `project.json`, `module.json`, markdown leaves, node types and edges.
 - [`docs/commands.md`](docs/commands.md) — the full CLI reference: every subcommand, flag and exit code.
-- [`docs/skills.md`](docs/skills.md) — the authoring loop: `/propose`, `/spec`, `/spec-review`, `/drift-fix`.
+- [`docs/skills.md`](docs/skills.md) — the authoring loop: `/propose`, `/spec`, `/spec-review`, `/drift`.
 - [`docs/enforcement-migration.md`](docs/enforcement-migration.md) — migrating a spec to the declarative enforcement contracts.
 - `spec/**` — the authoritative, requirement-level specification (spexmachina format).
 

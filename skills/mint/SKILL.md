@@ -168,6 +168,6 @@ hand-verification instead.
 ## Out of scope
 
 - Authoring spec files (`/spec`) or auditing them (`/spec-review`).
-- Drift triage — `/drift-fix` decides what a drift report is worth; it comes here to execute
-  the baseline move it decided on.
+- Drift triage — `/drift` decides what a drift report is worth; `/drift-workflow` comes here
+  to execute the baseline move.
 - Running the epic (faber's job).

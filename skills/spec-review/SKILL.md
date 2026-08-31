@@ -309,7 +309,7 @@ final report.
 
 ## Step 8: Fix in-session (after the go)
 
-- The fixes land on the current working branch: spec-review runs after `/spec` or `/drift-fix`
+- The fixes land on the current working branch: spec-review runs after `/spec` or `/drift`
   and rides that run's branch. A standalone audit whose approved findings warrant structural
   rework ends in a review proposal — hand the findings to `/propose`.
 - Apply the approved corrections with `/spec` discipline: ids via `bin/spex hash-id`, the
