@@ -14,13 +14,14 @@ Given the path to a spec directory, the checker loads `project.json` and the `mo
 
 ## Graphs Checked
 
-The graphs are the edge kinds the resolved profile declares, minus those marked `cyclic: true` — that optional flag on an edge declaration marks a descriptive edge exempt from the cycle check, and an omitted flag means cycle-checked. One graph is built per non-exempt edge kind; the checker holds no fixed edge list of its own. The default profile omits the flag on all seven of its edge kinds, so every one is checked — four vacuously, since a single edge kind whose source and target types differ cannot close a loop, and the three that can actually cycle under the default are:
+The graphs are the edge kinds the resolved profile declares, minus those marked `cyclic: true` — that optional flag on an edge declaration marks a descriptive edge exempt from the cycle check, and an omitted flag means cycle-checked. One graph is built per non-exempt edge kind and source occurrence; the checker holds no fixed edge list of its own. The default profile omits the flag on all seven of its edge kinds, so every one is checked — four of the seven vacuously: `implements`, `provided_by` and `describes` because an edge kind whose source and target types differ cannot close a loop, and `preq_id` because its source and target are both requirements but the target scope's requirements carry no such edge, so no loop can close there either — while `requires_module`, `depends_on` and `uses` can. `depends_on` is walked at both scopes its `requirement` source is declared at, so the default yields four graphs that can actually cycle:
 
 1. **Module dependency graph**: nodes are modules, edges are `requires_module` references
-2. **Requirement dependency graph** (per module): nodes are requirements, edges are `depends_on` references
+2. **Requirement dependency graph** (per module): nodes are a module's requirements, edges are `depends_on` references
 3. **Component dependency graph** (per module): nodes are components, edges are `uses` references
+4. **Project requirement dependency graph** (project-wide): nodes are `project.json`'s own requirements, edges are the same `depends_on` kind at project scope — walked by the generic profile-edge machinery, not a dedicated built-in graph
 
-A profile-declared edge is built and walked by the same machinery. Each graph is built and walked on its own, and one cycle produces one entry. The entry's message names which graph it came from — under the default profile: module, requirement or component dependency — and spells the cycle out as the chain of labels it runs through: module names, requirement titles, component names. Two cycles in different graphs therefore arrive as two report lines.
+A profile-declared edge is built and walked by the same machinery. Each graph is built and walked on its own, and one cycle produces one entry. The entry's message names which graph it came from — the three built-in graphs name it in prose (module, requirement or component dependency), and a graph the generic machinery walks names the edge kind (`<edge kind> cycle: …`), located by the entry's path — and spells the cycle out as the chain of labels it runs through: module names, requirement titles, component names. Two cycles in different graphs therefore arrive as two report lines.
 
 ## Cycle Detection
 

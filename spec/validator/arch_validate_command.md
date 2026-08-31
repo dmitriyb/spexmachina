@@ -20,7 +20,7 @@ The order is fixed in the command and is the same on every run:
 3. `link` — every typed cross-node link written in a content leaf resolves to a spec node
 4. `id` — [[00beeeda5ddd|IDValidator]], identity-hash uniqueness, cross-reference targets, `preq_id`, `priority`
 5. `id_derivation` — a module-scoped id equals the identity hash of its own module, node type and name
-6. `dag` — [[c6c770a59d68|DAGChecker]], the module, requirement and component dependency graphs are acyclic
+6. `dag` — [[c6c770a59d68|DAGChecker]], acyclicity over every non-exempt edge kind the profile declares — under the default: the module, requirement (both scopes) and component dependency graphs
 7. `name_consistency` — [[88dd4060cb44|NameConsistencyChecker]], `project.json` and `module.json` agree on a module's name
 8. `test_coverage` — [[ed7a40b68995|TestCoverageChecker]], every component is described by a `test_section`
 9. `requirement_coverage` — [[c7d0282b0e05|RequirementCoverageChecker]], every requirement is derived and implemented

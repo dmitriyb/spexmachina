@@ -239,10 +239,15 @@ implementation bead.
 - **Assertions**:
   - Under the default profile, every op's `spec_node_kind` matches today's vocabulary exactly —
     the output is byte-identical to the pre-profile builder's over the same batch.
-  - Under the extended profile, the endpoint create's op carries the declared `spec_node_kind`
-    (`"endpoint"`) unchanged, composed through the same canonical field order with no new op
-    shape; the kind-to-bead-type mapping is the adapter's, whose default arm files the unknown
-    kind as `feature`.
+  - Under the extended profile, `Build()` returns an error naming the `endpoint` kind and
+    writes no changeset: TopologicalSorter tiers only the built-in kind vocabulary and refuses
+    a batch holding a create whose spec node kind belongs to no tier (per
+    `arch_topological_sorter.md`), so a profile-declared plan-relevant type outside that
+    vocabulary reaches it as an untierable create. ChangesetBuilder itself copies
+    `spec_node_kind` from the action's node type verbatim and validates nothing against the
+    vocabulary — the refusal is the sorter's, surfaced through `Build()`. Extending the tier
+    assignment to profile-declared types is a change to the sorter's own contract, made in the
+    authoring loop, not something this component can deliver.
 
 ## Fixtures
 

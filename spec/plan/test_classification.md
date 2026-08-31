@@ -51,7 +51,7 @@ An unmatched `added` api yields zero actions; a test_section with `len(describes
 The bead-producing set the node-type gate consults is read from the resolved profile rather than from a compiled-in constant. Two arms:
 
 - Under the default profile, S5's verdicts hold byte-for-byte — the default declares today's plan-relevant set, so api stays outside it, data_flow always produces, and the describes-length rule binds test_section.
-- Under a profile declaring an `endpoint` type as plan-relevant, an unmatched `added` endpoint produces one create whose op carries `spec_node_kind: "endpoint"` — the bead type it is filed as is the adapter's mapping, not the op's; a profile leaving `endpoint` outside the set yields zero actions for the same change. The classifier branches on the declaration, never on the type name.
+- Under a profile declaring an `endpoint` type as plan-relevant, an unmatched `added` endpoint produces one create action carrying the type name; whether a changeset can be built from that action is the sorter's contract, not the classifier's (see `test_changeset_builder`). A profile leaving `endpoint` outside the set yields zero actions for the same change. The classifier branches on the declaration, never on the type name.
 
 ### S6: Resolver recomputes a retarget's deps add-only
 

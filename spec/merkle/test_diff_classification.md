@@ -7,8 +7,8 @@ Integration and acceptance tests for the DiffEngine (component 4), ImpactClassif
 This leaf covers three test files that fixture themselves differently, and the distinction matters when reading the scenarios below.
 
 - The **Diff** scenarios (S1–S5, E-cases) are backed by `merkle/diff_engine_test.go`, which writes a real spec directory with `setupSpecDir(t)` and produces both trees from it with `BuildTree`, so the keys under test are real identity hashes. `findChild(t, parent *Node, key string) *Node` locates a child by key; changes are located by inline loops over the returned slice.
-- The **Classify** scenarios (S7–S13, R1–R2) are backed by `merkle/impact_classifier_test.go`, which passes synthetic `[]Change` literals straight into `Classify` and builds no tree for them. That is why they can exercise a `data_flow` node type, which `setupSpecDir` does not declare. `Classify` takes the resolved profile as its required third argument; in the call shapes below `defaultProfile` stands for `schema.DefaultProfile()`, and every scenario passes it unless the scenario says otherwise (S15 is the one that does). The one test in that file that does build trees is S14, the end-to-end `Diff`-then-`Classify` pairing (`merkle/impact_classifier_test.go:175`). R3–R5 are Diff scenarios, not Classify ones.
-- The **Completeness** scenarios (C1–C11) are backed by `merkle/completeness_checker_test.go`, whose `TestREQ8_C1`…`TestREQ8_C11` functions carry them one-for-one.
+- The **Classify** scenarios (S7–S13, R1–R2) are backed by `merkle/impact_classifier_test.go`, which passes synthetic `[]Change` literals straight into `Classify` and builds no tree for them. That is why they can exercise a `data_flow` node type, which `setupSpecDir` does not declare. `Classify` takes the resolved profile as its required third argument; in the call shapes below `defaultProfile` stands for `schema.DefaultProfile()`, and every scenario passes it unless the scenario says otherwise (S15 is the one that does). The one test in that file that does build trees is S14, the end-to-end `Diff`-then-`Classify` pairing, `TestREQ5_S14_DiffThenClassifyEndToEnd`. R3–R5 are Diff scenarios, not Classify ones.
+- The **Completeness** scenarios (C1–C11) are backed by `merkle/completeness_checker_test.go`, whose `TestREQ8_C1`…`TestREQ8_C11` functions carry them one-for-one. `CheckCompleteness` takes the resolved profile as a required third argument; in the C1–C11 call shapes below `defaultProfile` stands for `schema.DefaultProfile()`, and every scenario passes it.
 
 The listing below is the abstract leaf shape the scenarios reason about, with placeholder keys standing in for identity hashes — not a transcript of `setupSpecDir`, which declares two project requirements, two alpha requirements, two alpha components, one alpha test_section and one beta component, and no data_flow.
 
@@ -65,13 +65,12 @@ TEST2_HASH               hash=bh1  type=leaf  node_type=test_section
 
 **Given** the current tree has:
 - `TEST1_HASH` modified (hash changed)
-- `COMP3_HASH` added
-- `COMP2_HASH` removed
+- `COMP3_HASH` added and `COMP2_HASH` removed, both in module beta
 **When** `Diff(current, snapshot)` is called
-**Then** the result contains exactly 3 changes
-**And** changes are sorted ascending by key, whatever hex order the three identity hashes fall into
+**Then** the result contains exactly 4 changes — the three leaf changes plus a modified `meta/<BETA_HASH>`, because under the mandated real-tree setup a leaf is added or removed by editing beta's `module.json`, whose raw bytes are that module's meta envelope leaf
+**And** changes are sorted ascending by key, whatever hex order the identity hashes fall into
 
-**Rationale**: Validates that DiffEngine handles mixed change types across multiple modules and returns results sorted by key for deterministic output (per `arch_diff_engine.md`).
+**Rationale**: Validates that DiffEngine handles mixed change types across multiple modules and returns results sorted by key for deterministic output (per `arch_diff_engine.md`). The dragged-along envelope change is the same mechanism E3 exercises at whole-module scale.
 
 ### S6: First diff with no snapshot (all nodes added)
 
@@ -260,65 +259,65 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 ### C1: Modified requirement with component leaf changed — no error
 
 **Given** a diff where `REQ1_HASH` is modified and `COMP1_HASH` (whose `implements` array contains `REQ1_HASH`) is also modified
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** no errors are returned
 
 ### C2: Modified requirement without component leaf changed — error
 
 **Given** a diff where `REQ1_HASH` is modified but `COMP1_HASH` (which implements it) is NOT in the diff
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned with type `"incomplete_change"`, path `REQ1_HASH`, and related `[COMP1_HASH]`
 
 ### C3: Added requirement with no implementing component — error
 
 **Given** a diff where `REQ3_HASH` is added, but no component in alpha has `REQ3_HASH` in its `implements` array
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned indicating the new requirement is not implemented
 
 ### C4: Added requirement with implementing component leaf unchanged — error
 
 **Given** a diff where `REQ3_HASH` is added, `COMP2_HASH` implements it, but `COMP2_HASH` is NOT in the diff
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned for the implementing component's unchanged content leaf
 
 ### C5: Removed requirement still referenced by component — error
 
 **Given** a diff where `REQ2_HASH` is removed, but `COMP1_HASH` in the current module.json still has `REQ2_HASH` in its `implements` array
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned indicating `COMP1_HASH` still implements the removed requirement
 
 ### C6: Project requirement changed with no module requirement deriving from it — error
 
 **Given** a diff where `PROJ_REQ5_HASH` is modified, but no module requirement has `preq_id == PROJ_REQ5_HASH`
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned indicating no module requirement derives from the changed project requirement
 
 ### C7: Project requirement changed, module requirement exists, component leaf unchanged — error
 
 **Given** a diff where `PROJ_REQ1_HASH` is modified, module requirement `MOD_REQ2_HASH` has `preq_id == PROJ_REQ1_HASH`, `COMP3_HASH` implements `MOD_REQ2_HASH`, but `COMP3_HASH` is NOT in the diff
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned for the implementing component's unchanged content leaf
 
 ### C8: Project requirement changed, full chain complete — no error
 
 **Given** a diff where `PROJ_REQ1_HASH` is modified, `MOD_REQ2_HASH` derives from it, `COMP3_HASH` implements `MOD_REQ2_HASH`, and `COMP3_HASH` IS in the diff
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** no errors are returned
 
 ### C9: Meta changed without requirement changes — component edge check
 
 **Given** a diff where `meta/<ALPHA_HASH>` is modified but no requirement nodes in module alpha changed, and no component content leaves changed
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** `DiffError`s are returned for each component whose content leaf did not change
 
 ### C10: Multiple requirements changed, partial coverage — errors for uncovered
 
 **Given** a diff where two requirements in alpha (`REQ1_HASH`, `REQ2_HASH`) are both modified. `COMP_A_HASH` implements `REQ1_HASH` and its leaf changed. `COMP_B_HASH` implements `REQ2_HASH` and its leaf did NOT change.
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** one `DiffError` is returned for `COMP_B_HASH` only — `COMP_A_HASH` is covered
 
 ### C11: No structural or requirement changes — no errors
 
 **Given** a diff with only `impl_only` and `arch_impl` changes (no requirement or meta changes)
-**When** `CheckCompleteness(changes, specDir)` is called
+**When** `CheckCompleteness(changes, specDir, defaultProfile)` is called
 **Then** no errors are returned

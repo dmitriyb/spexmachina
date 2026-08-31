@@ -2,7 +2,7 @@
 
 The project.json JSON Schema (`schema/project.schema.json`) defines the top-level structure of a spex-machina spec — [[f471f2764ab8|the project file's shape]]: what may appear in it, what must, and in what form.
 
-The effective document is composed, not fixed: the shipped schema is the frame — the envelope fields, the identity-hash pattern, `additionalProperties: false` — and the resolved profile supplies the array properties for the project-scoped node types. Under the default profile the composed document is identical in content to the shipped one — the same JSON value, which a golden test asserts by structural comparison — so everything below describes both the shipped frame and the default composition at once; a project declaring an additional project-scoped type gets its array added to the composed document with the same envelope constraints.
+The effective document is composed, not fixed: the shipped schema is the frame — the envelope fields, the identity-hash pattern, `additionalProperties: false` — and the resolved profile supplies the array properties for the project-scoped node types. Under the default profile the composed document is identical in content to the shipped one — the same JSON value, which a golden test asserts by structural comparison — so everything below describes both the shipped frame and the default composition at once; a project declaring an additional project-scoped type gets its array added to the composed document with the same envelope constraints, and its entry definition carries one array-of-identity-hash property per profile-declared edge kind whose source names that type, exactly as the module schema's composition does for module-scoped types.
 
 ## Structure
 

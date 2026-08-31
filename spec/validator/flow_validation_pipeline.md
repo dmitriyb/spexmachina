@@ -54,8 +54,9 @@ sequence but that this module declares no component for.
 composed JSON Schemas. [[5dcca0dab9bd|ContentResolver]] asks whether every declared `content`
 path resolves to a file, without opening any of them. [[00beeeda5ddd|IDValidator]] covers
 identity-hash uniqueness, cross-reference targets, mandatory `preq_id` and `priority`
-presence. [[c6c770a59d68|DAGChecker]] walks the module, requirement and component dependency
-graphs looking for cycles. [[88dd4060cb44|NameConsistencyChecker]] compares each module's
+presence. [[c6c770a59d68|DAGChecker]] walks every non-exempt edge kind the resolved profile
+declares — under the default, the module, requirement (both scopes) and component
+dependency graphs — looking for cycles. [[88dd4060cb44|NameConsistencyChecker]] compares each module's
 name in `project.json` against the name its own `module.json` declares.
 
 [[ed7a40b68995|TestCoverageChecker]] reports a component that no `test_section` describes,

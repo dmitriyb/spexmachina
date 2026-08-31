@@ -571,7 +571,7 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```
 **Expected:** Validation fails. The module-level requirement definition does not include `derivation` — a module requirement derives by construction through its required `preq_id` — and `additionalProperties: false` rejects it. Like E8 in the opposite direction, this verifies the two requirement definitions stay correctly separated.
 
-### S27: Profile-declared array accepted, undeclared array still rejected
+### S27: Profile-declared arrays and edge fields accepted, undeclared ones still rejected
 
 **Steps:** Compose the module schema from a profile that declares an additional module-scoped `endpoint` type with plural key `endpoints` and a required content leaf. Validate two documents against the composed schema:
 
@@ -586,10 +586,16 @@ This is the boundary test for the 12-hex-character identity pattern every ID fie
 ```
 **Expected:** Validation passes — the profile-supplied array gets the same envelope constraints (identity-hash id, non-empty name, required content) the built-in types get.
 
-**Input (undeclared array):** the same document with `"widgets": []` added.
+**Input (declared edge field):** compose instead from the same profile extended with a `serves` edge declared from `endpoint` to `component`; the same document with `"serves": ["000000000002"]` added to the endpoint entry.
+**Expected:** Validation passes — an edge kind the profile declares with the custom type as its source composes as an array-of-identity-hash property on that type's entry definition, so a node of the type can carry the field the profile says it may.
+
+**Input (undeclared edge field):** the `"serves"`-carrying document validated against the schema composed from the edge-less profile of the first step.
+**Expected:** Validation fails at the endpoint entry — the entry-level `additionalProperties: false` rejects a field that is neither envelope nor declared edge.
+
+**Input (undeclared array):** the first document with `"widgets": []` added.
 **Expected:** Validation fails at the root — `additionalProperties: false` is part of the fixed frame, so an array no profile declares is rejected exactly as it always was.
 
-**Verifies:** The frame-plus-vocabulary split — the profile supplies array properties, the frame supplies everything else, and declaring a type is the only way to open an array.
+**Verifies:** The frame-plus-vocabulary split — the profile supplies array properties and their declared edge fields, the frame supplies everything else; declaring a type is the only way to open an array, and declaring an edge is the only way to open a reference field on a declared type.
 
 ### E11: Section with arbitrary content properties passes schema validation
 
