@@ -1,26 +1,17 @@
 ---
 name: drift
-description: "Triage drift reports filed by implementers (drifts/drift-*.json): validate each report, verdict it, and apply the accepted spec corrections — the baseline decision and the pipeline are /mint's, the audit /spec-review's"
+description: "Triage drift reports filed by implementers (drifts/drift-*.json): validate each report, verdict it, and apply the accepted spec corrections"
 argument-hint: "[drift-report-files]"
 ---
 
 # /drift — Triage Implementer Drift Reports
 
-Implementer boxes never write `spec/` — the gate denies it. When an implementer finds a spec
-defect mid-task, it files a typed report under `drifts/` (schema: `schema/drift.schema.json`)
-and either continues (non-blocking) or stops the epic (blocking). This skill is the
-authoring-loop consumer of those reports: collect, validate, verdict, and apply what is
-accepted. It is one step of `/drift-workflow`; the deliberate baseline decision and every
-pipeline command belong to `/mint`, and the audit of the resulting spec to `/spec-review`.
-
-Two entry modes, same procedure:
-
-- **Mid-epic (blocking):** the epic settled with `halt_reason: blocking_drift`. The report
-  reached main as its own PR — the drift file plus the bead's return to `open` in one commit,
-  the PR review validating the claim itself. After the triage PR merges, the epic resumes with
-  a plain `faber run epic` — the reopened or replaced bead is simply ready again.
-- **Post-epic (batch):** the epic finished; `drifts/` holds non-blocking reports. Triage them
-  all in one pass.
+Implementers never write `spec/`. A spec defect found mid-task arrives as a typed report under
+`drifts/` (schema: `schema/drift.schema.json`) — a non-blocking report riding in its task's own
+PR, a blocking one as its own PR with the task returned to `open`. This skill consumes the
+reports in the authoring loop: collect, validate, verdict each, and apply the accepted
+corrections. It ends with the spec corrected and the reports deleted; the baseline stays
+untouched — moving it is `/mint`'s, the one skill that does.
 
 ## Step 1: Collect and verify
 
@@ -31,7 +22,7 @@ Two entry modes, same procedure:
   files, the leaf of every node the citations touch — and verify the report's evidence against
   the current spec and code before any verdict.
 
-## Step 2: Verdict each report
+## Step 2: Verdict each report, present, and stop
 
 - **Accepted** — the defect is real. Classify it, because the class shapes the fix:
 
@@ -49,29 +40,32 @@ Two entry modes, same procedure:
 - **Overtaken** — later work resolved the defect. Verify the resolution, record it in the PR
   description, delete the report.
 
-Present the verdicts — one row per report: class, fix shape, or the rejection/overtake ground —
-and pause for discussion before touching `spec/`.
+Present the verdicts — one row per report: class and fix shape, or the rejection/overtake
+ground — then stop and wait for the user's explicit go. Fixing is a second, separately
+authorized act.
 
-## Step 3: Fix the spec
+## Step 3: Fix the spec (after the go)
 
+- Work on a branch off main — or, for a blocking report, the branch its PR delivered.
 - Apply the agreed corrections with `/spec` discipline: ids via `bin/spex hash-id`, links in
   prose, no Go in arch leaves, completeness obligations honored.
 - Scope guard: the smallest edit that decides each accepted report. Every changed node beyond
-  a report's justification widens the downstream task count; findings the reports do not
-  justify go to `/spec-review`'s own flow.
+  a report's justification widens the downstream task count.
 - Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`.
 
-## Step 4: Hand back to the workflow
+## Step 4: Report
 
-- Delete every triaged report — the deletion is the completion marker, tracked in git.
-- For each changed node, state what changed and whether it records shipped, test-pinned
-  behaviour or births work — this feeds `/drift-workflow`'s pre-commit assessment and `/mint`'s
-  absorb table.
-- Everything after — the audit, the commits behind their pauses, the baseline decision and the
-  pipeline — is the workflow's following steps.
+- Delete every triaged report in the same change — the deletion is the completion marker,
+  tracked in git.
+- Tell the user: the verdict per report, and per changed node what changed and whether it
+  records shipped, test-pinned behaviour or births work — advisory only; the classification
+  itself is `/mint`'s Step 2, made against the committed diff.
+- Remind them to review and commit on the working branch. The mint runs against that commit.
 
 ## Out of scope
 
-- Writing drift reports (the implementer's protocol, in the box skills).
-- The baseline move and the pipeline (`/mint`), the audit (`/spec-review`), running the epic
-  (faber).
+- Writing drift reports (the implementer's protocol).
+- Moving the baseline and running the pipeline (`/mint`); auditing the corrected spec
+  (`/spec-review`).
+- Any spec change beyond what the triaged reports justify — other findings go to
+  `/spec-review`'s own flow.
