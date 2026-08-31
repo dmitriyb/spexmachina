@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://spexmachina.dev/schema/drift.schema.json",
   "title": "Spex Machina Drift Report",
-  "description": "A drift report filed by an implementer who found a spec defect during task implementation. Written to drifts/drift-<bead-id>.json; never a spec edit. Triaged by the /drift-fix skill in the authoring loop, which fixes the spec through review, makes the deliberate mint-or-refresh decision, and deletes the report in the same PR.",
+  "description": "A drift report filed by an implementer who found a spec defect during task implementation. Written to drifts/drift-<bead-id>.json; never a spec edit. Triaged in the authoring loop by /drift-workflow: /drift validates and verdicts the report and applies the accepted correction, /spec-review audits, /mint makes the deliberate mint-or-refresh decision; the report is deleted in the same PR.",
   "type": "object",
   "required": ["bead", "node", "files", "claim", "authoritative_source", "evidence", "blocking"],
   "additionalProperties": false,

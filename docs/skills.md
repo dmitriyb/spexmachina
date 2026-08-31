@@ -22,7 +22,7 @@ never a spec edit.
 Never automatically, never as a side effect. Every refresh states its reason.
 
 **An epic with an untriaged `drifts/` is not closed.** Reports accumulate
-during implementation and are cleared by `/drift-fix`, not before.
+during implementation and are cleared by `/drift`, not before.
 
 ## `/propose`
 
@@ -84,10 +84,11 @@ ingest mechanics with their label budgets, the refresh pathway, and the
 gate-asymmetry override. `/spec` ends at green gates and a commit; `/mint`
 starts from that commit.
 
-## `/drift-fix`
+## `/drift`
 
-*Triage drift reports filed by implementers, fix the spec through review, make
-the deliberate mint-or-refresh decision, and clear the reports.*
+*Triage drift reports filed by implementers: validate, verdict, and apply the
+accepted corrections; the audit is `/spec-review`'s, the baseline decision
+`/mint`'s, and the user-level `/drift-workflow` sequences all three.*
 
 Implementers file `drifts/drift-<task-id>.json` (schema:
 `schema/drift.schema.json`) when they find a spec defect. A report names the
@@ -97,8 +98,8 @@ claim, the authoritative source that contradicts it, and the evidence. It is
 **blocking** when the task's own contract is ambiguous, in which case it
 travels as its own PR and stops the epic.
 
-`/drift-fix` collects and validates the reports, classifies each, fixes the
-spec through review, and then makes the baseline call explicitly on `/mint`'s
+`/drift` collects and validates the reports, classifies each, fixes the
+spec, and hands over; the baseline call is made explicitly on `/mint`'s
 direction axis — mint if the correction births work, refresh if the spec is
 converging on shipped, test-pinned behaviour — and executes it through
 `/mint`. That decision is the reason the skill exists, and it is made by a
@@ -117,7 +118,7 @@ human-supervised session, never by a box.
                             implementation happens; defects found
                             become drifts/drift-<task-id>.json
                                           │
-                                    /drift-fix ──▶ spec corrected,
+                                    /drift ─────▶ spec corrected,
                                                    baseline decided,
                                                    reports cleared
 
