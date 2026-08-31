@@ -25,7 +25,7 @@ the contract.
 
 All checks operate on identity hashes. The diff change keys, the `implements` arrays in `module.json`, and the keys in the resolved component map are all hex strings — comparison is exact-match.
 
-Which node types trigger the rules is the resolved profile's declaration, not a compiled-in pair: the requirement-leaf checks fire on the type the profile assigns that role, and the meta-envelope sweep on the fixed `meta` leaves, with the implementing edge and the content-bearing types likewise read from the profile's declarations. The default profile declares exactly the triggers described below, so every rule reads under it as it always has.
+Which node types trigger the rules is the resolved profile's declaration, not a compiled-in pair: the requirement-leaf checks fire on the type the profile assigns that role, and the meta-envelope sweep on the fixed `meta` leaves — a rule of the frame, not a profile assignment. The implementing edge the checks resolve through (the `implements` arrays) and the component shape they sweep are this checker's own reading of `module.json`, not profile declarations. The default profile declares exactly the triggers described below, so every rule reads under it as it always has.
 
 ### Modified requirement → implementing component content must change
 

@@ -316,6 +316,12 @@ These scenarios cover profile resolution and the composition acceptance criterio
 **Steps:** Resolve the same profile (default and file-backed) twice.
 **Expected:** Byte-identical resolved profiles and byte-identical composed schemas across runs.
 
+### P6: A new edge kind sourced at a built-in type is rejected at profile validation
+
+**Steps:** Place a `spec/profile.json` declaring an `endpoint` type plus an `audits` edge kind — one the frame does not already carry — whose source is the built-in `component` type. Resolve the profile.
+**Expected:** Resolution fails with one early error naming the `audits` declaration. No composed schema is produced and no downstream check runs.
+**Verifies:** The deliberate rule of the current composition: built-in definitions are frame-fixed and gain no new reference fields, so an edge kind sourced at a built-in type could never be carried by any document — it is refused at declaration rather than accepted as inert. The rule stands until built-in types compose through the same path as declared ones; an edge kind the frame already carries (such as `uses` at `component`) is declarable as it always was.
+
 ## BeadMapSchema Scenarios
 
 ### BM1: BeadMapSchema() loads without error

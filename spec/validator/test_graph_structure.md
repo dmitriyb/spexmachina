@@ -4,7 +4,7 @@ Integration and acceptance test scenarios for DAGChecker and IDValidator.
 
 ## Setup
 
-IDValidator scenarios each read one checked-in fixture directory under `validator/testdata/id_*`, already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by ten tests. DAGChecker fixtures cover four shapes only — `dag_valid` (two acyclic modules, `core` and `api`), `dag_module_cycle` (a two-module cycle), `dag_req_cycle` and `dag_comp_cycle`; the remaining DAG scenarios have no dedicated fixture, and each carries a note below saying what covers it, if anything. Node ids in fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
+IDValidator scenarios each read one checked-in fixture directory under `validator/testdata/id_*`, already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by eleven tests. DAGChecker fixtures cover eleven shapes — `dag_valid` (two acyclic modules, `core` and `api`), `dag_module_cycle` (a two-module cycle), `dag_req_cycle`, `dag_comp_cycle`, `dag_profile_edge_cycle`, `dag_profile_edge_cyclic_exempt`, `dag_profile_builtin_exempt`, `dag_profile_omits_builtin_edges`, `dag_profile_data_flow_uses_cycle`, `dag_project_req_cycle`, and `empty_arrays` (shared with IDValidator, E1). D9, D10 and their variants are realized by the `dag_profile_*` and `dag_project_req_cycle` fixtures; the DAG scenarios no fixture realizes each carry a note below saying what covers them, if anything. Node ids in fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
 
 ### Scenario Model
 
@@ -194,9 +194,21 @@ tmp/spec/
 
 **Given** the same profile, where two endpoints reference each other through `serves`-style edges the profile declares without a `cyclic` flag.
 **When** `CheckDAG(specDir)` is called.
-**Then** one cycle error naming the two nodes. The DAG check enforces acyclicity over every edge kind the resolved profile declares that is not marked `cyclic: true`; under the default profile — which omits the flag on all seven edge kinds — the graphs that can actually cycle are exactly the three the scenarios above exercise, the other four passing vacuously.
+**Then** one cycle error naming the two nodes. The DAG check enforces acyclicity over every edge kind the resolved profile declares that is not marked `cyclic: true`; under the default profile — which omits the flag on all seven edge kinds — the graphs that can actually cycle are module dependency, requirement `depends_on` at both its scopes (each module's requirements, exercised by the scenarios above, and `project.json`'s own requirements, whose cycles report through the generic path with the `depends_on cycle` message), and component `uses`; the other four edge kinds pass vacuously.
 
 In a further variant the profile marks the endpoints' edge `cyclic: true`: the same loop then validates with zero DAG errors — a `cyclic` edge is descriptive, exempt from the cycle check.
+
+#### D10: Project requirement `depends_on` cycle
+
+**Given** two requirements in `project.json` whose `depends_on` arrays name each other (fixture `dag_project_req_cycle`).
+**When** `CheckDAG(specDir)` is called.
+**Then** one cycle error naming the two requirements, reported through the generic profile-edge path with the `depends_on cycle: …` message — project-scope `depends_on` has no dedicated built-in graph (per `arch_dag_checker.md`).
+
+Three further `dag_profile_*` fixtures pin the edge-set policy down:
+
+- `dag_profile_builtin_exempt`: a profile marking a built-in edge kind (`uses`) `cyclic: true` — a component `uses` loop then validates with zero DAG errors; the exemption flag binds built-in kinds exactly as it binds declared ones.
+- `dag_profile_omits_builtin_edges`: a profile whose edge set omits a built-in kind — a loop through that field produces zero DAG errors, because the checker walks only the kinds the resolved profile declares; the composed schema still admits the field (built-in definitions are frame-fixed), so leaving a built-in edge unchecked is the profile's own declaration to make.
+- `dag_profile_data_flow_uses_cycle`: data_flow `uses` edges alongside a component `uses` loop — exactly the component cycle is reported; the data_flow occurrence's graph (data_flow → component) cannot close a loop and contributes no edges to the component graph, per the per-source-occurrence rule in `arch_dag_checker.md`.
 
 ---
 
