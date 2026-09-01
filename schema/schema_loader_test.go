@@ -938,7 +938,7 @@ func TestFR9_P2_ComposedSchemasEqualShippedGolden(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 
-	composedProject, err := ComposeProjectSchema(p.ProjectNodeTypes())
+	composedProject, err := ComposeProjectSchema(p.ProjectNodeTypes(), p.Edges)
 	if err != nil {
 		t.Fatalf("ComposeProjectSchema: %v", err)
 	}

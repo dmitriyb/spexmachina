@@ -49,15 +49,19 @@ func defaultProjectArrayKeyByTypeName() map[string]string {
 // the shipped frame plus one array property per given project-scoped node
 // type, keyed by its plural key. A type whose name matches the frame's
 // built-in $defs entry (requirement) reuses that definition, and its array
-// property, unchanged from the frame. Any other name gets a generic
-// envelope definition — an identity-hash id, a non-empty name, and, only
-// when RequiresContent is set, a required content path — mirroring the
-// module schema's generic envelope, and a synthesized array property
-// description. additionalProperties:false at the root, inherited unchanged
-// from the frame, is what rejects any array no passed type declares.
-// Composing with DefaultProjectNodeTypes reproduces the shipped
-// project.schema.json.
-func ComposeProjectSchema(types []ProjectNodeType) ([]byte, error) {
+// property, unchanged from the frame — declared edges sourced at a built-in
+// type never reach it, since the built-in $defs are frame-fixed. Any other
+// name gets a generic envelope definition — an identity-hash id, a
+// non-empty name, and, only when RequiresContent is set, a required content
+// path — mirroring the module schema's generic envelope, plus one array-of-
+// identity-hash property per given edge whose source names that type, and a
+// synthesized array property description. additionalProperties:false at the
+// root, inherited unchanged from the frame, is what rejects any array no
+// passed type declares; the same constraint at the entry level, applied by
+// genericProjectNodeDef, is what rejects any field that is neither envelope
+// nor declared edge. Composing with DefaultProjectNodeTypes and
+// DefaultProfile's edges reproduces the shipped project.schema.json.
+func ComposeProjectSchema(types []ProjectNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := projectSchemaFrame()
 	if err != nil {
 		return nil, fmt.Errorf("schema: compose project schema: %w", err)
@@ -76,7 +80,7 @@ func ComposeProjectSchema(types []ProjectNodeType) ([]byte, error) {
 	for _, t := range types {
 		_, declared := defs[t.Name]
 		if !declared {
-			defs[t.Name] = genericProjectNodeDef(t)
+			defs[t.Name] = genericProjectNodeDef(t, edgesSourcedAt(edges, t.Name))
 		}
 		if declared {
 			if origKey, ok := defaultKeys[t.Name]; ok {
@@ -136,8 +140,13 @@ func projectSchemaFrame() (map[string]any, map[string]any, error) {
 // identity-hash id, a non-empty name, an optional description, and — only
 // when the type requires a content leaf — a required content path. Mirrors
 // the module schema's generic envelope (module_compose.go's
-// genericNodeDef).
-func genericProjectNodeDef(t ProjectNodeType) map[string]any {
+// genericNodeDef). edges supplies one additional property per
+// profile-declared edge kind sourced at this type — an optional array of
+// identity-hash values, matching the shape every built-in edge field
+// (depends_on, requires_module) already carries. additionalProperties:false
+// makes declaring an edge the only way to open a reference field on the
+// type: any other field is rejected.
+func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
 			"type":        "string",
@@ -162,6 +171,17 @@ func genericProjectNodeDef(t ProjectNodeType) map[string]any {
 			"description": "Relative path to the markdown content leaf.",
 		}
 		required = append(required, "content")
+	}
+	for _, e := range edges {
+		properties[e.Kind] = map[string]any{
+			"type":        "array",
+			"description": fmt.Sprintf("Identity hashes this %s references via the %s edge.", t.Name, e.Kind),
+			"items": map[string]any{
+				"type":    "string",
+				"pattern": identityHashPattern,
+			},
+			"uniqueItems": true,
+		}
 	}
 
 	return map[string]any{

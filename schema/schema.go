@@ -35,7 +35,8 @@ const identityHashPattern = "^[a-f0-9]{12}$"
 // identical across calls, processes and platforms; under the default
 // profile it reproduces the shipped project.schema.json document.
 func ProjectSchema() ([]byte, error) {
-	return ComposeProjectSchema(DefaultProfile().ProjectNodeTypes())
+	p := DefaultProfile()
+	return ComposeProjectSchema(p.ProjectNodeTypes(), p.Edges)
 }
 
 // ModuleSchema returns the effective JSON Schema for module.json, composed
