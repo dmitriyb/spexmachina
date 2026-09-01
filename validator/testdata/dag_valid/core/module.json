@@ -17,7 +17,7 @@
     {
       "id": "000000000001",
       "preq_id": "000000000001",
-      "title": "Base feature",
+      "name": "Base feature",
       "type": "functional"
     },
     {
@@ -26,7 +26,7 @@
       ],
       "id": "000000000002",
       "preq_id": "000000000001",
-      "title": "Extended feature",
+      "name": "Extended feature",
       "type": "functional"
     }
   ]

@@ -500,7 +500,7 @@ func TestFR7_ValidateCommand_PendingDerivationIsNoteNotError(t *testing.T) {
 		writeTestFile(t, alphaDir, "module.json", `{
 			"name": "alpha",
 			"requirements": [
-				{"id": "`+modReqHash+`", "preq_id": "aaaaaaaaaaaa", "title": "Mod Feat A", "type": "functional"}
+				{"id": "`+modReqHash+`", "preq_id": "aaaaaaaaaaaa", "name": "Mod Feat A", "type": "functional"}
 			],
 			"components": [
 				{"id": "`+compHash+`", "name": "Comp1", "content": "arch_comp1.md", "implements": ["`+modReqHash+`"]}

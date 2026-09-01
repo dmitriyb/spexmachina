@@ -44,9 +44,9 @@
   },
   "$defs": {
     "requirement": {
-      "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements. IDs are 12-char hex identity hashes computed by schema.IdentityHash.",
+      "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements. IDs are 12-char hex identity hashes computed by schema.IdentityHash. name (renamed from title in spec format version 1) makes the envelope universal across every node type.",
       "type": "object",
-      "required": ["id", "type", "title", "preq_id"],
+      "required": ["id", "type", "name", "preq_id"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -64,10 +64,10 @@
           "enum": ["functional", "non_functional"],
           "description": "Requirement type."
         },
-        "title": {
+        "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Short requirement title."
+          "description": "Short requirement name."
         },
         "description": {
           "type": "string",

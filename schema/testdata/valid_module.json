@@ -49,13 +49,13 @@
     {
       "id": "e7371017aed2",
       "preq_id": "9949fbd074f8",
-      "title": "R1",
+      "name": "R1",
       "type": "functional"
     },
     {
       "id": "72e08fd83c0a",
       "preq_id": "b7c3d9accd19",
-      "title": "R2",
+      "name": "R2",
       "type": "non_functional"
     },
     {
@@ -64,7 +64,7 @@
       ],
       "id": "72c5d27ee9a6",
       "preq_id": "9949fbd074f8",
-      "title": "R3",
+      "name": "R3",
       "type": "functional"
     }
   ],

@@ -22,7 +22,7 @@
     {
       "id": "0000000000a1",
       "preq_id": "0000000000f1",
-      "title": "Feat A",
+      "name": "Feat A",
       "type": "functional"
     }
   ],

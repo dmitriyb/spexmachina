@@ -15,13 +15,13 @@
     {
       "id": "000000000001",
       "preq_id": "000000000001",
-      "title": "Feature A",
+      "name": "Feature A",
       "type": "functional"
     },
     {
       "id": "000000000001",
       "preq_id": "000000000001",
-      "title": "Feature A dup",
+      "name": "Feature A dup",
       "type": "functional"
     }
   ]

@@ -95,17 +95,17 @@ func TestFR2_S9_RequirementMissingRequiredFields(t *testing.T) {
 	}{
 		{
 			"missing type",
-			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "title": "No type field", "preq_id": "112233445566"}]}`,
+			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "name": "No type field", "preq_id": "112233445566"}]}`,
 			"type",
 		},
 		{
 			"missing id",
-			`{"name": "bad-req", "requirements": [{"type": "functional", "title": "No id", "preq_id": "112233445566"}]}`,
+			`{"name": "bad-req", "requirements": [{"type": "functional", "name": "No id", "preq_id": "112233445566"}]}`,
 			"id",
 		},
 		{
 			"missing preq_id",
-			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "No preq_id"}]}`,
+			`{"name": "bad-req", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "No preq_id"}]}`,
 			"preq_id",
 		},
 	}
@@ -135,7 +135,7 @@ func TestNFR4_S10_WrongTypeForID(t *testing.T) {
 		},
 		{
 			"integer ID in requirement",
-			`{"name": "m", "requirements": [{"id": 1, "type": "functional", "title": "R", "preq_id": "aabbccddeeff"}]}`,
+			`{"name": "m", "requirements": [{"id": 1, "type": "functional", "name": "R", "preq_id": "aabbccddeeff"}]}`,
 		},
 		{
 			"float ID in component",
@@ -211,7 +211,7 @@ func TestNFR4_E4_WholeNumberFloatIDFailsModule(t *testing.T) {
 
 func TestFR2_S11_InvalidRequirementTypeEnum(t *testing.T) {
 	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "performance", "title": "R", "preq_id": "112233445566"}]}`)
+	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "performance", "name": "R", "preq_id": "112233445566"}]}`)
 	if err == nil {
 		t.Fatal("expected validation error for invalid requirement type enum, got nil")
 	}
@@ -290,22 +290,22 @@ func TestNFR4_IDPatternValidation(t *testing.T) {
 		},
 		{
 			"valid preq_id pattern",
-			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566"}]}`,
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566"}]}`,
 			false,
 		},
 		{
 			"invalid preq_id pattern",
-			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "short"}]}`,
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "short"}]}`,
 			true,
 		},
 		{
 			"valid depends_on hashes",
-			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}]}`,
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}]}`,
 			false,
 		},
 		{
 			"invalid depends_on item pattern",
-			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566", "depends_on": ["bad"]}]}`,
+			`{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566", "depends_on": ["bad"]}]}`,
 			true,
 		},
 		{
@@ -350,18 +350,19 @@ func TestFR2_S14_EmptyStringNameFails(t *testing.T) {
 	}
 }
 
-// TestFR2_S14_EmptyRequirementTitleFails pins the module-side half of S14:
-// a requirement's title carries the same minLength: 1 constraint the name
-// fields do, which is the promise IH6 in the schema-loading tests rests on
-// — no reachable node hashes an empty identity part.
-func TestFR2_S14_EmptyRequirementTitleFails(t *testing.T) {
+// TestFR2_S14_EmptyRequirementNameFails pins the module-side half of S14:
+// a requirement's name (renamed from title in spec format version 1)
+// carries the same minLength: 1 constraint every other type's name field
+// does, which is the promise IH6 in the schema-loading tests rests on — no
+// reachable node hashes an empty identity part.
+func TestFR2_S14_EmptyRequirementNameFails(t *testing.T) {
 	sch := compileModuleSchema(t)
-	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "", "preq_id": "112233445566"}]}`)
+	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "", "preq_id": "112233445566"}]}`)
 	if err == nil {
-		t.Fatal("expected validation error for empty requirement title, got nil")
+		t.Fatal("expected validation error for empty requirement name, got nil")
 	}
-	if !strings.Contains(err.Error(), "title") {
-		t.Fatalf("error should reference 'title', got: %v", err)
+	if !strings.Contains(err.Error(), "name") {
+		t.Fatalf("error should reference 'name', got: %v", err)
 	}
 }
 
@@ -415,8 +416,8 @@ func TestFR2_S15_DependsOnDuplicatesFails(t *testing.T) {
 	err := validateModule(t, sch, `{
 		"name": "m",
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "R1", "preq_id": "112233445566"},
-			{"id": "112233445566", "type": "functional", "title": "R2", "preq_id": "112233445566", "depends_on": ["aabbccddeeff", "aabbccddeeff"]}
+			{"id": "aabbccddeeff", "type": "functional", "name": "R1", "preq_id": "112233445566"},
+			{"id": "112233445566", "type": "functional", "name": "R2", "preq_id": "112233445566", "depends_on": ["aabbccddeeff", "aabbccddeeff"]}
 		]
 	}`)
 	if err == nil {
@@ -510,7 +511,7 @@ func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	t.Run("missing preq_id fails", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R"}]
+			"requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R"}]
 		}`)
 		if err == nil {
 			t.Fatal("expected validation error for missing preq_id, got nil")
@@ -523,7 +524,7 @@ func TestFR2_S20_PreqIDRequiredOnModuleRequirements(t *testing.T) {
 	t.Run("with preq_id passes", func(t *testing.T) {
 		err := validateModule(t, sch, `{
 			"name": "m",
-			"requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "R", "preq_id": "112233445566"}]
+			"requirements": [{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566"}]
 		}`)
 		if err != nil {
 			t.Fatalf("requirement with preq_id should pass: %v", err)
@@ -536,7 +537,7 @@ func TestFR2_S26_DerivationFieldRejected(t *testing.T) {
 	err := validateModule(t, sch, `{
 		"name": "m",
 		"requirements": [
-			{"id": "aabbccddee01", "type": "functional", "title": "R", "preq_id": "aabbccddee00", "derivation": "pending"}
+			{"id": "aabbccddee01", "type": "functional", "name": "R", "preq_id": "aabbccddee00", "derivation": "pending"}
 		]
 	}`)
 	if err == nil {
@@ -594,11 +595,23 @@ func TestFR2_E7_DependsOnNonExistentIDPasses(t *testing.T) {
 	err := validateModule(t, sch, `{
 		"name": "m",
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "R1", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}
+			{"id": "aabbccddeeff", "type": "functional", "name": "R1", "preq_id": "112233445566", "depends_on": ["ffeeddccbbaa"]}
 		]
 	}`)
 	if err != nil {
 		t.Fatalf("depends_on with non-existent ID should pass schema validation: %v", err)
+	}
+}
+
+// TestFR2_S28_SpecVersionRejectedOnModuleDocument pins the module-side half
+// of S28: module files carry no version field — spec_version is
+// project.json-only metadata — so additionalProperties:false rejects it on
+// a module document exactly as it rejects any other undeclared field.
+func TestFR2_S28_SpecVersionRejectedOnModuleDocument(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{"name": "m", "spec_version": 1}`)
+	if err == nil {
+		t.Fatal("expected validation error for spec_version on a module document, got nil")
 	}
 }
 
@@ -1019,5 +1032,179 @@ func TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired(t *testing.T) {
 
 	if err := validateModule(t, sch, `{"name": "m", "milestones": [{"id": "aabbccddeeff", "name": "M1", "content": "m1.md"}]}`); err == nil {
 		t.Fatal("expected validation error: content is not a declared property for this type")
+	}
+}
+
+// endpointType builds the S27 fixture type: DefaultModuleNodeTypes plus a
+// custom "endpoint" type carrying the given field declarations.
+func endpointType(fields ...Field) []ModuleNodeType {
+	return append(DefaultModuleNodeTypes(), ModuleNodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		RequiresContent: true,
+		Fields:          fields,
+	})
+}
+
+// TestFR2_S27_ProfileDeclaredReferenceFieldCardinality covers S27's
+// cardinality half: a declared reference field composes as an array of
+// identity hashes at cardinality "many" and as a single identity-hash
+// scalar at cardinality "one" — the array form then failing on type, the
+// shape preq_id has always had.
+func TestFR2_S27_ProfileDeclaredReferenceFieldCardinality(t *testing.T) {
+	t.Run("cardinality many composes as array", func(t *testing.T) {
+		types := endpointType(Field{Name: "serves", Kind: FieldKindReference, Cardinality: "many"})
+		data, err := ComposeModuleSchema(types, nil)
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		err = validateModule(t, sch, `{
+			"name": "m",
+			"endpoints": [{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "serves": ["112233445566"]}]
+		}`)
+		if err != nil {
+			t.Fatalf("array form should pass at cardinality many: %v", err)
+		}
+	})
+
+	t.Run("cardinality one composes as scalar", func(t *testing.T) {
+		types := endpointType(Field{Name: "serves", Kind: FieldKindReference, Cardinality: "one"})
+		data, err := ComposeModuleSchema(types, nil)
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+
+		err = validateModule(t, sch, `{
+			"name": "m",
+			"endpoints": [{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "serves": "112233445566"}]
+		}`)
+		if err != nil {
+			t.Fatalf("scalar form should pass at cardinality one: %v", err)
+		}
+
+		err = validateModule(t, sch, `{
+			"name": "m",
+			"endpoints": [{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "serves": ["112233445566"]}]
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error: array form should fail on type at cardinality one")
+		}
+	})
+}
+
+// TestFR2_S27_ProfileDeclaredTextFieldEnum covers S27's text-field half: a
+// declared text field with an enumeration accepts a member value and
+// rejects a non-member one at the field's own path.
+func TestFR2_S27_ProfileDeclaredTextFieldEnum(t *testing.T) {
+	types := endpointType(Field{Name: "protocol", Kind: FieldKindText, Enum: []string{"http", "grpc"}})
+	data, err := ComposeModuleSchema(types, nil)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	t.Run("enum member passes", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "protocol": "http"}]}`)
+		if err != nil {
+			t.Fatalf("declared enum value should pass: %v", err)
+		}
+	})
+
+	t.Run("non-enum value fails", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "protocol": "ftp"}]}`)
+		if err == nil {
+			t.Fatal("expected validation error for value outside declared enum, got nil")
+		}
+		if !strings.Contains(err.Error(), "protocol") {
+			t.Fatalf("error should reference 'protocol', got: %v", err)
+		}
+	})
+}
+
+// TestFR2_S27_ProfileDeclaredIntegerFieldBounds covers S27's integer-field
+// half: a declared integer field with bounds accepts an in-range value and
+// rejects one below the declared minimum at the field's own path.
+func TestFR2_S27_ProfileDeclaredIntegerFieldBounds(t *testing.T) {
+	min, max := 1, 65535
+	types := endpointType(Field{Name: "port", Kind: FieldKindInteger, Minimum: &min, Maximum: &max})
+	data, err := ComposeModuleSchema(types, nil)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	t.Run("in bounds passes", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "port": 8080}]}`)
+		if err != nil {
+			t.Fatalf("in-bounds port should pass: %v", err)
+		}
+	})
+
+	t.Run("below minimum fails", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "port": 0}]}`)
+		if err == nil {
+			t.Fatal("expected validation error for port below declared minimum, got nil")
+		}
+		if !strings.Contains(err.Error(), "port") {
+			t.Fatalf("error should reference 'port', got: %v", err)
+		}
+	})
+}
+
+// TestFR2_S27_ProfileDeclaredRequiredFieldAbsent covers S27's required-field
+// half: a declared field marked required rejects both its absence and an
+// empty string — a required text field composes non-empty — and passes
+// once present with a real value.
+func TestFR2_S27_ProfileDeclaredRequiredFieldAbsent(t *testing.T) {
+	types := endpointType(Field{Name: "protocol", Kind: FieldKindText, Enum: []string{"http", "grpc"}, Required: true})
+	data, err := ComposeModuleSchema(types, nil)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	t.Run("missing required field fails", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md"}]}`)
+		if err == nil {
+			t.Fatal("expected validation error for missing required field, got nil")
+		}
+		if !strings.Contains(err.Error(), "protocol") {
+			t.Fatalf("error should reference 'protocol', got: %v", err)
+		}
+	})
+
+	t.Run("empty required field fails", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "protocol": ""}]}`)
+		if err == nil {
+			t.Fatal("expected validation error for empty required field, got nil")
+		}
+	})
+
+	t.Run("present required field passes", func(t *testing.T) {
+		err := validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "protocol": "http"}]}`)
+		if err != nil {
+			t.Fatalf("present required field should pass: %v", err)
+		}
+	})
+}
+
+// TestFR2_S27_UndeclaredFieldStillRejected covers S27's final half: a
+// document carrying a field composed from a profile that declared it fails
+// validation once recomposed from a profile that never declared that
+// field — the entry-level additionalProperties:false rejects it as neither
+// envelope nor declared.
+func TestFR2_S27_UndeclaredFieldStillRejected(t *testing.T) {
+	fieldless := endpointType()
+	data, err := ComposeModuleSchema(fieldless, nil)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateModule(t, sch, `{"name": "m", "endpoints": [{"id": "aabbccddeeff", "name": "E", "content": "e.md", "serves": ["112233445566"]}]}`)
+	if err == nil {
+		t.Fatal("expected validation error: serves is not a declared field on this profile")
 	}
 }
