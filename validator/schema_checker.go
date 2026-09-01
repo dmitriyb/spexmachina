@@ -39,7 +39,7 @@ func compileSchemas(profile *schema.Profile) (*compiledSchemas, error) {
 		return nil, fmt.Errorf("validator: add project schema: %w", err)
 	}
 
-	modBytes, err := schema.ComposeModuleSchema(profile.ModuleNodeTypes())
+	modBytes, err := schema.ComposeModuleSchema(profile.ModuleNodeTypes(), profile.Edges)
 	if err != nil {
 		return nil, fmt.Errorf("validator: compose module schema: %w", err)
 	}
