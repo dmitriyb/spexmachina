@@ -24,6 +24,8 @@ identity_hash(parts):
 
 Same parts in the same order, same 12-character lowercase hex string — on any platform, in any process. That is what makes the result safe to write into a JSON file and commit to git.
 
+The map is deterministic but deliberately not injective. Joining no parts and joining one empty part both yield the identity string `""`, and a part that itself contains `/` can make two different part lists read as one string. Neither costs anything real: every part is a fixed type literal or a `name` or `title` field the schemas require to be non-empty, so degenerate identity strings are unreachable — and uniqueness among live ids is not entrusted to the join at all. It is enforced where it is required, by the validator's per-array ID-uniqueness check, so a genuine collision surfaces as a reported validation error, never as two nodes silently merging.
+
 The parts are the node's position in the spec graph, taken from fields the node already carries, so anyone holding the spec source can recompute any ID by hand. `spex hash-id` does exactly that: one `--type`, one `--name`, a `--module` for everything but a project requirement or a module, and one hash on stdout.
 
 | Node type | Parts, in order | Identity string |
