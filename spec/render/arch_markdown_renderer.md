@@ -25,11 +25,11 @@ The shape [[8828685278e9|Render markdown]] asks for is one collated document, re
 ## Requirements
 
 ### Functional
-- FR<n>: <title> — <description>
+- FR<n>: <name> — <description>
 ...
 
 ### Non-functional
-- NFR<n>: <title> — <description>
+- NFR<n>: <name> — <description>
 ...
 
 ## Module: <Name>
@@ -37,8 +37,8 @@ The shape [[8828685278e9|Render markdown]] asks for is one collated document, re
 <Module description>
 
 ### Requirements
-- FR<n>: <title> — <description>
-- NFR<n>: <title> — <description>
+- FR<n>: <name> — <description>
+- NFR<n>: <name> — <description>
 
 ### APIs
 - `<api name>` (<group>) — <description>

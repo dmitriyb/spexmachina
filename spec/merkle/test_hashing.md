@@ -112,22 +112,31 @@ Helper function `writeFile(t, dir, name, content)` writes one file into a direct
 **And** the second tree differs from the first at exactly one key, `meta/project`, and therefore also at the root
 **And** every other leaf of the second tree, the requirement's own included, equals the first tree's
 
-**Rationale**: two rules meet in this fixture and the scenario pins both. `derivation` is deliberately absent from the project-requirement field allowlist in `arch_tree_builder.md`, so declaring a gap and later graduating out of it moves no requirement leaf — that is what fails if the exclusion is implemented wrongly, since a serializer that hashes whatever fields it finds would move the leaf on both edits. The `meta/project` envelope leaf is hashed from `project.json`'s literal bytes, so it necessarily *does* move on the `pending` variant; asserting that it is the only leaf that moves is what keeps the exclusion honest, because a `derivation` leaked into the requirement serialization would surface here as a second differing key. The root-hash equality is therefore asserted between the first and third trees rather than across all three: an assertion that all three roots agree would contradict the envelope's raw-bytes rule in the same leaf and cannot hold. What the exclusion buys is stated in `arch_tree_builder.md` — the envelope entry is `structural`, so it is filtered before matching and obliges nothing downstream.
+**Rationale**: two rules meet in this fixture and the scenario pins both. `derivation` is declared `hashed: false` in the default profile — the exclusion `arch_tree_builder.md` records — so declaring a gap and later graduating out of it moves no requirement leaf — that is what fails if the exclusion is implemented wrongly, since a serializer that hashes whatever fields it finds would move the leaf on both edits. The `meta/project` envelope leaf is hashed from `project.json`'s literal bytes, so it necessarily *does* move on the `pending` variant; asserting that it is the only leaf that moves is what keeps the exclusion honest, because a `derivation` leaked into the requirement serialization would surface here as a second differing key. The root-hash equality is therefore asserted between the first and third trees rather than across all three: an assertion that all three roots agree would contradict the envelope's raw-bytes rule in the same leaf and cannot hold. What the exclusion buys is stated in `arch_tree_builder.md` — the envelope entry is `structural`, so it is filtered before matching and obliges nothing downstream.
 
-### S10: Per-type hashed field allowlists are read from the resolved profile
+### S10: Hashed serialization derives from the resolved profile's field declarations
 
 **Given** the fixture directory, built once under the default profile and once under a `spec/profile.json` byte-identical to the default declaration
 **When** `BuildTree` is called on each
-**Then** every leaf hash and the root are identical across the two trees — the allowlists TreeBuilder serializes each JSON-backed leaf through come from the resolved profile, and the default profile declares exactly the allowlists previously compiled in
-**And** building this repository's own spec under the default profile reproduces every identity hash and every leaf hash the current snapshot records
+**Then** every leaf hash and the root are identical across the two trees — the serialization TreeBuilder puts each JSON-backed leaf through is derived from its type's field declarations (every declared field unless `hashed: false`, plus the envelope fields), and the default profile's declarations reproduce the retired per-type allowlists exactly
+**And** building this repository's own spec under the default profile reproduces every identity hash the snapshot records, and — once the title-to-name adoption rename is refreshed into the snapshot — every leaf hash as well
 
-**Rationale**: The acceptance criterion that no existing hash moves when the taxonomy becomes data. The hash inputs — identity strings and per-type field allowlists — are unchanged under the default profile, so an implementation that derived either from the profile incorrectly surfaces here as a moved hash. Hasher itself is deliberately untouched: file, byte and child hashing are type-agnostic and read nothing from the profile.
+**Rationale**: The acceptance criterion that no existing hash moves when the node shape becomes data. The hash inputs — identity strings and the declaration-derived field sets — are unchanged under the default profile, so an implementation that derived either from the profile incorrectly surfaces here as a moved hash. Hasher itself is deliberately untouched: file, byte and child hashing are type-agnostic and read nothing from the profile.
 
 ### S11: A profile-declared type gets a leaf like any built-in type
 
 **Given** a profile declaring an `endpoint` type (content-bearing, module-scoped) and a fixture module carrying one endpoint with a content file
 **When** `BuildTree` is called
-**Then** the module node holds one leaf for the endpoint, keyed by its identity hash, hashed from its content file and its declared hashed fields — the tree shape (project root, module interiors, identity-hash-keyed leaves, the synthetic meta leaf) is fixed, and the profile only decides what leaves exist.
+**Then** the module node holds one leaf for the endpoint, keyed by its identity hash, hashed from its content file — a content-bearing type hashes from file bytes alone, like every built-in content-bearing type — and the tree shape (project root, module interiors, identity-hash-keyed leaves, the synthetic meta leaf) is fixed: the profile only decides what leaves exist.
+
+### S12: A field declared hashed: false does not move the leaf
+
+**Given** a profile declaring an `endpoint` type (module-scoped, no content leaf) with a required `protocol` text field and an optional `note` text field declared `hashed: false`, and two fixture builds identical except for the `note` value on one endpoint
+**When** `BuildTree` is called on each
+**Then** the endpoint's leaf hash is identical across the two builds, while editing `protocol` instead moves it
+**And** the `meta/<module-hash>` envelope leaf differs in both cases — the envelope is hashed from `module.json`'s literal bytes, exactly as S9 pins for `derivation` at the project level
+
+**Rationale**: The generalization S9's built-in case rests on: hash participation is the field declaration's own flag, not a compiled-in exclusion, so a declared type gets the same still-leaf guarantee `derivation` gets today.
 
 ## Edge Cases
 

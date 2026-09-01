@@ -110,8 +110,9 @@ absorption puts requirement and api events on the record.
 ### S8: Refresh receipt shape
 
 **Input:** the refresh fixture; a variant with `"absorbed": []`; a variant omitting `absorbed`.
-**Expected:** the first two pass (an empty absorbed list is legal in the schema even though
-ingest never writes one — the no-drift run appends nothing at all); the third fails.
+**Expected:** the first two pass; the third fails. An empty absorbed list is legal and real:
+a meta-only drift run absorbs its envelope change into the snapshot without a change event and
+still lands its receipt, absorbed empty — while the no-drift run appends nothing at all.
 
 ### S8b: Optional `path` on change events
 
@@ -119,6 +120,16 @@ ingest never writes one — the no-drift run appends nothing at all); the third 
 same fixture without the key.
 **Expected:** both pass — the path is present when the node has a content leaf and absent when it
 does not (requirement and api events).
+
+### S8c: Optional `v` on every line shape
+
+**Input:** each of the six fixtures with `"v": 1` added; the change-event fixture with
+`"v": "1"` (a string); the same fixture with the key absent.
+**Expected:** the `"v": 1` forms all pass and the absent form passes — `v` is the journal-line
+format version, an optional integer on every line shape whose absence means version 1, so no
+existing line changes meaning. The string form fails on type. The schema pins no upper bound:
+readers accept every version from 1 forward, forever, because the journal is append-only and
+permanent; a writer stamps the current version.
 
 ### S9: No integer ids anywhere
 

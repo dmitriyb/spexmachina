@@ -22,13 +22,13 @@ A declared name of any type the resolved profile marks name-declarable — the s
 `spex validate [--json]` is the shape this rejects: the brackets are stripped by the tokenizer, so the declared name and the phrase the scan rebuilds differ. `spex validate --json` is declarable; so is `spex map get`. The api name is the surface string alone — never a signature, never an argument placeholder.
 
 ### Cross-Reference Integrity
-[[4b399b1c568f|Cross-reference integrity]] holds when every edge in the spec names a node that exists. The edge set checked is the resolved profile's declaration — which reference fields a type may carry and what node type each points at — so a profile-declared edge is resolved by the same set-membership machinery, and an id whose type the profile does not declare has no array to resolve against. All references are identity hash strings, validated by string set membership against the appropriate per-array set. Under the default profile the declared edges are:
+[[4b399b1c568f|Cross-reference integrity]] holds when every edge in the spec names a node that exists. The edge set checked is the resolved profile's reference-kind field declarations — which reference fields a type may carry and what node type each points at — plus the frame's one fixed edge, `requires_module`, which no profile declares; a profile-declared reference field is resolved by the same set-membership machinery, and an id whose type the profile does not declare has no array to resolve against. All references are identity hash strings, validated by string set membership against the appropriate per-array set. Under the default profile the checked edges are:
 
 - `implements`: component → requirement identity hashes within the same module
 - `uses` (component): component → component identity hashes within the same module
 - `uses` (data_flow): data_flow → component identity hashes within the same module
 - `depends_on`: requirement → requirement identity hashes within the same scope
-- `requires_module`: module → module identity hashes in project.json
+- `requires_module`: module → module identity hashes in project.json (the frame's own edge — modules are not profile-declared types)
 - `preq_id`: module requirement → project requirement identity hash (must exist)
 - `describes` (test_section): test_section → component identity hashes within the same module
 - `provided_by`: api → component identity hashes within the same module

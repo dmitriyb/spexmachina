@@ -250,7 +250,7 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 
 ### R5: Requirement description modified in diff
 
-**Given** a snapshot tree where requirement `REQ1_HASH` has description "original", and a current tree where the same requirement (same identity hash, because the title is unchanged) has description "updated"
+**Given** a snapshot tree where requirement `REQ1_HASH` has description "original", and a current tree where the same requirement (same identity hash, because the name is unchanged) has description "updated"
 **When** `Diff(current, snapshot)` is called
 **Then** `REQ1_HASH` appears as Type=`modified` with different OldHash and NewHash
 

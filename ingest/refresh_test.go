@@ -491,6 +491,57 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing(
 	}
 }
 
+// TestREQ_e68653819f38_Refresh_MetaModifiedAbsorbedWithoutEvent pins the
+// meta-modified carve-out: the journal-line schema's node_type enum has
+// no "meta", so a modified envelope leaf is folded into the snapshot
+// rewrite without a change event. The run's refresh receipt still lands,
+// with an empty absorbed list, and nothing else is appended.
+func TestREQ_e68653819f38_Refresh_MetaModifiedAbsorbedWithoutEvent(t *testing.T) {
+	fx := setupRefreshFixture(t)
+	// Drift only the beta envelope: a description edit moves the
+	// meta/<beta-hash> leaf (hashed from module.json's bytes) and no
+	// node leaf.
+	writeFile(t, filepath.Join(fx.specDir, "beta"), "module.json", `{
+		"name": "beta",
+		"description": "meta-only drift",
+		"components": [
+			{"id": "`+fx.handlerID+`", "name": "Handler", "content": "arch_handler.md"}
+		],
+		"data_flows": [
+			{"id": "`+fx.flowID+`", "name": "Handler pipeline", "content": "flow_handler.md"}
+		]
+	}`)
+
+	journalBefore := readJournal(t, fx.specDir)
+	snapBefore := readBytes(t, fx.snapPath)
+
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("meta-only drift must absorb cleanly: %v", err)
+	}
+	if summary.EventsAppended != 0 {
+		t.Errorf("a meta modification yields no change event, got events_appended=%d", summary.EventsAppended)
+	}
+	if !summary.SnapshotSaved {
+		t.Error("the drift is real: the snapshot must be rewritten")
+	}
+	if got := readBytes(t, fx.snapPath); string(got) == string(snapBefore) {
+		t.Error("snapshot bytes must move with the envelope leaf")
+	}
+
+	after := readJournal(t, fx.specDir)
+	if want := len(journalBefore) + 1; len(after) != want {
+		t.Fatalf("exactly one line (the refresh receipt) is appended: want %d lines, got %d", want, len(after))
+	}
+	receipt := after[len(after)-1]
+	if receipt.Event != "refresh" {
+		t.Fatalf("the appended line must be the refresh receipt, got %q", receipt.Event)
+	}
+	if len(receipt.Absorbed) != 0 {
+		t.Errorf("no change event exists for the receipt to name: absorbed must be empty, got %v", receipt.Absorbed)
+	}
+}
+
 // TestREQ_e68653819f38_Refresh_RefusesAddedModuleMeta is the direct
 // guard on writing the allow-list as the complement of the classifier's
 // bead-producing set: "meta" is not bead-producing, so that negation

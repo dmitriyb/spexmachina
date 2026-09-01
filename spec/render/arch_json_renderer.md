@@ -18,9 +18,9 @@ The renderer is handed the graph [[7d1150c19724|SpecReader]] parsed and the stre
 {
   "nodes": [
     {"id": "project", "type": "project", "name": "spex-machina", "description": "..."},
-    {"id": "project:req:<hash>", "type": "requirement", "name": "<title>", "description": "..."},
+    {"id": "project:req:<hash>", "type": "requirement", "name": "<name>", "description": "..."},
     {"id": "module:schema", "type": "module", "name": "schema", "description": "..."},
-    {"id": "module:schema:req:<hash>", "type": "requirement", "name": "<title>", "description": "...", "module": "schema"},
+    {"id": "module:schema:req:<hash>", "type": "requirement", "name": "<name>", "description": "...", "module": "schema"},
     {"id": "module:schema:comp:<hash>", "type": "component", "name": "...", "description": "...", "content": "<inlined markdown>", "module": "schema"},
     {"id": "module:schema:flow:<hash>", "type": "data_flow", "name": "...", "description": "...", "content": "<inlined markdown>", "module": "schema"},
     {"id": "module:schema:test:<hash>", "type": "test_section", "name": "...", "content": "<inlined markdown>", "module": "schema"},

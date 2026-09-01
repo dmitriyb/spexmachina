@@ -30,7 +30,7 @@ Section nodes are drawn too and are covered by § Sections below, because they a
 
 The kinds drawn are the node types the resolved profile declares minus this format's own projection — test sections stay excluded, per above, whatever profile resolves. The table is the default profile's drawn set, and a profile-declared type's nodes are drawn with a shape distinct from the built-in kinds', its declared edges as labelled arrows, so a custom vocabulary reaches the picture without renderer changes.
 
-Every node's label is the name a reader would recognise — a requirement's title, everything else's name. An api's description and group are not drawn; the graph is a shape, and the prose belongs to the other two formats.
+Every node's label is its declared name — one rule for every type since the requirement's title-to-name rename. An api's description and group are not drawn; the graph is a shape, and the prose belongs to the other two formats.
 
 ## Edge Mapping
 

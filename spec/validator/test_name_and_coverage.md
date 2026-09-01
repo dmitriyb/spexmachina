@@ -168,7 +168,7 @@ tmp/spec/
 
 **Given** `project.json` declares a requirement with no `derivation` field, and no module requirement in any module carries its id as `preq_id`.
 **When** the requirement-coverage check runs.
-**Then** one error at path `project.json`, message `project requirement <hash> "<title>" is not derived into any module requirement` — byte-for-byte the pre-existing message — and zero notes.
+**Then** one error at path `project.json`, message `project requirement <hash> "<name>" is not derived into any module requirement` — byte-for-byte the pre-existing message — and zero notes.
 
 #### RC2: Pending requirement produces a note, not an error
 
@@ -176,7 +176,7 @@ tmp/spec/
 **When** the requirement-coverage check runs.
 **Then** zero errors and one note with:
 - `type`: `"pending_derivation"`
-- `message`: `project requirement <hash> "<title>" declares derivation pending and is not derived into any module requirement`
+- `message`: `project requirement <hash> "<name>" declares derivation pending and is not derived into any module requirement`
 - `related` containing exactly that requirement's identity hash
 
 #### RC3: Derived pending requirement produces neither
@@ -189,7 +189,7 @@ tmp/spec/
 
 **Given** a module requirement not implemented by any component, in a spec whose project requirements all declare `derivation: "pending"`.
 **When** the requirement-coverage check runs.
-**Then** the `<module> requirement <hash> "<title>" is not implemented by any component` error is reported unchanged. The pending state exempts only the project-to-module link.
+**Then** the `<module> requirement <hash> "<name>" is not implemented by any component` error is reported unchanged. The pending state exempts only the project-to-module link.
 
 #### RC5: Notes are deterministic and ordered
 

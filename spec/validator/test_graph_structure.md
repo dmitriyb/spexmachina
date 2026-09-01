@@ -188,13 +188,13 @@ tmp/spec/
 
 **Given** a `spec/profile.json` declaring an `endpoint` type carrying a `serves` reference field pointing at components, and alpha's endpoint has `serves: [99]` with no component 99.
 **When** `CheckIDs(specDir)` is called.
-**Then** one error for the dangling `serves` reference. The reference fields a type may carry, and what each may point at, are the resolved profile's legal edges — the checks above are the default profile's edge set, and a declared edge is checked with the same set-membership machinery.
+**Then** one error for the dangling `serves` reference. The reference fields a type may carry, and what each may point at, are the resolved profile's field declarations — the checks above are the default profile's declared set plus the frame's fixed `requires_module` edge, and a declared reference field is checked with the same set-membership machinery.
 
 #### D9: Acyclicity over profile-declared edges
 
 **Given** the same profile, where two endpoints reference each other through `serves`-style edges the profile declares without a `cyclic` flag.
 **When** `CheckDAG(specDir)` is called.
-**Then** one cycle error naming the two nodes. The DAG check enforces acyclicity over every edge kind the resolved profile declares that is not marked `cyclic: true`; under the default profile — which omits the flag on all seven edge kinds — the graphs that can actually cycle are module dependency, requirement `depends_on` at both its scopes (each module's requirements, exercised by the scenarios above, and `project.json`'s own requirements, whose cycles report through the generic path with the `depends_on cycle` message), and component `uses`; the other four edge kinds pass vacuously.
+**Then** one cycle error naming the two nodes. The DAG check enforces acyclicity over every reference kind the resolved profile declares that is not marked `cyclic: true`, plus the frame's fixed `requires_module` edge; under the default profile — which omits the flag on all six declared reference kinds — the graphs that can actually cycle are module dependency (the frame's edge), requirement `depends_on` at both its scopes (each module's requirements, exercised by the scenarios above, and `project.json`'s own requirements, whose cycles report through the generic path with the `depends_on cycle` message), and component `uses`; the other four reference kinds pass vacuously.
 
 In a further variant the profile marks the endpoints' edge `cyclic: true`: the same loop then validates with zero DAG errors — a `cyclic` edge is descriptive, exempt from the cycle check.
 
@@ -206,8 +206,8 @@ In a further variant the profile marks the endpoints' edge `cyclic: true`: the s
 
 Three further `dag_profile_*` fixtures pin the edge-set policy down:
 
-- `dag_profile_builtin_exempt`: a profile marking a built-in edge kind (`uses`) `cyclic: true` — a component `uses` loop then validates with zero DAG errors; the exemption flag binds built-in kinds exactly as it binds declared ones.
-- `dag_profile_omits_builtin_edges`: a profile whose edge set omits a built-in kind — a loop through that field produces zero DAG errors, because the checker walks only the kinds the resolved profile declares; the composed schema still admits the field (built-in definitions are frame-fixed), so leaving a built-in edge unchecked is the profile's own declaration to make.
+- `dag_profile_builtin_exempt`: a profile marking a built-in reference kind (`uses`) `cyclic: true` — a component `uses` loop then validates with zero DAG errors; the exemption flag binds built-in kinds exactly as it binds declared ones. `requires_module` is out of the flag's reach: it is the frame's edge, not a declarable field, so a profile attempting to declare (and thereby exempt) it fails profile validation as any fixed-point declaration does, and a module dependency cycle is always an error.
+- `dag_profile_omits_builtin_edges`: a profile whose field declarations omit a built-in reference kind — a loop through that field produces zero DAG errors, because the checker walks only the reference fields the resolved profile declares. Built-in shapes compose from the same declarations, so the omitted field also stops being admitted by the composed schema and the document draws a schema error instead; the fixture asserts the DAG checker's half in isolation — one declaration governs both the admission and the check.
 - `dag_profile_data_flow_uses_cycle`: data_flow `uses` edges alongside a component `uses` loop — exactly the component cycle is reported; the data_flow occurrence's graph (data_flow → component) cannot close a loop and contributes no edges to the component graph, per the per-source-occurrence rule in `arch_dag_checker.md`.
 
 ---

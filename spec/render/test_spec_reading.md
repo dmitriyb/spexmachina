@@ -73,7 +73,7 @@ spec/
 
 **Then:**
 - `SpecGraph.Project.Requirements` has length 3
-- Each requirement preserves `id`, `type`, `title` and `description`. No project requirement in the fixture declares `depends_on`, and no test in `render/` reads the field on any node — S5 asserts `implements`, `uses`, `describes`, data_flow `uses` and `preq_id` only
+- Each requirement preserves `id`, `type`, `name` and `description`. No project requirement in the fixture declares `depends_on`, and no test in `render/` reads the field on any node — S5 asserts `implements`, `uses`, `describes`, data_flow `uses` and `preq_id` only
 
 ### S5: All module-level edge types preserved
 

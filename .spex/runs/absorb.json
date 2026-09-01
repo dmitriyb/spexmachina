@@ -1,10 +1,10 @@
 [
   {
-    "node": "8719672c7580",
-    "reason": "IH6 Expected/Verifies relaxed to the shipped join/\"/\" algorithm (empty-vs-absent collision accepted, rationale names the schema-required non-empty name/title fields) and IH3 Verifies narrowed to the demonstrated positional property; converges onto shipped green tests TestFR10_IH6_EmptyPartsAndEmptyInput, TestFR10_IH5_JoinSeparatorIsSlash, TestFR10_IH3_DifferentPartsProduceDifferentHashes (schema/schema_loader_test.go). The node's P1-P5 contract is untouched and remains open bead spexmachina-h4gv.47's work."
+    "node": "a338e50fec70",
+    "reason": "HashIDCommand flag-table wording: the --name row now describes one identifier field for every type after the title-to-name rename; behaviour unchanged — identity strings are value-derived and --name already carries requirement names — pinned by cmd/spex/hashid_test.go"
   },
   {
-    "node": "ee88263d6555",
-    "reason": "Interface section gains a paragraph recording shipped behaviour only: the algorithm's deliberate non-injectivity (empty parts, separator-carrying parts) and the validator's per-array ID-uniqueness check as the enforcement locus. No code obligation changes; pinned by TestFR10_IH6_EmptyPartsAndEmptyInput and TestFR10_IH5_JoinSeparatorIsSlash (schema/schema_loader_test.go) and the REQ-5 duplicate-id tests (validator/id_validator_test.go)."
+    "node": "f9033352c13f",
+    "reason": "RefreshHandler outputs section records the shipped meta-modified carve-out (refresh.go: meta entries fold into the snapshot rewrite with no change event, the run's receipt landing with an empty absorbed list); pinned by ingest/refresh_test.go TestREQ_e68653819f38_Refresh_MetaModifiedAbsorbedWithoutEvent, added green in this PR"
   }
 ]

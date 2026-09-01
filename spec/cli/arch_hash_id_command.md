@@ -16,7 +16,7 @@ Prints a single 12-character lowercase hex string to stdout and exits 0. Nothing
 |---|---|---|
 | `--module` | for module-scoped nodes | Module name (e.g., `plan`). Omit for project-level nodes. |
 | `--type` | yes | A node type the resolved profile declares, plus the fixed `module` type. Under the default profile: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
-| `--name` | yes | Node name or title (the human-readable identifier) |
+| `--name` | yes | Node name (the human-readable identifier — one field for every type since the requirement's title-to-name rename) |
 
 ## Identity String Construction
 
