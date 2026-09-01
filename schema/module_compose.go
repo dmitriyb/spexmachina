@@ -90,9 +90,9 @@ func defaultArrayKeyByTypeName() map[string]string {
 // a synthesized array property description. additionalProperties:false at
 // the root, inherited unchanged from the frame, is what rejects any array
 // no passed type declares; the same constraint at the entry level, applied
-// by genericNodeDef, is what rejects any field that is neither envelope nor
-// declared edge. Composing with DefaultModuleNodeTypes and DefaultProfile's
-// edges reproduces the shipped module.schema.json.
+// by genericNodeDef, is what rejects any property that is neither envelope,
+// declared edge, nor declared field. Composing with DefaultModuleNodeTypes
+// and DefaultProfile's edges reproduces the shipped module.schema.json.
 func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
@@ -194,8 +194,11 @@ func edgesSourcedAt(edges []Edge, typeName string) []Edge {
 // additional property per profile-declared edge kind sourced at this type —
 // an optional array of identity-hash values, matching the shape every
 // built-in edge field (implements, uses, describes, provided_by) already
-// carries. additionalProperties:false makes declaring an edge the only way
-// to open a reference field on the type: any other field is rejected.
+// carries. t.Fields supplies one further property per declared field —
+// composeFieldSchema shapes it by kind, including a reference field, which
+// opens a property the same way an edge does. additionalProperties:false
+// makes declaring an edge or a field the only way to open a property on the
+// type beyond the envelope: any other property is rejected.
 func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
