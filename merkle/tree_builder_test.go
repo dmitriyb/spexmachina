@@ -1012,7 +1012,7 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 	modJSON := `{
 		"name": "m",
 		"requirements": [
-			{"id": "` + reqID + `", "type": "functional", "title": "Test", "description": "Desc", "preq_id": "` + schema.IdentityHash("project", "requirement", "000000000001") + `", "depends_on": ["` + schema.IdentityHash("m", "requirement", "Other") + `"]}
+			{"id": "` + reqID + `", "type": "functional", "name": "Test", "description": "Desc", "preq_id": "` + schema.IdentityHash("project", "requirement", "000000000001") + `", "depends_on": ["` + schema.IdentityHash("m", "requirement", "Other") + `"]}
 		]
 	}`
 	writeFile(t, modDir, "module.json", modJSON)
@@ -1036,8 +1036,8 @@ func TestREQ7_BuildTree_RequirementHashSortedKeys(t *testing.T) {
 		"depends_on":  []string{schema.IdentityHash("m", "requirement", "Other")},
 		"description": "Desc",
 		"id":          reqID,
+		"name":        "Test",
 		"preq_id":     schema.IdentityHash("project", "requirement", "000000000001"),
-		"title":       "Test",
 		"type":        "functional",
 	})
 	if req.Hash != expected {
