@@ -1162,3 +1162,70 @@ func TestFR9_P5_ResolutionIsDeterministic(t *testing.T) {
 		}
 	})
 }
+
+// TestFR9_P6_NewEdgeKindSourcedAtBuiltinTypeRejected covers arch_profile_loader.md's
+// rule that a profile-declared edge kind the frame does not already carry is
+// refused at validation when its source is a built-in type — the built-in
+// $defs are frame-fixed and gain no new reference fields in composition, so
+// such an edge could never be carried by any document.
+func TestFR9_P6_NewEdgeKindSourcedAtBuiltinTypeRejected(t *testing.T) {
+	t.Run("new edge kind sourced at a built-in type is refused", func(t *testing.T) {
+		profile := DefaultProfile()
+		profile.NodeTypes = append(profile.NodeTypes, NodeType{
+			Name:            "endpoint",
+			PluralKey:       "endpoints",
+			Scope:           "module",
+			RequiresContent: true,
+		})
+		profile.Edges = append(profile.Edges, Edge{
+			Kind: "audits",
+			From: []string{"component"},
+			To:   []string{"endpoint"},
+		})
+
+		dir := t.TempDir()
+		data, err := json.Marshal(profile)
+		if err != nil {
+			t.Fatalf("marshal profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+
+		_, err = ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a profile with a new edge kind sourced at a built-in type, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "audits") {
+			t.Fatalf("error should name the declaration (audits), got: %v", err)
+		}
+	})
+
+	t.Run("an edge kind the frame already carries remains declarable at a built-in type", func(t *testing.T) {
+		// "uses" is already carried by the frame at "component" (and
+		// "data_flow") in DefaultProfile — redeclaring it, even with an
+		// extra To target, must not trip the new-edge-kind rule.
+		profile := DefaultProfile()
+		for i, e := range profile.Edges {
+			if e.Kind == "uses" {
+				profile.Edges[i].To = append(append([]string{}, e.To...), "requirement")
+			}
+		}
+
+		dir := t.TempDir()
+		data, err := json.Marshal(profile)
+		if err != nil {
+			t.Fatalf("marshal profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+
+		if _, err := ResolveProfile(dir); err != nil {
+			t.Fatalf("expected the already-carried edge kind %q at a built-in type to resolve cleanly, got: %v", "uses", err)
+		}
+	})
+}
