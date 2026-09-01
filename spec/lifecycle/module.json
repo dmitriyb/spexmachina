@@ -6,14 +6,14 @@
       "id": "44b8c5de0d37",
       "preq_id": "2574f0fdcef2",
       "type": "functional",
-      "title": "Project state directory",
+      "name": "Project state directory",
       "description": "Derived state lives in .spex/ at the project root: the snapshot and the task journal, and nothing else. Authored content — spec leaves, project.json, module.json, proposals — stays where a human edits it. The split is the rule, not the convenience: .spex/ is what the tool writes, spec/ is what a person writes. .spex/ is committed to git, not ignored — the journal is the one artifact in the system that cannot be reconstructed from anything else. Run scratch lives under .spex/runs/ (the absorb list is .spex/runs/absorb.json): written for one cycle, consumed by it, safe to remove afterwards — neither authored spec nor durable derived state."
     },
     {
       "id": "ac57844f66a6",
       "preq_id": "2574f0fdcef2",
       "type": "functional",
-      "title": "Initialize a project",
+      "name": "Initialize a project",
       "description": "spex init creates .spex/ with exactly two files. The snapshot it seeds is the canonical empty tree — never a snapshot of the spec that already exists, because seeding from the current spec would make the first diff clean and no work would ever be born from the initial spec; the empty tree moves here, from the snapshot loader's forgiving default to init's seed value. The journal it seeds is empty, with deliberately no init event: the empty journal is what 'no cycle has completed' means, and an event written at birth would make that predicate permanently false — the exact predicate the refresh bootstrap guard reads. init refuses a directory that already has .spex/ rather than overwriting it; it is the one command that can destroy a journal.",
       "depends_on": [
         "44b8c5de0d37"
@@ -23,7 +23,7 @@
       "id": "1ddbd6e36681",
       "preq_id": "2574f0fdcef2",
       "type": "functional",
-      "title": "Diagnose project health",
+      "name": "Diagnose project health",
       "description": "spex doctor reports what is present, what is missing and what is unreadable in the project state, and names the command that would fix each finding. It never mints or moves a baseline — not by default and not behind a repair flag: the moment doctor can repair a snapshot, the rule that the baseline moves only deliberately acquires an automated exception, exercised in exactly the situation where nobody is thinking clearly. Doctor diagnoses; a human decides.",
       "depends_on": [
         "44b8c5de0d37"
@@ -33,7 +33,7 @@
       "id": "055444aee4c7",
       "preq_id": "2574f0fdcef2",
       "type": "functional",
-      "title": "Uninitialized project is an error",
+      "name": "Uninitialized project is an error",
       "description": "Absence of project state is an error, never a fallback, and no command initialises implicitly — a read command must not write. Two absences are distinguished, because conflating them is dangerous: no .spex/ at all means the project was never initialised, and the error names spex init; .spex/ present with the snapshot or journal missing or unparseable means the project is broken, and the error names spex doctor. If both said init, a user with a bad merge would re-initialise and destroy the journal — the failure mode is asymmetric, so the messages are too. 'Not a spex project' exits with its own stable, documented exit code, distinct from the input-error and invariant codes, so CI and scripts branch on the code rather than grepping the message.",
       "depends_on": [
         "44b8c5de0d37"

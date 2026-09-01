@@ -6,14 +6,14 @@
       "id": "6c556c0db942",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Compute leaf hashes",
+      "name": "Compute leaf hashes",
       "description": "Hash each markdown content file and each JSON file in the spec. Leaf nodes in the merkle tree."
     },
     {
       "id": "97cc591528f9",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Compute interior hashes",
+      "name": "Compute interior hashes",
       "description": "Interior node hashes are computed from the sorted concatenation of their children's hashes. Tree mirrors spec hierarchy: project → module → leaves, with no grouping level between a module and the leaves it declares.",
       "depends_on": [
         "6c556c0db942"
@@ -23,7 +23,7 @@
       "id": "e99a846810df",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Store snapshots",
+      "name": "Store snapshots",
       "description": "Write the complete hash tree to the project's snapshot file, committed to git, at the location the lifecycle resolver answers. Loading an absent snapshot is an error, never an implicit empty baseline: the canonical empty tree is no longer Load's forgiving default — it is produced in exactly one place, as the seed value spex init writes — so absence at read time means uninitialised or broken, not 'nothing has changed yet'.",
       "depends_on": [
         "97cc591528f9"
@@ -33,7 +33,7 @@
       "id": "f223179a540a",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Diff against snapshot",
+      "name": "Diff against snapshot",
       "description": "Compare current hash tree against a stored snapshot. Report changed leaves and changed paths (interior nodes whose hash changed).",
       "depends_on": [
         "e99a846810df"
@@ -43,7 +43,7 @@
       "id": "425146f32e96",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Classify impact",
+      "name": "Classify impact",
       "description": "Classify each change by its impact level: impl_only (only test_section leaves changed), contract (data_flow or api leaves changed — a surface shared beyond one component, either a cross-component shape inside the module or a surface the module declares to its callers), arch_impl (component leaves changed), or structural (module.json or project.json meta leaves changed, or requirement leaves changed). The contract level sits between impl_only and arch_impl: data_flow and api changes are not purely local to a single component, nor do they rewire graph topology like component or meta changes — a data_flow change alters the shapes moving between components and must reach the downstream action classifier so a dedicated data_flow task bead is created. The four levels are fixed; which declared node type maps to which level is read from the resolved profile, the default profile assigns today's types to today's levels unchanged, and a node type the resolved profile does not declare (and that is not meta) is classified unknown — reported on the change's own line in both output formats and in the JSON summary's per-impact counts.",
       "depends_on": [
         "f223179a540a"
@@ -53,21 +53,21 @@
       "id": "26358c05face",
       "preq_id": "6faeb216618a",
       "type": "non_functional",
-      "title": "Deterministic hashing",
+      "name": "Deterministic hashing",
       "description": "Same file content always produces the same hash. Hash computation is order-independent for interior nodes (children sorted before hashing)."
     },
     {
       "id": "3ada6b800cc5",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Identity-hash tree keying",
+      "name": "Identity-hash tree keying",
       "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add. The set of node types keyed into the tree, and each type's hashed serialization — derived from its field declarations, the policy deciding what counts as a semantic change — are read from the resolved profile; the tree shape itself (project root, module interior nodes, identity-hash-keyed leaves, the synthetic meta leaf per module) is fixed and not declarable."
     },
     {
       "id": "6f8284df92a2",
       "preq_id": "e291989b1599",
       "type": "functional",
-      "title": "Change completeness validation",
+      "name": "Change completeness validation",
       "description": "When individual requirement leaf nodes change in the diff (added, modified, or removed), verify that implementing components' content leaves also changed. For modified/added requirements, each implementing component's content leaf must also appear in the diff. For removed requirements, no component may still reference them. For project-level requirement changes, the chain must propagate through module requirements to component leaves. Errors are included alongside changes in the diff JSON output. Which node type triggers the requirement-leaf rules is read from the resolved profile's per-type role flag rather than compiled in — the default profile marks requirement, unchanged; the meta-envelope sweep runs on the fixed meta leaves, a rule of the frame, not a profile assignment.",
       "depends_on": [
         "f223179a540a"

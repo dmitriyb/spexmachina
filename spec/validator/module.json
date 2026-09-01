@@ -6,21 +6,21 @@
       "id": "8599f07272ad",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "JSON schema conformance",
+      "name": "JSON schema conformance",
       "description": "Validate project.json and module.json against their JSON Schemas. Report all violations, not just the first. The schemas validated against are the documents composed from the resolved profile, so schema_path values on validation entries point into a generated document and the profile is part of what a reader needs to interpret them; a malformed profile is a distinct early failure reported before any conformance check runs."
     },
     {
       "id": "5a1ce39e1c9d",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Content path resolution",
+      "name": "Content path resolution",
       "description": "All content paths in module.json resolve to existing markdown files relative to the module directory. Which node types carry a content file is the resolved profile's declaration, so resolution walks the declared content-bearing types rather than a fixed set; the default profile declares today's three."
     },
     {
       "id": "d0451520f7be",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "DAG acyclicity",
+      "name": "DAG acyclicity",
       "description": "Module dependencies (requires_module), requirement dependencies (depends_on), and component dependencies (uses) form directed acyclic graphs. Acyclicity is enforced over every reference-kind field the resolved profile declares that is not marked cyclic — the taxonomy's optional cyclic: true flag exempts a descriptive edge from the cycle check, and an omitted flag means checked — plus the frame's one fixed edge, requires_module, which is not the profile's to declare and is always cycle-checked, never exemptable. The default profile marks none of its six declared reference kinds cyclic.",
       "depends_on": [
         "8599f07272ad"
@@ -30,14 +30,14 @@
       "id": "707094f8868b",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "ID uniqueness",
+      "name": "ID uniqueness",
       "description": "Every identity hash ID is unique within the array that contains it, in project.json and in each module.json — the apis array included. Uniqueness is checked by string comparison against a per-array set. Exactly one uniqueness rule is not per-array: an api name is the external surface string callers type, so two modules declaring the same name describe the same surface twice, and api names are therefore unique across every module.json in the project. A declared api or component name must also be recoverable — tokenizing it the way the removal-time corpus scan tokenizes prose must reproduce it exactly, in at most six words — because a name that is not its own tokenization is one no corpus phrase can ever match. Collisions across distinct logical nodes should be impossible in practice given the 48-bit hash space, but the validator still enforces it explicitly to catch hand-edited or hand-merged files."
     },
     {
       "id": "4b399b1c568f",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Cross-reference integrity",
+      "name": "Cross-reference integrity",
       "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, provided_by → components, depends_on → requirements, requires_module → modules, preq_id → project requirements. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition. The edge list above is the default profile's declaration plus the frame's one fixed edge: which reference fields a type may carry, and what node types each may point at, are the resolved profile's reference-kind field declarations, integrity is checked over that declared set, and requires_module — frame, not vocabulary — is checked beside them.",
       "depends_on": [
         "707094f8868b"
@@ -47,35 +47,35 @@
       "id": "608f8ca2e1b0",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Structured error output",
+      "name": "Structured error output",
       "description": "Exit 0 if valid. Exit 1 with structured JSON errors listing every violation found. The report may additionally carry a notes array of disclosures, mirroring the channel spex diff publishes; notes never affect validity, the counts, or the exit code, and the array is omitted when empty so a clean run emits the same document it always has."
     },
     {
       "id": "b42c5cdf874b",
       "preq_id": "afc25fb6c8e8",
       "type": "non_functional",
-      "title": "Fast validation",
+      "name": "Fast validation",
       "description": "Validating a spec with 100 modules and 1000 nodes completes in under 1 second."
     },
     {
       "id": "b95862937dd0",
       "preq_id": "54de5bdaa9a5",
       "type": "non_functional",
-      "title": "Self-validate",
+      "name": "Self-validate",
       "description": "The validator can validate spex-machina's own spec directory, ensuring the tool's spec remains consistent as it evolves."
     },
     {
       "id": "7f53c3f63360",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Module name consistency",
+      "name": "Module name consistency",
       "description": "Module names in project.json must match the corresponding module.json name field exactly. Lowercase convention enforced. A mismatch is reported with both spellings, and carries the correction to make only when case is all that differs."
     },
     {
       "id": "530dc49d7135",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Test content path resolution",
+      "name": "Test content path resolution",
       "description": "All test content paths (test_*.md) declared in module.json test_sections resolve to existing markdown files relative to the module directory. The project file declares no test nodes of its own, so every test path is reached through some module.",
       "depends_on": [
         "8599f07272ad"
@@ -85,28 +85,28 @@
       "id": "a88e6fb4463d",
       "preq_id": "92dfddf840b0",
       "type": "functional",
-      "title": "Test coverage checking",
+      "name": "Test coverage checking",
       "description": "Every component must be described by at least one test_section. Report uncovered components as validation errors. The link is a declared coverage chain read from the resolved profile — covered type, edge kind, covering type — with the declared type names interpolated into the same error shape; the default profile declares the component-describes-test_section link this rule has always enforced."
     },
     {
       "id": "9445f0fe054d",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Validate priority on project requirements",
+      "name": "Validate priority on project requirements",
       "description": "Every project requirement must have a priority field (integer 0-4). Report missing or out-of-range priority values as validation errors."
     },
     {
       "id": "168ae8fde8e2",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Requirement coverage validation",
+      "name": "Requirement coverage validation",
       "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors. The two links are declared coverage chains read from the resolved profile — each the triple of covered type, edge kind, covering type — with the declared type names interpolated into the same error shapes; the default profile declares exactly these two. One declared exemption: a project requirement carrying derivation 'pending' is skipped by the first link and reported as a disclosure note naming its identity hash and quoted name, never as an error. The module-requirement-to-component link admits no such state."
     },
     {
       "id": "d99ef6b9b776",
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
-      "title": "Validate sections and coupled modules",
+      "name": "Validate sections and coupled modules",
       "description": "Validate the sections array: unique IDs, unique names, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/\u003cmodule-path\u003e/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
     }
   ],

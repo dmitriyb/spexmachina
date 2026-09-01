@@ -5,56 +5,56 @@
     {
       "id": "68f38bb4cc74",
       "type": "functional",
-      "title": "Tiered CI by trigger",
+      "name": "Tiered CI by trigger",
       "preq_id": "de4dd3cbb4dd",
       "description": "GitHub Actions workflows tiered by trigger cost: a fast gate on every pull request (build, vet, test, and the spec gate), the same gate plus the race detector on push to main, and a nightly fuzz run that discovers fuzz targets at run time rather than from a hardcoded list. Changes touching neither Go code nor the spec skip the runners; each workflow cancels its own superseded runs."
     },
     {
       "id": "07bbd73df14f",
       "type": "functional",
-      "title": "Spec gate on every PR",
+      "name": "Spec gate on every PR",
       "preq_id": "54de5bdaa9a5",
       "description": "After building the binary, every pull request runs spex validate and then asserts that spex diff reports no completeness errors. The job honors the diff exit-code contract (0 clean, 2 completeness errors, 1 tree build failure) without discarding the exit status, and the check is marked required for merge through branch protection."
     },
     {
       "id": "1a614dd66ebb",
       "type": "functional",
-      "title": "Cross-architecture binary release",
+      "name": "Cross-architecture binary release",
       "preq_id": "de4dd3cbb4dd",
       "description": "A version tag triggers a GoReleaser build that cross-compiles linux and darwin on amd64 and arm64 with CGO disabled and trimmed paths, stamps version, commit, and date via ldflags, and publishes a GitHub Release."
     },
     {
       "id": "1cbfffdeb281",
       "type": "functional",
-      "title": "Signed and attested artifacts",
+      "name": "Signed and attested artifacts",
       "preq_id": "de4dd3cbb4dd",
       "description": "Every release archive is SSHSIG-signed with the shared Ed25519 release key and accompanied by sha256 checksums and a SLSA build-provenance attestation: three independent ways to trust a downloaded binary."
     },
     {
       "id": "99127d3a1b95",
       "type": "functional",
-      "title": "Machine-readable release manifest",
+      "name": "Machine-readable release manifest",
       "preq_id": "de4dd3cbb4dd",
       "description": "A self-verifying manifest is derived from GoReleaser's own output, recomputing each artifact's sha256 and size from the bytes on disk rather than trusting internal bookkeeping, so a downstream consumer can pin a per-target checksum programmatically."
     },
     {
       "id": "6956c1a875ae",
       "type": "non_functional",
-      "title": "Deterministic ldflags-stamped builds",
+      "name": "Deterministic ldflags-stamped builds",
       "preq_id": "de4dd3cbb4dd",
       "description": "Release builds are reproducible: CGO disabled, trimmed paths, and version metadata injected only through ldflags, so a given tag yields byte-stable binaries and the stamped version is authoritative for the forward-only upgrade guard."
     },
     {
       "id": "d051819c3224",
       "type": "functional",
-      "title": "In-place self-update via the embedded installer",
+      "name": "In-place self-update via the embedded installer",
       "preq_id": "5b50178bf72e",
       "description": "The verified install script carries an upgrade mode and is embedded byte-for-byte into the binary; spex upgrade drives it against the running binary's own path. Replacement is staged and atomic with a kept backup, the latest path is forward-only and non-overridable, and an explicitly named version installs in any direction."
     },
     {
       "id": "5b33ea62c4e3",
       "type": "non_functional",
-      "title": "Embedded installer byte-identical to the released one",
+      "name": "Embedded installer byte-identical to the released one",
       "preq_id": "5b50178bf72e",
       "description": "A build-failing test asserts the embedded install script is byte-identical to the released copy at the repository root, so the binary can never ship an installer that drifted from the published, signed one."
     }

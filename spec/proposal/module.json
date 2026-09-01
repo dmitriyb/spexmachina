@@ -6,35 +6,35 @@
       "id": "2b62ad5e8ef2",
       "preq_id": "b42bc8a9b82a",
       "type": "functional",
-      "title": "Register proposal",
+      "name": "Register proposal",
       "description": "Copy or link a proposal file to spec/proposals/, validate that required sections are present (Vision, Modules, Key requirements, Design decisions for project proposals; Context, Proposed change, Impact expectation for change proposals). A successful registration also appends the registered event that opens the proposal's lifecycle to the task journal — {\"event\":\"registered\",\"eid\":\"<git_head>:<slug>\",\"proposal\":\"<slug>\",\"git_head\":\"<head>\"} — through the map module's MappingStore, the journal's writer-owner: the module that starts a lifecycle records its start, and the proposal epic's task_created later references this event. The git head is caller-supplied, never read from git by spex; the append is idempotent by eid, so a recovery re-run appends nothing."
     },
     {
       "id": "2e38135487be",
       "preq_id": "b42bc8a9b82a",
       "type": "functional",
-      "title": "Show proposal history",
+      "name": "Show proposal history",
       "description": "List all proposals with their dates, show which proposals led to which spec changes and which bead actions (via spec_proposal metadata on beads)."
     },
     {
       "id": "e8c48d1b4cde",
       "preq_id": "b42bc8a9b82a",
       "type": "functional",
-      "title": "Provide templates",
+      "name": "Provide templates",
       "description": "Output a project proposal template or a change proposal template to stdout. Templates include all required sections with placeholder content."
     },
     {
       "id": "924cf30cbd58",
       "preq_id": "8efae3d1ad18",
       "type": "non_functional",
-      "title": "Git-native proposals",
+      "name": "Git-native proposals",
       "description": "Proposals are plain markdown files in spec/proposals/. No database, no external state. Everything is committed to git."
     },
     {
       "id": "fd540b407fb4",
       "preq_id": "58ea35f52b86",
       "type": "functional",
-      "title": "Bead data via stdin",
+      "name": "Bead data via stdin",
       "description": "spex log reads tracker bead data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed []BeadRecord slice from its caller \u2014 no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which \u2014 ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
     }
   ],

@@ -6,35 +6,35 @@
       "id": "934d627f0e90",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Store mapping records",
+      "name": "Store mapping records",
       "description": "Own the task journal — one JSON object per line, append-only, living inside the .spex/ state directory at the location the lifecycle resolver answers. Change events record what a baselining absorbed — node identity hash, name, node_type, module, before/after leaf hashes, git_head, proposal — the registered event records the opening of a proposal's lifecycle, and receipt events record what the tracker did (task_created/task_closed with a task id, refresh receipts naming absorbed events). MappingStore is the journal's one writer-owner: every append — ingest's reconciliation and refresh batches, the Registrar's registered event — goes through its atomic, schema-validating append primitive; nothing writes around it. Current linkage is a fold, never a stored cache: the latest task-bearing event per node, with the epic's entry sourced from its registered event. No metadata is denormalized; names and modules are read from the event that carried them."
     },
     {
       "id": "27c046dde129",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Query mappings via CLI",
+      "name": "Query mappings via CLI",
       "description": "spex map get returns structured JSON for one node — keyed by identity hash or task id; there is no integer record id. spex map list shows the folded current linkage. spex map context resolves full spec context for a node, live or removed. All four invocations are declared as api nodes — the parent `spex map` and its three children — and each names MapCommand in provided_by alongside the worker it drives: MappingStore for get and list, ContextResolver for context. A declared name carries no argument placeholder: the api is `spex map get`, not `spex map get <key>`, because the name must be the string a caller types and must survive corpus tokenization unchanged. Declaring the children alongside the parent is also what keeps the parent retirable — the removal-time name check discards hits that a longer live name already covers, so the mentions of `spex map` that belong to `spex map get`, `spex map list` or `spex map context` are never counted against the bare parent."
     },
     {
       "id": "4aee62bd3c15",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Validate mapping file against schema",
+      "name": "Validate mapping file against schema",
       "description": "MappingStore validates each journal line against the journal-line JSON Schema on read. A malformed line is a clear error from the map query surface, naming the line number. Gating commands are exempt by design: they treat an unreadable journal as absent and degrade detection, never fail — the journal is not load-bearing for the pipeline."
     },
     {
       "id": "40a3d3155131",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Resolve full spec context from record",
+      "name": "Resolve full spec context from record",
       "description": "Given an identity hash or a task id, deterministically resolve all spec files needed to implement the node, plus the event bracket that locates its latest change in git — eid, event, before_head, after_head — for any node, live or removed. A live node's files resolve from the spec alone: the arch file from the component's declared content, test_sections whose describes array contains the component ID, data_flows whose uses array contains it, and the module file — all derived, nothing read from a cache; its bracket comes from the journal: the latest task-bearing event's git_head against the git_head of the node's preceding change event, before_head null when the latest event is an added, the whole bracket null when the node has no task-bearing event yet. A removed node resolves from the journal: its name, node_type, module, the proposal that removed it, and the same bracket off its removed event. Returns a single JSON blob."
     },
     {
       "id": "76fe608c3a40",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Fold and bracket retargeted tasks",
+      "name": "Fold and bracket retargeted tasks",
       "description": "task_retargeted is task-bearing: MappingStore's fold treats it exactly as it treats task_created — latest-wins moves the pairing's sourcing event forward to the retargeted event's referent, so the current linkage always points at the newest state the task owes. ContextResolver widens the context bracket for a retargeted task: before_head comes from the sourcing event of the task's original task_created, after_head from its latest task_retargeted event, so the implementer sees the full accumulated diff rather than the last increment. Because open tasks are no longer recreated when their node changes, no blocks lineage edge exists between generations on this path — the accumulation lives in the journal and this fold-and-bracket rule is what surfaces it."
     }
   ],

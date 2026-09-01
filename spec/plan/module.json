@@ -6,14 +6,14 @@
       "id": "022dcab6a70d",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Read bead metadata",
+      "name": "Read bead metadata",
       "description": "Parse bead metadata from input JSON (sourced via the --beads flag): each bead's id and its live status. No label is parsed — the label is an adapter-facing idempotency key spex reads nothing from; pairings arrive from the journal fold carrying task ids, and live status joins onto them by task id. Pure function over []byte or io.Reader — no subprocess invocation, no live tracker calls."
     },
     {
       "id": "acc550bb0e73",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Match changed nodes to beads",
+      "name": "Match changed nodes to beads",
       "description": "Correlate changed spec nodes (from merkle diff) with existing tasks: the journal fold supplies every pairing — the diff's node keys and the fold's node keys are the same identity hashes, joined directly — and the parsed bead list supplies live status, joined onto each pairing by task id. No label joins anywhere.",
       "depends_on": [
         "022dcab6a70d"
@@ -23,7 +23,7 @@
       "id": "de42d9efa750",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Classify actions",
+      "name": "Classify actions",
       "description": "Determine the action for each affected task from the state transition table: create (added or modified spec nodes), obsolete (modified or removed spec nodes with existing beads), or retarget. The modified — or added-with-differing-hashes — cell splits on the live pairing's tracker status: an open task is retargeted, an in_progress task refuses the whole run, a closed task obsoletes and mints a successor. A matched added or modified change whose open pairing's sourcing event already records the change's current after hash yields no action — the work is already tracked, and the change resurfaced only because a partial run left the snapshot unsaved; this cell is checked first and is what makes the changeset after a partial ingest carry only the unfinished ops. A change with no existing bead is gated by node type before the transition table runs, and api is absent from the bead-producing set: merkle classifies an api change as contract-level (alongside data_flow) so it is not skipped upstream as structural, but the components named in the api's provided_by array already carry the work, so a bead per api would duplicate them. An added or modified api is dropped by that gate; the matched and orphaned paths apply no node-type gate, but they walk journal pairings rather than changes, and an api never acquires a pairing because no create is ever produced for one. An added, modified or removed api therefore yields zero actions. The bead-producing set the node-type gate admits is the resolved profile's plan-relevant declaration rather than a compiled-in constant; the set named here is the default profile's. The profile says only which types produce beads — the bead type each op is filed as is the adapter's kind-to-bead-type mapping, never the profile's.",
       "depends_on": [
         "acc550bb0e73"
@@ -33,14 +33,14 @@
       "id": "5369b5ae363c",
       "preq_id": "6faeb216618a",
       "type": "non_functional",
-      "title": "Deterministic matching",
+      "name": "Deterministic matching",
       "description": "Same merkle diff + same bead state always produces the same matched pairings and the same classified actions, in the same order."
     },
     {
       "id": "8987ef169e48",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Classify cleanup actions for removed nodes",
+      "name": "Classify cleanup actions for removed nodes",
       "description": "When a removed spec node has a closed task (code shipped to main), classify as obsolete + cleanup create. When the task is open or in_progress (no code shipped), classify as obsolete only. The removed node's name, kind and module — needed to phrase the cleanup — are read from the journal's removed events, the only place they survive the node's removal.",
       "depends_on": [
         "de42d9efa750"
@@ -50,7 +50,7 @@
       "id": "dbe693b25c8d",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Validate diff input",
+      "name": "Validate diff input",
       "description": "Before processing, check if the diff input contains errors (from change completeness validation). If errors are present, refuse to proceed — print errors to stderr and exit non-zero. This is the pipeline's one gate on the diff: nothing downstream of it re-checks.",
       "depends_on": [
         "acc550bb0e73"
@@ -60,7 +60,7 @@
       "id": "3ec0a433e476",
       "preq_id": "13c15bc3c865",
       "type": "functional",
-      "title": "Data flow contract bead gating",
+      "name": "Data flow contract bead gating",
       "description": "Produce a create action with node_type=data_flow for every added or modified data_flow change (contract-level impact). Filter test_section changes by the describes array length in the current module spec: len(describes) >= 2 produces a task action, len(describes) == 1 is skipped (bundled into the single described component's feature bead). For every component create action whose spec node appears in a changed data_flow's uses array, add the data_flow's spec_node_id to the component's DepSpecNodeIDs. The TopologicalSorter and Resolver then ensure the data_flow's create op is emitted first and participating components carry ref:op deps on it.",
       "depends_on": [
         "de42d9efa750",
@@ -71,7 +71,7 @@
       "id": "e4234a9928e6",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Emit DepSpecNodeIDs per create and retarget action",
+      "name": "Emit DepSpecNodeIDs per create and retarget action",
       "description": "For each create action, collect identity hashes from component uses (direct) and transitive requires_module edges; for a create or retarget action whose node is a test_section, collect the section's describes array — unconditionally, with no batch-awareness at collection time, because filtering already-satisfied deps is the Resolver's responsibility and its existing precedence (in-batch create → ref:op, open fold pairing → ref:bead, closed pairing → dropped, no pairing → plan error) already yields the right answer per dep. Attach the collected set as DepSpecNodeIDs on the Action. Bead-ID resolution is NOT done here — it is deferred within the same pass to the Resolver, which classifies each spec_node_id into ref:op or ref:bead at changeset-build time, with full knowledge of the batch's op ids. Retires the prior design that pre-resolved to stale bead IDs and drove the broken-dep-graph bug (see proposal 2026-04-18-decouple-spex-from-br).",
       "depends_on": [
         "de42d9efa750"
@@ -81,63 +81,63 @@
       "id": "d027a902f414",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Accept bead state via --beads file input",
+      "name": "Accept bead state via --beads file input",
       "description": "PlanCommand accepts an optional --beads <file> flag. The file contains the JSON produced by 'br list --json' (or any tracker whose output conforms to the same shape). BeadReader parses the file contents into one entry per bead. Each journal pairing is enriched with its live bead_status before ActionClassifier runs, so the cleanup-bead gate fires correctly for removed nodes with closed tasks, and the retarget/refuse/recreate split reads a real status. No subprocess invocation — the caller pipes tracker output as a data artifact."
     },
     {
       "id": "cf4f1ab8264a",
       "preq_id": "58ea35f52b86",
       "type": "functional",
-      "title": "Pure function over inputs",
+      "name": "Pure function over inputs",
       "description": "spex plan reads the merkle diff (stdin or --diff), the tracker listing (--beads), the task journal — at the location the lifecycle resolver answers — the spec directory, the --git-head SHA, the --proposal ref and an optional --absorb file, run scratch under the project state directory; writes changeset.json to stdout or --out. No subprocess invocations, no live tracker calls, no git calls. Given identical inputs, always produces byte-identical changeset output. The invocation itself is a declared external surface — the api `spex plan`, provided by PlanCommand — and the declared name is the bare invocation, so the flags listed here sit behind it: adding, renaming or dropping one moves no name and is invisible to the diff. Nothing that reaches this function can carry an api node either, because an api produces no action, so no changeset op ever names one."
     },
     {
       "id": "483fdc961d3e",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Topological ordering within type levels",
+      "name": "Topological ordering within type levels",
       "description": "Ops are emitted in an order that respects type tiers (proposal epic first, then features and data_flow tasks, then multi-component test tasks) and respects spec-graph dependencies within each tier. When new bead B depends on new bead A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. Same-tier ties break deterministically by spec_node_id."
     },
     {
       "id": "ab7176690bfb",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Priority propagation through project requirements",
+      "name": "Priority propagation through project requirements",
       "description": "Each create op carries a priority derived from the chain component.implements → module_requirement.preq_id → project_requirement.priority. Lowest numeric priority wins across the implements set. Passed through in the op's priority field for the adapter to forward to the tracker."
     },
     {
       "id": "13296c25e250",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Parent resolution from mapping store",
+      "name": "Parent resolution from mapping store",
       "description": "Each create op's parent field encodes the proposal epic for the run. The epic is either the op_id of a same-run epic create (first op) or a bead_id ref to a pre-existing epic task, recognised by folding the task journal. The epic's identity is the proposal's registered event: the fold answers both that event — whose eid the epic op's label and its task_created referent carry — and any epic task already paired to it; a proposal with no registered event in the journal is a plan error naming the slug, because registration opens the lifecycle. All non-epic creates in the run parent under this single epic reference. The title's store is identity-bearing legacy; the journal fold is the source."
     },
     {
       "id": "f68bda93df12",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Forward-reference encoding for in-batch creates",
+      "name": "Forward-reference encoding for in-batch creates",
       "description": "Parent and dependency fields use two ref shapes: {\"ref\":\"bead\",\"bead_id\":\"<id>\"} for a task the journal fold already pairs with the spec node; {\"ref\":\"op\",\"op_id\":\"<id>\"} for the result of another create op in the same changeset. Resolving DepSpecNodeIDs into these two shapes is how the broken-dep-graph bug stays fixed: same-run deps become op refs resolved by the adapter at exec time rather than pre-resolved stale bead IDs. A dep that is neither in-batch nor in the fold is a plan error at build time — changeset v2 already dropped the third ref:spec_node shape and its adapter-time lookup, and v3 keeps that: the adapter reads no spex-owned file."
     },
     {
       "id": "885096d4941c",
       "preq_id": "6faeb216618a",
       "type": "functional",
-      "title": "Idempotency label construction",
+      "name": "Idempotency label construction",
       "description": "Every create op's idempotency.label is spex:<eid> of the journal event its task_created will reference — one rule for every action class. Node-bearing creates (fresh and modify-pair alike) key the change event ingest will mint from (git_head, op_id); cleanup creates key the removal event they answer — the journal's latest removed event for the node when the removal already landed, otherwise the event their same-batch close implies, derived from the close op's (git_head, op_id) — the same resolution order the reconciler pairs them by; epic creates key the proposal's registered event, read from the journal fold. Event ids are deterministic, so plan knows every eid at changeset-build time: no counter, no cursor, no store write. A label is unique per change — which is what a task is — so no cleanup- prefix, no slug shape, and no collision rationale survive. The label is the eid's tracker-side carrier, offered to adapters as optional insurance: the reference adapter matches it against the tracker before creating, so a pre-existing match produces a was_existing=true receipt rather than a duplicate bead; an adapter for a tracker without label support ignores the field and stays conformant, at the stated cost that a run crashed between a create and its receipt can duplicate that create on a blind re-run."
     },
     {
       "id": "26b2fdc6e7ea",
       "preq_id": "58ea35f52b86",
       "type": "functional",
-      "title": "Git HEAD threaded from caller",
+      "name": "Git HEAD threaded from caller",
       "description": "spex plan accepts --git-head <sha> and embeds the SHA into changeset.json under the top-level git_head field. The SHA is half of every eid the run derives — (git_head, op_id) — and the adapter's pre-flight requires the field as document provenance without reading it further. spex never calls git rev-parse; the caller supplies $(git rev-parse HEAD) from their shell."
     },
     {
       "id": "7f275787df34",
       "preq_id": "6faeb216618a",
       "type": "functional",
-      "title": "Deterministic changeset schema",
+      "name": "Deterministic changeset schema",
       "description": "changeset.json carries a top-level \"version\": 3 field. Version 3 added the retarget op and the top-level absorbed array to the vocabulary; the bump is an honest vocabulary change, because a v2 consumer must refuse a version it does not know rather than silently drop ops it cannot execute. Version 2 had already removed ref:spec_node from the adapter-facing vocabulary, and v3 keeps that: an op's deps reach the adapter as ref:op or ref:bead only. The schema is stable across runs: op ordering is deterministic, all ref shapes use named fields, field order is canonical so two runs with identical inputs produce byte-identical output suitable for git diff review.",
       "depends_on": [
         "7d45c20bd0f7",
@@ -148,14 +148,14 @@
       "id": "77f5182ac5f7",
       "preq_id": "91f6f338de19",
       "type": "functional",
-      "title": "Tool-agnostic operation vocabulary",
+      "name": "Tool-agnostic operation vocabulary",
       "description": "Operations are label, create, close, tag, and retarget — abstract over any bead tracker. No tracker-specific flags or subcommand names appear in changeset.json. Adapters for br, bd, GitHub Issues, or Jira consume the same vocabulary. The label surface is optional throughout: idempotency.label and every labels array are insurance and linkage an adapter MAY apply, so a tracker without label support hosts a conformant adapter — the minimum a tracker must offer is create, close, and a stable identifier — and an adapter without labels answers label and tag ops with an ok no-op receipt."
     },
     {
       "id": "7d45c20bd0f7",
       "preq_id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Retarget open tasks instead of recreating",
+      "name": "Retarget open tasks instead of recreating",
       "description": "A task is work on a change, not on a node's final state: when a modified — or added-with-differing-hashes — change matches a live pairing whose task is open (unclaimed), the action is retarget, a third action word beside create and obsolete. The retarget cell applies only where the node still owes a task of its own: a matched test_section whose describes array dropped to one component folds back into that component's feature bead — obsolete, no successor — before the status split is consulted, whatever the task's status. No bead is closed and none created on a retarget; the task's target moves from the old state to the new one. The retarget op targets the task by ref:bead and carries the node's spec_node_id, its new content hash, the spex:<eid> label of this run's modified event — derived from (git_head, op_id) like every node-bearing create — and deps holding the freshly recomputed DepSpecNodeIDs, applied add-only (stale deps are closed by their own lifecycle, never removed here). When the pairing's task is in_progress, spex plan refuses the run with exit 2, naming every claimed task whose node changed — a claimed task's target never moves under it; the operator waits for the task to settle or splits the change. When the task is closed, the obsolete + create successor pair applies unchanged, lineage as before. Because open tasks are no longer recreated, no blocks lineage edge is minted between generations on this path — history lives in the journal.",
       "depends_on": [
         "de42d9efa750"
@@ -165,7 +165,7 @@
       "id": "049e8ae9cc51",
       "preq_id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Absorb marked cosmetic modifications",
+      "name": "Absorb marked cosmetic modifications",
       "description": "Whether a prose edit is cosmetic is not deterministically decidable, so the decision is an authored input, never an inference: --absorb <file> names a git-committed JSON list of {node, reason} entries. The rules are deterministic in spex: a marked node must appear in the diff as modified — marking an added or removed node, or one absent from the diff, is exit 2. PlanCommand enforces those rules in pre-flight, withholds every marked change from matching and classification, and composes the absorbed entries directly from the diff's modified entries; ChangesetBuilder writes them into the document. A marked node therefore produces no op and never reaches the retarget/refuse/recreate split — whatever its pairing's status, open or claimed, cosmetic means the task owes nothing and never moves. Its change event still reaches the journal, because the changeset gains a top-level absorbed array (node, before/after hashes, reason) that the adapter ignores and ingest consumes, appending the modified events — eids derived from (node, before, after) exactly as refresh-born events are — closed by the existing refresh receipt naming them. ingest --mode refresh remains the all-or-nothing peer; this is its per-node form riding a normal run. The judgment discipline lives in the authoring loop, not in spex: the skills that move the baseline declare per node what changed and why it is cosmetic, contract-bearing sections are categorically ineligible, the presumption is non-cosmetic and silence never skips, and the PR reviewer validates the declaration itself. The absorb file in the PR diff and the reasons in the journal are what make the bypass auditable."
     }
   ],

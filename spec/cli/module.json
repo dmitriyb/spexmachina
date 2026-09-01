@@ -6,34 +6,34 @@
       "id": "0d7b10a39eb0",
       "preq_id": "c87aa373c2ed",
       "type": "functional",
-      "title": "Root command and subcommand registration",
+      "name": "Root command and subcommand registration",
       "description": "A top-level cobra root command that the binary's entry point attaches the module subcommands onto, sets global flags, and prints help when invoked with no args."
     },
     {
       "id": "e15f238e9534",
       "preq_id": "c87aa373c2ed",
       "type": "functional",
-      "title": "Version command",
+      "name": "Version command",
       "description": "A `spex version` subcommand that prints version string and build info injected at build time via ldflags."
     },
     {
       "id": "0c395440d59f",
       "preq_id": "c87aa373c2ed",
       "type": "functional",
-      "title": "Identity hash computation command",
+      "name": "Identity hash computation command",
       "description": "`spex hash-id --module <module> --type <type> --name <name>` computes and prints the 12-character hex identity hash for the given spec node. The command calls schema.IdentityHash with the appropriate parts for the node type. Exits 0 with the hash on stdout, exits 1 with a usage error if required flags are missing. --type is validated against the node types the resolved profile declares rather than a fixed switch, and the rejection message lists the profile's valid types; the default profile declares today's list."
     },
     {
       "id": "293b27f73924",
       "preq_id": "96c6c15ecc3e",
       "type": "non_functional",
-      "title": "Bounded third-party CLI surface",
+      "name": "Bounded third-party CLI surface",
       "description": "cobra is the only third-party CLI framework in the binary: no second command library and no hand-rolled argument parser stands beside it, and argument and flag parsing, help text, unknown-command suggestions and shell completions are taken from cobra's built-ins rather than reimplemented. cobra reaches exactly two packages: cli, which holds the root command and nothing else, and cmd/spex, which holds all fourteen subcommand constructors, one per file. No other package imports it \u2014 the worker packages that do the module's actual work define no commands and see no CLI framework at all, and a subcommand's run function reads flags into plain Go values before calling into them. What is bounded is therefore both which third-party module may be reached for and how far it reaches: the root command imports cobra and nothing else, and cobra stops at command construction. pflag and mousetrap arrive transitively through cobra and are never imported directly. A subcommand needing a capability cobra does not provide reaches for the standard library; anything else amends the project's declared stack before it is written. The bounded surface is now enumerated in the graph rather than only counted here: each of the fourteen constructors' commands is declared as an api node in the module that owns its entry point, plus the three `spex map` children, and the api names are globally unique across the project so no two modules can claim one invocation. The bare `spex` root is deliberately not among them \u2014 it runs no operation, only cobra's help, and every capability it does own is a persistent flag or a built-in, none of which is part of an api name."
     },
     {
       "id": "cb1775f0a576",
       "type": "functional",
-      "title": "In-place upgrade command",
+      "name": "In-place upgrade command",
       "preq_id": "5b50178bf72e",
       "description": "spex upgrade self-updates the installed binary by driving the embedded installer's upgrade mode: forward-only to the latest signed release by default, an exact release in any direction via --version, report-only via --check / --dry-run, and restoration of the previous binary via --rollback. It reimplements none of the resolve, download, verify, or replace logic."
     }
