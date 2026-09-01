@@ -16,20 +16,58 @@ var projectProfileArrays = []string{"requirements"}
 // ProjectNodeType describes one project-scoped node type as declared by the
 // resolved profile: its name (used to key $defs and, elsewhere, to derive
 // identity hashes as "project/<name>/<node name>"), the plural key naming
-// its array property in project.json, and whether nodes of this type carry
-// a content leaf.
+// its array property in project.json, whether nodes of this type carry a
+// content leaf, and the fields it declares beyond the fixed envelope.
 type ProjectNodeType struct {
 	Name            string
 	PluralKey       string
 	RequiresContent bool
+	Fields          []Field
 }
 
 // DefaultProjectNodeTypes returns the project-scoped node types of the
-// built-in default profile: requirement alone. Composing the project
-// schema from this set reproduces the shipped frame's requirements array.
+// built-in default profile: requirement alone, its non-envelope properties
+// declared as Fields — the type enumeration, the priority bounds, the
+// single-value derivation enumeration, and depends_on (a reference field;
+// the depends_on edge in DefaultProfile's edge list still carries the same
+// kind, for every non-schema consumer of the profile's edge declarations).
+// Composing the project schema from this set reproduces the shipped frame's
+// requirements array and $defs/requirement.
 func DefaultProjectNodeTypes() []ProjectNodeType {
+	zero, four := 0, 4
 	return []ProjectNodeType{
-		{Name: "requirement", PluralKey: "requirements"},
+		{
+			Name:      "requirement",
+			PluralKey: "requirements",
+			Fields: []Field{
+				{
+					Name:        "type",
+					Kind:        FieldKindText,
+					Required:    true,
+					Enum:        []string{"functional", "non_functional"},
+					Description: "Requirement type.",
+				},
+				{
+					Name:        "priority",
+					Kind:        FieldKindInteger,
+					Minimum:     &zero,
+					Maximum:     &four,
+					Description: "Requirement priority (0-4). Optional; enforced by validator when present.",
+				},
+				{
+					Name:        "derivation",
+					Kind:        FieldKindText,
+					Enum:        []string{"pending"},
+					Description: "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id.",
+				},
+				{
+					Name:        "depends_on",
+					Kind:        FieldKindReference,
+					Cardinality: "many",
+					Description: "Identity hashes of other requirements this one depends on (depends_on edge).",
+				},
+			},
+		},
 	}
 }
 
@@ -45,22 +83,43 @@ func defaultProjectArrayKeyByTypeName() map[string]string {
 	return keys
 }
 
+// defaultProjectFieldsByTypeName maps each built-in default project-scoped
+// type name to its declared Fields — the lookup Profile.ProjectNodeTypes
+// uses to backfill Fields for a declared type that reuses a default type's
+// name without declaring its own.
+func defaultProjectFieldsByTypeName() map[string][]Field {
+	fields := make(map[string][]Field, len(projectProfileArrays))
+	for _, t := range DefaultProjectNodeTypes() {
+		fields[t.Name] = t.Fields
+	}
+	return fields
+}
+
 // ComposeProjectSchema composes the effective project.json JSON Schema from
-// the shipped frame plus one array property per given project-scoped node
-// type, keyed by its plural key. A type whose name matches the frame's
-// built-in $defs entry (requirement) reuses that definition, and its array
-// property, unchanged from the frame — declared edges sourced at a built-in
-// type never reach it, since the built-in $defs are frame-fixed. Any other
-// name gets a generic envelope definition — an identity-hash id, a
-// non-empty name, and, only when RequiresContent is set, a required content
-// path — mirroring the module schema's generic envelope, plus one array-of-
-// identity-hash property per given edge whose source names that type, and a
-// synthesized array property description. additionalProperties:false at the
-// root, inherited unchanged from the frame, is what rejects any array no
-// passed type declares; the same constraint at the entry level, applied by
-// genericProjectNodeDef, is what rejects any field that is neither envelope
-// nor declared edge. Composing with DefaultProjectNodeTypes and
-// DefaultProfile's edges reproduces the shipped project.schema.json.
+// the shipped frame plus one array property and one $defs entry per given
+// project-scoped node type, keyed by its plural key and its name. Every
+// type — the built-in requirement included — gets a generic envelope
+// definition composed by genericProjectNodeDef: an identity-hash id, a
+// non-empty name, an optional description, and, only when RequiresContent
+// is set, a required content path, exactly as the module schema's
+// composition does for module-scoped types; the built-in $defs the shipped
+// frame used to carry verbatim are frame-fixed no longer. Beyond the
+// envelope, each entry definition carries one property per declared field —
+// typed, bounded, enum-constrained, identity-hash-patterned for references —
+// plus one array-of-identity-hash property per edge whose source names that
+// type; a field and an edge sharing a name compose the same property twice,
+// the field's shape winning since its loop runs last. The requirement type's
+// own non-envelope properties are the default profile's field declarations
+// materialized this way (DefaultProjectNodeTypes), so composing with them
+// and DefaultProfile's edges reproduces the shipped project.schema.json's
+// $defs/requirement exactly. The array property at the root, by contrast,
+// is restored unchanged from the frame for a built-in type name — its
+// shipped wording is hand-authored, not synthesized — and only synthesized
+// for a name the frame does not already carry. additionalProperties:false
+// at the root, inherited unchanged from the frame, is what rejects any
+// array no passed type declares; the same constraint at the entry level,
+// applied by genericProjectNodeDef, is what rejects any property that is
+// neither envelope, declared edge, nor declared field.
 func ComposeProjectSchema(types []ProjectNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := projectSchemaFrame()
 	if err != nil {
@@ -76,18 +135,15 @@ func ComposeProjectSchema(types []ProjectNodeType, edges []Edge) ([]byte, error)
 		return nil, fmt.Errorf("schema: compose project schema: frame has no $defs object")
 	}
 	defaultKeys := defaultProjectArrayKeyByTypeName()
+	scopedEdges := projectScopedEdges(edges)
 
 	for _, t := range types {
-		_, declared := defs[t.Name]
-		if !declared {
-			defs[t.Name] = genericProjectNodeDef(t, edgesSourcedAt(edges, t.Name))
-		}
-		if declared {
-			if origKey, ok := defaultKeys[t.Name]; ok {
-				if orig, ok := originalArrays[origKey]; ok {
-					props[t.PluralKey] = orig
-					continue
-				}
+		defs[t.Name] = genericProjectNodeDef(t, edgesSourcedAt(scopedEdges, t.Name))
+
+		if origKey, ok := defaultKeys[t.Name]; ok {
+			if orig, ok := originalArrays[origKey]; ok {
+				props[t.PluralKey] = orig
+				continue
 			}
 		}
 		props[t.PluralKey] = map[string]any{
@@ -104,14 +160,38 @@ func ComposeProjectSchema(types []ProjectNodeType, edges []Edge) ([]byte, error)
 	return out, nil
 }
 
+// projectScopedEdges drops the preq_id edge before project-scope
+// composition sources reference fields from an edge list: preq_id's From
+// names "requirement" the same bare way depends_on's does, but requirement
+// is declared once per scope (project and module) and preq_id links a
+// module requirement to its parent project requirement — module-scope-only,
+// the one property project.schema.json's requirement definition has always
+// rejected (E8). Every other edge kind whose From names "requirement" is
+// genuinely project-scoped. The module side never hits this ambiguity: its
+// requirement $defs entry composes preq_id by hand, not through an edge.
+func projectScopedEdges(edges []Edge) []Edge {
+	out := make([]Edge, 0, len(edges))
+	for _, e := range edges {
+		if e.Kind == "preq_id" {
+			continue
+		}
+		out = append(out, e)
+	}
+	return out
+}
+
 // projectSchemaFrame loads the shipped project.schema.json and strips the
-// profile-supplied array properties, leaving the envelope fields (name,
+// profile-supplied array properties and the built-in project-scoped $defs
+// entries (today, requirement alone), leaving the envelope fields (name,
 // description, version, modules, sections), the identity-hash pattern,
-// additionalProperties:false, and the $defs library of built-in node-type
-// shapes — the frame a resolved profile composes against. It also returns
-// the stripped array properties, keyed by their original plural key, so a
-// built-in type can have its original array property restored unchanged
-// rather than overwritten with a synthesized one.
+// additionalProperties:false, and the $defs entries no profile-declared
+// type composes (identityHash, module, section) — the frame a resolved
+// profile composes against. No built-in $defs entry for a project-scoped
+// node type remains in it: ComposeProjectSchema resynthesizes every one,
+// requirement included, from the given types. It also returns the stripped
+// array properties, keyed by their original plural key, so a built-in
+// type's array property — whose wording is hand-authored, not synthesized —
+// can be restored unchanged rather than overwritten with a generic one.
 func projectSchemaFrame() (map[string]any, map[string]any, error) {
 	data, err := projectSchemaBytes()
 	if err != nil {
@@ -132,20 +212,32 @@ func projectSchemaFrame() (map[string]any, map[string]any, error) {
 		}
 		delete(props, key)
 	}
+	if defs, ok := frame["$defs"].(map[string]any); ok {
+		for _, t := range DefaultProjectNodeTypes() {
+			delete(defs, t.Name)
+		}
+	}
 	return frame, original, nil
 }
 
 // genericProjectNodeDef synthesizes the JSON Schema definition for a
-// project-scoped node type the shipped frame does not already define: an
-// identity-hash id, a non-empty name, an optional description, and — only
-// when the type requires a content leaf — a required content path. Mirrors
-// the module schema's generic envelope (module_compose.go's
-// genericNodeDef). edges supplies one additional property per
-// profile-declared edge kind sourced at this type — an optional array of
-// identity-hash values, matching the shape every built-in edge field
-// (depends_on, requires_module) already carries. additionalProperties:false
-// makes declaring an edge the only way to open a reference field on the
-// type: any other field is rejected.
+// project-scoped node type: an identity-hash id, a non-empty name, an
+// optional description, and — only when the type requires a content leaf —
+// a required content path. Mirrors the module schema's generic envelope
+// (module_compose.go's genericNodeDef), and, unlike it, is every project-
+// scoped type's path through composition — built-in and profile-declared
+// alike, since no project-scoped $defs entry is frame-fixed. edges supplies
+// one additional property per profile-declared edge kind sourced at this
+// type — an optional array of identity-hash values, matching the shape
+// every built-in edge field (depends_on, requires_module) already carries —
+// and t.Fields supplies one further property per declared field, shaped by
+// composeFieldSchema; a field wins over an edge of the same name, since its
+// loop runs after. additionalProperties:false makes declaring an edge or a
+// field the only way to open a property on the type beyond the envelope:
+// any other property is rejected. required lists id first, then the
+// declared fields marked Required in field order, then name (and content,
+// when RequiresContent is set) — the order the requirement type's own
+// required set (id, type, name) needs to reproduce the shipped frame.
 func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
@@ -163,7 +255,13 @@ func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 			"description": fmt.Sprintf("%s description.", t.Name),
 		},
 	}
-	required := []any{"id", "name"}
+	required := []any{"id"}
+	for _, f := range t.Fields {
+		if f.Required {
+			required = append(required, f.Name)
+		}
+	}
+	required = append(required, "name")
 	if t.RequiresContent {
 		properties["content"] = map[string]any{
 			"type":        "string",
@@ -182,6 +280,9 @@ func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 			},
 			"uniqueItems": true,
 		}
+	}
+	for _, f := range t.Fields {
+		properties[f.Name] = composeFieldSchema(f)
 	}
 
 	return map[string]any{

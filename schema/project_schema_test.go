@@ -986,11 +986,14 @@ func TestFR1_ComposeProjectSchemaEdgeFieldShape(t *testing.T) {
 	}
 }
 
-// TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges pins that a
-// built-in type's frame $def is reused unchanged even when the caller
-// passes an edge sourced at that type's name: built-in definitions carry
-// only the reference fields the frame already gives them.
-func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
+// TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges pins the
+// project-scope half of "no built-in $defs remain in the frame"
+// (arch_project_schema.md): unlike the module side, no project-scoped
+// type's $defs entry is frame-fixed, the built-in requirement type
+// included, so an edge sourced at "requirement" composes a reference field
+// on it exactly as it would for a profile-declared type — the same path
+// TestFR1_ComposeProjectSchemaEdgeFieldShape exercises for a custom type.
+func TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges(t *testing.T) {
 	edges := []Edge{{Kind: "tracks", From: []string{"requirement"}, To: []string{"requirement"}}}
 	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), edges)
 	if err != nil {
@@ -1005,19 +1008,46 @@ func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
 			{"id": "aabbccddeeff", "type": "functional", "name": "R", "tracks": ["112233445566"]}
 		]
 	}`)
+	if err != nil {
+		t.Fatalf("declared tracks edge should compose onto the built-in requirement type: %v", err)
+	}
+}
+
+// TestFR1_ComposeProjectSchemaPreqIDExcludedFromRequirement pins
+// projectScopedEdges: the preq_id edge's From names "requirement" the same
+// bare way depends_on's does, but preq_id links a module requirement to its
+// parent project requirement — module-scope-only, the one property
+// project.schema.json's requirement definition has always rejected (E8).
+// Composing with the full default edge list must not let it leak onto the
+// project-scoped requirement type now that requirement composes generically.
+func TestFR1_ComposeProjectSchemaPreqIDExcludedFromRequirement(t *testing.T) {
+	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), DefaultProfile().Edges)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"requirements": [
+			{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566"}
+		]
+	}`)
 	if err == nil {
-		t.Fatal("expected validation error: built-in requirement definition should not gain a tracks field")
+		t.Fatal("expected validation error: preq_id must not compose onto the project-scoped requirement type")
 	}
 }
 
 // TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultProjectNodeTypes yields a schema that still accepts
-// the same known-good project fixtures the static schema accepts (S1, S2),
-// since the default type name (requirement) resolves to the frame's
-// existing $defs entry. It validates fixtures only — it does not compare
-// the composed document against the shipped static project.schema.json
-// byte-for-byte; that golden comparison is scenario P2 in
-// test_schema_loading.md, owned by SchemaLoader.
+// the same known-good project fixtures the static schema accepts (S1, S2) —
+// the requirement type's own fields (type, priority, derivation, depends_on)
+// are declared on DefaultProjectNodeTypes and materialize through the same
+// generic composition a profile-declared type goes through. It validates
+// fixtures only — it does not compare the composed document against the
+// shipped static project.schema.json byte-for-byte; that golden comparison
+// is scenario P2 in test_schema_loading.md, owned by SchemaLoader.
 func TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), DefaultProfile().Edges)
 	if err != nil {

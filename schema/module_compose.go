@@ -48,6 +48,7 @@ type Field struct {
 	Minimum     *int     // integer field: inclusive lower bound, when set
 	Maximum     *int     // integer field: inclusive upper bound, when set
 	Cardinality string   // reference field: "one" or "many" (default "many")
+	Description string   // composed property's "description", when non-empty
 }
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
@@ -257,33 +258,36 @@ func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 // identity-hash value for a reference field — a scalar at cardinality
 // "one", an array of identity hashes otherwise (uniqueItems, matching the
 // shape a declared edge field already carries) — with a required text field
-// composed non-empty.
+// composed non-empty. A required text field carrying an enumeration skips
+// minLength: the enum already excludes the empty string, so the bound would
+// be redundant. Description, when set, becomes the property's "description".
 func composeFieldSchema(f Field) map[string]any {
+	var prop map[string]any
 	switch f.Kind {
 	case FieldKindInteger:
-		prop := map[string]any{"type": "integer"}
+		prop = map[string]any{"type": "integer"}
 		if f.Minimum != nil {
 			prop["minimum"] = *f.Minimum
 		}
 		if f.Maximum != nil {
 			prop["maximum"] = *f.Maximum
 		}
-		return prop
 	case FieldKindReference:
 		if f.Cardinality == "one" {
-			return map[string]any{
+			prop = map[string]any{
 				"type":    "string",
 				"pattern": identityHashPattern,
 			}
-		}
-		return map[string]any{
-			"type":        "array",
-			"items":       map[string]any{"type": "string", "pattern": identityHashPattern},
-			"uniqueItems": true,
+		} else {
+			prop = map[string]any{
+				"type":        "array",
+				"items":       map[string]any{"type": "string", "pattern": identityHashPattern},
+				"uniqueItems": true,
+			}
 		}
 	default: // FieldKindText
-		prop := map[string]any{"type": "string"}
-		if f.Required {
+		prop = map[string]any{"type": "string"}
+		if f.Required && len(f.Enum) == 0 {
 			prop["minLength"] = 1
 		}
 		if len(f.Enum) > 0 {
@@ -293,6 +297,9 @@ func composeFieldSchema(f Field) map[string]any {
 			}
 			prop["enum"] = enum
 		}
-		return prop
 	}
+	if f.Description != "" {
+		prop["description"] = f.Description
+	}
+	return prop
 }

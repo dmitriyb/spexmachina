@@ -18,12 +18,13 @@ import (
 // requirement arrays carry different envelope constraints even though they
 // share a type name and both trigger the completeness rules.
 type NodeType struct {
-	Name                string `json:"name"`
-	PluralKey           string `json:"plural_key"`
-	Scope               string `json:"scope"` // "project" or "module"
-	RequiresContent     bool   `json:"requires_content,omitempty"`
-	CompletenessTrigger bool   `json:"completeness_trigger,omitempty"`
-	NameDeclarable      bool   `json:"name_declarable,omitempty"`
+	Name                string  `json:"name"`
+	PluralKey           string  `json:"plural_key"`
+	Scope               string  `json:"scope"` // "project" or "module"
+	RequiresContent     bool    `json:"requires_content,omitempty"`
+	CompletenessTrigger bool    `json:"completeness_trigger,omitempty"`
+	NameDeclarable      bool    `json:"name_declarable,omitempty"`
+	Fields              []Field `json:"fields,omitempty"`
 }
 
 // Edge declares one legal edge kind: the reference field name, the node
@@ -236,17 +237,30 @@ func builtinTypeNames() map[string]bool {
 }
 
 // ProjectNodeTypes returns the profile's project-scoped node types,
-// converted to the ProjectNodeType shape ComposeProjectSchema consumes.
+// converted to the ProjectNodeType shape ComposeProjectSchema consumes. A
+// declared type that reuses a default project-scoped type's name without
+// declaring its own Fields inherits that default type's Fields — the
+// project-scoped requirement type's own fields are no longer frame-fixed
+// (arch_project_schema.md), so a profile.json written before Fields existed,
+// which names "requirement" to get the built-in envelope without repeating
+// its type/priority/derivation/depends_on declarations, still composes them.
+// A profile that wants a fieldless requirement declares a different name.
 func (p *Profile) ProjectNodeTypes() []ProjectNodeType {
+	defaultFields := defaultProjectFieldsByTypeName()
 	var out []ProjectNodeType
 	for _, t := range p.NodeTypes {
 		if t.Scope != "project" {
 			continue
 		}
+		fields := t.Fields
+		if len(fields) == 0 {
+			fields = defaultFields[t.Name]
+		}
 		out = append(out, ProjectNodeType{
 			Name:            t.Name,
 			PluralKey:       t.PluralKey,
 			RequiresContent: t.RequiresContent,
+			Fields:          fields,
 		})
 	}
 	return out
@@ -264,6 +278,7 @@ func (p *Profile) ModuleNodeTypes() []ModuleNodeType {
 			Name:            t.Name,
 			PluralKey:       t.PluralKey,
 			RequiresContent: t.RequiresContent,
+			Fields:          t.Fields,
 		})
 	}
 	return out
@@ -290,6 +305,7 @@ func DefaultProfile() *Profile {
 			Scope:               "project",
 			RequiresContent:     t.RequiresContent,
 			CompletenessTrigger: t.Name == "requirement",
+			Fields:              t.Fields,
 		})
 	}
 	for _, t := range DefaultModuleNodeTypes() {
@@ -300,6 +316,7 @@ func DefaultProfile() *Profile {
 			RequiresContent:     t.RequiresContent,
 			CompletenessTrigger: t.Name == "requirement",
 			NameDeclarable:      t.Name == "component" || t.Name == "api",
+			Fields:              t.Fields,
 		})
 	}
 
