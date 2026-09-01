@@ -54,8 +54,8 @@ func setupCompletenessSpecDir(t *testing.T) completenessFixture {
 	proj := fmt.Sprintf(`{
 		"name": "test-project",
 		"requirements": [
-			{"id": %q, "type": "functional", "title": "Proj Req 1"},
-			{"id": %q, "type": "functional", "title": "Proj Req 5"}
+			{"id": %q, "type": "functional", "name": "Proj Req 1"},
+			{"id": %q, "type": "functional", "name": "Proj Req 5"}
 		],
 		"modules": [
 			{"id": %q, "name": "Alpha", "path": "alpha"}
@@ -502,7 +502,7 @@ func TestREQ8_ProjectRequirement_Added_RawPreqIDDerivation(t *testing.T) {
 	proj := fmt.Sprintf(`{
 		"name": "test-project",
 		"requirements": [
-			{"id": %q, "type": "functional", "title": "Source"}
+			{"id": %q, "type": "functional", "name": "Source"}
 		],
 		"modules": [
 			{"id": %q, "name": "Alpha", "path": "alpha"}

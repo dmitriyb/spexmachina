@@ -11,7 +11,7 @@
   "requirements": [
     {
       "id": "000000000001",
-      "title": "Project requirement",
+      "name": "Project requirement",
       "type": "functional"
     }
   ]

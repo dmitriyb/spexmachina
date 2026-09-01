@@ -13,7 +13,7 @@
         "000000000002"
       ],
       "id": "000000000001",
-      "title": "Project requirement A",
+      "name": "Project requirement A",
       "type": "functional"
     },
     {
@@ -21,7 +21,7 @@
         "000000000001"
       ],
       "id": "000000000002",
-      "title": "Project requirement B",
+      "name": "Project requirement B",
       "type": "functional"
     }
   ]

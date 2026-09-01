@@ -10,12 +10,12 @@
   "requirements": [
     {
       "id": "000000000001",
-      "title": "Req A",
+      "name": "Req A",
       "type": "functional"
     },
     {
       "id": "000000000001",
-      "title": "Req A duplicate",
+      "name": "Req A duplicate",
       "type": "functional"
     }
   ]

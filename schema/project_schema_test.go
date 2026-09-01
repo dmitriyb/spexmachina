@@ -107,12 +107,12 @@ func TestFR1_S9_RequirementMissingRequiredFields(t *testing.T) {
 	}{
 		{
 			"missing type",
-			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"id": "000000000001", "title": "No type field"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"id": "000000000001", "name": "No type field"}]}`,
 			"type",
 		},
 		{
 			"missing id",
-			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "title": "No id"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "name": "No id"}]}`,
 			"id",
 		},
 	}
@@ -156,7 +156,7 @@ func TestFR1_S11_InvalidRequirementTypeEnum(t *testing.T) {
 	err := validateProject(t, sch, `{
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-		"requirements": [{"id": "000000000001", "type": "performance", "title": "R"}]
+		"requirements": [{"id": "000000000001", "type": "performance", "name": "R"}]
 	}`)
 	if err == nil {
 		t.Fatal("expected validation error for invalid requirement type enum, got nil")
@@ -198,7 +198,7 @@ func TestNFR4_S13_InvalidIDPatternProject(t *testing.T) {
 	}{
 		{
 			"short id in requirement",
-			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "requirements": [{"id": "abc", "type": "functional", "title": "R"}]}`,
+			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "requirements": [{"id": "abc", "type": "functional", "name": "R"}]}`,
 		},
 		{
 			"non-hex id in module",
@@ -259,8 +259,8 @@ func TestFR1_S15_DependsOnDuplicatesFails(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R1"},
-			{"id": "000000000002", "type": "functional", "title": "R2", "depends_on": ["000000000001", "000000000001"]}
+			{"id": "000000000001", "type": "functional", "name": "R1"},
+			{"id": "000000000002", "type": "functional", "name": "R2", "depends_on": ["000000000001", "000000000001"]}
 		]
 	}`)
 	if err == nil {
@@ -452,7 +452,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": 1}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": 1}
 			]
 		}`)
 		if err != nil {
@@ -465,7 +465,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": 5}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": 5}
 			]
 		}`)
 		if err == nil {
@@ -478,7 +478,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": -1}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": -1}
 			]
 		}`)
 		if err == nil {
@@ -495,7 +495,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "pending"}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": "pending"}
 			]
 		}`)
 		if err != nil {
@@ -508,7 +508,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "done"}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": "done"}
 			]
 		}`)
 		if err == nil {
@@ -521,7 +521,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": ""}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": ""}
 			]
 		}`)
 		if err == nil {
@@ -534,7 +534,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": true}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": true}
 			]
 		}`)
 		if err == nil {
@@ -547,11 +547,42 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1}
 			]
 		}`)
 		if err != nil {
 			t.Fatalf("requirement without derivation should pass: %v", err)
+		}
+	})
+}
+
+// TestFR1_S28_SpecVersionAcceptedInProject pins the project-side half of
+// S28: spec_version is an optional integer accepted on project.json only —
+// metadata outside the hashed payload, absent meaning version 1. The
+// module-side half (spec_version rejected on a module document) is pinned
+// by TestFR2_S28_SpecVersionRejectedOnModuleDocument.
+func TestFR1_S28_SpecVersionAcceptedInProject(t *testing.T) {
+	sch := compileProjectSchema(t)
+
+	t.Run("accepted", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"spec_version": 1
+		}`)
+		if err != nil {
+			t.Fatalf("spec_version should be accepted: %v", err)
+		}
+	})
+
+	t.Run("wrong type fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"spec_version": "1"
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for spec_version as string, got nil")
 		}
 	})
 }
@@ -628,7 +659,7 @@ func TestFR1_E7_DependsOnNonExistentIDPassesProject(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R1", "depends_on": ["000000000999"]}
+			{"id": "000000000001", "type": "functional", "name": "R1", "depends_on": ["000000000999"]}
 		]
 	}`)
 	if err != nil {
@@ -642,7 +673,7 @@ func TestFR1_E8_PreqIDInProjectRequirementFails(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R", "preq_id": "000000000005"}
+			{"id": "000000000001", "type": "functional", "name": "R", "preq_id": "000000000005"}
 		]
 	}`)
 	if err == nil {
@@ -709,7 +740,7 @@ func TestFR1_ProjectSchemaMetaProperties(t *testing.T) {
 
 	// Check properties keys
 	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections"} {
+	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections", "spec_version"} {
 		if props[key] == nil {
 			t.Fatalf("project schema missing property %q", key)
 		}
@@ -971,7 +1002,7 @@ func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "R", "tracks": ["112233445566"]}
+			{"id": "aabbccddeeff", "type": "functional", "name": "R", "tracks": ["112233445566"]}
 		]
 	}`)
 	if err == nil {

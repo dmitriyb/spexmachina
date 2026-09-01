@@ -375,7 +375,7 @@ func TestNegative_TypeMismatch(t *testing.T) {
 		},
 		{
 			"string ID in project requirement fails Go unmarshal",
-			`{"name":"p","modules":[{"id":1,"name":"m","path":"m/"}],"requirements":[{"id":"x","type":"functional","title":"t"}]}`,
+			`{"name":"p","modules":[{"id":1,"name":"m","path":"m/"}],"requirements":[{"id":"x","type":"functional","name":"t"}]}`,
 			new(Project),
 		},
 	}

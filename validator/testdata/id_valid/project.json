@@ -11,7 +11,7 @@
     {
       "id": "000000000001",
       "priority": 1,
-      "title": "Req A",
+      "name": "Req A",
       "type": "functional"
     },
     {
@@ -20,7 +20,7 @@
       ],
       "id": "000000000002",
       "priority": 2,
-      "title": "Req B",
+      "name": "Req B",
       "type": "functional"
     }
   ]

@@ -32,7 +32,7 @@
       "description": "Given a spec directory, confirm it is a valid DAG with no orphans, no cycles, no broken references.",
       "id": "000000000001",
       "priority": 2,
-      "title": "Validate spec structure",
+      "name": "Validate spec structure",
       "type": "functional"
     },
     {
@@ -41,13 +41,13 @@
       ],
       "description": "Hash every node, store snapshots, diff against previous snapshots.",
       "id": "000000000002",
-      "title": "Compute merkle tree",
+      "name": "Compute merkle tree",
       "type": "functional"
     },
     {
       "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions.",
       "id": "000000000003",
-      "title": "Deterministic output",
+      "name": "Deterministic output",
       "type": "non_functional"
     }
   ],

@@ -85,6 +85,7 @@ type Project struct {
 	Requirements []Requirement `json:"requirements,omitempty"`
 	Modules      []Module      `json:"modules"`
 	Sections     []Section     `json:"sections,omitempty"`
+	SpecVersion  *int          `json:"spec_version,omitempty"`
 }
 
 // Section represents a project-level section with a typed envelope and
@@ -134,11 +135,17 @@ type Module struct {
 // derived into any module. A module requirement derives by construction
 // through its required preq_id, so it carries no such field.
 // IDs are 12-character hex identity hash strings.
+//
+// The wire key is "name" (spec format version 1 renamed the requirement
+// type's title field to name, making the envelope universal). The Go field
+// stays Title here — every other package still reads it under that name —
+// pending its own rename once those packages pick up the underlying
+// identifier change.
 type Requirement struct {
 	ID          string   `json:"id"`
 	PreqID      string   `json:"preq_id,omitempty"`
 	Type        string   `json:"type"`
-	Title       string   `json:"title"`
+	Title       string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	Priority    *int     `json:"priority,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`

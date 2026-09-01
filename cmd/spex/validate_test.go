@@ -485,8 +485,8 @@ func TestFR7_ValidateCommand_PendingDerivationIsNoteNotError(t *testing.T) {
 				{"id": "000000000001", "name": "alpha", "path": "alpha"}
 			],
 			"requirements": [
-				{"id": "aaaaaaaaaaaa", "title": "Feature A", "type": "functional", "priority": 1},
-				{"id": "bbbbbbbbbbbb", "title": "Feature B", "type": "functional", "priority": 2`+derivation+`}
+				{"id": "aaaaaaaaaaaa", "name": "Feature A", "type": "functional", "priority": 1},
+				{"id": "bbbbbbbbbbbb", "name": "Feature B", "type": "functional", "priority": 2`+derivation+`}
 			]
 		}`)
 
@@ -610,7 +610,7 @@ func TestFR7_ValidateCommand_LargeErrorCount(t *testing.T) {
 		if i > 1 {
 			sb.WriteString(",")
 		}
-		fmt.Fprintf(&sb, `{"id": "%012x", "title": "Req %d", "type": "functional", "priority": 1}`, i, i)
+		fmt.Fprintf(&sb, `{"id": "%012x", "name": "Req %d", "type": "functional", "priority": 1}`, i, i)
 	}
 	sb.WriteString(`]}`)
 	writeTestFile(t, dir, "project.json", sb.String())
