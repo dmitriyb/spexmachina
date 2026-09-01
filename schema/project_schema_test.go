@@ -795,7 +795,7 @@ func TestFR1_S27_ProjectProfileDeclaredArrayAccepted(t *testing.T) {
 		PluralKey:       "milestones",
 		RequiresContent: false,
 	})
-	data, err := ComposeProjectSchema(types)
+	data, err := ComposeProjectSchema(types, nil)
 	if err != nil {
 		t.Fatalf("ComposeProjectSchema: %v", err)
 	}
@@ -844,6 +844,141 @@ func TestFR1_S27_ProjectProfileDeclaredArrayAccepted(t *testing.T) {
 	})
 }
 
+// TestFR1_S27_ProjectProfileDeclaredEdgeFieldAccepted mirrors the module
+// side's S27 edge coverage (TestFR2_S27_ProfileDeclaredEdgeFieldAccepted)
+// for the project schema: a profile-declared edge whose source names a
+// custom project-scoped type opens a reference field on that type's
+// composed entry, and the same field is rejected when composed from a
+// profile that never declared the edge — the two documents are byte-
+// identical, only the profile differs, which is what pins the rejection to
+// the missing declaration rather than to document shape.
+func TestFR1_S27_ProjectProfileDeclaredEdgeFieldAccepted(t *testing.T) {
+	types := append(DefaultProjectNodeTypes(), ProjectNodeType{
+		Name:      "milestone",
+		PluralKey: "milestones",
+	})
+	doc := `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"milestones": [
+			{"id": "aabbccddeeff", "name": "M1", "tracks": ["112233445566"]}
+		]
+	}`
+
+	t.Run("declared edge field passes", func(t *testing.T) {
+		edges := []Edge{{Kind: "tracks", From: []string{"milestone"}, To: []string{"requirement"}}}
+		data, err := ComposeProjectSchema(types, edges)
+		if err != nil {
+			t.Fatalf("ComposeProjectSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateProject(t, sch, doc); err != nil {
+			t.Fatalf("profile-declared tracks edge should pass: %v", err)
+		}
+	})
+
+	t.Run("undeclared edge field still rejected", func(t *testing.T) {
+		data, err := ComposeProjectSchema(types, nil)
+		if err != nil {
+			t.Fatalf("ComposeProjectSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateProject(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for undeclared tracks field, got nil")
+		}
+	})
+
+	t.Run("edge sourced at a different type does not leak in", func(t *testing.T) {
+		edges := []Edge{{Kind: "tracks", From: []string{"requirement"}, To: []string{"milestone"}}}
+		data, err := ComposeProjectSchema(types, edges)
+		if err != nil {
+			t.Fatalf("ComposeProjectSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateProject(t, sch, doc); err == nil {
+			t.Fatal("expected validation error: tracks is not declared with milestone as its source")
+		}
+	})
+}
+
+// TestFR1_ComposeProjectSchemaEdgeFieldShape pins the shape of a
+// profile-declared edge field on a synthesized entry definition: an
+// optional array of identity-hash strings with uniqueItems, the same
+// constraints every built-in edge field (depends_on, requires_module)
+// already carries.
+func TestFR1_ComposeProjectSchemaEdgeFieldShape(t *testing.T) {
+	types := []ProjectNodeType{{Name: "milestone", PluralKey: "milestones"}}
+	edges := []Edge{
+		{Kind: "tracks", From: []string{"milestone"}, To: []string{"requirement"}},
+		{Kind: "blocks_milestone", From: []string{"milestone"}, To: []string{"milestone"}},
+	}
+	data, err := ComposeProjectSchema(types, edges)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	def := raw["$defs"].(map[string]any)["milestone"].(map[string]any)
+	props := def["properties"].(map[string]any)
+
+	for _, kind := range []string{"tracks", "blocks_milestone"} {
+		field, ok := props[kind].(map[string]any)
+		if !ok {
+			t.Fatalf("milestone definition missing edge property %q", kind)
+		}
+		if field["type"] != "array" {
+			t.Fatalf("%s: want type array, got %v", kind, field["type"])
+		}
+		if field["uniqueItems"] != true {
+			t.Fatalf("%s: want uniqueItems true, got %v", kind, field["uniqueItems"])
+		}
+		items, ok := field["items"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: items missing", kind)
+		}
+		if items["type"] != "string" || items["pattern"] != identityHashPattern {
+			t.Fatalf("%s: items should be identity-hash strings, got %v", kind, items)
+		}
+	}
+
+	required, _ := def["required"].([]any)
+	for _, r := range required {
+		if r == "tracks" || r == "blocks_milestone" {
+			t.Fatalf("declared edge fields must not be required, got required=%v", required)
+		}
+	}
+
+	if def["additionalProperties"] != false {
+		t.Fatalf("entry definition should still reject undeclared fields")
+	}
+}
+
+// TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges pins that a
+// built-in type's frame $def is reused unchanged even when the caller
+// passes an edge sourced at that type's name: built-in definitions carry
+// only the reference fields the frame already gives them.
+func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
+	edges := []Edge{{Kind: "tracks", From: []string{"requirement"}, To: []string{"requirement"}}}
+	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), edges)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"requirements": [
+			{"id": "aabbccddeeff", "type": "functional", "title": "R", "tracks": ["112233445566"]}
+		]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error: built-in requirement definition should not gain a tracks field")
+	}
+}
+
 // TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultProjectNodeTypes yields a schema that still accepts
 // the same known-good project fixtures the static schema accepts (S1, S2),
@@ -853,7 +988,7 @@ func TestFR1_S27_ProjectProfileDeclaredArrayAccepted(t *testing.T) {
 // byte-for-byte; that golden comparison is scenario P2 in
 // test_schema_loading.md, owned by SchemaLoader.
 func TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
-	data, err := ComposeProjectSchema(DefaultProjectNodeTypes())
+	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), DefaultProfile().Edges)
 	if err != nil {
 		t.Fatalf("ComposeProjectSchema: %v", err)
 	}
@@ -883,7 +1018,7 @@ func TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 // module side's TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired.
 func TestFR1_ComposeProjectSchemaNoContentPropertyWhenNotRequired(t *testing.T) {
 	types := []ProjectNodeType{{Name: "milestone", PluralKey: "milestones"}}
-	data, err := ComposeProjectSchema(types)
+	data, err := ComposeProjectSchema(types, nil)
 	if err != nil {
 		t.Fatalf("ComposeProjectSchema: %v", err)
 	}

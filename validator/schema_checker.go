@@ -27,7 +27,7 @@ type compiledSchemas struct {
 func compileSchemas(profile *schema.Profile) (*compiledSchemas, error) {
 	c := jsonschema.NewCompiler()
 
-	projBytes, err := schema.ComposeProjectSchema(profile.ProjectNodeTypes())
+	projBytes, err := schema.ComposeProjectSchema(profile.ProjectNodeTypes(), profile.Edges)
 	if err != nil {
 		return nil, fmt.Errorf("validator: compose project schema: %w", err)
 	}
