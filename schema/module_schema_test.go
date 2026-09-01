@@ -350,6 +350,21 @@ func TestFR2_S14_EmptyStringNameFails(t *testing.T) {
 	}
 }
 
+// TestFR2_S14_EmptyRequirementTitleFails pins the module-side half of S14:
+// a requirement's title carries the same minLength: 1 constraint the name
+// fields do, which is the promise IH6 in the schema-loading tests rests on
+// — no reachable node hashes an empty identity part.
+func TestFR2_S14_EmptyRequirementTitleFails(t *testing.T) {
+	sch := compileModuleSchema(t)
+	err := validateModule(t, sch, `{"name": "m", "requirements": [{"id": "aabbccddeeff", "type": "functional", "title": "", "preq_id": "112233445566"}]}`)
+	if err == nil {
+		t.Fatal("expected validation error for empty requirement title, got nil")
+	}
+	if !strings.Contains(err.Error(), "title") {
+		t.Fatalf("error should reference 'title', got: %v", err)
+	}
+}
+
 func TestFR2_ContentRequiredOnContentBearingNodes(t *testing.T) {
 	sch := compileModuleSchema(t)
 
