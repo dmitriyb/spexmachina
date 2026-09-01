@@ -21,7 +21,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "DAG acyclicity",
-      "description": "Module dependencies (requires_module), requirement dependencies (depends_on), and component dependencies (uses) form directed acyclic graphs. That edge list is the default profile's declaration: acyclicity is enforced over every edge kind the resolved profile declares that is not marked cyclic — the taxonomy's optional cyclic: true flag exempts a descriptive edge from the cycle check, and an omitted flag means checked — not over a fixed edge set. The default profile marks none of its seven edge kinds cyclic.",
+      "description": "Module dependencies (requires_module), requirement dependencies (depends_on), and component dependencies (uses) form directed acyclic graphs. Acyclicity is enforced over every reference-kind field the resolved profile declares that is not marked cyclic — the taxonomy's optional cyclic: true flag exempts a descriptive edge from the cycle check, and an omitted flag means checked — plus the frame's one fixed edge, requires_module, which is not the profile's to declare and is always cycle-checked, never exemptable. The default profile marks none of its six declared reference kinds cyclic.",
       "depends_on": [
         "8599f07272ad"
       ]
@@ -38,7 +38,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Cross-reference integrity",
-      "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, provided_by → components, depends_on → requirements, requires_module → modules, preq_id → project requirements. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition. The edge list above is the default profile's declaration: which reference fields a type may carry, and what node types each may point at, are the resolved profile's legal edges, and integrity is checked over that declared set.",
+      "description": "All cross-reference identity hashes point to existing nodes: implements → requirements, uses → components, describes → components, provided_by → components, depends_on → requirements, requires_module → modules, preq_id → project requirements. Every module requirement must have a preq_id that references a valid project requirement identity hash. All checks use string set membership against per-array identity-hash sets — there is no integer parsing or path decomposition. The edge list above is the default profile's declaration plus the frame's one fixed edge: which reference fields a type may carry, and what node types each may point at, are the resolved profile's reference-kind field declarations, integrity is checked over that declared set, and requires_module — frame, not vocabulary — is checked beside them.",
       "depends_on": [
         "707094f8868b"
       ]
@@ -100,7 +100,7 @@
       "preq_id": "d5a8407d38e1",
       "type": "functional",
       "title": "Requirement coverage validation",
-      "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors. The two links are declared coverage chains read from the resolved profile — each the triple of covered type, edge kind, covering type — with the declared type names interpolated into the same error shapes; the default profile declares exactly these two. One declared exemption: a project requirement carrying derivation 'pending' is skipped by the first link and reported as a disclosure note naming its identity hash and quoted title, never as an error. The module-requirement-to-component link admits no such state."
+      "description": "Every project requirement must be derived into at least one module requirement (preq_id edge). Every module requirement must be implemented by at least one component (implements edge). Report uncovered requirements as validation errors. The two links are declared coverage chains read from the resolved profile — each the triple of covered type, edge kind, covering type — with the declared type names interpolated into the same error shapes; the default profile declares exactly these two. One declared exemption: a project requirement carrying derivation 'pending' is skipped by the first link and reported as a disclosure note naming its identity hash and quoted name, never as an error. The module-requirement-to-component link admits no such state."
     },
     {
       "id": "d99ef6b9b776",

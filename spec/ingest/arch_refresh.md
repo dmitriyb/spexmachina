@@ -46,7 +46,10 @@ absorbed, so a refresh is visible in history instead of amnesiac.
 - An extended journal: one change event per absorbed drift entry — `modified` events
   carrying before/after hashes for content drift, `added`/`removed` events for the absorbable
   structural set (their `node_type` spans the absorbable kinds, `requirement` and `api` included) —
-  closed by one `refresh` receipt whose `absorbed` list names exactly those event ids. A
+  closed by one `refresh` receipt whose `absorbed` list names exactly those event ids. The one
+  entry kind absorbed without an event is a `meta` modification — the project.json or module.json
+  envelope leaf: the journal-line schema's `node_type` enum deliberately has no `meta`, so its
+  drift is folded into the snapshot rewrite alone, on the record only as the snapshot's movement. A
   refresh-born event has no op behind it, so its `eid` derives from `(node, before, after)` — the
   drift itself — rather than from `(git_head, op_id)`. Nothing already in the journal is altered.
 - A rewritten snapshot matching the current spec state, whenever anything moved at

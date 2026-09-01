@@ -54,7 +54,7 @@ Verify ordering by checking that the byte offset of each section heading is stri
 
 #### M3: Requirements formatting
 
-**Given** the project has functional requirement FR1 with title "Parse input" and description "Accept structured input and parse it."
+**Given** the project has functional requirement FR1 with name "Parse input" and description "Accept structured input and parse it."
 
 **When** `RenderMarkdown(spec, &buf)` is called.
 

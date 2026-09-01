@@ -33,8 +33,12 @@ Defines the JSON Schema for one journal line, covering:
   receipts reference the registered event through `for` like every other receipt. `node_type` is the closed
   enum of node kinds a change event may describe — the task-owning kinds `component`,
   `data_flow`, `test_section`, plus `requirement` and `api`, which only refresh-born events
-  carry — and each line is a self-contained object: there is no envelope, no counter, and no integer id anywhere
-  in the format.
+  carry — and each line is a self-contained object: there is no envelope, no counter, and no
+  integer id anywhere in the format. Every line shape also admits an optional integer `v` — the
+  journal-line [[b1baa51bd7a9|format version]], metadata outside any hashed payload: absent
+  means version 1, so no existing line changes meaning; a writer stamps the current version, 1;
+  and the schema pins no upper bound, because the journal is append-only and permanent, so
+  readers accept every version from 1 forward, forever.
 
 ## Design Notes
 

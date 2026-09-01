@@ -120,6 +120,16 @@ same fixture without the key.
 **Expected:** both pass — the path is present when the node has a content leaf and absent when it
 does not (requirement and api events).
 
+### S8c: Optional `v` on every line shape
+
+**Input:** each of the six fixtures with `"v": 1` added; the change-event fixture with
+`"v": "1"` (a string); the same fixture with the key absent.
+**Expected:** the `"v": 1` forms all pass and the absent form passes — `v` is the journal-line
+format version, an optional integer on every line shape whose absence means version 1, so no
+existing line changes meaning. The string form fails on type. The schema pins no upper bound:
+readers accept every version from 1 forward, forever, because the journal is append-only and
+permanent; a writer stamps the current version.
+
 ### S9: No integer ids anywhere
 
 **Input:** a line shaped like a retired bead-map record (`{"id": 42, "spec_node_id": "..."}`).

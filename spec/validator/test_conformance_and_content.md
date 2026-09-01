@@ -52,7 +52,7 @@ tmp/spec/
 
 ### S4: Multiple violations reported, not just the first
 
-**Given** `project.json` missing `name` AND `alpha/module.json` missing `requirements[0].title`.
+**Given** `project.json` missing `name` AND `alpha/module.json` missing `requirements[0].name`.
 **When** `CheckSchema(specDir)` is called.
 **Then** it returns at least two errors, one for each file.
 **Rationale** Validates the "report all violations" requirement (requirement 1).

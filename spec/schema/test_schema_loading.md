@@ -1,6 +1,6 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions — the two composed reads take no arguments and always compose from the built-in default profile, consulting no file. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader owns the file-backed resolution: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile. A caller that needs a project's own profile reflected in the composed schemas takes the resolve-then-compose path — ProfileLoader's resolution handed to the composition entry points directly — which the P-scenarios below exercise; the zero-argument reads are the default-profile convenience over the same composition.
+Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame, the default profile document `defaultProfile.json` and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions — the two composed reads take no arguments and always compose from the built-in default profile, consulting no file. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader owns the file-backed resolution: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile. A caller that needs a project's own profile reflected in the composed schemas takes the resolve-then-compose path — ProfileLoader's resolution handed to the composition entry points directly — which the P-scenarios below exercise; the zero-argument reads are the default-profile convenience over the same composition.
 
 These tests verify that the embedding works correctly, that the composed schemas are structurally sound and reproduce the shipped static documents under the default profile, that profile resolution and fallback behave as declared, that the composed schemas can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
@@ -58,7 +58,7 @@ The following fixture files live in `schema/testdata/`:
 - `type` field equals `"object"`.
 - `required` array contains `"name"` and `"modules"`.
 - `additionalProperties` is `false`.
-- `properties` object contains keys: `name`, `description`, `version`, `requirements`, `modules`, `sections`.
+- `properties` object contains keys: `name`, `description`, `version`, `spec_version`, `requirements`, `modules`, `sections`.
 - `$defs` object contains keys: `identityHash`, `requirement`, `module`, `section` — and nothing else.
 
 **Verifies:** The composed document is the actual project schema (not a stale frame or wrong composition) and carries the `sections` array. The `$defs` assertion is exhaustive on purpose: it is what catches a retired node type (`milestone`, `test_scenario`) coming back through a stale embed.
@@ -76,7 +76,7 @@ The following fixture files live in `schema/testdata/`:
 - `properties` object contains keys: `name`, `description`, `requirements`, `components`, `data_flows`, `test_sections`, `apis`.
 - `$defs` object contains keys: `requirement`, `component`, `data_flow`, `test_section`, `api`.
 
-**Verifies:** The embedded file is the actual module schema and includes the `test_sections`/`test_section` and `apis`/`api` additions.
+**Verifies:** The composed document is the actual module schema and includes the `test_sections`/`test_section` and `apis`/`api` additions.
 
 ### S5: Both schemas are independently loadable
 
@@ -90,7 +90,7 @@ mod, err2 := schema.ModuleSchema()
 - `proj` and `mod` are different byte slices (not the same content).
 - The `$id` values differ between the two documents.
 
-**Verifies:** The embed FS correctly serves two distinct files. No cross-contamination between the two schema files.
+**Verifies:** The two compositions yield two distinct documents. No cross-contamination between the project and module paths.
 
 ### S6: Loaded project schema validates the valid_project.json fixture
 
@@ -281,7 +281,7 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 
 **Call:** `IdentityHash()`, `IdentityHash("")`, `IdentityHash("a", "", "b")`.
 
-**Expected:** Each call returns *some* 12-char hex string and none panic. No distinctness is asserted between the calls: under the `join(parts, "/")` algorithm declared in SchemaLoader's leaf, no parts and one empty part both produce the identity string `""` and therefore the same hash. That collision is accepted — every real part is a fixed type literal or comes from a `name` or `title` field the schemas require to be non-empty (`minLength: 1`), so no reachable node hashes a degenerate identity string. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
+**Expected:** Each call returns *some* 12-char hex string and none panic. No distinctness is asserted between the calls: under the `join(parts, "/")` algorithm declared in SchemaLoader's leaf, no parts and one empty part both produce the identity string `""` and therefore the same hash. That collision is accepted — every real part is a fixed type literal or comes from a `name` field the schemas require to be non-empty (`minLength: 1`), so no reachable node hashes a degenerate identity string. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
 
 **Verifies:** The function does not crash on degenerate input.
 
@@ -292,14 +292,14 @@ These scenarios cover profile resolution and the composition acceptance criterio
 ### P1: Absent profile file resolves to the default profile
 
 **Steps:** Resolve the profile over a spec directory containing no `spec/profile.json`.
-**Expected:** Resolution succeeds; the resolved profile declares exactly the five built-in node types (requirement, component, data_flow, test_section, api) with today's per-type role flags — the completeness trigger on requirement, the name-declarable role on exactly component and api — the seven edge kinds with the `cyclic` flag omitted on every one, the three coverage links, the plan-relevant set, the per-type impact-level mapping, the hashed field allowlists, and refresh's absorbable directions.
+**Expected:** Resolution succeeds; the resolved profile declares exactly the five built-in node types (requirement, component, data_flow, test_section, api) with today's per-type role flags — the completeness trigger on requirement, the name-declarable role on exactly component and api — each type's field declarations, reference kinds included, with the `cyclic` flag omitted on every one and the hash-participation flag reproducing the retired allowlists exactly, plus the three coverage links, the plan-relevant set, the per-type impact-level mapping, and refresh's absorbable directions. The resolved form is interned: each node type and field is resolved once, consumers compare resolved references rather than strings, and iteration order is declaration order.
 **Verifies:** Absence of the file is the supported default, not an error — an existing project adopts the profile mechanism by doing nothing.
 
 ### P2: Composed schemas equal the shipped static documents (golden test)
 
 **Steps:** Resolve the default profile, compose the project and module schemas from it, and compare each against the shipped static schema document as a golden record — equal as JSON values, independent of formatting and key order, since the shipped copies are hand-formatted and the composer emits compact key-sorted JSON.
 **Expected:** Both composed documents reproduce the shipped documents' content; a composition that does not is a test failure, not a tolerated drift.
-**Verifies:** The acceptance criterion that the default profile reproduces current behaviour exactly — the on-disk shape of every existing project.json and module.json is unchanged.
+**Verifies:** The acceptance criterion that the default profile reproduces the shipped documents exactly. The one deliberate on-disk change for existing project.json and module.json files is the requirement type's title-to-name rename — spec format version 1's break, exercised by P8's sibling scenarios, not by this comparison.
 
 ### P3: Malformed profile is a distinct early failure
 
@@ -308,19 +308,34 @@ These scenarios cover profile resolution and the composition acceptance criterio
 
 ### P4: A declared custom type reaches the composed schema
 
-**Steps:** Place a valid `spec/profile.json` declaring an `endpoint` type, module-scoped, plural key `endpoints`, content leaf required. Resolve and compose the module schema.
-**Expected:** The composed module schema's `properties` contains an `endpoints` array validated with the same envelope constraints (identity-hash id, name, required content) the built-in types get; `additionalProperties: false` still rejects any array the profile does not declare.
+**Steps:** Place a valid `spec/profile.json` declaring an `endpoint` type, module-scoped, plural key `endpoints`, content leaf required, with a text field carrying an enumeration and a reference field targeting `component`. Resolve and compose the module schema.
+**Expected:** The composed module schema's `properties` contains an `endpoints` array validated with the same envelope constraints (identity-hash id, name, required content) the built-in types get, and its entry definition carries one property per declared field — enum-constrained for the text field, an array of identity hashes for the reference field; `additionalProperties: false` still rejects any array the profile does not declare and any field the type does not.
 
 ### P5: Resolution is deterministic
 
 **Steps:** Resolve the same profile (default and file-backed) twice.
 **Expected:** Byte-identical resolved profiles and byte-identical composed schemas across runs.
 
-### P6: A new edge kind sourced at a built-in type is rejected at profile validation
+### P6: A new reference field on a built-in type composes like any other
 
-**Steps:** Place a `spec/profile.json` declaring an `endpoint` type plus an `audits` edge kind — one the frame does not already carry — whose source is the built-in `component` type. Resolve the profile.
-**Expected:** Resolution fails with one early error naming the `audits` declaration. No composed schema is produced and no downstream check runs.
-**Verifies:** The deliberate rule of the current composition: built-in definitions are frame-fixed and gain no new reference fields, so an edge kind sourced at a built-in type could never be carried by any document — it is refused at declaration rather than accepted as inert. The rule stands until built-in types compose through the same path as declared ones; an edge kind the frame already carries (such as `uses` at `component`) is declarable as it always was.
+**Steps:** Place a `spec/profile.json` declaring the default ontology plus an `audits` reference field — one the built-in shape never carried — on the built-in `component` type, targeting `component`. Resolve the profile and compose the module schema.
+**Expected:** Resolution succeeds and the composed component definition carries an `audits` array-of-identity-hash property beside the built-in fields.
+**Verifies:** The interim rule refusing a new edge kind sourced at a built-in type is retired: built-in types compose from field declarations through the same path declared types take, so there is no frame-fixed definition left for a new field to be unable to reach. The v1 scenario asserting that refusal is superseded by this one.
+
+### P7: Profile validation names each defective field declaration
+
+**Steps:** Resolve, one at a time, profiles carrying: a field with an unknown kind; a reference field naming an undeclared target type; an enumeration on a non-text field; bounds on a non-integer field; a duplicate field name within one type; a field name colliding with an envelope field (`id`).
+**Expected:** Each resolution fails with one distinct early error naming the defective declaration. No composed schema is produced and no downstream check runs. The v1 rule stands unchanged: a profile attempting to declare a fixed point fails validation the same way.
+
+### P8: profile_version outside the supported range fails early
+
+**Steps:** Place a `spec/profile.json` identical to the default declaration but carrying `"profile_version": 99`. Resolve the profile. In a second case, omit `profile_version` entirely.
+**Expected:** The first resolution fails with one message naming the file, the version it declares (99) and the supported range — the migrate-before-using-this-spex signal, produced before any conformance check. The second succeeds: an absent `profile_version` means version 1, which is the version this binary supports, so adoption is doing nothing. A pre-versioning document in the earlier `edges`/`hashed_fields` format draws no version message at all — it fails ordinary profile validation as a malformed document, the deliberate breaking change the format-version requirement records.
+
+### P9: The embedded default profile is an ordinary profile document
+
+**Steps:** Read the embedded `defaultProfile.json` bytes, parse them, and resolve them through the same validation the file-backed path uses. Separately, copy the document to `spec/profile.json` in a fixture directory and resolve over it.
+**Expected:** Both resolutions succeed and yield identical resolved profiles — the embedded default is not a privileged code path but a document in the source tree, identical in format to what a project may commit, declaring `profile_version` 1. Composition from either yields the same composed schemas, so P2's golden comparison holds over both.
 
 ## BeadMapSchema Scenarios
 

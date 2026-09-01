@@ -9,7 +9,7 @@ The two links are declared coverage chains read from the resolved profile — ea
 - Check that every project requirement has at least one module requirement with a matching `preq_id`
 - Skip a project requirement that declares `derivation: pending` and emit a disclosure note in its place — a declared gap, never an error
 - Check that every module requirement has at least one component with a matching `implements` entry
-- Report uncovered requirements as validation errors with the requirement ID, title, and what's missing
+- Report uncovered requirements as validation errors with the requirement ID, name, and what's missing
 
 ## Interface
 
@@ -19,7 +19,7 @@ Given the path to a spec directory, the checker returns a flat list of validatio
 
 ### Project requirement → module requirement coverage
 
-For each project requirement ID, scan all module requirements across all modules for a matching `preq_id`. A module requirement whose `preq_id` is empty derives from nothing and covers nothing here. If no module requirement derives from a project requirement, report an entry at path `project.json` whose message interpolates the requirement's identity hash and its title, quoted — no ordinal, no trailing parenthetical. Were `a65bbd37c7ec` uncovered, the message would read:
+For each project requirement ID, scan all module requirements across all modules for a matching `preq_id`. A module requirement whose `preq_id` is empty derives from nothing and covers nothing here. If no module requirement derives from a project requirement, report an entry at path `project.json` whose message interpolates the requirement's identity hash and its name, quoted — no ordinal, no trailing parenthetical. Were `a65bbd37c7ec` uncovered, the message would read:
 
 ```
 project requirement a65bbd37c7ec "Coupled sections" is not derived into any module requirement
@@ -35,7 +35,7 @@ The note stands strictly in the error's place: it is emitted exactly where the e
 
 ### Module requirement → component coverage
 
-For each module requirement ID within a module, scan the module's components for a matching `implements` entry. If no component implements a module requirement, report an entry at path `<module>/module.json` whose message leads with the module name, then the requirement's identity hash and quoted title. Were `168ae8fde8e2` uncovered, the message would read:
+For each module requirement ID within a module, scan the module's components for a matching `implements` entry. If no component implements a module requirement, report an entry at path `<module>/module.json` whose message leads with the module name, then the requirement's identity hash and quoted name. Were `168ae8fde8e2` uncovered, the message would read:
 
 ```
 validator requirement 168ae8fde8e2 "Requirement coverage validation" is not implemented by any component
