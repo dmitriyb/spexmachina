@@ -1,38 +1,10 @@
 [
   {
-    "node": "de3309dfbd3c",
-    "reason": "h4gv.15-a triage: arch_completeness_checker.md trigger paragraph — the implementing edge and component shape are the checker's own module.json reading, not profile declarations; the meta sweep is a frame rule. Records shipped behaviour: merkle/completeness_checker.go reads implements arrays directly and never consults profile edges, pinned by TestREQ8_C1..C11 (merkle/completeness_checker_test.go) passing defaultProfile. No code owed."
+    "node": "8719672c7580",
+    "reason": "IH6 Expected/Verifies relaxed to the shipped join/\"/\" algorithm (empty-vs-absent collision accepted, rationale names the schema-required non-empty name/title fields) and IH3 Verifies narrowed to the demonstrated positional property; converges onto shipped green tests TestFR10_IH6_EmptyPartsAndEmptyInput, TestFR10_IH5_JoinSeparatorIsSlash, TestFR10_IH3_DifferentPartsProduceDifferentHashes (schema/schema_loader_test.go). The node's P1-P5 contract is untouched and remains open bead spexmachina-h4gv.47's work."
   },
   {
-    "node": "95a279cbdcbc",
-    "reason": "h4gv.14/.15-b/.33 triage: test_diff_classification.md — S5 now expects 4 changes (dragged meta envelope), C1-C11 call shapes gain the required profile third argument, S14 cited by test name not file:line. Records shipped tests: TestREQ4_Diff_S5_MultipleChangesAcrossModules asserts exactly 4 changes, CheckCompleteness(changes, specDir, profile) is the shipped signature exercised with defaultProfile in TestREQ8_C1..C11, TestREQ5_S14_DiffThenClassifyEndToEnd exists under that name. No code owed."
-  },
-  {
-    "node": "4c1146bb7287",
-    "reason": "h4gv.21 triage: arch_changeset_builder.md kind-vocabulary paragraphs — a profile-declared plan-relevant kind outside the built-in vocabulary makes Build() return an error naming the kind (TopologicalSorter refuses the untierable create); the adapter default-arm story is dropped. Records shipped behaviour pinned by TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors (plan/builder_test.go). No code owed."
-  },
-  {
-    "node": "338edabe0796",
-    "reason": "h4gv.21 triage: test_changeset_builder.md cross-component scenario assertions — under the extended profile Build() errors naming the endpoint kind and writes no changeset, instead of emitting the op for the adapter's default arm. Records the shipped refusal pinned by TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors (plan/builder_test.go). No code owed."
-  },
-  {
-    "node": "f3c4a2c35344",
-    "reason": "h4gv.21 triage sweep: test_classification.md S5 profile arm — the classifier emits a create action carrying the declared type name; whether a changeset can be built from it is the sorter's contract. Records shipped behaviour pinned by TestGateAdmits_S5b_ProfileDeclaredTypeBranchesOnDeclaration (plan/action_classifier_test.go). No code owed."
-  },
-  {
-    "node": "c6c770a59d68",
-    "reason": "h4gv.22 triage: arch_dag_checker.md Graphs Checked — one graph per edge kind and source occurrence, the project-requirement depends_on graph walked by the generic profile-edge machinery, generic entries named '<edge kind> cycle: ...'. Records shipped behaviour: validator/dag_checker.go generic message, pinned by TestREQ3_ProjectRequirementDependencyCycle and the dag_profile_* fixture tests (validator/dag_checker_test.go). No code owed."
-  },
-  {
-    "node": "78ac211428bb",
-    "reason": "h4gv.22/.31 triage: test_graph_structure.md Setup and D10 — eleven DAGChecker fixtures (all present under validator/testdata/), id_dangling read by eleven tests (verified count in validator/id_validator_test.go), D10 and the three edge-set-policy fixtures realized. Records shipped tests: TestREQ3_ProjectRequirementDependencyCycle and the dag_profile_* tests. No code owed."
-  },
-  {
-    "node": "59235a75aa44",
-    "reason": "h4gv.22 triage sweep: arch_validate_command.md step 6 — dag step description now states acyclicity over every non-exempt profile-declared edge kind, requirement graphs at both scopes. Records shipped DAGChecker behaviour pinned by TestREQ3_ProjectRequirementDependencyCycle and dag_profile_* tests (validator/dag_checker_test.go). No code owed."
-  },
-  {
-    "node": "832e170fa3c0",
-    "reason": "h4gv.22 triage sweep: flow_validation_pipeline.md DAGChecker sentence — walks every non-exempt profile-declared edge kind, requirement graphs at both scopes under the default. Same shipped behaviour, same pinning tests: TestREQ3_ProjectRequirementDependencyCycle and dag_profile_* tests. No code owed."
+    "node": "ee88263d6555",
+    "reason": "Interface section gains a paragraph recording shipped behaviour only: the algorithm's deliberate non-injectivity (empty parts, separator-carrying parts) and the validator's per-array ID-uniqueness check as the enforcement locus. No code obligation changes; pinned by TestFR10_IH6_EmptyPartsAndEmptyInput and TestFR10_IH5_JoinSeparatorIsSlash (schema/schema_loader_test.go) and the REQ-5 duplicate-id tests (validator/id_validator_test.go)."
   }
 ]

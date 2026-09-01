@@ -259,7 +259,7 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 
 **Expected:** All four results are distinct.
 
-**Verifies:** The function is not collapsing parts via concatenation in a way that loses positional information.
+**Verifies:** Part order and part content both reach the hash — reordering parts or changing one changes the result. No general injectivity is claimed: the algorithm's deliberate collision cases are stated in SchemaLoader's leaf and exercised by IH6.
 
 ### IH4: Same node identity across modules produces different hashes
 
@@ -281,9 +281,9 @@ These scenarios cover the `schema.IdentityHash(parts ...string) string` function
 
 **Call:** `IdentityHash()`, `IdentityHash("")`, `IdentityHash("a", "", "b")`.
 
-**Expected:** Each call returns *some* 12-char hex string, all three are distinct, and none panic. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
+**Expected:** Each call returns *some* 12-char hex string and none panic. No distinctness is asserted between the calls: under the `join(parts, "/")` algorithm declared in SchemaLoader's leaf, no parts and one empty part both produce the identity string `""` and therefore the same hash. That collision is accepted — every real part is a fixed type literal or comes from a `name` or `title` field the schemas require to be non-empty (`minLength: 1`), so no reachable node hashes a degenerate identity string. The values are not asserted against fixed strings — only that the function is total and produces schema-valid output for any input.
 
-**Verifies:** The function does not crash on degenerate input. It also does not silently treat empty strings as identical to absent parts.
+**Verifies:** The function does not crash on degenerate input.
 
 ## ProfileLoader Scenarios
 

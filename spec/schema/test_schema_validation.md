@@ -246,13 +246,19 @@ Every module-context requirement fixture below carries a `preq_id` unless the sc
 ```
 **Expected:** Validation fails. Error references `modules/0/id` — `-1` is not a string matching `^[0-9a-f]{12}$`; `project.schema.json` constrains module ids by pattern, not by numeric range.
 
-### S14: Empty string for name fails (minLength: 1)
+### S14: Empty string for name or title fails (minLength: 1)
 
 **Input (project):**
 ```json
 { "name": "", "modules": [{ "id": "000000000001", "name": "m", "path": "m/" }] }
 ```
 **Expected:** Validation fails. Error references `name` — empty string violates `minLength: 1`.
+
+**Input (requirement title within module):**
+```json
+{ "name": "m", "requirements": [{ "id": "000000000001", "type": "functional", "title": "", "preq_id": "000000000002" }] }
+```
+**Expected:** Validation fails. Error references `requirements/0/title` — titles carry the same `minLength: 1` the name fields do. This is the promise IH6 in the schema-loading tests rests on: no reachable node hashes an empty identity part.
 
 **Input (module name within project):**
 ```json
