@@ -147,6 +147,9 @@ func (p *Profile) Validate() error {
 		return name == "module" || declared[name]
 	}
 
+	frameEdgeKinds := builtinEdgeKinds()
+	frameTypeNames := builtinTypeNames()
+
 	edgeKinds := map[string]bool{}
 	for i, e := range p.Edges {
 		path := fmt.Sprintf("edges[%d]", i)
@@ -158,6 +161,14 @@ func (p *Profile) Validate() error {
 		}
 		for _, tt := range e.To {
 			check(validRef(tt), path, fmt.Sprintf("to: undeclared node type %q", tt))
+		}
+		if e.Kind != "" && !frameEdgeKinds[e.Kind] {
+			for _, f := range e.From {
+				if frameTypeNames[f] {
+					errs = append(errs, fmt.Errorf("%s: edge kind %q: sourced at built-in type %q but the frame does not already carry this edge kind — built-in definitions are frame-fixed and gain no new reference fields in composition", path, e.Kind, f))
+					break
+				}
+			}
 		}
 		if e.Kind != "" {
 			edgeKinds[e.Kind] = true
@@ -191,6 +202,37 @@ func (p *Profile) Validate() error {
 	}
 
 	return errors.Join(errs...)
+}
+
+// builtinEdgeKinds returns the edge kinds the shipped frame already carries
+// as reference-field properties on its built-in node-type definitions — the
+// set Validate checks a profile-declared edge's Kind against when the
+// edge's source names a built-in type.
+func builtinEdgeKinds() map[string]bool {
+	kinds := make(map[string]bool)
+	for _, e := range DefaultProfile().Edges {
+		kinds[e.Kind] = true
+	}
+	return kinds
+}
+
+// builtinTypeNames returns the node type names the shipped frame already
+// defines as fixed $defs entries — requirement, component, data_flow,
+// test_section, api. ComposeProjectSchema and ComposeModuleSchema restore
+// these types' original array property and $defs entry unchanged from the
+// frame, so a profile-declared edge kind the frame does not already carry
+// could never reach one of these types' reference fields in composition;
+// Validate refuses such a declaration outright rather than silently
+// accepting an edge that composition would then drop.
+func builtinTypeNames() map[string]bool {
+	names := make(map[string]bool)
+	for _, t := range DefaultProjectNodeTypes() {
+		names[t.Name] = true
+	}
+	for _, t := range DefaultModuleNodeTypes() {
+		names[t.Name] = true
+	}
+	return names
 }
 
 // ProjectNodeTypes returns the profile's project-scoped node types,
