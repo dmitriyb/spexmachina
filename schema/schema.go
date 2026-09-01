@@ -42,7 +42,8 @@ func ProjectSchema() ([]byte, error) {
 // from the built-in default profile the same way [ProjectSchema] composes
 // the project schema.
 func ModuleSchema() ([]byte, error) {
-	return ComposeModuleSchema(DefaultProfile().ModuleNodeTypes())
+	p := DefaultProfile()
+	return ComposeModuleSchema(p.ModuleNodeTypes(), p.Edges)
 }
 
 // projectSchemaBytes returns the raw embedded project.schema.json frame

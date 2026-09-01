@@ -769,7 +769,7 @@ func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
 		PluralKey:       "endpoints",
 		RequiresContent: true,
 	})
-	data, err := ComposeModuleSchema(types)
+	data, err := ComposeModuleSchema(types, nil)
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
@@ -821,6 +821,138 @@ func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
 	})
 }
 
+// TestFR2_S27_ProfileDeclaredEdgeFieldAccepted covers S27's edge half: a
+// profile-declared edge whose source names a custom type opens a reference
+// field on that type's composed entry, and the same field is rejected when
+// composed from a profile that never declared the edge — the two documents
+// are byte-identical, only the profile differs, which is what pins the
+// rejection to the missing declaration rather than to document shape.
+func TestFR2_S27_ProfileDeclaredEdgeFieldAccepted(t *testing.T) {
+	types := append(DefaultModuleNodeTypes(), ModuleNodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		RequiresContent: true,
+	})
+	doc := `{
+		"name": "m",
+		"endpoints": [
+			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "serves": ["112233445566"]}
+		]
+	}`
+
+	t.Run("declared edge field passes", func(t *testing.T) {
+		edges := []Edge{{Kind: "serves", From: []string{"endpoint"}, To: []string{"component"}}}
+		data, err := ComposeModuleSchema(types, edges)
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateModule(t, sch, doc); err != nil {
+			t.Fatalf("profile-declared serves edge should pass: %v", err)
+		}
+	})
+
+	t.Run("undeclared edge field still rejected", func(t *testing.T) {
+		data, err := ComposeModuleSchema(types, nil)
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateModule(t, sch, doc); err == nil {
+			t.Fatal("expected validation error for undeclared serves field, got nil")
+		}
+	})
+
+	t.Run("edge sourced at a different type does not leak in", func(t *testing.T) {
+		edges := []Edge{{Kind: "serves", From: []string{"component"}, To: []string{"endpoint"}}}
+		data, err := ComposeModuleSchema(types, edges)
+		if err != nil {
+			t.Fatalf("ComposeModuleSchema: %v", err)
+		}
+		sch := compileSchemaFromBytes(t, data)
+		if err := validateModule(t, sch, doc); err == nil {
+			t.Fatal("expected validation error: serves is not declared with endpoint as its source")
+		}
+	})
+}
+
+// TestFR2_ComposeModuleSchemaEdgeFieldShape pins the shape of a
+// profile-declared edge field on a synthesized entry definition: an
+// optional array of identity-hash strings with uniqueItems, the same
+// constraints every built-in edge field (implements, uses, describes,
+// provided_by) already carries.
+func TestFR2_ComposeModuleSchemaEdgeFieldShape(t *testing.T) {
+	types := []ModuleNodeType{{Name: "endpoint", PluralKey: "endpoints"}}
+	edges := []Edge{
+		{Kind: "serves", From: []string{"endpoint"}, To: []string{"component"}},
+		{Kind: "depends_on_endpoint", From: []string{"endpoint"}, To: []string{"endpoint"}},
+	}
+	data, err := ComposeModuleSchema(types, edges)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	def := raw["$defs"].(map[string]any)["endpoint"].(map[string]any)
+	props := def["properties"].(map[string]any)
+
+	for _, kind := range []string{"serves", "depends_on_endpoint"} {
+		field, ok := props[kind].(map[string]any)
+		if !ok {
+			t.Fatalf("endpoint definition missing edge property %q", kind)
+		}
+		if field["type"] != "array" {
+			t.Fatalf("%s: want type array, got %v", kind, field["type"])
+		}
+		if field["uniqueItems"] != true {
+			t.Fatalf("%s: want uniqueItems true, got %v", kind, field["uniqueItems"])
+		}
+		items, ok := field["items"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: items missing", kind)
+		}
+		if items["type"] != "string" || items["pattern"] != identityHashPattern {
+			t.Fatalf("%s: items should be identity-hash strings, got %v", kind, items)
+		}
+	}
+
+	required, _ := def["required"].([]any)
+	for _, r := range required {
+		if r == "serves" || r == "depends_on_endpoint" {
+			t.Fatalf("declared edge fields must not be required, got required=%v", required)
+		}
+	}
+
+	if def["additionalProperties"] != false {
+		t.Fatalf("entry definition should still reject undeclared fields")
+	}
+}
+
+// TestFR2_ComposeModuleSchemaBuiltinTypeUnaffectedByEdges pins that a
+// built-in type's frame $def is reused unchanged even when the caller
+// passes an edge sourced at that type's name: built-in definitions carry
+// only the reference fields the frame already gives them.
+func TestFR2_ComposeModuleSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
+	edges := []Edge{{Kind: "serves", From: []string{"component"}, To: []string{"component"}}}
+	data, err := ComposeModuleSchema(DefaultModuleNodeTypes(), edges)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateModule(t, sch, `{
+		"name": "m",
+		"components": [
+			{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "serves": ["112233445566"]}
+		]
+	}`)
+	if err == nil {
+		t.Fatal("expected validation error: built-in component definition should not gain a serves field")
+	}
+}
+
 // TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultModuleNodeTypes yields a schema that still accepts
 // the same known-good module fixtures the static schema accepts (S3, S4),
@@ -830,7 +962,7 @@ func TestFR2_S27_ProfileDeclaredArrayAccepted(t *testing.T) {
 // that golden comparison is scenario P2 in test_schema_loading.md, owned by
 // SchemaLoader.
 func TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
-	data, err := ComposeModuleSchema(DefaultModuleNodeTypes())
+	data, err := ComposeModuleSchema(DefaultModuleNodeTypes(), DefaultProfile().Edges)
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
@@ -860,7 +992,7 @@ func TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 // entry has, rather than an optional one.
 func TestFR2_ComposeModuleSchemaNoContentPropertyWhenNotRequired(t *testing.T) {
 	types := []ModuleNodeType{{Name: "milestone", PluralKey: "milestones"}}
-	data, err := ComposeModuleSchema(types)
+	data, err := ComposeModuleSchema(types, nil)
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}

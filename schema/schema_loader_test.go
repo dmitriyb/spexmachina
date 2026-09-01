@@ -950,7 +950,7 @@ func TestFR9_P2_ComposedSchemasEqualShippedGolden(t *testing.T) {
 		t.Fatalf("project schema composed from the default profile does not reproduce the shipped document")
 	}
 
-	composedModule, err := ComposeModuleSchema(p.ModuleNodeTypes())
+	composedModule, err := ComposeModuleSchema(p.ModuleNodeTypes(), p.Edges)
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
@@ -1088,7 +1088,7 @@ func TestFR9_P4_DeclaredCustomTypeReachesComposedSchema(t *testing.T) {
 		t.Fatalf("ResolveProfile: %v", err)
 	}
 
-	composed, err := ComposeModuleSchema(resolved.ModuleNodeTypes())
+	composed, err := ComposeModuleSchema(resolved.ModuleNodeTypes(), resolved.Edges)
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
@@ -1126,11 +1126,11 @@ func TestFR9_P5_ResolutionIsDeterministic(t *testing.T) {
 			t.Fatal("resolving the default profile twice should be byte-identical")
 		}
 
-		c1, err := ComposeModuleSchema(p1.ModuleNodeTypes())
+		c1, err := ComposeModuleSchema(p1.ModuleNodeTypes(), p1.Edges)
 		if err != nil {
 			t.Fatalf("ComposeModuleSchema #1: %v", err)
 		}
-		c2, err := ComposeModuleSchema(p2.ModuleNodeTypes())
+		c2, err := ComposeModuleSchema(p2.ModuleNodeTypes(), p2.Edges)
 		if err != nil {
 			t.Fatalf("ComposeModuleSchema #2: %v", err)
 		}

@@ -52,14 +52,19 @@ func defaultArrayKeyByTypeName() map[string]string {
 // type, keyed by its plural key. A type whose name matches one of the
 // frame's built-in $defs (requirement, component, data_flow, test_section,
 // api) reuses that definition, and its array property, unchanged from the
-// frame. Any other name gets a generic envelope definition — an
-// identity-hash id, a non-empty name, and, only when RequiresContent is
-// set, a required content path — the same constraints today's components
-// array enforces, and a synthesized array property description.
-// additionalProperties:false at the root, inherited unchanged from the
-// frame, is what rejects any array no passed type declares. Composing with
-// DefaultModuleNodeTypes reproduces the shipped module.schema.json.
-func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
+// frame — declared edges sourced at a built-in type never reach it, since
+// the built-in $defs are frame-fixed. Any other name gets a generic
+// envelope definition — an identity-hash id, a non-empty name, and, only
+// when RequiresContent is set, a required content path — the same
+// constraints today's components array enforces, plus one array-of-
+// identity-hash property per given edge whose source names that type, and
+// a synthesized array property description. additionalProperties:false at
+// the root, inherited unchanged from the frame, is what rejects any array
+// no passed type declares; the same constraint at the entry level, applied
+// by genericNodeDef, is what rejects any field that is neither envelope nor
+// declared edge. Composing with DefaultModuleNodeTypes and DefaultProfile's
+// edges reproduces the shipped module.schema.json.
+func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
 		return nil, fmt.Errorf("schema: compose module schema: %w", err)
@@ -78,7 +83,7 @@ func ComposeModuleSchema(types []ModuleNodeType) ([]byte, error) {
 	for _, t := range types {
 		_, declared := defs[t.Name]
 		if !declared {
-			defs[t.Name] = genericNodeDef(t)
+			defs[t.Name] = genericNodeDef(t, edgesSourcedAt(edges, t.Name))
 		}
 		if declared {
 			if origKey, ok := defaultKeys[t.Name]; ok {
@@ -133,13 +138,36 @@ func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 	return frame, original, nil
 }
 
+// edgesSourcedAt returns the edges whose From list names typeName, in
+// declaration order — the edge kinds a synthesized entry definition for
+// typeName gains as reference-field properties. An edge whose From does not
+// name typeName contributes nothing to that type's definition, even if it
+// shares a Kind with one that does.
+func edgesSourcedAt(edges []Edge, typeName string) []Edge {
+	var out []Edge
+	for _, e := range edges {
+		for _, from := range e.From {
+			if from == typeName {
+				out = append(out, e)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // genericNodeDef synthesizes the JSON Schema definition for a module-scoped
 // node type the shipped frame does not already define: an identity-hash id,
 // a non-empty name, an optional description, and — only when the type
 // requires a content leaf — a required content path. A type that does not
 // require content gets no content property at all, the same shape an api
-// entry has: there is nowhere to put a markdown leaf.
-func genericNodeDef(t ModuleNodeType) map[string]any {
+// entry has: there is nowhere to put a markdown leaf. edges supplies one
+// additional property per profile-declared edge kind sourced at this type —
+// an optional array of identity-hash values, matching the shape every
+// built-in edge field (implements, uses, describes, provided_by) already
+// carries. additionalProperties:false makes declaring an edge the only way
+// to open a reference field on the type: any other field is rejected.
+func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
 			"type":        "string",
@@ -164,6 +192,17 @@ func genericNodeDef(t ModuleNodeType) map[string]any {
 			"description": "Relative path to the markdown content leaf (described_in edge to content leaf).",
 		}
 		required = append(required, "content")
+	}
+	for _, e := range edges {
+		properties[e.Kind] = map[string]any{
+			"type":        "array",
+			"description": fmt.Sprintf("Identity hashes this %s references via the %s edge.", t.Name, e.Kind),
+			"items": map[string]any{
+				"type":    "string",
+				"pattern": identityHashPattern,
+			},
+			"uniqueItems": true,
+		}
 	}
 
 	return map[string]any{
