@@ -110,8 +110,9 @@ absorption puts requirement and api events on the record.
 ### S8: Refresh receipt shape
 
 **Input:** the refresh fixture; a variant with `"absorbed": []`; a variant omitting `absorbed`.
-**Expected:** the first two pass (an empty absorbed list is legal in the schema even though
-ingest never writes one — the no-drift run appends nothing at all); the third fails.
+**Expected:** the first two pass; the third fails. An empty absorbed list is legal and real:
+a meta-only drift run absorbs its envelope change into the snapshot without a change event and
+still lands its receipt, absorbed empty — while the no-drift run appends nothing at all.
 
 ### S8b: Optional `path` on change events
 
