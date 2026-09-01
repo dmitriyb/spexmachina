@@ -160,11 +160,17 @@ type ModuleSpec struct {
 // ModuleRequirement represents a requirement in module.json.
 // Unlike the project-level Requirement, all IDs are identity hash strings
 // and preq_id is required.
+//
+// The wire key is "name" (spec format version 1 renamed the requirement
+// type's title field to name, making the envelope universal). The Go field
+// stays Title here — every other module-scoped package still reads it under
+// that name — pending its own rename once those packages pick up the
+// underlying identifier change.
 type ModuleRequirement struct {
 	ID          string   `json:"id"`
 	PreqID      string   `json:"preq_id"`
 	Type        string   `json:"type"`
-	Title       string   `json:"title"`
+	Title       string   `json:"name"`
 	Description string   `json:"description,omitempty"`
 	DependsOn   []string `json:"depends_on,omitempty"`
 }

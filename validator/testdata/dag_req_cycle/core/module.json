@@ -8,7 +8,7 @@
       ],
       "id": "000000000001",
       "preq_id": "000000000001",
-      "title": "Feature A",
+      "name": "Feature A",
       "type": "functional"
     },
     {
@@ -17,7 +17,7 @@
       ],
       "id": "000000000002",
       "preq_id": "000000000001",
-      "title": "Feature B",
+      "name": "Feature B",
       "type": "functional"
     },
     {
@@ -26,7 +26,7 @@
       ],
       "id": "000000000003",
       "preq_id": "000000000001",
-      "title": "Feature C",
+      "name": "Feature C",
       "type": "functional"
     }
   ]

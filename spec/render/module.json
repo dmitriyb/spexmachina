@@ -6,35 +6,35 @@
       "id": "8828685278e9",
       "preq_id": "6b00623735ac",
       "type": "functional",
-      "title": "Render markdown",
+      "name": "Render markdown",
       "description": "Generate a collated spec document in markdown. Structure: requirements → architecture → implementation, with content inlined from markdown files. The sections iterate the node types the resolved profile declares, so a profile-declared type's nodes reach the document without renderer changes; the default profile yields today's structure unchanged."
     },
     {
       "id": "a596d8caefb1",
       "preq_id": "6b00623735ac",
       "type": "functional",
-      "title": "Render DOT",
+      "name": "Render DOT",
       "description": "Generate a graphviz DOT graph of spec nodes and edges. Node kinds are distinguished by shape and fill, and every edge carries a label naming its kind, so a rendering that drops colour still shows the relationship. Which kinds reach the graph, and how each is drawn, is DOTRenderer's contract rather than a list held here — and the kinds themselves are the node types and edges the resolved profile declares, so a profile-declared type reaches the graph without renderer changes."
     },
     {
       "id": "1078c088e0c6",
       "preq_id": "6b00623735ac",
       "type": "functional",
-      "title": "Render JSON",
+      "name": "Render JSON",
       "description": "Generate a machine-readable JSON graph of the full spec. All nodes and edges in a single JSON document for piping to other tools. The node table emits every node type the resolved profile declares — the spec is read through the profile's declared arrays, so a profile-declared type's nodes appear in the graph exactly as the built-in types do."
     },
     {
       "id": "8d441659a190",
       "preq_id": "91f6f338de19",
       "type": "non_functional",
-      "title": "Composable output",
+      "name": "Composable output",
       "description": "All render output goes to stdout. Format is selected by the --format flag (markdown, dot, json); --slim reduces the json graph to bare nodes. Output is pipeable to other tools. The module exposes one external surface, the api `spex render`, provided by RenderCommand: the formats are flags behind that single name, not separate entry points, so adding a format or a flag moves no name and the diff cannot see it, while renaming the subcommand is a removal plus an addition. Composability also binds what the surface must carry — every node type SpecReader surfaces has to reach all three outputs, apis included, and an api reaches them through its JSON fields alone because it has no content file to inline."
     },
     {
       "id": "d1a61942bc21",
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
-      "title": "Render sections",
+      "name": "Render sections",
       "description": "The spec reader and all three renderers (markdown, DOT, JSON) handle the project-level sections array generically. Iterate sections by name, render each section's envelope and content, pull related content from the coupled module. No hardcoded section-type logic."
     }
   ],

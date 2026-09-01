@@ -912,7 +912,7 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 
 	wantHashedFields := map[string][]string{
 		"project:requirement": {"depends_on", "description", "id", "priority", "title", "type"},
-		"module:requirement":  {"depends_on", "description", "id", "preq_id", "title", "type"},
+		"module:requirement":  {"depends_on", "description", "id", "name", "preq_id", "type"},
 		"module:api":          {"description", "group", "id", "name", "provided_by"},
 	}
 	if !reflect.DeepEqual(p.HashedFields, wantHashedFields) {

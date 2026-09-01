@@ -20,13 +20,13 @@
     {
       "id": "000000000001",
       "preq_id": "000000000001",
-      "title": "Feat A",
+      "name": "Feat A",
       "type": "functional"
     },
     {
       "id": "000000000002",
       "preq_id": "000000000001",
-      "title": "Feat B",
+      "name": "Feat B",
       "type": "functional"
     }
   ],

@@ -3,7 +3,7 @@
   "requirements": [
     {
       "id": "000000000001",
-      "title": "Mod Feat A",
+      "name": "Mod Feat A",
       "type": "functional"
     }
   ]

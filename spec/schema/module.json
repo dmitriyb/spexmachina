@@ -6,91 +6,91 @@
       "id": "f471f2764ab8",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Define project schema",
+      "name": "Define project schema",
       "description": "JSON Schema for project.json covering name, description, version, requirements (with optional priority field, integer 0-4, and an optional derivation field whose only permitted value is 'pending', declaring a requirement not yet derived into any module), and module declarations with inter-module dependencies. The derivation field is project-scoped only: a module requirement derives by construction through its required preq_id, so the module schema carries no such field. The document also admits an optional spec_version integer in project.json only — one declaration per project, metadata outside the hashed payload, absent meaning version 1; module files carry no version field. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$). The document is composed at load time from the resolved profile's project-scoped node types: the shipped schema is the frame — envelope fields, the identity-hash pattern, additionalProperties false — and the profile supplies the array properties and each type's declared fields. Under the default profile the composed document is identical in content to the shipped static one — the same JSON value, asserted by the golden test's structural comparison."
     },
     {
       "id": "eed2cf85d5c3",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Define module schema",
+      "name": "Define module schema",
       "description": "JSON Schema for module.json covering requirements (with required preq_id tracing to project requirements), architecture components (with content links), data flows (with content links), and the apis array naming the module's external surface entry points. All node IDs and cross-references are 12-character lowercase hex identity hash strings (pattern ^[a-f0-9]{12}$). The document is composed at load time from the resolved profile's module-scoped node types and their plural array keys: the shipped schema is the frame, the profile supplies the arrays and their per-type constraints, and a project declaring an additional type gets its array validated the same way. Under the default profile the composed document is identical in content to the previous static one — the same JSON value, asserted by the golden test's structural comparison — so the on-disk shape of every existing module.json is unchanged."
     },
     {
       "id": "b7c3bccd7c64",
       "preq_id": "6faeb216618a",
       "type": "functional",
-      "title": "Embed schemas in binary",
+      "name": "Embed schemas in binary",
       "description": "Make schemas available programmatically via go:embed so the validator can use them without external file dependencies. The embedded artifacts are the schema frame plus the built-in default profile — the latter an embedded defaultProfile.json document in the source tree, parsed at startup, identical in format to what a project may commit as spec/profile.json, rather than hand-authored code values, so the golden policy record is a JSON document a newcomer can open. The loader composes the effective project and module schemas from the resolved profile once per run, before any check, so consumers still carry no external file dependency and a malformed profile fails early and distinctly rather than as a cascade of conformance errors."
     },
     {
       "id": "237fd8ffb610",
       "preq_id": "d5a8407d38e1",
       "type": "non_functional",
-      "title": "Identity hash ID constraints",
+      "name": "Identity hash ID constraints",
       "description": "All node IDs are 12-character lowercase hex identity hash strings, unique within their containing array. The identity hash is SHA256(identity_string) truncated to the first 6 bytes (12 hex chars), where identity_string is built deterministically from the node's position in the spec graph: project requirements use 'project/requirement/<name>'; modules use 'module/<name>'; module requirements use '<module>/requirement/<name>'; components use '<module>/component/<name>'; data_flows use '<module>/data_flow/<name>'; test_sections use '<module>/test_section/<name>'; apis use '<module>/api/<name>' — one uniform '<scope>/<type>/<name>' shape, the requirement rows reading the name field that this contract renames from title (the identity string is built from the field's value, so the rename moves no identity hash). Schema enforces the hex pattern; uniqueness enforced by validator. IDs are computed deterministically from node identity, never assigned manually — two branches that add different nodes always produce different hashes, eliminating merge collisions. The hex pattern and per-array uniqueness are part of the fixed schema frame: they bind every node type the resolved profile declares — a profile-declared type's identity string is '<module>/<type>/<name>' with its declared type name as the middle part — and are not themselves declarable, which is why no existing hash moves when the type vocabulary becomes data."
     },
     {
       "id": "80debf6eb776",
       "preq_id": "92dfddf840b0",
       "type": "functional",
-      "title": "Define test_sections in module schema",
+      "name": "Define test_sections in module schema",
       "description": "Add a test_sections array to module.json schema. Each test_section has id, name, content (path to test_*.md), and describes (component IDs)."
     },
     {
       "id": "f7ef8bef0ba1",
       "preq_id": "9120788210c9",
       "type": "functional",
-      "title": "Define bead-map schema",
+      "name": "Define bead-map schema",
       "description": "JSON Schema for the task journal's line format — the format is the contract, indifferent to the file's location, which the lifecycle resolver answers: change events (event drawn from added/removed/modified, eid, node, name, node_type, module, before/after leaf hashes admitting null, git_head, proposal), the registered event that opens a proposal's lifecycle (eid of the form <git_head>:<slug>, proposal slug, git_head — no node field, because registration precedes any spec change), and receipt events (task_created/task_closed/task_retargeted with task_id and a for referencing an eid; refresh with git_head and an absorbed list of eids). The node field is constrained to the 12-hex identity hash pattern — the same key the merkle tree files that node's leaf under, so the two sides need no translation. A task_created carrying a proposal slug instead of for is admitted as a legacy shape: pre-migration epic lines validate as inert history, but every newly appended task_created references an eid — epics reference their registered event. Every line shape admits an optional integer v — the journal-line format version, metadata outside any hashed payload: absent means version 1, a writer stamps the current version, and readers accept every version from 1 forward, forever, the journal being append-only and permanent. Each line validates independently; there is no envelope, no counter, and no integer id anywhere in the format."
     },
     {
       "id": "581178718888",
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
-      "title": "Define sections array in project schema",
+      "name": "Define sections array in project schema",
       "description": "Add a sections array to project.json schema. Each entry requires id (string identity hash), name (string), type (string). Additional properties allowed on section entries (freeform content validated externally by coupled module schemas)."
     },
     {
       "id": "20da31e277e5",
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
-      "title": "Define section.schema.json convention",
+      "name": "Define section.schema.json convention",
       "description": "Document and enforce the convention that coupled modules provide a section.schema.json in their spec directory. This file is a standard JSON Schema that validates the freeform content of the module's project-level section."
     },
     {
       "id": "5392cca550c4",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Declare the node taxonomy",
+      "name": "Declare the node taxonomy",
       "description": "The node-type vocabulary of a spec is data, not code: an authored file, spec/profile.json, sitting beside project.json, declares for each node type its name, the plural key naming its array in project.json or module.json, whether it is project-scoped, module-scoped, or both, whether it requires a content leaf, two per-type role flags — whether the type triggers the requirement completeness rules, and whether its names are declarable, checked for recoverability at declaration and swept by the removed-name machinery — and the type's field declarations: the shape of a node beyond the fixed envelope. A field declares its name; its kind — text, integer, or reference; whether it is required; whether it participates in the node's hash (default: yes); for text fields an optional enumeration of permitted values; for integer fields optional bounds; and for reference fields the permitted target node types, the cardinality (one or many), and an optional boolean cyclic: true marking a descriptive edge exempt from the cycle check — an omitted flag means cycle-checked. A reference-kind field is the edge declaration: the separate edges section of the earlier profile format is unified into the source type's field list, so one declaration answers what a type may carry, what it may point at, and whether it counts as a semantic change. Coverage-chain triples and the DAG check name the field on its declaring type, exactly as they named an edge kind. A project with no spec/profile.json gets the built-in default profile, which declares today's ontology: requirement (declared at both scopes), component, data_flow, test_section, api, each carrying today's fields — the reference kinds preq_id, implements, uses, provided_by, describes and depends_on declared on their source types with the cyclic flag omitted on every one — with the completeness-trigger role marked on requirement and the name-declarable role on exactly component and api. requires_module stays in the frame: modules are not profile-declared types, and its module endpoint is a fixed frame type the frame's own edge may name. The profile is a description of a vocabulary, not a place to put behaviour, and it cannot reach the fixed points: the envelope minimum (id, name, description, content where content-bearing — universal across every declared type, the requirement type included, whose former title field is renamed to name by this contract), the identity hash algorithm, the name tokenization rule, the merkle tree shape, and the journal event format are not declarable."
     },
     {
       "id": "ef55248cb3ca",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Generate schemas from the profile",
+      "name": "Generate schemas from the profile",
       "description": "The effective project and module JSON Schemas are composed from the resolved profile at load time rather than loaded as two fixed documents. The frame retains only the envelope, the identity-hash pattern, the root document shapes and additionalProperties false; the profile supplies the array properties and, for each declared type, one property per declared field — typed, bounded, enum-constrained, identity-hash-patterned for references, a scalar for cardinality one and an array otherwise, with a required text field composed non-empty. The five built-in types' shapes are composed from the default profile's field declarations through the same path every custom type takes: the built-in $defs leave the frame, built-ins stop being special by construction, and the earlier interim rule refusing a new edge kind sourced at a built-in type is retired by the same move. Composition happens once per run, before any check, so a malformed profile is a distinct and early failure rather than a cascade of conformance errors. The schemas composed from the default profile are golden-tested against the shipped static documents: if composition does not reproduce their content — the same JSON value, independent of formatting and key order — the test fails. Under the default profile every identity hash on this repository's spec is unchanged; the one deliberate break is the requirement type's title-to-name rename, which moves each requirement leaf's serialization exactly once and is absorbed by the adoption refresh."
     },
     {
       "id": "91270a8a2b57",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Declare graph rules",
+      "name": "Declare graph rules",
       "description": "The profile declares the graph policy consumers currently compile in: the coverage chains, each the triple 'every node of type A must be the target of at least one edge of kind E from some node of type B'; the plan-relevant set — which node types produce beads; the per-type impact-level mapping that assigns each declared type one of the four fixed impact levels; and the per-type, per-direction absorbable set that refresh honours. What counts as a semantic change is no longer a separate per-type allowlist map: a JSON-backed node's hashed serialization derives from its type's field declarations — every declared field participates unless declared hashed: false, plus the envelope fields that participate today — and the default profile's declarations reproduce the retired allowlists exactly, so no existing hash moves. The built-in default profile declares today's three coverage links, today's plan-relevant set, today's impact levels and today's absorbable directions, so it is itself the golden record of the policy previously spread across the code: one document a reviewer can read to see the whole policy. The DAG check enforces acyclicity over every reference-kind field the profile declares that is not marked cyclic — the taxonomy's per-field exemption flag — rather than over a fixed edge set."
     },
     {
       "id": "cdc9c58ba097",
       "preq_id": "6faeb216618a",
       "type": "functional",
-      "title": "Identity hash algorithm",
+      "name": "Identity hash algorithm",
       "description": "Provide a deterministic identity hash function that defines the ID format every module reads and writes. Given a sequence of identity-string parts, the function joins them with '/', computes SHA256, and returns the first 6 bytes as a 12-character lowercase hex string. Same parts in same order always produce the same hash. The function lives in the schema package because it defines what IDs look like. The validator and the hash-id command call it to derive and check IDs; every other module treats the resulting 12-character hex string as an opaque key carried in the JSON id field, so it never recomputes and never reimplements the algorithm."
     },
     {
       "id": "b1baa51bd7a9",
       "preq_id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Declare the format version",
+      "name": "Declare the format version",
       "description": "Every authored format declares which version it speaks, as metadata outside any hashed payload, and versioning starts at 1 with the formats this contract ships: the field-declaration profile format is profile format version 1, and the earlier unversioned profile format is a deliberate breaking change away — such a document fails ordinary profile validation, and no migration signal is owed to it. Three declarations. profile_version in the profile document — the profile is not a merkle leaf, so the field is invisible to the tree; the binary declares the versions it supports, and a profile outside that range fails early with one message naming the file, its version and the supported range — the migrate-before-using-this-spex signal, replacing a cascade of conformance errors. spec_version in project.json only — one declaration per project; project.json's envelope leaf is inert by the existing tree contract, so introducing the field costs a single refresh-absorbable diff entry, and module files carry no version because a per-module.json field would move every module's meta leaf and trigger the change-completeness rule against every component, an adoption cost with no information gain over the single project-level declaration. Spec format version 1 carries one deliberate break of its own: the requirement type's title field is renamed to name, making the envelope universal, so a title-carrying document is pre-versioning and fails schema validation, migrated by one mechanical rename; identity hashes are value-derived and do not move, while each requirement leaf's serialization moves once and is absorbed by the adoption refresh. An optional per-line v in the journal-line format — the journal is append-only and permanent, so readers accept every version from 1 forward, forever, while a writer stamps the current version; no existing line changes meaning. Absent version fields mean version 1: for the profile and the journal adoption is doing nothing, and for the spec it is the one rename."
     }
   ],

@@ -13,12 +13,41 @@ var moduleProfileArrays = []string{"requirements", "components", "data_flows", "
 // ModuleNodeType describes one module-scoped node type as declared by the
 // resolved profile: its name (used to key $defs and, elsewhere, to derive
 // identity hashes as "<module>/<name>/<node name>"), the plural key naming
-// its array property in module.json, and whether nodes of this type carry a
-// content leaf.
+// its array property in module.json, whether nodes of this type carry a
+// content leaf, and the fields it declares beyond the fixed envelope.
 type ModuleNodeType struct {
 	Name            string
 	PluralKey       string
 	RequiresContent bool
+	Fields          []Field
+}
+
+// FieldKind is the kind of one field a profile-declared node type carries
+// beyond its fixed envelope — see arch_module_schema.md's "Each type's
+// declared fields reach the composed document too".
+type FieldKind string
+
+const (
+	FieldKindText      FieldKind = "text"
+	FieldKindInteger   FieldKind = "integer"
+	FieldKindReference FieldKind = "reference"
+)
+
+// Field declares one field a profile-declared module-scoped node type
+// carries beyond its envelope. It composes into one property on that type's
+// entry definition: enum-constrained for a text field carrying an
+// enumeration, bounded for an integer field carrying bounds, an
+// identity-hash value for a reference field — a scalar at cardinality
+// "one", an array of identity hashes otherwise — with a required text field
+// composed non-empty.
+type Field struct {
+	Name        string
+	Kind        FieldKind
+	Required    bool
+	Enum        []string // text field: permitted values, when non-empty
+	Minimum     *int     // integer field: inclusive lower bound, when set
+	Maximum     *int     // integer field: inclusive upper bound, when set
+	Cardinality string   // reference field: "one" or "many" (default "many")
 }
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
@@ -61,9 +90,9 @@ func defaultArrayKeyByTypeName() map[string]string {
 // a synthesized array property description. additionalProperties:false at
 // the root, inherited unchanged from the frame, is what rejects any array
 // no passed type declares; the same constraint at the entry level, applied
-// by genericNodeDef, is what rejects any field that is neither envelope nor
-// declared edge. Composing with DefaultModuleNodeTypes and DefaultProfile's
-// edges reproduces the shipped module.schema.json.
+// by genericNodeDef, is what rejects any property that is neither envelope,
+// declared edge, nor declared field. Composing with DefaultModuleNodeTypes
+// and DefaultProfile's edges reproduces the shipped module.schema.json.
 func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
@@ -165,8 +194,11 @@ func edgesSourcedAt(edges []Edge, typeName string) []Edge {
 // additional property per profile-declared edge kind sourced at this type —
 // an optional array of identity-hash values, matching the shape every
 // built-in edge field (implements, uses, describes, provided_by) already
-// carries. additionalProperties:false makes declaring an edge the only way
-// to open a reference field on the type: any other field is rejected.
+// carries. t.Fields supplies one further property per declared field —
+// composeFieldSchema shapes it by kind, including a reference field, which
+// opens a property the same way an edge does. additionalProperties:false
+// makes declaring an edge or a field the only way to open a property on the
+// type beyond the envelope: any other property is rejected.
 func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
@@ -204,11 +236,63 @@ func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 			"uniqueItems": true,
 		}
 	}
+	for _, f := range t.Fields {
+		properties[f.Name] = composeFieldSchema(f)
+		if f.Required {
+			required = append(required, f.Name)
+		}
+	}
 
 	return map[string]any{
 		"type":                 "object",
 		"required":             required,
 		"additionalProperties": false,
 		"properties":           properties,
+	}
+}
+
+// composeFieldSchema builds the JSON Schema property definition for one
+// profile-declared [Field]: enum-constrained for a text field carrying an
+// enumeration, bounded for an integer field carrying bounds, an
+// identity-hash value for a reference field — a scalar at cardinality
+// "one", an array of identity hashes otherwise (uniqueItems, matching the
+// shape a declared edge field already carries) — with a required text field
+// composed non-empty.
+func composeFieldSchema(f Field) map[string]any {
+	switch f.Kind {
+	case FieldKindInteger:
+		prop := map[string]any{"type": "integer"}
+		if f.Minimum != nil {
+			prop["minimum"] = *f.Minimum
+		}
+		if f.Maximum != nil {
+			prop["maximum"] = *f.Maximum
+		}
+		return prop
+	case FieldKindReference:
+		if f.Cardinality == "one" {
+			return map[string]any{
+				"type":    "string",
+				"pattern": identityHashPattern,
+			}
+		}
+		return map[string]any{
+			"type":        "array",
+			"items":       map[string]any{"type": "string", "pattern": identityHashPattern},
+			"uniqueItems": true,
+		}
+	default: // FieldKindText
+		prop := map[string]any{"type": "string"}
+		if f.Required {
+			prop["minLength"] = 1
+		}
+		if len(f.Enum) > 0 {
+			enum := make([]any, len(f.Enum))
+			for i, v := range f.Enum {
+				enum[i] = v
+			}
+			prop["enum"] = enum
+		}
+		return prop
 	}
 }

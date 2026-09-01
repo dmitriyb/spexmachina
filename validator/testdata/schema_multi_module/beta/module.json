@@ -10,7 +10,7 @@
     {
       "id": "000000000001",
       "preq_id": "000000000002",
-      "title": "Beta Feat",
+      "name": "Beta Feat",
       "type": "functional"
     }
   ]
