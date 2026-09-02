@@ -1,0 +1,20 @@
+{
+  "components": [
+    {
+      "content": "arch_widget.md",
+      "id": "000000000001",
+      "name": "Widget"
+    }
+  ],
+  "data_flows": [
+    {
+      "content": "flow_widget_data.md",
+      "id": "000000000001",
+      "name": "Widget data",
+      "uses": [
+        "000000000001"
+      ]
+    }
+  ],
+  "name": "alpha"
+}

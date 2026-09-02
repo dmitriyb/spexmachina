@@ -16,60 +16,70 @@ func TestREQ1_ValidSpecReturnsNoErrors(t *testing.T) {
 	}
 }
 
-func TestREQ1_MissingRequiredProjectField(t *testing.T) {
-	// project.json is missing required "name" field.
+// S2: project.json missing required "name" field — the fixture's only
+// mutation is the removed field, so the error set is closed at one.
+
+func TestS2_MissingRequiredProjectField(t *testing.T) {
 	errs := CheckSchema(filepath.Join("testdata", "missing_name"))
-	if len(errs) == 0 {
-		t.Fatal("expected errors for missing project name, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if e.Check != "schema" {
-			t.Fatalf("expected check=schema, got %q", e.Check)
-		}
-		if e.Severity != "error" {
-			t.Fatalf("expected severity=error, got %q", e.Severity)
-		}
-		if strings.Contains(e.Path, "project.json") && strings.Contains(e.Message, "name") {
-			found = true
-		}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
 	}
-	if !found {
-		t.Fatalf("expected an error about missing 'name' in project.json, got: %v", errs)
+	if e.Severity != "error" {
+		t.Fatalf("expected severity=error, got %q", e.Severity)
+	}
+	if e.Path != "project.json" {
+		t.Fatalf("expected path %q, got %q", "project.json", e.Path)
+	}
+	if !strings.Contains(e.Message, "name") {
+		t.Fatalf("expected message mentioning 'name', got %q", e.Message)
+	}
+	if !strings.Contains(e.Message, "required") {
+		t.Fatalf("expected message to indicate a required-field violation, got message=%q", e.Message)
 	}
 }
 
-func TestREQ1_InvalidModuleJSON(t *testing.T) {
-	// module.json has a component missing required "id" field.
+// S3: module.json component missing required "id" field — the fixture's
+// only mutation is the removed field, so the error set is closed at one,
+// and the path names the violating component (components[0]) — a
+// "required" violation's instance location is the parent object, since the
+// missing property has no location of its own to point at.
+
+func TestS3_ModuleComponentMissingRequiredID(t *testing.T) {
 	errs := CheckSchema(filepath.Join("testdata", "bad_module"))
-	if len(errs) == 0 {
-		t.Fatal("expected errors for invalid module.json, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Path, "core/module.json") {
-			found = true
-		}
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
 	}
-	if !found {
-		t.Fatalf("expected error referencing core/module.json, got: %v", errs)
+	if !strings.Contains(e.Path, "core/module.json") {
+		t.Fatalf("expected path referencing core/module.json, got %q", e.Path)
+	}
+	if !strings.Contains(e.Path, "components/0") {
+		t.Fatalf("expected path referencing components[0], got %q", e.Path)
+	}
+	if !strings.Contains(e.Message, "id") {
+		t.Fatalf("expected message identifying the missing 'id' property, got %q", e.Message)
 	}
 }
+
+// E3: module.json missing entirely — the fixture's only mutation is the
+// absent file, so the error set is closed at one.
 
 func TestREQ1_MissingModuleJSONFile(t *testing.T) {
 	// project.json references a module whose module.json does not exist.
 	errs := CheckSchema(filepath.Join("testdata", "missing_module_json"))
-	if len(errs) == 0 {
-		t.Fatal("expected errors for missing module.json file, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Path, "core/module.json") && strings.Contains(e.Message, "read file") {
-			found = true
-		}
-	}
-	if !found {
-		t.Fatalf("expected read error for core/module.json, got: %v", errs)
+	e := errs[0]
+	if !strings.Contains(e.Path, "core/module.json") || !strings.Contains(e.Message, "read file") {
+		t.Fatalf("expected read error for core/module.json, got: %v", e)
 	}
 }
 
@@ -81,16 +91,20 @@ func TestREQ1_MultipleViolationsReported(t *testing.T) {
 	}
 }
 
+// E1: spec directory does not exist — the fixture's only mutation is the
+// absent directory, so the error set is closed at one.
+
 func TestREQ1_MissingProjectJSON(t *testing.T) {
 	errs := CheckSchema(filepath.Join("testdata", "nonexistent"))
-	if len(errs) == 0 {
-		t.Fatal("expected errors for missing project.json, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	if errs[0].Check != "schema" {
-		t.Fatalf("expected check=schema, got %q", errs[0].Check)
+	e := errs[0]
+	if e.Check != "schema" {
+		t.Fatalf("expected check=schema, got %q", e.Check)
 	}
-	if !strings.Contains(errs[0].Message, "read file") {
-		t.Fatalf("expected read file error, got: %s", errs[0].Message)
+	if !strings.Contains(e.Message, "read file") {
+		t.Fatalf("expected read file error, got: %s", e.Message)
 	}
 }
 

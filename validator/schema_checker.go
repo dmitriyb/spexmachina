@@ -9,6 +9,7 @@ import (
 
 	"github.com/dmitriyb/spexmachina/schema"
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
+	"github.com/santhosh-tekuri/jsonschema/v6/kind"
 )
 
 // compiledSchemas holds precompiled JSON Schemas for project.json and module.json.
@@ -167,32 +168,17 @@ func validateFile(filePath, displayPath string, sch *jsonschema.Schema) ([]Valid
 	return flattenValidationErrors(valErr, displayPath), doc
 }
 
-// flattenValidationErrors converts a jsonschema.ValidationError tree into
-// a flat list of ValidationError values using BasicOutput.
+// flattenValidationErrors converts a jsonschema.ValidationError tree into a
+// flat list of ValidationError values. It walks DetailedOutput rather than
+// BasicOutput: BasicOutput's flattening collapses a single-cause $ref hop
+// (e.g. "components[0]" dereferencing the component schema) by discarding
+// the dereferenced cause's own message and substituting the $ref node's
+// generic "validation failed" — losing which property actually failed.
+// DetailedOutput preserves the tree so the leaf's real message survives.
 func flattenValidationErrors(valErr *jsonschema.ValidationError, displayPath string) []ValidationError {
-	output := valErr.BasicOutput()
 	var errs []ValidationError
-	for _, unit := range output.Errors {
-		if unit.Error == nil {
-			continue
-		}
-		msg := unit.Error.String()
-		if msg == "" {
-			continue
-		}
-		path := displayPath
-		if unit.InstanceLocation != "" {
-			path = displayPath + ":" + unit.InstanceLocation
-		}
-		errs = append(errs, ValidationError{
-			Check:      "schema",
-			Severity:   "error",
-			Path:       path,
-			Message:    msg,
-			SchemaPath: unit.KeywordLocation,
-		})
-	}
-	// If BasicOutput produced no leaf errors, fall back to the top-level error.
+	collectLeafErrors(valErr.DetailedOutput(), displayPath, &errs)
+	// If the tree produced no leaf errors, fall back to the top-level error.
 	if len(errs) == 0 {
 		errs = append(errs, ValidationError{
 			Check:    "schema",
@@ -202,6 +188,53 @@ func flattenValidationErrors(valErr *jsonschema.ValidationError, displayPath str
 		})
 	}
 	return errs
+}
+
+// collectLeafErrors recursively walks an OutputUnit tree, appending one
+// ValidationError per leaf (a unit with no nested Errors).
+func collectLeafErrors(unit *jsonschema.OutputUnit, displayPath string, errs *[]ValidationError) {
+	if len(unit.Errors) > 0 {
+		for i := range unit.Errors {
+			collectLeafErrors(&unit.Errors[i], displayPath, errs)
+		}
+		return
+	}
+	if unit.Error == nil {
+		return
+	}
+	msg := requiredMessage(unit.Error)
+	if msg == "" {
+		return
+	}
+	path := displayPath
+	if unit.InstanceLocation != "" {
+		path = displayPath + ":" + unit.InstanceLocation
+	}
+	*errs = append(*errs, ValidationError{
+		Check:      "schema",
+		Severity:   "error",
+		Path:       path,
+		Message:    msg,
+		SchemaPath: unit.KeywordLocation,
+	})
+}
+
+// requiredMessage formats a leaf error's message, spelling out "required"
+// for a missing-property violation instead of the underlying library's
+// "missing property 'x'" wording, which never says "required" explicitly.
+func requiredMessage(e *jsonschema.OutputError) string {
+	req, ok := e.Kind.(*kind.Required)
+	if !ok {
+		return e.String()
+	}
+	quoted := make([]string, len(req.Missing))
+	for i, m := range req.Missing {
+		quoted[i] = "'" + m + "'"
+	}
+	if len(quoted) == 1 {
+		return fmt.Sprintf("missing required property %s", quoted[0])
+	}
+	return fmt.Sprintf("missing required properties %s", strings.Join(quoted, ", "))
 }
 
 // extractModulePaths extracts module paths from parsed project.json data
