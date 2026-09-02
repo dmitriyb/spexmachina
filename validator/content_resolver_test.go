@@ -16,6 +16,52 @@ func TestREQ2_ValidContentReturnsNoErrors(t *testing.T) {
 	}
 }
 
+// S8: missing component content file — the fixture's only mutation is the
+// deleted file, so the error set is closed at one, and the path names the
+// declaring node, not the missing file.
+
+func TestS8_MissingComponentContentFile(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_missing_component"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "content" {
+		t.Fatalf("expected check=content, got %q", e.Check)
+	}
+	wantPath := "alpha/module.json:/components/Widget/content"
+	if e.Path != wantPath {
+		t.Fatalf("expected path %q, got %q", wantPath, e.Path)
+	}
+	wantMsg := "content file not found: arch_widget.md"
+	if e.Message != wantMsg {
+		t.Fatalf("expected message %q, got %q", wantMsg, e.Message)
+	}
+}
+
+// S9/E5: missing data_flow content file — ContentResolver walks data_flows
+// content paths the same way it walks components. The fixture's only
+// mutation is the deleted file, so the error set is closed at one.
+
+func TestS9_MissingDataFlowContentFile(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_missing_dataflow"))
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
+	}
+	e := errs[0]
+	if e.Check != "content" {
+		t.Fatalf("expected check=content, got %q", e.Check)
+	}
+	wantPath := "alpha/module.json:/data_flows/Widget data/content"
+	if e.Path != wantPath {
+		t.Fatalf("expected path %q, got %q", wantPath, e.Path)
+	}
+	wantMsg := "content file not found: flow_widget_data.md"
+	if e.Message != wantMsg {
+		t.Fatalf("expected message %q, got %q", wantMsg, e.Message)
+	}
+}
+
 func TestREQ2_MissingContentFile(t *testing.T) {
 	errs := CheckContentPaths(filepath.Join("testdata", "content_missing"))
 	if len(errs) == 0 {
@@ -112,42 +158,55 @@ func TestREQ11_ValidTestSectionContent(t *testing.T) {
 
 func TestREQ11_MissingTestSectionContent(t *testing.T) {
 	// S10: test_section references test_widget_behavior.md but file is missing.
+	// The fixture's only mutation is the deleted file, so the error set is
+	// closed at one; the path names the declaring node (the test_section),
+	// per the Shared Assertions convention.
 	errs := CheckContentPaths(filepath.Join("testdata", "content_missing_test_section"))
-	if len(errs) == 0 {
-		t.Fatal("expected error for missing test_section content file, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Message, "test_widget_behavior.md") {
-			if e.Check != "content" {
-				t.Fatalf("expected check=content, got %q", e.Check)
-			}
-			found = true
-			break
-		}
+	e := errs[0]
+	if e.Check != "content" {
+		t.Fatalf("expected check=content, got %q", e.Check)
 	}
-	if !found {
-		t.Fatalf("expected error mentioning test_widget_behavior.md, got: %v", errs)
+	wantPath := "alpha/module.json:/test_sections/Widget behavior/content"
+	if e.Path != wantPath {
+		t.Fatalf("expected path %q, got %q", wantPath, e.Path)
+	}
+	if !strings.Contains(e.Message, "test_widget_behavior.md") {
+		t.Fatalf("expected message mentioning test_widget_behavior.md, got %q", e.Message)
 	}
 }
 
 func TestREQ11_MultiMissingAcrossSections(t *testing.T) {
-	// S13: component, data_flow, and test_section content all missing.
+	// S13: component, data_flow, and test_section content all missing —
+	// exactly three errors, each with the path identifying which section
+	// referenced it.
 	errs := CheckContentPaths(filepath.Join("testdata", "content_multi_missing"))
 	if len(errs) != 3 {
 		t.Fatalf("expected exactly 3 errors (component + data_flow + test_section), got %d: %v", len(errs), errs)
 	}
-	wants := []string{"arch_widget.md", "flow_widget_data.md", "test_widget_behavior.md"}
-	for _, want := range wants {
+	wants := map[string]string{
+		"arch_widget.md":          "/components/",
+		"flow_widget_data.md":     "/data_flows/",
+		"test_widget_behavior.md": "/test_sections/",
+	}
+	for file, pluralSeg := range wants {
 		found := false
 		for _, e := range errs {
-			if strings.Contains(e.Message, want) {
+			if strings.Contains(e.Message, file) {
+				if e.Check != "content" {
+					t.Fatalf("expected check=content for %q, got %q", file, e.Check)
+				}
+				if !strings.Contains(e.Path, pluralSeg) {
+					t.Fatalf("expected path for %q to contain %q, got %q", file, pluralSeg, e.Path)
+				}
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Fatalf("expected error mentioning %q, got: %v", want, errs)
+			t.Fatalf("expected error mentioning %q, got: %v", file, errs)
 		}
 	}
 }

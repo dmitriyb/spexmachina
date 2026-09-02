@@ -1,0 +1,17 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "content-missing-component-test",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "name": "Project requirement",
+      "type": "functional"
+    }
+  ]
+}
