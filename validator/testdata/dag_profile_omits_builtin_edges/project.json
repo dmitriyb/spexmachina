@@ -4,14 +4,7 @@
     {
       "id": "000000000001",
       "name": "alpha",
-      "path": "alpha",
-      "requires_module": ["000000000002"]
-    },
-    {
-      "id": "000000000002",
-      "name": "beta",
-      "path": "beta",
-      "requires_module": ["000000000001"]
+      "path": "alpha"
     }
   ]
 }

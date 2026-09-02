@@ -1,28 +1,10 @@
 {
+  "name": "dag-profile-builtin-exempt-test",
   "modules": [
     {
       "id": "000000000001",
       "name": "alpha",
-      "path": "alpha",
-      "requires_module": [
-        "000000000002"
-      ]
-    },
-    {
-      "id": "000000000002",
-      "name": "beta",
-      "path": "beta",
-      "requires_module": [
-        "000000000001"
-      ]
-    }
-  ],
-  "name": "dag-profile-builtin-exempt-test",
-  "requirements": [
-    {
-      "id": "000000000001",
-      "name": "Project requirement",
-      "type": "functional"
+      "path": "alpha"
     }
   ]
 }

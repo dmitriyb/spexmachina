@@ -1,5 +1,15 @@
 {
-  "components": [],
   "name": "alpha",
-  "requirements": []
+  "components": [
+    {
+      "id": "0000000000c1",
+      "name": "Comp A",
+      "uses": ["0000000000c2"]
+    },
+    {
+      "id": "0000000000c2",
+      "name": "Comp B",
+      "uses": ["0000000000c1"]
+    }
+  ]
 }
