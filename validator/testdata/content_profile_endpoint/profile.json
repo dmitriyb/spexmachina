@@ -33,6 +33,7 @@
         {
           "name": "depends_on",
           "kind": "reference",
+          "targets": ["requirement"],
           "cardinality": "many",
           "description": "Identity hashes of other requirements this one depends on (depends_on edge)."
         }

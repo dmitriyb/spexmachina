@@ -4,7 +4,8 @@
       "fields": [
         {
           "cardinality": "many",
-          "description": "Identity hashes of other components this one depends on (uses edge).",
+          "cyclic": true,
+          "description": "Identity hashes of other components this one depends on (uses edge). Marked cyclic: true for this test fixture.",
           "kind": "reference",
           "name": "uses",
           "targets": [
@@ -21,7 +22,7 @@
       "fields": [
         {
           "cardinality": "many",
-          "description": "Component identity hashes involved in this data flow (uses edge).",
+          "description": "Component identity hashes involved in this data flow (uses edge). Not marked cyclic for this test fixture.",
           "kind": "reference",
           "name": "uses",
           "targets": [

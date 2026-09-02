@@ -33,28 +33,52 @@ const (
 	FieldKindReference FieldKind = "reference"
 )
 
-// Field declares one field a profile-declared module-scoped node type
-// carries beyond its envelope. It composes into one property on that type's
-// entry definition: enum-constrained for a text field carrying an
-// enumeration, bounded for an integer field carrying bounds, an
-// identity-hash value for a reference field — a scalar at cardinality
-// "one", an array of identity hashes otherwise — with a required text field
-// composed non-empty.
+// Field declares one field a profile-declared node type carries beyond its
+// envelope. It composes into one property on that type's entry definition:
+// enum-constrained for a text field carrying an enumeration, bounded for an
+// integer field carrying bounds, an identity-hash value for a reference
+// field — a scalar at cardinality "one", an array of identity hashes
+// otherwise — with a required text field composed non-empty.
+//
+// A reference-kind field is the edge declaration: Targets names the node
+// types it may point at, and Cyclic exempts it from the DAG cycle check
+// (an omitted/false value means cycle-checked) — the separate "edges"
+// section of the earlier profile format is unified into this field list, so
+// one declaration answers what a type may carry, what it may point at, and
+// whether it counts as a semantic change. Hashed controls whether the field
+// participates in its node's identity/content hash; nil (the JSON field
+// absent) means true, matching every declared field's default.
 type Field struct {
-	Name        string
-	Kind        FieldKind
-	Required    bool
-	Enum        []string // text field: permitted values, when non-empty
-	Minimum     *int     // integer field: inclusive lower bound, when set
-	Maximum     *int     // integer field: inclusive upper bound, when set
-	Cardinality string   // reference field: "one" or "many" (default "many")
-	Description string   // composed property's "description", when non-empty
+	Name        string    `json:"name"`
+	Kind        FieldKind `json:"kind"`
+	Required    bool      `json:"required,omitempty"`
+	Hashed      *bool     `json:"hashed,omitempty"`      // nil means true (the default); false opts the field out of hashing
+	Enum        []string  `json:"enum,omitempty"`        // text field: permitted values, when non-empty
+	Minimum     *int      `json:"minimum,omitempty"`     // integer field: inclusive lower bound, when set
+	Maximum     *int      `json:"maximum,omitempty"`     // integer field: inclusive upper bound, when set
+	Targets     []string  `json:"targets,omitempty"`     // reference field: permitted target node type names
+	Cardinality string    `json:"cardinality,omitempty"` // reference field: "one" or "many" (default "many")
+	Cyclic      bool      `json:"cyclic,omitempty"`      // reference field: true exempts this edge from the DAG cycle check
+	Description string    `json:"description,omitempty"` // composed property's "description", when non-empty
+}
+
+// HashParticipates reports whether f participates in its node's hash: every
+// declared field does unless it sets Hashed: false.
+func (f Field) HashParticipates() bool {
+	return f.Hashed == nil || *f.Hashed
 }
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
 // built-in default profile: requirement, component, data_flow, test_section
-// and api, in that order. Composing the module schema from this set
-// reproduces the shipped frame's five arrays.
+// and api, in that order, name and plural key only. Composing the module
+// schema from this set reproduces the shipped frame's five arrays: each
+// name already resolves to the frame's own $defs entry, so ComposeModuleSchema
+// reuses that entry's properties unchanged rather than synthesizing from
+// Fields. The five built-in types' actual field declarations — the single
+// record of that policy — live in the embedded defaultProfile.json, resolved
+// through DefaultProfile().ModuleNodeTypes(); this function exists only to
+// give defaultArrayKeyByTypeName the name-to-plural-key lookup it needs to
+// restore a built-in type's hand-authored array property unchanged.
 func DefaultModuleNodeTypes() []ModuleNodeType {
 	return []ModuleNodeType{
 		{Name: "requirement", PluralKey: "requirements"},
@@ -81,19 +105,24 @@ func defaultArrayKeyByTypeName() map[string]string {
 // the shipped frame plus one array property per given module-scoped node
 // type, keyed by its plural key. A type whose name matches one of the
 // frame's built-in $defs (requirement, component, data_flow, test_section,
-// api) reuses that definition, and its array property, unchanged from the
-// frame — declared edges sourced at a built-in type never reach it, since
-// the built-in $defs are frame-fixed. Any other name gets a generic
-// envelope definition — an identity-hash id, a non-empty name, and, only
-// when RequiresContent is set, a required content path — the same
-// constraints today's components array enforces, plus one array-of-
-// identity-hash property per given edge whose source names that type, and
-// a synthesized array property description. additionalProperties:false at
-// the root, inherited unchanged from the frame, is what rejects any array
-// no passed type declares; the same constraint at the entry level, applied
-// by genericNodeDef, is what rejects any property that is neither envelope,
-// declared edge, nor declared field. Composing with DefaultModuleNodeTypes
-// and DefaultProfile's edges reproduces the shipped module.schema.json.
+// api) keeps that entry's hand-authored $comment and its array property
+// unchanged from the frame, but its declared fields compose into the
+// entry's properties via mergeDeclaredFields — the same composeFieldSchema
+// path any other type's fields take — overwriting whatever property the
+// frame gave that name and adding any new one, so a declared edge or field
+// sourced at a built-in type reaches the composed schema too. Any other
+// name gets a generic envelope definition — an identity-hash id, a
+// non-empty name, and, only when RequiresContent is set, a required
+// content path — the same constraints today's components array enforces,
+// plus one array-of-identity-hash property per given edge whose source
+// names that type, and a synthesized array property description.
+// additionalProperties:false at the root, inherited unchanged from the
+// frame, is what rejects any array no passed type declares; the same
+// constraint at the entry level — already present on a frame-authored
+// entry, applied by genericNodeDef for a synthesized one — is what rejects
+// any property that is neither envelope, declared edge, nor declared
+// field. Composing with DefaultModuleNodeTypes and DefaultProfile's edges
+// reproduces the shipped module.schema.json.
 func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
@@ -111,9 +140,11 @@ func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	defaultKeys := defaultArrayKeyByTypeName()
 
 	for _, t := range types {
-		_, declared := defs[t.Name]
+		existing, declared := defs[t.Name]
 		if !declared {
 			defs[t.Name] = genericNodeDef(t, edgesSourcedAt(edges, t.Name))
+		} else if defMap, ok := existing.(map[string]any); ok {
+			mergeDeclaredFields(defMap, t.Fields)
 		}
 		if declared {
 			if origKey, ok := defaultKeys[t.Name]; ok {
@@ -166,6 +197,42 @@ func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 		delete(props, key)
 	}
 	return frame, original, nil
+}
+
+// mergeDeclaredFields composes one property per declared field into the
+// definition, from the field declaration — the same composeFieldSchema path
+// any declared type's fields take — overwriting whatever property the
+// shipped frame's $defs entry carried under that name. A built-in type's
+// field shape is therefore load-bearing: a profile that redeclares an
+// existing built-in field (e.g. adding an enum to api's "group") reaches the
+// composed schema, not just a wholly new field name the frame never gave the
+// type. This is what retires the earlier rule that a built-in type's $defs
+// entry is frame-fixed (test_schema_loading.md's P6) — there is no
+// frame-fixed definition left for a declared field, new or pre-existing, to
+// be unable to reach. required preserves the frame's original order for a
+// name it already lists — required is an unordered set semantically, and
+// reordering it would only churn the golden comparison — appending only the
+// field names newly required that the frame's entry did not already list.
+func mergeDeclaredFields(def map[string]any, fields []Field) {
+	props, ok := def["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+	required, _ := def["required"].([]any)
+	alreadyRequired := make(map[string]bool, len(required))
+	for _, r := range required {
+		if name, ok := r.(string); ok {
+			alreadyRequired[name] = true
+		}
+	}
+	for _, f := range fields {
+		props[f.Name] = composeFieldSchema(f)
+		if f.Required && !alreadyRequired[f.Name] {
+			required = append(required, f.Name)
+			alreadyRequired[f.Name] = true
+		}
+	}
+	def["required"] = required
 }
 
 // edgesSourcedAt returns the edges whose From list names typeName, in

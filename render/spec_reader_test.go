@@ -479,9 +479,9 @@ func TestFR1_S9_ProfileDeclaredTypeFlowsGenerically(t *testing.T) {
 		PluralKey:       "endpoints",
 		Scope:           "module",
 		RequiresContent: true,
-	})
-	profile.Edges = append(profile.Edges, schema.Edge{
-		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+		Fields: []schema.Field{
+			{Name: "calls", Kind: schema.FieldKindReference, Targets: []string{"component"}},
+		},
 	})
 	profileJSON, err := json.Marshal(profile)
 	if err != nil {

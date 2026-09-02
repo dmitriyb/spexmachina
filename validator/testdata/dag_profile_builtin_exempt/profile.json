@@ -1,54 +1,45 @@
 {
   "node_types": [
     {
-      "name": "requirement",
-      "plural_key": "requirements",
-      "scope": "project",
       "fields": [
         {
-          "name": "type",
-          "kind": "text",
-          "required": true,
+          "description": "Requirement type.",
           "enum": [
             "functional",
             "non_functional"
           ],
-          "description": "Requirement type."
-        },
-        {
-          "name": "priority",
-          "kind": "integer",
-          "minimum": 0,
-          "maximum": 4,
-          "description": "Requirement priority (0-4). Optional; enforced by validator when present."
-        },
-        {
-          "name": "derivation",
           "kind": "text",
+          "name": "type",
+          "required": true
+        },
+        {
+          "description": "Requirement priority (0-4). Optional; enforced by validator when present.",
+          "kind": "integer",
+          "maximum": 4,
+          "minimum": 0,
+          "name": "priority"
+        },
+        {
+          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id.",
           "enum": [
             "pending"
           ],
-          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."
+          "kind": "text",
+          "name": "derivation"
         },
         {
-          "name": "depends_on",
-          "kind": "reference",
           "cardinality": "many",
-          "description": "Identity hashes of other requirements this one depends on (depends_on edge)."
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
+          "kind": "reference",
+          "name": "depends_on",
+          "targets": [
+            "requirement"
+          ]
         }
-      ]
-    }
-  ],
-  "edges": [
-    {
-      "kind": "requires_module",
-      "from": [
-        "module"
       ],
-      "to": [
-        "module"
-      ],
-      "cyclic": true
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project"
     }
   ]
 }

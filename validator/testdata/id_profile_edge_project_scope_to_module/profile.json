@@ -1,213 +1,4 @@
 {
-  "node_types": [
-    {
-      "name": "requirement",
-      "plural_key": "requirements",
-      "scope": "project",
-      "completeness_trigger": true,
-      "fields": [
-        {
-          "name": "type",
-          "kind": "text",
-          "required": true,
-          "enum": [
-            "functional",
-            "non_functional"
-          ],
-          "description": "Requirement type."
-        },
-        {
-          "name": "priority",
-          "kind": "integer",
-          "minimum": 0,
-          "maximum": 4,
-          "description": "Requirement priority (0-4). Optional; enforced by validator when present."
-        },
-        {
-          "name": "derivation",
-          "kind": "text",
-          "enum": [
-            "pending"
-          ],
-          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."
-        },
-        {
-          "name": "depends_on",
-          "kind": "reference",
-          "cardinality": "many",
-          "description": "Identity hashes of other requirements this one depends on (depends_on edge)."
-        }
-      ]
-    },
-    {
-      "name": "requirement",
-      "plural_key": "requirements",
-      "scope": "module",
-      "completeness_trigger": true
-    },
-    {
-      "name": "component",
-      "plural_key": "components",
-      "scope": "module",
-      "requires_content": true,
-      "name_declarable": true
-    },
-    {
-      "name": "data_flow",
-      "plural_key": "data_flows",
-      "scope": "module",
-      "requires_content": true
-    },
-    {
-      "name": "test_section",
-      "plural_key": "test_sections",
-      "scope": "module",
-      "requires_content": true
-    },
-    {
-      "name": "api",
-      "plural_key": "apis",
-      "scope": "module",
-      "name_declarable": true
-    },
-    {
-      "name": "milestone",
-      "plural_key": "milestones",
-      "scope": "project"
-    }
-  ],
-  "edges": [
-    {
-      "kind": "preq_id",
-      "from": [
-        "requirement"
-      ],
-      "to": [
-        "requirement"
-      ]
-    },
-    {
-      "kind": "implements",
-      "from": [
-        "component"
-      ],
-      "to": [
-        "requirement"
-      ]
-    },
-    {
-      "kind": "uses",
-      "from": [
-        "component",
-        "data_flow"
-      ],
-      "to": [
-        "component"
-      ]
-    },
-    {
-      "kind": "provided_by",
-      "from": [
-        "api"
-      ],
-      "to": [
-        "component"
-      ]
-    },
-    {
-      "kind": "describes",
-      "from": [
-        "test_section"
-      ],
-      "to": [
-        "component"
-      ]
-    },
-    {
-      "kind": "depends_on",
-      "from": [
-        "requirement"
-      ],
-      "to": [
-        "requirement"
-      ]
-    },
-    {
-      "kind": "requires_module",
-      "from": [
-        "module"
-      ],
-      "to": [
-        "module"
-      ]
-    },
-    {
-      "kind": "groups",
-      "from": [
-        "milestone"
-      ],
-      "to": [
-        "component"
-      ]
-    }
-  ],
-  "coverage_chains": [
-    {
-      "covered_type": "requirement",
-      "covered_scope": "project",
-      "edge": "preq_id",
-      "covering_type": "requirement",
-      "covering_scope": "module"
-    },
-    {
-      "covered_type": "requirement",
-      "covered_scope": "module",
-      "edge": "implements",
-      "covering_type": "component"
-    },
-    {
-      "covered_type": "component",
-      "edge": "describes",
-      "covering_type": "test_section"
-    }
-  ],
-  "plan_relevant": [
-    "component",
-    "data_flow",
-    "test_section"
-  ],
-  "impact_levels": {
-    "api": "contract",
-    "component": "arch_impl",
-    "data_flow": "contract",
-    "requirement": "structural",
-    "test_section": "impl_only"
-  },
-  "hashed_fields": {
-    "module:api": [
-      "description",
-      "group",
-      "id",
-      "name",
-      "provided_by"
-    ],
-    "module:requirement": [
-      "depends_on",
-      "description",
-      "id",
-      "preq_id",
-      "title",
-      "type"
-    ],
-    "project:requirement": [
-      "depends_on",
-      "description",
-      "id",
-      "priority",
-      "title",
-      "type"
-    ]
-  },
   "absorbable": {
     "api": {
       "added": true,
@@ -229,5 +20,215 @@
       "added": false,
       "removed": false
     }
-  }
+  },
+  "coverage_chains": [
+    {
+      "covered_scope": "project",
+      "covered_type": "requirement",
+      "covering_scope": "module",
+      "covering_type": "requirement",
+      "edge": "preq_id"
+    },
+    {
+      "covered_scope": "module",
+      "covered_type": "requirement",
+      "covering_type": "component",
+      "edge": "implements"
+    },
+    {
+      "covered_type": "component",
+      "covering_type": "test_section",
+      "edge": "describes"
+    }
+  ],
+  "impact_levels": {
+    "api": "contract",
+    "component": "arch_impl",
+    "data_flow": "contract",
+    "requirement": "structural",
+    "test_section": "impl_only"
+  },
+  "node_types": [
+    {
+      "completeness_trigger": true,
+      "fields": [
+        {
+          "description": "Requirement type.",
+          "enum": [
+            "functional",
+            "non_functional"
+          ],
+          "kind": "text",
+          "name": "type",
+          "required": true
+        },
+        {
+          "description": "Requirement priority (0-4). Optional; enforced by validator when present.",
+          "kind": "integer",
+          "maximum": 4,
+          "minimum": 0,
+          "name": "priority"
+        },
+        {
+          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id.",
+          "enum": [
+            "pending"
+          ],
+          "kind": "text",
+          "name": "derivation"
+        },
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
+          "kind": "reference",
+          "name": "depends_on",
+          "targets": [
+            "requirement"
+          ]
+        }
+      ],
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project"
+    },
+    {
+      "completeness_trigger": true,
+      "fields": [
+        {
+          "description": "Requirement type.",
+          "enum": [
+            "functional",
+            "non_functional"
+          ],
+          "kind": "text",
+          "name": "type",
+          "required": true
+        },
+        {
+          "cardinality": "one",
+          "description": "Identity hash of the project requirement this module requirement derives from.",
+          "kind": "reference",
+          "name": "preq_id",
+          "required": true,
+          "targets": [
+            "requirement"
+          ]
+        },
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
+          "kind": "reference",
+          "name": "depends_on",
+          "targets": [
+            "requirement"
+          ]
+        }
+      ],
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Requirement identity hashes this component implements (implements edge).",
+          "kind": "reference",
+          "name": "implements",
+          "targets": [
+            "requirement"
+          ]
+        },
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of other components this one depends on (uses edge).",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component"
+          ]
+        }
+      ],
+      "name": "component",
+      "name_declarable": true,
+      "plural_key": "components",
+      "requires_content": true,
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Component identity hashes involved in this data flow (uses edge).",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component"
+          ]
+        }
+      ],
+      "name": "data_flow",
+      "plural_key": "data_flows",
+      "requires_content": true,
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Component identity hashes described by this test section (describes edge).",
+          "kind": "reference",
+          "name": "describes",
+          "targets": [
+            "component"
+          ]
+        }
+      ],
+      "name": "test_section",
+      "plural_key": "test_sections",
+      "requires_content": true,
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of components in this module that provide this entry point (module-local).",
+          "kind": "reference",
+          "name": "provided_by",
+          "targets": [
+            "component"
+          ]
+        },
+        {
+          "description": "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it.",
+          "kind": "text",
+          "name": "group"
+        }
+      ],
+      "name": "api",
+      "name_declarable": true,
+      "plural_key": "apis",
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "kind": "reference",
+          "name": "groups",
+          "targets": [
+            "component"
+          ]
+        }
+      ],
+      "name": "milestone",
+      "plural_key": "milestones",
+      "scope": "project"
+    }
+  ],
+  "plan_relevant": [
+    "component",
+    "data_flow",
+    "test_section"
+  ]
 }

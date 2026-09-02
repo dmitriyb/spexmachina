@@ -1,0 +1,88 @@
+{
+  "profile_version": 1,
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project",
+      "completeness_trigger": true,
+      "comment": "Project-level requirement. module.schema.json's copy carries preq_id in place of priority and derivation, since a module requirement derives by construction through its required preq_id. IDs are 12-char hex identity hashes computed by schema.IdentityHash.",
+      "fields": [
+        {"name": "type", "kind": "text", "required": true, "enum": ["functional", "non_functional"], "description": "Requirement type."},
+        {"name": "priority", "kind": "integer", "minimum": 0, "maximum": 4, "description": "Requirement priority (0-4). Optional; enforced by validator when present."},
+        {"name": "derivation", "kind": "text", "enum": ["pending"], "hashed": false, "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."},
+        {"name": "depends_on", "kind": "reference", "targets": ["requirement"], "cardinality": "many", "description": "Identity hashes of other requirements this one depends on (depends_on edge)."}
+      ]
+    },
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "module",
+      "completeness_trigger": true,
+      "fields": [
+        {"name": "type", "kind": "text", "required": true, "enum": ["functional", "non_functional"], "description": "Requirement type."},
+        {"name": "preq_id", "kind": "reference", "required": true, "targets": ["requirement"], "cardinality": "one", "description": "Identity hash of the project requirement this module requirement derives from."},
+        {"name": "depends_on", "kind": "reference", "targets": ["requirement"], "cardinality": "many", "description": "Identity hashes of other requirements this one depends on (depends_on edge)."}
+      ]
+    },
+    {
+      "name": "component",
+      "plural_key": "components",
+      "scope": "module",
+      "requires_content": true,
+      "name_declarable": true,
+      "fields": [
+        {"name": "implements", "kind": "reference", "targets": ["requirement"], "cardinality": "many", "description": "Requirement identity hashes this component implements (implements edge)."},
+        {"name": "uses", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Identity hashes of other components this one depends on (uses edge)."}
+      ]
+    },
+    {
+      "name": "data_flow",
+      "plural_key": "data_flows",
+      "scope": "module",
+      "requires_content": true,
+      "fields": [
+        {"name": "uses", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Component identity hashes involved in this data flow (uses edge)."}
+      ]
+    },
+    {
+      "name": "test_section",
+      "plural_key": "test_sections",
+      "scope": "module",
+      "requires_content": true,
+      "fields": [
+        {"name": "describes", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Component identity hashes described by this test section (describes edge)."}
+      ]
+    },
+    {
+      "name": "api",
+      "plural_key": "apis",
+      "scope": "module",
+      "name_declarable": true,
+      "fields": [
+        {"name": "provided_by", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Identity hashes of components in this module that provide this entry point (module-local)."},
+        {"name": "group", "kind": "text", "description": "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it."}
+      ]
+    }
+  ],
+  "coverage_chains": [
+    {"covered_type": "requirement", "covered_scope": "project", "edge": "preq_id", "covering_type": "requirement", "covering_scope": "module"},
+    {"covered_type": "requirement", "covered_scope": "module", "edge": "implements", "covering_type": "component"},
+    {"covered_type": "component", "edge": "describes", "covering_type": "test_section"}
+  ],
+  "plan_relevant": ["component", "data_flow", "test_section"],
+  "impact_levels": {
+    "test_section": "impl_only",
+    "data_flow": "contract",
+    "api": "contract",
+    "component": "arch_impl",
+    "requirement": "structural"
+  },
+  "absorbable": {
+    "requirement": {"added": true, "removed": true},
+    "api": {"added": true, "removed": true},
+    "component": {"added": false, "removed": true},
+    "data_flow": {"added": false, "removed": false},
+    "test_section": {"added": false, "removed": false}
+  }
+}

@@ -1,89 +1,112 @@
 {
+  "coverage_chains": [
+    {
+      "covered_scope": "project",
+      "covered_type": "requirement",
+      "covering_scope": "module",
+      "covering_type": "requirement",
+      "edge": "preq_id"
+    },
+    {
+      "covered_scope": "module",
+      "covered_type": "requirement",
+      "covering_type": "endpoint",
+      "edge": "implements"
+    }
+  ],
   "node_types": [
     {
-      "name": "requirement",
-      "plural_key": "requirements",
-      "scope": "project",
       "completeness_trigger": true,
       "fields": [
         {
-          "name": "type",
-          "kind": "text",
-          "required": true,
+          "description": "Requirement type.",
           "enum": [
             "functional",
             "non_functional"
           ],
-          "description": "Requirement type."
-        },
-        {
-          "name": "priority",
-          "kind": "integer",
-          "minimum": 0,
-          "maximum": 4,
-          "description": "Requirement priority (0-4). Optional; enforced by validator when present."
-        },
-        {
-          "name": "derivation",
           "kind": "text",
+          "name": "type",
+          "required": true
+        },
+        {
+          "description": "Requirement priority (0-4). Optional; enforced by validator when present.",
+          "kind": "integer",
+          "maximum": 4,
+          "minimum": 0,
+          "name": "priority"
+        },
+        {
+          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id.",
           "enum": [
             "pending"
           ],
-          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."
+          "kind": "text",
+          "name": "derivation"
         },
         {
-          "name": "depends_on",
-          "kind": "reference",
           "cardinality": "many",
-          "description": "Identity hashes of other requirements this one depends on (depends_on edge)."
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
+          "kind": "reference",
+          "name": "depends_on",
+          "targets": [
+            "requirement"
+          ]
         }
-      ]
-    },
-    {
+      ],
       "name": "requirement",
       "plural_key": "requirements",
-      "scope": "module",
-      "completeness_trigger": true
+      "scope": "project"
     },
     {
+      "completeness_trigger": true,
+      "fields": [
+        {
+          "description": "Requirement type.",
+          "enum": [
+            "functional",
+            "non_functional"
+          ],
+          "kind": "text",
+          "name": "type",
+          "required": true
+        },
+        {
+          "cardinality": "one",
+          "description": "Identity hash of the project requirement this module requirement derives from.",
+          "kind": "reference",
+          "name": "preq_id",
+          "required": true,
+          "targets": [
+            "requirement"
+          ]
+        },
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
+          "kind": "reference",
+          "name": "depends_on",
+          "targets": [
+            "requirement"
+          ]
+        }
+      ],
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "kind": "reference",
+          "name": "implements",
+          "targets": [
+            "requirement"
+          ]
+        }
+      ],
       "name": "endpoint",
       "plural_key": "endpoints",
       "scope": "module"
-    }
-  ],
-  "edges": [
-    {
-      "kind": "preq_id",
-      "from": [
-        "requirement"
-      ],
-      "to": [
-        "requirement"
-      ]
-    },
-    {
-      "kind": "implements",
-      "from": [
-        "endpoint"
-      ],
-      "to": [
-        "requirement"
-      ]
-    }
-  ],
-  "coverage_chains": [
-    {
-      "covered_type": "requirement",
-      "covered_scope": "project",
-      "edge": "preq_id",
-      "covering_type": "requirement",
-      "covering_scope": "module"
-    },
-    {
-      "covered_type": "requirement",
-      "covered_scope": "module",
-      "edge": "implements",
-      "covering_type": "endpoint"
     }
   ]
 }

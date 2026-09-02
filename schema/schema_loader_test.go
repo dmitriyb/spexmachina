@@ -844,6 +844,7 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 	names := map[string]bool{}
 	completenessTrigger := map[string]bool{}
 	nameDeclarable := map[string]bool{}
+	referenceFieldsByType := map[string]map[string]Field{}
 	for _, nt := range p.NodeTypes {
 		names[nt.Name] = true
 		if nt.CompletenessTrigger {
@@ -852,6 +853,16 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		if nt.NameDeclarable {
 			nameDeclarable[nt.Name] = true
 		}
+		fields := map[string]Field{}
+		for _, f := range nt.Fields {
+			if f.Kind == FieldKindReference {
+				fields[f.Name] = f
+				if f.Cyclic {
+					t.Fatalf("field %q on %q should not carry the cyclic exemption under the default profile", f.Name, nt.Name)
+				}
+			}
+		}
+		referenceFieldsByType[nt.Scope+":"+nt.Name] = fields
 	}
 	wantNames := []string{"requirement", "component", "data_flow", "test_section", "api"}
 	if len(names) != len(wantNames) {
@@ -869,8 +880,30 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		t.Fatalf("name-declarable role should be marked on exactly component and api, got %v", nameDeclarable)
 	}
 
+	// Every reference kind the earlier edges section carried is now a field
+	// declared on its source type.
+	wantReferenceFields := map[string][]string{
+		"module:requirement":  {"preq_id", "depends_on"},
+		"project:requirement": {"depends_on"},
+		"module:component":    {"implements", "uses"},
+		"module:data_flow":    {"uses"},
+		"module:test_section": {"describes"},
+		"module:api":          {"provided_by"},
+	}
+	for typeKey, fieldNames := range wantReferenceFields {
+		got := referenceFieldsByType[typeKey]
+		if len(got) != len(fieldNames) {
+			t.Fatalf("%s: reference fields = %v, want %v", typeKey, got, fieldNames)
+		}
+		for _, fn := range fieldNames {
+			if _, ok := got[fn]; !ok {
+				t.Fatalf("%s: missing reference field %q", typeKey, fn)
+			}
+		}
+	}
+
 	if len(p.Edges) != 7 {
-		t.Fatalf("edges = %d, want 7", len(p.Edges))
+		t.Fatalf("derived edges = %d, want 7", len(p.Edges))
 	}
 	wantEdgeKinds := map[string]bool{
 		"preq_id": true, "implements": true, "uses": true, "provided_by": true,
@@ -878,10 +911,12 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 	}
 	for _, e := range p.Edges {
 		if !wantEdgeKinds[e.Kind] {
-			t.Fatalf("unexpected edge kind %q", e.Kind)
+			t.Fatalf("unexpected derived edge kind %q", e.Kind)
 		}
-		if e.Cyclic {
-			t.Fatalf("edge %q should not carry the cyclic exemption under the default profile", e.Kind)
+		for _, from := range e.From {
+			if e.CyclicForType(from) {
+				t.Fatalf("derived edge %q from %q should not carry the cyclic exemption under the default profile", e.Kind, from)
+			}
 		}
 	}
 
@@ -929,6 +964,61 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 	if !reflect.DeepEqual(p.Absorbable, wantAbsorbable) {
 		t.Fatalf("absorbable directions = %v, want %v", p.Absorbable, wantAbsorbable)
 	}
+}
+
+// TestFR9_DeriveEdgesCyclicIsPerDeclaringType covers 91270a8a2b57's per-field
+// exemption flag: two node types declaring a reference field of the same
+// name must keep their own Cyclic value independently. Before this fix,
+// deriveEdges took Cyclic from whichever type happened to declare the field
+// first and every later declaration was silently ignored, so declaration
+// order — not the profile's own text — decided which type's fields got
+// cycle-checked.
+func TestFR9_DeriveEdgesCyclicIsPerDeclaringType(t *testing.T) {
+	build := func(aCyclic, bCyclic bool) []Edge {
+		nodeTypes := []NodeType{
+			{Name: "a", PluralKey: "as", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: aCyclic},
+			}},
+			{Name: "b", PluralKey: "bs", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: bCyclic},
+			}},
+		}
+		return deriveEdges(nodeTypes)
+	}
+
+	check := func(t *testing.T, edges []Edge, wantA, wantB bool) {
+		t.Helper()
+		var uses *Edge
+		for i, e := range edges {
+			if e.Kind == "uses" {
+				uses = &edges[i]
+			}
+		}
+		if uses == nil {
+			t.Fatal("no derived \"uses\" edge")
+		}
+		if got := uses.CyclicForType("a"); got != wantA {
+			t.Fatalf("a's cyclic exemption = %v, want %v", got, wantA)
+		}
+		if got := uses.CyclicForType("b"); got != wantB {
+			t.Fatalf("b's cyclic exemption = %v, want %v", got, wantB)
+		}
+	}
+
+	t.Run("a declared first, b marks cyclic", func(t *testing.T) {
+		check(t, build(false, true), false, true)
+	})
+	t.Run("b declared first (reverse order), a marks cyclic", func(t *testing.T) {
+		nodeTypes := []NodeType{
+			{Name: "b", PluralKey: "bs", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: false},
+			}},
+			{Name: "a", PluralKey: "as", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: true},
+			}},
+		}
+		check(t, deriveEdges(nodeTypes), true, false)
+	})
 }
 
 // TestFR9_P2_ComposedSchemasEqualShippedGolden is the acceptance criterion
@@ -987,13 +1077,7 @@ func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
 		doc := `{
 			"node_types": [
 				{"name": "endpoint", "scope": "module"}
-			],
-			"edges": [],
-			"coverage_chains": [],
-			"plan_relevant": [],
-			"impact_levels": {},
-			"hashed_fields": {},
-			"absorbable": {}
+			]
 		}`
 		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
 			t.Fatalf("write profile.json: %v", err)
@@ -1010,56 +1094,27 @@ func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
 		}
 	})
 
-	t.Run("hashed_fields key is not scope:name", func(t *testing.T) {
+	t.Run("retired edges/hashed_fields format is rejected as malformed", func(t *testing.T) {
 		dir := t.TempDir()
 		doc := `{
 			"node_types": [
 				{"name": "widget", "plural_key": "widgets", "scope": "module"}
 			],
 			"edges": [],
-			"coverage_chains": [],
-			"plan_relevant": [],
-			"impact_levels": {},
-			"hashed_fields": {"widget": ["id"]},
-			"absorbable": {}
+			"hashed_fields": {}
 		}`
 		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
 			t.Fatalf("write profile.json: %v", err)
 		}
 		_, err := ResolveProfile(dir)
 		if err == nil {
-			t.Fatal("expected an error resolving a profile with a malformed hashed_fields key, got nil")
+			t.Fatal("expected an error resolving a pre-versioning edges/hashed_fields document, got nil")
 		}
 		if !strings.Contains(err.Error(), "profile.json") {
 			t.Fatalf("error should name the profile file, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "hashed_fields") {
-			t.Fatalf("error should name the defect (hashed_fields), got: %v", err)
-		}
-	})
-
-	t.Run("hashed_fields scope:name typo is not a declared type", func(t *testing.T) {
-		dir := t.TempDir()
-		doc := `{
-			"node_types": [
-				{"name": "widget", "plural_key": "widgets", "scope": "module"}
-			],
-			"edges": [],
-			"coverage_chains": [],
-			"plan_relevant": [],
-			"impact_levels": {},
-			"hashed_fields": {"module:gadget": ["id"]},
-			"absorbable": {}
-		}`
-		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
-			t.Fatalf("write profile.json: %v", err)
-		}
-		_, err := ResolveProfile(dir)
-		if err == nil {
-			t.Fatal("expected an error resolving a profile with an undeclared hashed_fields node type, got nil")
-		}
-		if !strings.Contains(err.Error(), "gadget") {
-			t.Fatalf("error should name the undeclared type (gadget), got: %v", err)
+		if !strings.Contains(err.Error(), "edges") {
+			t.Fatalf("error should name the unrecognized retired-format key (edges), got: %v", err)
 		}
 	})
 }
@@ -1167,69 +1222,325 @@ func TestFR9_P5_ResolutionIsDeterministic(t *testing.T) {
 	})
 }
 
-// TestFR9_P6_NewEdgeKindSourcedAtBuiltinTypeRejected covers arch_profile_loader.md's
-// rule that a profile-declared edge kind the frame does not already carry is
-// refused at validation when its source is a built-in type — the built-in
-// $defs are frame-fixed and gain no new reference fields in composition, so
-// such an edge could never be carried by any document.
-func TestFR9_P6_NewEdgeKindSourcedAtBuiltinTypeRejected(t *testing.T) {
-	t.Run("new edge kind sourced at a built-in type is refused", func(t *testing.T) {
-		profile := DefaultProfile()
-		profile.NodeTypes = append(profile.NodeTypes, NodeType{
-			Name:            "endpoint",
-			PluralKey:       "endpoints",
-			Scope:           "module",
-			RequiresContent: true,
-		})
-		profile.Edges = append(profile.Edges, Edge{
-			Kind: "audits",
-			From: []string{"component"},
-			To:   []string{"endpoint"},
-		})
+// TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes covers test_schema_loading.md's
+// P6: a profile-declared reference field on a built-in type — one the
+// shipped frame never carried — reaches the composed module schema beside
+// the built-in fields. This supersedes the earlier interim rule that
+// refused a new edge kind sourced at a built-in type: built-in $defs are no
+// longer frame-fixed against a field the frame does not already give them.
+func TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes(t *testing.T) {
+	profile := DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, NodeType{
+		Name:            "endpoint",
+		PluralKey:       "endpoints",
+		Scope:           "module",
+		RequiresContent: true,
+	})
+	for i, nt := range profile.NodeTypes {
+		if nt.Scope == "module" && nt.Name == "component" {
+			profile.NodeTypes[i].Fields = append(profile.NodeTypes[i].Fields, Field{
+				Name: "audits", Kind: FieldKindReference, Targets: []string{"endpoint"},
+			})
+		}
+	}
 
-		dir := t.TempDir()
-		data, err := json.Marshal(profile)
+	dir := t.TempDir()
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		t.Fatalf("write profile.json: %v", err)
+	}
+
+	resolved, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+
+	composed, err := ComposeModuleSchema(resolved.ModuleNodeTypes(), resolved.Edges)
+	if err != nil {
+		t.Fatalf("ComposeModuleSchema: %v", err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(composed, &raw); err != nil {
+		t.Fatalf("unmarshal composed schema: %v", err)
+	}
+	def, ok := raw["$defs"].(map[string]any)["component"].(map[string]any)
+	if !ok {
+		t.Fatal("$defs/component missing from composed module schema")
+	}
+	props, ok := def["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("$defs/component has no properties")
+	}
+	audits, ok := props["audits"].(map[string]any)
+	if !ok {
+		t.Fatalf("$defs/component should carry the profile-declared 'audits' field beside the built-in fields, got properties: %v", props)
+	}
+	if audits["type"] != "array" {
+		t.Fatalf("audits should compose as an array-of-identity-hash property, got: %v", audits)
+	}
+	if _, ok := props["implements"]; !ok {
+		t.Fatal("built-in 'implements' field should still be present beside the new one")
+	}
+}
+
+// TestFR9_P7_FieldValidationNamesEachDefect covers test_schema_loading.md's
+// P7: each of the six defective field-declaration shapes fails with one
+// distinct, early error naming the declaration, with no composed schema
+// produced.
+func TestFR9_P7_FieldValidationNamesEachDefect(t *testing.T) {
+	base := func(field map[string]any) string {
+		doc := map[string]any{
+			"node_types": []any{
+				map[string]any{
+					"name": "widget", "plural_key": "widgets", "scope": "module",
+					"fields": []any{field},
+				},
+			},
+		}
+		data, err := json.Marshal(doc)
 		if err != nil {
 			t.Fatalf("marshal profile: %v", err)
 		}
-		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		return string(data)
+	}
+
+	cases := []struct {
+		name    string
+		field   map[string]any
+		wantErr string
+	}{
+		{
+			name:    "unknown kind",
+			field:   map[string]any{"name": "flavor", "kind": "enum"},
+			wantErr: "unknown kind",
+		},
+		{
+			name:    "reference field naming an undeclared target type",
+			field:   map[string]any{"name": "refers", "kind": "reference", "targets": []string{"gadget"}},
+			wantErr: "undeclared node type",
+		},
+		{
+			name:    "enumeration on a non-text field",
+			field:   map[string]any{"name": "count", "kind": "integer", "enum": []string{"a", "b"}},
+			wantErr: "enum is only valid on a text field",
+		},
+		{
+			name:    "bounds on a non-integer field",
+			field:   map[string]any{"name": "flavor", "kind": "text", "minimum": 0},
+			wantErr: "minimum/maximum are only valid on an integer field",
+		},
+		{
+			name:    "field name colliding with an envelope field",
+			field:   map[string]any{"name": "id", "kind": "text"},
+			wantErr: "collides with the envelope",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(base(tc.field)), 0o644); err != nil {
+				t.Fatalf("write profile.json: %v", err)
+			}
+			_, err := ResolveProfile(dir)
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			if !strings.Contains(err.Error(), "profile.json") {
+				t.Fatalf("error should name the profile file, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error should contain %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+
+	t.Run("duplicate field name within one type", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module", "fields": [
+					{"name": "flavor", "kind": "text"},
+					{"name": "flavor", "kind": "text"}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
 			t.Fatalf("write profile.json: %v", err)
 		}
-
-		_, err = ResolveProfile(dir)
+		_, err := ResolveProfile(dir)
 		if err == nil {
-			t.Fatal("expected an error resolving a profile with a new edge kind sourced at a built-in type, got nil")
+			t.Fatal("expected an error, got nil")
+		}
+		if !strings.Contains(err.Error(), "duplicate field name") {
+			t.Fatalf("error should name the duplicate field defect, got: %v", err)
+		}
+	})
+}
+
+// TestFR9_ContentFieldCollisionIsConditional covers arch_profile_loader.md's
+// "Fixed points": content is part of the fixed envelope only for a
+// content-bearing type ("content, where the type is content-bearing"), so a
+// declared field named "content" collides with the envelope only when the
+// declaring type sets RequiresContent — not unconditionally, the way id,
+// name and description always do.
+func TestFR9_ContentFieldCollisionIsConditional(t *testing.T) {
+	t.Run("content-bearing type rejects a declared content field", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module", "requires_content": true, "fields": [
+					{"name": "content", "kind": "text"}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error for a content-bearing type declaring a \"content\" field, got nil")
+		}
+		if !strings.Contains(err.Error(), "collides with the envelope") {
+			t.Fatalf("error should say the field collides with the envelope, got: %v", err)
+		}
+	})
+
+	t.Run("non-content-bearing type may declare a content field", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module", "fields": [
+					{"name": "content", "kind": "text"}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		if _, err := ResolveProfile(dir); err != nil {
+			t.Fatalf("a non-content-bearing type declaring a \"content\" field should resolve cleanly: %v", err)
+		}
+	})
+}
+
+// TestFR9_P8_ProfileVersionOutOfRangeFailsEarly covers test_schema_loading.md's
+// P8: an out-of-range profile_version fails with one message naming the
+// version and the supported range, before any conformance check; an absent
+// profile_version means version 1, which resolves cleanly.
+func TestFR9_P8_ProfileVersionOutOfRangeFailsEarly(t *testing.T) {
+	t.Run("unsupported version fails early", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{"profile_version": 99, "node_types": []}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving an out-of-range profile_version, got nil")
 		}
 		if !strings.Contains(err.Error(), "profile.json") {
 			t.Fatalf("error should name the profile file, got: %v", err)
 		}
-		if !strings.Contains(err.Error(), "audits") {
-			t.Fatalf("error should name the declaration (audits), got: %v", err)
+		if !strings.Contains(err.Error(), "99") {
+			t.Fatalf("error should name the declared version (99), got: %v", err)
 		}
 	})
 
-	t.Run("an edge kind the frame already carries remains declarable at a built-in type", func(t *testing.T) {
-		// "uses" is already carried by the frame at "component" (and
-		// "data_flow") in DefaultProfile — redeclaring it, even with an
-		// extra To target, must not trip the new-edge-kind rule.
-		profile := DefaultProfile()
-		for i, e := range profile.Edges {
-			if e.Kind == "uses" {
-				profile.Edges[i].To = append(append([]string{}, e.To...), "requirement")
-			}
-		}
-
+	t.Run("absent profile_version means version 1", func(t *testing.T) {
 		dir := t.TempDir()
-		data, err := json.Marshal(profile)
-		if err != nil {
-			t.Fatalf("marshal profile: %v", err)
-		}
-		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		doc := `{"node_types": []}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
 			t.Fatalf("write profile.json: %v", err)
 		}
-
-		if _, err := ResolveProfile(dir); err != nil {
-			t.Fatalf("expected the already-carried edge kind %q at a built-in type to resolve cleanly, got: %v", "uses", err)
+		p, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("expected an absent profile_version to resolve as version 1, got: %v", err)
+		}
+		if p.ProfileVersion != nil && *p.ProfileVersion != 1 {
+			t.Fatalf("resolved ProfileVersion = %d, want nil (absent) or 1", *p.ProfileVersion)
 		}
 	})
+
+	// An explicit "profile_version": 0 is not the same as an absent field:
+	// zero is outside the supported range [1,1] and must be rejected the
+	// same way 99 is, naming the declared version and the range — a *int
+	// (rather than int with the zero value doubling as "absent") is what
+	// lets Validate tell the two cases apart.
+	t.Run("explicit zero is out of range, distinct from absent", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{"profile_version": 0, "node_types": []}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving an explicit profile_version: 0, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "0") {
+			t.Fatalf("error should name the declared version (0), got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "unsupported") {
+			t.Fatalf("error should say unsupported, not silently treat 0 as absent, got: %v", err)
+		}
+	})
+}
+
+// TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument covers
+// test_schema_loading.md's P9: the embedded defaultProfile.json is decoded
+// and validated through the exact same path a file-backed profile.json
+// takes — not a privileged code path — and resolving it directly or via a
+// copied spec/profile.json yields identical resolved profiles.
+func TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument(t *testing.T) {
+	data, err := defaultProfileFS.ReadFile("defaultProfile.json")
+	if err != nil {
+		t.Fatalf("read embedded defaultProfile.json: %v", err)
+	}
+
+	embedded, err := decodeProfile(data)
+	if err != nil {
+		t.Fatalf("decode embedded defaultProfile.json: %v", err)
+	}
+	if err := embedded.Validate(); err != nil {
+		t.Fatalf("embedded defaultProfile.json should validate like any file-backed profile: %v", err)
+	}
+	embedded.finalize()
+
+	if embedded.ProfileVersion == nil || *embedded.ProfileVersion != 1 {
+		t.Fatalf("embedded defaultProfile.json should declare profile_version 1, got %v", embedded.ProfileVersion)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		t.Fatalf("write profile.json: %v", err)
+	}
+	fileBacked, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile over a copy of the embedded document: %v", err)
+	}
+
+	if !reflect.DeepEqual(embedded, fileBacked) {
+		t.Fatal("resolving the embedded document directly and via a copied spec/profile.json should yield identical profiles")
+	}
+	if !reflect.DeepEqual(embedded, DefaultProfile()) {
+		t.Fatal("DefaultProfile() should not be a privileged code path: it should equal the embedded document resolved the same way")
+	}
+
+	composedProject, err := ComposeProjectSchema(fileBacked.ProjectNodeTypes(), fileBacked.Edges)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	shippedProject, err := projectSchemaBytes()
+	if err != nil {
+		t.Fatalf("projectSchemaBytes: %v", err)
+	}
+	if !jsonEqual(t, composedProject, shippedProject) {
+		t.Fatal("composing from the file-backed copy of the embedded document should still reproduce the shipped project schema (P2 holds over both)")
+	}
 }

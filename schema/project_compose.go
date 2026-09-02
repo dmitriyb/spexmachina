@@ -68,6 +68,7 @@ func DefaultProjectNodeTypes() []ProjectNodeType {
 				{
 					Name:        "depends_on",
 					Kind:        FieldKindReference,
+					Targets:     []string{"requirement"},
 					Cardinality: "many",
 					Description: "Identity hashes of other requirements this one depends on (depends_on edge).",
 				},

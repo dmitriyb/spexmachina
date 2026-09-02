@@ -1,21 +1,19 @@
 {
   "node_types": [
     {
+      "fields": [
+        {
+          "cyclic": true,
+          "kind": "reference",
+          "name": "serves",
+          "targets": [
+            "endpoint"
+          ]
+        }
+      ],
       "name": "endpoint",
       "plural_key": "endpoints",
       "scope": "module"
-    }
-  ],
-  "edges": [
-    {
-      "kind": "serves",
-      "from": [
-        "endpoint"
-      ],
-      "to": [
-        "endpoint"
-      ],
-      "cyclic": true
     }
   ]
 }
