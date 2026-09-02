@@ -1561,3 +1561,90 @@ func TestS11_BuildTree_ProfileDeclaredContentTypeGetsALeaf(t *testing.T) {
 		t.Fatalf("module children: want 2, got %d", len(mod.Children))
 	}
 }
+
+// buildEndpointFieldFixture builds a fixture whose single module declares a
+// profile-defined "endpoint" type (module-scoped, no content leaf) with a
+// required "protocol" field and a "note" field declared hashed: false, then
+// builds the tree with the given protocol/note values.
+func buildEndpointFieldFixture(t *testing.T, protocol, note string) (root, mod *Node, modID, endpointID string) {
+	t.Helper()
+	dir := t.TempDir()
+
+	falseVal := false
+	profile := schema.DefaultProfile()
+	profile.NodeTypes = append(profile.NodeTypes, schema.NodeType{
+		Name:      "endpoint",
+		PluralKey: "endpoints",
+		Scope:     "module",
+		Fields: []schema.Field{
+			{Name: "protocol", Kind: schema.FieldKindText, Required: true},
+			{Name: "note", Kind: schema.FieldKindText, Hashed: &falseVal},
+		},
+	})
+	profileJSON, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	writeFile(t, dir, "profile.json", string(profileJSON))
+
+	modID = schema.IdentityHash("module", "API")
+	endpointID = schema.IdentityHash("api", "endpoint", "widgets")
+
+	proj := `{
+		"name": "endpoint-project",
+		"modules": [{"id": "` + modID + `", "name": "API", "path": "api"}]
+	}`
+	writeFile(t, dir, "project.json", proj)
+
+	modDir := filepath.Join(dir, "api")
+	must(t, os.MkdirAll(modDir, 0755))
+	modJSON := `{
+		"name": "api",
+		"endpoints": [
+			{"id": "` + endpointID + `", "name": "widgets", "protocol": "` + protocol + `", "note": "` + note + `"}
+		]
+	}`
+	writeFile(t, modDir, "module.json", modJSON)
+
+	root, err = BuildTree(dir)
+	if err != nil {
+		t.Fatalf("BuildTree: %v", err)
+	}
+	mod = findChild(t, root, modID)
+	return root, mod, modID, endpointID
+}
+
+// TestS12_BuildTree_HashedFalseFieldDoesNotMoveLeaf covers test_hashing.md
+// S12: a profile-declared field marked hashed: false does not participate in
+// its node's leaf hash, while an ordinary declared field does — the same
+// still-leaf guarantee S9 pins for the built-in "derivation" field, now shown
+// to apply to any profile-declared field via its own Hashed flag rather than
+// a compiled-in exclusion. The module.json envelope leaf moves on every byte
+// edit regardless, exactly as S9 pins for meta/project.
+func TestS12_BuildTree_HashedFalseFieldDoesNotMoveLeaf(t *testing.T) {
+	_, modNoteA, _, endpointID := buildEndpointFieldFixture(t, "https", "first note")
+	_, modNoteB, _, _ := buildEndpointFieldFixture(t, "https", "second note")
+	_, modProtocolChanged, modID, _ := buildEndpointFieldFixture(t, "http", "first note")
+
+	endpointNoteA := findChild(t, modNoteA, endpointID)
+	endpointNoteB := findChild(t, modNoteB, endpointID)
+	endpointProtocolChanged := findChild(t, modProtocolChanged, endpointID)
+
+	if endpointNoteA.Hash != endpointNoteB.Hash {
+		t.Fatalf("endpoint leaf hash must be invariant when hashed:false field 'note' changes: %s != %s", endpointNoteA.Hash, endpointNoteB.Hash)
+	}
+	if endpointNoteA.Hash == endpointProtocolChanged.Hash {
+		t.Fatal("endpoint leaf hash should change when 'protocol' (an ordinary declared field) changes")
+	}
+
+	metaKey := "meta/" + modID
+	metaNoteA := findChild(t, modNoteA, metaKey)
+	metaNoteB := findChild(t, modNoteB, metaKey)
+	metaProtocolChanged := findChild(t, modProtocolChanged, metaKey)
+	if metaNoteA.Hash == metaNoteB.Hash {
+		t.Fatal("module.json envelope leaf should differ when 'note' changes, even though the endpoint leaf itself does not move")
+	}
+	if metaNoteA.Hash == metaProtocolChanged.Hash {
+		t.Fatal("module.json envelope leaf should differ when 'protocol' changes")
+	}
+}
