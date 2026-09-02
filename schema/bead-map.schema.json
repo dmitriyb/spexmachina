@@ -11,6 +11,10 @@
     { "$ref": "#/$defs/refreshReceipt" }
   ],
   "$defs": {
+    "formatVersion": {
+      "type": "integer",
+      "description": "The journal-line format version, metadata outside any hashed payload. Absent means version 1, so no existing line changes meaning; a writer stamps the current version. The schema pins no upper bound — readers accept every version from 1 forward, forever, because the journal is append-only and permanent."
+    },
     "registeredEvent": {
       "type": "object",
       "description": "Opens a proposal's lifecycle before any spec change exists.",
@@ -33,7 +37,8 @@
         },
         "git_head": {
           "type": "string"
-        }
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
       }
     },
     "changeEvent": {
@@ -85,7 +90,8 @@
         "path": {
           "type": "string",
           "description": "The node's content-leaf path. Present when the node has one; absent for requirement and api events."
-        }
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
       }
     },
     "taskReceipt": {
@@ -111,7 +117,8 @@
           "type": "string",
           "minLength": 1,
           "description": "The proposal slug this epic receipt answers."
-        }
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
       },
       "oneOf": [
         { "required": ["for"], "not": { "required": ["proposal"] } },
@@ -136,7 +143,8 @@
           "type": "string",
           "minLength": 1,
           "description": "The eid of the retarget's own modified event."
-        }
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
       }
     },
     "refreshReceipt": {
@@ -160,7 +168,8 @@
             "minLength": 1
           },
           "description": "The eids of the change events this refresh absorbed. Empty when the refresh absorbed nothing, though a no-drift run appends nothing at all."
-        }
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
       }
     }
   }

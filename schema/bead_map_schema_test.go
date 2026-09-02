@@ -306,6 +306,53 @@ func TestFR7_S8b_OptionalPath(t *testing.T) {
 	})
 }
 
+// --- S8c: Optional v on every line shape ---
+
+func TestFR7_S8c_OptionalFormatVersion(t *testing.T) {
+	sch := compileBeadMapSchema(t)
+
+	withVersion := func(doc, version string) string {
+		return strings.TrimSuffix(strings.TrimSpace(doc), "}") + `,"v":` + version + `}`
+	}
+
+	fixtures := []struct {
+		name string
+		doc  string
+	}{
+		{"change event", fixtureChangeEvent},
+		{"task receipt", fixtureTaskReceipt},
+		{"task retargeted receipt", fixtureTaskRetargeted},
+		{"registered event", fixtureRegisteredEvent},
+		{"epic receipt", fixtureEpicReceipt},
+		{"refresh receipt", fixtureRefreshReceipt},
+	}
+	for _, f := range fixtures {
+		t.Run(f.name+" with v:1 passes", func(t *testing.T) {
+			if err := validateLine(t, sch, withVersion(f.doc, "1")); err != nil {
+				t.Fatalf("%s with v:1 should pass: %v", f.name, err)
+			}
+		})
+	}
+
+	t.Run("v as string fails", func(t *testing.T) {
+		if err := validateLine(t, sch, withVersion(fixtureChangeEvent, `"1"`)); err == nil {
+			t.Fatal("expected validation error for v as string")
+		}
+	})
+
+	t.Run("v above 1 passes", func(t *testing.T) {
+		if err := validateLine(t, sch, withVersion(fixtureChangeEvent, "2")); err != nil {
+			t.Fatalf("v:2 should pass — the schema pins no upper bound: %v", err)
+		}
+	})
+
+	t.Run("absent v passes", func(t *testing.T) {
+		if err := validateLine(t, sch, fixtureChangeEvent); err != nil {
+			t.Fatalf("absent v should pass: %v", err)
+		}
+	})
+}
+
 // --- S9: No integer ids anywhere ---
 
 func TestFR7_S9_NoIntegerIDs(t *testing.T) {
