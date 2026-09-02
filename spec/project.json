@@ -6,14 +6,14 @@
     {
       "id": "d5a8407d38e1",
       "type": "functional",
-      "title": "Validate spec structure",
+      "name": "Validate spec structure",
       "description": "Given a spec directory, confirm it is a valid DAG with no cycles and no broken references, that every declared content path resolves, and that coverage holds in both directions \u2014 every component described by a test_section, every requirement derived and implemented. Structured error output.",
       "priority": 1
     },
     {
       "id": "e291989b1599",
       "type": "functional",
-      "title": "Compute merkle tree",
+      "name": "Compute merkle tree",
       "description": "Hash every node, store snapshots, diff against previous snapshots, classify change impact paths.",
       "depends_on": [
         "d5a8407d38e1"
@@ -23,14 +23,14 @@
     {
       "id": "9120788210c9",
       "type": "functional",
-      "title": "Map spec nodes to beads",
+      "name": "Map spec nodes to beads",
       "description": "Each plan-relevant spec node maps to a bead with spec_id, typed dependencies, and full metadata (requirements, component, module, spec_hash, proposal). Plan-relevant is a closed set of node types \u2014 component, data_flow and test_section, plus one epic per proposal \u2014 and a mapping record points at a node in that set, never at prose that elaborates one.",
       "priority": 1
     },
     {
       "id": "0a0f49f9be9b",
       "type": "functional",
-      "title": "Compute impact",
+      "name": "Compute impact",
       "description": "Given changed spec nodes, find all affected beads and classify actions (create/obsolete/retarget).",
       "depends_on": [
         "e291989b1599",
@@ -41,7 +41,7 @@
     {
       "id": "81f8102ae1b5",
       "type": "functional",
-      "title": "Apply changes",
+      "name": "Apply changes",
       "description": "Turn a merkle diff into applied tracker state through plan, an external adapter, and ingest. Plan composes a tool-agnostic changeset — create, close and retarget operations plus the absorbed entries of marked cosmetic modifications — carrying deterministic bead-type assignment, parent hierarchy under the proposal epic, lineage deps, priority propagation, and a per-op idempotency label keyed to the journal event the op's receipt will reference. An adapter outside the binary executes the ops against a bead tracker and writes receipts. Ingest appends the run's change events and task receipts to the task journal from the changeset and receipts, then saves the snapshot when the run is complete. spex itself never invokes a bead CLI.",
       "depends_on": [
         "0a0f49f9be9b"
@@ -51,14 +51,14 @@
     {
       "id": "b42bc8a9b82a",
       "type": "functional",
-      "title": "Manage proposals",
+      "name": "Manage proposals",
       "description": "Register proposals, validate structure, link to spec changes and bead actions, show history.",
       "priority": 1
     },
     {
       "id": "6b00623735ac",
       "type": "functional",
-      "title": "Render spec",
+      "name": "Render spec",
       "description": "Generate markdown, DOT, or JSON from spec structure.",
       "depends_on": [
         "d5a8407d38e1"
@@ -68,63 +68,63 @@
     {
       "id": "54de5bdaa9a5",
       "type": "non_functional",
-      "title": "Self-hosting",
+      "name": "Self-hosting",
       "description": "Spex Machina's own spec is managed by Spex Machina (after bootstrap).",
       "priority": 2
     },
     {
       "id": "6faeb216618a",
       "type": "non_functional",
-      "title": "Deterministic",
+      "name": "Deterministic",
       "description": "Given the same spec state and snapshot, always produce the same diff, impact, and actions. No LLM calls.",
       "priority": 2
     },
     {
       "id": "91f6f338de19",
       "type": "non_functional",
-      "title": "Composable",
+      "name": "Composable",
       "description": "Every subcommand reads stdin or files, writes stdout or files, and exits with a small set of documented codes: 0 is success, and every non-zero code is documented by the surface that owns it — input error, contract refusal, diff errors present, not a spex project. A caller branches on the code, never by grepping a message. Pipeable.",
       "priority": 2
     },
     {
       "id": "afc25fb6c8e8",
       "type": "non_functional",
-      "title": "Fast",
+      "name": "Fast",
       "description": "Validating a spec with 100 modules and 1000 nodes should take less than 1 second.",
       "priority": 2
     },
     {
       "id": "8efae3d1ad18",
       "type": "non_functional",
-      "title": "Git-native",
+      "name": "Git-native",
       "description": "Snapshots are files committed to git. Proposals are files committed to git. No external state.",
       "priority": 2
     },
     {
       "id": "92dfddf840b0",
       "type": "functional",
-      "title": "Spec test strategy",
+      "name": "Spec test strategy",
       "description": "Spec format supports test_sections at module level and test_plan at project level, enabling traceability from components to verification scenarios.",
       "priority": 1
     },
     {
       "id": "c87aa373c2ed",
       "type": "functional",
-      "title": "CLI infrastructure",
+      "name": "CLI infrastructure",
       "description": "Declarative subcommand registration via cobra, auto-generated help for every subcommand, version info via ldflags, shell completions, and consistent error handling.",
       "priority": 1
     },
     {
       "id": "a65bbd37c7ec",
       "type": "functional",
-      "title": "Coupled sections",
+      "name": "Coupled sections",
       "description": "Project.json supports a sections array with typed entries. Sections with type 'coupled' require a corresponding module and a section.schema.json in the module's spec directory. Spex validates the envelope generically and delegates content validation to the module's schema.",
       "priority": 1
     },
     {
       "id": "13c15bc3c865",
       "type": "functional",
-      "title": "Data flow contract layer",
+      "name": "Data flow contract layer",
       "description": "Data flows are cross-component contracts that describe the shapes moving between components in a module's uses graph. When a data flow's content (its Data Shapes section) changes, spex creates a dedicated task bead parented under the proposal epic, and participating component beads (via the flow's uses array) gain depends edges on it. The data_flow bead is implemented first: shared types and interfaces are updated across all participants, the codebase compiles, and tests or logic that need per-component follow-up are marked with deferred-work markers naming the specific component bead that will resolve them. Each participating component bead then updates only the files it owns and removes the deferred markers pointing to itself. This prevents cross-bead cascading edits that otherwise produce unowned TODO markers across the codebase.",
       "depends_on": [
         "9120788210c9",
@@ -136,35 +136,35 @@
     {
       "id": "58ea35f52b86",
       "type": "non_functional",
-      "title": "No runtime subprocesses",
+      "name": "No runtime subprocesses",
       "description": "The spex spec pipeline invokes no external subprocesses: all interaction with external tools (bead trackers, git) happens via input/output data artifacts. User-owned adapter scripts \u2014 outside the spex binary \u2014 bridge artifacts to the bead tracker. Callers supply state (git HEAD, bead list) as file or stdin inputs. The sole sanctioned exception, outside every pipeline path, is spex upgrade driving the embedded installer synchronously.",
       "priority": 2
     },
     {
       "id": "96c6c15ecc3e",
       "type": "non_functional",
-      "title": "Declared stack",
+      "name": "Declared stack",
       "description": "The implementation stack is a declared contract, not a convention. The language is Go, at or above the version the `go` directive in go.mod declares; go.mod carries no `toolchain` directive, so that directive is a minimum floor and not a pin. The standard library is the default for every capability: a third-party module is admissible only where the standard library offers no viable equivalent, and each admitted module is named in this requirement together with the capability it supplies. Permitted today \u2014 github.com/spf13/cobra for subcommand registration, flag parsing, help and shell completions; github.com/santhosh-tekuri/jsonschema/v6 for JSON Schema validation of project.json, module.json and the task journal's lines; golang.org/x/term for terminal detection when a command chooses human-readable over machine-readable output. The direct requires of go.mod are to be exactly that set, and admitting, dropping or repurposing a dependency is a spec change made here first. Nothing automated enforces any of this: the check is a person reading go.mod's direct requires against the list above, and a `go get` that adds a direct require without amending this requirement is precisely the drift the requirement exists to make visible.",
       "priority": 2
     },
     {
       "id": "de4dd3cbb4dd",
       "type": "functional",
-      "title": "Delivery pipeline",
+      "name": "Delivery pipeline",
       "description": "spex has an automated, reproducible release pipeline that turns a version tag into signed, checksummed, provenance-attested, cross-architecture binaries, with the GoReleaser configuration and the workflow files as the source of truth for how a release is built.",
       "priority": 1
     },
     {
       "id": "5b50178bf72e",
       "type": "functional",
-      "title": "Installable and self-updating",
+      "name": "Installable and self-updating",
       "description": "Pre-built signed binaries for linux and macOS (amd64, arm64), installable via a verified install script and go install, and updatable in place with spex upgrade.",
       "priority": 1
     },
     {
       "id": "2574f0fdcef2",
       "type": "functional",
-      "title": "Project initialization and health",
+      "name": "Project initialization and health",
       "description": "A spex project has a declared state directory holding what the tool writes, created by an explicit init command — never implicitly, and never as a side effect of a read command. Absence of that state is an error rather than a fallback, distinguishing a project that was never initialised from one that is broken. The project's condition is diagnosable without repair: a doctor command reports what is present, missing or unreadable and names the command that would fix each finding, but never mints or moves a baseline.",
       "priority": 1
     }
