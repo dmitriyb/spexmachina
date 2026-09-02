@@ -464,19 +464,41 @@ func TestFR2_D4_EdgeStyles(t *testing.T) {
 	}
 	out := buf.String()
 
-	// Builder (c2c2c2c2c2c2) implements the Build requirement (a2a2a2a2a2a2)
-	if !strings.Contains(out, `"c2c2c2c2c2c2" -> "a2a2a2a2a2a2"`) {
+	// Builder (c2c2c2c2c2c2) implements the Build requirement (a2a2a2a2a2a2):
+	// solid style, i.e. no style= attribute at all (DOT's default is solid).
+	var implementsLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, `"c2c2c2c2c2c2" -> "a2a2a2a2a2a2"`) {
+			implementsLine = line
+			break
+		}
+	}
+	if implementsLine == "" {
 		t.Fatalf("should have edge Builder -> Build requirement, got:\n%s", out)
 	}
-	if !strings.Contains(out, `label="implements"`) {
-		t.Fatal("should have implements label")
+	if !strings.Contains(implementsLine, `label="implements"`) {
+		t.Fatalf("implements edge should have label=\"implements\", got: %s", implementsLine)
 	}
+	if strings.Contains(implementsLine, "style=") {
+		t.Fatalf("implements edge should use solid style (no style= attribute), got: %s", implementsLine)
+	}
+
 	// Builder uses Parser (c1c1c1c1c1c1) with dotted style
-	if !strings.Contains(out, `"c2c2c2c2c2c2" -> "c1c1c1c1c1c1"`) {
+	var usesLine string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, `"c2c2c2c2c2c2" -> "c1c1c1c1c1c1"`) {
+			usesLine = line
+			break
+		}
+	}
+	if usesLine == "" {
 		t.Fatalf("should have Builder -> Parser uses edge, got:\n%s", out)
 	}
-	if !strings.Contains(out, `"uses"`) || !strings.Contains(out, "dotted") {
-		t.Fatal("uses edge should exist with dotted style")
+	if !strings.Contains(usesLine, `label="uses"`) {
+		t.Fatalf("uses edge should have label=\"uses\", got: %s", usesLine)
+	}
+	if !strings.Contains(usesLine, "style=dotted") {
+		t.Fatalf("uses edge should have dotted style, got: %s", usesLine)
 	}
 }
 
@@ -1532,7 +1554,7 @@ func TestFR3_J9_SlimDropsContentAndDescription(t *testing.T) {
 	for _, text := range []string{
 		"Serves requests.",
 		"Request in, response out.",
-		"Accept, dispatch, reply.",
+		"Drive the server end to end.",
 		"Start the server.",
 	} {
 		if bytes.Contains(raw, []byte(text)) {
