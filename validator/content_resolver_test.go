@@ -83,48 +83,40 @@ func TestREQ2_MissingContentFile(t *testing.T) {
 	}
 }
 
+// S11: content path with path traversal — the fixture's only mutation is
+// the "../escape.md" content value, so the error set is closed at one.
+
 func TestREQ2_PathTraversalRejected(t *testing.T) {
 	errs := CheckContentPaths(filepath.Join("testdata", "content_traversal"))
-	if len(errs) == 0 {
-		t.Fatal("expected error for path traversal, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Message, "..") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected error about '..' in path, got: %v", errs)
+	if !strings.Contains(errs[0].Message, "..") {
+		t.Fatalf("expected error about '..' in path, got: %v", errs[0])
 	}
 }
+
+// S12: content path with an absolute path — the fixture's only mutation is
+// the "/etc/passwd" content value, so the error set is closed at one.
 
 func TestREQ2_AbsolutePathRejected(t *testing.T) {
 	errs := CheckContentPaths(filepath.Join("testdata", "content_absolute"))
-	if len(errs) == 0 {
-		t.Fatal("expected error for absolute path, got none")
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error, got %d: %v", len(errs), errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e.Message, "absolute") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected error about absolute path, got: %v", errs)
+	if !strings.Contains(errs[0].Message, "absolute") {
+		t.Fatalf("expected error about absolute path, got: %v", errs[0])
 	}
 }
 
-func TestREQ2_EmptyContentIsValid(t *testing.T) {
-	// The content_valid fixture has a component (Store) with no content field.
-	// It should not produce errors.
-	errs := CheckContentPaths(filepath.Join("testdata", "content_valid"))
-	for _, e := range errs {
-		if strings.Contains(e.Message, "Store") {
-			t.Fatalf("empty content should not produce errors, got: %v", e)
-		}
+// S14: a component with a literal empty-string content field is not an
+// error — the fixture's only content-bearing entry carries "content": "",
+// so the error set is closed at zero.
+
+func TestS14_EmptyContentFieldIsValid(t *testing.T) {
+	errs := CheckContentPaths(filepath.Join("testdata", "content_empty_field"))
+	if len(errs) != 0 {
+		t.Fatalf("expected no errors for a literal empty content field, got %d: %v", len(errs), errs)
 	}
 }
 
