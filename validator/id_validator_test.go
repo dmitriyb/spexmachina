@@ -547,41 +547,6 @@ func TestREQ6_DanglingProfileDeclaredEdgeFromProjectScope(t *testing.T) {
 	}
 }
 
-// TestREQ6_DanglingProfileDeclaredEdgeFromModule: a profile can declare an
-// edge from the fixed "module" concept itself (e.g. "owns"), which
-// Profile.Validate accepts as a legal from-type even though "module" is not
-// itself a profile.NodeTypes entry. findModuleNodeType only matches a
-// module-scoped NodeType, and findProjectNodeType only matches a
-// project-scoped NodeType — neither matches the bare string "module" — so
-// this from-type used to be resolved by neither checkExtraModuleEdges nor
-// checkExtraProjectEdges and the edge went unchecked, even though
-// projectTypeIDSet already resolved "module" generically on the target
-// side. checkExtraProjectEdges' projectEdgeSourceKey now resolves it against
-// project.json's fixed "modules" array.
-func TestREQ6_DanglingProfileDeclaredEdgeFromModule(t *testing.T) {
-	// TODO(bead:spexmachina-9jfk.12): arch_profile_loader.md's field-
-	// declaration format retires this capability outright — "module ...
-	// is never a declarable type nor a declarable target, and only the
-	// frame's own requires_module edge names it" — so a reference field
-	// sourced at the fixed "module" concept (the old "owns" edge) has no
-	// expression under profile-v2 at all. IDValidator's own bead must decide
-	// whether this needs a spec change or the capability is simply gone.
-	t.Skip("an edge sourced at the fixed \"module\" concept is no longer declarable under profile-v2")
-	errs := CheckIDs(filepath.Join("testdata", "id_profile_edge_from_module"))
-	found := false
-	for _, e := range errs {
-		if e.Check == "id" &&
-			e.Path == "project.json:/modules/000000000001" &&
-			strings.Contains(e.Message, "owns references non-existent requirement 000000000099") {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("expected dangling owns error for profile-declared edge from the fixed \"module\" concept, got %v", errs)
-	}
-}
-
 // TestREQ6_ProfileDeclaredEdgeFromProjectScopeToModuleScope: a profile can
 // declare an edge whose from-type is project-scoped ("milestone") but whose
 // to-type is module-scoped ("component") — Profile.Validate's validRef is
