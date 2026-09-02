@@ -1807,9 +1807,9 @@ func TestFR3_DT1_ProfileDeclaredTypeJSON(t *testing.T) {
 		PluralKey:       "endpoints",
 		Scope:           "module",
 		RequiresContent: true,
-	})
-	profile.Edges = append(profile.Edges, schema.Edge{
-		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+		Fields: []schema.Field{
+			{Name: "calls", Kind: schema.FieldKindReference, Targets: []string{"component"}},
+		},
 	})
 	profileJSON, err := json.Marshal(profile)
 	if err != nil {
@@ -1923,9 +1923,9 @@ func TestFR2_DT1_ProfileDeclaredTypeDOT(t *testing.T) {
 		PluralKey:       "endpoints",
 		Scope:           "module",
 		RequiresContent: true,
-	})
-	profile.Edges = append(profile.Edges, schema.Edge{
-		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+		Fields: []schema.Field{
+			{Name: "calls", Kind: schema.FieldKindReference, Targets: []string{"component"}},
+		},
 	})
 	profileJSON, err := json.Marshal(profile)
 	if err != nil {
@@ -2201,9 +2201,9 @@ func TestFR1_DT1_ProfileDeclaredTypeMarkdown(t *testing.T) {
 		PluralKey:       "endpoints",
 		Scope:           "module",
 		RequiresContent: true,
-	})
-	profile.Edges = append(profile.Edges, schema.Edge{
-		Kind: "calls", From: []string{"endpoint"}, To: []string{"component"},
+		Fields: []schema.Field{
+			{Name: "calls", Kind: schema.FieldKindReference, Targets: []string{"component"}},
+		},
 	})
 	profileJSON, err := json.Marshal(profile)
 	if err != nil {

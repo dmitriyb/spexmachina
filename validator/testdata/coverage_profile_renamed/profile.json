@@ -1,12 +1,34 @@
 {
-  "node_types": [
-    { "name": "endpoint", "plural_key": "endpoints", "scope": "module", "requires_content": true },
-    { "name": "test_section", "plural_key": "test_sections", "scope": "module", "requires_content": true }
-  ],
-  "edges": [
-    { "kind": "describes", "from": ["test_section"], "to": ["endpoint"] }
-  ],
   "coverage_chains": [
-    { "covered_type": "endpoint", "edge": "describes", "covering_type": "test_section" }
+    {
+      "covered_type": "endpoint",
+      "covering_type": "test_section",
+      "edge": "describes"
+    }
+  ],
+  "node_types": [
+    {
+      "name": "endpoint",
+      "plural_key": "endpoints",
+      "requires_content": true,
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Component identity hashes described by this test section (describes edge).",
+          "kind": "reference",
+          "name": "describes",
+          "targets": [
+            "endpoint"
+          ]
+        }
+      ],
+      "name": "test_section",
+      "plural_key": "test_sections",
+      "requires_content": true,
+      "scope": "module"
+    }
   ]
 }

@@ -33,22 +33,39 @@ const (
 	FieldKindReference FieldKind = "reference"
 )
 
-// Field declares one field a profile-declared module-scoped node type
-// carries beyond its envelope. It composes into one property on that type's
-// entry definition: enum-constrained for a text field carrying an
-// enumeration, bounded for an integer field carrying bounds, an
-// identity-hash value for a reference field — a scalar at cardinality
-// "one", an array of identity hashes otherwise — with a required text field
-// composed non-empty.
+// Field declares one field a profile-declared node type carries beyond its
+// envelope. It composes into one property on that type's entry definition:
+// enum-constrained for a text field carrying an enumeration, bounded for an
+// integer field carrying bounds, an identity-hash value for a reference
+// field — a scalar at cardinality "one", an array of identity hashes
+// otherwise — with a required text field composed non-empty.
+//
+// A reference-kind field is the edge declaration: Targets names the node
+// types it may point at, and Cyclic exempts it from the DAG cycle check
+// (an omitted/false value means cycle-checked) — the separate "edges"
+// section of the earlier profile format is unified into this field list, so
+// one declaration answers what a type may carry, what it may point at, and
+// whether it counts as a semantic change. Hashed controls whether the field
+// participates in its node's identity/content hash; nil (the JSON field
+// absent) means true, matching every declared field's default.
 type Field struct {
-	Name        string
-	Kind        FieldKind
-	Required    bool
-	Enum        []string // text field: permitted values, when non-empty
-	Minimum     *int     // integer field: inclusive lower bound, when set
-	Maximum     *int     // integer field: inclusive upper bound, when set
-	Cardinality string   // reference field: "one" or "many" (default "many")
-	Description string   // composed property's "description", when non-empty
+	Name        string    `json:"name"`
+	Kind        FieldKind `json:"kind"`
+	Required    bool      `json:"required,omitempty"`
+	Hashed      *bool     `json:"hashed,omitempty"`      // nil means true (the default); false opts the field out of hashing
+	Enum        []string  `json:"enum,omitempty"`        // text field: permitted values, when non-empty
+	Minimum     *int      `json:"minimum,omitempty"`     // integer field: inclusive lower bound, when set
+	Maximum     *int      `json:"maximum,omitempty"`     // integer field: inclusive upper bound, when set
+	Targets     []string  `json:"targets,omitempty"`     // reference field: permitted target node type names
+	Cardinality string    `json:"cardinality,omitempty"` // reference field: "one" or "many" (default "many")
+	Cyclic      bool      `json:"cyclic,omitempty"`      // reference field: true exempts this edge from the DAG cycle check
+	Description string    `json:"description,omitempty"` // composed property's "description", when non-empty
+}
+
+// HashParticipates reports whether f participates in its node's hash: every
+// declared field does unless it sets Hashed: false.
+func (f Field) HashParticipates() bool {
+	return f.Hashed == nil || *f.Hashed
 }
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
@@ -57,11 +74,40 @@ type Field struct {
 // reproduces the shipped frame's five arrays.
 func DefaultModuleNodeTypes() []ModuleNodeType {
 	return []ModuleNodeType{
-		{Name: "requirement", PluralKey: "requirements"},
-		{Name: "component", PluralKey: "components", RequiresContent: true},
-		{Name: "data_flow", PluralKey: "data_flows", RequiresContent: true},
-		{Name: "test_section", PluralKey: "test_sections", RequiresContent: true},
-		{Name: "api", PluralKey: "apis"},
+		{
+			Name: "requirement", PluralKey: "requirements",
+			Fields: []Field{
+				{Name: "type", Kind: FieldKindText, Required: true, Enum: []string{"functional", "non_functional"}, Description: "Requirement type."},
+				{Name: "preq_id", Kind: FieldKindReference, Required: true, Targets: []string{"requirement"}, Cardinality: "one", Description: "Identity hash of the project requirement this module requirement derives from."},
+				{Name: "depends_on", Kind: FieldKindReference, Targets: []string{"requirement"}, Cardinality: "many", Description: "Identity hashes of other requirements this one depends on (depends_on edge)."},
+			},
+		},
+		{
+			Name: "component", PluralKey: "components", RequiresContent: true,
+			Fields: []Field{
+				{Name: "implements", Kind: FieldKindReference, Targets: []string{"requirement"}, Cardinality: "many", Description: "Requirement identity hashes this component implements (implements edge)."},
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Identity hashes of other components this one depends on (uses edge)."},
+			},
+		},
+		{
+			Name: "data_flow", PluralKey: "data_flows", RequiresContent: true,
+			Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Component identity hashes involved in this data flow (uses edge)."},
+			},
+		},
+		{
+			Name: "test_section", PluralKey: "test_sections", RequiresContent: true,
+			Fields: []Field{
+				{Name: "describes", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Component identity hashes described by this test section (describes edge)."},
+			},
+		},
+		{
+			Name: "api", PluralKey: "apis",
+			Fields: []Field{
+				{Name: "provided_by", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Identity hashes of components in this module that provide this entry point (module-local)."},
+				{Name: "group", Kind: FieldKindText, Description: "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it."},
+			},
+		},
 	}
 }
 
@@ -111,9 +157,11 @@ func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	defaultKeys := defaultArrayKeyByTypeName()
 
 	for _, t := range types {
-		_, declared := defs[t.Name]
+		existing, declared := defs[t.Name]
 		if !declared {
 			defs[t.Name] = genericNodeDef(t, edgesSourcedAt(edges, t.Name))
+		} else if defMap, ok := existing.(map[string]any); ok {
+			mergeDeclaredFields(defMap, t.Fields)
 		}
 		if declared {
 			if origKey, ok := defaultKeys[t.Name]; ok {
@@ -166,6 +214,36 @@ func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 		delete(props, key)
 	}
 	return frame, original, nil
+}
+
+// mergeDeclaredFields adds one property per field the definition does not
+// already carry — a built-in type's frame-authored $defs entry keeps every
+// hand-written property untouched, since composeFieldSchema never runs for
+// a name already present; only a field the frame does not already give the
+// type, such as a profile-declared addition, reaches the definition this
+// way. This is what retires the earlier rule that a built-in type's $defs
+// entry is frame-fixed and gains no new reference fields in composition
+// (arch_profile_loader.md's P6): a profile-declared field beside the
+// built-in ones now reaches the composed schema exactly as it would for any
+// declared type, while every property the shipped frame already documents —
+// including the built-in reference fields the default profile also
+// expresses as Fields for exposure — is left byte-for-byte alone.
+func mergeDeclaredFields(def map[string]any, fields []Field) {
+	props, ok := def["properties"].(map[string]any)
+	if !ok {
+		return
+	}
+	required, _ := def["required"].([]any)
+	for _, f := range fields {
+		if _, exists := props[f.Name]; exists {
+			continue
+		}
+		props[f.Name] = composeFieldSchema(f)
+		if f.Required {
+			required = append(required, f.Name)
+		}
+	}
+	def["required"] = required
 }
 
 // edgesSourcedAt returns the edges whose From list names typeName, in

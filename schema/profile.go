@@ -2,25 +2,32 @@ package schema
 
 import (
 	"bytes"
+	"embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
+	"slices"
+	"sort"
 )
 
 // NodeType declares one node type in the resolved profile's vocabulary: its
 // name, the plural key naming its array property in project.json or
 // module.json, whether it is project- or module-scoped, whether it requires
-// a content leaf, and its two per-type role flags. "requirement" is declared
-// twice — once per scope — because the project-level and module-level
-// requirement arrays carry different envelope constraints even though they
-// share a type name and both trigger the completeness rules. Comment is
-// project-scope-only: it becomes the composed $defs entry's own "$comment"
-// (ComposeProjectSchema, via ProjectNodeType.Comment) — a module-scoped
-// built-in's $defs entry is frame-fixed and carries its $comment from the
-// shipped document instead, so no module-scoped type needs one here.
+// a content leaf, its two per-type role flags, and the fields it carries
+// beyond the fixed envelope. "requirement" is declared twice — once per
+// scope — because the project-level and module-level requirement arrays
+// carry different envelope constraints even though they share a type name
+// and both trigger the completeness rules. A reference-kind field in Fields
+// is the edge declaration: the separate "edges" section of the earlier
+// profile format is unified into this list, so one declaration per field
+// answers what the type may carry, what it may point at, and whether it
+// counts as a semantic change. Comment is project-scope-only: it becomes
+// the composed $defs entry's own "$comment" (ComposeProjectSchema, via
+// ProjectNodeType.Comment) — a module-scoped built-in's $defs entry carries
+// its $comment from the shipped document instead, so no module-scoped type
+// needs one here.
 type NodeType struct {
 	Name                string  `json:"name"`
 	PluralKey           string  `json:"plural_key"`
@@ -32,24 +39,32 @@ type NodeType struct {
 	Comment             string  `json:"comment,omitempty"`
 }
 
-// Edge declares one legal edge kind: the reference field name, the node
-// types that may carry it, and the node types it may point at. "module" is a
-// legal From/To entry even though module is not a declarable node type — it
-// is the fixed interior-node concept requires_module points at. Cyclic
-// exempts the edge kind from the DAG cycle check; an omitted (false) value
-// means the edge kind is cycle-checked.
+// Edge is a derived view of one legal edge kind: the reference-field name,
+// the node types that declare it (From), and the node types it may point at
+// (To). It is no longer part of the profile wire format — a reference-kind
+// [Field] declared on a type is the edge declaration now — but every
+// consumer written against the earlier edges section keeps working
+// unchanged, since [Profile.Edges] is populated with an equivalent view
+// once resolution succeeds. "module" is a legal From/To entry even though
+// module is not a declarable node type: requires_module is the fixed
+// interior-node concept a profile can never declare, so it is always
+// present in this derived view regardless of what the profile says.
+// Cyclic exempts the edge kind from the DAG cycle check; false means the
+// edge kind is cycle-checked.
 type Edge struct {
-	Kind   string   `json:"kind"`
-	From   []string `json:"from"`
-	To     []string `json:"to"`
-	Cyclic bool     `json:"cyclic,omitempty"`
+	Kind   string
+	From   []string
+	To     []string
+	Cyclic bool
 }
 
 // CoverageChain declares one coverage rule: every node of CoveredType must
-// be the target of at least one Edge-kind edge from some node of
-// CoveringType. The Scope fields disambiguate CoveredType/CoveringType only
-// when the type name is shared across scopes (requirement); they are empty
-// when the type has only one scope.
+// be the target of at least one Edge-named field from some node of
+// CoveringType — Edge names a reference-kind field declared on CoveringType
+// (at CoveringScope, when given), exactly as it used to name a globally
+// declared edge kind. The Scope fields disambiguate CoveredType/CoveringType
+// only when the type name is shared across scopes (requirement); they are
+// empty when the type has only one scope.
 type CoverageChain struct {
 	CoveredType   string `json:"covered_type"`
 	CoveredScope  string `json:"covered_scope,omitempty"`
@@ -66,35 +81,65 @@ type AbsorbDirections struct {
 }
 
 // Profile is the resolved declaration of a project's spec vocabulary: the
-// node types, the legal edges, and the graph rules (coverage chains, the
-// plan-relevant set, the per-type impact-level mapping, the hashed field
-// allowlists, and refresh's absorbable directions). It carries no behaviour
-// — every consumer reads its own policy off this document rather than
+// node types (with their fields, reference kinds included), and the graph
+// rules — coverage chains, the plan-relevant set, the per-type impact-level
+// mapping, and refresh's absorbable directions. It carries no behaviour —
+// every consumer reads its own policy off this document rather than
 // branching on type-name string literals.
 //
-// HashedFields is keyed by "<scope>:<name>" rather than by name alone,
-// because project-scoped and module-scoped requirement declare different
-// allowlists (a project requirement hashes priority, a module requirement
-// hashes preq_id) even though they share a name. A content-bearing type has
-// no entry: its leaf hashes from its content file, not its JSON fields.
+// Edges and HashedFields are not part of the wire format: they are derived,
+// once resolution succeeds, from the reference-kind and hash-participating
+// fields NodeTypes declares. A profile document no longer authors an
+// "edges" or "hashed_fields" section directly — declaring either as a
+// top-level key is rejected as an unknown field, the same way any other
+// pre-versioning document in the retired format is — but every package that
+// reads Profile.Edges or Profile.HashedFields keeps working against these
+// derived views unchanged.
 type Profile struct {
+	ProfileVersion int                         `json:"profile_version,omitempty"`
 	NodeTypes      []NodeType                  `json:"node_types"`
-	Edges          []Edge                      `json:"edges"`
 	CoverageChains []CoverageChain             `json:"coverage_chains"`
 	PlanRelevant   []string                    `json:"plan_relevant"`
 	ImpactLevels   map[string]string           `json:"impact_levels"`
-	HashedFields   map[string][]string         `json:"hashed_fields"`
 	Absorbable     map[string]AbsorbDirections `json:"absorbable"`
+
+	Edges        []Edge              `json:"-"`
+	HashedFields map[string][]string `json:"-"`
+}
+
+//go:embed defaultProfile.json
+var defaultProfileFS embed.FS
+
+// Supported profile format versions. Version 1 is the field-declaration
+// format this contract ships; an absent profile_version means version 1.
+// A document declaring a version outside this range — or a pre-versioning
+// document in the retired edges/hashed_fields format, which carries no
+// profile_version at all and fails ordinary validation as malformed — is
+// rejected before any other check runs.
+const (
+	minProfileVersion = 1
+	maxProfileVersion = 1
+)
+
+// envelopeFieldNames are the fixed envelope property names no declared
+// field may reuse: id, name, description always, content when the type
+// requires one. The profile is a description of a vocabulary and cannot
+// reach the envelope minimum (arch_profile_loader.md's "Fixed points"), so
+// a field colliding with one of these names is rejected outright rather
+// than silently shadowing it.
+var envelopeFieldNames = map[string]bool{
+	"id": true, "name": true, "description": true, "content": true,
 }
 
 // ResolveProfile resolves the profile for the project rooted at specDir: it
 // reads "profile.json" beside "project.json" when present, or returns the
 // built-in default profile when the file is absent — absence is the
 // supported default, never an error. A present file is decoded strictly (no
-// unknown top-level fields, so an attempt to declare a fixed point is
-// rejected) and validated before it is returned, so a malformed profile
-// fails once, early, naming the file and the defect, rather than surfacing
-// downstream as a cascade of schema-conformance errors.
+// unknown top-level fields, so an attempt to declare a fixed point, or a
+// document in the retired edges/hashed_fields format, is rejected) and
+// validated before it is returned, so a malformed profile fails once,
+// early, naming the file and the defect, rather than surfacing downstream
+// as a cascade of schema-conformance errors.
 func ResolveProfile(specDir string) (*Profile, error) {
 	path := filepath.Join(specDir, "profile.json")
 	data, err := os.ReadFile(path)
@@ -105,26 +150,176 @@ func ResolveProfile(specDir string) (*Profile, error) {
 		return nil, fmt.Errorf("schema: resolve profile: read %s: %w", path, err)
 	}
 
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
-	var p Profile
-	if err := dec.Decode(&p); err != nil {
+	p, err := decodeProfile(data)
+	if err != nil {
 		return nil, fmt.Errorf("schema: resolve profile: parse %s: %w", path, err)
 	}
 	if err := p.Validate(); err != nil {
 		return nil, fmt.Errorf("schema: resolve profile: %s: %w", path, err)
 	}
+	p.finalize()
+	return p, nil
+}
+
+// DefaultProfile returns the built-in default profile: today's ontology,
+// resolved from the embedded defaultProfile.json — a document in the
+// source tree, identical in format to what a project may commit as
+// spec/profile.json, not hand-authored Go values. It is not a privileged
+// code path: it is decoded and validated through the exact same
+// decodeProfile/Validate steps ResolveProfile runs over a file-backed
+// profile, which is what P9 in test_schema_loading.md pins. The embedded
+// document is checked at build time (it ships in this package's own tests),
+// so a decode or validation failure here is an internal invariant
+// violation, not a runtime condition callers should handle — DefaultProfile
+// keeps its long-standing no-error signature and panics instead.
+func DefaultProfile() *Profile {
+	data, err := defaultProfileFS.ReadFile("defaultProfile.json")
+	if err != nil {
+		panic(fmt.Sprintf("schema: read embedded defaultProfile.json: %v", err))
+	}
+	p, err := decodeProfile(data)
+	if err != nil {
+		panic(fmt.Sprintf("schema: decode embedded defaultProfile.json: %v", err))
+	}
+	if err := p.Validate(); err != nil {
+		panic(fmt.Sprintf("schema: embedded defaultProfile.json is invalid: %v", err))
+	}
+	p.finalize()
+	return p
+}
+
+// decodeProfile strictly decodes one profile document: no unknown top-level
+// or nested fields, so a document in the retired edges/hashed_fields format,
+// or one attempting to declare a fixed point, fails here rather than being
+// silently accepted with the unrecognized data dropped.
+func decodeProfile(data []byte) (*Profile, error) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
+	var p Profile
+	if err := dec.Decode(&p); err != nil {
+		return nil, err
+	}
 	return &p, nil
 }
 
-// Validate checks the profile document for internal consistency: every node
-// type carries a name and a plural key and a legal scope, no two node types
-// declare the same (scope, name) pair, and every edge, coverage chain, and
-// graph-rule entry names only node types (or, for edges, the fixed "module"
-// concept) the profile itself declares. All violations are collected and
-// returned together via errors.Join, so a malformed profile is reported in
-// one pass rather than one field at a time across repeated runs.
+// finalize populates the derived Edges and HashedFields views from
+// NodeTypes' declared fields. Called once resolution succeeds — never on a
+// profile that failed Validate — so every consumer that reads these two
+// views can assume they reflect a valid profile.
+func (p *Profile) finalize() {
+	p.Edges = deriveEdges(p.NodeTypes)
+	p.HashedFields = deriveHashedFields(p.NodeTypes)
+}
+
+// deriveEdges rebuilds the earlier profile format's "edges" view from every
+// reference-kind field NodeTypes declares, grouped by field name: a field
+// name shared by two types (e.g. "uses" declared on both component and
+// data_flow) folds into one Edge whose From lists both source types, the
+// way one hand-authored edge kind used to. requires_module is not sourced
+// by any declarable field — module is never a declarable node type, and
+// requires_module is the frame's own fixed edge — so it is appended
+// unconditionally, present in every resolved profile's derived view
+// regardless of what NodeTypes declares.
+func deriveEdges(nodeTypes []NodeType) []Edge {
+	order := make([]string, 0)
+	byKind := map[string]*Edge{}
+	for _, t := range nodeTypes {
+		for _, f := range t.Fields {
+			if f.Kind != FieldKindReference {
+				continue
+			}
+			e, ok := byKind[f.Name]
+			if !ok {
+				e = &Edge{Kind: f.Name, Cyclic: f.Cyclic}
+				byKind[f.Name] = e
+				order = append(order, f.Name)
+			}
+			if !slices.Contains(e.From, t.Name) {
+				e.From = append(e.From, t.Name)
+			}
+			for _, target := range f.Targets {
+				if !slices.Contains(e.To, target) {
+					e.To = append(e.To, target)
+				}
+			}
+		}
+	}
+
+	edges := make([]Edge, 0, len(order)+1)
+	for _, kind := range order {
+		edges = append(edges, *byKind[kind])
+	}
+	edges = append(edges, Edge{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}})
+	return edges
+}
+
+// deriveHashedFields rebuilds the earlier profile format's per-(scope,name)
+// hashed-field allowlists: the envelope fields that hash today (id, name,
+// description) plus every declared field that has not opted out via
+// Hashed: false. A content-bearing type gets no entry — its leaf hashes
+// from its content file, not its JSON fields, exactly as before.
+func deriveHashedFields(nodeTypes []NodeType) map[string][]string {
+	out := make(map[string][]string, len(nodeTypes))
+	for _, t := range nodeTypes {
+		if t.RequiresContent {
+			continue
+		}
+		names := []string{"id", "name", "description"}
+		for _, f := range t.Fields {
+			if !f.HashParticipates() {
+				continue
+			}
+			names = append(names, f.Name)
+		}
+		sort.Strings(names)
+		out[t.Scope+":"+t.Name] = names
+	}
+	return out
+}
+
+// findField returns the field named fieldName declared on the node type
+// named typeName — at the given scope when scope is non-empty, at either
+// scope otherwise — the lookup CoverageChain.Edge resolves against, since a
+// coverage chain now names a field on its declaring type rather than a
+// globally listed edge kind.
+func (p *Profile) findField(typeName, scope, fieldName string) (Field, bool) {
+	for _, t := range p.NodeTypes {
+		if t.Name != typeName {
+			continue
+		}
+		if scope != "" && t.Scope != scope {
+			continue
+		}
+		for _, f := range t.Fields {
+			if f.Name == fieldName {
+				return f, true
+			}
+		}
+	}
+	return Field{}, false
+}
+
+// Validate checks the profile document for internal consistency. The
+// profile_version check runs first and alone: a version outside the
+// supported range fails with one distinct message naming the version and
+// the supported range, the migrate-before-using-this-spex signal, before
+// any other check runs. Every remaining violation — a node type missing a
+// name or plural key or legal scope, a duplicate (scope, name) pair, a
+// field with an unknown kind, a reference field naming an undeclared target
+// type ("module" is never declared, so a reference field naming it always
+// fails here), an enumeration on a non-text field, bounds on a non-integer
+// field, a duplicate field name within one type, a field name colliding
+// with an envelope field, or a coverage/plan-relevant/impact-level/
+// absorbable entry naming an undeclared type or a field that does not
+// exist, is not a reference field, or does not target the covered type —
+// is collected and returned together via errors.Join, so a malformed
+// profile is reported in one pass rather than one field at a time across
+// repeated runs.
 func (p *Profile) Validate() error {
+	if p.ProfileVersion != 0 && (p.ProfileVersion < minProfileVersion || p.ProfileVersion > maxProfileVersion) {
+		return fmt.Errorf("profile_version: %d: unsupported (supported: %d-%d)", p.ProfileVersion, minProfileVersion, maxProfileVersion)
+	}
+
 	var errs []error
 	check := func(cond bool, path, msg string) {
 		if !cond {
@@ -149,35 +344,42 @@ func (p *Profile) Validate() error {
 		}
 	}
 
-	validRef := func(name string) bool {
-		return name == "module" || declared[name]
-	}
+	for i, t := range p.NodeTypes {
+		typePath := fmt.Sprintf("node_types[%d]", i)
+		seenFields := map[string]bool{}
+		for j, f := range t.Fields {
+			path := fmt.Sprintf("%s.fields[%d]", typePath, j)
 
-	frameEdgeKinds := builtinEdgeKinds()
-	frameTypeNames := builtinTypeNames()
-
-	edgeKinds := map[string]bool{}
-	for i, e := range p.Edges {
-		path := fmt.Sprintf("edges[%d]", i)
-		check(e.Kind != "", path, "kind: required")
-		check(len(e.From) > 0, path, "from: at least one node type required")
-		check(len(e.To) > 0, path, "to: at least one node type required")
-		for _, f := range e.From {
-			check(validRef(f), path, fmt.Sprintf("from: undeclared node type %q", f))
-		}
-		for _, tt := range e.To {
-			check(validRef(tt), path, fmt.Sprintf("to: undeclared node type %q", tt))
-		}
-		if e.Kind != "" && !frameEdgeKinds[e.Kind] {
-			for _, f := range e.From {
-				if frameTypeNames[f] {
-					errs = append(errs, fmt.Errorf("%s: edge kind %q: sourced at type %q, whose module-scoped $defs entry is frame-fixed and gains no new reference fields in composition", path, e.Kind, f))
-					break
-				}
+			if envelopeFieldNames[f.Name] {
+				errs = append(errs, fmt.Errorf("%s: field %q: collides with the envelope", path, f.Name))
 			}
-		}
-		if e.Kind != "" {
-			edgeKinds[e.Kind] = true
+			if seenFields[f.Name] {
+				errs = append(errs, fmt.Errorf("%s: field %q: duplicate field name on node type %q", path, f.Name, t.Name))
+			}
+			seenFields[f.Name] = true
+
+			switch f.Kind {
+			case FieldKindText, FieldKindInteger, FieldKindReference:
+			default:
+				errs = append(errs, fmt.Errorf("%s: field %q: unknown kind %q", path, f.Name, f.Kind))
+				continue
+			}
+
+			if len(f.Enum) > 0 && f.Kind != FieldKindText {
+				errs = append(errs, fmt.Errorf("%s: field %q: enum is only valid on a text field", path, f.Name))
+			}
+			if (f.Minimum != nil || f.Maximum != nil) && f.Kind != FieldKindInteger {
+				errs = append(errs, fmt.Errorf("%s: field %q: minimum/maximum are only valid on an integer field", path, f.Name))
+			}
+
+			if f.Kind == FieldKindReference {
+				check(len(f.Targets) > 0, path, fmt.Sprintf("field %q: targets: at least one node type required", f.Name))
+				for _, target := range f.Targets {
+					check(declared[target], path, fmt.Sprintf("field %q: targets: undeclared node type %q", f.Name, target))
+				}
+			} else if len(f.Targets) > 0 {
+				errs = append(errs, fmt.Errorf("%s: field %q: targets is only valid on a reference field", path, f.Name))
+			}
 		}
 	}
 
@@ -185,7 +387,15 @@ func (p *Profile) Validate() error {
 		path := fmt.Sprintf("coverage_chains[%d]", i)
 		check(declared[c.CoveredType], path, fmt.Sprintf("covered_type: undeclared node type %q", c.CoveredType))
 		check(declared[c.CoveringType], path, fmt.Sprintf("covering_type: undeclared node type %q", c.CoveringType))
-		check(edgeKinds[c.Edge], path, fmt.Sprintf("edge: undeclared edge kind %q", c.Edge))
+		if declared[c.CoveringType] {
+			f, ok := p.findField(c.CoveringType, c.CoveringScope, c.Edge)
+			if !ok {
+				errs = append(errs, fmt.Errorf("%s: edge: covering type %q declares no field named %q", path, c.CoveringType, c.Edge))
+			} else {
+				check(f.Kind == FieldKindReference, path, fmt.Sprintf("edge: field %q on %q is not a reference field", c.Edge, c.CoveringType))
+				check(slices.Contains(f.Targets, c.CoveredType), path, fmt.Sprintf("edge: field %q on %q does not target %q", c.Edge, c.CoveringType, c.CoveredType))
+			}
+		}
 	}
 
 	for _, name := range p.PlanRelevant {
@@ -197,51 +407,8 @@ func (p *Profile) Validate() error {
 	for name := range p.Absorbable {
 		check(declared[name], "absorbable", fmt.Sprintf("undeclared node type %q", name))
 	}
-	for key := range p.HashedFields {
-		scope, name, ok := strings.Cut(key, ":")
-		if !ok {
-			errs = append(errs, fmt.Errorf("hashed_fields: key %q: must be \"<scope>:<name>\"", key))
-			continue
-		}
-		check(scope == "project" || scope == "module", "hashed_fields", fmt.Sprintf("key %q: scope must be \"project\" or \"module\"", key))
-		check(seenScoped[scope+":"+name], "hashed_fields", fmt.Sprintf("key %q: undeclared node type %q for scope %q", key, name, scope))
-	}
 
 	return errors.Join(errs...)
-}
-
-// builtinEdgeKinds returns the edge kinds the shipped frame already carries
-// as reference-field properties on its built-in node-type definitions — the
-// set Validate checks a profile-declared edge's Kind against when the
-// edge's source names a built-in type.
-func builtinEdgeKinds() map[string]bool {
-	kinds := make(map[string]bool)
-	for _, e := range DefaultProfile().Edges {
-		kinds[e.Kind] = true
-	}
-	return kinds
-}
-
-// builtinTypeNames returns the node type names DefaultModuleNodeTypes
-// declares — requirement, component, data_flow, test_section, api.
-// ComposeModuleSchema restores each one's $defs entry and array property
-// unchanged from the frame (module_compose.go's genericNodeDef never runs
-// for a name the frame already defines), so a profile-declared edge kind
-// the frame does not already carry could never reach one of these types'
-// reference fields when composing module.json; Validate refuses such a
-// declaration outright rather than silently accepting an edge that
-// composition would then drop. The project-scoped $defs entry sharing one
-// of these names (requirement, today) is no longer frame-fixed —
-// ComposeProjectSchema composes declared edges onto it freely — but the
-// edge model names a source type without a scope, so an edge sourced at
-// "requirement" reaches both scopes' composition at once and this check
-// still has to block it for module.json's sake.
-func builtinTypeNames() map[string]bool {
-	names := make(map[string]bool)
-	for _, t := range DefaultModuleNodeTypes() {
-		names[t.Name] = true
-	}
-	return names
 }
 
 // ProjectNodeTypes returns the profile's project-scoped node types,
@@ -279,96 +446,4 @@ func (p *Profile) ModuleNodeTypes() []ModuleNodeType {
 		})
 	}
 	return out
-}
-
-// DefaultProfile returns the built-in default profile: the golden record of
-// the policy previously spread across seven modules. It declares today's
-// ontology exactly — the five node types (requirement declared once per
-// scope), today's seven edge kinds with the cyclic flag omitted on every
-// one, the three coverage chains, the plan-relevant set, the per-type
-// impact-level mapping, the hashed field allowlists, and refresh's
-// absorbable directions. It is built from DefaultProjectNodeTypes and
-// DefaultModuleNodeTypes — the same node-type declarations
-// ComposeProjectSchema and ComposeModuleSchema already use to reproduce the
-// shipped schemas — so a profile-driven composition of the default profile
-// is guaranteed to match them.
-func DefaultProfile() *Profile {
-	p := &Profile{}
-
-	for _, t := range DefaultProjectNodeTypes() {
-		p.NodeTypes = append(p.NodeTypes, NodeType{
-			Name:                t.Name,
-			PluralKey:           t.PluralKey,
-			Scope:               "project",
-			RequiresContent:     t.RequiresContent,
-			CompletenessTrigger: t.Name == "requirement",
-			Fields:              t.Fields,
-			Comment:             t.Comment,
-		})
-	}
-	for _, t := range DefaultModuleNodeTypes() {
-		p.NodeTypes = append(p.NodeTypes, NodeType{
-			Name:                t.Name,
-			PluralKey:           t.PluralKey,
-			Scope:               "module",
-			RequiresContent:     t.RequiresContent,
-			CompletenessTrigger: t.Name == "requirement",
-			NameDeclarable:      t.Name == "component" || t.Name == "api",
-			Fields:              t.Fields,
-		})
-	}
-
-	p.Edges = []Edge{
-		{Kind: "preq_id", From: []string{"requirement"}, To: []string{"requirement"}},
-		{Kind: "implements", From: []string{"component"}, To: []string{"requirement"}},
-		{Kind: "uses", From: []string{"component", "data_flow"}, To: []string{"component"}},
-		{Kind: "provided_by", From: []string{"api"}, To: []string{"component"}},
-		{Kind: "describes", From: []string{"test_section"}, To: []string{"component"}},
-		{Kind: "depends_on", From: []string{"requirement"}, To: []string{"requirement"}},
-		{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}},
-	}
-
-	p.CoverageChains = []CoverageChain{
-		{
-			CoveredType: "requirement", CoveredScope: "project",
-			Edge:         "preq_id",
-			CoveringType: "requirement", CoveringScope: "module",
-		},
-		{
-			CoveredType: "requirement", CoveredScope: "module",
-			Edge:         "implements",
-			CoveringType: "component",
-		},
-		{
-			CoveredType:  "component",
-			Edge:         "describes",
-			CoveringType: "test_section",
-		},
-	}
-
-	p.PlanRelevant = []string{"component", "data_flow", "test_section"}
-
-	p.ImpactLevels = map[string]string{
-		"test_section": "impl_only",
-		"data_flow":    "contract",
-		"api":          "contract",
-		"component":    "arch_impl",
-		"requirement":  "structural",
-	}
-
-	p.HashedFields = map[string][]string{
-		"project:requirement": {"depends_on", "description", "id", "name", "priority", "type"},
-		"module:requirement":  {"depends_on", "description", "id", "name", "preq_id", "type"},
-		"module:api":          {"description", "group", "id", "name", "provided_by"},
-	}
-
-	p.Absorbable = map[string]AbsorbDirections{
-		"requirement":  {Added: true, Removed: true},
-		"api":          {Added: true, Removed: true},
-		"component":    {Added: false, Removed: true},
-		"data_flow":    {Added: false, Removed: false},
-		"test_section": {Added: false, Removed: false},
-	}
-
-	return p
 }

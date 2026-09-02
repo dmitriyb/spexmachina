@@ -1,27 +1,38 @@
 {
   "node_types": [
     {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Identity hashes of other components this one depends on (uses edge).",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component",
+            "data_flow"
+          ]
+        }
+      ],
       "name": "component",
       "plural_key": "components",
       "scope": "module"
     },
     {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Component identity hashes involved in this data flow (uses edge).",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component",
+            "data_flow"
+          ]
+        }
+      ],
       "name": "data_flow",
       "plural_key": "data_flows",
       "scope": "module"
-    }
-  ],
-  "edges": [
-    {
-      "kind": "uses",
-      "from": [
-        "component",
-        "data_flow"
-      ],
-      "to": [
-        "component",
-        "data_flow"
-      ]
     }
   ]
 }
