@@ -955,7 +955,7 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	proj := `{
 		"name": "req-change-test",
 		"requirements": [
-			{"id": "` + reqID + `", "type": "functional", "title": "Original title"}
+			{"id": "` + reqID + `", "type": "functional", "name": "Original title"}
 		],
 		"modules": [{"id": "` + modID + `", "name": "M", "path": "m"}]
 	}`
@@ -970,11 +970,11 @@ func TestREQ7_BuildTree_RequirementHashChangesOnFieldChange(t *testing.T) {
 	}
 	hash1 := findChild(t, root1, reqID).Hash
 
-	// Change the requirement title (the id stays stable, as in real specs)
+	// Change the requirement name (the id stays stable, as in real specs)
 	proj2 := `{
 		"name": "req-change-test",
 		"requirements": [
-			{"id": "` + reqID + `", "type": "functional", "title": "Updated title"}
+			{"id": "` + reqID + `", "type": "functional", "name": "Updated title"}
 		],
 		"modules": [{"id": "` + modID + `", "name": "M", "path": "m"}]
 	}`
@@ -1063,7 +1063,7 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 	proj := `{
 		"name": "omitempty-test",
 		"requirements": [
-			{"id": "` + reqID + `", "type": "functional", "title": "Minimal"}
+			{"id": "` + reqID + `", "type": "functional", "name": "Minimal"}
 		],
 		"modules": [{"id": "` + schema.IdentityHash("module", "M") + `", "name": "M", "path": "m"}]
 	}`
@@ -1079,11 +1079,11 @@ func TestREQ7_BuildTree_RequirementOmitsZeroFields(t *testing.T) {
 
 	req := findChild(t, root, reqID)
 
-	// Minimal requirement: only id, title, type are set.
+	// Minimal requirement: only id, name, type are set.
 	expected := hashRequirementJSON(t, map[string]interface{}{
-		"id":    reqID,
-		"title": "Minimal",
-		"type":  "functional",
+		"id":   reqID,
+		"name": "Minimal",
+		"type": "functional",
 	})
 	if req.Hash != expected {
 		t.Fatalf("minimal requirement hash mismatch: want %s, got %s", expected, req.Hash)

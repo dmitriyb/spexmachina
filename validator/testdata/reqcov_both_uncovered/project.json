@@ -11,13 +11,13 @@
     {
       "id": "000000000001",
       "priority": 1,
-      "title": "Feature A",
+      "name": "Feature A",
       "type": "functional"
     },
     {
       "id": "000000000002",
       "priority": 2,
-      "title": "Feature B",
+      "name": "Feature B",
       "type": "functional"
     }
   ]

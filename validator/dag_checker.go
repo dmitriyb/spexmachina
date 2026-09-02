@@ -291,12 +291,12 @@ func (c *rawDocCache) entries(pluralKey string) ([]rawEntry, error) {
 // to spell a found cycle out by name. An edge whose target id is not itself
 // an entry in the same slice is dropped: it cannot participate in a cycle
 // confined to this graph. A node's declared-identity field is "name" for
-// every built-in type but one — a project requirement's is "title" (see
-// moduleTypedEntries in id_validator.go, and project.schema.json's required
-// ["id", "type", "title"] with no "name" property at all; a module-scoped
-// requirement carries "name" like every other type) — so the label falls
-// back to "title" before falling back to the raw id, which project
-// requirements still need.
+// every built-in type now, project requirement included —
+// project.schema.json's required ["id", "type", "name"] carries no "title"
+// property at all since the title-to-name rename — so the "title" fallback
+// below no longer has a built-in type to serve; it stays only as tolerant
+// handling of a node entry that carries "title" anyway, ahead of the final
+// fallback to the raw id.
 func genericCycleAdjacency(entries []rawEntry, edgeKind string) (map[string][]string, map[string]string) {
 	ids := make(map[string]bool, len(entries))
 	labels := make(map[string]string, len(entries))

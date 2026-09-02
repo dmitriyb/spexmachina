@@ -26,9 +26,9 @@ func setupMultiModuleSpec(t *testing.T) string {
 		"name": "test-project",
 		"description": "A test spec",
 		"requirements": [
-			{"id": "112233445566", "type": "functional", "title": "Parse input", "description": "Accept structured input and parse it."},
-			{"id": "665544332211", "type": "functional", "title": "Build output", "description": "Build output from parsed input."},
-			{"id": "778899aabbcc", "type": "non_functional", "title": "Performance", "description": "Complete within 2 seconds."}
+			{"id": "112233445566", "type": "functional", "name": "Parse input", "description": "Accept structured input and parse it."},
+			{"id": "665544332211", "type": "functional", "name": "Build output", "description": "Build output from parsed input."},
+			{"id": "778899aabbcc", "type": "non_functional", "name": "Performance", "description": "Complete within 2 seconds."}
 		],
 		"modules": [
 			{"id": "111111111111", "name": "alpha", "path": "alpha", "description": "Alpha module"},

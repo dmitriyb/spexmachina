@@ -85,9 +85,10 @@ func nodesForScope(raw map[string]json.RawMessage, profile *schema.Profile, scop
 // not declare is simply absent from entry — and its edges from the
 // resolved profile's edge declarations carried "from" this node type. Name
 // falls back to "title" when absent: every built-in type's declared-name
-// field is "name" but one — a project requirement's is "title"
-// (project.schema.json declares no "name" property for it at all; a
-// module-scoped requirement carries "name" like every other type).
+// field is "name" now, project requirement included — project.schema.json
+// requires "name" and rejects "title" outright since the title-to-name
+// rename, so no built-in type still reaches this fallback; it stays only as
+// tolerant handling of a node entry that carries "title" anyway.
 func nodeFromEntry(entry map[string]any, nt schema.NodeType, edges []schema.Edge, moduleName string) Node {
 	n := Node{
 		ID:          str(entry, "id"),

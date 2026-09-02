@@ -35,6 +35,10 @@
       "type": "array",
       "description": "Project-level sections with typed envelopes and freeform content.",
       "items": { "$ref": "#/$defs/section" }
+    },
+    "spec_version": {
+      "type": "integer",
+      "description": "The spec format version this project speaks. Optional; absent means version 1. Lives in project.json only — module files carry no version field."
     }
   },
   "$defs": {
@@ -44,25 +48,29 @@
       "description": "12-character hex identity hash (see schema.IdentityHash)."
     },
     "requirement": {
-      "$comment": "NOTE: This definition mirrors the one in module.schema.json. Project requirements carry priority; module requirements carry preq_id.",
+      "$comment": "Project-level requirement. module.schema.json's copy carries preq_id in place of priority and derivation, since a module requirement derives by construction through its required preq_id. IDs are 12-char hex identity hashes computed by schema.IdentityHash.",
       "type": "object",
-      "required": ["id", "type", "title"],
+      "required": ["id", "type", "name"],
       "additionalProperties": false,
       "properties": {
-        "id": { "$ref": "#/$defs/identityHash" },
+        "id": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{12}$",
+          "description": "Identity hash ID (12-char hex), unique within the requirements array."
+        },
         "type": {
           "type": "string",
           "enum": ["functional", "non_functional"],
           "description": "Requirement type."
         },
-        "title": {
+        "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Short requirement title."
+          "description": "requirement name."
         },
         "description": {
           "type": "string",
-          "description": "Detailed requirement description."
+          "description": "requirement description."
         },
         "priority": {
           "type": "integer",
@@ -73,7 +81,10 @@
         "depends_on": {
           "type": "array",
           "description": "Identity hashes of other requirements this one depends on (depends_on edge).",
-          "items": { "$ref": "#/$defs/identityHash" },
+          "items": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{12}$"
+          },
           "uniqueItems": true
         },
         "derivation": {

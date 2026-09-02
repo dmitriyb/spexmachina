@@ -107,12 +107,12 @@ func TestFR1_S9_RequirementMissingRequiredFields(t *testing.T) {
 	}{
 		{
 			"missing type",
-			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"id": "000000000001", "title": "No type field"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"id": "000000000001", "name": "No type field"}]}`,
 			"type",
 		},
 		{
 			"missing id",
-			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "title": "No id"}]}`,
+			`{"name": "p", "modules": [{"id": "000000000001", "name": "m", "path": "m/"}], "requirements": [{"type": "functional", "name": "No id"}]}`,
 			"id",
 		},
 	}
@@ -156,7 +156,7 @@ func TestFR1_S11_InvalidRequirementTypeEnum(t *testing.T) {
 	err := validateProject(t, sch, `{
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
-		"requirements": [{"id": "000000000001", "type": "performance", "title": "R"}]
+		"requirements": [{"id": "000000000001", "type": "performance", "name": "R"}]
 	}`)
 	if err == nil {
 		t.Fatal("expected validation error for invalid requirement type enum, got nil")
@@ -198,7 +198,7 @@ func TestNFR4_S13_InvalidIDPatternProject(t *testing.T) {
 	}{
 		{
 			"short id in requirement",
-			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "requirements": [{"id": "abc", "type": "functional", "title": "R"}]}`,
+			`{"name": "p", "modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}], "requirements": [{"id": "abc", "type": "functional", "name": "R"}]}`,
 		},
 		{
 			"non-hex id in module",
@@ -259,8 +259,8 @@ func TestFR1_S15_DependsOnDuplicatesFails(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R1"},
-			{"id": "000000000002", "type": "functional", "title": "R2", "depends_on": ["000000000001", "000000000001"]}
+			{"id": "000000000001", "type": "functional", "name": "R1"},
+			{"id": "000000000002", "type": "functional", "name": "R2", "depends_on": ["000000000001", "000000000001"]}
 		]
 	}`)
 	if err == nil {
@@ -452,7 +452,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": 1}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": 1}
 			]
 		}`)
 		if err != nil {
@@ -465,7 +465,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": 5}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": 5}
 			]
 		}`)
 		if err == nil {
@@ -478,7 +478,7 @@ func TestFR1_S19_PriorityFieldOnProjectRequirements(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "000000000001", "type": "functional", "title": "R", "priority": -1}
+				{"id": "000000000001", "type": "functional", "name": "R", "priority": -1}
 			]
 		}`)
 		if err == nil {
@@ -495,7 +495,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "pending"}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": "pending"}
 			]
 		}`)
 		if err != nil {
@@ -508,7 +508,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": "done"}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": "done"}
 			]
 		}`)
 		if err == nil {
@@ -521,7 +521,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": ""}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": ""}
 			]
 		}`)
 		if err == nil {
@@ -534,7 +534,7 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1, "derivation": true}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1, "derivation": true}
 			]
 		}`)
 		if err == nil {
@@ -547,11 +547,42 @@ func TestFR1_S25_DerivationFieldPendingOnly(t *testing.T) {
 			"name": "p",
 			"modules": [{"id": "aabbccddeeff", "name": "m", "path": "m/"}],
 			"requirements": [
-				{"id": "aabbccddee00", "type": "functional", "title": "R", "priority": 1}
+				{"id": "aabbccddee00", "type": "functional", "name": "R", "priority": 1}
 			]
 		}`)
 		if err != nil {
 			t.Fatalf("requirement without derivation should pass: %v", err)
+		}
+	})
+}
+
+// TestFR1_S28_SpecVersionAcceptedInProject pins the project-side half of
+// S28: spec_version is an optional integer accepted on project.json only —
+// metadata outside the hashed payload, absent meaning version 1. The
+// module-side half (spec_version rejected on a module document) is pinned
+// by TestFR2_S28_SpecVersionRejectedOnModuleDocument.
+func TestFR1_S28_SpecVersionAcceptedInProject(t *testing.T) {
+	sch := compileProjectSchema(t)
+
+	t.Run("accepted", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"spec_version": 1
+		}`)
+		if err != nil {
+			t.Fatalf("spec_version should be accepted: %v", err)
+		}
+	})
+
+	t.Run("wrong type fails", func(t *testing.T) {
+		err := validateProject(t, sch, `{
+			"name": "p",
+			"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+			"spec_version": "1"
+		}`)
+		if err == nil {
+			t.Fatal("expected validation error for spec_version as string, got nil")
 		}
 	})
 }
@@ -628,7 +659,7 @@ func TestFR1_E7_DependsOnNonExistentIDPassesProject(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R1", "depends_on": ["000000000999"]}
+			{"id": "000000000001", "type": "functional", "name": "R1", "depends_on": ["000000000999"]}
 		]
 	}`)
 	if err != nil {
@@ -642,7 +673,7 @@ func TestFR1_E8_PreqIDInProjectRequirementFails(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "000000000001", "type": "functional", "title": "R", "preq_id": "000000000005"}
+			{"id": "000000000001", "type": "functional", "name": "R", "preq_id": "000000000005"}
 		]
 	}`)
 	if err == nil {
@@ -709,7 +740,7 @@ func TestFR1_ProjectSchemaMetaProperties(t *testing.T) {
 
 	// Check properties keys
 	props := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections"} {
+	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections", "spec_version"} {
 		if props[key] == nil {
 			t.Fatalf("project schema missing property %q", key)
 		}
@@ -955,11 +986,22 @@ func TestFR1_ComposeProjectSchemaEdgeFieldShape(t *testing.T) {
 	}
 }
 
-// TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges pins that a
-// built-in type's frame $def is reused unchanged even when the caller
-// passes an edge sourced at that type's name: built-in definitions carry
-// only the reference fields the frame already gives them.
-func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
+// TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges pins the
+// project-scope half of "no built-in $defs remain in the frame"
+// (arch_project_schema.md) at the composition layer directly: unlike the
+// module side, no project-scoped type's $defs entry is frame-fixed, the
+// built-in requirement type included, so ComposeProjectSchema composes a
+// reference field onto it for an edge sourced at "requirement" exactly as
+// it would for a profile-declared type — the same path
+// TestFR1_ComposeProjectSchemaEdgeFieldShape exercises for a custom type.
+// It calls ComposeProjectSchema directly rather than through a resolved
+// Profile: Profile.Validate still refuses a "requirement"-sourced edge the
+// frame does not already carry, because the same bare type name also
+// reaches module.json's frame-fixed requirement $defs entry, which would
+// silently drop it (builtinTypeNames) — that guard is scope-blind by
+// construction and stays in force regardless of which scope's composition
+// could actually carry the edge.
+func TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges(t *testing.T) {
 	edges := []Edge{{Kind: "tracks", From: []string{"requirement"}, To: []string{"requirement"}}}
 	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), edges)
 	if err != nil {
@@ -971,22 +1013,49 @@ func TestFR1_ComposeProjectSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
 		"name": "p",
 		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
 		"requirements": [
-			{"id": "aabbccddeeff", "type": "functional", "title": "R", "tracks": ["112233445566"]}
+			{"id": "aabbccddeeff", "type": "functional", "name": "R", "tracks": ["112233445566"]}
+		]
+	}`)
+	if err != nil {
+		t.Fatalf("declared tracks edge should compose onto the built-in requirement type: %v", err)
+	}
+}
+
+// TestFR1_ComposeProjectSchemaPreqIDExcludedFromRequirement pins
+// projectScopedEdges: the preq_id edge's From names "requirement" the same
+// bare way depends_on's does, but preq_id links a module requirement to its
+// parent project requirement — module-scope-only, the one property
+// project.schema.json's requirement definition has always rejected (E8).
+// Composing with the full default edge list must not let it leak onto the
+// project-scoped requirement type now that requirement composes generically.
+func TestFR1_ComposeProjectSchemaPreqIDExcludedFromRequirement(t *testing.T) {
+	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), DefaultProfile().Edges)
+	if err != nil {
+		t.Fatalf("ComposeProjectSchema: %v", err)
+	}
+	sch := compileSchemaFromBytes(t, data)
+
+	err = validateProject(t, sch, `{
+		"name": "p",
+		"modules": [{"id": "000000000001", "name": "m", "path": "m/"}],
+		"requirements": [
+			{"id": "aabbccddeeff", "type": "functional", "name": "R", "preq_id": "112233445566"}
 		]
 	}`)
 	if err == nil {
-		t.Fatal("expected validation error: built-in requirement definition should not gain a tracks field")
+		t.Fatal("expected validation error: preq_id must not compose onto the project-scoped requirement type")
 	}
 }
 
 // TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultProjectNodeTypes yields a schema that still accepts
-// the same known-good project fixtures the static schema accepts (S1, S2),
-// since the default type name (requirement) resolves to the frame's
-// existing $defs entry. It validates fixtures only — it does not compare
-// the composed document against the shipped static project.schema.json
-// byte-for-byte; that golden comparison is scenario P2 in
-// test_schema_loading.md, owned by SchemaLoader.
+// the same known-good project fixtures the static schema accepts (S1, S2) —
+// the requirement type's own fields (type, priority, derivation, depends_on)
+// are declared on DefaultProjectNodeTypes and materialize through the same
+// generic composition a profile-declared type goes through. It validates
+// fixtures only — it does not compare the composed document against the
+// shipped static project.schema.json byte-for-byte; that golden comparison
+// is scenario P2 in test_schema_loading.md, owned by SchemaLoader.
 func TestFR1_ComposeProjectSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), DefaultProfile().Edges)
 	if err != nil {
