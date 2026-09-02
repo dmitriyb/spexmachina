@@ -4,7 +4,40 @@
       "name": "requirement",
       "plural_key": "requirements",
       "scope": "project",
-      "completeness_trigger": true
+      "completeness_trigger": true,
+      "fields": [
+        {
+          "name": "type",
+          "kind": "text",
+          "required": true,
+          "enum": [
+            "functional",
+            "non_functional"
+          ],
+          "description": "Requirement type."
+        },
+        {
+          "name": "priority",
+          "kind": "integer",
+          "minimum": 0,
+          "maximum": 4,
+          "description": "Requirement priority (0-4). Optional; enforced by validator when present."
+        },
+        {
+          "name": "derivation",
+          "kind": "text",
+          "enum": [
+            "pending"
+          ],
+          "description": "Declares a requirement not yet derived into any module. Project-scoped only: a module requirement derives by construction through its required preq_id."
+        },
+        {
+          "name": "depends_on",
+          "kind": "reference",
+          "cardinality": "many",
+          "description": "Identity hashes of other requirements this one depends on (depends_on edge)."
+        }
+      ]
     },
     {
       "name": "requirement",

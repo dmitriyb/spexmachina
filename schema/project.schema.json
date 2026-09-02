@@ -48,6 +48,7 @@
       "description": "12-character hex identity hash (see schema.IdentityHash)."
     },
     "requirement": {
+      "$comment": "Project-level requirement. module.schema.json's copy carries preq_id in place of priority and derivation, since a module requirement derives by construction through its required preq_id. IDs are 12-char hex identity hashes computed by schema.IdentityHash.",
       "type": "object",
       "required": ["id", "type", "name"],
       "additionalProperties": false,

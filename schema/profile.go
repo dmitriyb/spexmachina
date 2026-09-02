@@ -16,7 +16,11 @@ import (
 // a content leaf, and its two per-type role flags. "requirement" is declared
 // twice — once per scope — because the project-level and module-level
 // requirement arrays carry different envelope constraints even though they
-// share a type name and both trigger the completeness rules.
+// share a type name and both trigger the completeness rules. Comment is
+// project-scope-only: it becomes the composed $defs entry's own "$comment"
+// (ComposeProjectSchema, via ProjectNodeType.Comment) — a module-scoped
+// built-in's $defs entry is frame-fixed and carries its $comment from the
+// shipped document instead, so no module-scoped type needs one here.
 type NodeType struct {
 	Name                string  `json:"name"`
 	PluralKey           string  `json:"plural_key"`
@@ -25,6 +29,7 @@ type NodeType struct {
 	CompletenessTrigger bool    `json:"completeness_trigger,omitempty"`
 	NameDeclarable      bool    `json:"name_declarable,omitempty"`
 	Fields              []Field `json:"fields,omitempty"`
+	Comment             string  `json:"comment,omitempty"`
 }
 
 // Edge declares one legal edge kind: the reference field name, the node
@@ -166,7 +171,7 @@ func (p *Profile) Validate() error {
 		if e.Kind != "" && !frameEdgeKinds[e.Kind] {
 			for _, f := range e.From {
 				if frameTypeNames[f] {
-					errs = append(errs, fmt.Errorf("%s: edge kind %q: sourced at built-in type %q but the frame does not already carry this edge kind — built-in definitions are frame-fixed and gain no new reference fields in composition", path, e.Kind, f))
+					errs = append(errs, fmt.Errorf("%s: edge kind %q: sourced at type %q, whose module-scoped $defs entry is frame-fixed and gains no new reference fields in composition", path, e.Kind, f))
 					break
 				}
 			}
@@ -217,19 +222,22 @@ func builtinEdgeKinds() map[string]bool {
 	return kinds
 }
 
-// builtinTypeNames returns the node type names the shipped frame already
-// defines as fixed $defs entries — requirement, component, data_flow,
-// test_section, api. ComposeProjectSchema and ComposeModuleSchema restore
-// these types' original array property and $defs entry unchanged from the
-// frame, so a profile-declared edge kind the frame does not already carry
-// could never reach one of these types' reference fields in composition;
-// Validate refuses such a declaration outright rather than silently
-// accepting an edge that composition would then drop.
+// builtinTypeNames returns the node type names DefaultModuleNodeTypes
+// declares — requirement, component, data_flow, test_section, api.
+// ComposeModuleSchema restores each one's $defs entry and array property
+// unchanged from the frame (module_compose.go's genericNodeDef never runs
+// for a name the frame already defines), so a profile-declared edge kind
+// the frame does not already carry could never reach one of these types'
+// reference fields when composing module.json; Validate refuses such a
+// declaration outright rather than silently accepting an edge that
+// composition would then drop. The project-scoped $defs entry sharing one
+// of these names (requirement, today) is no longer frame-fixed —
+// ComposeProjectSchema composes declared edges onto it freely — but the
+// edge model names a source type without a scope, so an edge sourced at
+// "requirement" reaches both scopes' composition at once and this check
+// still has to block it for module.json's sake.
 func builtinTypeNames() map[string]bool {
 	names := make(map[string]bool)
-	for _, t := range DefaultProjectNodeTypes() {
-		names[t.Name] = true
-	}
 	for _, t := range DefaultModuleNodeTypes() {
 		names[t.Name] = true
 	}
@@ -237,30 +245,19 @@ func builtinTypeNames() map[string]bool {
 }
 
 // ProjectNodeTypes returns the profile's project-scoped node types,
-// converted to the ProjectNodeType shape ComposeProjectSchema consumes. A
-// declared type that reuses a default project-scoped type's name without
-// declaring its own Fields inherits that default type's Fields — the
-// project-scoped requirement type's own fields are no longer frame-fixed
-// (arch_project_schema.md), so a profile.json written before Fields existed,
-// which names "requirement" to get the built-in envelope without repeating
-// its type/priority/derivation/depends_on declarations, still composes them.
-// A profile that wants a fieldless requirement declares a different name.
+// converted to the ProjectNodeType shape ComposeProjectSchema consumes.
 func (p *Profile) ProjectNodeTypes() []ProjectNodeType {
-	defaultFields := defaultProjectFieldsByTypeName()
 	var out []ProjectNodeType
 	for _, t := range p.NodeTypes {
 		if t.Scope != "project" {
 			continue
 		}
-		fields := t.Fields
-		if len(fields) == 0 {
-			fields = defaultFields[t.Name]
-		}
 		out = append(out, ProjectNodeType{
 			Name:            t.Name,
 			PluralKey:       t.PluralKey,
 			RequiresContent: t.RequiresContent,
-			Fields:          fields,
+			Fields:          t.Fields,
+			Comment:         t.Comment,
 		})
 	}
 	return out
@@ -306,6 +303,7 @@ func DefaultProfile() *Profile {
 			RequiresContent:     t.RequiresContent,
 			CompletenessTrigger: t.Name == "requirement",
 			Fields:              t.Fields,
+			Comment:             t.Comment,
 		})
 	}
 	for _, t := range DefaultModuleNodeTypes() {

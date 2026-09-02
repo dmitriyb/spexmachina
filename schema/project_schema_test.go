@@ -988,11 +988,19 @@ func TestFR1_ComposeProjectSchemaEdgeFieldShape(t *testing.T) {
 
 // TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges pins the
 // project-scope half of "no built-in $defs remain in the frame"
-// (arch_project_schema.md): unlike the module side, no project-scoped
-// type's $defs entry is frame-fixed, the built-in requirement type
-// included, so an edge sourced at "requirement" composes a reference field
-// on it exactly as it would for a profile-declared type — the same path
+// (arch_project_schema.md) at the composition layer directly: unlike the
+// module side, no project-scoped type's $defs entry is frame-fixed, the
+// built-in requirement type included, so ComposeProjectSchema composes a
+// reference field onto it for an edge sourced at "requirement" exactly as
+// it would for a profile-declared type — the same path
 // TestFR1_ComposeProjectSchemaEdgeFieldShape exercises for a custom type.
+// It calls ComposeProjectSchema directly rather than through a resolved
+// Profile: Profile.Validate still refuses a "requirement"-sourced edge the
+// frame does not already carry, because the same bare type name also
+// reaches module.json's frame-fixed requirement $defs entry, which would
+// silently drop it (builtinTypeNames) — that guard is scope-blind by
+// construction and stays in force regardless of which scope's composition
+// could actually carry the edge.
 func TestFR1_ComposeProjectSchemaBuiltinRequirementGainsDeclaredEdges(t *testing.T) {
 	edges := []Edge{{Kind: "tracks", From: []string{"requirement"}, To: []string{"requirement"}}}
 	data, err := ComposeProjectSchema(DefaultProjectNodeTypes(), edges)

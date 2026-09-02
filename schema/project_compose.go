@@ -17,12 +17,16 @@ var projectProfileArrays = []string{"requirements"}
 // resolved profile: its name (used to key $defs and, elsewhere, to derive
 // identity hashes as "project/<name>/<node name>"), the plural key naming
 // its array property in project.json, whether nodes of this type carry a
-// content leaf, and the fields it declares beyond the fixed envelope.
+// content leaf, the fields it declares beyond the fixed envelope, and an
+// optional $comment on the composed $defs entry itself (arch_project_schema.md's
+// "each copy carries a $comment naming the other" — the way Description
+// reaches a property, Comment reaches the entry definition it annotates).
 type ProjectNodeType struct {
 	Name            string
 	PluralKey       string
 	RequiresContent bool
 	Fields          []Field
+	Comment         string
 }
 
 // DefaultProjectNodeTypes returns the project-scoped node types of the
@@ -39,6 +43,7 @@ func DefaultProjectNodeTypes() []ProjectNodeType {
 		{
 			Name:      "requirement",
 			PluralKey: "requirements",
+			Comment:   "Project-level requirement. module.schema.json's copy carries preq_id in place of priority and derivation, since a module requirement derives by construction through its required preq_id. IDs are 12-char hex identity hashes computed by schema.IdentityHash.",
 			Fields: []Field{
 				{
 					Name:        "type",
@@ -81,18 +86,6 @@ func defaultProjectArrayKeyByTypeName() map[string]string {
 		keys[t.Name] = t.PluralKey
 	}
 	return keys
-}
-
-// defaultProjectFieldsByTypeName maps each built-in default project-scoped
-// type name to its declared Fields — the lookup Profile.ProjectNodeTypes
-// uses to backfill Fields for a declared type that reuses a default type's
-// name without declaring its own.
-func defaultProjectFieldsByTypeName() map[string][]Field {
-	fields := make(map[string][]Field, len(projectProfileArrays))
-	for _, t := range DefaultProjectNodeTypes() {
-		fields[t.Name] = t.Fields
-	}
-	return fields
 }
 
 // ComposeProjectSchema composes the effective project.json JSON Schema from
@@ -237,7 +230,11 @@ func projectSchemaFrame() (map[string]any, map[string]any, error) {
 // any other property is rejected. required lists id first, then the
 // declared fields marked Required in field order, then name (and content,
 // when RequiresContent is set) — the order the requirement type's own
-// required set (id, type, name) needs to reproduce the shipped frame.
+// required set (id, type, name) needs to reproduce the shipped frame. When
+// t.Comment is set, it becomes the entry definition's own "$comment" — the
+// requirement type's two scope declarations each name the other's file
+// (arch_project_schema.md's Design Rationale), materialized the same way
+// Description reaches a property.
 func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
@@ -285,10 +282,14 @@ func genericProjectNodeDef(t ProjectNodeType, edges []Edge) map[string]any {
 		properties[f.Name] = composeFieldSchema(f)
 	}
 
-	return map[string]any{
+	def := map[string]any{
 		"type":                 "object",
 		"required":             required,
 		"additionalProperties": false,
 		"properties":           properties,
 	}
+	if t.Comment != "" {
+		def["$comment"] = t.Comment
+	}
+	return def
 }
