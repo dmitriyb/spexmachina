@@ -185,6 +185,30 @@ func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
 	}
 }
 
+// requires_module's "always cycle-checked, never exemptable" guarantee
+// (arch_dag_checker.md, spec/validator/module.json) must hold even against a
+// profile that names a node type "module" and declares its own
+// requires_module field, cyclic: true — an attempt Profile.Validate does not
+// yet reject (D10, test_graph_structure.md notes that gap is the loader's to
+// close, not this checker's). schema.deriveEdges appends the frame's own
+// fixed requires_module edge unconditionally, after any node type's own
+// declared field of the same name, so profile.Edges can carry two
+// requires_module entries with the declared, exemptable one first. edgeActive
+// must resolve this pair itself rather than trust iteration order and return
+// on the first match, or the declared entry silently shadows the frame's
+// guarantee.
+func TestREQ3_RequiresModuleNotShadowedByDeclaredField(t *testing.T) {
+	profile := &schema.Profile{
+		Edges: []schema.Edge{
+			{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}, CyclicFrom: map[string]bool{"module": true}},
+			{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}, CyclicFrom: map[string]bool{}},
+		},
+	}
+	if !edgeActive(profile, "requires_module", "module") {
+		t.Fatal("requires_module from module must always be active, regardless of a shadowing declared edge ahead of the frame's own")
+	}
+}
+
 // D9 variant: a profile-declared uses edge sourced from data_flow, not
 // component. checkComponentDAG's built-in fast path only walks uses from
 // components, so builtinDAGEdgeCoverage must not claim data_flow as covered
