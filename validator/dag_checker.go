@@ -104,12 +104,14 @@ func CheckDAG(specDir string) []ValidationError {
 
 // edgeActive reports whether a built-in fast path should build and walk its
 // graph: the resolved profile must declare the given edge kind carried from
-// the given from-type, and that declaration must not be marked cyclic: true.
-// An edge kind the profile does not declare for that from-type at all is
-// inactive — the checker holds no fixed edge list of its own, so an
-// undeclared (kind, from-type) pair is skipped here exactly as it would be
-// by the generic checkExtra*DAGEdges path, rather than walked anyway using
-// the built-in struct field regardless of what the profile says.
+// the given from-type, and that from-type's own declaration must not be
+// marked cyclic: true — checked per from-type, since two types declaring the
+// same-named field can set the flag differently. An edge kind the profile
+// does not declare for that from-type at all is inactive — the checker
+// holds no fixed edge list of its own, so an undeclared (kind, from-type)
+// pair is skipped here exactly as it would be by the generic
+// checkExtra*DAGEdges path, rather than walked anyway using the built-in
+// struct field regardless of what the profile says.
 func edgeActive(profile *schema.Profile, kind, fromType string) bool {
 	for _, e := range profile.Edges {
 		if e.Kind != kind {
@@ -118,32 +120,35 @@ func edgeActive(profile *schema.Profile, kind, fromType string) bool {
 		if !slices.Contains(e.From, fromType) {
 			continue
 		}
-		return !e.Cyclic
+		return !e.CyclicForType(fromType)
 	}
 	return false
 }
 
 // extraCycleEdgesForScope returns the resolved profile's declared edges,
 // reduced to the (kind, from-type) pairs not already covered, at the given
-// scope, by one of the three built-in graphs — with any edge kind marked
-// cyclic: true dropped entirely, since that edge closes no graph at all,
-// built-in coverage aside. Scoping the reduction matters because a from-type
-// name like "requirement" can be declared at both scopes under one shared
-// edge declaration: filtering on name alone would drop the project-scoped
-// occurrence too, even though only the module-scoped one is actually walked
-// by checkRequirementDAG. Called once per scope by checkExtraModuleDAGEdges
-// and checkExtraProjectDAGEdges; a from-type this leaves in that has no
-// occurrence at the caller's scope is simply skipped downstream by
-// findModuleNodeType/projectEdgeSourceKey, so over-including here is safe.
+// scope, by one of the three built-in graphs — with any from-type whose own
+// declaration is marked cyclic: true dropped from that edge's From list,
+// since that occurrence closes no graph at all, built-in coverage aside; a
+// sibling from-type sharing the edge kind but not marked cyclic is kept, so
+// one type's exemption never silently drops another's cycle check. Scoping
+// the reduction matters because a from-type name like "requirement" can be
+// declared at both scopes under one shared edge declaration: filtering on
+// name alone would drop the project-scoped occurrence too, even though only
+// the module-scoped one is actually walked by checkRequirementDAG. Called
+// once per scope by checkExtraModuleDAGEdges and checkExtraProjectDAGEdges;
+// a from-type this leaves in that has no occurrence at the caller's scope is
+// simply skipped downstream by findModuleNodeType/projectEdgeSourceKey, so
+// over-including here is safe.
 func extraCycleEdgesForScope(profile *schema.Profile, scope string) []schema.Edge {
 	var out []schema.Edge
 	for _, e := range profile.Edges {
-		if e.Cyclic {
-			continue
-		}
 		covered := builtinDAGEdgeCoverage[e.Kind]
 		var from []string
 		for _, f := range e.From {
+			if e.CyclicForType(f) {
+				continue
+			}
 			if covered[f] == scope {
 				continue
 			}

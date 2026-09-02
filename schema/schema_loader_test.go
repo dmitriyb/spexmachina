@@ -913,8 +913,10 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		if !wantEdgeKinds[e.Kind] {
 			t.Fatalf("unexpected derived edge kind %q", e.Kind)
 		}
-		if e.Cyclic {
-			t.Fatalf("derived edge %q should not carry the cyclic exemption under the default profile", e.Kind)
+		for _, from := range e.From {
+			if e.CyclicForType(from) {
+				t.Fatalf("derived edge %q from %q should not carry the cyclic exemption under the default profile", e.Kind, from)
+			}
 		}
 	}
 
@@ -962,6 +964,61 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 	if !reflect.DeepEqual(p.Absorbable, wantAbsorbable) {
 		t.Fatalf("absorbable directions = %v, want %v", p.Absorbable, wantAbsorbable)
 	}
+}
+
+// TestFR9_DeriveEdgesCyclicIsPerDeclaringType covers 91270a8a2b57's per-field
+// exemption flag: two node types declaring a reference field of the same
+// name must keep their own Cyclic value independently. Before this fix,
+// deriveEdges took Cyclic from whichever type happened to declare the field
+// first and every later declaration was silently ignored, so declaration
+// order — not the profile's own text — decided which type's fields got
+// cycle-checked.
+func TestFR9_DeriveEdgesCyclicIsPerDeclaringType(t *testing.T) {
+	build := func(aCyclic, bCyclic bool) []Edge {
+		nodeTypes := []NodeType{
+			{Name: "a", PluralKey: "as", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: aCyclic},
+			}},
+			{Name: "b", PluralKey: "bs", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: bCyclic},
+			}},
+		}
+		return deriveEdges(nodeTypes)
+	}
+
+	check := func(t *testing.T, edges []Edge, wantA, wantB bool) {
+		t.Helper()
+		var uses *Edge
+		for i, e := range edges {
+			if e.Kind == "uses" {
+				uses = &edges[i]
+			}
+		}
+		if uses == nil {
+			t.Fatal("no derived \"uses\" edge")
+		}
+		if got := uses.CyclicForType("a"); got != wantA {
+			t.Fatalf("a's cyclic exemption = %v, want %v", got, wantA)
+		}
+		if got := uses.CyclicForType("b"); got != wantB {
+			t.Fatalf("b's cyclic exemption = %v, want %v", got, wantB)
+		}
+	}
+
+	t.Run("a declared first, b marks cyclic", func(t *testing.T) {
+		check(t, build(false, true), false, true)
+	})
+	t.Run("b declared first (reverse order), a marks cyclic", func(t *testing.T) {
+		nodeTypes := []NodeType{
+			{Name: "b", PluralKey: "bs", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: false},
+			}},
+			{Name: "a", PluralKey: "as", Scope: "module", Fields: []Field{
+				{Name: "uses", Kind: FieldKindReference, Targets: []string{"a"}, Cyclic: true},
+			}},
+		}
+		check(t, deriveEdges(nodeTypes), true, false)
+	})
 }
 
 // TestFR9_P2_ComposedSchemasEqualShippedGolden is the acceptance criterion
@@ -1165,7 +1222,7 @@ func TestFR9_P5_ResolutionIsDeterministic(t *testing.T) {
 	})
 }
 
-// TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes covers arch_profile_loader.md's
+// TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes covers test_schema_loading.md's
 // P6: a profile-declared reference field on a built-in type — one the
 // shipped frame never carried — reaches the composed module schema beside
 // the built-in fields. This supersedes the earlier interim rule that
@@ -1229,7 +1286,7 @@ func TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes(t *testing.T) {
 	}
 }
 
-// TestFR9_P7_FieldValidationNamesEachDefect covers arch_profile_loader.md's
+// TestFR9_P7_FieldValidationNamesEachDefect covers test_schema_loading.md's
 // P7: each of the six defective field-declaration shapes fails with one
 // distinct, early error naming the declaration, with no composed schema
 // produced.
@@ -1324,7 +1381,53 @@ func TestFR9_P7_FieldValidationNamesEachDefect(t *testing.T) {
 	})
 }
 
-// TestFR9_P8_ProfileVersionOutOfRangeFailsEarly covers arch_profile_loader.md's
+// TestFR9_ContentFieldCollisionIsConditional covers arch_profile_loader.md's
+// "Fixed points": content is part of the fixed envelope only for a
+// content-bearing type ("content, where the type is content-bearing"), so a
+// declared field named "content" collides with the envelope only when the
+// declaring type sets RequiresContent — not unconditionally, the way id,
+// name and description always do.
+func TestFR9_ContentFieldCollisionIsConditional(t *testing.T) {
+	t.Run("content-bearing type rejects a declared content field", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module", "requires_content": true, "fields": [
+					{"name": "content", "kind": "text"}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error for a content-bearing type declaring a \"content\" field, got nil")
+		}
+		if !strings.Contains(err.Error(), "collides with the envelope") {
+			t.Fatalf("error should say the field collides with the envelope, got: %v", err)
+		}
+	})
+
+	t.Run("non-content-bearing type may declare a content field", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module", "fields": [
+					{"name": "content", "kind": "text"}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		if _, err := ResolveProfile(dir); err != nil {
+			t.Fatalf("a non-content-bearing type declaring a \"content\" field should resolve cleanly: %v", err)
+		}
+	})
+}
+
+// TestFR9_P8_ProfileVersionOutOfRangeFailsEarly covers test_schema_loading.md's
 // P8: an out-of-range profile_version fails with one message naming the
 // version and the supported range, before any conformance check; an absent
 // profile_version means version 1, which resolves cleanly.
@@ -1357,14 +1460,40 @@ func TestFR9_P8_ProfileVersionOutOfRangeFailsEarly(t *testing.T) {
 		if err != nil {
 			t.Fatalf("expected an absent profile_version to resolve as version 1, got: %v", err)
 		}
-		if p.ProfileVersion != 0 && p.ProfileVersion != 1 {
-			t.Fatalf("resolved ProfileVersion = %d, want 0 (absent) or 1", p.ProfileVersion)
+		if p.ProfileVersion != nil && *p.ProfileVersion != 1 {
+			t.Fatalf("resolved ProfileVersion = %d, want nil (absent) or 1", *p.ProfileVersion)
+		}
+	})
+
+	// An explicit "profile_version": 0 is not the same as an absent field:
+	// zero is outside the supported range [1,1] and must be rejected the
+	// same way 99 is, naming the declared version and the range — a *int
+	// (rather than int with the zero value doubling as "absent") is what
+	// lets Validate tell the two cases apart.
+	t.Run("explicit zero is out of range, distinct from absent", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{"profile_version": 0, "node_types": []}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving an explicit profile_version: 0, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "0") {
+			t.Fatalf("error should name the declared version (0), got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "unsupported") {
+			t.Fatalf("error should say unsupported, not silently treat 0 as absent, got: %v", err)
 		}
 	})
 }
 
 // TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument covers
-// arch_profile_loader.md's P9: the embedded defaultProfile.json is decoded
+// test_schema_loading.md's P9: the embedded defaultProfile.json is decoded
 // and validated through the exact same path a file-backed profile.json
 // takes — not a privileged code path — and resolving it directly or via a
 // copied spec/profile.json yields identical resolved profiles.
@@ -1383,8 +1512,8 @@ func TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument(t *testing.T) {
 	}
 	embedded.finalize()
 
-	if embedded.ProfileVersion != 1 {
-		t.Fatalf("embedded defaultProfile.json should declare profile_version 1, got %d", embedded.ProfileVersion)
+	if embedded.ProfileVersion == nil || *embedded.ProfileVersion != 1 {
+		t.Fatalf("embedded defaultProfile.json should declare profile_version 1, got %v", embedded.ProfileVersion)
 	}
 
 	dir := t.TempDir()

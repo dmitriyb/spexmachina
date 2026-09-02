@@ -1,0 +1,39 @@
+{
+  "node_types": [
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "cyclic": true,
+          "description": "Identity hashes of other components this one depends on (uses edge). Marked cyclic: true for this test fixture.",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component",
+            "data_flow"
+          ]
+        }
+      ],
+      "name": "component",
+      "plural_key": "components",
+      "scope": "module"
+    },
+    {
+      "fields": [
+        {
+          "cardinality": "many",
+          "description": "Component identity hashes involved in this data flow (uses edge). Not marked cyclic for this test fixture.",
+          "kind": "reference",
+          "name": "uses",
+          "targets": [
+            "component",
+            "data_flow"
+          ]
+        }
+      ],
+      "name": "data_flow",
+      "plural_key": "data_flows",
+      "scope": "module"
+    }
+  ]
+}

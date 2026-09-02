@@ -49,13 +49,23 @@ type NodeType struct {
 // module is not a declarable node type: requires_module is the fixed
 // interior-node concept a profile can never declare, so it is always
 // present in this derived view regardless of what the profile says.
-// Cyclic exempts the edge kind from the DAG cycle check; false means the
-// edge kind is cycle-checked.
+// CyclicFrom exempts one declaring type's occurrence of the edge kind from
+// the DAG cycle check — 91270a8a2b57's per-field exemption flag, kept per
+// declaring type since two types can declare a reference field of the same
+// name with different Cyclic values (e.g. "uses" cyclic on data_flow but not
+// on component); a name absent from the map, or mapped to false, is
+// cycle-checked.
 type Edge struct {
-	Kind   string
-	From   []string
-	To     []string
-	Cyclic bool
+	Kind       string
+	From       []string
+	To         []string
+	CyclicFrom map[string]bool
+}
+
+// CyclicForType reports whether fromType's own declaration of this edge kind
+// is exempt from the DAG cycle check.
+func (e Edge) CyclicForType(fromType string) bool {
+	return e.CyclicFrom[fromType]
 }
 
 // CoverageChain declares one coverage rule: every node of CoveredType must
@@ -96,7 +106,12 @@ type AbsorbDirections struct {
 // reads Profile.Edges or Profile.HashedFields keeps working against these
 // derived views unchanged.
 type Profile struct {
-	ProfileVersion int                         `json:"profile_version,omitempty"`
+	// ProfileVersion is nil when the field is absent from the document,
+	// which means version 1 — the same as an explicit 1. A pointer is what
+	// lets Validate tell an absent field apart from an explicit
+	// "profile_version": 0, which is out of the supported range and must be
+	// rejected rather than silently treated as absent.
+	ProfileVersion *int                        `json:"profile_version,omitempty"`
 	NodeTypes      []NodeType                  `json:"node_types"`
 	CoverageChains []CoverageChain             `json:"coverage_chains"`
 	PlanRelevant   []string                    `json:"plan_relevant"`
@@ -122,13 +137,16 @@ const (
 )
 
 // envelopeFieldNames are the fixed envelope property names no declared
-// field may reuse: id, name, description always, content when the type
-// requires one. The profile is a description of a vocabulary and cannot
-// reach the envelope minimum (arch_profile_loader.md's "Fixed points"), so
-// a field colliding with one of these names is rejected outright rather
-// than silently shadowing it.
+// field may reuse: id, name and description on every type. "content" is
+// deliberately not in this set — it is only part of a type's envelope when
+// RequiresContent is set (arch_profile_loader.md's "Fixed points": "content
+// where the type is content-bearing"), so its collision is checked
+// separately, conditioned on that flag, rather than unconditionally here.
+// The profile is a description of a vocabulary and cannot reach the
+// envelope minimum, so a field colliding with one of these names is
+// rejected outright rather than silently shadowing it.
 var envelopeFieldNames = map[string]bool{
-	"id": true, "name": true, "description": true, "content": true,
+	"id": true, "name": true, "description": true,
 }
 
 // ResolveProfile resolves the profile for the project rooted at specDir: it
@@ -215,11 +233,14 @@ func (p *Profile) finalize() {
 // reference-kind field NodeTypes declares, grouped by field name: a field
 // name shared by two types (e.g. "uses" declared on both component and
 // data_flow) folds into one Edge whose From lists both source types, the
-// way one hand-authored edge kind used to. requires_module is not sourced
-// by any declarable field — module is never a declarable node type, and
-// requires_module is the frame's own fixed edge — so it is appended
-// unconditionally, present in every resolved profile's derived view
-// regardless of what NodeTypes declares.
+// way one hand-authored edge kind used to — and whose CyclicFrom records
+// each declaring type's own Cyclic flag independently, so one type's
+// exemption never overrides or is overridden by another's declaration of
+// the same-named field. requires_module is not sourced by any declarable
+// field — module is never a declarable node type, and requires_module is
+// the frame's own fixed edge — so it is appended unconditionally, present
+// in every resolved profile's derived view regardless of what NodeTypes
+// declares, and always cycle-checked (module is absent from its CyclicFrom).
 func deriveEdges(nodeTypes []NodeType) []Edge {
 	order := make([]string, 0)
 	byKind := map[string]*Edge{}
@@ -230,13 +251,14 @@ func deriveEdges(nodeTypes []NodeType) []Edge {
 			}
 			e, ok := byKind[f.Name]
 			if !ok {
-				e = &Edge{Kind: f.Name, Cyclic: f.Cyclic}
+				e = &Edge{Kind: f.Name, CyclicFrom: map[string]bool{}}
 				byKind[f.Name] = e
 				order = append(order, f.Name)
 			}
 			if !slices.Contains(e.From, t.Name) {
 				e.From = append(e.From, t.Name)
 			}
+			e.CyclicFrom[t.Name] = f.Cyclic
 			for _, target := range f.Targets {
 				if !slices.Contains(e.To, target) {
 					e.To = append(e.To, target)
@@ -249,7 +271,7 @@ func deriveEdges(nodeTypes []NodeType) []Edge {
 	for _, kind := range order {
 		edges = append(edges, *byKind[kind])
 	}
-	edges = append(edges, Edge{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}})
+	edges = append(edges, Edge{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}, CyclicFrom: map[string]bool{}})
 	return edges
 }
 
@@ -316,8 +338,8 @@ func (p *Profile) findField(typeName, scope, fieldName string) (Field, bool) {
 // profile is reported in one pass rather than one field at a time across
 // repeated runs.
 func (p *Profile) Validate() error {
-	if p.ProfileVersion != 0 && (p.ProfileVersion < minProfileVersion || p.ProfileVersion > maxProfileVersion) {
-		return fmt.Errorf("profile_version: %d: unsupported (supported: %d-%d)", p.ProfileVersion, minProfileVersion, maxProfileVersion)
+	if p.ProfileVersion != nil && (*p.ProfileVersion < minProfileVersion || *p.ProfileVersion > maxProfileVersion) {
+		return fmt.Errorf("profile_version: %d: unsupported (supported: %d-%d)", *p.ProfileVersion, minProfileVersion, maxProfileVersion)
 	}
 
 	var errs []error
@@ -350,7 +372,7 @@ func (p *Profile) Validate() error {
 		for j, f := range t.Fields {
 			path := fmt.Sprintf("%s.fields[%d]", typePath, j)
 
-			if envelopeFieldNames[f.Name] {
+			if envelopeFieldNames[f.Name] || (f.Name == "content" && t.RequiresContent) {
 				errs = append(errs, fmt.Errorf("%s: field %q: collides with the envelope", path, f.Name))
 			}
 			if seenFields[f.Name] {

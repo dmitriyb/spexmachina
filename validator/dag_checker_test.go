@@ -223,6 +223,33 @@ func TestREQ3_ProfileDeclaredDataFlowUsesEdgeCycle(t *testing.T) {
 	}
 }
 
+// The cyclic exemption is per declaring type, not per edge kind: component
+// and data_flow both declare a "uses" field, component's marked cyclic:true
+// and data_flow's not. Before schema.deriveEdges tracked the flag per
+// declaring type, whichever type's field the profile happened to list first
+// decided the exemption for both — here component sorts/declares first, so
+// the bug would have exempted data_flow's cycle too. This fixture pins that
+// component's self-cycle is exempt while data_flow's own is still caught.
+func TestREQ3_CyclicExemptionIsPerDeclaringType(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_profile_cyclic_per_declaring_type"))
+
+	for _, e := range errs {
+		if strings.Contains(e.Message, "Comp A") || strings.Contains(e.Message, "Comp B") {
+			t.Fatalf("component's uses cycle should be exempt (cyclic: true), got: %v", e)
+		}
+	}
+
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e.Message, "uses cycle") && strings.Contains(e.Message, "Flow A") && strings.Contains(e.Message, "Flow B") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("expected a data_flow uses cycle error (not cyclic-exempt), got: %v", errs)
+	}
+}
+
 // The default profile declares "requirement" at both scopes under one
 // shared depends_on edge: checkRequirementDAG only walks each module's own
 // requirements, so a cycle among project.json's top-level requirements must

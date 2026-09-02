@@ -70,44 +70,22 @@ func (f Field) HashParticipates() bool {
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
 // built-in default profile: requirement, component, data_flow, test_section
-// and api, in that order. Composing the module schema from this set
-// reproduces the shipped frame's five arrays.
+// and api, in that order, name and plural key only. Composing the module
+// schema from this set reproduces the shipped frame's five arrays: each
+// name already resolves to the frame's own $defs entry, so ComposeModuleSchema
+// reuses that entry's properties unchanged rather than synthesizing from
+// Fields. The five built-in types' actual field declarations — the single
+// record of that policy — live in the embedded defaultProfile.json, resolved
+// through DefaultProfile().ModuleNodeTypes(); this function exists only to
+// give defaultArrayKeyByTypeName the name-to-plural-key lookup it needs to
+// restore a built-in type's hand-authored array property unchanged.
 func DefaultModuleNodeTypes() []ModuleNodeType {
 	return []ModuleNodeType{
-		{
-			Name: "requirement", PluralKey: "requirements",
-			Fields: []Field{
-				{Name: "type", Kind: FieldKindText, Required: true, Enum: []string{"functional", "non_functional"}, Description: "Requirement type."},
-				{Name: "preq_id", Kind: FieldKindReference, Required: true, Targets: []string{"requirement"}, Cardinality: "one", Description: "Identity hash of the project requirement this module requirement derives from."},
-				{Name: "depends_on", Kind: FieldKindReference, Targets: []string{"requirement"}, Cardinality: "many", Description: "Identity hashes of other requirements this one depends on (depends_on edge)."},
-			},
-		},
-		{
-			Name: "component", PluralKey: "components", RequiresContent: true,
-			Fields: []Field{
-				{Name: "implements", Kind: FieldKindReference, Targets: []string{"requirement"}, Cardinality: "many", Description: "Requirement identity hashes this component implements (implements edge)."},
-				{Name: "uses", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Identity hashes of other components this one depends on (uses edge)."},
-			},
-		},
-		{
-			Name: "data_flow", PluralKey: "data_flows", RequiresContent: true,
-			Fields: []Field{
-				{Name: "uses", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Component identity hashes involved in this data flow (uses edge)."},
-			},
-		},
-		{
-			Name: "test_section", PluralKey: "test_sections", RequiresContent: true,
-			Fields: []Field{
-				{Name: "describes", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Component identity hashes described by this test section (describes edge)."},
-			},
-		},
-		{
-			Name: "api", PluralKey: "apis",
-			Fields: []Field{
-				{Name: "provided_by", Kind: FieldKindReference, Targets: []string{"component"}, Cardinality: "many", Description: "Identity hashes of components in this module that provide this entry point (module-local)."},
-				{Name: "group", Kind: FieldKindText, Description: "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it."},
-			},
-		},
+		{Name: "requirement", PluralKey: "requirements"},
+		{Name: "component", PluralKey: "components", RequiresContent: true},
+		{Name: "data_flow", PluralKey: "data_flows", RequiresContent: true},
+		{Name: "test_section", PluralKey: "test_sections", RequiresContent: true},
+		{Name: "api", PluralKey: "apis"},
 	}
 }
 
@@ -216,31 +194,37 @@ func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 	return frame, original, nil
 }
 
-// mergeDeclaredFields adds one property per field the definition does not
-// already carry — a built-in type's frame-authored $defs entry keeps every
-// hand-written property untouched, since composeFieldSchema never runs for
-// a name already present; only a field the frame does not already give the
-// type, such as a profile-declared addition, reaches the definition this
-// way. This is what retires the earlier rule that a built-in type's $defs
-// entry is frame-fixed and gains no new reference fields in composition
-// (arch_profile_loader.md's P6): a profile-declared field beside the
-// built-in ones now reaches the composed schema exactly as it would for any
-// declared type, while every property the shipped frame already documents —
-// including the built-in reference fields the default profile also
-// expresses as Fields for exposure — is left byte-for-byte alone.
+// mergeDeclaredFields composes one property per declared field into the
+// definition, from the field declaration — the same composeFieldSchema path
+// any declared type's fields take — overwriting whatever property the
+// shipped frame's $defs entry carried under that name. A built-in type's
+// field shape is therefore load-bearing: a profile that redeclares an
+// existing built-in field (e.g. adding an enum to api's "group") reaches the
+// composed schema, not just a wholly new field name the frame never gave the
+// type. This is what retires the earlier rule that a built-in type's $defs
+// entry is frame-fixed (test_schema_loading.md's P6) — there is no
+// frame-fixed definition left for a declared field, new or pre-existing, to
+// be unable to reach. required preserves the frame's original order for a
+// name it already lists — required is an unordered set semantically, and
+// reordering it would only churn the golden comparison — appending only the
+// field names newly required that the frame's entry did not already list.
 func mergeDeclaredFields(def map[string]any, fields []Field) {
 	props, ok := def["properties"].(map[string]any)
 	if !ok {
 		return
 	}
 	required, _ := def["required"].([]any)
-	for _, f := range fields {
-		if _, exists := props[f.Name]; exists {
-			continue
+	alreadyRequired := make(map[string]bool, len(required))
+	for _, r := range required {
+		if name, ok := r.(string); ok {
+			alreadyRequired[name] = true
 		}
+	}
+	for _, f := range fields {
 		props[f.Name] = composeFieldSchema(f)
-		if f.Required {
+		if f.Required && !alreadyRequired[f.Name] {
 			required = append(required, f.Name)
+			alreadyRequired[f.Name] = true
 		}
 	}
 	def["required"] = required

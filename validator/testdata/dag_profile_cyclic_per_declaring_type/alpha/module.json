@@ -1,0 +1,29 @@
+{
+  "name": "alpha",
+  "components": [
+    {
+      "id": "0000000000c1",
+      "name": "Comp A",
+      "content": "arch_a.md",
+      "uses": ["0000000000c2"]
+    },
+    {
+      "id": "0000000000c2",
+      "name": "Comp B",
+      "content": "arch_b.md",
+      "uses": ["0000000000c1"]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "0000000000f1",
+      "name": "Flow A",
+      "uses": ["0000000000f2"]
+    },
+    {
+      "id": "0000000000f2",
+      "name": "Flow B",
+      "uses": ["0000000000f1"]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "dag-profile-cyclic-per-declaring-type-test",
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ]
+}
