@@ -189,8 +189,9 @@ func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
 // (arch_dag_checker.md, spec/validator/module.json) must hold even against a
 // profile that names a node type "module" and declares its own
 // requires_module field, cyclic: true — an attempt Profile.Validate does not
-// yet reject (D10, test_graph_structure.md notes that gap is the loader's to
-// close, not this checker's). schema.deriveEdges appends the frame's own
+// yet reject (drifts/drift-spexmachina-9jfk.19.json: test_graph_structure.md
+// line 209 claims this is rejected as a fixed-point declaration; it is not).
+// schema.deriveEdges appends the frame's own
 // fixed requires_module edge unconditionally, after any node type's own
 // declared field of the same name, so profile.Edges can carry two
 // requires_module entries with the declared, exemptable one first. edgeActive
