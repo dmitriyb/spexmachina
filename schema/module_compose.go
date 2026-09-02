@@ -105,19 +105,24 @@ func defaultArrayKeyByTypeName() map[string]string {
 // the shipped frame plus one array property per given module-scoped node
 // type, keyed by its plural key. A type whose name matches one of the
 // frame's built-in $defs (requirement, component, data_flow, test_section,
-// api) reuses that definition, and its array property, unchanged from the
-// frame — declared edges sourced at a built-in type never reach it, since
-// the built-in $defs are frame-fixed. Any other name gets a generic
-// envelope definition — an identity-hash id, a non-empty name, and, only
-// when RequiresContent is set, a required content path — the same
-// constraints today's components array enforces, plus one array-of-
-// identity-hash property per given edge whose source names that type, and
-// a synthesized array property description. additionalProperties:false at
-// the root, inherited unchanged from the frame, is what rejects any array
-// no passed type declares; the same constraint at the entry level, applied
-// by genericNodeDef, is what rejects any property that is neither envelope,
-// declared edge, nor declared field. Composing with DefaultModuleNodeTypes
-// and DefaultProfile's edges reproduces the shipped module.schema.json.
+// api) keeps that entry's hand-authored $comment and its array property
+// unchanged from the frame, but its declared fields compose into the
+// entry's properties via mergeDeclaredFields — the same composeFieldSchema
+// path any other type's fields take — overwriting whatever property the
+// frame gave that name and adding any new one, so a declared edge or field
+// sourced at a built-in type reaches the composed schema too. Any other
+// name gets a generic envelope definition — an identity-hash id, a
+// non-empty name, and, only when RequiresContent is set, a required
+// content path — the same constraints today's components array enforces,
+// plus one array-of-identity-hash property per given edge whose source
+// names that type, and a synthesized array property description.
+// additionalProperties:false at the root, inherited unchanged from the
+// frame, is what rejects any array no passed type declares; the same
+// constraint at the entry level — already present on a frame-authored
+// entry, applied by genericNodeDef for a synthesized one — is what rejects
+// any property that is neither envelope, declared edge, nor declared
+// field. Composing with DefaultModuleNodeTypes and DefaultProfile's edges
+// reproduces the shipped module.schema.json.
 func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
