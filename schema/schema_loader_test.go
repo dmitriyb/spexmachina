@@ -1544,3 +1544,18 @@ func TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument(t *testing.T) {
 		t.Fatal("composing from the file-backed copy of the embedded document should still reproduce the shipped project schema (P2 holds over both)")
 	}
 }
+
+// TestFR3_FormatVersionDeclarations covers arch_schema_loader.md's format
+// version declarations beyond profile_version (pinned separately by
+// TestFR9_P8_ProfileVersionOutOfRangeFailsEarly): SchemaLoader carries the
+// binary's supported spec_version and the journal-line version writers
+// stamp, so a future spec_version check or journal writer has a constant to
+// consume rather than a bare literal 1.
+func TestFR3_FormatVersionDeclarations(t *testing.T) {
+	if SupportedSpecVersion != 1 {
+		t.Fatalf("SupportedSpecVersion = %d, want 1", SupportedSpecVersion)
+	}
+	if JournalLineVersion != 1 {
+		t.Fatalf("JournalLineVersion = %d, want 1", JournalLineVersion)
+	}
+}

@@ -136,6 +136,21 @@ const (
 	maxProfileVersion = 1
 )
 
+// SupportedSpecVersion is the spec format version this binary supports,
+// declared by project.json's spec_version field ([Project.SpecVersion]). An
+// absent spec_version means version 1. Spec format version 1 carries one
+// deliberate break: the requirement type's title field is renamed to name.
+// Unlike profile_version, there is no range to consult — this binary speaks
+// exactly one spec format version.
+const SupportedSpecVersion = 1
+
+// JournalLineVersion is the journal-line format version a writer stamps
+// into the optional per-line "v" field; an absent v means version 1. The
+// journal is append-only and permanent, so — unlike SupportedSpecVersion —
+// this is a floor rather than an exact match: readers accept every version
+// from JournalLineVersion forward, forever.
+const JournalLineVersion = 1
+
 // envelopeFieldNames are the fixed envelope property names no declared
 // field may reuse: id, name and description on every type. "content" is
 // deliberately not in this set — it is only part of a type's envelope when
