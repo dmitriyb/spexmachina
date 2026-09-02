@@ -243,6 +243,48 @@ func TestREQ14_RC7_ProfileRenamedCoveringTypeUncovered(t *testing.T) {
 	}
 }
 
+// RC9: a profile renaming the project-scoped covered type (requirement ->
+// objective) still interpolates the renamed node's declared name into the
+// message — the generic covered-side path must read the wire's "name" key,
+// not the retired "title" key, exactly as RC7 already pins for a renamed
+// covering type.
+func TestREQ14_RC9_ProfileRenamedCoveredProjectType(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_profile_renamed_covered_project"))
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `project objective 000000000009 "Feature Z" is not derived into any module requirement`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "project.json" {
+		t.Fatalf("expected path=project.json, got %q", errs[0].Path)
+	}
+}
+
+// RC10: a profile renaming the module-scoped covered type (requirement ->
+// capability) exercises the same generic covered-side path at module scope
+// — its declared name must appear quoted, not empty.
+func TestREQ14_RC10_ProfileRenamedCoveredModuleType(t *testing.T) {
+	errs, notes := CheckRequirementCoverage(filepath.Join("testdata", "reqcov_profile_renamed_covered_module"))
+	if len(notes) != 0 {
+		t.Fatalf("expected 0 notes, got %d: %v", len(notes), notes)
+	}
+	if len(errs) != 1 {
+		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
+	}
+	want := `alpha capability 000000000002 "Mod Feat B" is not implemented by any endpoint`
+	if errs[0].Message != want {
+		t.Fatalf("message mismatch:\n got: %s\nwant: %s", errs[0].Message, want)
+	}
+	if errs[0].Path != "alpha/module.json" {
+		t.Fatalf("expected path=alpha/module.json, got %q", errs[0].Path)
+	}
+}
+
 // RC8: a profile declaring no coverage chains (and no completeness-trigger
 // types) drops both checks entirely — a project requirement with no
 // deriving module requirement and a module requirement with no implementer

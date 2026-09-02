@@ -1,0 +1,18 @@
+{
+  "name": "alpha",
+  "components": [
+    {
+      "id": "000000000001",
+      "name": "CompA",
+      "implements": ["000000000001"]
+    }
+  ],
+  "requirements": [
+    {
+      "id": "000000000001",
+      "preq_id": "000000000099",
+      "name": "Mod Feat A",
+      "type": "functional"
+    }
+  ]
+}

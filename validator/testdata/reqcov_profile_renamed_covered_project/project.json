@@ -1,0 +1,17 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "reqcov-profile-renamed-covered-project",
+  "objectives": [
+    {
+      "id": "000000000009",
+      "name": "Feature Z",
+      "type": "functional"
+    }
+  ]
+}

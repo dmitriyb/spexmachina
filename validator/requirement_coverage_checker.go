@@ -205,7 +205,7 @@ func projectCoveredEntries(specDir string, profile *schema.Profile, project *sch
 	}
 	out := make([]coverageNode, len(entries))
 	for i, e := range entries {
-		out[i] = coverageNode{id: e.str("id"), title: e.str("title"), derivation: e.str("derivation")}
+		out[i] = coverageNode{id: e.str("id"), title: entryTitle(e), derivation: e.str("derivation")}
 	}
 	return out, nil
 }
@@ -236,9 +236,19 @@ func moduleCoveredEntries(specDir, modPath string, mod *schema.ModuleSpec, profi
 	}
 	out := make([]coverageNode, len(entries))
 	for i, e := range entries {
-		out[i] = coverageNode{id: e.str("id"), title: e.str("title")}
+		out[i] = coverageNode{id: e.str("id"), title: entryTitle(e)}
 	}
 	return out, nil
+}
+
+// entryTitle reads a raw entry's declared-identity field: "name" under the
+// wire format since the title-to-name rename (03da982), falling back to
+// "title" for tolerance, matching genericCycleAdjacency in dag_checker.go.
+func entryTitle(e rawEntry) string {
+	if name := e.str("name"); name != "" {
+		return name
+	}
+	return e.str("title")
 }
 
 // coveringEdgeTargets returns the ids one module's covering-side entries

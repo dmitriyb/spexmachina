@@ -1,0 +1,36 @@
+{
+  "profile_version": 1,
+  "node_types": [
+    {
+      "name": "requirement",
+      "plural_key": "requirements",
+      "scope": "project",
+      "completeness_trigger": true,
+      "fields": [
+        {"name": "type", "kind": "text", "required": true, "enum": ["functional", "non_functional"]}
+      ]
+    },
+    {
+      "name": "capability",
+      "plural_key": "capabilities",
+      "scope": "module",
+      "completeness_trigger": true,
+      "fields": [
+        {"name": "type", "kind": "text", "required": true, "enum": ["functional", "non_functional"]},
+        {"name": "preq_id", "kind": "reference", "required": true, "targets": ["requirement"], "cardinality": "one"}
+      ]
+    },
+    {
+      "name": "endpoint",
+      "plural_key": "endpoints",
+      "scope": "module",
+      "fields": [
+        {"name": "implements", "kind": "reference", "targets": ["capability"], "cardinality": "many"}
+      ]
+    }
+  ],
+  "coverage_chains": [
+    {"covered_type": "requirement", "covered_scope": "project", "edge": "preq_id", "covering_type": "capability", "covering_scope": "module"},
+    {"covered_type": "capability", "covered_scope": "module", "edge": "implements", "covering_type": "endpoint"}
+  ]
+}

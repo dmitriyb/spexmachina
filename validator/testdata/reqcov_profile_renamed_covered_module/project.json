@@ -1,0 +1,17 @@
+{
+  "modules": [
+    {
+      "id": "000000000001",
+      "name": "alpha",
+      "path": "alpha"
+    }
+  ],
+  "name": "reqcov-profile-renamed-covered-module",
+  "requirements": [
+    {
+      "id": "000000000001",
+      "name": "Feature A",
+      "type": "functional"
+    }
+  ]
+}
