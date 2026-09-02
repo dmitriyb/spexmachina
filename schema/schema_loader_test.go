@@ -185,7 +185,7 @@ func TestFR3_S3_ProjectSchemaStructure(t *testing.T) {
 	}
 
 	props, _ := raw["properties"].(map[string]any)
-	for _, key := range []string{"name", "description", "version", "requirements", "modules", "sections"} {
+	for _, key := range []string{"name", "description", "version", "spec_version", "requirements", "modules", "sections"} {
 		if props[key] == nil {
 			t.Errorf("properties missing %q", key)
 		}
@@ -1120,10 +1120,15 @@ func TestFR9_P3_MalformedProfileIsDistinctEarlyFailure(t *testing.T) {
 }
 
 // TestFR9_P4_DeclaredCustomTypeReachesComposedSchema declares a custom
-// "endpoint" type in spec/profile.json and checks that it reaches the
-// composed module schema with the same generic envelope constraints
-// built-in types get, while additionalProperties:false still rejects any
-// array the profile does not declare.
+// "endpoint" type in spec/profile.json — module-scoped, plural key
+// "endpoints", content leaf required, with a text field carrying an
+// enumeration and a reference field targeting "component" — and checks that
+// it reaches the composed module schema through the file-backed
+// ResolveProfile -> ComposeModuleSchema path with the same generic envelope
+// constraints built-in types get, one composed property per declared field,
+// and that additionalProperties:false rejects an undeclared array, an
+// undeclared field, and a non-hash id, while the required content leaf is
+// enforced.
 func TestFR9_P4_DeclaredCustomTypeReachesComposedSchema(t *testing.T) {
 	profile := DefaultProfile()
 	profile.NodeTypes = append(profile.NodeTypes, NodeType{
@@ -1131,6 +1136,10 @@ func TestFR9_P4_DeclaredCustomTypeReachesComposedSchema(t *testing.T) {
 		PluralKey:       "endpoints",
 		Scope:           "module",
 		RequiresContent: true,
+		Fields: []Field{
+			{Name: "protocol", Kind: FieldKindText, Enum: []string{"http", "grpc"}},
+			{Name: "serves", Kind: FieldKindReference, Targets: []string{"component"}},
+		},
 	})
 
 	dir := t.TempDir()
@@ -1151,15 +1160,85 @@ func TestFR9_P4_DeclaredCustomTypeReachesComposedSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ComposeModuleSchema: %v", err)
 	}
+
+	var raw map[string]any
+	if err := json.Unmarshal(composed, &raw); err != nil {
+		t.Fatalf("unmarshal composed schema: %v", err)
+	}
+	def, ok := raw["$defs"].(map[string]any)["endpoint"].(map[string]any)
+	if !ok {
+		t.Fatal("$defs/endpoint missing from composed module schema")
+	}
+	props, ok := def["properties"].(map[string]any)
+	if !ok {
+		t.Fatal("$defs/endpoint has no properties")
+	}
+
+	protocol, ok := props["protocol"].(map[string]any)
+	if !ok {
+		t.Fatalf("$defs/endpoint should carry the declared 'protocol' field, got properties: %v", props)
+	}
+	if enum, ok := protocol["enum"].([]any); !ok || len(enum) != 2 || enum[0] != "http" || enum[1] != "grpc" {
+		t.Fatalf("protocol should compose enum-constrained [http grpc], got: %v", protocol)
+	}
+
+	serves, ok := props["serves"].(map[string]any)
+	if !ok {
+		t.Fatalf("$defs/endpoint should carry the declared 'serves' field, got properties: %v", props)
+	}
+	if serves["type"] != "array" {
+		t.Fatalf("serves should compose as an array of identity hashes, got: %v", serves)
+	}
+	items, ok := serves["items"].(map[string]any)
+	if !ok || items["pattern"] != identityHashPattern {
+		t.Fatalf("serves items should be identity-hash-pattern strings, got: %v", serves)
+	}
+
 	sch := compileSchemaFromBytes(t, composed)
 
 	if err := validateModule(t, sch, `{
 		"name": "m",
 		"endpoints": [
-			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md"}
+			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "protocol": "http", "serves": ["112233445566"]}
 		]
 	}`); err != nil {
-		t.Fatalf("profile-declared endpoints array should pass: %v", err)
+		t.Fatalf("fully-populated endpoint entry should pass: %v", err)
+	}
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"endpoints": [
+			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "protocol": "ftp"}
+		]
+	}`); err == nil {
+		t.Fatal("expected validation error for a protocol value outside the declared enum")
+	}
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"endpoints": [
+			{"id": "aabbccddeeff", "name": "GET /things", "protocol": "http"}
+		]
+	}`); err == nil {
+		t.Fatal("expected validation error for an endpoint entry omitting its required content leaf")
+	}
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"endpoints": [
+			{"id": "not-a-hash", "name": "GET /things", "content": "endpoint_things.md"}
+		]
+	}`); err == nil {
+		t.Fatal("expected validation error for a non-hash id")
+	}
+
+	if err := validateModule(t, sch, `{
+		"name": "m",
+		"endpoints": [
+			{"id": "aabbccddeeff", "name": "GET /things", "content": "endpoint_things.md", "unlisted_field": "x"}
+		]
+	}`); err == nil {
+		t.Fatal("expected validation error for an undeclared field on the endpoint entry")
 	}
 
 	if err := validateModule(t, sch, `{
