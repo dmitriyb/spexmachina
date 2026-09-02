@@ -157,39 +157,55 @@ func TestREQ3_ProfileDeclaredEdgeCyclicExempt(t *testing.T) {
 	}
 }
 
-// A built-in edge kind (requires_module) marked cyclic: true in the resolved
+// A built-in reference kind (uses) marked cyclic: true in the resolved
 // profile is exempt from the cycle check the same way a profile-declared
 // edge is: the flag applies uniformly, not only to graphs built generically.
+// requires_module carries no such capability — it is the frame's own fixed
+// edge, never sourced by a declarable field (schema.deriveEdges), so it is
+// always cycle-checked and cannot be exempted by any profile.
 func TestREQ3_BuiltinEdgeCyclicExempt(t *testing.T) {
-	// TODO(bead:spexmachina-9jfk.13): profile-v2's field-declaration format
-	// (arch_profile_loader.md) has no way to declare requires_module at all —
-	// module is never a declarable node type, so it carries no Fields list to
-	// mark cyclic, and Profile.Edges' requires_module entry is now a fixed,
-	// always-cycle-checked frame edge (schema.deriveEdges). This test exercises
-	// the retired profile-configurable exemption; DAGChecker's own bead must
-	// decide whether to keep this capability (via a spec change) or drop it.
-	t.Skip("requires_module is no longer profile-configurable under profile-v2's field-declaration format")
 	errs := CheckDAG(filepath.Join("testdata", "dag_profile_builtin_exempt"))
 	if len(errs) > 0 {
-		t.Fatalf("expected no errors when requires_module is marked cyclic: true, got %d: %v", len(errs), errs)
+		t.Fatalf("expected no errors when uses is marked cyclic: true, got %d: %v", len(errs), errs)
 	}
 }
 
-// A profile that declares none of requires_module, depends_on or uses must
-// not have the built-in module/requirement/component graphs built and
-// walked anyway: the checker holds no fixed edge list of its own, so an
-// edge kind the resolved profile omits entirely gets no graph, the same as
-// one it declares cyclic: true.
+// A profile whose field declarations omit a built-in reference kind (here,
+// uses on component) must not have that graph built and walked anyway: the
+// checker holds no fixed edge list of its own, so a kind the resolved
+// profile omits entirely gets no graph, the same as one it declares
+// cyclic: true. requires_module is exempt from this too, in the opposite
+// direction: module is never a declarable node type, so no profile can omit
+// it either — it is unconditionally present in every resolved profile's
+// derived edge view (schema.deriveEdges).
 func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
-	// TODO(bead:spexmachina-9jfk.13): same retired capability as
-	// TestREQ3_BuiltinEdgeCyclicExempt — requires_module can no longer be
-	// omitted by a profile-v2 document (schema.deriveEdges always appends it),
-	// since module is never a declarable node type under
-	// arch_profile_loader.md's field-declaration format.
-	t.Skip("requires_module is no longer profile-omittable under profile-v2's field-declaration format")
 	errs := CheckDAG(filepath.Join("testdata", "dag_profile_omits_builtin_edges"))
 	if len(errs) > 0 {
-		t.Fatalf("expected no errors when the profile declares none of requires_module, depends_on or uses, got %d: %v", len(errs), errs)
+		t.Fatalf("expected no errors when the profile omits uses from component's declared fields, got %d: %v", len(errs), errs)
+	}
+}
+
+// requires_module's "always cycle-checked, never exemptable" guarantee
+// (arch_dag_checker.md, spec/validator/module.json) must hold even against a
+// profile that names a node type "module" and declares its own
+// requires_module field, cyclic: true — an attempt Profile.Validate does not
+// yet reject (D10, test_graph_structure.md notes that gap is the loader's to
+// close, not this checker's). schema.deriveEdges appends the frame's own
+// fixed requires_module edge unconditionally, after any node type's own
+// declared field of the same name, so profile.Edges can carry two
+// requires_module entries with the declared, exemptable one first. edgeActive
+// must resolve this pair itself rather than trust iteration order and return
+// on the first match, or the declared entry silently shadows the frame's
+// guarantee.
+func TestREQ3_RequiresModuleNotShadowedByDeclaredField(t *testing.T) {
+	profile := &schema.Profile{
+		Edges: []schema.Edge{
+			{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}, CyclicFrom: map[string]bool{"module": true}},
+			{Kind: "requires_module", From: []string{"module"}, To: []string{"module"}, CyclicFrom: map[string]bool{}},
+		},
+	}
+	if !edgeActive(profile, "requires_module", "module") {
+		t.Fatal("requires_module from module must always be active, regardless of a shadowing declared edge ahead of the frame's own")
 	}
 }
 

@@ -112,7 +112,22 @@ func CheckDAG(specDir string) []ValidationError {
 // pair is skipped here exactly as it would be by the generic
 // checkExtra*DAGEdges path, rather than walked anyway using the built-in
 // struct field regardless of what the profile says.
+//
+// requires_module from module is the one exception: it is the frame's own
+// fixed edge, "not the profile's to declare and always cycle-checked, never
+// exemptable" (arch_dag_checker.md, spec/validator/module.json). module is
+// never a legitimately declarable node type, but nothing before this point
+// rejects a profile that names a node type "module" anyway — Profile.Validate
+// is the loader's belt to close that hole (D10, test_graph_structure.md),
+// not this checker's. Until it does, schema.deriveEdges' unconditional
+// append of the frame edge can sit behind such a type's own declared
+// requires_module field in profile.Edges, and the loop below returns on
+// the first match — so this pair is decided before the loop ever runs,
+// rather than by whatever a same-named declared field claims.
 func edgeActive(profile *schema.Profile, kind, fromType string) bool {
+	if kind == "requires_module" && fromType == "module" {
+		return true
+	}
 	for _, e := range profile.Edges {
 		if e.Kind != kind {
 			continue

@@ -1,3 +1,10 @@
 {
-  "node_types": []
+  "node_types": [
+    {
+      "fields": [],
+      "name": "component",
+      "plural_key": "components",
+      "scope": "module"
+    }
+  ]
 }
