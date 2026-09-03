@@ -95,6 +95,15 @@ func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string
 // checked first — the same order the reconciler pairs the receipt by, so
 // label and referent stay one fact whichever run the removal actually
 // landed in.
+//
+// TODO(bead:spexmachina-swvx.13): the CloseOpIDs[action.OldTaskID] fallback
+// is the pre-task-lifecycle obsolete-then-recreate shape's same-batch
+// close op — a modify-pair cleanup's OldTaskID names the task
+// ActionClassifier's obsolete path (spexmachina-swvx.16) is closing in the
+// same run. Once that path retargets in place instead, a modify-pair
+// cleanup create stops existing and this fallback narrows to the
+// removed-node cleanup case the fold branch above already covers;
+// IdempotencyLabeler's own bead is to drop it then.
 func (l *Labeler) cleanupLabel(action Action) (string, error) {
 	if l.Fold != nil {
 		if entry, ok := l.Fold.Removal(action.SpecNodeID); ok && entry.Removed && entry.EID != "" {

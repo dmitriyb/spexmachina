@@ -36,6 +36,15 @@ type Registration struct {
 // could resolve what this function cannot. Used identically for a create
 // action's DepSpecNodeIDs and a retarget action's freshly recomputed ones
 // (spec/plan/arch_resolver.md, "Retarget deps").
+//
+// TODO(bead:spexmachina-swvx.19): the BeadStatus == "closed" drop branch
+// exists for the obsolete-then-recreate shape — a dep on a node that was
+// itself obsoleted resolves to a task already closed by this run's own
+// close op, so the edge is dropped rather than pointed at a dead task.
+// Once ActionClassifier (spexmachina-swvx.16) retargets in place instead of
+// closing, a changed node's task stays open across the change and this
+// branch stops firing for that case; Resolver's own bead is to confirm
+// nothing else still relies on it before removing it.
 func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLookup) ([]Ref, error) {
 	var refs []Ref
 	for _, dep := range depSpecNodeIDs {

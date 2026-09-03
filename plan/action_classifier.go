@@ -405,6 +405,14 @@ func applyDataFlowAddOn(actions []Action, flowUses map[string][]string) {
 // every matched-path obsolete (an added change matched to a differing hash
 // behaves exactly as a modified one — see spec/plan/test_classification.md
 // S3) or "removed" for an orphaned one.
+//
+// TODO(bead:spexmachina-swvx.16): a "modified" obsolete paired with
+// createSuccessorAction is the pre-task-lifecycle obsolete-then-recreate
+// shape plan/doc.go describes as target-superseded: spec/plan/flow_plan.md's
+// v4 flow retargets an open task's node change in place instead (step 4),
+// so this changeType == "modified" path — and its createSuccessorAction
+// pairing — is ActionClassifier's own bead to rewrite. The "removed" path
+// (an orphaned node's cleanup) is unaffected and stays.
 func obsoleteAction(module, node, nodeType, specNodeID, beadID, changeType string) Action {
 	reason := fmt.Sprintf("Spec node modified: %s/%s", module, node)
 	if changeType == "removed" {
