@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/task-state.json",
+  "title": "Spex Machina Task State Artifact",
+  "description": "Schema for the task-state artifact plan reads through its required --tasks flag: the versioned document an adapter's export half derives from the tracker, listing in-flight work only. There is no closed status and no way to express one — a task absent from the document has no live work.",
+  "type": "object",
+  "required": ["version", "tasks"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "const": 1,
+      "description": "The task-state format version. Required and refused if not exactly 1 — this document is regenerated from the tracker before every run, so a consumer refuses what it does not speak rather than guessing at the entry shape."
+    },
+    "tasks": {
+      "type": "array",
+      "description": "In-flight tasks only. An empty array is a legal, explicit nothing-in-flight statement, not a degenerate case.",
+      "items": { "$ref": "#/$defs/taskEntry" }
+    }
+  },
+  "$defs": {
+    "taskEntry": {
+      "type": "object",
+      "required": ["task_id", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "task_id": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The tracker's own id for the task — the same value a receipt's task_id and a journal receipt's task_id carry."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "in_progress"],
+          "description": "Exactly two values. There is no closed, no done, and no third status — completion is derived from the journal pairing plus the task's absence from this document, never carried as a status."
+        }
+      }
+    }
+  }
+}
