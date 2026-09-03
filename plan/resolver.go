@@ -32,7 +32,7 @@ type Registration struct {
 //     the work is already satisfied and needs no edge.
 //
 // A dep that is neither in-batch nor in the fold is a plan error naming the
-// spec_node_id — v3 has no adapter-time fallback, so nothing downstream
+// spec_node_id — v4 has no adapter-time fallback, so nothing downstream
 // could resolve what this function cannot. Used identically for a create
 // action's DepSpecNodeIDs and a retarget action's freshly recomputed ones
 // (spec/plan/arch_resolver.md, "Retarget deps").

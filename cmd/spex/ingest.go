@@ -159,7 +159,7 @@ func runRefreshMode(cmd *cobra.Command, specDir string, ctx *lifecycle.ProjectCo
 	return enc.Encode(sum)
 }
 
-// loadChangeset parses changeset.json as plan.Changeset (v3) — the same
+// loadChangeset parses changeset.json as plan.Changeset (v4) — the same
 // type Reconciler and RefreshHandler consume, so no bridging conversion
 // sits between the file and either pathway.
 func loadChangeset(path string) (plan.Changeset, error) {

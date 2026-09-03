@@ -17,12 +17,12 @@ type Fold interface {
 	RemovalLookup
 }
 
-// Builder composes changeset.json v3 from one batch of classified actions
+// Builder composes changeset.json v4 from one batch of classified actions
 // and the run's fixed inputs — the spec graph, the journal fold, the run's
 // registration, the git HEAD SHA, the proposal ref, and the absorbed
 // entries PlanCommand composed off the diff's withheld marks
 // (spec/plan/arch_changeset_builder.md, "Interface"). It is set up once per
-// run and handed exactly one batch; Build answers with one v3 changeset or
+// run and handed exactly one batch; Build answers with one v4 changeset or
 // an error, never both.
 type Builder struct {
 	SpecGraph    SpecGraph
