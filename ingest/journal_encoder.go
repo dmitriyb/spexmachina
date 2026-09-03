@@ -84,8 +84,10 @@ var (
 // is the format's only writer. Reads schema.JournalLineSchema (backed by
 // schema/journal-line.schema.json) rather than the retired
 // schema.BeadMapSchema — the two documents are byte-identical apart from
-// their $id, but JournalLineSchema is the current name every other
-// reader of this format resolves by.
+// their $id, but MappingStore (the journal's only other reader) has not
+// migrated off schema.BeadMapSchema yet (schema/schema.go), so
+// JournalLineSchema is not yet the name every reader resolves by — only
+// this one.
 func getLineSchema() (*jsonschema.Schema, error) {
 	lineSchemaOnce.Do(func() {
 		raw, err := schema.JournalLineSchema()
