@@ -4,7 +4,7 @@ Integration and acceptance test scenarios for DAGChecker and IDValidator.
 
 ## Setup
 
-IDValidator scenarios each read one checked-in fixture directory under `validator/testdata/id_*`, already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by eleven tests. DAGChecker fixtures cover eleven shapes — `dag_valid` (two acyclic modules, `core` and `api`), `dag_module_cycle` (a two-module cycle), `dag_req_cycle`, `dag_comp_cycle`, `dag_profile_edge_cycle`, `dag_profile_edge_cyclic_exempt`, `dag_profile_builtin_exempt`, `dag_profile_omits_builtin_edges`, `dag_profile_data_flow_uses_cycle`, `dag_project_req_cycle`, and `empty_arrays` (shared with IDValidator, E1). D9, D10 and their variants are realized by the `dag_profile_*` and `dag_project_req_cycle` fixtures; the DAG scenarios no fixture realizes each carry a note below saying what covers them, if anything. Node ids in fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
+IDValidator scenarios each read one checked-in fixture directory under `validator/testdata/id_*`, already carrying the mutations the scenarios that read it name. One fixture may serve several scenarios: `id_dangling` carries six kinds of dangling reference and is read by eleven tests. DAGChecker fixtures cover twelve shapes — `dag_valid` (two acyclic modules, `core` and `api`), `dag_module_cycle` (a two-module cycle), `dag_req_cycle`, `dag_comp_cycle`, `dag_profile_edge_cycle`, `dag_profile_edge_cyclic_exempt`, `dag_profile_builtin_exempt`, `dag_profile_omits_builtin_edges`, `dag_profile_data_flow_uses_cycle`, `dag_profile_cyclic_per_declaring_type`, `dag_project_req_cycle`, and `empty_arrays` (shared with IDValidator, E1). D9, D10 and their variants are realized by the `dag_profile_*` and `dag_project_req_cycle` fixtures; the DAG scenarios no fixture realizes each carry a note below saying what covers them, if anything. Node ids in fixtures are 12-character identity-hash strings (`000000000001`, `000000000099`, …); the numbering below — module 1, requirement 2, component 99 — is shorthand for them, never a literal JSON value.
 
 ### Scenario Model
 
@@ -53,7 +53,7 @@ tmp/spec/
 **When** `CheckDAG(specDir)` is called.
 **Then** one error whose `message` includes the full three-node cycle path.
 
-> No implementing test or fixture exists for the three-node shape. Fixture-tested cycles stop at two nodes (D2), and the in-memory unit cases cover self-loops and two-node cycles only.
+> No implementing test or fixture exists for the three-node shape in the module graph. Fixture-tested module cycles stop at two nodes (D2) — the three-node shape is fixture-tested only in the requirement graph (`dag_req_cycle`, the fixture that covers D5 with a three-node rather than two-node loop, whose test asserts all three names appear in the path) — and the in-memory unit cases cover self-loops and two-node cycles only.
 
 #### D4: Self-referential module dependency
 
@@ -204,11 +204,12 @@ In a further variant the profile marks the endpoints' edge `cyclic: true`: the s
 **When** `CheckDAG(specDir)` is called.
 **Then** one cycle error naming the two requirements, reported through the generic profile-edge path with the `depends_on cycle: …` message — project-scope `depends_on` has no dedicated built-in graph (per `arch_dag_checker.md`).
 
-Three further `dag_profile_*` fixtures pin the edge-set policy down:
+Four further `dag_profile_*` fixtures pin the edge-set policy down:
 
 - `dag_profile_builtin_exempt`: a profile marking a built-in reference kind (`uses`) `cyclic: true` — a component `uses` loop then validates with zero DAG errors; the exemption flag binds built-in kinds exactly as it binds declared ones. `requires_module` is out of the flag's reach: it is the frame's edge, not a declarable field, so a profile attempting to declare (and thereby exempt) it fails profile validation as any fixed-point declaration does, and a module dependency cycle is always an error.
 - `dag_profile_omits_builtin_edges`: a profile whose field declarations omit a built-in reference kind — a loop through that field produces zero DAG errors, because the checker walks only the reference fields the resolved profile declares. Built-in shapes compose from the same declarations, so the omitted field also stops being admitted by the composed schema and the document draws a schema error instead; the fixture asserts the DAG checker's half in isolation — one declaration governs both the admission and the check.
 - `dag_profile_data_flow_uses_cycle`: data_flow `uses` edges alongside a component `uses` loop — exactly the component cycle is reported; the data_flow occurrence's graph (data_flow → component) cannot close a loop and contributes no edges to the component graph, per the per-source-occurrence rule in `arch_dag_checker.md`.
+- `dag_profile_cyclic_per_declaring_type`: component and data_flow both declare a `uses` field targeting components and data_flows alike, component's marked `cyclic: true` and data_flow's not, and the module carries a two-component `uses` loop beside a two-data_flow `uses` loop — exactly the data_flow cycle is reported and the component loop draws nothing. The exemption flag sits on one type's field declaration, so it is tracked per declaring type, never per field name: one type's `cyclic: true` neither exempts nor is overridden by another type's same-named field.
 
 ---
 
