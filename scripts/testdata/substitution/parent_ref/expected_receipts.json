@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0001","status":"ok","bead_id":"br-50","was_existing":false},
-    {"op_id":"op-0002","status":"ok","bead_id":"br-51","was_existing":false}
+    {"op_id":"op-0001","status":"ok","task_id":"br-50","was_existing":false},
+    {"op_id":"op-0002","status":"ok","task_id":"br-51","was_existing":false}
   ]
 }

@@ -246,7 +246,7 @@ func (b *EventBuilder) buildFreshCreate(cs plan.Changeset, op plan.Op, receipt a
 		Proposal: cs.Proposal,
 		Path:     md.ContentFile,
 	}
-	created := mapping.Event{Event: "task_created", TaskID: receipt.BeadID, For: eid}
+	created := mapping.Event{Event: "task_created", TaskID: receipt.TaskID, For: eid}
 	return []mapping.Event{ev, created}, nil
 }
 
@@ -280,7 +280,7 @@ func (b *EventBuilder) buildModifiedPair(cs plan.Changeset, op plan.Op, receipt 
 		Path:     md.ContentFile,
 	}
 	closed := mapping.Event{Event: "task_closed", TaskID: oldBeadID, For: eid}
-	created := mapping.Event{Event: "task_created", TaskID: receipt.BeadID, For: eid}
+	created := mapping.Event{Event: "task_created", TaskID: receipt.TaskID, For: eid}
 	return []mapping.Event{ev, closed, created}, nil
 }
 
@@ -315,7 +315,7 @@ func (b *EventBuilder) buildRemoved(cs plan.Changeset, op plan.Op, receipt adapt
 		Proposal: cs.Proposal,
 		Path:     entry.Source.Path,
 	}
-	closed := mapping.Event{Event: "task_closed", TaskID: receipt.BeadID, For: eid}
+	closed := mapping.Event{Event: "task_closed", TaskID: receipt.TaskID, For: eid}
 	return []mapping.Event{ev, closed}, nil
 }
 
@@ -355,7 +355,7 @@ func (b *EventBuilder) buildModifiedFromClose(cs plan.Changeset, op plan.Op, rec
 		Proposal: cs.Proposal,
 		Path:     md.ContentFile,
 	}
-	closed := mapping.Event{Event: "task_closed", TaskID: receipt.BeadID, For: eid}
+	closed := mapping.Event{Event: "task_closed", TaskID: receipt.TaskID, For: eid}
 	return []mapping.Event{ev, closed}, nil
 }
 
@@ -399,7 +399,7 @@ func buildEpicCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, 
 	if !ok {
 		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: proposal-epic %s: no registered event in journal", op.OpID, stem)
 	}
-	return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: eid}}, nil
+	return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: eid}}, nil
 }
 
 // buildCleanupCreate builds the one-line receipt a cleanup create implies:
@@ -431,10 +431,10 @@ func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fol
 		if e.TaskID != "" {
 			return nil, nil // idempotent no-op: cleanup already landed for this removal
 		}
-		return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: e.Source.EID}}, nil
+		return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: e.Source.EID}}, nil
 	}
 	if eid, ok := sameBatchRemovals[hash]; ok {
-		return []mapping.Event{{Event: "task_created", TaskID: receipt.BeadID, For: eid}}, nil
+		return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: eid}}, nil
 	}
 	return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no removed event", op.OpID, hash)
 }

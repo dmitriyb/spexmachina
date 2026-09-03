@@ -113,14 +113,14 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-01", Status: adapters.OpStatusOk, BeadID: "br-new1"},
-		{OpID: "op-02", Status: adapters.OpStatusOk, BeadID: "br-new2"},
-		{OpID: "op-03", Status: adapters.OpStatusOk, BeadID: "br-A"},
-		{OpID: "op-04", Status: adapters.OpStatusOk, BeadID: "br-B"},
-		{OpID: "op-05", Status: adapters.OpStatusOk, BeadID: "br-C"},
-		{OpID: "op-06", Status: adapters.OpStatusOk, BeadID: "br-old1"},
-		{OpID: "op-07", Status: adapters.OpStatusOk, BeadID: "br-old2"},
-		{OpID: "op-08", Status: adapters.OpStatusOk, BeadID: "br-gone"},
+		{OpID: "op-01", Status: adapters.OpStatusOk, TaskID: "br-new1"},
+		{OpID: "op-02", Status: adapters.OpStatusOk, TaskID: "br-new2"},
+		{OpID: "op-03", Status: adapters.OpStatusOk, TaskID: "br-A"},
+		{OpID: "op-04", Status: adapters.OpStatusOk, TaskID: "br-B"},
+		{OpID: "op-05", Status: adapters.OpStatusOk, TaskID: "br-C"},
+		{OpID: "op-06", Status: adapters.OpStatusOk, TaskID: "br-old1"},
+		{OpID: "op-07", Status: adapters.OpStatusOk, TaskID: "br-old2"},
+		{OpID: "op-08", Status: adapters.OpStatusOk, TaskID: "br-gone"},
 	}}
 
 	sum, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)
@@ -198,7 +198,7 @@ func TestConsistencyInvariants_Invariant4_PartialLeavesSnapshotUntouched(t *test
 		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A"},
 		{OpID: "op-2", Status: adapters.OpStatusError, Error: "tracker boom"},
 	}}
 
@@ -244,7 +244,7 @@ func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A"},
 	}}
 
 	_, wrote := runWithSnapshot(t, specDir, graph, "", snapPath, cs, rc)
@@ -289,8 +289,8 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 		{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"},
-		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"},
+		{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"},
 	}}
 
 	if _, err := r.Apply(cs, rc); err != nil {
@@ -362,7 +362,7 @@ func TestConsistencyInvariants_Invariant1_RetargetPairing(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}},
 	}
 
 	sum, err := r.Apply(cs, rc)

@@ -61,6 +61,12 @@ if ! echo "$CHANGESET_JSON" | jq -e . >/dev/null 2>&1; then
     exit 1
 fi
 
+# TODO(bead:spexmachina-swvx.5): the spec's changeset v4 (and its "task" ref
+# shape, replacing "bead") has not landed anywhere yet — this gate, resolve_ref
+# below, and plan.ChangesetVersion (spexmachina-swvx.6) all still agree on v3
+# today. Only receipts.json's own wire shape (version, task_id) was brought
+# current by spexmachina-swvx.4 — the changeset-consuming half of the adapter
+# is the BrReferenceAdapter migration.
 VERSION=$(jq -r '.version // empty' <<< "$CHANGESET_JSON")
 if [[ -z "$VERSION" ]]; then
     echo "error: changeset missing required field: version" >&2
@@ -107,27 +113,27 @@ debug_sub_table() {
 }
 
 append_receipt_ok() {
-    local op_id="$1" bead_id="$2" was_existing="$3"
+    local op_id="$1" task_id="$2" was_existing="$3"
     OP_STATUS["$op_id"]="ok"
     RECEIPTS+=("$(jq -cn \
-        --arg op "$op_id" --arg bid "$bead_id" --argjson we "$was_existing" \
-        '{op_id: $op, status: "ok", bead_id: $bid, was_existing: $we}')")
+        --arg op "$op_id" --arg tid "$task_id" --argjson we "$was_existing" \
+        '{op_id: $op, status: "ok", task_id: $tid, was_existing: $we}')")
 }
 
 append_receipt_ok_no_existing() {
-    local op_id="$1" bead_id="$2"
+    local op_id="$1" task_id="$2"
     OP_STATUS["$op_id"]="ok"
     RECEIPTS+=("$(jq -cn \
-        --arg op "$op_id" --arg bid "$bead_id" \
-        '{op_id: $op, status: "ok", bead_id: $bid}')")
+        --arg op "$op_id" --arg tid "$task_id" \
+        '{op_id: $op, status: "ok", task_id: $tid}')")
 }
 
 append_receipt_error() {
-    local op_id="$1" bead_id="$2" err="$3"
+    local op_id="$1" task_id="$2" err="$3"
     OP_STATUS["$op_id"]="error"
     RECEIPTS+=("$(jq -cn \
-        --arg op "$op_id" --arg bid "$bead_id" --arg e "$err" \
-        '{op_id: $op, status: "error", bead_id: $bid, was_existing: false, error: $e}')")
+        --arg op "$op_id" --arg tid "$task_id" --arg e "$err" \
+        '{op_id: $op, status: "error", task_id: $tid, was_existing: false, error: $e}')")
 }
 
 # resolve_ref echoes the resolved bead_id (or sentinel) for a ref JSON object.
@@ -536,7 +542,7 @@ for r in "${RECEIPTS[@]:-}"; do
     fi
 done
 
-# Build the final v1 wrapper. Avoid relying on shell expansion for the ops
+# Build the final v2 wrapper. Avoid relying on shell expansion for the ops
 # array — feed each receipt to jq via --slurpfile-equivalent stdin so we never
 # trip over IFS or empty-arrays.
 ops_json="[]"
@@ -547,7 +553,7 @@ fi
 out=$(jq -n \
     --arg st "$top_status" \
     --argjson ops "$ops_json" \
-    '{version: 1, status: $st, ops: $ops}')
+    '{version: 2, status: $st, ops: $ops}')
 
 if [[ -n "$RECEIPTS_OUT" ]]; then
     tmp="${RECEIPTS_OUT}.tmp"

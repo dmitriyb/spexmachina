@@ -194,11 +194,12 @@ func loadReceipts(path string) (adapters.Receipts, error) {
 // The version checks below read plan.ChangesetVersion and
 // adapters.ReceiptsVersion symbolically rather than hardcoding 4 and 2
 // (spec/ingest/arch_ingest_command.md, "Both modes"), so this pre-flight
-// needs no edit once plan (spexmachina-swvx.6) and adapters
-// (spexmachina-swvx.4) bump their own constants — until then it enforces
-// the versions those packages currently declare (3 and 1).
+// needed no edit when adapters (spexmachina-swvx.4) bumped its constant
+// to 2. Plan's own bump to 4 (spexmachina-swvx.6) is still outstanding,
+// so today it enforces the versions those packages currently declare
+// (3 and 2).
 // TODO(bead:spexmachina-swvx.25): IngestCommand's own component bead —
-// revisit this pre-flight once the version bump lands.
+// revisit this pre-flight once plan's version bump lands.
 func preflightPair(cs plan.Changeset, rc adapters.Receipts) error {
 	if cs.Version != plan.ChangesetVersion {
 		return fmt.Errorf("ingest: changeset version must be %d, got %d", plan.ChangesetVersion, cs.Version)

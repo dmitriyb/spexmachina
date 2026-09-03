@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0001","status":"ok","bead_id":"mock-cleanup-001","was_existing":true}
+    {"op_id":"op-0001","status":"ok","task_id":"mock-cleanup-001","was_existing":true}
   ]
 }

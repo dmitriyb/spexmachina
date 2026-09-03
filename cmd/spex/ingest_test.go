@@ -113,7 +113,7 @@ func setupIngestFixture(t *testing.T, status string) ingestFixture {
 		Ops: []adapters.OpReceipt{{
 			OpID:        "op-0001",
 			Status:      adapters.OpStatusOk,
-			BeadID:      "bead-1",
+			TaskID:      "bead-1",
 			WasExisting: false,
 		}},
 	}
@@ -247,7 +247,7 @@ func TestIngestCommand_OkRetarget_CountedInSummary(t *testing.T) {
 		Ops: []adapters.OpReceipt{{
 			OpID:   "op-0001",
 			Status: adapters.OpStatusOk,
-			BeadID: "bead-1",
+			TaskID: "bead-1",
 		}},
 	}
 	rcPath := filepath.Join(dir, "receipts.json")
@@ -362,7 +362,7 @@ func TestIngestCommand_MismatchedOpID_Exits1(t *testing.T) {
 		Ops: []adapters.OpReceipt{{
 			OpID:   "op-0042-stray",
 			Status: adapters.OpStatusOk,
-			BeadID: "bead-x",
+			TaskID: "bead-x",
 		}},
 	}
 	writeJSON(t, f.receiptsPath, rc)
@@ -493,8 +493,8 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 		Version: adapters.ReceiptsVersion,
 		Status:  adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-0001", Status: adapters.OpStatusOk, BeadID: "bead-1"},
-			{OpID: "op-0002", Status: adapters.OpStatusOk, BeadID: "bead-ghost"},
+			{OpID: "op-0001", Status: adapters.OpStatusOk, TaskID: "bead-1"},
+			{OpID: "op-0002", Status: adapters.OpStatusOk, TaskID: "bead-ghost"},
 		},
 	}
 	writeJSON(t, f.receiptsPath, rc)
@@ -559,7 +559,7 @@ func TestIngestCommand_ReRun_LeavesJournalByteIdentical(t *testing.T) {
 		Ops: []adapters.OpReceipt{{
 			OpID:        "op-0001",
 			Status:      adapters.OpStatusOk,
-			BeadID:      "bead-1",
+			TaskID:      "bead-1",
 			WasExisting: true,
 		}},
 	}

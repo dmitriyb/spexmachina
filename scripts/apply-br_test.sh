@@ -186,12 +186,12 @@ run_integration_case() {
         return
     }
 
-    # Integration bead IDs are non-deterministic (br assigns them based on
-    # the sandbox repo name). Normalize: any expected bead_id of "__ANY__"
+    # Integration task IDs are non-deterministic (br assigns them based on
+    # the sandbox repo name). Normalize: any expected task_id of "__ANY__"
     # accepts whatever the run produced.
     local norm_actual norm_expected
-    norm_actual=$(jq '.ops |= map(.bead_id = (if .bead_id == "" then "" else "__ANY__" end))' <<< "$actual")
-    norm_expected=$(jq '.ops |= map(if .bead_id == "__ANY__" then . else . end)' "$sandbox/expected_receipts.json")
+    norm_actual=$(jq '.ops |= map(.task_id = (if .task_id == "" then "" else "__ANY__" end))' <<< "$actual")
+    norm_expected=$(jq '.ops |= map(if .task_id == "__ANY__" then . else . end)' "$sandbox/expected_receipts.json")
     if ! _jdiff "$norm_actual" "$norm_expected" >"$sandbox/diff.txt" 2>&1; then
         echo "  [FAIL] $name: receipts mismatch"
         sed 's/^/    /' "$sandbox/diff.txt"

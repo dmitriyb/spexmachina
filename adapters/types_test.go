@@ -37,23 +37,23 @@ func encode(t *testing.T, v any) string {
 	return strings.TrimRight(buf.String(), "\n")
 }
 
-func TestReceipts_VersionConstantIsOne(t *testing.T) {
-	if ReceiptsVersion != 1 {
-		t.Fatalf("ReceiptsVersion: got %d want 1", ReceiptsVersion)
+func TestReceipts_VersionConstantIsTwo(t *testing.T) {
+	if ReceiptsVersion != 2 {
+		t.Fatalf("ReceiptsVersion: got %d want 2", ReceiptsVersion)
 	}
 }
 
-func TestReceipts_V1Schema(t *testing.T) {
+func TestReceipts_V2Schema(t *testing.T) {
 	r := Receipts{
 		Version: ReceiptsVersion,
 		Status:  StatusComplete,
 		Ops: []OpReceipt{
-			{OpID: "op-0001", Status: OpStatusOk, BeadID: "spexmachina-abc", WasExisting: false},
+			{OpID: "op-0001", Status: OpStatusOk, TaskID: "spexmachina-abc", WasExisting: false},
 		},
 	}
 	got := encode(t, r)
-	if !strings.Contains(got, `"version":1`) {
-		t.Fatalf("receipts must declare version 1: %s", got)
+	if !strings.Contains(got, `"version":2`) {
+		t.Fatalf("receipts must declare version 2: %s", got)
 	}
 	fieldOrder(t, got, "receipts", "version", "status", "ops")
 }
@@ -96,12 +96,12 @@ func TestOpReceipt_OkCanonicalFieldOrder(t *testing.T) {
 	r := OpReceipt{
 		OpID:        "op-0001",
 		Status:      OpStatusOk,
-		BeadID:      "spexmachina-abc",
+		TaskID:      "spexmachina-abc",
 		WasExisting: false,
 	}
 	got := encode(t, r)
 	fieldOrder(t, got, "ok receipt",
-		"op_id", "status", "bead_id", "was_existing",
+		"op_id", "status", "task_id", "was_existing",
 	)
 	for _, banned := range []string{`"reason"`, `"error"`} {
 		if strings.Contains(got, banned) {
@@ -114,13 +114,13 @@ func TestOpReceipt_SkippedShapeWithReason(t *testing.T) {
 	r := OpReceipt{
 		OpID:        "op-0003",
 		Status:      OpStatusSkipped,
-		BeadID:      "spexmachina-ghi",
+		TaskID:      "spexmachina-ghi",
 		WasExisting: true,
 		Reason:      "idempotent re-match",
 	}
 	got := encode(t, r)
 	fieldOrder(t, got, "skipped receipt",
-		"op_id", "status", "bead_id", "was_existing", "reason",
+		"op_id", "status", "task_id", "was_existing", "reason",
 	)
 	if strings.Contains(got, `"error"`) {
 		t.Fatalf("skipped receipt must not emit error field: %s", got)
@@ -131,36 +131,36 @@ func TestOpReceipt_ErrorShapeWithError(t *testing.T) {
 	r := OpReceipt{
 		OpID:        "op-0004",
 		Status:      OpStatusError,
-		BeadID:      "",
+		TaskID:      "",
 		WasExisting: false,
 		Error:       "br create exited 1: invalid priority -1",
 	}
 	got := encode(t, r)
 	fieldOrder(t, got, "error receipt",
-		"op_id", "status", "bead_id", "was_existing", "error",
+		"op_id", "status", "task_id", "was_existing", "error",
 	)
 	if strings.Contains(got, `"reason"`) {
 		t.Fatalf("error receipt must not emit reason field: %s", got)
 	}
-	// bead_id "" must remain present per receipts schema
-	if !strings.Contains(got, `"bead_id":""`) {
-		t.Fatalf("error receipt must keep empty bead_id field: %s", got)
+	// task_id "" must remain present per receipts schema
+	if !strings.Contains(got, `"task_id":""`) {
+		t.Fatalf("error receipt must keep empty task_id field: %s", got)
 	}
 }
 
-func TestOpReceipt_BeadIDPresentEvenWhenEmpty(t *testing.T) {
-	// The receipts contract requires bead_id to appear in every entry,
-	// even when no bead was created (error / pre-create failure).
+func TestOpReceipt_TaskIDPresentEvenWhenEmpty(t *testing.T) {
+	// The receipts contract requires task_id to appear in every entry,
+	// even when no task was created (error / pre-create failure).
 	r := OpReceipt{OpID: "op-0001", Status: OpStatusError}
 	got := encode(t, r)
-	if !strings.Contains(got, `"bead_id":""`) {
-		t.Fatalf("bead_id must serialize even when empty: %s", got)
+	if !strings.Contains(got, `"task_id":""`) {
+		t.Fatalf("task_id must serialize even when empty: %s", got)
 	}
 }
 
 func TestOpReceipt_WasExistingPresentEvenWhenFalse(t *testing.T) {
-	// was_existing is part of the v1 contract: always present, never elided.
-	r := OpReceipt{OpID: "op-0001", Status: OpStatusOk, BeadID: "spexmachina-abc"}
+	// was_existing is part of the v2 contract: always present, never elided.
+	r := OpReceipt{OpID: "op-0001", Status: OpStatusOk, TaskID: "spexmachina-abc"}
 	got := encode(t, r)
 	if !strings.Contains(got, `"was_existing":false`) {
 		t.Fatalf("was_existing must serialize even when false: %s", got)
@@ -172,8 +172,8 @@ func TestReceipts_DeterministicEncoding(t *testing.T) {
 		Version: ReceiptsVersion,
 		Status:  StatusComplete,
 		Ops: []OpReceipt{
-			{OpID: "op-0001", Status: OpStatusOk, BeadID: "spexmachina-abc"},
-			{OpID: "op-0002", Status: OpStatusOk, BeadID: "spexmachina-def", WasExisting: true},
+			{OpID: "op-0001", Status: OpStatusOk, TaskID: "spexmachina-abc"},
+			{OpID: "op-0002", Status: OpStatusOk, TaskID: "spexmachina-def", WasExisting: true},
 		},
 	}
 	first := encode(t, r)
@@ -189,8 +189,8 @@ func TestReceipts_RoundTrip(t *testing.T) {
 		Version: ReceiptsVersion,
 		Status:  StatusPartial,
 		Ops: []OpReceipt{
-			{OpID: "op-0001", Status: OpStatusOk, BeadID: "spexmachina-abc"},
-			{OpID: "op-0002", Status: OpStatusSkipped, BeadID: "spexmachina-def", WasExisting: true, Reason: "idempotent re-match"},
+			{OpID: "op-0001", Status: OpStatusOk, TaskID: "spexmachina-abc"},
+			{OpID: "op-0002", Status: OpStatusSkipped, TaskID: "spexmachina-def", WasExisting: true, Reason: "idempotent re-match"},
 			{OpID: "op-0003", Status: OpStatusError, Error: "br exited 1"},
 		},
 	}
@@ -227,8 +227,8 @@ func TestReceipts_OmitsAllOptionalFieldsOnAllOk(t *testing.T) {
 		Version: ReceiptsVersion,
 		Status:  StatusComplete,
 		Ops: []OpReceipt{
-			{OpID: "op-0001", Status: OpStatusOk, BeadID: "spexmachina-abc"},
-			{OpID: "op-0002", Status: OpStatusOk, BeadID: "spexmachina-def"},
+			{OpID: "op-0001", Status: OpStatusOk, TaskID: "spexmachina-abc"},
+			{OpID: "op-0002", Status: OpStatusOk, TaskID: "spexmachina-def"},
 		},
 	}
 	got := encode(t, r)

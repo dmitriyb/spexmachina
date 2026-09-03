@@ -2,8 +2,9 @@ package adapters
 
 // ReceiptsVersion is the wire-format version of receipts.json. Bumped when
 // the schema changes in a non-backwards-compatible way; ingest rejects
-// any version it does not recognize.
-const ReceiptsVersion = 1
+// any version it does not recognize. Version 2 renamed the per-op
+// tracker id field from bead_id to task_id.
+const ReceiptsVersion = 2
 
 // Top-level status values on Receipts. The adapter sets Status to
 // StatusComplete when every op produced ok or intentional-skipped, and
@@ -40,20 +41,20 @@ const (
 
 // OpReceipt is the per-op record an adapter writes after attempting one
 // op. Field order on this struct IS the canonical JSON field order — do
-// not reorder. BeadID and WasExisting always serialize (no omitempty)
-// because the v1 contract requires them on every entry; Reason and Error
+// not reorder. TaskID and WasExisting always serialize (no omitempty)
+// because the v2 contract requires them on every entry; Reason and Error
 // are optional (omitempty) and mutually exclusive in practice (Reason on
 // skipped, Error on error).
 type OpReceipt struct {
 	OpID        string `json:"op_id"`
 	Status      string `json:"status"`
-	BeadID      string `json:"bead_id"`
+	TaskID      string `json:"task_id"`
 	WasExisting bool   `json:"was_existing"`
 	Reason      string `json:"reason,omitempty"`
 	Error       string `json:"error,omitempty"`
 }
 
-// Receipts is the v1 output schema an adapter writes after processing a
+// Receipts is the v2 output schema an adapter writes after processing a
 // changeset. Op ordering in Ops mirrors the input changeset's op ordering —
 // ingest relies on this 1:1 alignment to pair each receipt with the
 // originating op.

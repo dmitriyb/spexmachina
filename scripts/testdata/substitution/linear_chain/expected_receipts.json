@@ -1,9 +1,9 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0001","status":"ok","bead_id":"br-100","was_existing":false},
-    {"op_id":"op-0002","status":"ok","bead_id":"br-101","was_existing":false},
-    {"op_id":"op-0003","status":"ok","bead_id":"br-102","was_existing":false}
+    {"op_id":"op-0001","status":"ok","task_id":"br-100","was_existing":false},
+    {"op_id":"op-0002","status":"ok","task_id":"br-101","was_existing":false},
+    {"op_id":"op-0003","status":"ok","task_id":"br-102","was_existing":false}
   ]
 }

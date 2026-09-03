@@ -1,8 +1,8 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "partial",
   "ops": [
-    {"op_id":"op-0004","status":"error","bead_id":"","was_existing":false,"error":"create op missing title"},
-    {"op_id":"op-0005","status":"error","bead_id":"","was_existing":false,"error":"dep ref: dependency op-0004 errored; cannot resolve op ref"}
+    {"op_id":"op-0004","status":"error","task_id":"","was_existing":false,"error":"create op missing title"},
+    {"op_id":"op-0005","status":"error","task_id":"","was_existing":false,"error":"dep ref: dependency op-0004 errored; cannot resolve op ref"}
   ]
 }

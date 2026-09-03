@@ -133,7 +133,7 @@ func TestApply_OkCreate_EventAndReceiptAppended(t *testing.T) {
 		Version: adapters.ReceiptsVersion,
 		Status:  adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{{
-			OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new", WasExisting: false,
+			OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new", WasExisting: false,
 		}},
 	}
 
@@ -204,7 +204,7 @@ func TestApply_OkClose_RemovedAppendsRemovedEventAndTaskClosed(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -276,8 +276,8 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new", WasExisting: false},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"},
+			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"},
 		},
 	}
 
@@ -358,7 +358,7 @@ func TestApply_WasExisting_IdempotentNoOp(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: opID, Status: adapters.OpStatusOk, BeadID: "br-7", WasExisting: true}},
+		Ops: []adapters.OpReceipt{{OpID: opID, Status: adapters.OpStatusOk, TaskID: "br-7", WasExisting: true}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -456,10 +456,10 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A2", WasExisting: false},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-Y", WasExisting: false},
-			{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "br-A"},
-			{OpID: "op-4", Status: adapters.OpStatusOk, BeadID: "br-B"},
+			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A2", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-Y", WasExisting: false},
+			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-A"},
+			{OpID: "op-4", Status: adapters.OpStatusOk, TaskID: "br-B"},
 		},
 	}
 
@@ -524,7 +524,7 @@ func TestApply_ProposalEpicCreate_ReferencesRegisteredEvent(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-epic", WasExisting: false}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-epic", WasExisting: false}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -563,7 +563,7 @@ func TestApply_ProposalEpicCreate_NoRegisteredEvent_InvariantFailure(t *testing.
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-epic", WasExisting: false}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-epic", WasExisting: false}},
 	}
 
 	_, err := r.Apply(cs, rc)
@@ -595,7 +595,7 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-cleanup", WasExisting: false}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -649,8 +649,8 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-cleanup", WasExisting: false},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-gone"},
+			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false},
+			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-gone"},
 		},
 	}
 
@@ -696,7 +696,7 @@ func TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-orphan"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-orphan"}},
 	}
 
 	_, err := r.Apply(cs, rc)
@@ -740,7 +740,7 @@ func TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone(t *test
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -800,8 +800,8 @@ func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial,
 		Ops: []adapters.OpReceipt{
 			{OpID: "op-1", Status: adapters.OpStatusError, Error: "tracker boom"},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-B", WasExisting: false},
-			{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "br-old"},
+			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-B", WasExisting: false},
+			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-old"},
 		},
 	}
 
@@ -855,7 +855,7 @@ func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-x"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-x"}},
 	}
 
 	_, err := r.Apply(cs, rc)
@@ -885,8 +885,8 @@ func TestApply_AtomicOnConstructionFailure(t *testing.T) {
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A"},
-			{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-x"},
+			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A"},
+			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-x"},
 		},
 	}
 
@@ -913,7 +913,7 @@ func TestApply_Idempotent_RerunAppendsNothing(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-A", WasExisting: false}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A", WasExisting: false}},
 	}
 
 	if _, err := r.Apply(cs, rc); err != nil {
@@ -945,7 +945,7 @@ func TestApply_RejectsMissingReceipt(t *testing.T) {
 		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "B", Idempotency: idem("spex:B")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brA"},
 	}}
 	_, err := r.Apply(cs, rc)
 	if err == nil || !strings.Contains(err.Error(), "no receipt for op op-2") {
@@ -964,8 +964,8 @@ func TestApply_RejectsExtraReceipt(t *testing.T) {
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "A", Idempotency: idem("spex:A")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
-		{OpID: "op-stray", Status: adapters.OpStatusOk, BeadID: "br-stray"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brA"},
+		{OpID: "op-stray", Status: adapters.OpStatusOk, TaskID: "br-stray"},
 	}}
 	_, err := r.Apply(cs, rc)
 	if err == nil || !strings.Contains(err.Error(), "op-stray") {
@@ -1007,8 +1007,8 @@ func TestApply_EidPredicate_SeesJournalAndBatch(t *testing.T) {
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
-			{OpID: "op-a", Status: adapters.OpStatusOk, BeadID: "br-A", WasExisting: true},
-			{OpID: "op-b", Status: adapters.OpStatusOk, BeadID: "br-B", WasExisting: false},
+			{OpID: "op-a", Status: adapters.OpStatusOk, TaskID: "br-A", WasExisting: true},
+			{OpID: "op-b", Status: adapters.OpStatusOk, TaskID: "br-B", WasExisting: false},
 		},
 	}
 
@@ -1075,7 +1075,7 @@ func TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}},
 	}
 
 	sum, err := r.Apply(cs, rc)
@@ -1143,7 +1143,7 @@ func TestApply_Retarget_ReRun_Idempotent(t *testing.T) {
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}},
 	}
 
 	if _, err := r.Apply(cs, rc); err != nil {
