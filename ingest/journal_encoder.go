@@ -81,10 +81,16 @@ var (
 // getLineSchema compiles the embedded journal-line schema once and caches
 // it. JournalEncoder owns its own compiled copy rather than reaching into
 // mapping's — MappingStore's is a read-time internal, and JournalEncoder
-// is the format's only writer.
+// is the format's only writer. Reads schema.JournalLineSchema (backed by
+// schema/journal-line.schema.json) rather than the retired
+// schema.BeadMapSchema — the two documents are byte-identical apart from
+// their $id, but MappingStore (the journal's only other reader) has not
+// migrated off schema.BeadMapSchema yet (schema/schema.go), so
+// JournalLineSchema is not yet the name every reader resolves by — only
+// this one.
 func getLineSchema() (*jsonschema.Schema, error) {
 	lineSchemaOnce.Do(func() {
-		raw, err := schema.BeadMapSchema()
+		raw, err := schema.JournalLineSchema()
 		if err != nil {
 			lineSchemaErr = fmt.Errorf("load journal-line schema: %w", err)
 			return
@@ -95,18 +101,18 @@ func getLineSchema() (*jsonschema.Schema, error) {
 			return
 		}
 		c := jsonschema.NewCompiler()
-		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
+		if err := c.AddResource("journal-line.schema.json", doc); err != nil {
 			lineSchemaErr = fmt.Errorf("add journal-line schema: %w", err)
 			return
 		}
-		lineSchema, lineSchemaErr = c.Compile("bead-map.schema.json")
+		lineSchema, lineSchemaErr = c.Compile("journal-line.schema.json")
 	})
 	return lineSchema, lineSchemaErr
 }
 
 // changeEventLine, registeredEventLine, taskReceiptLine and
 // taskRetargetedLine mirror the journal-line shapes in
-// schema/bead-map.schema.json exactly — changeEventLine always serialises
+// schema/journal-line.schema.json exactly — changeEventLine always serialises
 // its ten required keys (before/after admit null); taskReceiptLine omits
 // whichever of for/proposal does not apply, since additionalProperties is
 // false on every shape. registeredEventLine has no writer in this

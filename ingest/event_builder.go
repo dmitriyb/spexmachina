@@ -72,6 +72,17 @@ func NewEventBuilder(state EventBuilderState) *EventBuilder {
 // modified event and both receipts in one call, off the dep, without
 // waiting for the paired close (see "The Modified-Node Pair"). See
 // "Proposal-Epic Ops" and "Cleanup-Create Ops" in arch_event_builder.md.
+//
+// TODO(bead:spexmachina-swvx.22): "The Modified-Node Pair" this default
+// case builds via blocksDepBeadID is retired in the current
+// arch_event_builder.md ("Node-Bearing Creates" / "Fold-Back Closes"):
+// a node-bearing create no longer carries a `blocks` dep at all, and
+// added-vs-modified is derived instead from the journal fold's latest
+// change event for op.SpecNodeID (no event, or one with a null after,
+// means added; one with an after hash means modified, with that hash as
+// before). A superseded task gets no task_closed — the fold-back close
+// path below covers the one case that still needs one. This is the
+// handoff EventBuilder's own bead consumes; do not build it here.
 func (b *EventBuilder) BuildCreate(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	switch op.SpecNodeKind {
 	case plan.KindProposalEpic:
@@ -102,6 +113,15 @@ func (b *EventBuilder) BuildCreate(cs plan.Changeset, op plan.Op, receipt adapte
 // changeset scan, so the pair stays incomplete for this partial run —
 // either way there is nothing left for the close to add. See "The
 // Modified-Node Pair" in arch_event_builder.md.
+//
+// TODO(bead:spexmachina-swvx.22): per the current arch_event_builder.md
+// ("Fold-Back Closes"), the ModifiedHandled/claimedByCreate discrimination
+// below is retired along with the modified-node pair: a "Spec node
+// modified" close always builds its own modified event plus task_closed,
+// unconditionally — no create in the same batch ever claims it, because
+// node-bearing creates no longer carry a lineage dep. Once BuildCreate
+// stops populating ModifiedHandled, this case reduces to always calling
+// buildModifiedFromClose.
 func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	switch {
 	case strings.HasPrefix(op.Reason, ReasonRemovedPrefix):
@@ -389,6 +409,19 @@ func buildEpicCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, 
 // falls through to sameBatchRemovals; a hash that matches neither is a
 // malformed changeset, not a fallback. See arch_event_builder.md
 // "Cleanup-Create Ops".
+//
+// TODO(bead:spexmachina-swvx.22): per the current arch_event_builder.md
+// "Cleanup-Create Ops", a cleanup create no longer waits on a same-batch
+// removal close at all — resolve the referent from the node's latest
+// change event in the fold: if it is already a `removed` event, name its
+// eid (the case sameBatchRemovals covers today); otherwise the cleanup
+// itself mints the removal — one `removed` change event with eid derived
+// from the cleanup op's own (git_head, op_id), before taken from the
+// latest event's after, after null, identity from the fold entry —
+// followed by the task_created naming it. A hash the journal has never
+// seen at all stays an invariant failure. Once this lands,
+// EventBuilderState.SameBatchRemovals and Reconciler's sameBatchRemovals
+// helper have no remaining caller.
 func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, sameBatchRemovals map[string]string) ([]mapping.Event, error) {
 	hash := op.SpecNodeID
 	for _, e := range fold.Entries {

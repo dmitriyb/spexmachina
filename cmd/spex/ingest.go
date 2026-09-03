@@ -190,6 +190,15 @@ func loadReceipts(path string) (adapters.Receipts, error) {
 // asserts that changeset and receipts cover exactly the same op_id set.
 // Either side missing an op is a contract violation by plan or the
 // adapter — input error, not invariant failure.
+//
+// The version checks below read plan.ChangesetVersion and
+// adapters.ReceiptsVersion symbolically rather than hardcoding 4 and 2
+// (spec/ingest/arch_ingest_command.md, "Both modes"), so this pre-flight
+// needs no edit once plan (spexmachina-swvx.6) and adapters
+// (spexmachina-swvx.4) bump their own constants — until then it enforces
+// the versions those packages currently declare (3 and 1).
+// TODO(bead:spexmachina-swvx.25): IngestCommand's own component bead —
+// revisit this pre-flight once the version bump lands.
 func preflightPair(cs plan.Changeset, rc adapters.Receipts) error {
 	if cs.Version != plan.ChangesetVersion {
 		return fmt.Errorf("ingest: changeset version must be %d, got %d", plan.ChangesetVersion, cs.Version)
