@@ -1429,7 +1429,7 @@ func writeCompleteIngestFixture(t *testing.T, dir, compID string) (changesetPath
 		Ops: []adapters.OpReceipt{{
 			OpID:        "op-0001",
 			Status:      adapters.OpStatusOk,
-			BeadID:      "bead-1",
+			TaskID:      "bead-1",
 			WasExisting: false,
 		}},
 	}

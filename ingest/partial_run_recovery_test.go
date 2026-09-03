@@ -49,10 +49,10 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/Old"},
 	}}
 	run1RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA"},
-		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "brB"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brA"},
+		{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "brB"},
 		{OpID: "op-3", Status: adapters.OpStatusError, Error: "tracker boom"},
-		{OpID: "op-4", Status: adapters.OpStatusOk, BeadID: "br-old"},
+		{OpID: "op-4", Status: adapters.OpStatusOk, TaskID: "br-old"},
 	}}
 
 	_, wrote1 := runWithSnapshot(t, specDir, graph, "", snapPath, run1CS, run1RC)
@@ -86,7 +86,7 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run2head:op-1")},
 	}}
 	run2RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: false},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brC", WasExisting: false},
 	}}
 
 	_, wrote2 := runWithSnapshot(t, specDir, graph, "", snapPath, run2CS, run2RC)
@@ -151,9 +151,9 @@ func TestPartialRunRecovery_AdapterSideDuplicate(t *testing.T) {
 		{OpID: "op-3", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brA", WasExisting: true},
-		{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "brB", WasExisting: true},
-		{OpID: "op-3", Status: adapters.OpStatusOk, BeadID: "brC", WasExisting: true},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brA", WasExisting: true},
+		{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "brB", WasExisting: true},
+		{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "brC", WasExisting: true},
 	}}
 
 	_, wrote := runWithSnapshot(t, specDir, graph, "", snapPath, cs, rc)
@@ -200,7 +200,7 @@ func TestPartialRunRecovery_SnapshotMatchesIndependentMerkle(t *testing.T) {
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:g:op-1")},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "brC"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brC"},
 	}}
 
 	_, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)

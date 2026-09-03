@@ -99,7 +99,7 @@ func TestEventBuilder_BuildCreate_Fresh(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Proposal: "p"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-1")}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -144,7 +144,7 @@ func TestEventBuilder_BuildCreate_WasExistingIdempotent(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Proposal: "p"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node, Idempotency: idem("spex:" + wantEID)}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-7", WasExisting: true}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-7", WasExisting: true}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -175,7 +175,7 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 		Idempotency: idem("spex:cafe1234:op-1"),
 		Deps:        []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
 	}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -222,7 +222,7 @@ func TestEventBuilder_BuildCreate_ProposalEpic(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "beef0001", Proposal: stem}
 	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: plan.KindProposalEpic, SpecNodeID: stem, Idempotency: idem("spex:" + registeredEID)}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-epic"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-epic"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -246,7 +246,7 @@ func TestEventBuilder_BuildCreate_ProposalEpic_NoRegisteredEvent(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "beef0001", Proposal: stem}
 	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: plan.KindProposalEpic, SpecNodeID: stem}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-epic"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-epic"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err == nil {
@@ -275,7 +275,7 @@ func TestEventBuilder_BuildCreate_Cleanup_PriorRemovedEvent(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: node, Idempotency: idem("spex:" + removedEID)}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-cleanup"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -307,7 +307,7 @@ func TestEventBuilder_BuildCreate_Cleanup_SameBatchRemoval(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
 	op := plan.Op{OpID: "op-cleanup", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-close")}
-	receipt := adapters.OpReceipt{OpID: "op-cleanup", Status: adapters.OpStatusOk, BeadID: "br-cleanup"}
+	receipt := adapters.OpReceipt{OpID: "op-cleanup", Status: adapters.OpStatusOk, TaskID: "br-cleanup"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
@@ -332,7 +332,7 @@ func TestEventBuilder_BuildClose_Removed(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/N"}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
 	lines, err := b.BuildClose(cs, op, receipt)
 	if err != nil {
@@ -369,7 +369,7 @@ func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
 	}
 	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"}
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{createOp, closeOp}}
-	closeReceipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, BeadID: "br-old"}
+	closeReceipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
 	t.Run("ok", func(t *testing.T) {
 		graph := newFakeSpecGraph()
@@ -378,7 +378,7 @@ func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
 			mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
 			mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
 		)
-		createReceipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-new"}
+		createReceipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 		createLines, err := b.BuildCreate(cs, createOp, createReceipt)
 		if err != nil {
 			t.Fatalf("BuildCreate: %v", err)
@@ -429,7 +429,7 @@ func TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-unknown"}, Reason: "Spec node modified (new): m/N"}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-unknown"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-unknown"}
 
 	lines, err := b.BuildClose(cs, op, receipt)
 	if err == nil {
@@ -456,7 +456,7 @@ func TestEventBuilder_BuildClose_ModifiedNoClaim_LiveBead(t *testing.T) {
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{
 		{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"},
 	}}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-old"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
 	lines, err := b.BuildClose(cs, cs.Ops[0], receipt)
 	if err != nil {
@@ -512,7 +512,7 @@ func TestEventBuilder_BuildRetarget_Ok(t *testing.T) {
 		Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
 		Labels: []string{"spex:cafe1234:op-1"},
 	}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}
 
 	lines, err := b.BuildRetarget(cs, op, receipt)
 	if err != nil {
@@ -557,7 +557,7 @@ func TestEventBuilder_BuildRetarget_Idempotent(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
 	op := plan.Op{OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: node, SpecHash: "h-new", Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"}}
-	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, BeadID: "br-open"}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}
 
 	lines, err := b.BuildRetarget(cs, op, receipt)
 	if err != nil {
@@ -673,7 +673,7 @@ func TestEventBuilder_EidPredicate_SeesJournalAndBatch(t *testing.T) {
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
 
 	opA := plan.Op{OpID: "op-a", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: nodeA}
-	linesA, err := b.BuildCreate(cs, opA, adapters.OpReceipt{OpID: "op-a", Status: adapters.OpStatusOk, BeadID: "br-A"})
+	linesA, err := b.BuildCreate(cs, opA, adapters.OpReceipt{OpID: "op-a", Status: adapters.OpStatusOk, TaskID: "br-A"})
 	if err != nil {
 		t.Fatalf("BuildCreate A: %v", err)
 	}
@@ -683,7 +683,7 @@ func TestEventBuilder_EidPredicate_SeesJournalAndBatch(t *testing.T) {
 
 	// B is fresh: builds and lands in the batch.
 	opB := plan.Op{OpID: "op-b", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: nodeB}
-	linesB, err := b.BuildCreate(cs, opB, adapters.OpReceipt{OpID: "op-b", Status: adapters.OpStatusOk, BeadID: "br-B"})
+	linesB, err := b.BuildCreate(cs, opB, adapters.OpReceipt{OpID: "op-b", Status: adapters.OpStatusOk, TaskID: "br-B"})
 	if err != nil {
 		t.Fatalf("BuildCreate B: %v", err)
 	}
@@ -701,7 +701,7 @@ func TestEventBuilder_EidPredicate_SeesJournalAndBatch(t *testing.T) {
 		t.Fatalf("batch eid set does not carry B's eid %s after markBuilt", wantEIDB)
 	}
 	opBAgain := plan.Op{OpID: "op-b", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: nodeB}
-	linesBAgain, err := b.BuildCreate(cs, opBAgain, adapters.OpReceipt{OpID: "op-b", Status: adapters.OpStatusOk, BeadID: "br-B"})
+	linesBAgain, err := b.BuildCreate(cs, opBAgain, adapters.OpReceipt{OpID: "op-b", Status: adapters.OpStatusOk, TaskID: "br-B"})
 	if err != nil {
 		t.Fatalf("BuildCreate B (re-derived): %v", err)
 	}
