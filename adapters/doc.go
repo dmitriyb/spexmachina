@@ -47,9 +47,10 @@
 // # Contract surface
 //
 // This package is intentionally minimal: the wire-format types
-// (Receipts, OpReceipt) plus version and status constants. Component-
-// level behavior — ref resolution, the substitution table, tracker
-// subprocess invocation — lives in the bash reference adapter
-// (spexmachina-swvx.5, BrReferenceAdapter) and in adapters written for
-// other trackers, which consult this contract unchanged.
+// (Receipts, OpReceipt), version and status constants, and the label
+// vocabulary (IdempotencyLabelPrefix). Component-level behavior — ref
+// resolution, the substitution table, tracker subprocess invocation —
+// lives in the bash reference adapter (spexmachina-swvx.5,
+// BrReferenceAdapter) and in adapters written for other trackers, which
+// consult this contract unchanged.
 package adapters
