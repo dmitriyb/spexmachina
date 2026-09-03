@@ -19,6 +19,7 @@
       "plural_key": "requirements",
       "scope": "module",
       "completeness_trigger": true,
+      "comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements. IDs are 12-char hex identity hashes computed by schema.IdentityHash. name (renamed from title in spec format version 1) makes the envelope universal across every node type.",
       "fields": [
         {"name": "type", "kind": "text", "required": true, "enum": ["functional", "non_functional"], "description": "Requirement type."},
         {"name": "preq_id", "kind": "reference", "required": true, "targets": ["requirement"], "cardinality": "one", "description": "Identity hash of the project requirement this module requirement derives from."},
@@ -59,6 +60,7 @@
       "plural_key": "apis",
       "scope": "module",
       "name_declarable": true,
+      "comment": "An external surface entry point. No content file — an api hashes from these fields alone. Identity is <module>/api/<name>, computed by schema.IdentityHash.",
       "fields": [
         {"name": "provided_by", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Identity hashes of components in this module that provide this entry point (module-local)."},
         {"name": "group", "kind": "text", "description": "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it."}

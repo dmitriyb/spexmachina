@@ -23,11 +23,12 @@ import (
 // is the edge declaration: the separate "edges" section of the earlier
 // profile format is unified into this list, so one declaration per field
 // answers what the type may carry, what it may point at, and whether it
-// counts as a semantic change. Comment is project-scope-only: it becomes
-// the composed $defs entry's own "$comment" (ComposeProjectSchema, via
-// ProjectNodeType.Comment) — a module-scoped built-in's $defs entry carries
-// its $comment from the shipped document instead, so no module-scoped type
-// needs one here.
+// counts as a semantic change. Comment becomes the composed $defs entry's
+// own "$comment" — ComposeProjectSchema via ProjectNodeType.Comment for a
+// project-scoped type, ComposeModuleSchema via ModuleNodeType.Comment for a
+// module-scoped one — carried by the built-in requirement and api types on
+// both scopes, empty (and so absent from the composed entry) on every other
+// declared type.
 type NodeType struct {
 	Name                string  `json:"name"`
 	PluralKey           string  `json:"plural_key"`
@@ -484,6 +485,7 @@ func (p *Profile) ModuleNodeTypes() []ModuleNodeType {
 			PluralKey:       t.PluralKey,
 			RequiresContent: t.RequiresContent,
 			Fields:          t.Fields,
+			Comment:         t.Comment,
 		})
 	}
 	return out

@@ -992,9 +992,9 @@ func TestFR1_ComposeProjectSchemaEdgeFieldShape(t *testing.T) {
 // project-scoped type's $defs entry is frame-fixed, the built-in
 // requirement type included — ComposeProjectSchema always resynthesizes
 // its entry via genericProjectNodeDef rather than reusing the frame's copy.
-// (The module side reaches the same "no frame-fixed $defs" result the
-// other way: mergeDeclaredFields overwrites the frame-authored entry's
-// properties in place instead of resynthesizing it.) So
+// (The module side reaches the same "no frame-fixed $defs" result the same
+// way: ComposeModuleSchema always resynthesizes via genericNodeDef too —
+// see TestFR2_ComposeModuleSchemaBuiltinComponentGainsDeclaredEdges.) So
 // ComposeProjectSchema composes a reference field onto the requirement
 // entry for an edge sourced at "requirement" exactly as it would for a
 // profile-declared type — the same path

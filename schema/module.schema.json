@@ -46,7 +46,7 @@
     "requirement": {
       "$comment": "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements. IDs are 12-char hex identity hashes computed by schema.IdentityHash. name (renamed from title in spec format version 1) makes the envelope universal across every node type.",
       "type": "object",
-      "required": ["id", "type", "name", "preq_id"],
+      "required": ["id", "type", "preq_id", "name"],
       "additionalProperties": false,
       "properties": {
         "id": {
@@ -67,11 +67,11 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Short requirement name."
+          "description": "requirement name."
         },
         "description": {
           "type": "string",
-          "description": "Detailed requirement description."
+          "description": "requirement description."
         },
         "depends_on": {
           "type": "array",
@@ -97,16 +97,16 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Component name."
+          "description": "component name."
         },
         "description": {
           "type": "string",
-          "description": "Component description."
+          "description": "component description."
         },
         "content": {
           "type": "string",
           "minLength": 1,
-          "description": "Relative path to the markdown file with detailed content (described_in edge to content leaf)."
+          "description": "Relative path to the markdown content leaf (described_in edge to content leaf)."
         },
         "implements": {
           "type": "array",
@@ -141,12 +141,16 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Test section name."
+          "description": "test_section name."
+        },
+        "description": {
+          "type": "string",
+          "description": "test_section description."
         },
         "content": {
           "type": "string",
           "minLength": 1,
-          "description": "Relative path to the markdown file with test details (described_in edge to content leaf)."
+          "description": "Relative path to the markdown content leaf (described_in edge to content leaf)."
         },
         "describes": {
           "type": "array",
@@ -172,16 +176,16 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "Data flow name."
+          "description": "data_flow name."
         },
         "description": {
           "type": "string",
-          "description": "Data flow description."
+          "description": "data_flow description."
         },
         "content": {
           "type": "string",
           "minLength": 1,
-          "description": "Relative path to the markdown file with data flow details (described_in edge to content leaf)."
+          "description": "Relative path to the markdown content leaf (described_in edge to content leaf)."
         },
         "uses": {
           "type": "array",
@@ -208,11 +212,11 @@
         "name": {
           "type": "string",
           "minLength": 1,
-          "description": "The exact external surface string as callers write it (e.g. \"spex diff\", \"GET /v1/specs/{id}\"). Never a signature."
+          "description": "api name."
         },
         "description": {
           "type": "string",
-          "description": "What the entry point does."
+          "description": "api description."
         },
         "provided_by": {
           "type": "array",
