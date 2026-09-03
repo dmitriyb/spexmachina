@@ -1,7 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": [
-    {"op_id":"op-0004","status":"ok","bead_id":"br-open"}
+    {"op_id":"op-0004","status":"ok","task_id":"br-open"}
   ]
 }

@@ -3,32 +3,33 @@
 //
 // Adapters live outside the spex binary. Each has two halves: an export
 // half that derives tasks.json (the task-state artifact plan reads) from
-// the tracker, and an apply half that consumes changeset.json v4 (typed
-// by the plan package), executes the listed operations against a task
+// the tracker, and an apply half that consumes changeset.json (typed by
+// the plan package), executes the listed operations against a task
 // tracker (br, bd, GitHub Issues, Jira, …), and writes receipts.json.
 // ingest then reads changeset.json and receipts.json to reconcile the
 // task journal and gate the merkle snapshot write.
 //
 // # Flow
 //
-// The reference adapter (scripts/export-br.sh, scripts/apply-br.sh)
-// implements this pipeline:
+// scripts/apply-br.sh is the reference implementation of the apply half.
+// There is no reference export half yet — TODO(bead:spexmachina-swvx.5):
+// scripts/export-br.sh. apply-br.sh today:
 //
-//  1. Export, before plan: list the tracker, keep tasks in flight (open
-//     or in_progress), project each to task_id and status, write
-//     tasks.json.
-//  2. Apply, pre-flight: parse changeset v4, confirm the tracker CLI
-//     answers, start with an empty op_id → task_id substitution table.
-//     The changeset's top-level absorbed array is ingest's input, not
-//     read past the parse.
-//  3. Apply, per op in order: resolve parent/deps/target refs — a task
-//     ref resolves as-is, an op ref resolves via the substitution
+//  1. Pre-flight: parse changeset.json, confirm the tracker CLI answers,
+//     start with an empty op_id → task_id substitution table. It enforces
+//     changeset version 3, matching plan.ChangesetVersion — the spec's v4
+//     ref-shape rename (bead_id → task_id on plan.Ref) has not landed on
+//     either side yet: TODO(bead:spexmachina-swvx.5) tracks the adapter's
+//     half, TODO(bead:spexmachina-swvx.6) tracks plan's. The changeset's
+//     top-level absorbed array is ingest's input, not read past the parse.
+//  2. Per op in order: resolve parent/deps/target refs — today a "bead"
+//     ref resolves as-is, an "op" ref resolves via the substitution
 //     table — idempotency-check the tracker where the op kind supports
 //     one, run the tracker-specific subcommand, append a per-op receipt;
 //     a create additionally records its resolved task id in the
 //     substitution table.
-//  4. Apply, emit receipts.json: derive the top-level status (complete
-//     vs partial), assemble the v2 wrapper, atomic write.
+//  3. Emit receipts.json: derive the top-level status (complete vs
+//     partial), assemble the v2 wrapper, atomic write.
 //
 // # Determinism and idempotency
 //
