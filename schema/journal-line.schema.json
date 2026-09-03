@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spexmachina.dev/schema/journal-line.json",
+  "title": "Spex Machina Task Journal Line",
+  "description": "Schema for one line of the task journal linking spec nodes to tasks, indifferent to where the journal file lives. Each line is a self-contained object: a change event, the registered event that opens a proposal's lifecycle, a task receipt, or a refresh receipt. There is no envelope, no counter, and no integer id anywhere in the format.",
+  "oneOf": [
+    { "$ref": "#/$defs/changeEvent" },
+    { "$ref": "#/$defs/registeredEvent" },
+    { "$ref": "#/$defs/taskReceipt" },
+    { "$ref": "#/$defs/taskRetargetedReceipt" },
+    { "$ref": "#/$defs/refreshReceipt" }
+  ],
+  "$defs": {
+    "formatVersion": {
+      "type": "integer",
+      "description": "The journal-line format version, metadata outside any hashed payload. Absent means version 1, so no existing line changes meaning; a writer stamps the current version. The schema pins no upper bound — readers accept every version from 1 forward, forever, because the journal is append-only and permanent."
+    },
+    "registeredEvent": {
+      "type": "object",
+      "description": "Opens a proposal's lifecycle before any spec change exists.",
+      "required": ["event", "eid", "proposal", "git_head"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["registered"]
+        },
+        "eid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "This event's own id, of the form <git_head>:<slug>."
+        },
+        "proposal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The proposal slug this registration opens."
+        },
+        "git_head": {
+          "type": "string"
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
+      }
+    },
+    "changeEvent": {
+      "type": "object",
+      "description": "Records what a baselining absorbed for one spec node.",
+      "required": ["event", "eid", "node", "name", "node_type", "module", "before", "after", "git_head", "proposal"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["added", "removed", "modified"]
+        },
+        "eid": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The event's own id, deriving from (git_head, op_id)."
+        },
+        "node": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{12}$",
+          "description": "The changed node's identity hash — the same key the merkle tree files that node's leaf under."
+        },
+        "name": {
+          "type": "string"
+        },
+        "node_type": {
+          "type": "string",
+          "enum": ["component", "data_flow", "test_section", "requirement", "api"],
+          "description": "The task-owning kinds (component, data_flow, test_section) plus the refresh-absorbable kinds (requirement, api). A kind that never owns a task of its own has no entry."
+        },
+        "module": {
+          "type": "string"
+        },
+        "before": {
+          "type": ["string", "null"],
+          "description": "The content leaf's hash before the change, or null — an add has no before."
+        },
+        "after": {
+          "type": ["string", "null"],
+          "description": "The content leaf's hash after the change, or null — a removal has no after."
+        },
+        "git_head": {
+          "type": "string"
+        },
+        "proposal": {
+          "type": "string",
+          "description": "The proposal slug that produced this event."
+        },
+        "path": {
+          "type": "string",
+          "description": "The node's content-leaf path. Present when the node has one; absent for requirement and api events."
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
+      }
+    },
+    "taskReceipt": {
+      "type": "object",
+      "description": "Records what the tracker did in response to a change event or a proposal epic.",
+      "required": ["event", "task_id"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["task_created", "task_closed"]
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "for": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The eid this receipt answers — a change event's eid, or, for epics, the registered event's eid."
+        },
+        "proposal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The proposal slug this epic receipt answers."
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
+      },
+      "oneOf": [
+        { "required": ["for"], "not": { "required": ["proposal"] } },
+        { "required": ["proposal"], "not": { "required": ["for"] } }
+      ]
+    },
+    "taskRetargetedReceipt": {
+      "type": "object",
+      "description": "Records a task whose target moved to a new state without lifecycle. Takes the strict shape only — no task_retargeted line predates the for field, so the legacy proposal-slug arm belongs to task_created alone.",
+      "required": ["event", "task_id", "for"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["task_retargeted"]
+        },
+        "task_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "for": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The eid of the retarget's own modified event."
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
+      }
+    },
+    "refreshReceipt": {
+      "type": "object",
+      "description": "Records a refresh run absorbing no-bead-work drift.",
+      "required": ["event", "git_head", "absorbed"],
+      "additionalProperties": false,
+      "properties": {
+        "event": {
+          "type": "string",
+          "enum": ["refresh"]
+        },
+        "git_head": {
+          "type": ["string", "null"],
+          "description": "The git head the refresh ran at, admitting recorded absence."
+        },
+        "absorbed": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "The eids of the change events this refresh absorbed. Empty when the refresh absorbed nothing, though a no-drift run appends nothing at all."
+        },
+        "v": { "$ref": "#/$defs/formatVersion" }
+      }
+    }
+  }
+}
