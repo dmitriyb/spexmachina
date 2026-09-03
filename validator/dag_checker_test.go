@@ -185,19 +185,13 @@ func TestREQ3_BuiltinEdgeUndeclaredNotChecked(t *testing.T) {
 	}
 }
 
-// requires_module's "always cycle-checked, never exemptable" guarantee
-// (arch_dag_checker.md, spec/validator/module.json) must hold even against a
-// profile that names a node type "module" and declares its own
-// requires_module field, cyclic: true — an attempt Profile.Validate does not
-// yet reject (drifts/drift-spexmachina-9jfk.19.json: test_graph_structure.md
-// line 209 claims this is rejected as a fixed-point declaration; it is not).
-// schema.deriveEdges appends the frame's own
-// fixed requires_module edge unconditionally, after any node type's own
-// declared field of the same name, so profile.Edges can carry two
-// requires_module entries with the declared, exemptable one first. edgeActive
-// must resolve this pair itself rather than trust iteration order and return
-// on the first match, or the declared entry silently shadows the frame's
-// guarantee.
+// Profile.Validate rejects a node type named "module", so no resolved
+// profile can carry a declared requires_module field. edgeActive still
+// must not depend on that: the derived Edges view is plain data, and a
+// hand-built profile can list a declared, exemptable requires_module entry
+// ahead of the frame's own. If edgeActive returned on the first matching
+// entry, the declared one would silently shadow the frame's guarantee that
+// requires_module is always cycle-checked, so it resolves the pair itself.
 func TestREQ3_RequiresModuleNotShadowedByDeclaredField(t *testing.T) {
 	profile := &schema.Profile{
 		Edges: []schema.Edge{

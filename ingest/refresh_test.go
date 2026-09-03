@@ -1387,13 +1387,15 @@ func TestREQ_e68653819f38_Refresh_AbsorbableNamesOnlyReachableTypes(t *testing.T
 
 // TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections
 // proves the "meta"/"module" refusal is the handler's own fixed rule,
-// not merely an artefact of the default profile omitting the two names:
-// nothing in schema.Profile.Validate stops a profile.json from declaring
-// a node_types entry named "meta" or "module" and marking it absorbable
-// in both directions — Validate only rejects an absorbable key naming a
-// type the profile never declared (schema/profile.go:180-182) — so a
-// careless or malicious profile.json must not be able to grant either
-// absorption. The "meta" half is exercised end-to-end: the module
+// not merely an artefact of the default profile omitting the two names.
+// schema.Profile.Validate rejects a node type named "module" outright
+// (spexmachina-48bh), but nothing stops a profile.json from declaring a
+// node_types entry named "meta" and marking it absorbable in both
+// directions — Validate only rejects an absorbable key naming a type the
+// profile never declared — so a careless or malicious profile.json must
+// not be able to grant either absorption, and the handler's rule must
+// hold even against a Profile value that never passed Validate. The
+// "meta" half is exercised end-to-end: the module
 // envelope leaf the gamma toggle adds/removes is a diff entry merkle
 // actually emits with NodeType "meta" (tree_builder.go:54, :115), and
 // refresh must refuse it despite the profile's explicit grant. "module"
@@ -1405,13 +1407,11 @@ func TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections(t *te
 	maliciousProfileJSON := `{
 		"node_types": [
 			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true},
-			{"name": "meta", "plural_key": "metas", "scope": "module"},
-			{"name": "module", "plural_key": "modules_extra", "scope": "module"}
+			{"name": "meta", "plural_key": "metas", "scope": "module"}
 		],
 		"absorbable": {
 			"component": {"added": true, "removed": true},
-			"meta": {"added": true, "removed": true},
-			"module": {"added": true, "removed": true}
+			"meta": {"added": true, "removed": true}
 		}
 	}`
 
@@ -1420,7 +1420,17 @@ func TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections(t *te
 		t.Fatal(err)
 	}
 	if err := maliciousProfile.Validate(); err != nil {
-		t.Fatalf("a profile declaring \"meta\" and \"module\" node types must validate cleanly — that is the exploit this test guards against: %v", err)
+		t.Fatalf("a profile declaring a \"meta\" node type must validate cleanly — that is the exploit this test guards against: %v", err)
+	}
+
+	// "module" never reaches the handler through a resolved profile —
+	// Validate rejects the declaration — so its half is checked against a
+	// Profile value that bypassed Validate, the only way the grant could
+	// ever be presented to isAbsorbable.
+	maliciousProfile.NodeTypes = append(maliciousProfile.NodeTypes, schema.NodeType{Name: "module", PluralKey: "modules_extra", Scope: "module"})
+	maliciousProfile.Absorbable["module"] = schema.AbsorbDirections{Added: true, Removed: true}
+	if err := maliciousProfile.Validate(); err == nil {
+		t.Fatal("a profile declaring a \"module\" node type must fail Validate: module is the frame's fixed type")
 	}
 
 	for _, nodeType := range []string{"meta", "module"} {
