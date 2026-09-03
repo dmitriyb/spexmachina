@@ -42,7 +42,7 @@ The second reason is that the name would be unremovable. The removal-time name c
 |------|-----------|------|---------|-------------|
 | `--spec-dir` | `-s` | string | `spec/` | Path to the spec directory |
 
-Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word. Since the per-child `--map`/`--map-file` flags were retired with the bead-map, `--spec-dir` locates the authored spec tree and nothing else: the derived state — the snapshot and the task journal — resolves through the lifecycle module's pre-flight to the `.spex/` state directory, the only layout there is. The two lifecycle constructors, `init` and `doctor`, register here exactly as the other twelve do; owning the pre-flight gives lifecycle no special standing in the wiring.
+Global flags are defined as persistent flags on the root command, so every subcommand accepts them, every subcommand sees the same default, and a caller may write either the long form or the shorthand on either side of the subcommand word. Since the per-child `--map`/`--map-file` flags were retired with the record file they pointed at, `--spec-dir` locates the authored spec tree and nothing else: the derived state — the snapshot and the task journal — resolves through the lifecycle module's pre-flight to the `.spex/` state directory, the only layout there is. The two lifecycle constructors, `init` and `doctor`, register here exactly as the other twelve do; owning the pre-flight gives lifecycle no special standing in the wiring.
 
 ## Dependency Boundary
 

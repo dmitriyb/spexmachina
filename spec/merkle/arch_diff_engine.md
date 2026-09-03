@@ -34,7 +34,7 @@ Step 5 is what makes the result reproducible. Changes come out in ascending lexi
 
 A module-scoped node's identity hash derives from its module, its node type and its own `name` — never from a filesystem path. So renaming a module directory or moving a content file produces no remove + add: the keys are untouched and a content edit alongside the move is still reported as a single modification.
 
-Renaming the *node* is the opposite case. Changing a `name` changes the identity string it derives from, so the node's `id` changes with it, and the diff sees the old key vanish and a new key appear: one `removed` and one `added`, with nothing tying them together. This is the "rename is destructive" behaviour the rest of the pipeline is built on — in the bead layer a rename is a delete plus a create, never an edit.
+Renaming the *node* is the opposite case. Changing a `name` changes the identity string it derives from, so the node's `id` changes with it, and the diff sees the old key vanish and a new key appear: one `removed` and one `added`, with nothing tying them together. This is the "rename is destructive" behaviour the rest of the pipeline is built on — in the task layer a rename is a delete plus a create, never an edit.
 
 ## Bootstrap behavior
 

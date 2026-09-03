@@ -22,7 +22,9 @@ works unchanged against a tracker that carries no labels at all.
 - For a retargeted task, [[76fe608c3a40|widen that bracket to the whole accumulated change]]:
   `before_head` from the sourcing event of the task's original `task_created`, `after_head` from
   its latest `task_retargeted` event, so the implementer sees the full delta the task owes, not
-  the last increment
+  the last increment. A successor task — a fresh `task_created` after a finished predecessor —
+  starts a bracket of its own: `before_head` is the predecessor's last state, because that is the
+  change event preceding the successor's, and no tracker edge is needed to find it
 - For a removed node: return the journal's biography — name, node type, module, removing proposal,
   last task — alongside that bracket
 - Return all of it as one structured result
@@ -107,7 +109,7 @@ resolved paths.
 
 ### Resolution reads the spec graph and the journal, not the tracker
 
-A bead can be closed, replaced by a modify-pair, or re-created under a new task id, and
+A task can be finished, followed by a successor under a new task id, or cancelled, and
 `spex map context` returns the same files — the identity hash survives everything except a rename,
 and a rename is a new node by definition. A resolver that consulted tracker state would return
 different context depending on when it was asked, and the skills that consume it would lose the

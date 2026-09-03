@@ -35,7 +35,7 @@
       "preq_id": "9120788210c9",
       "type": "functional",
       "name": "Fold and bracket retargeted tasks",
-      "description": "task_retargeted is task-bearing: MappingStore's fold treats it exactly as it treats task_created — latest-wins moves the pairing's sourcing event forward to the retargeted event's referent, so the current linkage always points at the newest state the task owes. ContextResolver widens the context bracket for a retargeted task: before_head comes from the sourcing event of the task's original task_created, after_head from its latest task_retargeted event, so the implementer sees the full accumulated diff rather than the last increment. Because open tasks are no longer recreated when their node changes, no blocks lineage edge exists between generations on this path — the accumulation lives in the journal and this fold-and-bracket rule is what surfaces it."
+      "description": "task_retargeted is task-bearing: MappingStore's fold treats it exactly as it treats task_created — latest-wins moves the pairing's sourcing event forward to the retargeted event's referent, so the current linkage always points at the newest state the task owes. ContextResolver widens the context bracket for a retargeted task: before_head comes from the sourcing event of the task's original task_created, after_head from its latest task_retargeted event, so the implementer sees the full accumulated diff rather than the last increment. No path recreates a task with a lineage edge — an open task is retargeted, and a completed one is followed by a plain create whose only tie to its predecessor is the journal — so no blocks edge exists between generations anywhere in the tracker: the accumulation lives in the journal and this fold-and-bracket rule is what surfaces it."
     }
   ],
   "components": [
@@ -79,10 +79,10 @@
   ],
   "data_flows": [
     {
-      "id": "38b6d99f08bf",
-      "name": "Bead creation mapping flow",
-      "description": "How a task pairs with the event that spawned it. Plan derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, an adapter that implements the optional label surface applies that label to the task it creates — or, for a retarget op, adds the new modified event's label to the existing task — and ingest appends the change event and its task_created (or task_retargeted) receipt through MappingStore at baselining. Skills query the resulting linkage via MapCommand.",
-      "content": "flow_bead_mapping.md",
+      "id": "ef335db5e961",
+      "name": "Task creation mapping flow",
+      "description": "How a task pairs with the event that spawned it. Plan derives each create op's journal eid at changeset-build time — the same (git_head, op_id) derivation ingest uses to mint the event — and stamps it on the op as the spex:<eid> idempotency label, an adapter that implements the optional label surface applies that label to the task it creates — or, for a retarget op, adds the new modified event's label to the existing task — and ingest appends the change event and its task_created (or task_retargeted) receipt through MappingStore at baselining. The journal records what the pipeline did, never a task's completion: a completed task's successor is a plain create paired by a fresh event, with no task_closed for the predecessor. Skills query the resulting linkage via MapCommand.",
+      "content": "flow_task_mapping.md",
       "uses": [
         "205e67ca4aad",
         "08909d62930b"

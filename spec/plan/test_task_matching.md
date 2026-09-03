@@ -1,22 +1,22 @@
-# Bead Matching Tests
+# Task Matching Tests
 
-Integration and acceptance tests for BeadReader and NodeMatcher. These tests verify that bead metadata is correctly read from the tracker listing the caller supplies as a file, never from a tracker command this binary runs, and that changed spec nodes are deterministically correlated with existing beads using identity hashes.
+Integration and acceptance tests for TaskReader and NodeMatcher. These tests verify that task state is correctly read from the task-state artifact the caller supplies as a file — never from a tracker command this binary runs, and never from the tracker's own listing format — and that changed spec nodes are deterministically correlated with existing tasks using identity hashes.
 
 ## Setup
 
-Scenarios split by what they exercise. S1 and S2 exercise BeadReader alone, against the shape it actually consumes: a tracker listing (`arch_bead_reader.md`'s "Input Shape"), not the task journal — BeadReader starts no process and contacts no tracker, and never touches the journal. S3 onward exercise NodeMatcher against journal-derived pairings, since folding the journal into pairings is `mapping.MappingStore`'s job (see `spec/map/test_mapping_store.md`), not BeadReader's.
+Scenarios split by what they exercise. S1, S2 and S2b exercise TaskReader alone, against the shape it actually consumes: the task-state artifact (`arch_task_reader.md`'s "Input Shape"), not the task journal — TaskReader starts no process, contacts no tracker, and never touches the journal. S3 onward exercise NodeMatcher against journal-derived pairings, since folding the journal into pairings is `mapping.MappingStore`'s job (see `spec/map/test_mapping_store.md`), not TaskReader's.
 
 Identity hashes in fixtures are placeholder constants (`SCHK_HASH`, `HASR_HASH`, etc.) so the test data stays readable; the values themselves are computed once at fixture-load time via `schema.IdentityHash`.
 
-- A tracker listing (the shape BeadReader's `--beads` input takes), for S1/S2. The labels are
-  present because real tracker output carries them; BeadReader reads none of them:
+- A task-state artifact (the shape TaskReader's `--tasks` input takes), for S1/S2. Only in-flight tasks appear in it — an artifact never lists a finished task, and there is no status value that could:
 
 ```json
 {
-  "issues": [
-    {"id": "spex-001", "status": "open",        "labels": ["spex:<HEAD>:op-1", "commit:deadbeef"]},
-    {"id": "spex-002", "status": "in_progress", "labels": ["spex:<HEAD>:op-2"]},
-    {"id": "spex-003", "status": "open",        "labels": ["spex:<HEAD>:op-3"]}
+  "version": 1,
+  "tasks": [
+    {"task_id": "spex-001", "status": "open"},
+    {"task_id": "spex-002", "status": "in_progress"},
+    {"task_id": "spex-003", "status": "open"}
   ]
 }
 ```
@@ -52,13 +52,22 @@ The `node_type` field is part of the change record because identity hashes do no
 
 ## Scenarios
 
-### S1: BeadReader carries id and status, parses no labels
+### S1: TaskReader carries id and status, parses nothing else
 
-Parse the tracker listing above. Assert each entry carries the two fields the interface promises (`ID`, `Status`), in input order, and that no entry exposes anything derived from a label — the linkage lives in the journal fold, and status joins onto it by task id. The `in_progress` status on `spex-002` is carried through verbatim: the retarget/refuse split downstream reads it exactly as the input spelled it.
+Parse the artifact above. Assert each entry carries the two fields the interface promises (`ID`, `Status`), in input order, and that no entry exposes anything beyond them — the linkage lives in the journal fold, and status joins onto it by task id. The `in_progress` status on `spex-002` is carried through verbatim: the retarget/refuse split downstream reads it exactly as the input spelled it.
 
-### S2: BeadReader returns empty slice on empty input
+### S2: TaskReader returns empty slice on an empty artifact
 
-An empty `issues` array, and separately an empty bare array. Assert an empty slice rather than an error for both: absence and emptiness are both first-class states, not error conditions.
+`{"version": 1, "tasks": []}`. Assert an empty slice rather than an error: an empty list is the explicit statement that nothing is in flight, and it is the normal state of a project between epics.
+
+### S2b: TaskReader refuses every document that is not a version-1 task-state artifact
+
+Four inputs, each refused with an error beginning `plan: read tasks:` and naming the constraint, none returning entries:
+
+- `{"version": 2, "tasks": []}` — the version is not the one the reader speaks; a reader that guessed would silently misread a future shape.
+- `{"version": 1, "tasks": [{"task_id": "spex-004", "status": "closed"}]}` — `closed` is not a value the format has. This is the arm that pins the design: the artifact cannot express completion, so no consumer can ever branch on it.
+- `{"version": 1, "tasks": [{"task_id": "spex-005", "status": "open", "labels": []}]}` — an undeclared property on an entry. The tracker's listing fields never enter the binary, and the schema's `additionalProperties: false` is what keeps them out.
+- `{"issues": [{"id": "spex-006", "status": "open"}]}` — a raw tracker listing, the shape the retired input took. It has no `version` and no `tasks`, and it is refused as any other malformed document is, not recognised as a legacy form.
 
 ### S3: NodeMatcher produces correct matched, unmatched, and orphaned lists
 
@@ -68,15 +77,19 @@ Call `MatchNodes(changes, pairings)` with the fixture data. Expected:
 - **Unmatched (1 entry):** `NEW_COMP` (added, no pairing)
 - **Orphaned:** none in this fixture (no removed node has a matching pairing)
 
-### S4: NodeMatcher handles multiple beads per spec node
+### S4: NodeMatcher handles multiple tasks per spec node
 
-Append a modify pair for `SCHK_HASH` (second `task_created` after a `task_closed`). Assert the match carries the node's current pairing, with the lineage reachable through the journal history — the fold answers latest-wins, so one pairing is what it hands over here.
+Append a second `modified` + `task_created` pair for `SCHK_HASH` — a successor task after the first completed; no `task_closed` separates the two, because the journal never records completion. Assert the match carries the node's current pairing, with the lineage reachable through the journal history — the fold answers latest-wins, so one pairing is what it hands over here.
 
-Then assert the interface contract directly, independent of what the fold happens to produce: hand `MatchNodes` two pairings that both store `SCHK_HASH` and assert the match carries **both**, in bead-id order, not the first alone. The fold's latest-wins rule is why the list holds one entry in practice, and matching is specified to neither rely on that nor enforce it — so the plural case has to be constructed to be tested at all, and a matcher that returned the first entry would pass every fold-derived fixture.
+Then assert the interface contract directly, independent of what the fold happens to produce: hand `MatchNodes` two pairings that both store `SCHK_HASH` and assert the match carries **both**, in task-id order, not the first alone. The fold's latest-wins rule is why the list holds one entry in practice, and matching is specified to neither rely on that nor enforce it — so the plural case has to be constructed to be tested at all, and a matcher that returned the first entry would pass every fold-derived fixture.
 
 ### S4b: A retargeted pairing matches like any other
 
 Append a `modified` event for `SCHK_HASH` plus a `task_retargeted` receipt naming spex-001. Assert the match still pairs `SCHK_HASH` with spex-001 — the fold moved the pairing's sourcing event forward, the task id did not change, and NodeMatcher sees one current pairing exactly as before. Retargeting is invisible to matching; only the sourcing event's `after` hash (consulted downstream by the already-tracked cell) moved.
+
+### S4c: TaskReader's output joins onto the pairings, and NodeMatcher carries the result
+
+The one scenario that crosses both components. Parse, with TaskReader, an artifact listing spex-001 as `open` and spex-002 as `in_progress` and nothing else; join the entries it returns onto the fixture pairings by task id — the join PlanCommand performs — and hand the enriched pairings to NodeMatcher with the fixture diff. Assert the matched entry for `SCHK_HASH` carries `open` and the pairing for `HASR_HASH` (not in the diff) reaches no list, so the status never leaks past matching; then modify `HASR_HASH` in the diff and assert its matched entry carries `in_progress` verbatim. Assert the matched entry for `HTST_HASH` (spex-003) carries no status — not `closed`, not an error, simply unset — and that matching still pairs it exactly as S3 does. Absence is data the classifier reads downstream; matching neither invents a value for it nor drops the pairing. A reader that mislabeled the statuses, or a matcher that dropped unlisted pairings, fails here and nowhere in S1–S4b.
 
 ### S5: NodeMatcher uses direct identity-hash comparison
 

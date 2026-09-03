@@ -15,9 +15,16 @@ component rather than as helpers at the bottom of a larger file.
   append — the validation gate sits between construction and the atomic commit, so a refused
   line refuses the whole run.
 
-Validation is against the journal-line schema, the same contract every journal reader parses by.
-The gate lives with the encoder, not with each caller, so any pathway that appends — normal-mode
-reconciliation and refresh-mode absorption alike — inherits it rather than re-implementing it.
+Validation is against the journal-line schema — the document the schema module's
+JournalLineSchema ships as `schema/journal-line.schema.json`, read through the schema package —
+the same contract every journal reader parses by. The gate lives with the encoder, not with each
+caller, so any pathway that appends — normal-mode reconciliation and refresh-mode absorption
+alike — inherits it rather than re-implementing it.
+
+The schema is per-line and knows no lifecycle: it admits a `task_created` whether or not an
+earlier pairing for the same node was ever closed, so the encoder passes a completed task's
+successor exactly as it passes a first task. What a sequence of lines may mean is the
+InvariantChecker's question; the encoder answers only whether each line is well-formed.
 
 ## A Boundary Made Visible
 

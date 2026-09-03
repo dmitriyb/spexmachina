@@ -1,10 +1,10 @@
-# BeadMapSchema
+# JournalLineSchema
 
-The journal-line JSON Schema definition. It validates each line of the task journal — the
+The journal-line JSON Schema definition, shipped as `schema/journal-line.schema.json`. It validates each line of the task journal — the
 append-only log linking spec nodes to tasks, living in the `.spex/` state directory the lifecycle
 pre-flight resolves; the line format is the contract and is indifferent to the file's location —
 and those line shapes are the whole of
-[[f7ef8bef0ba1|what the journal may hold]]: change events, the registered event, receipt
+[[43e38a51a7e0|what the journal may hold]]: change events, the registered event, receipt
 events, and nothing else.
 
 ## Scope
@@ -49,7 +49,7 @@ identity hash, so plan's node matching joins a changed merkle node against the j
 key translation anywhere. Tracker labels carry the *event* id instead (`spex:<eid>`) — an
 adapter-facing idempotency key spex reads nothing from, so no label ever needs parsing back into a
 node key. Earlier formats used `<module>/<node_type>/<integer_id>` keys
-that required rekeying between merkle and the retired bead-map; that translation layer died when
+that required rekeying between merkle and the retired record file; that translation layer died when
 identity hashes were introduced, and the journal keeps the single-format property.
 
 ### `node_type` is the closed set of things an event may describe
@@ -70,6 +70,17 @@ constructed an event for an untaskable kind is rejected at the write boundary, l
 untouched. The corollary is that retiring a kind of spec content that was never in the enum is not
 a journal migration: no line named one, so no line has to be rewritten.
 
+### The journal records what the pipeline did, never completion
+
+`task_closed` is a receipt for a close op the pipeline issued — a removed node's live task
+cancelled, or a folded-back test section's — and nothing else. A task its implementer finished
+leaves no line: the pipeline did not close it, so the journal does not say it closed. A node
+whose work spans several generations therefore carries several `task_created` lines with no
+`task_closed` between them, and the schema admits that sequence without comment, because it
+validates one line at a time and knows no lifecycle. Whether a task is still live is a question
+for the task-state artifact plan reads at run time, not for this format; the journal's answer is
+which task a node's latest change is paired with, and the fold gives it.
+
 ### Per-line validation, not per-file
 
 Each line validates independently. That is what lets the map query surface name the exact line
@@ -82,3 +93,10 @@ The schema does not enforce that a receipt's `for` references an existing `eid`,
 are unique, or that a node's events are ordered sensibly. JSON Schema cannot express cross-line
 constraints over a JSONL stream. These are enforced programmatically by ingest's invariants at
 append time and surfaced by the fold at read time.
+
+### A sibling contract for the other direction
+
+This schema governs what spex remembers; its sibling `task-state.schema.json` governs what spex
+is told. The two are deliberately disjoint in what they can say: the journal never carries a
+status, and the task-state document never carries history. Plan joins them on the one field both
+have — `task_id`, the tracker's own id as the receipt recorded it — and nothing else crosses.

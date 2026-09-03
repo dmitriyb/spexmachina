@@ -74,3 +74,10 @@ the pipeline depends on.
 
 <Which modules/components are expected to be affected>
 ```
+
+The change template pre-prints exactly the three sections the registrar requires and no optional
+one. The corpus-wide vocabulary sweep reads a fourth, `## Retired vocabulary`, off any proposal
+that carries it — one term per list line — and a proposal that retires a term, flag or file adds
+that section by hand; the template does not offer it, because most changes retire nothing and an
+empty section would read as a declaration. The registrar accepts the extra heading as it accepts
+any optional one.

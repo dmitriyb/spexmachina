@@ -14,7 +14,7 @@
       "preq_id": "b42bc8a9b82a",
       "type": "functional",
       "name": "Show proposal history",
-      "description": "List all proposals with their dates, show which proposals led to which spec changes and which bead actions (via spec_proposal metadata on beads)."
+      "description": "List all proposals with their dates, show which proposals led to which spec changes and which task actions (via spec_proposal metadata on tasks)."
     },
     {
       "id": "e8c48d1b4cde",
@@ -31,11 +31,11 @@
       "description": "Proposals are plain markdown files in spec/proposals/. No database, no external state. Everything is committed to git."
     },
     {
-      "id": "fd540b407fb4",
+      "id": "76c339aebbcd",
       "preq_id": "58ea35f52b86",
       "type": "functional",
-      "name": "Bead data via stdin",
-      "description": "spex log reads tracker bead data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed []BeadRecord slice from its caller \u2014 no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which \u2014 ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
+      "name": "Task data via stdin",
+      "description": "spex log reads tracker task data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed task records from its caller \u2014 no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which \u2014 ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
     }
   ],
   "components": [
@@ -52,11 +52,11 @@
     {
       "id": "97f73ced5a02",
       "name": "HistoryViewer",
-      "description": "Groups and renders proposal history from a bead data array supplied by the caller. Accepts parsed []BeadRecord directly \u2014 no subprocess invocation. Filters by spec_proposal:<ref> label, resolves proposal files from spec/proposals/, and writes the grouped history to an io.Writer. Usage: the ProposalCommands wrapper reads 'br list --json' (or equivalent) from stdin, parses into BeadRecord, and passes the slice to HistoryViewer.",
+      "description": "Groups and renders proposal history from a task data array supplied by the caller. Accepts parsed task records directly \u2014 no subprocess invocation. Filters by spec_proposal:<ref> label, resolves proposal files from spec/proposals/, and writes the grouped history to an io.Writer. Usage: the ProposalCommands wrapper reads 'br list --json' (or equivalent) from stdin, parses it into task records, and passes the slice to HistoryViewer.",
       "content": "arch_history_viewer.md",
       "implements": [
         "2e38135487be",
-        "fd540b407fb4"
+        "76c339aebbcd"
       ]
     },
     {
@@ -77,7 +77,7 @@
         "2b62ad5e8ef2",
         "2e38135487be",
         "e8c48d1b4cde",
-        "fd540b407fb4"
+        "76c339aebbcd"
       ],
       "uses": [
         "24180f55c0b4",
@@ -90,7 +90,7 @@
     {
       "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 plan \u2192 bead actions \u2192 history query.",
+      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 plan \u2192 task actions \u2192 history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
         "24180f55c0b4",
@@ -139,7 +139,7 @@
     {
       "id": "44a9d44c7eec",
       "name": "spex log",
-      "description": "Show proposal history and linked bead actions (reads bead JSON on stdin)",
+      "description": "Show proposal history and linked task actions (reads task JSON on stdin)",
       "provided_by": [
         "21bc124a46c0",
         "97f73ced5a02"

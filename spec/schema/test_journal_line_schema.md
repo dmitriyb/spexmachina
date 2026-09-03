@@ -1,14 +1,14 @@
-# Bead Map Schema Tests
+# Journal Line Schema Tests
 
-Integration and acceptance tests for BeadMapSchema (component 4). These tests verify that the
-journal-line JSON Schema correctly accepts valid lines of the task journal, rejects invalid
-ones, and enforces all field constraints — one self-contained object at a time, because the
-journal has no envelope.
+Integration and acceptance tests for JournalLineSchema. These tests verify that the
+journal-line JSON Schema, shipped as `schema/journal-line.schema.json`, correctly accepts valid
+lines of the task journal, rejects invalid ones, and enforces all field constraints — one
+self-contained object at a time, because the journal has no envelope.
 
 ## Setup
 
-The JSON Schema validator is initialized with the journal-line schema loaded from
-`BeadMapSchema()`.
+The JSON Schema validator is initialized with the journal-line schema loaded from the schema
+package's journal-line read.
 
 **Fixture: valid change event:**
 
@@ -99,6 +99,14 @@ variant carrying a `node` field.
 lifecycle before any spec change exists, so the shape requires `eid`, `proposal` and `git_head`
 and admits no `node`.
 
+### S6d: Two task_created lines for one node validate independently
+
+**Input:** two `task_created` receipts naming different eids and different task ids, with no
+`task_closed` between them — the shape a completed task's successor leaves in the journal.
+**Expected:** both pass. The schema validates one line at a time and knows no lifecycle; that a
+node carries several task pairings across its history with no close between them is the normal
+record of completion, which the journal never states.
+
 ### S7: `node_type` is a closed enum
 
 **Input:** a change event with `"node_type": "impl_section"`, and another with
@@ -133,7 +141,7 @@ permanent; a writer stamps the current version.
 
 ### S9: No integer ids anywhere
 
-**Input:** a line shaped like a retired bead-map record (`{"id": 42, "spec_node_id": "..."}`).
+**Input:** a line shaped like a record of the retired map file (`{"id": 42, "spec_node_id": "..."}`).
 **Expected:** validation fails — the format has no `id`, no `next_id`, no `records` envelope.
 This is the regression guard against the retired format creeping back through a stale embed.
 
@@ -151,6 +159,6 @@ boundary rather than accumulating silently.
 
 ### E3: The schema file itself is embedded
 
-`BeadMapSchema()` returns a compilable JSON Schema document — the embed is validated by
-compiling it, which catches a truncated or stale `bead-map.schema.json` at test time rather than
-on first use.
+The schema package's journal-line read returns a compilable JSON Schema document — the embed is
+validated by compiling it, which catches a truncated or stale `journal-line.schema.json` at test
+time rather than on first use.

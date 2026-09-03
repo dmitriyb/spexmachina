@@ -1,6 +1,6 @@
 # Schema Loading Tests
 
-Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame, the default profile document `defaultProfile.json` and the journal-line schema `bead-map.schema.json` via `go:embed`, composes the effective project and module schemas, and exposes them through `ProjectSchema()`, `ModuleSchema()`, and `BeadMapSchema()` functions — the two composed reads take no arguments and always compose from the built-in default profile, consulting no file. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader owns the file-backed resolution: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile. A caller that needs a project's own profile reflected in the composed schemas takes the resolve-then-compose path — ProfileLoader's resolution handed to the composition entry points directly — which the P-scenarios below exercise; the zero-argument reads are the default-profile convenience over the same composition.
+Integration and acceptance tests for SchemaLoader and ProfileLoader. The SchemaLoader is the Go package (`schema/schema.go`) that embeds the schema frame, the default profile document `defaultProfile.json`, the journal-line schema `journal-line.schema.json` and the task-state schema `task-state.schema.json` via `go:embed`, composes the effective project and module schemas, and exposes them through `ProjectSchema()`, `ModuleSchema()`, `JournalLineSchema()` and `TaskStateSchema()` functions — the two composed reads take no arguments and always compose from the built-in default profile, consulting no file. It also exposes the `IdentityHash(parts ...string) string` function that defines what spec node IDs look like. ProfileLoader owns the file-backed resolution: it reads `spec/profile.json` when present, falls back to the built-in default profile otherwise, validates the document, and exposes the resolved profile. A caller that needs a project's own profile reflected in the composed schemas takes the resolve-then-compose path — ProfileLoader's resolution handed to the composition entry points directly — which the P-scenarios below exercise; the zero-argument reads are the default-profile convenience over the same composition.
 
 These tests verify that the embedding works correctly, that the composed schemas are structurally sound and reproduce the shipped static documents under the default profile, that profile resolution and fallback behave as declared, that the composed schemas can be used to validate known-good fixtures, and that the `IdentityHash` function is deterministic and matches the schema's hex pattern.
 
@@ -9,7 +9,7 @@ These tests verify that the embedding works correctly, that the composed schemas
 ### Build Preconditions
 
 - The `schema` package compiles successfully (`go build ./schema/...`).
-- The `go:embed` directive references `project.schema.json`, `module.schema.json` and `bead-map.schema.json`, all of which exist in the `schema/` directory at build time.
+- The `go:embed` directive references `project.schema.json`, `module.schema.json`, `journal-line.schema.json` and `task-state.schema.json`, all of which exist in the `schema/` directory at build time.
 - No external file system access is needed at runtime — schemas are baked into the binary.
 
 ### Test Fixtures
@@ -219,7 +219,7 @@ The current API uses fixed function names (`ProjectSchema`, `ModuleSchema`) rath
 **Call:** `data, err := schemaFS.ReadFile("nonexistent.schema.json")`
 **Expected:** `err` is non-nil (file not found in embed FS). `data` is nil or empty.
 
-**Verifies:** The embed FS only contains the three expected schema files and does not silently serve other content.
+**Verifies:** The embed FS only contains the four expected schema files and does not silently serve other content.
 
 ### E6: Schema files reference correct $defs internally
 
@@ -337,15 +337,15 @@ These scenarios cover profile resolution and the composition acceptance criterio
 **Steps:** Read the embedded `defaultProfile.json` bytes, parse them, and resolve them through the same validation the file-backed path uses. Separately, copy the document to `spec/profile.json` in a fixture directory and resolve over it.
 **Expected:** Both resolutions succeed and yield identical resolved profiles — the embedded default is not a privileged code path but a document in the source tree, identical in format to what a project may commit, declaring `profile_version` 1. Composition from either yields the same composed schemas, so P2's golden comparison holds over both.
 
-## BeadMapSchema Scenarios
+## JournalLineSchema Scenarios
 
-### BM1: BeadMapSchema() loads without error
+### JL1: JournalLineSchema() loads without error
 
-**Call:** `data, err := schema.BeadMapSchema()`
+**Call:** `data, err := schema.JournalLineSchema()`
 
 **Expected:** `err` is nil; `data` is non-empty; `data` is valid JSON.
 
-### BM2: BeadMapSchema() accepts both identities spec_node_id carries
+### JL2: JournalLineSchema() accepts both identities a journal line carries
 
 **Steps:**
 1. Load the journal-line schema and compile a validator.
@@ -356,3 +356,22 @@ These scenarios cover profile resolution and the composition acceptance criterio
 **Expected:** The first two pass; the empty string fails the identity-hash pattern.
 
 **Verifies:** node keys and proposal slugs live in different fields with different constraints — the pattern lives where the hash lives, and slugs never share its field.
+
+## TaskStateSchema Scenarios
+
+### TS1: TaskStateSchema() loads without error
+
+**Call:** `data, err := schema.TaskStateSchema()`
+
+**Expected:** `err` is nil; `data` is non-empty; `data` is valid JSON and compiles as a JSON Schema document.
+
+### TS2: The embedded task-state schema is the one plan validates against
+
+**Steps:**
+1. Load the task-state schema and compile a validator.
+2. Validate `{"version": 1, "tasks": [{"task_id": "spexmachina-abc", "status": "open"}]}` — passes.
+3. Validate `{"version": 1, "tasks": [{"task_id": "spexmachina-abc", "status": "closed"}]}` — fails the enum.
+
+**Expected:** the first passes and the second fails naming the `status` constraint.
+
+**Verifies:** the loader serves the same document `TaskReader` refuses a `closed` status against, so the two cannot drift: one embedded file, read by one function, compiled by its one consumer.

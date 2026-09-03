@@ -13,7 +13,7 @@
 
 The saver is configured with two paths: the spec directory it hashes, and the snapshot file it writes. The shipped command sets the snapshot path to the location inside `.spex/` that the lifecycle pre-flight resolved, so this writer computes no location of its own.
 
-One call hands it the run's top-level status. It answers whether it wrote, or it fails. It is never told *what* to write: the tree is computed from the spec directory as it stands at the moment of the call.
+One call hands it the run's top-level status — read off the receipts v2 document, whose version envelope IngestCommand's pre-flight has already checked, so the saver sees a status and never a version. It answers whether it wrote, or it fails. It is never told *what* to write: the tree is computed from the spec directory as it stands at the moment of the call.
 
 ## Gate Logic
 
@@ -29,7 +29,7 @@ That yes-or-no answer is what the run's summary reports as `snapshot_saved`, so 
 
 - A partial run means some ops succeeded and some didn't. The journal reflects the partial state (pairings for ok creates, nothing for error creates).
 - If we wrote the snapshot on partial, the next `spex plan` run would diff against the new (partial) baseline and miss the ops that still need to run.
-- Leaving the snapshot untouched means the next run diffs the spec against the ORIGINAL baseline. The resulting changeset re-includes only the ops whose pairings never landed — the journal already pairs everything that succeeded, so nothing landed is re-created. Adapter re-runs. Ingest reconciles — appending nothing for lines already present. If the second run is complete, snapshot gets saved.
+- Leaving the snapshot untouched means the next run diffs the spec against the ORIGINAL baseline. The resulting changeset re-includes only the ops whose pairings never landed — the journal already pairs everything that succeeded, so nothing landed is re-created; a landed task that has meanwhile finished is still already tracked, because that cell is decided on the journal's hash and not on the task-state artifact. Adapter re-runs. Ingest reconciles — appending nothing for lines already present. If the second run is complete, snapshot gets saved.
 
 This is the "unfinished operations resurface through the idempotency path" mechanism described in the proposal.
 

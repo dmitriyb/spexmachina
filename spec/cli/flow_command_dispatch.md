@@ -51,7 +51,7 @@ The input is the raw argument list. Parsing splits it into four things, and noth
 
 The subcommand is handed its parsed local flags, the root's persistent flags and the leftover positional arguments. No spec state and no shared object crosses with them: the subcommand opens the spec directory itself if it needs one.
 
-The process's standard input crosses too, and for two subcommands it is where the payload arrives rather than an incidental channel. `spex plan` reads the merkle diff there whenever `--diff` names no file, and `spex log` reads the bead JSON there always — it declares no flag to read it from a file, and the root's own help line for it says so.
+The process's standard input crosses too, and for two subcommands it is where the payload arrives rather than an incidental channel. `spex plan` reads the merkle diff there whenever `--diff` names no file, and `spex log` reads the task JSON there always — it declares no flag to read it from a file, and the root's own help line for it says so.
 
 ### Subcommand → stderr / stdout (exit contract)
 

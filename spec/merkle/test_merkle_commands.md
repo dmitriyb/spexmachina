@@ -109,7 +109,7 @@ filename or path.
 **Then** stdout reports the change as `modified` with impact `structural`
 
 **Rationale**: Structural changes are the highest impact level and trigger the
-most downstream work (new beads, new journal pairings).
+most downstream work (new tasks, new journal pairings).
 
 ### S6: `spex diff --snapshot <path>` uses explicit snapshot
 

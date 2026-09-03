@@ -11,11 +11,12 @@ place the run's sequence lives.
 ## Responsibilities
 
 - Pair each op in the changeset with its corresponding receipt by op_id.
-- Open the journal and fold it; resolve the whole batch's ok removal closes up front.
-- Assemble the per-run state — the eid predicate over journal and in-flight batch, the fold, the
-  same-batch removals, the registered-by-stem map, the modified-handled set — and hand it to
+- Open the journal and fold it.
+- Assemble the per-run state — the eid predicate over journal and in-flight batch, the fold with
+  each node's latest change event, the registered-by-stem map — and hand it to
   [[3c0569749972|EventBuilder]] once, at construction, instead of threading it through every
-  call.
+  call. No batch-wide pre-pass precedes the loop: no op's lines depend on another op in the
+  batch, so there is nothing to resolve up front.
 - Loop the ops in changeset order, dispatching each (and each absorbed entry) to the builder;
   collect what it constructs.
 - After the whole batch is constructed, run [[5fd9613616e1|InvariantChecker]] against
@@ -31,7 +32,8 @@ Reconciler is set up from two things: the journal it will append to, and a view 
 spec graph it can ask for a node's name, kind and module — the identity a change event must carry,
 because the event is the only record of it once the node is gone. It is then handed the changeset
 and the receipts together, in one call, and answers with a tally or with an error — never with
-both.
+both. The changeset is v4 and the receipts v2; a receipt's tracker id is read from its `task_id`
+field, and the version envelopes are checked by IngestCommand before the pair reaches here.
 
 That tally is what the run's summary on stdout is built from: ok creates, ok closes and ok
 retargets (added together into the summary's `ok` count), skipped ops, errored ops, and the two
@@ -76,10 +78,12 @@ never writes it. That asymmetry is deliberate: a failed plan run that never reac
 leave the journal byte-identical, so the next run re-derives the same view and is retryable.
 
 Reconciler also never contacts a tracker. It learns what happened solely from the
-`(changeset, receipts)` pair — which is why a receipt's `bead_id` and `was_existing` are
+`(changeset, receipts)` pair — which is why a receipt's `task_id` and `was_existing` are
 load-bearing rather than advisory, and why an op with an `error` receipt constructs nothing
 rather than triggering a status query. `spex` closes the loop on file evidence alone; the adapter
-is the only participant that ever ran a tracker command.
+is the only participant that ever ran a tracker command. The same holds for what the pair does
+not say: a task the pipeline never closed is never journaled as closed, however finished it is in
+the tracker, because completion is not something this run did.
 
 The practical consequence is that ingest is replayable. Reconciling the same changeset and
 receipts twice produces the same journal — the second pass derives the same eids, finds every
@@ -91,14 +95,11 @@ git_head rather than off tracker state that may have moved underneath.
 Within a run, ops are processed in the order they appear in changeset.json — same order the
 adapter executed them, same order their lines land in the journal. Plan orders every changeset
 create-before-close: all create ops first, in the sorter's topological order, then the retargets,
-then one close op per obsolete (`arch_changeset_builder.md`, "Canonical Output"). The
-modified-node pair and a cleanup create with its own removal both arrive in that order — the
-create before the close naming the same bead or node. Neither construction path depends on seeing
-the close first, because the per-run state Reconciler assembles is batch-wide: the modified-node
-pair is built entirely from the create op's own `blocks` dep and the pre-batch fold, and a
-cleanup's referent comes from the whole batch's ok removal closes, resolved before any op is
-processed (`arch_event_builder.md`). Ordering is still what makes the fold's "latest wins" rule
-meaningful once lines land.
+then one close op per close action (`arch_changeset_builder.md`, "Canonical Output"). No op in
+the batch names another op's node — a successor create carries no reference to a predecessor, and
+a cleanup is never accompanied by a close for the same node — so no construction path depends on
+seeing any other op first. Ordering is still what makes the fold's "latest wins" rule meaningful
+once lines land.
 
 ## Error Surface
 

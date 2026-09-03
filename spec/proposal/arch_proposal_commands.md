@@ -8,7 +8,7 @@ CLI entry points for proposal management: `spex register`, `spex log`, `spex tem
   and hand them to
   [[24180f55c0b4|Registrar]], which decides both whether the file is accepted and what it ends up
   being called, and appends the `registered` journal event that opens the proposal's lifecycle
-- `spex log`: read the tracker's bead data from stdin and parse it, then hand the records to
+- `spex log`: read the tracker's task data from stdin and parse it, then hand the records to
   [[97f73ced5a02|HistoryViewer]] — the reading and parsing are this component's half of that
   surface, the grouping and rendering are the viewer's
 - `spex template`: hand the requested type through to [[cc8adc823719|TemplateProvider]] without
@@ -24,7 +24,7 @@ The declared names are the invocation strings alone. `--proposal`, `--json` and 
 
 ## `spex log` stdin contract
 
-`spex log` reads the bead tracker's JSON output from stdin — [[fd540b407fb4|the declared stdin contract for bead data]], and the reason no tracker binary is ever executed. The tracker is whichever tool the user has on PATH (`br`, `bd`, or a GitHub/Jira wrapper). Typical usage:
+`spex log` reads the tracker's JSON output from stdin — [[76c339aebbcd|the declared stdin contract for task data]], and the reason no tracker binary is ever executed. The tracker is whichever tool the user has on PATH (`br`, `bd`, or a GitHub/Jira wrapper). Typical usage:
 
 ```
 br list --json | spex log --proposal 2026-04-18-decouple-spex-from-br
@@ -36,18 +36,18 @@ Or for all proposals:
 br list --json | spex log
 ```
 
-The input shape is the same as `spex plan`'s `--beads` input: a JSON array (or `{"issues": [...]}` wrapper) of bead objects with `id`, `status`, `labels`, and `title`. ProposalCommands parses it into bead records and hands them to HistoryViewer.
+The input shape is the tracker's own listing: a JSON array (or `{"issues": [...]}` wrapper) of task objects with `id`, `status`, `labels`, and `title`. This is deliberately not the task-state artifact `spex plan` reads — that document lists in-flight work only and carries no labels or titles, and `spex log` needs the finished tasks and their labels to show a proposal's history. `spex log` is the one surface that reads the listing shape directly, and it sits outside the pipeline: nothing downstream of it decides anything. ProposalCommands parses the listing into task records and hands them to HistoryViewer.
 
-`--proposal <ref>` narrows the set before the hand-off, keeping only beads whose `spec_proposal:`
+`--proposal <ref>` narrows the set before the hand-off, keeping only tasks whose `spec_proposal:`
 label matches the reference given. A trailing `.md` is tolerated on either side of that comparison,
 so `--proposal 2026-04-18-decouple-spex-from-br` and the same reference written with `.md` select
-the same beads. What survives the filter is grouped and rendered as
-[[2e38135487be|the proposal history]] — each proposal beside the bead actions it produced.
+the same tasks. What survives the filter is grouped and rendered as
+[[2e38135487be|the proposal history]] — each proposal beside the task actions it produced.
 
 If stdin is empty — or carries nothing but whitespace — ProposalCommands exits non-zero with
-`spex log: no bead data on stdin; pipe 'br list --json' or equivalent`. Input that arrives but is
-not bead JSON is a different failure with a different message: the exit is still non-zero, and the
-error reads `spex log: parse bead JSON: <detail>`, naming the decode failure rather than an empty
+`spex log: no task data on stdin; pipe 'br list --json' or equivalent`. Input that arrives but is
+not task JSON is a different failure with a different message: the exit is still non-zero, and the
+error reads `spex log: parse task JSON: <detail>`, naming the decode failure rather than an empty
 pipe.
 
 ## `spex register` interface
@@ -86,7 +86,7 @@ so `spex template change > my-proposal.md` is the intended way to start one.
 
 ```
 spex register <proposal-path> --git-head <sha>
-spex log [--proposal <ref>] [--json]   # reads bead data on stdin
+spex log [--proposal <ref>] [--json]   # reads task data on stdin
 spex template <project|change>
 ```
 
@@ -98,4 +98,4 @@ Implements the project-level non-functional requirement `No runtime subprocesses
 - `spex register` reads a file path; no tracker interaction.
 - `spex template` writes stdout; no tracker interaction.
 
-The previous `proposal/exec.go` and `proposal/history.go`'s `CLIBeadLister` type — both of which ran `br list --json` as subprocesses — are deleted as part of this proposal's implementation.
+The previous `proposal/exec.go` and `proposal/history.go`'s lister type — both of which ran `br list --json` as subprocesses — are deleted as part of this proposal's implementation.

@@ -3,9 +3,9 @@
 Constructs journal lines per action class. [[2b5158af774b|Reconciler]] builds it once per run and
 calls it once per op (and once per absorbed entry); the builder answers with the lines the op
 implies — [[539030e8c5a4|an ok create yields a change event and the task_created receipt pairing
-it, an ok close on a removed node yields the removed event and its task_closed, and a receipt
+it, an ok close yields the removed or modified event and its task_closed, and a receipt
 reporting an error yields nothing]]. Cleanup creates pair with the removal event they answer —
-prior-batch or same-batch — instead of a fresh one; epic creates pair with the proposal's
+already journaled, or minted by the cleanup itself; epic creates pair with the proposal's
 `registered` event; an ok retarget yields [[7191a50f7447|the `modified` change event plus its
 `task_retargeted` receipt]]; the changeset's `absorbed` array yields [[7900dcd38c4a|one `modified`
 event per entry, closed by one `refresh` receipt naming them]] — every receipt references an
@@ -19,13 +19,17 @@ threaded through each call:
 - the **eid predicate** — answers whether an eid is already present, in the journal *or* in the
   batch constructed so far. It is mutated as the batch grows, so a mid-batch collision is caught
   exactly as a journal-side duplicate is;
-- the **journal fold** — live pairings, epic slugs, legacy lines behind the read-only branch;
-- the **same-batch removals** — the whole batch's ok removal closes, resolved before any op is
-  processed, which is what lets a cleanup create find a removal that comes after it in op order;
+- the **journal fold** — live pairings, epic slugs, legacy lines behind the read-only branch,
+  and each node's latest change event, which is what tells a create whether its node is new,
+  modified or coming back from a removal;
 - the **registered-by-stem map** — the journal's `registered` events keyed by proposal stem, for
-  epic creates;
-- the **modified-handled set** — which beads' modified pairs an earlier create has already built,
-  so the paired close constructs nothing twice.
+  epic creates.
+
+No op's lines depend on another op in the batch. The retired modify pair made a close's lines
+depend on its paired create, and a cleanup's referent depend on a close elsewhere in the batch;
+both dependencies are gone with the pair, so the builder needs no batch-wide pre-pass and no
+"already handled" bookkeeping — each op is constructed from itself, the journal and the spec
+graph.
 
 Any line whose derived eid the predicate already answers for is dropped, which is what makes the
 batch idempotent: [[fd6f08ef34fa|re-processing the same changeset+receipts pair constructs the
@@ -36,33 +40,68 @@ same lines, finds every one present, and yields nothing]].
 | Op type | spec_node_kind | Receipt status | Journal lines constructed |
 |---------|----------------|----------------|---------------------------|
 | create  | `proposal_epic` | ok            | one `task_created` whose `for` is the proposal's `registered` event — no change event (see Proposal-Epic Ops) |
-| create  | `cleanup`       | ok            | one `task_created` whose `for` is the `removed` event for the op's spec_node_id (see Cleanup-Create Ops) |
-| create  | other          | ok             | the change event (`added`, or `modified` when paired with a close) plus a `task_created` with the receipt's task id |
+| create  | `cleanup`       | ok            | one `task_created` whose `for` is the `removed` event for the op's spec_node_id — the journal's, or one this op mints (see Cleanup-Create Ops) |
+| create  | other          | ok             | the change event — `added` or `modified`, derived from the journal (see Node-Bearing Creates) — plus a `task_created` with the receipt's task id |
 | create  | any            | error/skipped  | nothing |
 | close   | —              | ok (reason="Spec node removed")  | the `removed` change event plus a `task_closed` |
-| close   | —              | ok (reason starts "Spec node modified"), bead claimed by a create in this batch | a `task_closed` whose `for` is the pair's `modified` event; the paired create op owns that event |
-| close   | —              | ok (reason starts "Spec node modified"), bead's create errored/skipped in this batch | nothing — partial run, see "The Modified-Node Pair" |
-| close   | —              | ok (reason starts "Spec node modified"), bead claimed by no create in this batch | the `modified` change event plus a `task_closed`, built from the close alone — no `task_created` (see "The Modified-Node Pair") |
+| close   | —              | ok (reason starts "Spec node modified") | the `modified` change event plus a `task_closed`, built from the close alone — no `task_created` (see Fold-Back Closes) |
 | close   | —              | error          | nothing |
-| retarget | —             | ok             | the `modified` change event plus a `task_retargeted` with the receipt's bead id (see Retarget Ops) |
+| retarget | —             | ok             | the `modified` change event plus a `task_retargeted` with the receipt's task id (see Retarget Ops) |
 | retarget | —             | error/skipped  | nothing |
-| label   | —              | any            | nothing (labels don't reach the journal) |
-| tag     | —              | any            | nothing |
 
 Node identity — name, kind, module — comes from the view of the current spec graph the builder is
-set up with, because a change event is the only record of that identity once the node is gone.
+set up with, because a change event is the only record of that identity once the node is gone;
+for a node already gone (a cleanup's, or a removal close's), it comes from the journal's fold
+entry instead.
+
+## Node-Bearing Creates
+
+A create op says which node it is for and nothing about the node's past: the same op is emitted
+for a brand-new node and for a node whose earlier task finished. The change type is therefore
+derived from the journal, not read off the op. The builder looks up the node's latest change
+event in the fold:
+
+- no change event at all, or a latest event whose `after` is null (the node was removed and is
+  now coming back) → an `added` event, `before` null;
+- a latest event carrying an `after` hash → a `modified` event, with that hash as `before`.
+
+The event's eid derives from `(git_head, op_id)`, its node identity and current hash from the op
+and the spec graph, its `git_head` and `proposal` from the changeset's top-level fields. One
+`task_created` pairs it to the receipt's task id.
+
+A node's earlier pairing is left exactly as it is. No `task_closed` is constructed for the
+finished task, because nothing closed it — its implementer finished it, and the journal records
+what the pipeline did, never a task's completion. The old pairing stays in the journal as
+lineage, and the fold answers with the successor because it is later in the file. A node may
+therefore carry several `task_created` lines across its history with no `task_closed` between
+them; that is the normal shape of a completed task's successor, and no invariant reads it as a
+gap.
+
+## Fold-Back Closes
+
+A close op whose reason starts "Spec node modified" is the shape plan emits for a coupled
+`test_section` edit — the section's `describes` dropped to one component, so its coverage folds
+into that component going forward and the section's own open task is cancelled. The node itself
+still exists — only its hash changed — so the close builds the `modified` event and its
+`task_closed` on its own: identity and prior hash come from the journal's live fold entry for the
+closing task (exactly as a removed node's identity is resolved), and current name, module, path
+and hash come from the spec graph. No `task_created` is built — there is no successor task.
+
+A close naming a task the journal has never heard of (no fold entry at all) has no identity to
+build from and is refused as a malformed changeset. "Spec node removed" closes construct the
+`removed` event directly, from the fold entry's identity and prior hash and an `after` of null.
 
 ## Retarget Ops
 
 A retarget op is what plan emits for a modified node whose open, unclaimed task moves to the new
-state instead of being recreated. Its ok receipt constructs a pair: the `modified` change event —
-eid derived from `(git_head, op_id)` exactly as a create op's event is, node identity and hashes
-from the op, name/kind/module from the spec graph — plus a `task_retargeted` receipt whose `for`
-is that event's eid and whose `task_id` is the existing task the op targeted. No `task_closed`
-and no `task_created` accompany the pair: nothing died and nothing was born. The old pairing
-stays in the journal as history, and the fold answers with the retargeted event because
-`task_retargeted` is task-bearing and later in the file. Both lines dedup by derived event id, so
-re-processing the batch appends nothing.
+state instead of being followed by a successor. Its ok receipt constructs a pair: the `modified`
+change event — eid derived from `(git_head, op_id)` exactly as a create op's event is, node
+identity and hashes from the op, name/kind/module from the spec graph — plus a `task_retargeted`
+receipt whose `for` is that event's eid and whose `task_id` is the existing task the op targeted.
+No `task_closed` and no `task_created` accompany the pair: nothing died and nothing was born. The
+old pairing stays in the journal as history, and the fold answers with the retargeted event
+because `task_retargeted` is task-bearing and later in the file. Both lines dedup by derived event
+id, so re-processing the batch appends nothing.
 
 ## Absorbed Entries
 
@@ -83,43 +122,6 @@ on partial runs too. Re-absorption is harmless by construction — after a parti
 is unsaved, the next diff re-reports the node, the operator marks it again, and the re-derived
 eids find their lines already present and append nothing. An empty `absorbed` array constructs
 nothing, not an empty receipt.
-
-## The Modified-Node Pair
-
-Plan generates two ops for a modified node whose pairing's task is closed: a create op labeled
-`spex:<eid>` of the pair's `modified` event — the very event this component will mint from the
-create op's `(git_head, op_id)` — plus a close op for the old task, in that order (see
-`arch_reconciler.md`, "Ordering"). The create op alone carries everything the pair needs: its
-`blocks` dep names the old bead directly, and the node's current live fold entry supplies the
-prior content hash for `before`. The builder constructs the whole pair while processing the
-create — one `modified` change event, a `task_closed` for the retired task and a `task_created`
-for its successor, both receipts carrying the pair's `modified` event as their `for`, so the join
-needs no scan by task id — without waiting to see the paired close, and records the bead in the
-modified-handled set. Nothing is rebound and nothing is deleted — the old pairing stays in the
-journal as lineage, and the fold answers with the successor because it is later in the file.
-
-When the paired close is then reached, it constructs nothing of its own — the modified-handled
-set says the create already built both receipts. A "Spec node modified" close whose bead was not
-claimed by an already-processed create is parked until the whole batch has been processed, then
-resolved one of two ways, discriminated on whether a create op for that bead exists in the
-changeset at all — not on receipt order:
-
-- **A create op for the bead exists in the changeset, but its receipt was `error` or `skipped`.**
-  This is a partial run (`scripts/apply-br.sh` routinely continues past a failed create to close
-  the old task anyway): the pair constructs nothing, same as any other errored/skipped create, and
-  the rest of the batch still lands.
-- **No create op for the bead exists in the changeset at all.** This is the shape the classifier
-  emits for a coupled `test_section` edit: an `obsolete` action with no replacement create,
-  because the section's bead is folded into its owning component going forward rather than
-  replaced. The node itself still exists — only its hash changed — so the close builds the
-  `modified` event and its `task_closed` on its own: identity and prior hash come from the
-  journal's live fold entry for the closing bead (exactly as a removed node's identity is
-  resolved), and current name/module/path/hash come from the spec graph. No `task_created` is
-  built — there is no successor task to pair.
-
-A close naming a bead the journal has never heard of (no fold entry at all) has no identity to
-build from and is refused as a malformed changeset. "Spec node removed" closes construct the
-`removed` event directly and never park.
 
 ## Proposal-Epic Ops
 
@@ -150,26 +152,28 @@ how a re-run recognises an epic that already exists.
 ## Cleanup-Create Ops
 
 Create ops with `spec_node_kind == "cleanup"` represent a code-cleanup task for a spec node that
-was removed in a prior or concurrent batch. Their `spec_node_id` carries the identity hash of the
-now-removed node, and their label is `spex:<eid>` of the removal event they answer — label and
-`task_created` referent are the same event.
+was removed while its own task was already finished. Their `spec_node_id` carries the identity
+hash of the now-removed node, and their label is `spex:<eid>` of the removal event they answer —
+label and `task_created` referent are the same event.
 
 The builder MUST treat them as a distinct case:
 
 - **Discriminate on the op's spec node kind before anything else** — before the spec graph is
   consulted, which no longer holds the node.
-- **Construct** a `task_created` whose `for` is the journal's latest `removed` event for that
-  hash — the cleanup task is born pointing at the removal it answers, which is what makes its
-  label resolvable from day one. If the journal holds no removed event for the hash (the removal
-  is in this same batch), the referent is the removal's eid, answered by the same-batch removals
-  in the per-run state — resolved from the whole batch's ok removal closes before any op is
-  processed, not from a scan of lines already appended to the batch. The changeset lists the
-  cleanup create before the close that performs its removal (see `arch_reconciler.md`,
-  "Ordering"), so at the point the create is processed neither the on-disk fold nor the
-  batch-so-far shows the node as removed yet; only a batch-wide, order-independent resolution
-  gets the referent right.
-- A cleanup op whose hash matches no removed event anywhere is an invariant failure, not a
-  fallback — a cleanup for a removal that never happened is a malformed changeset.
+- **Resolve the referent from the node's latest change event.** If that event is a `removed`
+  one — the removal landed in an earlier batch whose cleanup never did — the `task_created`'s
+  `for` is its eid, and no new change event is constructed. Otherwise the cleanup mints the
+  removal itself: one `removed` change event with eid derived from the cleanup op's own
+  `(git_head, op_id)`, `before` taken from the latest event's `after`, `after` null, and
+  name/kind/module from the fold entry — the biography that outlives the node — followed by the
+  `task_created` naming it. No close op accompanies a cleanup, because the node's task was
+  finished and there was nothing live to close; the cleanup is the one op in the batch that
+  knows the node is gone, so it is the one that says so.
+- A cleanup op whose hash the journal has never seen at all is an invariant failure, not a
+  fallback — a cleanup for a node with no history is a malformed changeset.
+
+The finished task that the removed node had gets no `task_closed`, for the same reason a
+successor create constructs none: the journal does not record completion.
 
 ## Error Surface
 

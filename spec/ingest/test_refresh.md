@@ -1,19 +1,19 @@
 # Refresh mode tests
 
 Module integration tests for the `RefreshHandler` component (id `f9033352c13f`). Refresh mode is
-the parallel ingest pathway for absorbing spec drift that owes no bead work, without triggering
-bead lifecycle. This test_section covers the RefreshHandler's contract end-to-end through
+the parallel ingest pathway for absorbing spec drift that owes no task work, without triggering
+task lifecycle. This test_section covers the RefreshHandler's contract end-to-end through
 `spex ingest --mode refresh`, exercised against a real fixture spec tree, with a real journal
 and a real snapshot at the fixture project's resolved locations. Per-method unit tests for internal
 helpers belong in `ingest/refresh_test.go` and are bundled with this component's implementation
-bead.
+task.
 
 ## Setup
 
 - `tmpdir/` containing a complete fixture spec (project.json + module.json files + content
-  leaves), a pre-seeded journal with pairings for the fixture's bead-producing nodes, and a
+  leaves), a pre-seeded journal with pairings for the fixture's task-producing nodes, and a
   pre-seeded snapshot matching some earlier state of the fixture spec.
-- An empty changeset (`version: 3`, empty `ops`) and an empty receipts file (`version: 1`,
+- An empty changeset (`version: 4`, empty `ops`) and an empty receipts file (`version: 2`,
   empty `ops`, `status: "complete"`).
 - Helper `runIngest(args ...string) (stdout, stderr string, exitCode int)` wraps
   `IngestCommand.Run`.
@@ -35,13 +35,13 @@ and after hashes, and one `refresh` receipt whose `absorbed` list names exactly 
 **And** no pre-existing journal line is altered
 **And** the snapshot is rewritten to match the current spec state
 
-**Rationale**: the headline behavior — drift is absorbed without bead churn, and unlike the
+**Rationale**: the headline behavior — drift is absorbed without task churn, and unlike the
 retired record-rewrite semantics, the absorption itself is now on the record: a refresh run is
 visible in history, not amnesiac.
 
 ### Refresh refuses on diff with `added` entries
 
-**Given** the fixture has been edited to introduce a new **bead-producing** content leaf (a new
+**Given** the fixture has been edited to introduce a new **task-producing** content leaf (a new
 component referenced from `alpha/module.json`) so the diff contains a non-absorbable `added` entry
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is non-zero
@@ -49,7 +49,7 @@ component referenced from `alpha/module.json`) so the diff contains a non-absorb
 does not absorb structural changes; use the normal pipeline")
 **And** the journal and the snapshot are unchanged byte-for-byte
 
-**Rationale**: structural changes that owe bead work must go through the normal Reconciler path.
+**Rationale**: structural changes that owe task work must go through the normal Reconciler path.
 The fixture must add a `component`, `data_flow` or `test_section`; an added `requirement` or `api`
 is absorbed and would not refuse.
 
@@ -67,7 +67,7 @@ IS absorbed, so the fixture must remove a `data_flow` or `test_section` to exerc
 ### Refresh absorbs the absorbable structural set
 
 **Given** the fixture has been edited to add a requirement, add and remove an api, and remove a
-component whose journal pairing was already closed
+component whose journal pairing names a task the normal pipeline already closed
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is 0
 **And** the journal gains `added`/`removed` change events for each absorbed entry plus the
@@ -76,22 +76,26 @@ component whose journal pairing was already closed
 
 **Rationale**: the refusal gate is a filter on node type and direction, not a blanket ban. A test
 that only exercises the refusal side would pass against an implementation that refused everything.
-The component removal is paired with a closed task deliberately: the orphan gate, not the
-structural gate, is what keeps a component removal honest.
+The component removal is paired with a journaled `task_closed` deliberately: the orphan gate, not
+the structural gate, is what keeps a component removal honest.
 
-### Refresh refuses while a live pairing points at a removed node
+### Refresh refuses while an unclosed pairing points at a removed node
 
 **Given** the fixture's current spec graph does NOT contain a node whose journal fold still shows
-an open task pairing (task_created with no task_closed)
+a task pairing with no `task_closed` — the only signal refresh has, since it reads no task-state
+artifact and cannot tell an open task from a finished one
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is non-zero
-**And** stderr contains a structured error naming the node's identity hash and the live task id,
-with the reason ("live task for removed node; structural drift requires the normal pipeline")
+**And** stderr contains a structured error naming the node's identity hash and the task id,
+with the reason ("live task for removed node; structural drift requires the normal pipeline") — "live" in the message meaning unclosed in the journal's sense, the only sense refresh has
 **And** both files are unchanged
 
-**Rationale**: an open task pointing at a deleted node signals bead work the normal pipeline owes
-(close or cleanup). Refresh absorbing the removal would leave the tracker lying about live work —
-a state we want surfaced, not baselined.
+**Rationale**: a task pointing at a deleted node signals task work the normal pipeline owes
+(close or cleanup) — and only the normal pipeline, reading the task-state artifact, can tell
+which. Refresh absorbing the removal would leave the tracker lying about live work — a state we
+want surfaced, not baselined. A finished task the journal never saw closed refuses here too, and
+that is the intended cost: the normal pipeline's cleanup path is where a finished task's removal
+is recorded.
 
 ### Refresh on no-change spec is a clean no-op
 
@@ -127,7 +131,7 @@ exactly what refresh mode exists for
 refreshes as a no-op
 
 **Rationale**: refresh and normal runs are complementary, not redundant. Normal runs baseline
-whatever bead lifecycle they process; refresh is the pathway when there is *only* driftwork, and
+whatever task lifecycle they process; refresh is the pathway when there is *only* driftwork, and
 its receipt is what keeps that absorption accountable.
 
 ### The absorbable table is the resolved profile's declaration
@@ -187,7 +191,7 @@ normal-mode complete runs. Either both move together or neither does.
 In-code Go fixtures, no on-disk testdata (the package convention). The handler-level tests in
 `ingest/refresh_test.go` build a two-module spec tree, seed its snapshot and journal via a fixture
 helper, then introduce per-scenario drift by editing content files (headline), adding or removing
-module.json entries (refusal gates), or seeding an open pairing for a node about to be removed
+module.json entries (refusal gates), or seeding an unclosed pairing for a node about to be removed
 (orphan gate). The command-level tests in `cmd/spex/ingest_test.go` drive
 `spex ingest --mode refresh` end-to-end, seeding the baseline by running a complete normal-mode
 ingest first.

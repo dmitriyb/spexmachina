@@ -69,6 +69,14 @@ End-to-end tests for `spex ingest`.
   mode alike, stderr names `spex doctor`, the journal is untouched — the lifecycle pre-flight
   reads both state files before `--mode` forks, so neither mode's own reader is reached.
 
+### A v3 pair is refused at the version envelope
+
+- `spex ingest --changeset <v3.json> --receipts <v1.json>` — a changeset carrying `"version": 3`
+  with a dep in the v3 task-ref spelling, receipts carrying `"version": 1`.
+- Expected: exit 1 from the command's pre-flight naming the version, before either mode runs;
+  nothing appended, snapshot untouched. The retired shapes are refused, never adapted — the
+  pre-flight requires `version: 4` on the changeset and `version: 2` on the receipts.
+
 ### Unknown --mode value
 
 - `spex ingest --changeset <valid.json> --receipts <valid.json> --mode bogus`.
