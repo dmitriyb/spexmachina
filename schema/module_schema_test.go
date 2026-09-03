@@ -958,11 +958,22 @@ func TestFR2_ComposeModuleSchemaEdgeFieldShape(t *testing.T) {
 	}
 }
 
-// TestFR2_ComposeModuleSchemaBuiltinTypeUnaffectedByEdges pins that a
-// built-in type's frame $def is reused unchanged even when the caller
-// passes an edge sourced at that type's name: built-in definitions carry
-// only the reference fields the frame already gives them.
-func TestFR2_ComposeModuleSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
+// TestFR2_ComposeModuleSchemaBuiltinComponentGainsDeclaredEdges pins the
+// module-scope half of "no built-in $defs remain in the frame"
+// (arch_module_schema.md) at the composition layer directly: no
+// module-scoped type's $defs entry is frame-fixed, the five built-in types
+// included — ComposeModuleSchema always resynthesizes each entry via
+// genericNodeDef rather than reusing the frame's copy. So ComposeModuleSchema
+// composes a reference field onto the component entry for an edge sourced
+// at "component" exactly as it would for a profile-declared type — the same
+// path TestFR2_ComposeModuleSchemaEdgeFieldShape exercises for a custom
+// type. It calls ComposeModuleSchema directly with a hand-built edge,
+// rather than through a resolved Profile, to isolate the composition layer
+// from decodeProfile/Validate/deriveEdges: declaring "serves" as a
+// reference field on the profile's component node type would reach the
+// same composed schema via Profile.ModuleNodeTypes/Profile.Edges. This
+// supersedes the retired refusal test_schema_loading.md's P6 describes.
+func TestFR2_ComposeModuleSchemaBuiltinComponentGainsDeclaredEdges(t *testing.T) {
 	edges := []Edge{{Kind: "serves", From: []string{"component"}, To: []string{"component"}}}
 	data, err := ComposeModuleSchema(DefaultModuleNodeTypes(), edges)
 	if err != nil {
@@ -976,19 +987,22 @@ func TestFR2_ComposeModuleSchemaBuiltinTypeUnaffectedByEdges(t *testing.T) {
 			{"id": "aabbccddeeff", "name": "C", "content": "arch_c.md", "serves": ["112233445566"]}
 		]
 	}`)
-	if err == nil {
-		t.Fatal("expected validation error: built-in component definition should not gain a serves field")
+	if err != nil {
+		t.Fatalf("declared serves edge should compose onto the built-in component type: %v", err)
 	}
 }
 
 // TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultModuleNodeTypes yields a schema that still accepts
-// the same known-good module fixtures the static schema accepts (S3, S4),
-// since every default type name resolves to the frame's existing $defs
-// entry. It validates fixtures only — it does not compare the composed
-// document against the shipped static module.schema.json byte-for-byte;
-// that golden comparison is scenario P2 in test_schema_loading.md, owned by
-// SchemaLoader.
+// the same known-good module fixtures the static schema accepts (S3, S4).
+// This is the guard that the hand-maintained DefaultModuleNodeTypes stays
+// complete: every built-in type's own fields (e.g. requirement's type,
+// preq_id) must be declared on it and materialize through the same generic
+// composition a profile-declared type goes through, or the fixtures these
+// fields appear in stop validating. It validates fixtures only — it does
+// not compare the composed document against the shipped static
+// module.schema.json byte-for-byte; that golden comparison is scenario P2
+// in test_schema_loading.md, owned by SchemaLoader.
 func TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 	data, err := ComposeModuleSchema(DefaultModuleNodeTypes(), DefaultProfile().Edges)
 	if err != nil {

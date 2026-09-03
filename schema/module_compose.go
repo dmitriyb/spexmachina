@@ -14,12 +14,16 @@ var moduleProfileArrays = []string{"requirements", "components", "data_flows", "
 // resolved profile: its name (used to key $defs and, elsewhere, to derive
 // identity hashes as "<module>/<name>/<node name>"), the plural key naming
 // its array property in module.json, whether nodes of this type carry a
-// content leaf, and the fields it declares beyond the fixed envelope.
+// content leaf, the fields it declares beyond the fixed envelope, and an
+// optional $comment on the composed $defs entry itself — mirrors
+// ProjectNodeType.Comment (project_compose.go); the built-in requirement and
+// api types are the ones that carry one.
 type ModuleNodeType struct {
 	Name            string
 	PluralKey       string
 	RequiresContent bool
 	Fields          []Field
+	Comment         string
 }
 
 // FieldKind is the kind of one field a profile-declared node type carries
@@ -70,22 +74,116 @@ func (f Field) HashParticipates() bool {
 
 // DefaultModuleNodeTypes returns the module-scoped node types of the
 // built-in default profile: requirement, component, data_flow, test_section
-// and api, in that order, name and plural key only. Composing the module
-// schema from this set reproduces the shipped frame's five arrays: each
-// name already resolves to the frame's own $defs entry, so ComposeModuleSchema
-// reuses that entry's properties unchanged rather than synthesizing from
-// Fields. The five built-in types' actual field declarations — the single
-// record of that policy — live in the embedded defaultProfile.json, resolved
-// through DefaultProfile().ModuleNodeTypes(); this function exists only to
-// give defaultArrayKeyByTypeName the name-to-plural-key lookup it needs to
-// restore a built-in type's hand-authored array property unchanged.
+// and api, in that order, their non-envelope properties declared as
+// Fields — the reference kinds preq_id, depends_on, implements, uses,
+// describes and provided_by, plus api's group field. This duplicates the
+// embedded defaultProfile.json's module-scoped declarations (also reachable
+// through DefaultProfile().ModuleNodeTypes()); it exists so callers can
+// compose the module schema, and defaultArrayKeyByTypeName can look up a
+// built-in type's plural key, without resolving a profile. Composing with
+// this set and DefaultProfile's edges reproduces the shipped
+// module.schema.json — every built-in type's $defs entry included, since no
+// module-scoped $defs entry is frame-fixed. Mirrors DefaultProjectNodeTypes
+// (project_compose.go).
 func DefaultModuleNodeTypes() []ModuleNodeType {
 	return []ModuleNodeType{
-		{Name: "requirement", PluralKey: "requirements"},
-		{Name: "component", PluralKey: "components", RequiresContent: true},
-		{Name: "data_flow", PluralKey: "data_flows", RequiresContent: true},
-		{Name: "test_section", PluralKey: "test_sections", RequiresContent: true},
-		{Name: "api", PluralKey: "apis"},
+		{
+			Name:      "requirement",
+			PluralKey: "requirements",
+			Comment:   "Module-level requirement. Extends the project-level requirement with preq_id to trace derivation from project requirements. IDs are 12-char hex identity hashes computed by schema.IdentityHash. name (renamed from title in spec format version 1) makes the envelope universal across every node type.",
+			Fields: []Field{
+				{
+					Name:        "type",
+					Kind:        FieldKindText,
+					Required:    true,
+					Enum:        []string{"functional", "non_functional"},
+					Description: "Requirement type.",
+				},
+				{
+					Name:        "preq_id",
+					Kind:        FieldKindReference,
+					Required:    true,
+					Targets:     []string{"requirement"},
+					Cardinality: "one",
+					Description: "Identity hash of the project requirement this module requirement derives from.",
+				},
+				{
+					Name:        "depends_on",
+					Kind:        FieldKindReference,
+					Targets:     []string{"requirement"},
+					Cardinality: "many",
+					Description: "Identity hashes of other requirements this one depends on (depends_on edge).",
+				},
+			},
+		},
+		{
+			Name:            "component",
+			PluralKey:       "components",
+			RequiresContent: true,
+			Fields: []Field{
+				{
+					Name:        "implements",
+					Kind:        FieldKindReference,
+					Targets:     []string{"requirement"},
+					Cardinality: "many",
+					Description: "Requirement identity hashes this component implements (implements edge).",
+				},
+				{
+					Name:        "uses",
+					Kind:        FieldKindReference,
+					Targets:     []string{"component"},
+					Cardinality: "many",
+					Description: "Identity hashes of other components this one depends on (uses edge).",
+				},
+			},
+		},
+		{
+			Name:            "data_flow",
+			PluralKey:       "data_flows",
+			RequiresContent: true,
+			Fields: []Field{
+				{
+					Name:        "uses",
+					Kind:        FieldKindReference,
+					Targets:     []string{"component"},
+					Cardinality: "many",
+					Description: "Component identity hashes involved in this data flow (uses edge).",
+				},
+			},
+		},
+		{
+			Name:            "test_section",
+			PluralKey:       "test_sections",
+			RequiresContent: true,
+			Fields: []Field{
+				{
+					Name:        "describes",
+					Kind:        FieldKindReference,
+					Targets:     []string{"component"},
+					Cardinality: "many",
+					Description: "Component identity hashes described by this test section (describes edge).",
+				},
+			},
+		},
+		{
+			Name:      "api",
+			PluralKey: "apis",
+			Comment:   "An external surface entry point. No content file — an api hashes from these fields alone. Identity is <module>/api/<name>, computed by schema.IdentityHash.",
+			Fields: []Field{
+				{
+					Name:        "provided_by",
+					Kind:        FieldKindReference,
+					Targets:     []string{"component"},
+					Cardinality: "many",
+					Description: "Identity hashes of components in this module that provide this entry point (module-local).",
+				},
+				{
+					Name:        "group",
+					Kind:        FieldKindText,
+					Description: "Freeform grouping label for renderers (e.g. \"cli\", \"http\"). Spex never branches on it.",
+				},
+			},
+		},
 	}
 }
 
@@ -102,27 +200,30 @@ func defaultArrayKeyByTypeName() map[string]string {
 }
 
 // ComposeModuleSchema composes the effective module.json JSON Schema from
-// the shipped frame plus one array property per given module-scoped node
-// type, keyed by its plural key. A type whose name matches one of the
-// frame's built-in $defs (requirement, component, data_flow, test_section,
-// api) keeps that entry's hand-authored $comment and its array property
-// unchanged from the frame, but its declared fields compose into the
-// entry's properties via mergeDeclaredFields — the same composeFieldSchema
-// path any other type's fields take — overwriting whatever property the
-// frame gave that name and adding any new one, so a declared edge or field
-// sourced at a built-in type reaches the composed schema too. Any other
-// name gets a generic envelope definition — an identity-hash id, a
-// non-empty name, and, only when RequiresContent is set, a required
-// content path — the same constraints today's components array enforces,
-// plus one array-of-identity-hash property per given edge whose source
-// names that type, and a synthesized array property description.
-// additionalProperties:false at the root, inherited unchanged from the
-// frame, is what rejects any array no passed type declares; the same
-// constraint at the entry level — already present on a frame-authored
-// entry, applied by genericNodeDef for a synthesized one — is what rejects
-// any property that is neither envelope, declared edge, nor declared
-// field. Composing with DefaultModuleNodeTypes and DefaultProfile's edges
-// reproduces the shipped module.schema.json.
+// the shipped frame plus one array property and one $defs entry per given
+// module-scoped node type, keyed by its plural key and its name. Every
+// type — the five built-in types included — gets a generic envelope
+// definition composed by genericNodeDef: an identity-hash id, a non-empty
+// name, an optional description, and, only when RequiresContent is set, a
+// required content path, exactly as the project schema's composition does
+// for project-scoped types; no module-scoped $defs entry is frame-fixed.
+// Beyond the envelope, each entry definition carries one property per
+// declared field — typed, bounded, enum-constrained, identity-hash-patterned
+// for references — plus one array-of-identity-hash property per edge whose
+// source names that type; a field and an edge sharing a name compose the
+// same property twice, the field's shape winning since its loop runs last.
+// The five built-in types' own non-envelope properties are the default
+// profile's field declarations materialized this way
+// (DefaultModuleNodeTypes), so composing with them and DefaultProfile's
+// edges reproduces the shipped module.schema.json's $defs entries exactly.
+// The array property at the root, by contrast, is restored unchanged from
+// the frame for a built-in type name — its shipped wording is
+// hand-authored, not synthesized — and only synthesized for a name the
+// frame does not already carry. additionalProperties:false at the root,
+// inherited unchanged from the frame, is what rejects any array no passed
+// type declares; the same constraint at the entry level, applied by
+// genericNodeDef, is what rejects any property that is neither envelope,
+// declared edge, nor declared field.
 func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	frame, originalArrays, err := moduleSchemaFrame()
 	if err != nil {
@@ -140,18 +241,12 @@ func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 	defaultKeys := defaultArrayKeyByTypeName()
 
 	for _, t := range types {
-		existing, declared := defs[t.Name]
-		if !declared {
-			defs[t.Name] = genericNodeDef(t, edgesSourcedAt(edges, t.Name))
-		} else if defMap, ok := existing.(map[string]any); ok {
-			mergeDeclaredFields(defMap, t.Fields)
-		}
-		if declared {
-			if origKey, ok := defaultKeys[t.Name]; ok {
-				if orig, ok := originalArrays[origKey]; ok {
-					props[t.PluralKey] = orig
-					continue
-				}
+		defs[t.Name] = genericNodeDef(t, edgesSourcedAt(edges, t.Name))
+
+		if origKey, ok := defaultKeys[t.Name]; ok {
+			if orig, ok := originalArrays[origKey]; ok {
+				props[t.PluralKey] = orig
+				continue
 			}
 		}
 		props[t.PluralKey] = map[string]any{
@@ -169,13 +264,17 @@ func ComposeModuleSchema(types []ModuleNodeType, edges []Edge) ([]byte, error) {
 }
 
 // moduleSchemaFrame loads the shipped module.schema.json and strips the
-// profile-supplied array properties, leaving the envelope fields, the
-// identity-hash pattern, additionalProperties:false, and the $defs library
-// of built-in node-type shapes — the frame a resolved profile composes
-// against. It also returns the stripped array properties, keyed by their
-// original plural key, so a built-in type can have its original array
-// property restored unchanged rather than overwritten with a synthesized
-// one.
+// profile-supplied array properties and the built-in module-scoped $defs
+// entries (today, requirement, component, data_flow, test_section and api),
+// leaving the envelope fields, the identity-hash pattern,
+// additionalProperties:false, and nothing else — the frame a resolved
+// profile composes against. No built-in $defs entry remains in it:
+// ComposeModuleSchema resynthesizes every one, the five built-ins included,
+// from the given types. It also returns the stripped array properties,
+// keyed by their original plural key, so a built-in type's array
+// property — whose wording is hand-authored, not synthesized — can be
+// restored unchanged rather than overwritten with a generic one. Mirrors
+// projectSchemaFrame (project_compose.go).
 func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 	data, err := moduleSchemaBytes()
 	if err != nil {
@@ -196,43 +295,12 @@ func moduleSchemaFrame() (map[string]any, map[string]any, error) {
 		}
 		delete(props, key)
 	}
+	if defs, ok := frame["$defs"].(map[string]any); ok {
+		for _, t := range DefaultModuleNodeTypes() {
+			delete(defs, t.Name)
+		}
+	}
 	return frame, original, nil
-}
-
-// mergeDeclaredFields composes one property per declared field into the
-// definition, from the field declaration — the same composeFieldSchema path
-// any declared type's fields take — overwriting whatever property the
-// shipped frame's $defs entry carried under that name. A built-in type's
-// field shape is therefore load-bearing: a profile that redeclares an
-// existing built-in field (e.g. adding an enum to api's "group") reaches the
-// composed schema, not just a wholly new field name the frame never gave the
-// type. This is what retires the earlier rule that a built-in type's $defs
-// entry is frame-fixed (test_schema_loading.md's P6) — there is no
-// frame-fixed definition left for a declared field, new or pre-existing, to
-// be unable to reach. required preserves the frame's original order for a
-// name it already lists — required is an unordered set semantically, and
-// reordering it would only churn the golden comparison — appending only the
-// field names newly required that the frame's entry did not already list.
-func mergeDeclaredFields(def map[string]any, fields []Field) {
-	props, ok := def["properties"].(map[string]any)
-	if !ok {
-		return
-	}
-	required, _ := def["required"].([]any)
-	alreadyRequired := make(map[string]bool, len(required))
-	for _, r := range required {
-		if name, ok := r.(string); ok {
-			alreadyRequired[name] = true
-		}
-	}
-	for _, f := range fields {
-		props[f.Name] = composeFieldSchema(f)
-		if f.Required && !alreadyRequired[f.Name] {
-			required = append(required, f.Name)
-			alreadyRequired[f.Name] = true
-		}
-	}
-	def["required"] = required
 }
 
 // edgesSourcedAt returns the edges whose From list names typeName, in
@@ -254,19 +322,28 @@ func edgesSourcedAt(edges []Edge, typeName string) []Edge {
 }
 
 // genericNodeDef synthesizes the JSON Schema definition for a module-scoped
-// node type the shipped frame does not already define: an identity-hash id,
-// a non-empty name, an optional description, and — only when the type
-// requires a content leaf — a required content path. A type that does not
-// require content gets no content property at all, the same shape an api
-// entry has: there is nowhere to put a markdown leaf. edges supplies one
-// additional property per profile-declared edge kind sourced at this type —
-// an optional array of identity-hash values, matching the shape every
-// built-in edge field (implements, uses, describes, provided_by) already
-// carries. t.Fields supplies one further property per declared field —
-// composeFieldSchema shapes it by kind, including a reference field, which
-// opens a property the same way an edge does. additionalProperties:false
-// makes declaring an edge or a field the only way to open a property on the
-// type beyond the envelope: any other property is rejected.
+// node type: an identity-hash id, a non-empty name, an optional
+// description, and — only when the type requires a content leaf — a
+// required content path. A type that does not require content gets no
+// content property at all, the same shape an api entry has: there is
+// nowhere to put a markdown leaf. Mirrors the project schema's generic
+// envelope (project_compose.go's genericProjectNodeDef), and, unlike the
+// earlier version of this function, is every module-scoped type's path
+// through composition — built-in and profile-declared alike, since no
+// module-scoped $defs entry is frame-fixed. edges supplies one additional
+// property per profile-declared edge kind sourced at this type — an
+// optional array of identity-hash values, matching the shape every built-in
+// edge field (implements, uses, describes, provided_by) already carries —
+// and t.Fields supplies one further property per declared field, shaped by
+// composeFieldSchema; a field wins over an edge of the same name, since its
+// loop runs after. additionalProperties:false makes declaring an edge or a
+// field the only way to open a property on the type beyond the envelope:
+// any other property is rejected. required lists id first, then the
+// declared fields marked Required in field order, then name (and content,
+// when RequiresContent is set) — the order the requirement type's own
+// required set (id, type, preq_id, name) needs to reproduce the shipped
+// frame. When t.Comment is set, it becomes the entry definition's own
+// "$comment", materialized the same way Description reaches a property.
 func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 	properties := map[string]any{
 		"id": map[string]any{
@@ -284,7 +361,13 @@ func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 			"description": fmt.Sprintf("%s description.", t.Name),
 		},
 	}
-	required := []any{"id", "name"}
+	required := []any{"id"}
+	for _, f := range t.Fields {
+		if f.Required {
+			required = append(required, f.Name)
+		}
+	}
+	required = append(required, "name")
 	if t.RequiresContent {
 		properties["content"] = map[string]any{
 			"type":        "string",
@@ -306,17 +389,18 @@ func genericNodeDef(t ModuleNodeType, edges []Edge) map[string]any {
 	}
 	for _, f := range t.Fields {
 		properties[f.Name] = composeFieldSchema(f)
-		if f.Required {
-			required = append(required, f.Name)
-		}
 	}
 
-	return map[string]any{
+	def := map[string]any{
 		"type":                 "object",
 		"required":             required,
 		"additionalProperties": false,
 		"properties":           properties,
 	}
+	if t.Comment != "" {
+		def["$comment"] = t.Comment
+	}
+	return def
 }
 
 // composeFieldSchema builds the JSON Schema property definition for one
