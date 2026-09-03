@@ -238,6 +238,15 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 // (real changesets always put it before — see arch_reconciler.md
 // "Ordering"). Node hash comes from the fold's live entry for the close's
 // target bead, exactly as buildRemoved resolves it.
+//
+// TODO(bead:spexmachina-swvx.24): current arch_reconciler.md ("No
+// op's lines depend on another op in the batch") retires this batch-wide
+// pre-pass along with the modified-node pair: a cleanup create no longer
+// needs a same-batch removal close to exist at all, since it mints its
+// own removal when the fold's latest event for the node isn't already one
+// (see TODO(bead:spexmachina-swvx.22) in event_builder.go's
+// buildCleanupCreate). Once that lands, drop this helper, the
+// EventBuilderState.SameBatchRemovals field and this call site.
 func sameBatchRemovals(cs plan.Changeset, receiptsByOp map[string]adapters.OpReceipt, fold mapping.Fold) map[string]string {
 	out := map[string]string{}
 	for _, op := range cs.Ops {

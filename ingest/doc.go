@@ -14,26 +14,35 @@
 //  1. Pre-flight: parse both files, changeset version == 3 / receipts
 //     version == 1 check, op_id set equality between changeset and
 //     receipts.
-//  2. Reconciler.Apply: construct the batch's journal lines in memory —
-//     change events and task receipts, with event ids derived from
-//     (git_head, op_id) — dropping any line whose eid (or, for cleanup
-//     and proposal-epic creates, whose fold entry) the journal already
-//     carries. Construction and invariant checking have declared
-//     contracts — EventBuilder and InvariantChecker — not yet wired in
-//     here (see "Reconciler decomposition" below); Reconciler still
-//     performs each inline and remains the one place the run's sequence
-//     lives. Line encoding is JournalEncoder's: invariant 5 is asserted
-//     by delegating each candidate line to JournalEncoder.Validate.
-//     Only once the batch is complete does it assert invariants 1, 2
-//     and 5 over journal-plus-batch (invariant 3 — re-running appends
-//     nothing — falls out of the dedup construction itself; invariant 4
-//     — snapshot saved iff complete — is SnapshotSaver's gate), then
-//     commits the append atomically.
+//  2. Reconciler.Apply: assembles the per-run state and constructs one
+//     EventBuilder, dispatching every op (and the changeset's absorbed
+//     entries) to it — change events and task receipts, with event ids
+//     derived from (git_head, op_id) — dropping any line whose eid the
+//     journal or in-flight batch already carries. Only once the batch is
+//     complete does Reconciler run InvariantChecker over
+//     journal-plus-batch (invariants 1 and 2; invariant 3 — re-running
+//     appends nothing — falls out of the dedup construction itself;
+//     invariant 4 — snapshot saved iff complete — is SnapshotSaver's
+//     gate) and JournalEncoder over each surviving line (invariant 5),
+//     then commits the append atomically.
 //  3. SnapshotSaver.Save: gate on status — if complete, build the
 //     merkle tree and atomically write spec/.snapshot.json; if partial,
 //     leave the snapshot untouched so the next spex plan recomputes
 //     against the unchanged baseline.
 //  4. Emit a JSON Summary to stdout.
+//
+// EventBuilder's own construction paths still implement the pre-task-
+// lifecycle "Modified-Node Pair" mechanism (a create's `blocks` dep
+// names the bead its paired close retires) that spec/ingest/module.json
+// and spec/ingest/arch_event_builder.md have since retired in favor of
+// deriving added-vs-modified from the journal fold's latest change event
+// per node, and a cleanup create minting its own removal event when the
+// journal shows none — see TODO(bead:spexmachina-swvx.22) in
+// event_builder.go and TODO(bead:spexmachina-swvx.24) in reconciler.go.
+// The changeset/receipts version check likewise stays at 3/1 pending the
+// v4/v2 bump plan (spexmachina-swvx.6) and adapters
+// (spexmachina-swvx.4) still owe their own wire types — see
+// TODO(bead:spexmachina-swvx.25) in cmd/spex/ingest.go.
 //
 // # Mode: refresh
 //
