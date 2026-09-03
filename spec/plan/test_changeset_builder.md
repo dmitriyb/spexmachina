@@ -9,7 +9,7 @@ The three subordinates have no public surface independent of `Builder.Build()` �
 coverage therefore lives here, exercised through `Builder.Build()`'s public API rather than
 against each subordinate component in isolation. Per-method unit tests for the individual
 components live in `plan/{resolver,sorter,labeler}_test.go` and are bundled with each component's
-implementation bead.
+implementation task.
 
 ## Setup
 
@@ -21,7 +21,7 @@ implementation bead.
 
 ### Canonical schema and field order
 
-- Build a changeset from a single-create action batch. Assert the output has `"version": 3` at
+- Build a changeset from a single-create action batch. Assert the output has `"version": 4` at
   the top, `git_head` set to the fixed SHA, and canonical field order on every op (`op_id`,
   `type`, `spec_node_kind`, `spec_node_id`, `spec_hash`, `idempotency`, `parent`, `deps`,
   `priority`, `title`, `body`, `target`, `labels`, `reason`) — the one sequence every op kind
@@ -31,10 +31,12 @@ implementation bead.
 - Run the same assertion over a batch carrying one create, one retarget and one close, and assert
   the retarget's `deps` are serialized **before** its `target`: one order governs every kind, and
   a retarget is where a per-kind order would show itself.
-- Assert each ref object's own key names on the wire — `{"ref":"op","op_id":…}`,
-  `{"ref":"bead","bead_id":…}`, and `type` on a lineage edge. The adapter reads `.op_id` off an
-  in-batch dep to resolve it against the ops it has already applied, so renaming the key silently
-  resolves every in-batch dep to nothing rather than failing loudly.
+- Assert each ref object's own key names on the wire — `{"ref":"op","op_id":…}` and
+  `{"ref":"task","task_id":…}` — and that no ref carries any further key: the edge-type field
+  left with the lineage edge, and a `type` key on a dep would be a v3 shape leaking through. The
+  adapter reads `.op_id` off an in-batch dep to resolve it against the ops it has already
+  applied, so renaming the key silently resolves every in-batch dep to nothing rather than
+  failing loudly.
 - Same inputs produce byte-identical output across two runs.
 
 ### Proposal epic parents every non-epic create
@@ -46,10 +48,10 @@ implementation bead.
   registered event's eid, not the changeset's own git_head; following two creates' `parent` fields
   are `{"ref":"op","op_id":"<epic op_id>"}`.
 - With the journal fold already pairing an epic task with the registered event, no epic create is
-  emitted and every create's parent is `{"ref":"bead","bead_id":"<epic task>"}`.
+  emitted and every create's parent is `{"ref":"task","task_id":"<epic task>"}`.
 - With the fold pairing an epic task and **no registration at all** — the legacy shape, an epic
   whose lifecycle predates the `registered` event — the same assertion holds: parents are
-  `{"ref":"bead","bead_id":"<epic task>"}` and no error is raised. The fold is asked first, so a
+  `{"ref":"task","task_id":"<epic task>"}` and no error is raised. The fold is asked first, so a
   live epic task settles the question before the registration is consulted.
 - With no epic pairing and no registration for the proposal, `Builder.Build()` returns an error
   naming the slug — registration opens the lifecycle, so plan refuses to synthesize an epic
@@ -66,15 +68,19 @@ implementation bead.
   - B's create has `deps: [{"ref":"op","op_id":"<A op>"}]`.
   - C's create has `deps: [{"ref":"op","op_id":"<B op>"}]`.
 
-### Existing-task dep resolves to ref:bead
+### Live-task dep resolves to ref:task
 
-- New component X uses existing component Y, whose journal fold entry pairs it with an open task.
-  Assert X's create has `deps: [{"ref":"bead","bead_id":"<Y's task>"}]`.
+- New component X uses existing component Y, whose journal fold entry pairs it with a task the
+  task-state artifact lists as open. Assert X's create has
+  `deps: [{"ref":"task","task_id":"<Y's task>"}]`. Repeat with the task listed as `in_progress`
+  and assert the same ref — a claimed dependency is still live work to wait on.
 
-### Closed-task dep is dropped
+### Finished-task dep is dropped
 
-- New component X uses Y; Y's fold entry shows its task closed (`task_closed` after its last
-  `task_created`). Assert X's `deps` is empty (a closed dependency is satisfied — no edge).
+- New component X uses Y; Y's fold entry pairs it with a task the artifact does not list. Assert
+  X's `deps` is empty: a dependency whose task is absent from the artifact is satisfied, and no
+  edge is written. Nothing in the fixture's journal says the task closed — no `task_closed` line
+  exists for it — because absence from the artifact is the only signal the builder reads.
 
 ### Unresolvable dep is a plan error
 
@@ -86,13 +92,13 @@ implementation bead.
 ### Retarget op shape
 
 - A retarget action for component X (open task `spexmachina-hun`), whose recomputed
-  DepSpecNodeIDs name one in-batch create and one fold-paired open task. Assert the resulting op
+  DepSpecNodeIDs name one in-batch create and one fold-paired live task. Assert the resulting op
   carries:
   - `type: "retarget"`.
   - `spec_node_id`: X's identity hash.
   - `spec_hash`: X's new content hash — the state the task now targets.
-  - `deps`: the two recomputed refs, one `ref:op` and one `ref:bead`.
-  - `target: {"ref":"bead","bead_id":"spexmachina-hun"}` — serialized after `deps`, per the one
+  - `deps`: the two recomputed refs, one `ref:op` and one `ref:task`.
+  - `target: {"ref":"task","task_id":"spexmachina-hun"}` — serialized after `deps`, per the one
     canonical order.
   - `labels: ["spex:<git_head>:<its op_id>"]` — the eid of this run's `modified` event for X,
     derived from `(git_head, op_id)` like every node-bearing create's label; no
@@ -125,70 +131,75 @@ implementation bead.
   collapsing the whole walk to the fallback. The fallback answers only when *no* entry is
   reachable, which is the case the scenario above pins.
 
-### Obsolete + create lineage
+### A modified node's create carries no lineage
 
-- Modified component Q with a **closed** pairing: old task `spexmachina-abc`, new create op.
-  Assert:
-  - Close op carries `target: {"ref":"bead","bead_id":"spexmachina-abc"}` and no `labels`
-    key — a close op is target and reason alone; the retired `spex:obsolete` / `commit:<HEAD>`
-    markers are not emitted, because close idempotency keys on the tracker's own status.
-  - Create op for the replacement includes `deps: [{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}]`
-    for lineage.
-  - Create op's `idempotency.label` is `spex:<git_head>:<its op_id>` — the eid of this run's
+- Modified component Q whose fold pairing names task `spexmachina-abc`, absent from the
+  task-state artifact — the classifier emitted one plain create for it. Assert:
+  - The changeset carries no close op at all: `spexmachina-abc` is named nowhere in the
+    document.
+  - The create op's `deps` carries only what Q's spec-graph edges resolve to — no
+    `{"ref":"task","task_id":"spexmachina-abc"}` entry, typed or otherwise.
+  - The create op's `idempotency.label` is `spex:<git_head>:<its op_id>` — the eid of this run's
     `modified` event, derived with no lookup and distinct from any label the original create
     carried, because each change in the lineage references its own event. Nothing in the fixture
     needs seeding to make this true; assert it holds with an empty fold as well as a populated
     one.
-- The lineage pair is minted only on the closed path: rerun the fixture with the pairing open and
-  assert a single retarget op with no `blocks` dep anywhere — history for that path lives in the
-  journal.
+- Rerun the fixture with the pairing's task listed as open and assert a single retarget op —
+  again with no close and no lineage dep. The two paths differ in whether the task moves or a
+  successor is born; neither writes history into the tracker, because the journal holds it.
 
-### Cleanup-bead create
+### Cleanup create
 
-- Action with `Reason: "Code cleanup: m/X"`, `OldBeadID: "spexmachina-old"`,
-  `SpecNodeID: "abc123def456"`. Assert the resulting create op carries:
+- Action with `Reason: "Code cleanup: m/X"`, `SpecNodeID: "abc123def456"`, from a removed node
+  whose task the artifact does not list. Assert the resulting create op carries:
   - `spec_node_kind: "cleanup"`.
   - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"`
     form).
-  - no `labels` key — the retired `spex:cleanup` discriminator is not emitted; what marks the
-    task as cleanup tracker-side is nothing at all, because cleanup classification is answered by
-    the journal (the task's `task_created` references a `removed` event), and `Op.Labels` is
+  - no `deps` naming the finished task — the cleanup's tie to the node is its label and its
+    `task_created` referent, not a tracker edge — and no `labels` key: what marks the task as
+    cleanup tracker-side is nothing at all, because cleanup classification is answered by the
+    journal (the task's `task_created` references a `removed` event), and `Op.Labels` is
     populated only on retargets.
-  - `idempotency.label: "spex:<git_head>:<close op_id>"` — the eid of the `removed` event the
-    same-batch close implies, so the cleanup's `task_created` referent and its label are the same
-    event.
-
-### Cleanup-bead create for a prior-batch removal
-
-- The journal already holds the `removed` event for the node (eid `E1`, from an earlier run whose
-  cleanup errored); the batch carries the cleanup create but **no** close op for that node —
-  its close landed last run.
-- Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
-  any op in this batch — so a re-run at a moved HEAD still carries the label of the removal it
-  answers, and label and `task_created` referent stay one fact across runs.
-  - `deps: [{"ref":"bead","bead_id":"spexmachina-old","type":"blocks"}]` — lineage from the
-    closed task being cleaned up.
+  - `idempotency.label: "spex:<git_head>:<its own op_id>"` — the eid of the `removed` event this
+    cleanup op will itself mint at ingest, derived exactly as a node-bearing create's label is.
+    No close op accompanies a cleanup (the task the removed node had is finished, so there is
+    nothing to close), so nothing else in the batch could mint the removal, and the cleanup's
+    `task_created` referent and its label are the same event by the same derivation.
+  - The changeset carries no close op naming the removed node at all.
   - `priority: 3` (`plan.FallbackPriority`).
+
+### Cleanup create for a prior-batch removal
+
+- The journal's latest change event for the node is a `removed` event (eid `E1`, from an earlier
+  run whose cleanup errored); the batch carries the cleanup create again.
+- Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
+  this op — so a re-run at a moved HEAD still carries the label of the removal it answers, and
+  label and `task_created` referent stay one fact across runs.
+  - `deps` is empty: no lineage edge to the finished task.
+  - `priority: 3` (`plan.FallbackPriority`).
+- Vary the fixture so the node's `removed` event `E1` is followed by an `added` event (the node
+  was re-added and is now removed a second time): assert the label is this op's own
+  `spex:<git_head>:<op_id>`, not `spex:E1`. The fold answers only when the removal is the
+  node's latest state; an older removal in the lineage is history, not a referent.
 
 ### Op id numbering across a batch mixing every kind
 
 - One batch carrying all of it together: two conventional creates, one cleanup create for a
-  removed node, one retarget, and two closes — one of them the removal close the cleanup answers.
+  removed node whose task is finished, one retarget, and two closes — a removal close for a
+  node whose task is open, and a fold-back close on a live test_section.
 - Assert op ids run from `op-1` in creates → retargets → closes order, with no gap and no reuse,
   zero-padded to the digit width of the total op count across all three kinds.
-- Assert the cleanup create's `idempotency.label` is `spex:<git_head>:<the removal close's op_id>`,
-  reading that close's actual `op_id` out of the emitted document rather than recomputing the
-  arithmetic the builder used. The cleanup's label is derived before the close ops are numbered,
-  so it rests on a prediction of where the closes will start — and the retarget block sitting
-  between the creates and the closes is exactly what that prediction has to account for. A batch
-  of creates and closes alone satisfies both a correct rule and one blind to retargets.
+- Assert the cleanup create's `idempotency.label` embeds the cleanup op's own `op_id` as read out
+  of the emitted document, and that no label anywhere in the document embeds a close op's id:
+  every label is derived from the op that carries it or read from the fold, never predicted
+  from where another block of ops will be numbered.
 
 ### Cross-component scenario: Resolver + Sorter + Labeler + Builder produce byte-identical output across runs
 
 - **Setup**: identical action batch (multi-create with at least one in-batch dep, one
-  existing-task dep, and one retarget), identical journal, identical spec graph, identical
+  live-task dep, and one retarget), identical journal, identical spec graph, identical
   `--git-head`. Run the builder twice in two separate processes.
-- **Components exercised together**: `Resolver` classifies each dep into ref:op or ref:bead;
+- **Components exercised together**: `Resolver` classifies each dep into ref:op or ref:task;
   `TopologicalSorter` orders the create ops — proposal epic first, then in-batch dep
   predecessors, with lex-tiebreak among independent ops; `IdempotencyLabeler` stamps each create's
   label with its referent event's eid; `ChangesetBuilder` composes the final changeset with
@@ -208,7 +219,7 @@ implementation bead.
 ### Cross-component scenario: dep classification round-trip through Builder
 
 - **Setup**: a multi-create action batch with deps exercising both live code paths — in-batch
-  (`ref:op`) and existing-task (`ref:bead`) — plus one dep constructed to be unresolvable.
+  (`ref:op`) and live-task (`ref:task`) — plus one dep constructed to be unresolvable.
 - **Components exercised together**: Resolver classifies, Sorter orders so the in-batch
   predecessor is sequenced before its dependent, Builder composes or refuses.
 - **Assertions**:
@@ -235,7 +246,7 @@ implementation bead.
   the default profile and once under a profile declaring an additional plan-relevant `endpoint`
   type.
 - **Components exercised together**: ChangesetBuilder fills each op's `spec_node_kind` from the
-  action's node type; the profile declares only which types are plan-relevant — no bead types.
+  action's node type; the profile declares only which types are plan-relevant — no tracker types.
 - **Assertions**:
   - Under the default profile, every op's `spec_node_kind` matches today's vocabulary exactly —
     the output is byte-identical to the pre-profile builder's over the same batch.
@@ -253,14 +264,15 @@ implementation bead.
 
 In-code Go fixtures, no on-disk testdata (the package convention). The tests in
 `plan/builder_test.go` compose a builder environment (a fake journal-fold double plus a fake spec
-graph), sample actions, per-scenario fold states — mixes of open, in_progress, closed, and absent
-task pairings seeded directly on the fake fold — and per-scenario registrations, seeded
-independently of the fold so the two epic verdicts can be told apart. Canonical-output and
-determinism scenarios assert against JSON marshalled in-test rather than a golden file.
+graph), sample actions, per-scenario fold states — mixes of open, in_progress and unlisted task
+pairings, plus nodes with no pairing at all, seeded directly on the fake fold — and per-scenario
+registrations, seeded independently of the fold so the two epic verdicts can be told apart.
+Canonical-output and determinism scenarios assert against JSON marshalled in-test rather than a
+golden file.
 
 ## Edge cases
 
 - Empty action batch → changeset with only the proposal epic op (if any) or an empty op list.
 - A batch with only closes (no creates) → no parent/dep resolution needed.
-- DepSpecNodeIDs with a spec_node_id that is both a closed task in the fold AND a fresh create in
-  the same batch → the in-batch op wins (ref:op) over the closed pairing (dropped).
+- DepSpecNodeIDs with a spec_node_id that is both a finished task in the fold AND a fresh create in
+  the same batch → the in-batch op wins (ref:op) over the unlisted pairing (dropped).

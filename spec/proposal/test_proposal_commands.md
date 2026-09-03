@@ -17,7 +17,7 @@ tmpdir/
     invalid-proposal.md             # missing required sections
 ```
 
-For `spex log` scenarios, feed deterministic bead JSON on stdin (matching the `[]BeadRecord` shape, or the `{"issues":[...]}` envelope produced by `br list --json`). The test driver writes the fixture string directly into the command's stdin — `spex log` never invokes a tracker subprocess, so no `br` binary or `$PATH` setup is required.
+For `spex log` scenarios, feed deterministic task JSON on stdin (matching the task-record shape, or the `{"issues":[...]}` envelope produced by `br list --json`). The test driver writes the fixture string directly into the command's stdin — `spex log` never invokes a tracker subprocess, so no `br` binary or `$PATH` setup is required.
 
 For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error / `ExitError.ExitCode()`.
 
@@ -76,11 +76,11 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 
 #### S6: Show proposal history in human-readable format
 
-**Given** `spec/proposals/` contains `2026-02-23-spex-machina.md` and beads are tagged with this proposal.
+**Given** `spec/proposals/` contains `2026-02-23-spex-machina.md` and tasks are tagged with this proposal.
 **When** `spex log` is executed.
 **Then:**
 - Exit code is 0.
-- Stdout contains the proposal filename and its linked bead actions, formatted as described in the HistoryViewer architecture:
+- Stdout contains the proposal filename and its linked task actions, formatted as described in the HistoryViewer architecture:
   ```
   2026-02-23-spex-machina.md (project proposal)
     Created: spexmachina-abc (schema: ProjectSchema)
@@ -93,7 +93,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Exit code is 0.
 - Stdout is valid JSON parseable by `jq` or `json.Unmarshal`.
-- JSON structure matches the HistoryViewer envelope: `{"proposals": [{"filename", "title", "beads": [{"id", "status", "action", "summary"}]}]}`.
+- JSON structure matches the HistoryViewer envelope: `{"proposals": [{"filename", "title", "tasks": [{"id", "status", "action", "summary"}]}]}`.
 
 #### S8: Log with empty proposals directory
 
@@ -114,11 +114,11 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 
 #### S10: Log with empty stdin
 
-**Given** the architecture forbids `spex log` from invoking any tracker subprocess (see `arch_proposal_commands.md`); the caller is expected to pipe bead JSON in.
+**Given** the architecture forbids `spex log` from invoking any tracker subprocess (see `arch_proposal_commands.md`); the caller is expected to pipe task JSON in.
 **When** `spex log` is executed with no data on stdin (e.g., `spex log < /dev/null`).
 **Then:**
 - Exit code is 1.
-- Stderr contains the documented message: `spex log: no bead data on stdin; pipe 'br list --json' or equivalent`.
+- Stderr contains the documented message: `spex log: no task data on stdin; pipe 'br list --json' or equivalent`.
 
 ### spex template
 
@@ -177,7 +177,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Step 3 succeeds (exit code 0).
 - Step 4 output includes the newly registered proposal in the JSON array.
-- The registered proposal has an empty `beads` array (no beads tagged with it yet).
+- The registered proposal has an empty `tasks` array (no tasks tagged with it yet).
 
 #### S17: Register preserves composability contract
 

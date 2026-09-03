@@ -47,8 +47,8 @@ on disk or a stream.
 
 ## Mode: normal (default)
 
-1. **Pre-flight.** Parse both files, check the changeset carries version 3 and the receipts
-   version 1, and confirm the two name exactly the same set of op ids.
+1. **Pre-flight.** Parse both files, check the changeset carries version 4 and the receipts
+   version 2, and confirm the two name exactly the same set of op ids.
 2. **Reconcile.** [[2b5158af774b|Reconciler]] assembles the per-run state and dispatches each op
    to [[3c0569749972|EventBuilder]], which constructs the batch's journal lines in memory —
    change events and task receipts, with event ids derived from `(git_head, op_id)` — dropping
@@ -66,9 +66,9 @@ on disk or a stream.
 
 ## Mode: refresh
 
-The refresh-mode pathway absorbs drift that owes no bead work — content edits to any leaf, plus
-additions and removals of the node types that produce no bead (requirements and apis in either
-direction) and component *removals* — without any bead lifecycle running, and records the
+The refresh-mode pathway absorbs drift that owes no task work — content edits to any leaf, plus
+additions and removals of the node types that produce no task (requirements and apis in either
+direction) and component *removals* — without any task lifecycle running, and records the
 absorption in the journal. See `arch_refresh.md` for the refusal contract and the absorbable set.
 
 1. **Pre-flight.** Confirm the changeset and receipts carry no ops, and that the journal is
@@ -78,7 +78,7 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
 2. **Compute the diff.** [[f9033352c13f|RefreshHandler]] rebuilds the current merkle tree, loads
    the pre-refresh snapshot, and diffs one against the other.
 3. **Refusal gates.** Any added or removed entry the absorbable set does not cover refuses the
-   run, as does any removed node whose journal pairing is still live. A refusal is a structured
+   run, as does any removed node whose journal pairing is unclosed — no `task_closed` follows it. A refusal is a structured
    error and leaves both files exactly as they were.
 4. **Construct the absorption.** One change event per absorbed drift entry — before/after hashes
    off the two trees — closed by one `refresh` receipt naming those event ids, stamped with
@@ -93,25 +93,25 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": [
     {
       "op_id": "op-0001",
       "status": "ok",
-      "bead_id": "spexmachina-abc",
+      "task_id": "spexmachina-abc",
       "was_existing": false
     },
     {
       "op_id": "op-0002",
       "status": "ok",
-      "bead_id": "spexmachina-def",
+      "task_id": "spexmachina-def",
       "was_existing": true
     },
     {
       "op_id": "op-0003",
       "status": "error",
-      "bead_id": "",
+      "task_id": "",
       "error": "br create exited 1: invalid priority"
     }
   ]
@@ -124,7 +124,7 @@ Always empty:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "status": "complete",
   "ops": []
 }
@@ -164,18 +164,17 @@ failures return a structured error and no summary.
 
 For the full construction table, see `arch_event_builder.md`. Summary:
 
-- ok create → change event plus `task_created`; cleanup creates pair with the `removed` event
-  they answer (prior-batch or same-batch), epic creates pair with the proposal's `registered`
-  event — every receipt references an event.
+- ok create → change event plus `task_created` — `added` or `modified` by what the journal
+  already holds for the node, with no `task_closed` for a finished predecessor; cleanup creates
+  pair with the `removed` event they answer (journaled earlier, or minted by the cleanup op
+  itself), epic creates pair with the proposal's `registered` event — every receipt references
+  an event.
 - ok create / was_existing=true → same lines constructed; already-present lines (matched by
   derived event id) are dropped, so a true duplicate appends nothing and adapter-side recovery
   appends the missing pairing.
 - ok close / reason="Spec node removed" → `removed` event plus `task_closed`.
-- ok close / reason starts "Spec node modified" → when a create in the changeset claims the bead,
-  the pair's lines — `modified` event, `task_closed`, `task_created` — are built with that create
-  and the close adds nothing; when no create in the changeset claims it (the coupled
-  `test_section` shape), the close alone builds the `modified` event plus its `task_closed`, no
-  `task_created`.
+- ok close / reason starts "Spec node modified" → the fold-back of a coupled `test_section`:
+  the close alone builds the `modified` event plus its `task_closed`, no `task_created`.
 - ok retarget → `modified` event plus `task_retargeted`.
 - absorbed entry (no receipt exists for one) → `modified` event, eid from `(node, before, after)`;
   the batch's absorbed events close under one `refresh` receipt naming them.

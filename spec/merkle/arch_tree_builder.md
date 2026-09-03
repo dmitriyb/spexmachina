@@ -12,7 +12,7 @@ Builds the merkle tree from the parsed spec graph. [[3ada6b800cc5|Each node's ke
 
 ## Tree Structure
 
-Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also the task journal's node key — eliminates any rekeying when impact analysis correlates merkle changes against existing beads.
+Nodes are keyed by identity hash, not by file path or by path-style integer composition. The key of a component, requirement, data_flow, test_section, or api is exactly the value of its `id` field. This makes the tree rename-stable for file moves and — because the identity hash is also the task journal's node key — eliminates any rekeying when impact analysis correlates merkle changes against existing tasks.
 
 Every entry in the tree is one of the following, and its key, level and hash source are fixed by which one it is:
 
@@ -72,7 +72,7 @@ is created, nothing is logged, and no error is returned.
 
 The consequence is total, not partial. A skipped node has no leaf, so it has no
 hash; with no hash it can never appear in a diff, so plan never sees it, never
-emits an op for it, and it never acquires a bead. It is declared in
+emits an op for it, and it never acquires a task. It is declared in
 `module.json` and invisible to every stage of the pipeline — and because its
 absence is also stable across runs, no diff ever reports it as missing. The
 failure mode is a spec node that exists to a reader and does not exist to the
@@ -104,7 +104,7 @@ For project-level requirements, the serialized fields are: `depends_on`, `descri
 
 The exclusion holds the requirement leaf still; it does not hold the whole tree still. The two rules meet on this edit and the difference has to be stated, because the graduation removes a field from `project.json`: the file's bytes change, so the `meta/project` envelope leaf — hashed from those bytes, per the Tree Structure table above — moves, and the root hash moves with it. That is the envelope guard doing its job rather than a leak in the exclusion. `meta/project` exists to notice any textual change to the project envelope, and a field deleted from it is one.
 
-The two rules do not conflict, because the envelope's entry is inert. A `meta` leaf is [[425146f32e96|classified `structural`]], `spex plan` filters structural changes out before any journal lookup runs, and [[6f8284df92a2|change completeness]] collects only meta changes that name a module, which `meta/project` does not. So the graduation produces exactly one diff entry, on `meta/project`, and nothing behind it: the requirement leaf is unchanged, the components implementing that requirement are owed no leaf, no op is emitted and no bead moves. An absorb mark would add nothing here either: marking a node withholds its change from matching so that it yields no op, and a structural change is filtered out of matching already, so there is nothing left for a mark to withhold.
+The two rules do not conflict, because the envelope's entry is inert. A `meta` leaf is [[425146f32e96|classified `structural`]], `spex plan` filters structural changes out before any journal lookup runs, and [[6f8284df92a2|change completeness]] collects only meta changes that name a module, which `meta/project` does not. So the graduation produces exactly one diff entry, on `meta/project`, and nothing behind it: the requirement leaf is unchanged, the components implementing that requirement are owed no leaf, no op is emitted and no task moves. An absorb mark would add nothing here either: marking a node withholds its change from matching so that it yields no op, and a structural change is filtered out of matching already, so there is nothing left for a mark to withhold.
 
 The `id` field is now a 12-character hex string rather than an integer, but it is still serialized as part of the leaf so that a node which is moved between modules (and therefore gets a new identity hash) is detected as a content change too — not just a key change.
 

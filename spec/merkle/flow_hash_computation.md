@@ -66,7 +66,7 @@ No standalone "compute and persist the tree" step is required or supported —
 and init deliberately is not one: it seeds the *empty* tree, never a snapshot
 of the current spec. A snapshot matching the current spec at birth would make
 the first `spex diff` produce zero changes and the pipeline would never create
-the first beads.
+the first tasks.
 
 ## Steady-state (snapshot exists)
 

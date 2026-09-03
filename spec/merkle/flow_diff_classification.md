@@ -55,7 +55,7 @@ The default text format prints one line per change carrying four of those, in th
 change type, impact level, module name, identity hash. The node type and the two content hashes are
 on the JSON path only; a caller that needs them must ask for `--json`.
 
-This output feeds directly into the plan module for bead matching.
+This output feeds directly into the plan module for task matching.
 
 ## Data Shapes
 
@@ -114,4 +114,4 @@ The `contract` level is a surface shared beyond a single component: for a
 data_flow, a cross-component shape inside a module; for an api, a surface the
 module declares to its callers. Downstream matchers MUST NOT skip it — a
 data_flow change must reach the action classifier so a dedicated data_flow task
-bead is created.
+is created.

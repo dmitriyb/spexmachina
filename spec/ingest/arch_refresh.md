@@ -1,8 +1,8 @@
 # RefreshHandler
 
-Refresh-mode ingest pathway: [[e68653819f38|it absorbs spec drift that owes no bead work, moving
-the journal and the snapshot forward together without any bead lifecycle running]]. Separated from
-`Reconciler` so the bead-lifecycle rules and the drift-absorption rules live in distinct
+Refresh-mode ingest pathway: [[e68653819f38|it absorbs spec drift that owes no task work, moving
+the journal and the snapshot forward together without any task lifecycle running]]. Separated from
+`Reconciler` so the task-lifecycle rules and the drift-absorption rules live in distinct
 components with distinct test surfaces — and so an external caller can inspect the run-mode
 dispatch by looking at `IngestCommand.uses` rather than chasing a flag through Reconciler
 internals.
@@ -15,19 +15,19 @@ or the journal breaks the snapshot+journal atomicity invariant (both must always
 same point-in-time spec state).
 
 There is a class of legitimate change that rule would otherwise make impossible: drift that owes
-no bead work. Two kinds qualify.
+no task work. Two kinds qualify.
 
 **Content edits to any leaf** where the work scope hasn't changed — an author corrects spec prose
 to match shipped code, rewrites a stale paragraph, or clarifies a contract. Content modifications
 are never gated, whatever leaf they land on.
 
-**Structural additions and removals of node types that produce no bead** — requirements and apis
+**Structural additions and removals of node types that produce no task** — requirements and apis
 in either direction, plus component *removals*. Declaring a requirement or adding an api creates
 nothing in the tracker, so baselining it costs nothing.
 
-Without refresh the user must either run the normal pipeline (which produces obsolete-then-create
-beads for already-shipped work) or skip ingest entirely (which leaves the snapshot stale relative
-to current content). `RefreshHandler` absorbs this drift in a single atomic step — and unlike the
+Without refresh the user must either run the normal pipeline (which produces a successor task
+for already-shipped work) or skip ingest entirely (which leaves the snapshot stale relative to
+current content). `RefreshHandler` absorbs this drift in a single atomic step — and unlike the
 retired record-rewrite semantics, the absorption is itself recorded: the run appends what it
 absorbed, so a refresh is visible in history instead of amnesiac.
 
@@ -40,6 +40,11 @@ absorbed, so a refresh is visible in history instead of amnesiac.
 - The current journal, at its resolved location — required to be non-empty; see the bootstrap guard under "Refusal contract".
 - The current snapshot, at its resolved location (the diff baseline).
 - Optionally `--git-head`; the receipt records the value when given and its absence otherwise.
+
+Refresh reads no task-state artifact. It runs no adapter half and consults no tracker, so it
+cannot tell an open task from a finished one; the one thing it can read about a task is whether
+the journal shows the pipeline closing it, and the refusal contract below is written against
+exactly that.
 
 ## Outputs
 
@@ -91,13 +96,22 @@ following is true:
 
 | Condition | Reason |
 |-----------|--------|
-| The diff contains an `added` entry whose node type is not absorbable in the added direction | Structural change; requires the normal pipeline so bead lifecycle runs. |
+| The diff contains an `added` entry whose node type is not absorbable in the added direction | Structural change; requires the normal pipeline so task lifecycle runs. |
 | The diff contains a `removed` entry whose node type is not absorbable in the removed direction | Structural change; requires the normal pipeline. |
-| A `removed` entry's node still has a live task pairing in the journal fold — a `task_created` with no matching `task_closed` | Open work points at the vanishing node. The normal pipeline owes a close or a cleanup; absorbing the removal would leave the tracker lying about live work. |
+| A `removed` entry's node still has a task pairing in the journal fold that the pipeline never closed — a `task_created` or `task_retargeted` with no matching `task_closed` | Work points at the vanishing node, and refresh cannot tell whether it is open or finished. The normal pipeline owes a close or a cleanup, and only it — reading the task-state artifact — can say which; absorbing the removal here would leave the tracker lying about live work, or leave shipped code with no cleanup task. |
 | The journal is empty | The bootstrap guard: an empty journal means no cycle has ever completed, and refresh absorbs drift between cycles — the first cycle is the normal pipeline's. The guard keys on the journal, not on snapshot presence, because `spex init` writes a snapshot at birth and would make a file-existence proxy permanently true. The journal-empty predicate stays available as a gate so a future adoption-style mode and refresh can be made mutually exclusive by construction. |
 | The changeset or receipts file is non-empty | Configuration error; refresh has no per-op transitions. |
 
 `modified` entries are never gated. Only additions and removals reach the structural gate.
+
+The third row is deliberately broad, and its stderr message says "live task" in the journal's sense — a pairing the pipeline never closed — which is the only sense refresh can have. The journal never records a task's completion — a finished
+task's pairing looks exactly like an open one's — so the gate cannot narrow itself to "open"
+and does not try: a removed component whose latest pairing was never closed by the pipeline
+refuses, whatever the tracker would say. The practical consequence is that a component removal is
+refresh-absorbable only when its latest task-bearing pairing carries a `task_closed` — a removal
+close or a fold-back close the normal pipeline already issued — or when the node never had a task
+at all. Every other component removal goes through the normal pipeline, which is where its
+cleanup task is born.
 
 ### The absorbable set
 
@@ -110,17 +124,17 @@ The per-type, per-direction table is read from the resolved profile's absorbable
 | `component`     | **refused** | absorbed |
 | `data_flow`, `test_section`, `meta`, `module` | refused | refused |
 
-The set is written out explicitly — in the profile, as declarations the handler reads — rather than derived by negating plan's bead-producing types.
+The set is written out explicitly — in the profile, as declarations the handler reads — rather than derived by negating plan's task-producing types.
 That negation would also admit `meta` — the `project.json` / `module.json` envelope leaf — and
 refresh runs neither `spex validate` nor the completeness checker: baselining a meta addition or
 removal would hide a whole module appearing or vanishing from every downstream tool.
 
 `component` is removal-only, and the asymmetry is the point. A removed component's task already
-exists, and absorbing the node's disappearance is safe only because the live-pairing gate above
-still demands the task be closed first. An *added* component is a bead that was never created;
+exists, and absorbing the node's disappearance is safe only because the unclosed-pairing gate above
+still demands the pipeline have closed it first. An *added* component is a task that was never created;
 baselining it into the snapshot would remove it from `spex diff` permanently, which is precisely
-the bead lifecycle refresh must not bypass. `component` is on the list at all only because
-retiring a spec component whose code is gone is a structural removal with no bead work left to do.
+the task lifecycle refresh must not bypass. `component` is on the list at all only because
+retiring a spec component whose code is gone is a structural removal with no task work left to do.
 
 The diff comes from the merkle module's existing diff path, which RefreshHandler does not
 reimplement: every entry already arrives carrying the node type of the leaf that moved, so the
@@ -133,7 +147,7 @@ and direction alone.
 - Existing journal lines: appends only, never edits or deletes.
 - Task pairings: no receipt of kind `task_created` or `task_closed` is ever born from a refresh.
 - Tracker state: `spex` does not invoke a tracker subprocess in refresh mode any more than in
-  normal mode.
+  normal mode, and reads no task-state artifact either.
 
 ## Wiring
 
@@ -147,7 +161,7 @@ Once wired, the handler runs in one order:
 1. Rebuild the merkle tree for the spec directory as it stands now.
 2. Diff that tree against the pre-refresh snapshot.
 3. Refuse on any added or removed entry the absorbable set does not cover.
-4. Refuse on any removed node whose journal pairing is still live.
+4. Refuse on any removed node whose journal pairing the pipeline never closed.
 5. Construct one change event per absorbed entry, plus the refresh receipt naming them.
 6. Encode every constructed line through [[6ce1df0a456b|JournalEncoder]], whose schema gate
    refuses the run on an invalid line before anything is written — the refresh append inherits
@@ -170,7 +184,7 @@ Once wired, the handler runs in one order:
 
 - IO error reading current files → exit 1, both files unchanged.
 - Diff computation fails → exit 1, both files unchanged.
-- Refusal (non-absorbable added/removed, or live pairing on a removed node) → exit 2 with a
+- Refusal (non-absorbable added/removed, or an unclosed pairing on a removed node) → exit 2 with a
   structured stderr message naming the specific entries; both files unchanged.
 - Atomic-write failure mid-commit → exit 1, the temp file is removed and both target files are
   unchanged. The handler MUST NOT leave one file updated and the other stale.

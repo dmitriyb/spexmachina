@@ -33,7 +33,7 @@ The store is the journal's one writer-owner. Every append goes through its appen
 Registrar hands it the `registered` event that opens a proposal's lifecycle — and the primitive
 lands each batch with the same atomic write-and-rename the snapshot uses, validating every line
 against the journal-line schema before the write commits. Nothing writes around it; the one-shot
-backfill that seeded the journal from the retired bead-map's git history ran once and is history
+backfill that seeded the journal from the retired record file's git history ran once and is history
 itself. Append-only describes the format's semantics, not an I/O contract.
 
 The schema check has two audiences with different stakes. The map query surface fails loudly: a
@@ -78,8 +78,8 @@ Receipt events record what the tracker did:
 | `git_head` | change, registered, refresh | The commit the changeset carried; registration records the head at register time; refresh records its own when given `--git-head` and its absence otherwise |
 | `path` | change, optional | The node's content-leaf path relative to the spec directory, present when the node has one — what makes `git show <head>:<path>` runnable for a removed node. Requirement and api events carry none |
 | `proposal` | change, registered | The proposal that drove the change, or — on the registered event — the slug whose lifecycle opened. A `task_created` carrying a slug instead of `for` is a legacy pre-migration shape, read but never appended anew |
-| `for` | receipts | The `eid` of the event this receipt answers. A modify pair's `task_closed` and `task_created` both reference the pair's `modified` event; a removal's `task_closed` references the `removed` event; an epic's `task_created` references the `registered` event; a `task_retargeted` references the retarget's own `modified` event |
-| `task_id` | receipts | The tracker's id, applied by the adapter, reported in receipts |
+| `for` | receipts | The `eid` of the event this receipt answers. A successor's `task_created` references the `modified` event that opened it; a removal's or fold-back's `task_closed` references the `removed` or `modified` event the close produced; a cleanup's `task_created` references the `removed` event it answers; an epic's `task_created` references the `registered` event; a `task_retargeted` references the retarget's own `modified` event |
+| `task_id` | receipts | The tracker's id, applied by the adapter, reported in receipts — the same value the task-state artifact keys its entries by, so plan's status join is a string comparison |
 
 A receipt pairs with the event its `for` names by eid alone, never by file position. Ingest lands
 a batch whole and is free to write a receipt on either side of the event it references: the
@@ -88,6 +88,15 @@ answers. Folding therefore indexes every event by eid before it walks them — a
 during the walk would meet that receipt early, find nothing, and report a pairing that exists as
 dangling. Dangling means the journal carries no such event anywhere in the file, which is a fact
 about the file and not about the order two lines happen to sit in.
+
+The journal records what the pipeline did, never what a task's implementer did. A `task_closed`
+marks a close op the pipeline issued — a removed node's live task cancelled, a folded-back test
+section's — and a task that was simply finished leaves no line: its node's next change opens a
+successor with a fresh `task_created`, and the earlier pairing stays as it was, unclosed. A node's
+history is therefore a run of `task_created` lines with `task_closed` appearing only where work
+was cancelled, and the fold's latest-wins rule is what reads that run. Whether the current task
+is live is not the journal's to say; plan reads it fresh from the task-state artifact every run,
+and nothing stores the answer.
 
 A pointer discipline holds throughout: the journal stores identity, names, hashes and commit refs —
 never leaf content. Showing a change is `git diff <before-head> <after-head> -- <leaf>`, derived
@@ -131,12 +140,12 @@ location at all — the lifecycle pre-flight's `.spex/` resolution does.
 
 ### Why an event log instead of a record file?
 
-The retired `.bead-map.json` stored one record per node — current state only, nine denormalized
+The retired record file stored one record per node — current state only, nine denormalized
 fields, an integer counter minting `spex:<int>` labels. Three failures were structural: a task for
 a *removed* node had no record by design, so cleanup labels resolved to nothing; several tasks
 sharing one node across its modify lineage collided on one record; and the validator's removal
 sweep depended on a tracker-side artifact for retired names. An event log answers all three because
-a task pairs with the *change* that spawned it, not with the node's current state — and beads
+a task pairs with the *change* that spawned it, not with the node's current state — and trackers
 already work this way (`issues.jsonl` is append-only; current state is a projection). The fold is
 that projection.
 

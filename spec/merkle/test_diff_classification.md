@@ -228,7 +228,7 @@ In the scenarios below, identifiers like `REQ1_HASH`, `COMP1_HASH`, `ALPHA_HASH`
 **When** `Classify(changes, moduleNames, defaultProfile)` is called
 **Then** the result contains one ClassifiedChange with Impact=`structural` and Module=`"Alpha"`
 
-**Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (plan module) skips structural changes, so requirement leaf changes do not produce bead actions.
+**Rationale**: Requirement changes are structural signals — they indicate the spec contract changed. The NodeMatcher (plan module) skips structural changes, so requirement leaf changes do not produce task actions.
 
 ### R2: Classify project requirement change as structural
 

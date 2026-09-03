@@ -11,7 +11,8 @@ The checks run in numeric order, so the first message a caller sees names the mo
 cause:
 
 1. Every ok create pairs exactly one `task_created` with exactly one referent event — a change
-   event in journal or batch, the removal event for cleanups, or the registered event for epics.
+   event in journal or batch, the removal event for cleanups (journaled earlier, or minted by the
+   cleanup op itself in this batch), or the registered event for epics.
    Every ok retarget pairs exactly one `task_retargeted` with its own `modified` event, and the
    batch's absorbed events are closed by exactly one `refresh` receipt naming them. The retired
    "or a proposal slug" arm survives only in legacy lines already on disk.
@@ -31,6 +32,15 @@ Invariants 3, 4 and 5 have no check of their own here because their enforcement 
 5 is JournalEncoder's schema gate — and the numbering still names them so it stays aligned with
 the five-invariant contract the requirement states and `test_consistency_invariants.md` titles
 its sections by.
+
+## What Is Deliberately Not an Invariant
+
+No check demands a `task_closed` between one generation of a node's task and the next. A node
+whose task finished and whose next change opened a successor carries two `task_created` lines
+with nothing closing the first, and the checker reads that as the ordinary record of completion —
+which the journal never states, because completion is not something the pipeline did. A checker
+that required every superseded pairing to be closed would refuse every honest successor; the
+lineage is the sequence itself, and the fold's latest-wins rule is what reads it.
 
 ## Numbering Resolves In-File
 

@@ -1,6 +1,6 @@
 # Br integration test
 
-End-to-end adapter run against a real br sandbox. Gated on `br` being present on PATH; skipped otherwise. Lives at `scripts/apply-br_test.sh` — outside the Go test suite.
+End-to-end adapter run against a real br sandbox — both halves, export and apply. Gated on `br` being present on PATH; skipped otherwise. Lives at `scripts/apply-br_test.sh` — outside the Go test suite.
 
 ## Gate
 
@@ -13,16 +13,26 @@ fi
 
 ## Scenarios
 
+### Export against a live sandbox
+
+- Seed br sandbox: two open tasks, one claimed (`in_progress`) task, two closed tasks.
+- Run `scripts/export-br.sh tasks.json`.
+- Assertions:
+  - `tasks.json` validates against `schema/task-state.schema.json`.
+  - It lists exactly the three unfinished tasks with their statuses as `br list` reports them, and neither closed one.
+  - Feeding it to `spex plan --tasks tasks.json` over a fixture diff and journal exits 0 — the artifact the export half writes is the artifact the binary reads, with no format adapter between them.
+
 ### Full happy path
 
-- Seed br sandbox: create a fake proposal epic and a handful of feature beads (analogues of existing journal pairings).
-- Run `scripts/apply-br.sh` with a changeset containing 2 new creates, 1 close (removed), 1 modified close+create pair.
+- Seed br sandbox: create a fake proposal epic and a handful of feature tasks (analogues of existing journal pairings).
+- Run `scripts/apply-br.sh` with a changeset containing 2 new creates, 1 close (removed), and 1 create for a modified node whose earlier task is finished.
 - Assertions:
-  - All 5 ops land as receipts.
-  - `br list --json` output matches expected beads (count, statuses, labels).
-  - `spex:<eid>` labels present on new beads — each op's referent event id, `<git_head>:<op_id>`.
-  - the closed beads carry no new labels — close ops apply none; their `status` is the whole record of the close.
-  - Receipts top-level status: complete.
+  - All 4 ops land as receipts.
+  - `br list --json` output matches expected tasks (count, statuses, labels).
+  - `spex:<eid>` labels present on new tasks — each op's referent event id, `<git_head>:<op_id>`.
+  - the modified node's new task carries no dependency on its finished predecessor — the changeset named none, and the adapter invented none.
+  - the closed task carries no new labels — close ops apply none; its `status` is the whole record of the close.
+  - Receipts top-level status: complete; `"version": 2`; every entry keyed `task_id`.
 
 ### Partial run (injected failure)
 
@@ -43,8 +53,8 @@ fi
 
 ### Both ref shapes
 
-- Changeset mixing ref:op (new-to-new) and ref:bead (existing open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
-- Assertions: each new bead's `--deps blocked-by:<>` is correct per the ref resolution.
+- Changeset mixing ref:op (new-to-new) and ref:task (existing, listed as open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
+- Assertions: each new task's `--deps blocked-by:<>` is correct per the ref resolution.
 
 ## Harness
 
@@ -74,8 +84,15 @@ for case in "$TESTS_DIR"/*/; do
         ./seed.sh
     fi
 
-    ./apply-br.sh < changeset.json > receipts.json
-    diff <(jq -S . receipts.json) <(jq -S . expected_receipts.json)
+    if [[ -f expected_tasks.json ]]; then
+        ./export-br.sh > tasks.json
+        diff <(jq -S . tasks.json) <(jq -S . expected_tasks.json)
+    fi
+
+    if [[ -f changeset.json ]]; then
+        ./apply-br.sh < changeset.json > receipts.json
+        diff <(jq -S . receipts.json) <(jq -S . expected_receipts.json)
+    fi
 
     if [[ -f verify.sh ]]; then
         ./verify.sh
@@ -88,8 +105,9 @@ echo "ok"
 
 ## Fixtures
 
-- `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh:172` runs `seed.sh` only when the case supplies one.
-- `scripts/testdata/integration/close_obsolete/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
+- `scripts/testdata/integration/export/` — seed.sh + expected_tasks.json.
+- `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one.
+- `scripts/testdata/integration/close_removed/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
 
 The partial-run, re-run-idempotency and both-ref-shape scenarios above have no integration fixture, and neither does the retarget path; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.
 

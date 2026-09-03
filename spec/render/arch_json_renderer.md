@@ -43,7 +43,7 @@ Every node carries `id`, `type` and `name`; `description`, `content`, `module` a
 
 Synthetic IDs are constructed from the path: `module:<name>:<type>:<id>`, where `<type>` is the abbreviated node kind — `req`, `comp`, `flow`, `test`, `api`. A module is `module:<name>`, a project requirement is `project:req:<id>` and the project itself is the bare string `project`. This creates globally unique identifiers for the flat graph representation.
 
-`--slim` uses no synthetic prefix: a slim node's `id` is the declared identity hash itself, copied out of the declaration and never recomputed from the node's name. That distinction is load-bearing, not incidental — the identity hashes that predate the current identity string, still keyed on by snapshots and by the bead map, would not survive a renderer that recomputed them.
+`--slim` uses no synthetic prefix: a slim node's `id` is the declared identity hash itself, copied out of the declaration and never recomputed from the node's name. That distinction is load-bearing, not incidental — the identity hashes that predate the current identity string, still keyed on by snapshots and by the task journal, would not survive a renderer that recomputed them.
 
 ## Sections
 

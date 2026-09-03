@@ -13,11 +13,11 @@ resolver answered for the fixture project.
 ## The Five Invariants
 
 1. Every ok create pairs exactly one `task_created` receipt with exactly one referent event — a
-   change event, the `removed` event the cleanup answers (prior-batch or same-batch), or the
-   proposal's `registered` event (epic creates) — every ok retarget pairs exactly one
-   `task_retargeted` receipt with its own `modified` event, and a batch's absorbed events are
-   closed by exactly one `refresh` receipt naming them. A `proposal`-keyed receipt with no
-   `for` is a legacy line read as inert history, never constructed anew.
+   change event, the `removed` event the cleanup answers (prior-batch, or minted by the cleanup
+   op itself), or the proposal's `registered` event (epic creates) — every ok retarget pairs
+   exactly one `task_retargeted` receipt with its own `modified` event, and a batch's absorbed
+   events are closed by exactly one `refresh` receipt naming them. A `proposal`-keyed receipt
+   with no `for` is a legacy line read as inert history, never constructed anew.
 2. No receipt references an event id that neither the journal nor the batch contains — `for`
    fields and the entries of a `refresh` receipt's `absorbed` list alike.
 3. Re-running the same changeset+receipts pair appends nothing — op-born event ids derive from
@@ -28,7 +28,9 @@ resolver answered for the fixture project.
 
 The retired store invariants — one record per node, modify rebinds the record, no leftover record
 after a removal — are void by construction over an append-only log: lineage replaces them, and the
-scenarios below include one that proves the replacement holds.
+scenarios below include one that proves the replacement holds. No invariant demands a
+`task_closed` between one generation of a node's task and the next: the journal records what the
+pipeline did, and a task's completion is not something the pipeline does.
 
 ## Scenarios
 
@@ -99,10 +101,11 @@ writes.
 
 ### Lineage replaces the rebind invariant
 
-- Run a modified-node close+create pair to completion.
-- Expected: the journal holds both pairings — old task closed, new task created — and the fold
-  answers with the new task only. No assertion anywhere demands the old line be gone; asserting
-  its presence IS the test.
+- Run a create for a node whose earlier task is finished — a plain create, no close beside it —
+  to completion.
+- Expected: the journal holds both pairings — the earlier `task_created`, with no `task_closed`
+  after it, and the new one — and the fold answers with the new task only. No assertion anywhere
+  demands the old line be gone or closed; asserting its presence, unclosed, IS the test.
 
 ### Invariant 1: retarget pairing
 
@@ -121,9 +124,17 @@ writes.
   both eids and nothing else; the dangling variant is refused before the write. Invariant 2's
   no-unknown-referent rule covers the `absorbed` list exactly as it covers `for`.
 
+### Invariant 1: a cleanup's self-minted removal is one referent
+
+- Run a cleanup create for a node with no prior `removed` event to completion.
+- Expected: exactly one `removed` event, minted from the cleanup op's own `(git_head, op_id)`,
+  and exactly one `task_created` naming it. Then re-run the pair: nothing appended, because the
+  removal's eid derives from the same op.
+
 ## Happy Path
 
-- Full complete run with 5 ok creates and 3 ok closes — 2 of the creates paired with 2 of the closes as modify pairs, the third close a removal.
+- Full complete run with 5 ok creates and 2 ok closes — 2 of the creates for nodes whose earlier
+  tasks are finished, 1 a cleanup, the closes a removal and a fold-back.
   All invariants pass. The journal gains exactly the expected events and receipts,
   the snapshot is rewritten, and every appended line validates against the journal-line schema.
 

@@ -8,7 +8,10 @@ That copy plus that one journal line are the whole of the record, because
 control, so a registration adds to the working tree and touches no
 database and no state living outside git. The module that starts a lifecycle records its start:
 the epic's `task_created` later references the registered event, which is what lets every task
-pairing in the journal reference an event.
+pairing in the journal reference an event. The epic that receipt pairs is the one task plan
+never reads a status for — it is a grouping, not work, so it parents a run's tasks whatever the
+task-state artifact says or omits about it — and the registered event, not any tracker state,
+is what makes it resolvable.
 
 ## Responsibilities
 

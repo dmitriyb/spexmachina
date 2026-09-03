@@ -29,7 +29,11 @@ $ spex map get a1b2c3d4e5f6
 {"node":"a1b2c3d4e5f6","task_id":"spexmachina-abc","name":"ActionClassifier","node_type":"component","module":"impact","git_head":"cafe1234","proposal":"2026-08-02-merge-impact-emit"}
 ```
 
-Exit code 0 on success, 1 if neither the journal fold nor the spec knows the key.
+Exit code 0 on success, 1 if neither the journal fold nor the spec knows the key. The `task_id`
+reported is the task the node's latest change is paired with; whether that task is still live is
+not in the journal and not in this output — the pipeline reads it fresh from the task-state
+artifact at plan time, and a finished task's node keeps answering with that task until its next
+change opens a successor.
 
 ### spex map list
 

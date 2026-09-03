@@ -19,7 +19,7 @@
 
 The four levels are fixed; the mapping from declared node type to level is the resolved profile's graph-rules declaration, joined by one fixed rule — `meta` leaves are the frame's, always `structural` — and the table above states the default profile's assignment: a profile-declared type is classified by its declared level through the same rules, and under the default profile every built-in type lands exactly where it always has.
 
-The `contract` level sits between `impl_only` and `arch_impl`: contract changes are not purely local to one component (so `impl_only` is wrong), but they also do not rewire graph topology (so `arch_impl` is wrong). `data_flow` and `api` land there together because they are the same kind of surface seen from two sides — a data_flow is a shape agreed between components inside the module, an api is a surface the module declares to its callers — and neither belongs to a single component. Downstream node matchers skip `structural` changes but forward `contract` changes so a dedicated data_flow task bead is produced.
+The `contract` level sits between `impl_only` and `arch_impl`: contract changes are not purely local to one component (so `impl_only` is wrong), but they also do not rewire graph topology (so `arch_impl` is wrong). `data_flow` and `api` land there together because they are the same kind of surface seen from two sides — a data_flow is a shape agreed between components inside the module, an api is a surface the module declares to its callers — and neither belongs to a single component. Downstream node matchers skip `structural` changes but forward `contract` changes so a dedicated data_flow task is produced.
 
 ## Interface
 

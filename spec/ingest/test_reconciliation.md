@@ -13,50 +13,64 @@ in the orchestrator both surface here.
 - Tests write an initial journal file, run reconciliation, and assert the appended lines
   match expected — by parsing, never by byte comparison, since field order inside a line is the
   encoder's business.
+- Changesets are v4 and receipts v2 throughout: refs are `ref:task`/`ref:op`, receipts key the
+  tracker id as `task_id`, and no op carries a lineage dep.
 
 ## Scenarios
 
-### Ok create → event and receipt appended
+### Ok create on an unknown node → added event and receipt appended
 
 - Changeset: one create op, spec_node_id `abc123def456`, idempotency label
-  `spex:cafe1234:<op_id>` (the eid the event below will carry), git_head `cafe1234`.
-- Receipts: corresponding op receipt with `status: "ok"`, `bead_id: "br-new"`, `was_existing: false`.
+  `spex:cafe1234:<op_id>` (the eid the event below will carry), git_head `cafe1234`. The journal
+  holds no change event for the node.
+- Receipts: corresponding op receipt with `status: "ok"`, `task_id: "br-new"`, `was_existing: false`.
 - Expected: the journal gains an `added` change event for node `abc123def456` (eid derived from
-  `(cafe1234, <op_id>)`) and a `task_created` receipt with `for` naming that eid and
-  `task_id: "br-new"`.
+  `(cafe1234, <op_id>)`, `before` null) and a `task_created` receipt with `for` naming that eid
+  and `task_id: "br-new"`.
+
+### Ok create on a known node → modified event, no task_closed
+
+- Initial journal: `added` (after `aaa`) + `task_created` (task `br-old`) for node `feedface0002`.
+- Changeset: one create op for `feedface0002` labeled `spex:<git_head>:<its op_id>`, carrying no
+  dep on `br-old` and accompanied by no close op — plan's shape for a modified node whose task is
+  finished.
+- Receipts: create ok, `task_id: "br-new"`, `was_existing: false`.
+- Expected: a `modified` change event for `feedface0002` with `before: "aaa"` — the journal's
+  latest `after` for the node, because the op itself carries no change type — plus a
+  `task_created` for `br-new`. **No** `task_closed` for `br-old`: the journal never records a
+  task's completion, and the old pairing stays as lineage. The fold now answers
+  `feedface0002 → br-new`.
+
+### Ok create on a re-added node → added event
+
+- Initial journal: `added` + `task_created` (task `br-1`), then `removed` (after null) +
+  `task_closed` for node `feedface0005`.
+- Changeset: one create op for `feedface0005`, the node re-added under the same name.
+- Receipts: ok, `task_id: "br-2"`.
+- Expected: an `added` event with `before` null — the journal's latest change event carries no
+  `after`, so the node is born again rather than modified — and a `task_created` for `br-2`.
 
 ### Ok close on removed → removed event and task_closed appended
 
-- Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0001`.
-- Changeset: one close op targeting bead `br-old`, `reason` starting with "Spec node removed".
+- Initial journal: `added` + `task_created` (task `br-old`) for node `feedface0001`.
+- Changeset: one close op targeting task `br-old`, `reason` starting with "Spec node removed".
 - Receipts: op receipt `status: "ok"`.
-- Expected: a `removed` change event for `beadbead0001` carrying its name, node_type and module — the
+- Expected: a `removed` change event for `feedface0001` carrying its name, node_type and module — the
   biography that outlives the node — plus a `task_closed` receipt for `br-old`. The earlier
   pairing lines remain untouched: nothing is ever deleted.
-
-### Modified node: create+close → lineage extended, not rebound
-
-- Initial journal: `added` + `task_created` (task `br-old`) for node `beadbead0002`.
-- Changeset: create op for `beadbead0002` labeled `spex:<git_head>:<its op_id>` (the pair's
-  `modified` eid) and a `blocks` dep on
-  `br-old`, then close op for `br-old` — plan's real ordering (creates before closes).
-- Receipts: both ok; create's `bead_id: "br-new"`, `was_existing: false`.
-- Expected: a `modified` change event for `beadbead0002`, a `task_closed` for `br-old`, a `task_created`
-  for `br-new` — all built while processing the create, off its `blocks` dep, without waiting for
-  the close. The fold now answers `beadbead0002 → br-new`; the `br-old` pairing remains as lineage.
 
 ### Was_existing=true → idempotent no-op
 
 - Initial journal already holds the change event and `task_created` for node `A`, task `br-7`.
 - Changeset: the same create op re-emitted (same git_head, same op_id).
-- Receipts: create op `status: "ok"`, `bead_id: "br-7"`, `was_existing: true`.
+- Receipts: create op `status: "ok"`, `task_id: "br-7"`, `was_existing: true`.
 - Expected: nothing appended — the derived eid already exists, and the receipt pairs with it.
   No error.
 
 ### Error status → op skipped, nothing appended
 
 - Changeset: one create op.
-- Receipts: that op with `status: "error"`, `bead_id: ""`.
+- Receipts: that op with `status: "error"`, `task_id: ""`.
 - Expected: no event, no receipt; no error from the reconciler (the adapter's failure is the
   user's problem, ingest records truth — and the truth is that nothing happened).
 
@@ -68,12 +82,13 @@ in the orchestrator both surface here.
 
 ### Mixed ops: one batch, ordered append
 
-- Changeset: [create for node X replacing A (modified lineage), create for new node Y, close br-A
-  (modified), close br-B (removed)] — plan's real ordering (creates before closes).
+- Changeset: [create for known node X (its earlier task finished), create for new node Y, close
+  br-B (removed)] — plan's real ordering (creates before closes).
 - Receipts: all ok.
-- Expected: the journal gains, in op order, the modified event for X with its two receipts, the
+- Expected: the journal gains, in op order, the modified event for X with its task_created, the
   added event for Y with its task_created, and the removed event for B's node with its
-  task_closed. The fold answers X → new task, no live entry for B's node, Y → its task.
+  task_closed. The fold answers X → new task, no live entry for B's node, Y → its task. No line
+  in the batch names X's earlier task.
 
 ### Proposal-epic create → receipt references the registered event, no spec-graph lookup
 
@@ -82,7 +97,7 @@ in the orchestrator both surface here.
 - Changeset: one create op with `spec_node_kind: "proposal_epic"`,
   `spec_node_id: "2026-04-29-decouple-contract-gaps"` (the proposal stem),
   `idempotency.label: "spex:beef0001:2026-04-29-decouple-contract-gaps"` — the registered eid.
-- Receipts: `status: "ok"`, `bead_id: "br-epic"`, `was_existing: false`.
+- Receipts: `status: "ok"`, `task_id: "br-epic"`, `was_existing: false`.
 - Spec graph: empty (the proposal stem is NOT a spec-graph node by design).
 - Expected: a `task_created` receipt with `for: "beef0001:2026-04-29-decouple-contract-gaps"` —
   no change event is invented, and no `proposal`-keyed receipt is constructed. The reconciler
@@ -97,66 +112,66 @@ in the orchestrator both surface here.
 
 ### Cleanup create → receipt pairs with the prior removed event
 
-- Initial journal: a `removed` event for node `abc123def456` (eid `E1`), from a prior run.
+- Initial journal: the node `abc123def456`'s latest change event is a `removed` event (eid
+  `E1`), from a prior run whose cleanup errored.
 - Changeset: one create op with `spec_node_kind: "cleanup"`, `spec_node_id: "abc123def456"`,
   `idempotency.label: "spex:E1"` — the removal event's own eid.
-- Receipts: `status: "ok"`, `bead_id: "br-cleanup"`, `was_existing: false`.
+- Receipts: `status: "ok"`, `task_id: "br-cleanup"`, `was_existing: false`.
 - Expected: a `task_created` receipt with `for: "E1"` and `task_id: "br-cleanup"` — the cleanup
   task is born pointing at the removal it answers. No new change event.
 
-### Cleanup create → receipt pairs with a same-batch removal
+### Cleanup create → the cleanup mints the removal itself
 
-- Initial journal: `added` + `task_created` (task `br-gone`) for the still-live node being
-  cleaned up.
-- Changeset: [cleanup create for that node's hash, then close `br-gone` (removed)] — plan's real
-  ordering, the cleanup create before the close that performs its removal.
-- Receipts: both ok.
-- Expected: same shape as the prior-removal scenario, but the referent is resolved from the
-  batch's own removal close rather than the journal — neither the fold nor lines already appended
-  show the node as removed yet when the cleanup create is processed, since its removal comes
-  after it in this same batch.
+- Initial journal: `added` (after `aaa`) + `task_created` (task `br-gone`) for the node being
+  cleaned up; no `removed` event exists for it.
+- Changeset: [cleanup create for that node's hash, labeled `spex:<git_head>:<its op_id>`] and
+  **no** close op — the node's task is finished, so plan issued nothing to close.
+- Receipts: ok, `task_id: "br-cleanup"`.
+- Expected: a `removed` change event for the node — eid derived from the cleanup op's own
+  `(git_head, op_id)`, `before: "aaa"`, `after` null, name/kind/module from the journal's live
+  fold entry for the node, since the spec graph no longer holds it — plus a `task_created` with
+  `for` naming that eid. The finished task `br-gone` gets no `task_closed`. This is the ordinary
+  cleanup case: the removal event is born with the cleanup, by the same derivation every
+  node-bearing create uses.
 
-### Modified close with no paired create, bead unknown to the journal → refused before append
+### Cleanup create after a re-add → a fresh removal, not the old one
 
-- Changeset: one close op, reason starting "Spec node modified", targeting a bead that no create
-  in the batch claims via a `blocks` dep, and that has no fold entry at all.
-- Receipts: close op `status: "ok"`.
-- Expected: structured error naming the op and the unclaimed bead; the journal file is
-  byte-identical to its pre-run state. A batch is not reported as successful with a retired
-  task's closure silently missing from the journal.
+- Initial journal: `removed` (eid `E1`) for the node, then `added` + `task_created` for the same
+  hash — re-added, then finished.
+- Changeset: a cleanup create labeled `spex:<git_head>:<its op_id>`.
+- Expected: a new `removed` event from the op's own derivation and a `task_created` naming it;
+  `E1` is not the referent, because it is not the node's latest state.
 
-### Modified close with no paired create, bead live in the journal → modified event from the close alone
+### Fold-back close, task live in the journal → modified event from the close alone
 
 - Initial journal: `added` + `task_created` (task `br-old`) for a `test_section` node.
-- Changeset: one close op, reason starting "Spec node modified", targeting `br-old`; no create op
-  in the batch claims `br-old` via a `blocks` dep — the shape the classifier emits
-  for a coupled `test_section` edit (obsolete with no replacement create).
+- Changeset: one close op, reason starting "Spec node modified", targeting `br-old` — the shape
+  the classifier emits for a coupled `test_section` edit whose task was open: the section folds
+  into its owning component and its own task is cancelled.
 - Receipts: close op `status: "ok"`.
 - Expected: a `modified` change event for the node (identity and prior hash from the journal's live
   fold entry for `br-old`, current name/module/path/hash from the spec graph) plus a `task_closed`
   for `br-old` naming it. No `task_created` — there is no successor task.
 
-### Modify-pair create errored, paired close ok → partial run tolerated
+### Fold-back close naming a task unknown to the journal → refused before append
 
-- Initial journal: `added` + `task_created` (task `br-old`) for a node.
-- Changeset: [modify-pair create for that node with a `blocks` dep on `br-old`, an unrelated fresh
-  create, close of `br-old` (modified)] — plan's real ordering (creates before closes).
-- Receipts: the modify-pair create `status: "error"`; the unrelated create and the close both `ok`.
-- Expected: nothing constructed for the modify-pair (neither the `modified` event nor the
-  `task_closed` for `br-old`) — the errored create leaves its pair incomplete, which is not a
-  malformed changeset. The unrelated create's `added` event and `task_created` still land; the run
-  reports success.
+- Changeset: one close op, reason starting "Spec node modified", targeting a task that has no
+  fold entry at all.
+- Receipts: close op `status: "ok"`.
+- Expected: structured error naming the op and the unknown task; the journal file is
+  byte-identical to its pre-run state. A close has no identity to build from except the journal's,
+  so a close the journal cannot place is a malformed changeset.
 
 ### Ok retarget → modified event and task_retargeted appended
 
-- Initial journal: `added` + `task_created` (task `br-open`) for node `beadbead0003`.
-- Changeset: one retarget op targeting `br-open`, `spec_node_id: "beadbead0003"`, its new content
+- Initial journal: `added` + `task_created` (task `br-open`) for node `feedface0003`.
+- Changeset: one retarget op targeting `br-open`, `spec_node_id: "feedface0003"`, its new content
   hash, `labels: ["spex:cafe1234:<op_id>"]` — the eid of the `modified` event below.
-- Receipts: op receipt `status: "ok"`, `bead_id: "br-open"`.
-- Expected: the journal gains a `modified` change event for `beadbead0003` (eid derived from
+- Receipts: op receipt `status: "ok"`, `task_id: "br-open"`.
+- Expected: the journal gains a `modified` change event for `feedface0003` (eid derived from
   `(cafe1234, <op_id>)`, name/kind/module from the spec graph) and a `task_retargeted` receipt
   with `for` naming that eid and `task_id: "br-open"`. No `task_closed`, no `task_created` — the
-  task neither died nor was born. The fold now answers `beadbead0003 → br-open` sourced from the
+  task neither died nor was born. The fold now answers `feedface0003 → br-open` sourced from the
   new event.
 
 ### Retarget re-run → idempotent no-op
@@ -172,9 +187,9 @@ in the orchestrator both surface here.
 
 ### Absorbed entry → modified event and refresh receipt appended
 
-- Changeset: empty `ops`, one `absorbed` entry — node `beadbead0004`, before `aaa`, after `bbb`,
+- Changeset: empty `ops`, one `absorbed` entry — node `feedface0004`, before `aaa`, after `bbb`,
   reason "typo sweep". Receipts: empty `ops`, status complete.
-- Expected: the journal gains one `modified` change event for `beadbead0004` — eid derived from
+- Expected: the journal gains one `modified` change event for `feedface0004` — eid derived from
   `(node, before, after)`, hashes off the entry, name/kind/module from the spec graph — and one
   `refresh` receipt whose `absorbed` list names exactly that eid. No task receipt of any kind: the
   node's existing pairing keeps its sourcing event.

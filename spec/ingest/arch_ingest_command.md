@@ -116,7 +116,7 @@ comes back into one JSON summary and one exit code.
 
 ### Both modes
 
-- Both files must parse successfully as JSON with their declared versions — `version: 3` on the changeset, `version: 1` on the receipts.
+- Both files must parse successfully as JSON with their declared versions — `version: 4` on the changeset, `version: 2` on the receipts. Any other version is refused here, before either mode runs: a v3 changeset would carry refs of a shape the builder does not resolve and a v1 receipts file keys the tracker id under a retired name, and neither is adapted.
 - The changeset and the receipts must cover exactly the same set of op ids: every receipt's op
   present in the changeset, and every op receipted. In refresh mode both files are empty, so the
   check passes trivially.
