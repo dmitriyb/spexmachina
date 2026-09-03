@@ -136,7 +136,7 @@ and composes the changeset. Three action types
 (`plan/action_classifier.go`):
 
 - **create** — this node needs work that does not exist yet. When it replaces
-  a task being obsoleted, the action carries `old_bead_id`, which is what
+  a task being obsoleted, the action carries `OldTaskID`, which is what
   preserves the chain across a rename.
 - **obsolete** — the task must go: its node left the spec, or the node
   changed and its task is closed (or its status unknown), or a test section
@@ -155,7 +155,7 @@ cleanup task is minted for a removed node, and a matched modified node takes
 the obsolete+create path unless the journal already records that new hash or it is
 a test section folding back.
 
-The output is `changeset.json` (v3) — an ordered, tool-agnostic list of
+The output is `changeset.json` (v4) — an ordered, tool-agnostic list of
 operations drawn from a `create` / `close` / `retarget` vocabulary, with
 forward references encoded so an adapter can apply them in order without
 resolving IDs itself, plus a top-level `absorbed` array carrying the nodes

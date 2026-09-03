@@ -116,10 +116,10 @@ cycle, an unresolvable dep or parent); `3` not a spex project — the lifecycle 
 code, uninitialised (naming `spex init`) or broken snapshot/journal (naming `spex doctor`). A
 malformed journal never takes `1`: the pre-flight refuses before the fold reads anything.
 
-Changeset v3 vocabulary: ops are `create`, `close`, `retarget` (`obsolete` is an action word —
+Changeset v4 vocabulary: ops are `create`, `close`, `retarget` (`obsolete` is an action word —
 an obsoleted node reaches the adapter as a `close`); `spec_node_kind` on a create is
 `proposal_epic`, `component`, `data_flow`, `test_section` or `cleanup` (no `api`, no
-`requirement` — neither produces a bead); refs are `{"ref":"bead"}` or `{"ref":"op"}`, resolved
+`requirement` — neither produces a bead); refs are `{"ref":"task"}` or `{"ref":"op"}`, resolved
 at build time; `absorbed` is a top-level array beside `ops`, never an op.
 
 **The 50-character label budget.** br rejects any label over 50 characters, in the same
