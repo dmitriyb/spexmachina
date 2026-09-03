@@ -20,7 +20,7 @@ import (
 	"strings"
 )
 
-//go:embed project.schema.json module.schema.json bead-map.schema.json journal-line.schema.json
+//go:embed project.schema.json module.schema.json bead-map.schema.json journal-line.schema.json task-state.schema.json
 var schemaFS embed.FS
 
 // identityHashPattern is the pattern every node id and cross-reference field
@@ -76,6 +76,15 @@ func BeadMapSchema() ([]byte, error) {
 // (task_created/task_closed/task_retargeted), and refresh receipts.
 func JournalLineSchema() ([]byte, error) {
 	return schemaFS.ReadFile("journal-line.schema.json")
+}
+
+// TaskStateSchema returns the raw JSON Schema bytes for the task-state
+// artifact plan reads through its required --tasks flag: the versioned
+// document an adapter's export half derives from the tracker, listing
+// in-flight tasks only. It admits the version-1 envelope and, per entry,
+// task_id plus a status of open or in_progress, and nothing else.
+func TaskStateSchema() ([]byte, error) {
+	return schemaFS.ReadFile("task-state.schema.json")
 }
 
 // IdentityHash joins parts with "/" and returns the first 6 bytes of
