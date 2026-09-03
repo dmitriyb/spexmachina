@@ -1437,6 +1437,30 @@ func TestFR9_P7_FieldValidationNamesEachDefect(t *testing.T) {
 		})
 	}
 
+	t.Run("node type named module", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"node_types": [
+				{"name": "module", "plural_key": "modules", "scope": "project", "fields": [
+					{"name": "requires_module", "kind": "reference", "targets": ["module"], "cyclic": true}
+				]}
+			]
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error, got nil: module is the frame's fixed type and must not be declarable")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), `"module" is the frame's fixed type`) {
+			t.Fatalf("error should name the fixed-point declaration, got: %v", err)
+		}
+	})
+
 	t.Run("duplicate field name within one type", func(t *testing.T) {
 		dir := t.TempDir()
 		doc := `{

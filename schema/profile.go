@@ -341,7 +341,10 @@ func (p *Profile) findField(typeName, scope, fieldName string) (Field, bool) {
 // supported range fails with one distinct message naming the version and
 // the supported range, the migrate-before-using-this-spex signal, before
 // any other check runs. Every remaining violation — a node type missing a
-// name or plural key or legal scope, a duplicate (scope, name) pair, a
+// name or plural key or legal scope, a node type named "module" (the
+// frame's fixed type, never the profile's to declare — the type-name
+// counterpart of the envelope-field collision), a duplicate (scope, name)
+// pair, a
 // field with an unknown kind, a reference field naming an undeclared target
 // type ("module" is never declared, so a reference field naming it always
 // fails here), an enumeration on a non-text field, bounds on a non-integer
@@ -369,6 +372,7 @@ func (p *Profile) Validate() error {
 	for i, t := range p.NodeTypes {
 		path := fmt.Sprintf("node_types[%d]", i)
 		check(t.Name != "", path, "name: required")
+		check(t.Name != "module", path, `name: "module" is the frame's fixed type and cannot be declared`)
 		check(t.PluralKey != "", path, "plural_key: required")
 		check(t.Scope == "project" || t.Scope == "module", path, `scope: must be "project" or "module"`)
 		if t.Name != "" && (t.Scope == "project" || t.Scope == "module") {
