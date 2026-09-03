@@ -350,6 +350,46 @@ run_reject_case invalid_json \
     'not json at all' \
     "changeset is not valid JSON"
 
+# ---- Export listing-failure test -------------------------------------------
+# export-br.sh must exit 1 on a listing failure and write no document,
+# regardless of br's own exit status (flow_adapter.md: "A failure of the
+# listing exits 1 and writes no document").
+
+run_export_list_failure_case() {
+    local name="export_list_failure"
+    local tmp; tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' RETURN
+
+    cat > "$tmp/fail_br.sh" <<'STUB'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "--version" ]]; then echo "br 0.0.0-mock"; exit 0; fi
+if [[ "${1:-}" == "list" ]]; then exit 2; fi
+exit 0
+STUB
+    chmod +x "$tmp/fail_br.sh"
+
+    BR_BIN="$tmp/fail_br.sh" "$EXPORT_SCRIPT" >"$tmp/out.txt" 2>"$tmp/err.txt"
+    local rc=$?
+
+    if [[ "$rc" -ne 1 ]]; then
+        echo "  [FAIL] $name: exit code $rc, want 1 (br's own exit status leaked through)"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (exit $rc)")
+        return
+    fi
+    if [[ -s "$tmp/out.txt" ]]; then
+        echo "  [FAIL] $name: tasks document written on listing failure"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (wrote output)")
+        return
+    fi
+    echo "  [ok]   $name"
+    PASS=$((PASS+1))
+}
+
+echo "== export reject =="
+run_export_list_failure_case
+
 # ---- Run integration suite (gated) -----------------------------------------
 
 if command -v br >/dev/null 2>&1; then

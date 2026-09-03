@@ -37,7 +37,10 @@ esac
 # Status-unfiltered and unbounded: br list's defaults hide finished tasks
 # and cap the row count, and either default would silently drop in-flight
 # work from the projection below.
-LISTING=$("$BR_BIN" list --json --all --limit 0)
+if ! LISTING=$("$BR_BIN" list --json --all --limit 0); then
+    echo "error: br list failed" >&2
+    exit 1
+fi
 
 # Project onto the version-1 task-state document: keep only tasks whose
 # status is open or in_progress, carry id as task_id and status verbatim,
