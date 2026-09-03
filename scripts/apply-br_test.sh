@@ -1,17 +1,18 @@
 #!/usr/bin/env bash
 #
-# apply-br_test.sh — bash test harness for scripts/apply-br.sh.
+# apply-br_test.sh — bash test harness for scripts/apply-br.sh and
+# scripts/export-br.sh.
 #
 # Two modes, both gated on jq being on PATH:
 #
-#  1. Substitution / parsing tests against scripts/testdata/mock_br.sh.
-#     Run unconditionally (no real br needed). Fixtures under
-#     scripts/testdata/{idempotency,substitution}.
+#  1. Mock-mode tests against scripts/testdata/mock_br.sh. Run
+#     unconditionally (no real br needed). Fixtures under
+#     scripts/testdata/{idempotency,substitution,export}.
 #
 #  2. Integration tests against a real br sandbox. Gated on `br` being on
 #     PATH; skipped otherwise. Fixtures under scripts/testdata/integration.
 #
-# Each fixture directory contains:
+# Each apply-half fixture directory contains:
 #   changeset.json          — input to apply-br.sh.
 #   state_before.json       — (mock mode) initial BR_MOCK_STATE.
 #   expected_receipts.json  — receipts shape the harness diffs against.
@@ -23,12 +24,22 @@
 #                             adapter N times against the same state and check
 #                             expected_receipts_runN.json.
 #
+# Each export-half fixture directory (scripts/testdata/export, mock mode
+# only) contains:
+#   state_before.json  — initial BR_MOCK_STATE.
+#   expected_tasks.json — the task-state document export-br.sh must emit.
+#
+# The integration export fixture (scripts/testdata/integration/export) has
+# no changeset.json; the harness runs export-br.sh instead of apply-br.sh
+# and hands its output to verify.sh as tasks.json.
+#
 # Exit code: 0 if every fixture passes; 1 on first failure.
 
 set -uo pipefail
 
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT="$ROOT/apply-br.sh"
+EXPORT_SCRIPT="$ROOT/export-br.sh"
 MOCK_BR="$ROOT/testdata/mock_br.sh"
 
 if ! command -v jq >/dev/null 2>&1; then
@@ -159,6 +170,52 @@ run_mock_case() {
     PASS=$((PASS+1))
 }
 
+run_export_mock_case() {
+    local case_dir="$1"
+    local name; name=$(basename "$case_dir")
+    local tmp; tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' RETURN
+
+    cp "$case_dir/state_before.json" "$tmp/state.json"
+
+    local expected; expected=$(cat "$case_dir/expected_tasks.json")
+
+    # Run twice over the unchanged sandbox and assert byte-identical
+    # output — the export half reads the tracker, it never mutates it.
+    local first second
+    first=$(BR_BIN="$MOCK_BR" BR_MOCK_STATE="$tmp/state.json" "$EXPORT_SCRIPT" 2>"$tmp/stderr.txt") || {
+        echo "  [FAIL] $name: export-br.sh exited non-zero"
+        sed 's/^/    /' "$tmp/stderr.txt"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (exit non-zero)")
+        return
+    }
+    second=$(BR_BIN="$MOCK_BR" BR_MOCK_STATE="$tmp/state.json" "$EXPORT_SCRIPT" 2>"$tmp/stderr.txt") || {
+        echo "  [FAIL] $name: export-br.sh exited non-zero on second run"
+        sed 's/^/    /' "$tmp/stderr.txt"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (exit non-zero, second run)")
+        return
+    }
+    if [[ "$first" != "$second" ]]; then
+        echo "  [FAIL] $name: two runs over an unchanged sandbox produced different output"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (not deterministic)")
+        return
+    fi
+
+    if ! _jdiff "$first" "$expected" >"$tmp/diff.txt" 2>&1; then
+        echo "  [FAIL] $name: tasks.json mismatch"
+        sed 's/^/    /' "$tmp/diff.txt"
+        FAIL=$((FAIL+1))
+        FAILURES+=("$name (tasks mismatch)")
+        return
+    fi
+
+    echo "  [ok]   $name"
+    PASS=$((PASS+1))
+}
+
 run_integration_case() {
     local case_dir="$1"
     local name; name=$(basename "$case_dir")
@@ -177,27 +234,39 @@ run_integration_case() {
         }
     fi
 
-    local actual stderr
-    actual=$(cd "$sandbox" && "$SCRIPT" changeset.json 2>stderr.txt) || {
-        echo "  [FAIL] $name: adapter exited non-zero"
-        sed 's/^/    /' "$sandbox/stderr.txt"
-        FAIL=$((FAIL+1))
-        FAILURES+=("$name (adapter exit)")
-        return
-    }
+    if [[ -f "$sandbox/changeset.json" ]]; then
+        local actual
+        actual=$(cd "$sandbox" && "$SCRIPT" changeset.json 2>stderr.txt) || {
+            echo "  [FAIL] $name: adapter exited non-zero"
+            sed 's/^/    /' "$sandbox/stderr.txt"
+            FAIL=$((FAIL+1))
+            FAILURES+=("$name (adapter exit)")
+            return
+        }
 
-    # Integration task IDs are non-deterministic (br assigns them based on
-    # the sandbox repo name). Normalize: any expected task_id of "__ANY__"
-    # accepts whatever the run produced.
-    local norm_actual norm_expected
-    norm_actual=$(jq '.ops |= map(.task_id = (if .task_id == "" then "" else "__ANY__" end))' <<< "$actual")
-    norm_expected=$(jq '.ops |= map(if .task_id == "__ANY__" then . else . end)' "$sandbox/expected_receipts.json")
-    if ! _jdiff "$norm_actual" "$norm_expected" >"$sandbox/diff.txt" 2>&1; then
-        echo "  [FAIL] $name: receipts mismatch"
-        sed 's/^/    /' "$sandbox/diff.txt"
-        FAIL=$((FAIL+1))
-        FAILURES+=("$name (receipts)")
-        return
+        # Integration task IDs are non-deterministic (br assigns them based
+        # on the sandbox repo name). Normalize: any expected task_id of
+        # "__ANY__" accepts whatever the run produced.
+        local norm_actual norm_expected
+        norm_actual=$(jq '.ops |= map(.task_id = (if .task_id == "" then "" else "__ANY__" end))' <<< "$actual")
+        norm_expected=$(jq '.ops |= map(if .task_id == "__ANY__" then . else . end)' "$sandbox/expected_receipts.json")
+        if ! _jdiff "$norm_actual" "$norm_expected" >"$sandbox/diff.txt" 2>&1; then
+            echo "  [FAIL] $name: receipts mismatch"
+            sed 's/^/    /' "$sandbox/diff.txt"
+            FAIL=$((FAIL+1))
+            FAILURES+=("$name (receipts)")
+            return
+        fi
+    else
+        # No changeset.json: an export-half fixture. Run export-br.sh and
+        # hand its output to verify.sh as tasks.json.
+        (cd "$sandbox" && "$EXPORT_SCRIPT" > tasks.json 2>stderr.txt) || {
+            echo "  [FAIL] $name: export-br.sh exited non-zero"
+            sed 's/^/    /' "$sandbox/stderr.txt"
+            FAIL=$((FAIL+1))
+            FAILURES+=("$name (export exit)")
+            return
+        }
     fi
 
     if [[ -f "$sandbox/verify.sh" ]]; then
@@ -225,8 +294,16 @@ for suite in idempotency substitution; do
     done
 done
 
+echo "== export =="
+export_dir="$ROOT/testdata/export"
+if [[ -d "$export_dir" ]]; then
+    for case_dir in "$export_dir"/*/; do
+        run_export_mock_case "$case_dir"
+    done
+fi
+
 # ---- Pre-flight rejection tests --------------------------------------------
-# These exercise the changeset.json v3 gate (version + required fields).
+# These exercise the changeset.json v4 gate (version + required fields).
 # The adapter must exit non-zero AND print a recognizable error to stderr
 # WITHOUT writing receipts.
 
@@ -261,13 +338,13 @@ run_reject_case version_mismatch \
     '{"version":2,"git_head":"x","proposal":"p","ops":[]}' \
     "unsupported changeset version: 2"
 run_reject_case missing_git_head \
-    '{"version":3,"proposal":"p","ops":[]}' \
+    '{"version":4,"proposal":"p","ops":[]}' \
     "missing required field: git_head"
 run_reject_case missing_proposal \
-    '{"version":3,"git_head":"x","ops":[]}' \
+    '{"version":4,"git_head":"x","ops":[]}' \
     "missing required field: proposal"
 run_reject_case missing_ops \
-    '{"version":3,"git_head":"x","proposal":"p"}' \
+    '{"version":4,"git_head":"x","proposal":"p"}' \
     "missing or malformed required field: ops"
 run_reject_case invalid_json \
     'not json at all' \

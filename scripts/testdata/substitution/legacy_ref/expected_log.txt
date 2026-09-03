@@ -1,0 +1,4 @@
+br --version
+br list --json --all --limit 0 --label spex:1
+br create --title Anchor --labels spex:1 --type feature --json --priority 1
+br list --json --all --limit 0 --label spex:2

@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 4,
   "git_head": "deadbeefcafe1234",
   "proposal": "test/idempotency",
   "ops": [
@@ -8,12 +8,11 @@
       "type": "create",
       "spec_node_kind": "cleanup",
       "spec_node_id": "abc123def456",
-      "idempotency": {"label": "spex:cafe1234:op-9"},
+      "idempotency": {
+        "label": "spex:cafe1234:op-9"
+      },
       "priority": 3,
-      "title": "Code cleanup: m/X",
-      "deps": [
-        {"ref": "bead", "bead_id": "spexmachina-old", "type": "blocks"}
-      ]
+      "title": "Code cleanup: m/X"
     }
   ]
 }

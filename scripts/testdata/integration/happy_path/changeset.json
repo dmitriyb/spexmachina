@@ -1,9 +1,53 @@
 {
-  "version": 3,
+  "version": 4,
   "git_head": "deadbeefcafef00d",
   "proposal": "test/integration",
   "ops": [
-    {"op_id":"op-0001","type":"create","spec_node_kind":"proposal_epic","spec_node_id":"sn-epic","idempotency":{"label":"spex:deadbeefcafef00d:op-0001"},"priority":2,"title":"Proposal: integration"},
-    {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-comp","idempotency":{"label":"spex:deadbeefcafef00d:op-0002"},"parent":{"ref":"op","op_id":"op-0001"},"priority":1,"title":"New comp"}
+    {
+      "op_id": "op-0001",
+      "type": "create",
+      "spec_node_kind": "proposal_epic",
+      "spec_node_id": "sn-epic",
+      "idempotency": {
+        "label": "spex:deadbeefcafef00d:op-0001"
+      },
+      "priority": 2,
+      "title": "Proposal: integration"
+    },
+    {
+      "op_id": "op-0002",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-comp",
+      "idempotency": {
+        "label": "spex:deadbeefcafef00d:op-0002"
+      },
+      "parent": {
+        "ref": "op",
+        "op_id": "op-0001"
+      },
+      "priority": 1,
+      "title": "New comp"
+    },
+    {
+      "op_id": "op-0003",
+      "type": "close",
+      "target": {
+        "ref": "task",
+        "task_id": "__REMOVED__"
+      },
+      "reason": "spec node removed"
+    },
+    {
+      "op_id": "op-0004",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-modified",
+      "idempotency": {
+        "label": "spex:deadbeefcafef00d:op-0004"
+      },
+      "priority": 1,
+      "title": "Modified node successor"
+    }
   ]
 }

@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "tasks": [
+    {"task_id":"br-1","status":"open"},
+    {"task_id":"br-2","status":"in_progress"}
+  ]
+}

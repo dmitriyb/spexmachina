@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "status": "partial",
+  "ops": [
+    {"op_id":"op-0001","status":"ok","task_id":"br-100","was_existing":false},
+    {"op_id":"op-0002","status":"error","task_id":"","was_existing":false,"error":"dep ref: unknown ref kind: bead"}
+  ]
+}

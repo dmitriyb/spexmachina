@@ -11,23 +11,25 @@
 //
 // # Flow
 //
-// scripts/apply-br.sh is the reference implementation of the apply half.
-// There is no reference export half yet — TODO(bead:spexmachina-swvx.5):
-// scripts/export-br.sh. apply-br.sh today:
+// scripts/apply-br.sh is the reference implementation of the apply half;
+// scripts/export-br.sh is the reference implementation of the export half.
+// apply-br.sh:
 //
 //  1. Pre-flight: parse changeset.json, confirm the tracker CLI answers,
 //     start with an empty op_id → task_id substitution table. It enforces
-//     changeset version 3, matching plan.ChangesetVersion — the spec's v4
-//     ref-shape rename (bead_id → task_id on plan.Ref) has not landed on
-//     either side yet: TODO(bead:spexmachina-swvx.5) tracks the adapter's
-//     half, TODO(bead:spexmachina-swvx.6) tracks plan's. The changeset's
-//     top-level absorbed array is ingest's input, not read past the parse.
-//  2. Per op in order: resolve parent/deps/target refs — today a "bead"
-//     ref resolves as-is, an "op" ref resolves via the substitution
-//     table — idempotency-check the tracker where the op kind supports
-//     one, run the tracker-specific subcommand, append a per-op receipt;
-//     a create additionally records its resolved task id in the
-//     substitution table.
+//     changeset version 4 — the spec's ref-shape rename (bead_id →
+//     task_id on plan.Ref, kind "bead" → "task") has not landed on
+//     plan's side yet: TODO(bead:spexmachina-swvx.6) tracks plan's half
+//     of the migration, so plan.ChangesetVersion (still 3, still
+//     RefBead/BeadID) and this script disagree until it lands. The
+//     changeset's top-level absorbed array is ingest's input, not read
+//     past the parse.
+//  2. Per op in order: resolve parent/deps/target refs — a "task" ref
+//     resolves as-is, an "op" ref resolves via the substitution table —
+//     idempotency-check the tracker where the op kind supports one, run
+//     the tracker-specific subcommand, append a per-op receipt; a create
+//     additionally records its resolved task id in the substitution
+//     table.
 //  3. Emit receipts.json: derive the top-level status (complete vs
 //     partial), assemble the v2 wrapper, atomic write.
 //

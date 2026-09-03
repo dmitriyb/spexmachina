@@ -1,12 +1,66 @@
 {
-  "version": 3,
+  "version": 4,
   "git_head": "feedface00000001",
   "proposal": "test/round-trip",
   "ops": [
-    {"op_id":"op-0001","type":"create","spec_node_kind":"proposal_epic","spec_node_id":"sn-1","idempotency":{"label":"spex:1"},"priority":2,"title":"Proposal: round-trip"},
-    {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-2","idempotency":{"label":"spex:2"},"parent":{"ref":"op","op_id":"op-0001"},"priority":1,"title":"Brand new"},
-    {"op_id":"op-0003","type":"create","spec_node_kind":"component","spec_node_id":"sn-3","idempotency":{"label":"spex:3"},"parent":{"ref":"op","op_id":"op-0001"},"priority":1,"title":"Already exists"},
-    {"op_id":"op-0004","type":"close","target":{"ref":"bead","bead_id":"existing-open"},"reason":"superseded"},
-    {"op_id":"op-0005","type":"close","target":{"ref":"bead","bead_id":"existing-closed"},"reason":"already closed"}
+    {
+      "op_id": "op-0001",
+      "type": "create",
+      "spec_node_kind": "proposal_epic",
+      "spec_node_id": "sn-1",
+      "idempotency": {
+        "label": "spex:1"
+      },
+      "priority": 2,
+      "title": "Proposal: round-trip"
+    },
+    {
+      "op_id": "op-0002",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-2",
+      "idempotency": {
+        "label": "spex:2"
+      },
+      "parent": {
+        "ref": "op",
+        "op_id": "op-0001"
+      },
+      "priority": 1,
+      "title": "Brand new"
+    },
+    {
+      "op_id": "op-0003",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-3",
+      "idempotency": {
+        "label": "spex:3"
+      },
+      "parent": {
+        "ref": "op",
+        "op_id": "op-0001"
+      },
+      "priority": 1,
+      "title": "Already exists"
+    },
+    {
+      "op_id": "op-0004",
+      "type": "close",
+      "target": {
+        "ref": "task",
+        "task_id": "existing-open"
+      },
+      "reason": "superseded"
+    },
+    {
+      "op_id": "op-0005",
+      "type": "close",
+      "target": {
+        "ref": "task",
+        "task_id": "existing-closed"
+      },
+      "reason": "already closed"
+    }
   ]
 }
