@@ -1,12 +1,15 @@
 {
-  "version": 3,
+  "version": 4,
   "git_head": "deadbeefcafe1234",
   "proposal": "test/idempotency",
   "ops": [
     {
       "op_id": "op-0001",
       "type": "close",
-      "target": {"ref": "bead", "bead_id": "br-abc"},
+      "target": {
+        "ref": "task",
+        "task_id": "br-abc"
+      },
       "reason": "obsoleted by spec change"
     }
   ]

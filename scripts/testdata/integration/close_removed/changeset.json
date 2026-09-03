@@ -1,16 +1,16 @@
 {
   "version": 4,
-  "git_head": "deadbeefcafe1234",
-  "proposal": "test/idempotency",
+  "git_head": "deadbeefcafef00d",
+  "proposal": "test/integration",
   "ops": [
     {
       "op_id": "op-0001",
       "type": "close",
       "target": {
         "ref": "task",
-        "task_id": "br-xyz"
+        "task_id": "__VICTIM__"
       },
-      "reason": "tracker missing this bead"
+      "reason": "superseded"
     }
   ]
 }

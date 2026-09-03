@@ -1,0 +1,8 @@
+{
+  "issues": [
+    {"id":"br-1","title":"first open task","status":"open","issue_type":"feature","labels":["spex:1"]},
+    {"id":"br-2","title":"claimed task","status":"in_progress","issue_type":"task","labels":["spex:2"]},
+    {"id":"br-3","title":"finished task","status":"closed","issue_type":"feature","labels":["spex:3"]}
+  ],
+  "create_ids": []
+}

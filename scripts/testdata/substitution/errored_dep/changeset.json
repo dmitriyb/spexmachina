@@ -1,9 +1,35 @@
 {
-  "version": 3,
+  "version": 4,
   "git_head": "11112222",
   "proposal": "test/substitution",
   "ops": [
-    {"op_id":"op-0004","type":"create","spec_node_kind":"component","spec_node_id":"sn-bad","idempotency":{"label":"spex:4"},"priority":-99,"title":""},
-    {"op_id":"op-0005","type":"create","spec_node_kind":"component","spec_node_id":"sn-dep","idempotency":{"label":"spex:5"},"deps":[{"ref":"op","op_id":"op-0004"}],"priority":1,"title":"Depends on errored"}
+    {
+      "op_id": "op-0004",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-bad",
+      "idempotency": {
+        "label": "spex:4"
+      },
+      "priority": -99,
+      "title": ""
+    },
+    {
+      "op_id": "op-0005",
+      "type": "create",
+      "spec_node_kind": "component",
+      "spec_node_id": "sn-dep",
+      "idempotency": {
+        "label": "spex:5"
+      },
+      "deps": [
+        {
+          "ref": "op",
+          "op_id": "op-0004"
+        }
+      ],
+      "priority": 1,
+      "title": "Depends on errored"
+    }
   ]
 }
