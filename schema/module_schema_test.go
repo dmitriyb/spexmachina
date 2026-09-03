@@ -994,12 +994,15 @@ func TestFR2_ComposeModuleSchemaBuiltinComponentGainsDeclaredEdges(t *testing.T)
 
 // TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures checks that
 // composing from DefaultModuleNodeTypes yields a schema that still accepts
-// the same known-good module fixtures the static schema accepts (S3, S4),
-// since every default type name resolves to the frame's existing $defs
-// entry. It validates fixtures only — it does not compare the composed
-// document against the shipped static module.schema.json byte-for-byte;
-// that golden comparison is scenario P2 in test_schema_loading.md, owned by
-// SchemaLoader.
+// the same known-good module fixtures the static schema accepts (S3, S4).
+// This is the guard that the hand-maintained DefaultModuleNodeTypes stays
+// complete: every built-in type's own fields (e.g. requirement's type,
+// preq_id) must be declared on it and materialize through the same generic
+// composition a profile-declared type goes through, or the fixtures these
+// fields appear in stop validating. It validates fixtures only — it does
+// not compare the composed document against the shipped static
+// module.schema.json byte-for-byte; that golden comparison is scenario P2
+// in test_schema_loading.md, owned by SchemaLoader.
 func TestFR2_ComposeModuleSchemaDefaultAcceptsKnownGoodFixtures(t *testing.T) {
 	data, err := ComposeModuleSchema(DefaultModuleNodeTypes(), DefaultProfile().Edges)
 	if err != nil {

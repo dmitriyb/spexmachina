@@ -218,9 +218,9 @@ func projectSchemaFrame() (map[string]any, map[string]any, error) {
 // project-scoped node type: an identity-hash id, a non-empty name, an
 // optional description, and — only when the type requires a content leaf —
 // a required content path. Mirrors the module schema's generic envelope
-// (module_compose.go's genericNodeDef), and, unlike it, is every project-
-// scoped type's path through composition — built-in and profile-declared
-// alike, since no project-scoped $defs entry is frame-fixed. edges supplies
+// (module_compose.go's genericNodeDef): both are every type's path through
+// composition — built-in and profile-declared alike, since neither schema
+// keeps a frame-fixed $defs entry. edges supplies
 // one additional property per profile-declared edge kind sourced at this
 // type — an optional array of identity-hash values, matching the shape
 // every built-in edge field (depends_on, requires_module) already carries —
