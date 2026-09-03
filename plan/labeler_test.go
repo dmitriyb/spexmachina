@@ -35,7 +35,7 @@ func TestLabelFor_NodeBearingCreate_DerivesFromGitHeadAndOpID(t *testing.T) {
 }
 
 func TestLabelFor_ModifyPairCreate_SameDerivationAsFreshCreate(t *testing.T) {
-	// A modify-pair create (OldBeadID set, Reason "modified (new)") carries
+	// A modify-pair create (OldTaskID set, Reason "modified (new)") carries
 	// no shape distinct from a fresh create in the label rule — only
 	// cleanup and epic branch differently.
 	l := &Labeler{GitHead: "deadbeef"}
@@ -44,7 +44,7 @@ func TestLabelFor_ModifyPairCreate_SameDerivationAsFreshCreate(t *testing.T) {
 		NodeType:   KindComponent,
 		SpecNodeID: "4c1146bb7287",
 		SpecHash:   "abc",
-		OldBeadID:  "spexmachina-abc",
+		OldTaskID:  "spexmachina-abc",
 		Reason:     "Spec node modified (new): plan/ChangesetBuilder",
 	}
 
@@ -92,7 +92,7 @@ func TestLabelFor_Retarget_SameDerivationAsCreate(t *testing.T) {
 	l := &Labeler{GitHead: "deadbeef"}
 	action := Action{
 		Type:       ActionRetarget,
-		BeadID:     "spexmachina-hun",
+		TaskID:     "spexmachina-hun",
 		NodeType:   KindComponent,
 		SpecNodeID: "9f1578d7af6d",
 		SpecHash:   "bbb",
@@ -173,7 +173,7 @@ func TestLabelFor_Cleanup_SameBatchClose_DerivesFromCloseOpID(t *testing.T) {
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -193,7 +193,7 @@ func TestLabelFor_Cleanup_NoFoldEntry_NoSameBatchClose_IsError(t *testing.T) {
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -220,7 +220,7 @@ func TestLabelFor_Cleanup_PriorBatchRemoval_ReadsFoldEID(t *testing.T) {
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -250,7 +250,7 @@ func TestLabelFor_Cleanup_FoldCheckedBeforeSameBatchClose(t *testing.T) {
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -278,7 +278,7 @@ func TestLabelFor_Cleanup_FoldEntryNotRemoved_FallsBackToSameBatchClose(t *testi
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -302,7 +302,7 @@ func TestLabelFor_Cleanup_NilFold_FallsBackToSameBatchClose(t *testing.T) {
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldBeadID:  "spexmachina-old",
+		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 

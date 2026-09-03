@@ -40,6 +40,11 @@ composes changeset.json — one invocation, no intermediate document.`,
 	cmd.Flags().StringVar(&proposal, "proposal", "", "proposal ref (filename stem)")
 	cmd.Flags().StringVar(&gitHead, "git-head", "", "git HEAD SHA (7-40 hex chars)")
 	cmd.Flags().StringVar(&diffPath, "diff", "", "path to the diff document spex diff --json writes (default: stdin; '-' selects stdin explicitly)")
+	// TODO(bead:spexmachina-swvx.14): --beads/beadsPath is BeadReader
+	// (spexmachina-swvx.7's target for removal) standing in for
+	// spec/plan/flow_plan.md step 2's TaskReader/--tasks — the version-1
+	// task-state artifact listing only in-flight tasks. This bead adds the
+	// --tasks flag and TaskReader parser; --beads stays wired until then.
 	cmd.Flags().StringVar(&beadsPath, "beads", "", "tracker listing (br list --json or compatible)")
 	cmd.Flags().StringVar(&absorbPath, "absorb", "", "git-committed JSON list of {node, reason} cosmetic-modification marks")
 	cmd.Flags().StringVar(&outPath, "out", "", "changeset output path (default: stdout)")

@@ -17,12 +17,12 @@ type Fold interface {
 	RemovalLookup
 }
 
-// Builder composes changeset.json v3 from one batch of classified actions
+// Builder composes changeset.json v4 from one batch of classified actions
 // and the run's fixed inputs — the spec graph, the journal fold, the run's
 // registration, the git HEAD SHA, the proposal ref, and the absorbed
 // entries PlanCommand composed off the diff's withheld marks
 // (spec/plan/arch_changeset_builder.md, "Interface"). It is set up once per
-// run and handed exactly one batch; Build answers with one v3 changeset or
+// run and handed exactly one batch; Build answers with one v4 changeset or
 // an error, never both.
 type Builder struct {
 	SpecGraph    SpecGraph
@@ -81,13 +81,13 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		batch[ordered[i].Action.SpecNodeID] = ordered[i].OpID
 	}
 
-	// closeOpIDs maps a to-be-closed bead_id to the op_id its close op will
+	// closeOpIDs maps a to-be-closed task_id to the op_id its close op will
 	// carry, computed up front so a cleanup create can key its label off
 	// the same-batch close op that answers its removal, before that close
 	// Op is actually assembled.
 	closeOpIDs := make(map[string]string, len(obsoletes))
 	for i, o := range obsoletes {
-		closeOpIDs[o.BeadID] = fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1)
+		closeOpIDs[o.TaskID] = fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1)
 	}
 
 	labeler := &Labeler{GitHead: b.GitHead, Fold: b.Fold, CloseOpIDs: closeOpIDs}
@@ -118,7 +118,7 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		ops = append(ops, Op{
 			OpID:   fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1),
 			Type:   OpClose,
-			Target: &Ref{Kind: RefBead, BeadID: a.BeadID},
+			Target: &Ref{Kind: RefTask, TaskID: a.TaskID},
 			Reason: a.Reason,
 		})
 	}
@@ -167,12 +167,12 @@ func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) 
 	if err != nil {
 		return Op{}, err
 	}
-	if a.OldBeadID != "" {
+	if a.OldTaskID != "" {
 		// Every create that replaces an obsoleted bead — cleanup and
 		// modify-pair alike — carries one extra lineage dep naming the old
 		// bead, so the replacement's lineage survives after the close op
 		// runs.
-		deps = append(deps, Ref{Kind: RefBead, BeadID: a.OldBeadID, EdgeType: "blocks"})
+		deps = append(deps, Ref{Kind: RefTask, TaskID: a.OldTaskID, EdgeType: "blocks"})
 	}
 
 	if isCleanup(a) {
@@ -224,7 +224,7 @@ func (b *Builder) retargetOp(a Action, opID string, batch map[string]string, lab
 		Type:       OpRetarget,
 		SpecNodeID: a.SpecNodeID,
 		SpecHash:   a.SpecHash,
-		Target:     &Ref{Kind: RefBead, BeadID: a.BeadID},
+		Target:     &Ref{Kind: RefTask, TaskID: a.TaskID},
 		Deps:       deps,
 		Labels:     []string{label},
 		Reason:     a.Reason,

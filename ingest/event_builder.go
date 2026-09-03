@@ -127,13 +127,13 @@ func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapter
 	case strings.HasPrefix(op.Reason, ReasonRemovedPrefix):
 		return b.buildRemoved(cs, op, receipt)
 	case strings.HasPrefix(op.Reason, ReasonModifiedPrefix):
-		if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-			return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
+		if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
+			return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:task", op.OpID)
 		}
-		if b.State.ModifiedHandled[op.Target.BeadID] {
+		if b.State.ModifiedHandled[op.Target.TaskID] {
 			return nil, nil
 		}
-		if claimedByCreate(cs, op.Target.BeadID) {
+		if claimedByCreate(cs, op.Target.TaskID) {
 			return nil, nil
 		}
 		return b.buildModifiedFromClose(cs, op, receipt)
@@ -150,8 +150,8 @@ func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapter
 // bead dies and none is born: task_id is the existing task the op
 // already targets. See "Retarget Ops" in arch_event_builder.md.
 func (b *EventBuilder) BuildRetarget(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
-	if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: retarget target must be ref:bead", op.OpID)
+	if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
+		return nil, fmt.Errorf("ingest: reconcile: op %s: retarget target must be ref:task", op.OpID)
 	}
 	eid := deriveEID(cs.GitHead, op.OpID)
 	if b.State.HasEID(eid) {
@@ -175,7 +175,7 @@ func (b *EventBuilder) BuildRetarget(cs plan.Changeset, op plan.Op, receipt adap
 		Proposal: cs.Proposal,
 		Path:     md.ContentFile,
 	}
-	retargeted := mapping.Event{Event: "task_retargeted", TaskID: op.Target.BeadID, For: eid}
+	retargeted := mapping.Event{Event: "task_retargeted", TaskID: op.Target.TaskID, For: eid}
 	return []mapping.Event{ev, retargeted}, nil
 }
 
@@ -291,16 +291,16 @@ func (b *EventBuilder) buildModifiedPair(cs plan.Changeset, op plan.Op, receipt 
 // spec no longer carries the node, so this is the only place left to
 // ask.
 func (b *EventBuilder) buildRemoved(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
-	if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:bead", op.OpID)
+	if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
+		return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:task", op.OpID)
 	}
 	eid := deriveEID(cs.GitHead, op.OpID)
 	if b.State.HasEID(eid) {
 		return nil, nil
 	}
-	entry, found := b.foldEntryByTask(op.Target.BeadID)
+	entry, found := b.foldEntryByTask(op.Target.TaskID)
 	if !found {
-		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.BeadID)
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.TaskID)
 	}
 	ev := mapping.Event{
 		Event:    "removed",
@@ -334,9 +334,9 @@ func (b *EventBuilder) buildModifiedFromClose(cs plan.Changeset, op plan.Op, rec
 	if b.State.HasEID(eid) {
 		return nil, nil
 	}
-	entry, found := b.foldEntryByTask(op.Target.BeadID)
+	entry, found := b.foldEntryByTask(op.Target.TaskID)
 	if !found {
-		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.BeadID)
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: no journal entry for bead %s", op.OpID, op.Target.TaskID)
 	}
 	md, err := b.lookupMetadata(entry.Key)
 	if err != nil {
@@ -446,8 +446,8 @@ func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fol
 // consults it once cleanup and proposal_epic have been ruled out.
 func blocksDepBeadID(op plan.Op) (string, bool) {
 	for _, d := range op.Deps {
-		if d.Kind == plan.RefBead && d.EdgeType == "blocks" {
-			return d.BeadID, true
+		if d.Kind == plan.RefTask && d.EdgeType == "blocks" {
+			return d.TaskID, true
 		}
 	}
 	return "", false

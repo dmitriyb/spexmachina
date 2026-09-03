@@ -71,7 +71,7 @@ spex diff --json          # machine-readable, the form `spex plan` consumes
 ### `spex plan`
 
 Decides the whole bead-action changeset from a diff in one pass — match,
-classify, order, label, resolve, compose — and writes `changeset.json` (v3):
+classify, order, label, resolve, compose — and writes `changeset.json` (v4):
 an ordered, tool-agnostic list of `create` / `close` / `retarget` operations
 with forward references encoded, plus a top-level `absorbed` array for the
 nodes marked cosmetic, ready for an adapter.

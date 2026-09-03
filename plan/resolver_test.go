@@ -44,7 +44,7 @@ func TestResolveDeps_FoldOpenYieldsRefBead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := Ref{Kind: RefBead, BeadID: "spexmachina-abc"}
+	want := Ref{Kind: RefTask, TaskID: "spexmachina-abc"}
 	if len(refs) != 1 || refs[0] != want {
 		t.Fatalf("got %+v, want %+v", refs, want)
 	}
@@ -58,7 +58,7 @@ func TestResolveDeps_FoldInProgressYieldsRefBead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := Ref{Kind: RefBead, BeadID: "spexmachina-abc"}
+	want := Ref{Kind: RefTask, TaskID: "spexmachina-abc"}
 	if len(refs) != 1 || refs[0] != want {
 		t.Fatalf("got %+v, want %+v", refs, want)
 	}
@@ -97,7 +97,7 @@ func TestResolveDeps_PreservesInputOrder(t *testing.T) {
 	}
 	want := []Ref{
 		{Kind: RefOp, OpID: "op-1"},
-		{Kind: RefBead, BeadID: "spexmachina-b"},
+		{Kind: RefTask, TaskID: "spexmachina-b"},
 		{Kind: RefOp, OpID: "op-3"},
 	}
 	if len(refs) != len(want) {
@@ -135,7 +135,7 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 	}
 	want := []Ref{
 		{Kind: RefOp, OpID: "op-2"},
-		{Kind: RefBead, BeadID: "spexmachina-z"},
+		{Kind: RefTask, TaskID: "spexmachina-z"},
 	}
 	if len(refs) != len(want) {
 		t.Fatalf("got %+v, want %+v (w's closed pairing should drop)", refs, want)
@@ -196,7 +196,7 @@ func TestRetargetDeps_ClassifierOutputResolvesViaResolver(t *testing.T) {
 		case f.CompY:
 			want = append(want, Ref{Kind: RefOp, OpID: "op-y"})
 		case f.CompZ:
-			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-z"})
+			want = append(want, Ref{Kind: RefTask, TaskID: "spexmachina-z"})
 		case f.CompS:
 			// closed in the fold: dropped, no ref.
 		default:
@@ -318,7 +318,7 @@ func TestResolveDeps_TestSectionDescribes_OpenFoldPairingYieldsRefBead(t *testin
 		case f.CompX:
 			want = append(want, Ref{Kind: RefOp, OpID: "op-x"})
 		case f.CompY:
-			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-y"})
+			want = append(want, Ref{Kind: RefTask, TaskID: "spexmachina-y"})
 		default:
 			t.Fatalf("unexpected dep: %s", id)
 		}
@@ -405,7 +405,7 @@ func TestRetargetDeps_TestSectionDescribes_ReMintedSuccessorGainsRefOp(t *testin
 	for _, id := range tsAction.DepSpecNodeIDs {
 		switch id {
 		case f.CompX:
-			want = append(want, Ref{Kind: RefBead, BeadID: "spexmachina-x"})
+			want = append(want, Ref{Kind: RefTask, TaskID: "spexmachina-x"})
 		case f.CompY:
 			want = append(want, Ref{Kind: RefOp, OpID: "op-y-successor"})
 		default:
@@ -487,7 +487,7 @@ func TestResolveParent_ExistingEpicYieldsRefBead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := Ref{Kind: RefBead, BeadID: "spexmachina-epic"}
+	want := Ref{Kind: RefTask, TaskID: "spexmachina-epic"}
 	if ref != want {
 		t.Fatalf("got %+v, want %+v", ref, want)
 	}

@@ -198,7 +198,7 @@ func TestApply_OkClose_RemovedAppendsRemovedEventAndTaskClosed(t *testing.T) {
 		Ops: []plan.Op{{
 			OpID:   "op-1",
 			Type:   plan.OpClose,
-			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"},
+			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"},
 			Reason: "Spec node removed: m/Widget",
 		}},
 	}
@@ -268,9 +268,9 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 			{
 				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
 				Idempotency: idem("spex:cafe0002:op-1"),
-				Deps:        []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
+				Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}},
 			},
-			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Widget"},
+			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/Widget"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -447,10 +447,10 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafe9999", Proposal: "p4",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-A", EdgeType: "blocks"}}},
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-A", EdgeType: "blocks"}}},
 			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
-			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-A"}, Reason: "Spec node modified: m/X"},
-			{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-B"}, Reason: "Spec node removed: m/Z"},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-A"}, Reason: "Spec node modified: m/X"},
+			{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-B"}, Reason: "Spec node removed: m/Z"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -643,7 +643,7 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
 				Idempotency: idem("spex:cafebeef:op-2"), Labels: []string{"spex:cleanup"},
 			},
-			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -691,7 +691,7 @@ func TestApply_ModifiedClose_UnknownBead_RefusedBeforeAppend(t *testing.T) {
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-orphan"}, Reason: "Spec node modified: m/Orphan"},
+			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-orphan"}, Reason: "Spec node modified: m/Orphan"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -735,7 +735,7 @@ func TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone(t *test
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafeeeee", Proposal: "p5",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/Section"},
+			{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/Section"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -791,9 +791,9 @@ func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafe4321", Proposal: "p6",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}}},
 			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/A"},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/A"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -1069,7 +1069,7 @@ func TestApply_OkRetarget_ModifiedEventAndTaskRetargetedAppended(t *testing.T) {
 		Version: plan.ChangesetVersion, GitHead: "cafe1234", Proposal: "p",
 		Ops: []plan.Op{{
 			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
-			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"},
 			Labels: []string{"spex:cafe1234:op-1"},
 		}},
 	}
@@ -1137,7 +1137,7 @@ func TestApply_Retarget_ReRun_Idempotent(t *testing.T) {
 		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []plan.Op{{
 			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
-			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"},
 			Labels: []string{"spex:g:op-1"},
 		}},
 	}
@@ -1174,7 +1174,7 @@ func TestApply_Retarget_ErrorReceipt_NothingAppended(t *testing.T) {
 		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []plan.Op{{
 			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
-			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"},
 			Labels: []string{"spex:g:op-1"},
 		}},
 	}

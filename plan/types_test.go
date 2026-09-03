@@ -38,9 +38,9 @@ func encode(t *testing.T, v any) string {
 	return strings.TrimRight(buf.String(), "\n")
 }
 
-func TestChangesetVersion_IsThree(t *testing.T) {
-	if ChangesetVersion != 3 {
-		t.Fatalf("ChangesetVersion: got %d want 3", ChangesetVersion)
+func TestChangesetVersion_IsFour(t *testing.T) {
+	if ChangesetVersion != 4 {
+		t.Fatalf("ChangesetVersion: got %d want 4", ChangesetVersion)
 	}
 }
 
@@ -49,15 +49,11 @@ func TestOpTypeConstants(t *testing.T) {
 		"OpCreate":   "create",
 		"OpClose":    "close",
 		"OpRetarget": "retarget",
-		"OpLabel":    "label",
-		"OpTag":      "tag",
 	}
 	got := map[string]string{
 		"OpCreate":   OpCreate,
 		"OpClose":    OpClose,
 		"OpRetarget": OpRetarget,
-		"OpLabel":    OpLabel,
-		"OpTag":      OpTag,
 	}
 	for k, v := range want {
 		if got[k] != v {
@@ -89,8 +85,8 @@ func TestSpecNodeKindConstants(t *testing.T) {
 }
 
 func TestRefKindConstants(t *testing.T) {
-	if RefBead != "bead" {
-		t.Fatalf("RefBead: got %q want %q", RefBead, "bead")
+	if RefTask != "task" {
+		t.Fatalf("RefTask: got %q want %q", RefTask, "task")
 	}
 	if RefOp != "op" {
 		t.Fatalf("RefOp: got %q want %q", RefOp, "op")
@@ -128,7 +124,7 @@ func TestOp_CreateCanonicalFieldOrder(t *testing.T) {
 		SpecNodeID:   "4c1146bb7287",
 		Idempotency:  &Idem{Label: "spex:deadbeef:op-2"},
 		Parent:       &Ref{Kind: RefOp, OpID: "op-1"},
-		Deps:         []Ref{{Kind: RefBead, BeadID: "spexmachina-ab1"}},
+		Deps:         []Ref{{Kind: RefTask, TaskID: "spexmachina-ab1"}},
 		Priority:     1,
 		Title:        "plan: ChangesetBuilder",
 		Body:         "spec/plan/arch_changeset_builder.md",
@@ -155,7 +151,7 @@ func TestOp_RetargetCanonicalFieldOrder(t *testing.T) {
 		Type:       OpRetarget,
 		SpecNodeID: "9f1578d7af6d",
 		SpecHash:   "bbb",
-		Target:     &Ref{Kind: RefBead, BeadID: "spexmachina-hun"},
+		Target:     &Ref{Kind: RefTask, TaskID: "spexmachina-hun"},
 		Labels:     []string{"spex:deadbeef:op-3"},
 		Deps:       []Ref{{Kind: RefOp, OpID: "op-2"}},
 		Reason:     "Spec node modified (retarget): plan/BeadReader",
@@ -187,11 +183,11 @@ func TestOp_CloseMatchesArchSpecExample(t *testing.T) {
 	op := Op{
 		OpID:   "op-0042",
 		Type:   OpClose,
-		Target: &Ref{Kind: RefBead, BeadID: "spexmachina-tjs"},
+		Target: &Ref{Kind: RefTask, TaskID: "spexmachina-tjs"},
 		Reason: "Spec node modified: apply/ApplyCommand",
 	}
 	got := encode(t, op)
-	want := `{"op_id":"op-0042","type":"close","target":{"ref":"bead","bead_id":"spexmachina-tjs"},"reason":"Spec node modified: apply/ApplyCommand"}`
+	want := `{"op_id":"op-0042","type":"close","target":{"ref":"task","task_id":"spexmachina-tjs"},"reason":"Spec node modified: apply/ApplyCommand"}`
 	if got != want {
 		t.Fatalf("close op mismatch:\n got %s\nwant %s", got, want)
 	}
@@ -213,7 +209,7 @@ func TestOp_CleanupCreateShape(t *testing.T) {
 		SpecNodeID:   "abc123def456",
 		Idempotency:  &Idem{Label: "spex:deadbeef:op-8"},
 		Parent:       &Ref{Kind: RefOp, OpID: "op-1"},
-		Deps:         []Ref{{Kind: RefBead, BeadID: "spexmachina-old", EdgeType: "blocks"}},
+		Deps:         []Ref{{Kind: RefTask, TaskID: "spexmachina-old", EdgeType: "blocks"}},
 		Priority:     3,
 		Title:        "Code cleanup: m/X",
 	}
@@ -259,8 +255,8 @@ func TestChangeset_TopLevelCanonicalFieldOrder(t *testing.T) {
 	}
 	got := encode(t, cs)
 	fieldOrder(t, got, "changeset", "version", "git_head", "proposal", "ops", "absorbed")
-	if !strings.Contains(got, `"version":3`) {
-		t.Fatalf("changeset must declare version 3: %s", got)
+	if !strings.Contains(got, `"version":4`) {
+		t.Fatalf("changeset must declare version 4: %s", got)
 	}
 }
 
@@ -272,7 +268,7 @@ func TestChangeset_DeterministicEncoding(t *testing.T) {
 		Ops: []Op{
 			{OpID: "op-1", Type: OpCreate, SpecNodeKind: KindComponent, SpecNodeID: "4c1146bb7287"},
 			{OpID: "op-2", Type: OpRetarget, SpecNodeID: "9f1578d7af6d", SpecHash: "bbb",
-				Target: &Ref{Kind: RefBead, BeadID: "spexmachina-hun"}, Labels: []string{"spex:deadbeef:op-2"}},
+				Target: &Ref{Kind: RefTask, TaskID: "spexmachina-hun"}, Labels: []string{"spex:deadbeef:op-2"}},
 		},
 	}
 	first := encode(t, cs)
@@ -288,9 +284,9 @@ func TestOp_RoundTrip(t *testing.T) {
 		Type:       OpRetarget,
 		SpecNodeID: "9f1578d7af6d",
 		SpecHash:   "bbb",
-		Target:     &Ref{Kind: RefBead, BeadID: "spexmachina-hun"},
+		Target:     &Ref{Kind: RefTask, TaskID: "spexmachina-hun"},
 		Labels:     []string{"spex:deadbeef:op-3"},
-		Deps:       []Ref{{Kind: RefOp, OpID: "op-2"}, {Kind: RefBead, BeadID: "spexmachina-abc", EdgeType: "blocks"}},
+		Deps:       []Ref{{Kind: RefOp, OpID: "op-2"}, {Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}},
 		Reason:     "Spec node modified (retarget): plan/BeadReader",
 	}
 	wire := encode(t, original)
@@ -316,7 +312,7 @@ func TestOp_RoundTrip(t *testing.T) {
 }
 
 func TestRef_EdgeTypeOmittedWhenEmpty(t *testing.T) {
-	r := Ref{Kind: RefBead, BeadID: "spexmachina-abc"}
+	r := Ref{Kind: RefTask, TaskID: "spexmachina-abc"}
 	got := encode(t, r)
 	if strings.Contains(got, `"type"`) {
 		t.Fatalf("ref without an edge type must omit the type key: %s", got)
@@ -324,7 +320,7 @@ func TestRef_EdgeTypeOmittedWhenEmpty(t *testing.T) {
 }
 
 func TestRef_EdgeTypePresentWhenSet(t *testing.T) {
-	r := Ref{Kind: RefBead, BeadID: "spexmachina-abc", EdgeType: "blocks"}
+	r := Ref{Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}
 	got := encode(t, r)
 	if !strings.Contains(got, `"type":"blocks"`) {
 		t.Fatalf("ref with an edge type must carry it: %s", got)
@@ -387,19 +383,19 @@ func TestAction_PreservesDepOrder(t *testing.T) {
 	}
 }
 
-// TestAction_ObsoleteCarriesBeadIDAndChangeType matches
-// arch_action_classifier.md's Interface table: bead id is set on an
+// TestAction_ObsoleteCarriesTaskIDAndChangeType matches
+// arch_action_classifier.md's Interface table: task id is set on an
 // obsolete or retarget, empty on a create; change_type is set on an
 // obsolete only.
-func TestAction_ObsoleteCarriesBeadIDAndChangeType(t *testing.T) {
+func TestAction_ObsoleteCarriesTaskIDAndChangeType(t *testing.T) {
 	a := Action{
 		Type:       ActionObsolete,
-		BeadID:     "spexmachina-abc",
+		TaskID:     "spexmachina-abc",
 		ChangeType: "removed",
-		Reason:     "Spec node removed: plan/BeadReader",
+		Reason:     "Spec node removed: plan/TaskReader",
 	}
-	if a.BeadID == "" || a.ChangeType == "" {
-		t.Fatalf("obsolete action must carry bead id and change type: %+v", a)
+	if a.TaskID == "" || a.ChangeType == "" {
+		t.Fatalf("obsolete action must carry task id and change type: %+v", a)
 	}
 }
 

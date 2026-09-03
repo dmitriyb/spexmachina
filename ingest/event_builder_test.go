@@ -173,7 +173,7 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 	op := plan.Op{
 		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
 		Idempotency: idem("spex:cafe1234:op-1"),
-		Deps:        []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
+		Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}},
 	}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 
@@ -331,7 +331,7 @@ func TestEventBuilder_BuildClose_Removed(t *testing.T) {
 	)
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
-	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/N"}
+	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node removed: m/N"}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
 	lines, err := b.BuildClose(cs, op, receipt)
@@ -365,9 +365,9 @@ func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
 	const node = "bbbbbbbbbbbb"
 	createOp := plan.Op{
 		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
-		Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}},
+		Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}},
 	}
-	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"}
+	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified (new): m/N"}
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{createOp, closeOp}}
 	closeReceipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
@@ -428,7 +428,7 @@ func TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead(t *testing.T) {
 	b, _ := newTestEventBuilder(t, graph)
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g"}
-	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-unknown"}, Reason: "Spec node modified (new): m/N"}
+	op := plan.Op{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-unknown"}, Reason: "Spec node modified (new): m/N"}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-unknown"}
 
 	lines, err := b.BuildClose(cs, op, receipt)
@@ -454,7 +454,7 @@ func TestEventBuilder_BuildClose_ModifiedNoClaim_LiveBead(t *testing.T) {
 	)
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{
-		{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified (new): m/N"},
+		{OpID: "op-1", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified (new): m/N"},
 	}}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
@@ -509,7 +509,7 @@ func TestEventBuilder_BuildRetarget_Ok(t *testing.T) {
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
 	op := plan.Op{
 		OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: node, SpecHash: "h-new",
-		Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+		Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"},
 		Labels: []string{"spex:cafe1234:op-1"},
 	}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}
@@ -556,7 +556,7 @@ func TestEventBuilder_BuildRetarget_Idempotent(t *testing.T) {
 	)
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
-	op := plan.Op{OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: node, SpecHash: "h-new", Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"}}
+	op := plan.Op{OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: node, SpecHash: "h-new", Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"}}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-open"}
 
 	lines, err := b.BuildRetarget(cs, op, receipt)

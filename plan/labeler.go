@@ -49,8 +49,8 @@ type Labeler struct {
 	// Fold is the task journal fold, consulted only for a cleanup create's
 	// removed event, when the removal already landed in an earlier batch.
 	Fold RemovalLookup
-	// CloseOpIDs maps a to-be-closed bead_id to the op_id the builder
-	// assigned its close op in this batch. A cleanup action's OldBeadID
+	// CloseOpIDs maps a to-be-closed task_id to the op_id the builder
+	// assigned its close op in this batch. A cleanup action's OldTaskID
 	// indexes into it when the fold carries no removed event yet — the
 	// removal this run's own same-batch close op is about to record.
 	CloseOpIDs map[string]string
@@ -70,7 +70,7 @@ type Labeler struct {
 // verdict Resolver's missing-parent error reads, both decided on the run's
 // registration.
 //
-// Cleanup is checked next: a cleanup action also carries OldBeadID
+// Cleanup is checked next: a cleanup action also carries OldTaskID
 // (lineage to the closed task it dismantles), which would otherwise be
 // indistinguishable from a modify-pair's node-bearing shape.
 func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string, error) {
@@ -95,15 +95,24 @@ func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string
 // checked first — the same order the reconciler pairs the receipt by, so
 // label and referent stay one fact whichever run the removal actually
 // landed in.
+//
+// TODO(bead:spexmachina-swvx.13): the CloseOpIDs[action.OldTaskID] fallback
+// is the pre-task-lifecycle obsolete-then-recreate shape's same-batch
+// close op — a modify-pair cleanup's OldTaskID names the task
+// ActionClassifier's obsolete path (spexmachina-swvx.16) is closing in the
+// same run. Once that path retargets in place instead, a modify-pair
+// cleanup create stops existing and this fallback narrows to the
+// removed-node cleanup case the fold branch above already covers;
+// IdempotencyLabeler's own bead is to drop it then.
 func (l *Labeler) cleanupLabel(action Action) (string, error) {
 	if l.Fold != nil {
 		if entry, ok := l.Fold.Removal(action.SpecNodeID); ok && entry.Removed && entry.EID != "" {
 			return IdempotencyLabelPrefix + entry.EID, nil
 		}
 	}
-	closeOpID, ok := l.CloseOpIDs[action.OldBeadID]
+	closeOpID, ok := l.CloseOpIDs[action.OldTaskID]
 	if !ok {
-		return "", fmt.Errorf("plan: label: cleanup for spec_node_id %q has no same-batch close op for old bead %q and no removed event in the journal fold", action.SpecNodeID, action.OldBeadID)
+		return "", fmt.Errorf("plan: label: cleanup for spec_node_id %q has no same-batch close op for old bead %q and no removed event in the journal fold", action.SpecNodeID, action.OldTaskID)
 	}
 	return fmt.Sprintf("%s%s:%s", IdempotencyLabelPrefix, l.GitHead, closeOpID), nil
 }

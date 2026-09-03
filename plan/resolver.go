@@ -27,15 +27,24 @@ type Registration struct {
 // Shapes" and "Determinism"). First match wins:
 //
 //  1. batch holds the id (another create op in this same run) -> ref:op.
-//  2. Otherwise the fold holds a pairing for the id -> ref:bead, unless that
+//  2. Otherwise the fold holds a pairing for the id -> ref:task, unless that
 //     pairing's BeadStatus is "closed", in which case the dep is dropped —
 //     the work is already satisfied and needs no edge.
 //
 // A dep that is neither in-batch nor in the fold is a plan error naming the
-// spec_node_id — v3 has no adapter-time fallback, so nothing downstream
+// spec_node_id — v4 has no adapter-time fallback, so nothing downstream
 // could resolve what this function cannot. Used identically for a create
 // action's DepSpecNodeIDs and a retarget action's freshly recomputed ones
 // (spec/plan/arch_resolver.md, "Retarget deps").
+//
+// TODO(bead:spexmachina-swvx.19): the BeadStatus == "closed" drop branch
+// exists for the obsolete-then-recreate shape — a dep on a node that was
+// itself obsoleted resolves to a task already closed by this run's own
+// close op, so the edge is dropped rather than pointed at a dead task.
+// Once ActionClassifier (spexmachina-swvx.16) retargets in place instead of
+// closing, a changed node's task stays open across the change and this
+// branch stops firing for that case; Resolver's own bead is to confirm
+// nothing else still relies on it before removing it.
 func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLookup) ([]Ref, error) {
 	var refs []Ref
 	for _, dep := range depSpecNodeIDs {
@@ -47,7 +56,7 @@ func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLook
 			if p.BeadStatus == "closed" {
 				continue
 			}
-			refs = append(refs, Ref{Kind: RefBead, BeadID: p.TaskID})
+			refs = append(refs, Ref{Kind: RefTask, TaskID: p.TaskID})
 			continue
 		}
 		return nil, fmt.Errorf("plan: resolve: dep %s is neither an in-batch create nor tracked by the journal fold", dep)
@@ -93,7 +102,7 @@ func ResolveEpicAction(proposalRef string, fold FoldLookup, registration Registr
 // callers never call this for one.
 func ResolveParent(proposalRef string, fold FoldLookup, registration Registration, batch map[string]string) (Ref, error) {
 	if p, ok := fold.Lookup(proposalRef); ok {
-		return Ref{Kind: RefBead, BeadID: p.TaskID}, nil
+		return Ref{Kind: RefTask, TaskID: p.TaskID}, nil
 	}
 	if registration.EID == "" {
 		return Ref{}, fmt.Errorf("plan: resolve: proposal %q has no registered event in the journal and no existing epic task — run spex register first", proposalRef)

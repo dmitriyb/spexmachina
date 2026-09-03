@@ -103,7 +103,7 @@ func opIndex(ops []Op, specNodeID string) int {
 func findClose(t *testing.T, ops []Op, beadID string) Op {
 	t.Helper()
 	for _, op := range ops {
-		if op.Type == OpClose && op.Target != nil && op.Target.BeadID == beadID {
+		if op.Type == OpClose && op.Target != nil && op.Target.TaskID == beadID {
 			return op
 		}
 	}
@@ -158,8 +158,8 @@ func TestBuild_CanonicalSchemaAndFieldOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if cs.Version != 3 {
-		t.Errorf("version: want 3, got %d", cs.Version)
+	if cs.Version != 4 {
+		t.Errorf("version: want 4, got %d", cs.Version)
 	}
 	if cs.GitHead != "deadbeefcafe1234" {
 		t.Errorf("git_head: want deadbeefcafe1234, got %q", cs.GitHead)
@@ -190,7 +190,7 @@ func TestBuild_CanonicalFieldOrderMixedBatch(t *testing.T) {
 		sampleComponentCreate("c1", "m", "C1", nil),
 		{
 			Type:           ActionRetarget,
-			BeadID:         "spexmachina-hun",
+			TaskID:         "spexmachina-hun",
 			Module:         "m",
 			Node:           "X",
 			NodeType:       KindComponent,
@@ -199,7 +199,7 @@ func TestBuild_CanonicalFieldOrderMixedBatch(t *testing.T) {
 			DepSpecNodeIDs: []string{"w-open"},
 			Reason:         "Spec node modified (retarget): m/X",
 		},
-		{Type: ActionObsolete, BeadID: "spexmachina-old", Module: "m", Node: "B", NodeType: KindComponent, Reason: "removed"},
+		{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "B", NodeType: KindComponent, Reason: "removed"},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
 	if err != nil {
@@ -244,7 +244,7 @@ func TestBuild_RefWireKeyNames(t *testing.T) {
 			NodeType:   KindComponent,
 			SpecNodeID: "q1",
 			SpecHash:   "h-q1",
-			OldBeadID:  "spexmachina-abc",
+			OldTaskID:  "spexmachina-abc",
 			Reason:     "Spec node modified (new): m/Q",
 		},
 	}
@@ -262,8 +262,8 @@ func TestBuild_RefWireKeyNames(t *testing.T) {
 	if !strings.Contains(got, `{"ref":"op","op_id":"`) {
 		t.Errorf("in-batch dep: want literal {\"ref\":\"op\",\"op_id\":...} on the wire, got %s", got)
 	}
-	if !strings.Contains(got, `{"ref":"bead","bead_id":"spexmachina-y"}`) {
-		t.Errorf("existing-task dep: want literal {\"ref\":\"bead\",\"bead_id\":...} on the wire, got %s", got)
+	if !strings.Contains(got, `{"ref":"task","task_id":"spexmachina-y"}`) {
+		t.Errorf("existing-task dep: want literal {\"ref\":\"task\",\"task_id\":...} on the wire, got %s", got)
 	}
 
 	q := findOp(t, cs.Ops, "q1")
@@ -272,7 +272,7 @@ func TestBuild_RefWireKeyNames(t *testing.T) {
 		t.Fatalf("marshal: %v", err)
 	}
 	got2 := string(raw2)
-	if !strings.Contains(got2, `{"ref":"bead","bead_id":"spexmachina-abc","type":"blocks"}`) {
+	if !strings.Contains(got2, `{"ref":"task","task_id":"spexmachina-abc","type":"blocks"}`) {
 		t.Errorf("lineage dep: want type naming the edge on the wire, got %s", got2)
 	}
 }
@@ -350,8 +350,8 @@ func TestBuild_ExistingEpicSkipsCreateAndParentsRefBead(t *testing.T) {
 		}
 	}
 	c1 := findOp(t, cs.Ops, "c1")
-	if c1.Parent == nil || c1.Parent.Kind != RefBead || c1.Parent.BeadID != "spexmachina-epic" {
-		t.Errorf("c1 parent: want ref:bead spexmachina-epic, got %+v", c1.Parent)
+	if c1.Parent == nil || c1.Parent.Kind != RefTask || c1.Parent.TaskID != "spexmachina-epic" {
+		t.Errorf("c1 parent: want ref:task spexmachina-epic, got %+v", c1.Parent)
 	}
 }
 
@@ -371,8 +371,8 @@ func TestBuild_LegacyEpicNoRegistrationParentsRefBead(t *testing.T) {
 		}
 	}
 	c1 := findOp(t, cs.Ops, "c1")
-	if c1.Parent == nil || c1.Parent.Kind != RefBead || c1.Parent.BeadID != "spexmachina-legacy-epic" {
-		t.Errorf("c1 parent: want ref:bead spexmachina-legacy-epic, got %+v", c1.Parent)
+	if c1.Parent == nil || c1.Parent.Kind != RefTask || c1.Parent.TaskID != "spexmachina-legacy-epic" {
+		t.Errorf("c1 parent: want ref:task spexmachina-legacy-epic, got %+v", c1.Parent)
 	}
 }
 
@@ -421,7 +421,7 @@ func TestBuild_InBatchDepChainResolvesToRefOp(t *testing.T) {
 	}
 }
 
-// --- Existing-task dep resolves to ref:bead ---
+// --- Existing-task dep resolves to ref:task ---
 
 func TestBuild_ExistingTaskDepResolvesToRefBead(t *testing.T) {
 	env := newBuilderEnv()
@@ -434,8 +434,8 @@ func TestBuild_ExistingTaskDepResolvesToRefBead(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 	x := findOp(t, cs.Ops, "X")
-	if len(x.Deps) != 1 || x.Deps[0] != (Ref{Kind: RefBead, BeadID: "spexmachina-y"}) {
-		t.Fatalf("X.deps: want [ref:bead spexmachina-y], got %+v", x.Deps)
+	if len(x.Deps) != 1 || x.Deps[0] != (Ref{Kind: RefTask, TaskID: "spexmachina-y"}) {
+		t.Fatalf("X.deps: want [ref:task spexmachina-y], got %+v", x.Deps)
 	}
 }
 
@@ -490,7 +490,7 @@ func TestBuild_RetargetUnresolvableDepIsError(t *testing.T) {
 	actions := []Action{
 		{
 			Type:           ActionRetarget,
-			BeadID:         "spexmachina-hun",
+			TaskID:         "spexmachina-hun",
 			Module:         "m",
 			Node:           "X",
 			NodeType:       KindComponent,
@@ -522,7 +522,7 @@ func TestBuild_RetargetOpShape(t *testing.T) {
 		sampleComponentCreate("y1", "m", "Y", nil), // in-batch predecessor for the retarget's dep
 		{
 			Type:           ActionRetarget,
-			BeadID:         "spexmachina-hun",
+			TaskID:         "spexmachina-hun",
 			Module:         "m",
 			Node:           "X",
 			NodeType:       KindComponent,
@@ -540,8 +540,8 @@ func TestBuild_RetargetOpShape(t *testing.T) {
 	if op.Type != OpRetarget {
 		t.Errorf("type: want retarget, got %q", op.Type)
 	}
-	if op.Target == nil || op.Target.Kind != RefBead || op.Target.BeadID != "spexmachina-hun" {
-		t.Errorf("target: want ref:bead spexmachina-hun, got %+v", op.Target)
+	if op.Target == nil || op.Target.Kind != RefTask || op.Target.TaskID != "spexmachina-hun" {
+		t.Errorf("target: want ref:task spexmachina-hun, got %+v", op.Target)
 	}
 	if op.SpecHash != "new-hash" {
 		t.Errorf("spec_hash: want new-hash, got %q", op.SpecHash)
@@ -563,8 +563,8 @@ func TestBuild_RetargetOpShape(t *testing.T) {
 	if op.Deps[0] != (Ref{Kind: RefOp, OpID: y1.OpID}) {
 		t.Errorf("deps[0]: want ref:op %s, got %+v", y1.OpID, op.Deps[0])
 	}
-	if op.Deps[1] != (Ref{Kind: RefBead, BeadID: "spexmachina-w"}) {
-		t.Errorf("deps[1]: want ref:bead spexmachina-w, got %+v", op.Deps[1])
+	if op.Deps[1] != (Ref{Kind: RefTask, TaskID: "spexmachina-w"}) {
+		t.Errorf("deps[1]: want ref:task spexmachina-w, got %+v", op.Deps[1])
 	}
 }
 
@@ -572,8 +572,8 @@ func TestBuild_TwoRetargetsCarryDistinctLabels(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
-		{Type: ActionRetarget, BeadID: "spexmachina-a", NodeType: KindComponent, SpecNodeID: "a-node", SpecHash: "ha", Reason: "r"},
-		{Type: ActionRetarget, BeadID: "spexmachina-b", NodeType: KindComponent, SpecNodeID: "b-node", SpecHash: "hb", Reason: "r"},
+		{Type: ActionRetarget, TaskID: "spexmachina-a", NodeType: KindComponent, SpecNodeID: "a-node", SpecHash: "ha", Reason: "r"},
+		{Type: ActionRetarget, TaskID: "spexmachina-b", NodeType: KindComponent, SpecNodeID: "b-node", SpecHash: "hb", Reason: "r"},
 	}
 	cs, err := env.build(actions, "p", "h")
 	if err != nil {
@@ -590,7 +590,7 @@ func TestBuild_OnlyRetargetsNoCloseNoEpic(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
-		{Type: ActionRetarget, BeadID: "spexmachina-a", NodeType: KindComponent, SpecNodeID: "a-node", SpecHash: "ha", Reason: "r"},
+		{Type: ActionRetarget, TaskID: "spexmachina-a", NodeType: KindComponent, SpecNodeID: "a-node", SpecHash: "ha", Reason: "r"},
 	}
 	cs, err := env.build(actions, "p", "h")
 	if err != nil {
@@ -776,12 +776,12 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 			NodeType:   KindComponent,
 			SpecNodeID: "Q",
 			SpecHash:   "h-Q",
-			OldBeadID:  "spexmachina-abc",
+			OldTaskID:  "spexmachina-abc",
 			Reason:     "Spec node modified (new): m/Q",
 		},
 		{
 			Type:       ActionObsolete,
-			BeadID:     "spexmachina-abc",
+			TaskID:     "spexmachina-abc",
 			Module:     "m",
 			Node:       "Q",
 			NodeType:   KindComponent,
@@ -798,12 +798,12 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 	q := findOp(t, cs.Ops, "Q")
 	var foundLineage bool
 	for _, d := range q.Deps {
-		if d == (Ref{Kind: RefBead, BeadID: "spexmachina-abc", EdgeType: "blocks"}) {
+		if d == (Ref{Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}) {
 			foundLineage = true
 		}
 	}
 	if !foundLineage {
-		t.Errorf("Q.deps: want ref:bead spexmachina-abc type:blocks, got %+v", q.Deps)
+		t.Errorf("Q.deps: want ref:task spexmachina-abc type:blocks, got %+v", q.Deps)
 	}
 
 	closeOp := findClose(t, cs.Ops, "spexmachina-abc")
@@ -830,7 +830,7 @@ func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
 			NodeType:   KindComponent,
 			SpecNodeID: "Q",
 			SpecHash:   "h-Q",
-			OldBeadID:  "spexmachina-abc",
+			OldTaskID:  "spexmachina-abc",
 			Reason:     "Spec node modified (new): m/Q",
 		},
 	}
@@ -853,7 +853,7 @@ func TestBuild_OpenPairingRetargetsWithNoLineage(t *testing.T) {
 	actions := []Action{
 		{
 			Type:           ActionRetarget,
-			BeadID:         "spexmachina-abc",
+			TaskID:         "spexmachina-abc",
 			Module:         "m",
 			Node:           "Q",
 			NodeType:       KindComponent,
@@ -891,12 +891,12 @@ func TestBuild_CleanupBeadCreate(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "abc123def456",
-			OldBeadID:  "spexmachina-old",
+			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
 		},
 		{
 			Type:       ActionObsolete,
-			BeadID:     "spexmachina-old",
+			TaskID:     "spexmachina-old",
 			Module:     "m",
 			Node:       "X",
 			NodeType:   KindComponent,
@@ -936,7 +936,7 @@ func TestBuild_CleanupBeadCreatePriorBatchRemoval(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "abc123def456",
-			OldBeadID:  "spexmachina-old",
+			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
 		},
 	}
@@ -950,12 +950,12 @@ func TestBuild_CleanupBeadCreatePriorBatchRemoval(t *testing.T) {
 	}
 	var foundLineage bool
 	for _, d := range op.Deps {
-		if d == (Ref{Kind: RefBead, BeadID: "spexmachina-old", EdgeType: "blocks"}) {
+		if d == (Ref{Kind: RefTask, TaskID: "spexmachina-old", EdgeType: "blocks"}) {
 			foundLineage = true
 		}
 	}
 	if !foundLineage {
-		t.Errorf("deps: want ref:bead spexmachina-old type:blocks, got %+v", op.Deps)
+		t.Errorf("deps: want ref:task spexmachina-old type:blocks, got %+v", op.Deps)
 	}
 	if op.Priority != FallbackPriority {
 		t.Errorf("priority: want fallback %d, got %d", FallbackPriority, op.Priority)
@@ -1037,7 +1037,7 @@ func crossComponentEnv() (*builderEnv, []Action) {
 		sampleComponentCreate("aa1", "m", "AA", nil),
 		{
 			Type:           ActionRetarget,
-			BeadID:         "spexmachina-r",
+			TaskID:         "spexmachina-r",
 			Module:         "m",
 			Node:           "R",
 			NodeType:       KindComponent,
@@ -1104,8 +1104,8 @@ func TestBuild_CrossComponent_ByteIdenticalAcrossRuns(t *testing.T) {
 	if x.Deps[0] != (Ref{Kind: RefOp, OpID: y.OpID}) {
 		t.Errorf("x1 dep[0]: want ref:op %s, got %+v", y.OpID, x.Deps[0])
 	}
-	if x.Deps[1] != (Ref{Kind: RefBead, BeadID: "spexmachina-z"}) {
-		t.Errorf("x1 dep[1]: want ref:bead spexmachina-z, got %+v", x.Deps[1])
+	if x.Deps[1] != (Ref{Kind: RefTask, TaskID: "spexmachina-z"}) {
+		t.Errorf("x1 dep[1]: want ref:task spexmachina-z, got %+v", x.Deps[1])
 	}
 }
 
@@ -1131,8 +1131,8 @@ func TestBuild_CrossComponent_DepClassificationRoundTrip(t *testing.T) {
 	if d.Deps[0] != (Ref{Kind: RefOp, OpID: p.OpID}) {
 		t.Errorf("dep[0]: want pure ref:op %s, got %+v", p.OpID, d.Deps[0])
 	}
-	if d.Deps[1] != (Ref{Kind: RefBead, BeadID: "spexmachina-q"}) {
-		t.Errorf("dep[1]: want pure ref:bead spexmachina-q, got %+v", d.Deps[1])
+	if d.Deps[1] != (Ref{Kind: RefTask, TaskID: "spexmachina-q"}) {
+		t.Errorf("dep[1]: want pure ref:task spexmachina-q, got %+v", d.Deps[1])
 	}
 	if opIndex(cs.Ops, "p1") >= opIndex(cs.Ops, "d1") {
 		t.Errorf("sorter must sequence in-batch predecessor p1 before dependent d1: %+v", cs.Ops)
@@ -1285,8 +1285,8 @@ func TestBuild_OnlyClosesNoCreates(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
-		{Type: ActionObsolete, BeadID: "spexmachina-1", Module: "m", Node: "A", NodeType: KindComponent, Reason: "removed"},
-		{Type: ActionObsolete, BeadID: "spexmachina-2", Module: "m", Node: "B", NodeType: KindComponent, Reason: "removed"},
+		{Type: ActionObsolete, TaskID: "spexmachina-1", Module: "m", Node: "A", NodeType: KindComponent, Reason: "removed"},
+		{Type: ActionObsolete, TaskID: "spexmachina-2", Module: "m", Node: "B", NodeType: KindComponent, Reason: "removed"},
 	}
 	cs, err := env.build(actions, "p", "head1")
 	if err != nil {
@@ -1329,7 +1329,7 @@ func TestBuild_OpIDsUnpaddedUnderTen(t *testing.T) {
 		id := string(rune('A' + i))
 		actions = append(actions, sampleComponentCreate(id, "m", id, nil))
 	}
-	actions = append(actions, Action{Type: ActionObsolete, BeadID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
+	actions = append(actions, Action{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
 
 	cs, err := env.build(actions, "p", "h")
 	if err != nil {
@@ -1351,7 +1351,7 @@ func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
 		id := string(rune('A' + i))
 		actions = append(actions, sampleComponentCreate(id, "m", id, nil))
 	}
-	actions = append(actions, Action{Type: ActionObsolete, BeadID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
+	actions = append(actions, Action{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
 
 	cs, err := env.build(actions, "p", "h")
 	if err != nil {
@@ -1398,12 +1398,12 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "cleanup-node",
-			OldBeadID:  "spexmachina-old",
+			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
 		},
 		{
 			Type:       ActionRetarget,
-			BeadID:     "spexmachina-hun",
+			TaskID:     "spexmachina-hun",
 			Module:     "m",
 			Node:       "R",
 			NodeType:   KindComponent,
@@ -1413,7 +1413,7 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 		},
 		{
 			Type:       ActionObsolete,
-			BeadID:     "spexmachina-old",
+			TaskID:     "spexmachina-old",
 			Module:     "m",
 			Node:       "X",
 			NodeType:   KindComponent,
@@ -1422,7 +1422,7 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 		},
 		{
 			Type:       ActionObsolete,
-			BeadID:     "spexmachina-other",
+			TaskID:     "spexmachina-other",
 			Module:     "m",
 			Node:       "Y",
 			NodeType:   KindComponent,
@@ -1431,7 +1431,7 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 		},
 		{
 			Type:       ActionObsolete,
-			BeadID:     "spexmachina-third",
+			TaskID:     "spexmachina-third",
 			Module:     "m",
 			Node:       "Z",
 			NodeType:   KindComponent,

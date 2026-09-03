@@ -130,9 +130,6 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		opRC := receiptsByOp[op.OpID]
 
 		switch op.Type {
-		case plan.OpLabel, plan.OpTag:
-			// Labels and tags carry no journal consequence and no tally.
-
 		case plan.OpClose:
 			switch opRC.Status {
 			case adapters.OpStatusOk:
@@ -256,11 +253,11 @@ func sameBatchRemovals(cs plan.Changeset, receiptsByOp map[string]adapters.OpRec
 		if receiptsByOp[op.OpID].Status != adapters.OpStatusOk {
 			continue
 		}
-		if op.Target == nil || op.Target.Kind != plan.RefBead || op.Target.BeadID == "" {
+		if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
 			continue
 		}
 		for _, e := range fold.Entries {
-			if e.TaskID == op.Target.BeadID {
+			if e.TaskID == op.Target.TaskID {
 				out[e.Key] = deriveEID(cs.GitHead, op.OpID)
 				break
 			}

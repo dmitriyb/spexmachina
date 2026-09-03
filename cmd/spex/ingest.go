@@ -159,7 +159,7 @@ func runRefreshMode(cmd *cobra.Command, specDir string, ctx *lifecycle.ProjectCo
 	return enc.Encode(sum)
 }
 
-// loadChangeset parses changeset.json as plan.Changeset (v3) — the same
+// loadChangeset parses changeset.json as plan.Changeset (v4) — the same
 // type Reconciler and RefreshHandler consume, so no bridging conversion
 // sits between the file and either pathway.
 func loadChangeset(path string) (plan.Changeset, error) {
@@ -195,11 +195,13 @@ func loadReceipts(path string) (adapters.Receipts, error) {
 // adapters.ReceiptsVersion symbolically rather than hardcoding 4 and 2
 // (spec/ingest/arch_ingest_command.md, "Both modes"), so this pre-flight
 // needed no edit when adapters (spexmachina-swvx.4) bumped its constant
-// to 2. Plan's own bump to 4 (spexmachina-swvx.6) is still outstanding,
-// so today it enforces the versions those packages currently declare
-// (3 and 2).
+// to 2, nor when plan (spexmachina-swvx.6) bumped its own to 4: it
+// enforces whatever those packages currently declare.
 // TODO(bead:spexmachina-swvx.25): IngestCommand's own component bead —
-// revisit this pre-flight once plan's version bump lands.
+// EventBuilder and Reconciler's TODOs (spexmachina-swvx.22,
+// spexmachina-swvx.24) still name the deeper v4 behavior (no lineage
+// dep, unconditional fold-back closes) this pre-flight's version check
+// alone does not exercise; revisit once those land.
 func preflightPair(cs plan.Changeset, rc adapters.Receipts) error {
 	if cs.Version != plan.ChangesetVersion {
 		return fmt.Errorf("ingest: changeset version must be %d, got %d", plan.ChangesetVersion, cs.Version)

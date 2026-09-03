@@ -234,7 +234,7 @@ func TestIngestCommand_OkRetarget_CountedInSummary(t *testing.T) {
 			Type:       plan.OpRetarget,
 			SpecNodeID: compID,
 			SpecHash:   "new-hash",
-			Target:     &plan.Ref{Kind: plan.RefBead, BeadID: "bead-1"},
+			Target:     &plan.Ref{Kind: plan.RefTask, TaskID: "bead-1"},
 			Labels:     []string{"spex:cafe1234:op-0001"},
 		}},
 	}
@@ -482,7 +482,7 @@ func TestIngestCommand_InvariantFailure_Exits2_PreservesJournal(t *testing.T) {
 			{
 				OpID:   "op-0002",
 				Type:   plan.OpClose,
-				Target: &plan.Ref{Kind: plan.RefBead, BeadID: "bead-ghost"},
+				Target: &plan.Ref{Kind: plan.RefTask, TaskID: "bead-ghost"},
 				Reason: "Spec node removed: alpha/Ghost",
 			},
 		},

@@ -46,7 +46,7 @@ func TestPartialRunRecovery_TwoRunSequence(t *testing.T) {
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:run1head:op-1")},
 		{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:run1head:op-2")},
 		{OpID: "op-3", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:run1head:op-3")},
-		{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node removed: m/Old"},
+		{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node removed: m/Old"},
 	}}
 	run1RC := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusPartial, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "brA"},

@@ -103,14 +103,14 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	}
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []plan.Op{
-		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old1", EdgeType: "blocks"}}},
-		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old2", EdgeType: "blocks"}}},
+		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old1", EdgeType: "blocks"}}},
+		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old2", EdgeType: "blocks"}}},
 		{OpID: "op-03", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 		{OpID: "op-04", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 		{OpID: "op-05", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
-		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
-		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
-		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
+		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
+		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-01", Status: adapters.OpStatusOk, TaskID: "br-new1"},
@@ -285,8 +285,8 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 	)
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []plan.Op{
-		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []plan.Ref{{Kind: plan.RefBead, BeadID: "br-old", EdgeType: "blocks"}}},
-		{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-old"}, Reason: "Spec node modified: m/M"},
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}}},
+		{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/M"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"},
@@ -356,7 +356,7 @@ func TestConsistencyInvariants_Invariant1_RetargetPairing(t *testing.T) {
 		Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p",
 		Ops: []plan.Op{{
 			OpID: "op-1", Type: plan.OpRetarget, SpecNodeID: hexR, SpecHash: "new-r",
-			Target: &plan.Ref{Kind: plan.RefBead, BeadID: "br-open"},
+			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-open"},
 			Labels: []string{"spex:g:op-1"},
 		}},
 	}

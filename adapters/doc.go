@@ -17,13 +17,11 @@
 //
 //  1. Pre-flight: parse changeset.json, confirm the tracker CLI answers,
 //     start with an empty op_id → task_id substitution table. It enforces
-//     changeset version 4 — the spec's ref-shape rename (bead_id →
-//     task_id on plan.Ref, kind "bead" → "task") has not landed on
-//     plan's side yet: TODO(bead:spexmachina-swvx.6) tracks plan's half
-//     of the migration, so plan.ChangesetVersion (still 3, still
-//     RefBead/BeadID) and this script disagree until it lands. The
-//     changeset's top-level absorbed array is ingest's input, not read
-//     past the parse.
+//     changeset version 4 and the spec's ref-shape rename (bead_id →
+//     task_id on plan.Ref, kind "bead" → "task"), both of which now match
+//     plan.ChangesetVersion and plan.RefTask/Ref.TaskID
+//     (spexmachina-swvx.6). The changeset's top-level absorbed array is
+//     ingest's input, not read past the parse.
 //  2. Per op in order: resolve parent/deps/target refs — a "task" ref
 //     resolves as-is, an "op" ref resolves via the substitution table —
 //     idempotency-check the tracker where the op kind supports one, run
