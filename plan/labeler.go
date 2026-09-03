@@ -49,8 +49,8 @@ type Labeler struct {
 	// Fold is the task journal fold, consulted only for a cleanup create's
 	// removed event, when the removal already landed in an earlier batch.
 	Fold RemovalLookup
-	// CloseOpIDs maps a to-be-closed bead_id to the op_id the builder
-	// assigned its close op in this batch. A cleanup action's OldBeadID
+	// CloseOpIDs maps a to-be-closed task_id to the op_id the builder
+	// assigned its close op in this batch. A cleanup action's OldTaskID
 	// indexes into it when the fold carries no removed event yet — the
 	// removal this run's own same-batch close op is about to record.
 	CloseOpIDs map[string]string
@@ -70,7 +70,7 @@ type Labeler struct {
 // verdict Resolver's missing-parent error reads, both decided on the run's
 // registration.
 //
-// Cleanup is checked next: a cleanup action also carries OldBeadID
+// Cleanup is checked next: a cleanup action also carries OldTaskID
 // (lineage to the closed task it dismantles), which would otherwise be
 // indistinguishable from a modify-pair's node-bearing shape.
 func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string, error) {
@@ -101,9 +101,9 @@ func (l *Labeler) cleanupLabel(action Action) (string, error) {
 			return IdempotencyLabelPrefix + entry.EID, nil
 		}
 	}
-	closeOpID, ok := l.CloseOpIDs[action.OldBeadID]
+	closeOpID, ok := l.CloseOpIDs[action.OldTaskID]
 	if !ok {
-		return "", fmt.Errorf("plan: label: cleanup for spec_node_id %q has no same-batch close op for old bead %q and no removed event in the journal fold", action.SpecNodeID, action.OldBeadID)
+		return "", fmt.Errorf("plan: label: cleanup for spec_node_id %q has no same-batch close op for old bead %q and no removed event in the journal fold", action.SpecNodeID, action.OldTaskID)
 	}
 	return fmt.Sprintf("%s%s:%s", IdempotencyLabelPrefix, l.GitHead, closeOpID), nil
 }

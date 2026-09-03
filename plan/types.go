@@ -1,24 +1,33 @@
 package plan
 
-// ChangesetVersion is the wire-format version of changeset.json. Version 3
-// added the retarget op and the top-level absorbed array to the
-// vocabulary — a v2 consumer must refuse a version it does not know
-// rather than silently drop ops it cannot execute. Version 2 had already
-// dropped the ref:spec_node shape from the adapter-facing vocabulary; v3
-// keeps that: an op's deps and target reach the adapter as ref:op or
-// ref:bead only.
-const ChangesetVersion = 3
+// ChangesetVersion is the wire-format version of changeset.json. Version 4
+// retired the close-and-recreate step and its lineage dependency, dropped
+// the reserved label and tag op kinds, and renamed the task ref shape to
+// {"ref":"task","task_id":…} — a v3 consumer would resolve no v4 task ref
+// at all and must refuse the document rather than execute half of it.
+// Version 3 added the retarget op and the top-level absorbed array; version
+// 2 had already dropped the ref:spec_node shape from the adapter-facing
+// vocabulary, and v4 keeps that: an op's deps and target reach the adapter
+// as ref:op or ref:task only.
+//
+// This bump lands plan's wire shape ahead of the component rewrites that
+// consume it: the create/close/retarget action logic still speaks the pre-
+// task-lifecycle "obsolete, then recreate" shape pending ActionClassifier
+// (spexmachina-swvx.16), Resolver (spexmachina-swvx.19), ChangesetBuilder
+// (spexmachina-swvx.20) and IdempotencyLabeler (spexmachina-swvx.13); the
+// task-state artifact (--tasks, TaskReader) that replaces --beads/BeadReader
+// is spexmachina-swvx.14 and spexmachina-swvx.7. See spec/plan/flow_plan.md.
+const ChangesetVersion = 4
 
 // Op type vocabulary. Tool-agnostic — adapters for br, bd, GitHub Issues,
-// or Jira consume the same vocabulary. Label and tag are reserved for
-// future flows (e.g. cross-proposal tagging); no plan component emits
-// them yet.
+// or Jira consume the same vocabulary. Exactly the three kinds v4 emits:
+// the reserved label and tag kinds left the vocabulary with the bump to 4,
+// because a vocabulary is closed only when it lists what is actually
+// produced.
 const (
 	OpCreate   = "create"
 	OpClose    = "close"
 	OpRetarget = "retarget"
-	OpLabel    = "label"
-	OpTag      = "tag"
 )
 
 // spec_node_kind vocabulary carried by create ops. The closure is
@@ -36,11 +45,13 @@ const (
 )
 
 // Ref kind discriminator values. Each Ref is exactly one of these two —
-// the only two shapes v2 kept and v3 does not reopen: a dep that is
-// neither in-batch (ref:op) nor already tracked (ref:bead) is a plan
-// error at build time, never a deferred adapter-side lookup.
+// the only two shapes v2 kept and later versions do not reopen: a dep
+// that is neither in-batch (ref:op) nor already tracked (ref:task) is a
+// plan error at build time, never a deferred adapter-side lookup. v4
+// renames the tracked-task shape's kind from "bead" to "task" — see
+// Ref.TaskID.
 const (
-	RefBead = "bead"
+	RefTask = "task"
 	RefOp   = "op"
 )
 
@@ -86,24 +97,35 @@ const (
 	CleanupLabel           = "spex:cleanup"
 )
 
-// Ref encodes a forward-resolvable reference. Exactly one of BeadID or
-// OpID is set per Ref; omitempty keeps the JSON clean.
+// Ref encodes a forward-resolvable reference. Exactly one of TaskID or
+// OpID is set per Ref; omitempty keeps the JSON clean. v4 renamed the
+// pre-existing-task shape's kind from "bead" to "task" and its id field
+// from bead_id to task_id (spec/plan/flow_plan.md, "changeset.json
+// (output)").
 //
-//	{ "ref": "bead", "bead_id": "<id>" }   pre-existing bead
+//	{ "ref": "task", "task_id": "<id>" }   pre-existing task
 //	{ "ref": "op",   "op_id":   "<id>" }   another op in this changeset
 //
 // EdgeType is optional and carries the dep edge label ("blocks") on
 // obsolete+create and cleanup-create lineage refs.
+//
+// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's target v4 ref
+// shape carries no edge-type field at all — the lineage edge was the only
+// typed dep, and it leaves the vocabulary with the close-and-recreate step
+// once ChangesetBuilder (and EventBuilder, spexmachina-swvx.22) stop
+// needing it. EdgeType stays until that lands, so the field-rename this
+// bead lands does not also strand the still-in-use obsolete+create/cleanup
+// lineage mechanism mid-migration.
 type Ref struct {
 	Kind     string `json:"ref"`
-	BeadID   string `json:"bead_id,omitempty"`
+	TaskID   string `json:"task_id,omitempty"`
 	OpID     string `json:"op_id,omitempty"`
 	EdgeType string `json:"type,omitempty"`
 }
 
 // Idem carries the idempotency label the adapter matches against the
-// tracker before creating a bead. A pre-existing match yields a
-// was_existing=true receipt rather than a duplicate bead. Retarget ops
+// tracker before creating a task. A pre-existing match yields a
+// was_existing=true receipt rather than a duplicate task. Retarget ops
 // carry no Idem: updates are naturally idempotent, so there is nothing
 // to probe for — the run's modified-event label rides in Op.Labels
 // instead.
@@ -156,7 +178,7 @@ type AbsorbedEntry struct {
 	Reason string `json:"reason"`
 }
 
-// Changeset is the v3 output schema written to stdout or --out. Field
+// Changeset is the v4 output schema written to stdout or --out. Field
 // order is fixed: version, git_head, proposal, ops, absorbed. Ops are
 // emitted in the order the classifier's deterministic action order and
 // TopologicalSorter produced them — creates, then retargets, then
@@ -173,25 +195,25 @@ type Changeset struct {
 // builder-chain shape spec/plan/flow_plan.md's "ActionClassifier -> the
 // builder chain" section names, tabulated in full by
 // spec/plan/arch_action_classifier.md's "Interface" table. It carries
-// spec-graph ids, never bead ids: Resolver classifies DepSpecNodeIDs into
+// spec-graph ids, never task ids: Resolver classifies DepSpecNodeIDs into
 // Ref shapes three steps later in the same process, so this type crosses
 // no file boundary and no command seam.
 //
-// BeadID is the existing bead on an obsolete or retarget, empty on a
-// create. SpecHash is set on a create or retarget; OldBeadID is set on a
-// create that replaces an obsoleted bead. ChangeType ("modified" or
+// TaskID is the existing task on an obsolete or retarget, empty on a
+// create. SpecHash is set on a create or retarget; OldTaskID is set on a
+// create that replaces an obsoleted task. ChangeType ("modified" or
 // "removed") is set on an obsolete only. DepSpecNodeIDs is collected for
-// create and retarget actions only — an obsolete inherits its bead's
+// create and retarget actions only — an obsolete inherits its task's
 // existing graph position.
 type Action struct {
 	Type           string
-	BeadID         string
+	TaskID         string
 	Module         string
 	Node           string
 	NodeType       string
 	SpecNodeID     string
 	SpecHash       string
-	OldBeadID      string
+	OldTaskID      string
 	DepSpecNodeIDs []string
 	ChangeType     string
 	Reason         string

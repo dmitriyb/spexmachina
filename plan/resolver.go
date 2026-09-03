@@ -27,7 +27,7 @@ type Registration struct {
 // Shapes" and "Determinism"). First match wins:
 //
 //  1. batch holds the id (another create op in this same run) -> ref:op.
-//  2. Otherwise the fold holds a pairing for the id -> ref:bead, unless that
+//  2. Otherwise the fold holds a pairing for the id -> ref:task, unless that
 //     pairing's BeadStatus is "closed", in which case the dep is dropped —
 //     the work is already satisfied and needs no edge.
 //
@@ -47,7 +47,7 @@ func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLook
 			if p.BeadStatus == "closed" {
 				continue
 			}
-			refs = append(refs, Ref{Kind: RefBead, BeadID: p.TaskID})
+			refs = append(refs, Ref{Kind: RefTask, TaskID: p.TaskID})
 			continue
 		}
 		return nil, fmt.Errorf("plan: resolve: dep %s is neither an in-batch create nor tracked by the journal fold", dep)
@@ -93,7 +93,7 @@ func ResolveEpicAction(proposalRef string, fold FoldLookup, registration Registr
 // callers never call this for one.
 func ResolveParent(proposalRef string, fold FoldLookup, registration Registration, batch map[string]string) (Ref, error) {
 	if p, ok := fold.Lookup(proposalRef); ok {
-		return Ref{Kind: RefBead, BeadID: p.TaskID}, nil
+		return Ref{Kind: RefTask, TaskID: p.TaskID}, nil
 	}
 	if registration.EID == "" {
 		return Ref{}, fmt.Errorf("plan: resolve: proposal %q has no registered event in the journal and no existing epic task — run spex register first", proposalRef)

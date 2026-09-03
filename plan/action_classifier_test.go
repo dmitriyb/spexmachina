@@ -250,7 +250,7 @@ func TestClassifyUnmatched_AddedProducesCreateWithNewSpecNodeReason(t *testing.T
 	}
 	a := actions[0]
 	if a.Type != ActionCreate || a.Module != "plan" || a.Node != "CompX" || a.NodeType != "component" ||
-		a.SpecNodeID != f.CompX || a.SpecHash != "newhash" || a.BeadID != "" {
+		a.SpecNodeID != f.CompX || a.SpecHash != "newhash" || a.TaskID != "" {
 		t.Fatalf("unexpected action: %+v", a)
 	}
 	if a.Reason != "New spec node: plan/CompX" {
@@ -379,10 +379,10 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 		if obsolete == nil || create == nil {
 			t.Fatalf("want one create and one obsolete: %+v", actions)
 		}
-		if obsolete.BeadID != "spex-001" || obsolete.ChangeType != "modified" {
+		if obsolete.TaskID != "spex-001" || obsolete.ChangeType != "modified" {
 			t.Errorf("obsolete: %+v", *obsolete)
 		}
-		if create.OldBeadID != "spex-001" || create.SpecHash != "new" || create.BeadID != "" {
+		if create.OldTaskID != "spex-001" || create.SpecHash != "new" || create.TaskID != "" {
 			t.Errorf("create: %+v", *create)
 		}
 		if create.Reason != "Spec node modified (new): plan/CompX" {
@@ -403,7 +403,7 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 			t.Fatalf("want 1 retarget, got %+v", actions)
 		}
 		a := actions[0]
-		if a.BeadID != "spex-003" || a.SpecHash != "new" {
+		if a.TaskID != "spex-003" || a.SpecHash != "new" {
 			t.Errorf("retarget: %+v", a)
 		}
 		if a.Reason != "Spec node modified (retarget): plan/CompX" {
@@ -612,7 +612,7 @@ func TestClassifyOrphaned_ClosedYieldsObsoletePlusCleanupCreate(t *testing.T) {
 	if obsolete == nil || cleanup == nil {
 		t.Fatalf("want one obsolete and one create: %+v", actions)
 	}
-	if cleanup.OldBeadID != "spex-010" || cleanup.SpecHash != "" {
+	if cleanup.OldTaskID != "spex-010" || cleanup.SpecHash != "" {
 		t.Errorf("cleanup create: %+v", *cleanup)
 	}
 	if cleanup.Reason != "Code cleanup: plan/Legacy" {

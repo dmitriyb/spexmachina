@@ -515,8 +515,8 @@ func TestPlanCommand_S6_BeadsFlagDrivesCleanupGate(t *testing.T) {
 	wantClosed := map[string]bool{"task-existing": false, "task-existing2": false}
 	for _, op := range cs2.Ops {
 		if op.Type == plan.OpClose && op.Target != nil {
-			if _, ok := wantClosed[op.Target.BeadID]; ok {
-				wantClosed[op.Target.BeadID] = true
+			if _, ok := wantClosed[op.Target.TaskID]; ok {
+				wantClosed[op.Target.TaskID] = true
 			}
 		}
 	}
@@ -1415,8 +1415,8 @@ func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
 		if epicOpID == "" || newOp.Parent.OpID != epicOpID {
 			t.Errorf("want the parent ref to point at this run's synthesized epic op, got %+v (epic op id %q)", newOp.Parent, epicOpID)
 		}
-	case plan.RefBead:
-		if newOp.Parent.BeadID != "epic-task-1" {
+	case plan.RefTask:
+		if newOp.Parent.TaskID != "epic-task-1" {
 			t.Errorf("want the parent ref to point at the live epic task, got %+v", newOp.Parent)
 		}
 	default:

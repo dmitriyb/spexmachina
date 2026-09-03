@@ -139,7 +139,7 @@ func classifyOrphaned(o Orphaned) []Action {
 		Node:       rec.Name,
 		NodeType:   o.NodeType,
 		SpecNodeID: rec.SpecNodeID,
-		OldBeadID:  rec.TaskID,
+		OldTaskID:  rec.TaskID,
 		Reason:     fmt.Sprintf("Code cleanup: %s/%s", rec.Module, rec.Name),
 	}
 	return []Action{obsolete, cleanup}
@@ -246,7 +246,7 @@ func matchedNodeName(change merkle.ClassifiedChange, graph SpecGraph) string {
 // (transitive) edges. A test_section walks its describes array —
 // unconditionally, with no journal lookup and no bead-status filtering at
 // collection time; whether each described component's hash resolves to
-// ref:op, ref:bead, is dropped, or is a plan error is the Resolver's
+// ref:op, ref:task, is dropped, or is a plan error is the Resolver's
 // existing precedence, unchanged (spec/plan/arch_action_classifier.md,
 // "DepSpecNodeIDs Collection", rule 4). A data_flow action collects nothing
 // here — the data_flow add-on runs separately, and only ever targets
@@ -412,7 +412,7 @@ func obsoleteAction(module, node, nodeType, specNodeID, beadID, changeType strin
 	}
 	return Action{
 		Type:       ActionObsolete,
-		BeadID:     beadID,
+		TaskID:     beadID,
 		Module:     module,
 		Node:       node,
 		NodeType:   nodeType,
@@ -432,7 +432,7 @@ func createSuccessorAction(change merkle.ClassifiedChange, oldBeadID string, gra
 		NodeType:       change.NodeType,
 		SpecNodeID:     change.Key,
 		SpecHash:       change.NewHash,
-		OldBeadID:      oldBeadID,
+		OldTaskID:      oldBeadID,
 		DepSpecNodeIDs: depsFor(change, graph),
 		Reason:         fmt.Sprintf("Spec node modified (new): %s/%s", change.Module, name),
 	}
@@ -445,7 +445,7 @@ func retargetAction(change merkle.ClassifiedChange, rec Pairing, graph SpecGraph
 	name := matchedNodeName(change, graph)
 	return Action{
 		Type:           ActionRetarget,
-		BeadID:         rec.TaskID,
+		TaskID:         rec.TaskID,
 		Module:         change.Module,
 		Node:           name,
 		NodeType:       change.NodeType,
@@ -457,7 +457,7 @@ func retargetAction(change merkle.ClassifiedChange, rec Pairing, graph SpecGraph
 }
 
 // sortActions orders the final list deterministically by (Type, Module,
-// Node, BeadID, SpecNodeID) so that the same diff and bead state always
+// Node, TaskID, SpecNodeID) so that the same diff and bead state always
 // produce the same action list in the same order, regardless of input
 // order.
 func sortActions(actions []Action) {
@@ -472,8 +472,8 @@ func sortActions(actions []Action) {
 		if a.Node != b.Node {
 			return a.Node < b.Node
 		}
-		if a.BeadID != b.BeadID {
-			return a.BeadID < b.BeadID
+		if a.TaskID != b.TaskID {
+			return a.TaskID < b.TaskID
 		}
 		return a.SpecNodeID < b.SpecNodeID
 	})
