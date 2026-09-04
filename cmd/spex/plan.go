@@ -22,30 +22,30 @@ import (
 var hexNodeIDRe = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
 func newPlanCmd() *cobra.Command {
-	var proposal, gitHead, diffPath, beadsPath, absorbPath, outPath string
+	var proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath string
 
 	cmd := &cobra.Command{
 		Use:   "plan",
 		Short: "Compute the bead-action changeset from a merkle diff",
 		Long: `spex plan reads a merkle diff, refuses it if spex diff flagged it as
-incomplete, enriches the journal fold's pairings with live bead status from
-a caller-supplied --beads file, maps changed spec nodes to actions, and
+incomplete, enriches the journal fold's pairings with live task status from
+a caller-supplied --tasks file, maps changed spec nodes to actions, and
 composes changeset.json — one invocation, no intermediate document.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPlanE(cmd, proposal, gitHead, diffPath, beadsPath, absorbPath, outPath)
+			return runPlanE(cmd, proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath)
 		},
 	}
 
 	cmd.Flags().StringVar(&proposal, "proposal", "", "proposal ref (filename stem)")
 	cmd.Flags().StringVar(&gitHead, "git-head", "", "git HEAD SHA (7-40 hex chars)")
 	cmd.Flags().StringVar(&diffPath, "diff", "", "path to the diff document spex diff --json writes (default: stdin; '-' selects stdin explicitly)")
-	// TODO(bead:spexmachina-swvx.14): --beads/beadsPath is BeadReader
-	// (spexmachina-swvx.7's target for removal) standing in for
-	// spec/plan/flow_plan.md step 2's TaskReader/--tasks — the version-1
-	// task-state artifact listing only in-flight tasks. This bead adds the
-	// --tasks flag and TaskReader parser; --beads stays wired until then.
-	cmd.Flags().StringVar(&beadsPath, "beads", "", "tracker listing (br list --json or compatible)")
+	// TODO(bead:spexmachina-swvx.7): --beads/beadsPath is BeadReader, the
+	// pre-task-lifecycle tracker-listing input TaskReader/--tasks replaces
+	// (spec/plan/flow_plan.md step 2). Remove this flag and its wiring once
+	// spexmachina-swvx.7 lands and every caller has moved to --tasks.
+	cmd.Flags().StringVar(&beadsPath, "beads", "", "tracker listing (br list --json or compatible) [deprecated: use --tasks]")
+	cmd.Flags().StringVar(&tasksPath, "tasks", "", "task-state artifact: the version-1 document listing in-flight tasks (schema/task-state.schema.json)")
 	cmd.Flags().StringVar(&absorbPath, "absorb", "", "git-committed JSON list of {node, reason} cosmetic-modification marks")
 	cmd.Flags().StringVar(&outPath, "out", "", "changeset output path (default: stdout)")
 	_ = cmd.MarkFlagRequired("proposal")
@@ -53,7 +53,7 @@ composes changeset.json — one invocation, no intermediate document.`,
 	return cmd
 }
 
-func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorbPath, outPath string) error {
+func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath string) error {
 	if proposal == "" {
 		return planInputErr(fmt.Errorf("plan: --proposal is required"))
 	}
@@ -111,6 +111,27 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorb
 		beadStatus = make(map[string]string, len(beads))
 		for _, b := range beads {
 			beadStatus[b.ID] = b.Status
+		}
+	}
+	// --tasks joins onto the same live-status map --beads populates above:
+	// both feed Pairing.BeadStatus, and a --tasks entry overrides a --beads
+	// entry for the same task id (arch_task_reader.md's replacement input
+	// wins where the two overlap). Requiredness and the --beads removal
+	// belong to spexmachina-swvx.7, not here.
+	if tasksPath != "" {
+		data, err := os.ReadFile(tasksPath)
+		if err != nil {
+			return planInputErr(fmt.Errorf("plan: read tasks: %w", err))
+		}
+		tasks, err := plan.ReadTasksBytes(data)
+		if err != nil {
+			return planInputErr(err)
+		}
+		if beadStatus == nil {
+			beadStatus = make(map[string]string, len(tasks))
+		}
+		for _, tsk := range tasks {
+			beadStatus[tsk.ID] = tsk.Status
 		}
 	}
 
