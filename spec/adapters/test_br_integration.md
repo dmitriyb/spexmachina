@@ -70,7 +70,8 @@ if ! command -v br >/dev/null; then
     exit 0
 fi
 
-TESTS_DIR="$(dirname "$0")/testdata/integration"
+SCRIPTS="$(cd "$(dirname "$0")" && pwd)"
+TESTS_DIR="$SCRIPTS/testdata/integration"
 for case in "$TESTS_DIR"/*/; do
     name=$(basename "$case")
     echo "--- $name ---"
@@ -81,17 +82,19 @@ for case in "$TESTS_DIR"/*/; do
     br init >/dev/null 2>&1
 
     if [[ -f seed.sh ]]; then
-        ./seed.sh
-    fi
-
-    if [[ -f expected_tasks.json ]]; then
-        ./export-br.sh > tasks.json
-        diff <(jq -S . tasks.json) <(jq -S . expected_tasks.json)
+        ./seed.sh    # may write the ids it created into changeset.json
     fi
 
     if [[ -f changeset.json ]]; then
-        ./apply-br.sh < changeset.json > receipts.json
-        diff <(jq -S . receipts.json) <(jq -S . expected_receipts.json)
+        "$SCRIPTS/apply-br.sh" changeset.json > receipts.json
+        # br assigns task ids the fixture cannot predict: compare with
+        # every non-empty task_id masked to the __ANY__ the expectation carries.
+        diff <(jq -S '.ops |= map(.task_id |= (if . == "" then . else "__ANY__" end))' receipts.json) \
+             <(jq -S . expected_receipts.json)
+    else
+        # No changeset: an export-half case. The argument form writes
+        # tasks.json for verify.sh; the ids are the seed's, never a fixture's.
+        "$SCRIPTS/export-br.sh" tasks.json
     fi
 
     if [[ -f verify.sh ]]; then
@@ -105,11 +108,11 @@ echo "ok"
 
 ## Fixtures
 
-- `scripts/testdata/integration/export/` — seed.sh + expected_tasks.json.
-- `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one.
+- `scripts/testdata/integration/export/` — seed.sh + verify.sh. There is no `expected_tasks.json`: real `br` assigns task ids the fixture cannot predict, so an exact diff of the export is unreachable, and verify.sh checks the document against the ids the seed recorded instead. This case is the one place the script's `<tasks.json>` argument form runs under test — the mock-mode export suite captures stdout.
+- `scripts/testdata/integration/happy_path/` — seed.sh + changeset.json + expected_receipts.json + verify.sh. The seed establishes what the scenario presupposes: the task the close op cancels — its id written into `changeset.json`'s close target in place of a placeholder, since the fixture cannot know it — and the finished predecessor the modified node's new create must not depend on. `expected_receipts.json` carries `__ANY__` wherever a br-assigned id lands. `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one, and runs the shipped scripts from `scripts/` rather than copies.
 - `scripts/testdata/integration/close_removed/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
 
-The partial-run, re-run-idempotency and both-ref-shape scenarios above have no integration fixture, and neither does the retarget path; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.
+The partial-run, re-run-idempotency and both-ref-shape scenarios above, and the retarget path, are owed integration fixtures of the same shape and have none yet. The mock-mode suite under `scripts/testdata/{idempotency,substitution}/` covers them meanwhile against the stand-in `br`, which does not discharge what this test claims: the requirement asks for those cases against a real sandbox.
 
 ## Non-Responsibilities
 

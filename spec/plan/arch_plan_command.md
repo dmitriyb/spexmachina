@@ -41,7 +41,7 @@ Before running the builder:
 
 ## Wiring
 
-PlanCommand assembles the run and then gets out of the way. The enriched pairings and the diff's changes — marked ones already withheld — go to [[972faea162a6|NodeMatcher]], which correlates them by direct identity-hash lookup; its three lists go to [[8aa1ab5ac102|ActionClassifier]], which decides the create, close and retarget actions and collects `DepSpecNodeIDs` — or refuses the run, exit 2, naming every claimed (`in_progress`) task whose node changed or was removed; the actions, the fold, the registration, the spec graph, the composed absorbed entries, the `--git-head` SHA and the `--proposal` ref go to [[4c1146bb7287|ChangesetBuilder]], which owns everything from there.
+PlanCommand assembles the run and then gets out of the way. The enriched pairings and the diff's changes — marked ones already withheld — go to [[972faea162a6|NodeMatcher]], which correlates them by direct identity-hash lookup; its three lists go to [[8aa1ab5ac102|ActionClassifier]], which decides the create, close and retarget actions and collects `DepSpecNodeIDs` — or refuses the run, exit 2, naming every claimed (`in_progress`) task whose node changed or was removed; the actions, the fold, the registration, the spec graph, the composed absorbed entries, the resolved profile's plan-relevant list, the `--git-head` SHA and the `--proposal` ref go to [[4c1146bb7287|ChangesetBuilder]], which owns everything from there. The list is the same declaration the classifier's gate read; here it is handed on as the layer order.
 
 The registration is resolved here rather than inside the builder for the same reason the fold is: the command is the one place permitted to know where the journal lives — an answer it takes from the lifecycle pre-flight rather than computing — and how it parses, and everything downstream of it receives finished answers. Neither the builder nor its three subordinates opens the journal file.
 
@@ -53,10 +53,12 @@ Once the builder answers, the command has one job left: serialize the changeset 
 
 - `0` — success; changeset written.
 - `1` — input validation error (bad or missing flags, `--tasks` included; malformed JSON; diff carries errors; `--tasks` unreadable or failing the task-state schema). Stderr names the flag or the input that failed.
-- `2` — contract refusal (a claimed task's node changed or was removed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent). Stderr carries the error with the spec_node_ids or task ids implicated.
+- `2` — contract refusal (a claimed task's node changed or was removed, an invalid absorb entry, a dep cycle, a create whose kind the profile's plan-relevant list does not place, a dep pointing at a later layer's op, an unresolvable dep or parent). Stderr carries the error with the spec_node_ids, kinds or task ids implicated.
 - not a spex project — the pre-flight's own stable exit code, distinct from both codes above: the directory was never initialised (naming `spex init`), or its snapshot or journal is missing or unparseable (broken, naming `spex doctor`). A malformed journal can never take `1`: the fold is reached only after the pre-flight has resolved a readable journal.
 
 Failure modes never write a partial changeset.
+
+One condition warns and does not fail: a resolved profile whose plan-relevant list is empty. Stderr says that no node type produces tasks, so the changeset carries no create op and an adapter run creates none; the run then proceeds as usual — exit 0, changeset written — because the spec side of the tool is whole without tasks, and a project may use it that way.
 
 ## Composability
 

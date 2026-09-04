@@ -9,7 +9,7 @@ These tests verify that the embedding works correctly, that the composed schemas
 ### Build Preconditions
 
 - The `schema` package compiles successfully (`go build ./schema/...`).
-- The `go:embed` directive references `project.schema.json`, `module.schema.json`, `journal-line.schema.json` and `task-state.schema.json`, all of which exist in the `schema/` directory at build time.
+- The `go:embed` directive references `project.schema.json`, `module.schema.json`, `journal-line.schema.json`, `task-state.schema.json` and `defaultProfile.json`, all of which exist in the `schema/` directory at build time.
 - No external file system access is needed at runtime — schemas are baked into the binary.
 
 ### Test Fixtures
@@ -219,7 +219,7 @@ The current API uses fixed function names (`ProjectSchema`, `ModuleSchema`) rath
 **Call:** `data, err := schemaFS.ReadFile("nonexistent.schema.json")`
 **Expected:** `err` is non-nil (file not found in embed FS). `data` is nil or empty.
 
-**Verifies:** The embed FS only contains the four expected schema files and does not silently serve other content.
+**Verifies:** The embed FS only contains the five expected documents and does not silently serve other content.
 
 ### E6: Schema files reference correct $defs internally
 
@@ -292,7 +292,7 @@ These scenarios cover profile resolution and the composition acceptance criterio
 ### P1: Absent profile file resolves to the default profile
 
 **Steps:** Resolve the profile over a spec directory containing no `spec/profile.json`.
-**Expected:** Resolution succeeds; the resolved profile declares exactly the five built-in node types (requirement, component, data_flow, test_section, api) with today's per-type role flags — the completeness trigger on requirement, the name-declarable role on exactly component and api — each type's field declarations, reference kinds included, with the `cyclic` flag omitted on every one and the hash-participation flag reproducing the retired allowlists exactly, plus the three coverage links, the plan-relevant set, the per-type impact-level mapping, and refresh's absorbable directions. The resolved form is interned: each node type and field is resolved once, consumers compare resolved references rather than strings, and iteration order is declaration order.
+**Expected:** Resolution succeeds; the resolved profile declares exactly the five built-in node types (requirement, component, data_flow, test_section, api) with today's per-type role flags — the completeness trigger on requirement, the name-declarable role on exactly component and api — each type's field declarations, reference kinds included, with the `cyclic` flag omitted on every one and the hash-participation flag reproducing the retired allowlists exactly, plus the three coverage links, the plan-relevant list in its declared order (data_flow, component, test_section), the per-type impact-level mapping, and refresh's absorbable directions. The resolved form is interned: each node type and field is resolved once, consumers compare resolved references rather than strings, and iteration order is declaration order.
 **Verifies:** Absence of the file is the supported default, not an error — an existing project adopts the profile mechanism by doing nothing.
 
 ### P2: Composed schemas equal the shipped static documents (golden test)
@@ -325,7 +325,7 @@ These scenarios cover profile resolution and the composition acceptance criterio
 ### P7: Profile validation names each defective field declaration
 
 **Steps:** Resolve, one at a time, profiles carrying: a field with an unknown kind; a reference field naming an undeclared target type; an enumeration on a non-text field; bounds on a non-integer field; a duplicate field name within one type; a field name colliding with an envelope field (`id`).
-**Expected:** Each resolution fails with one distinct early error naming the defective declaration. No composed schema is produced and no downstream check runs. The v1 rule stands unchanged: a profile attempting to declare a fixed point fails validation the same way.
+**Expected:** Each resolution fails with one distinct early error naming the profile file and the defective declaration. No composed schema is produced and no downstream check runs. The v1 rule stands unchanged: a profile attempting to declare a fixed point fails validation the same way.
 
 ### P8: profile_version outside the supported range fails early
 
@@ -336,6 +336,11 @@ These scenarios cover profile resolution and the composition acceptance criterio
 
 **Steps:** Read the embedded `defaultProfile.json` bytes, parse them, and resolve them through the same validation the file-backed path uses. Separately, copy the document to `spec/profile.json` in a fixture directory and resolve over it.
 **Expected:** Both resolutions succeed and yield identical resolved profiles — the embedded default is not a privileged code path but a document in the source tree, identical in format to what a project may commit, declaring `profile_version` 1. Composition from either yields the same composed schemas, so P2's golden comparison holds over both.
+
+### P10: The plan-relevant list is validated as an ordered list of declared types
+
+**Steps:** Resolve, one at a time, profiles identical to the default declaration except for `plan_relevant`: one listing `component` twice; one naming `endpoint` where no `endpoint` type is declared; one listing the default's three types in the order `test_section, component, data_flow`; one listing nothing at all.
+**Expected:** The first two fail with one early error naming the profile file and the offending entry, exactly as P7's field-declaration defects do, and nothing downstream runs. The third and fourth resolve: the order is the profile's to declare, and an empty list is a legal declaration that no type produces tasks. The resolved profile exposes the list in the declared order — the order, not the membership alone, is what plan reads — so the third case's resolved profile differs from the default's.
 
 ## JournalLineSchema Scenarios
 

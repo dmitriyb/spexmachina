@@ -14,7 +14,8 @@ implementation task.
 ## Setup
 
 - Use the in-code fixtures described under Fixtures below: a builder environment wrapping a fake
-  journal fold, a per-scenario registration (an eid, or absent) and a fake spec graph.
+  journal fold, a per-scenario registration (an eid, or absent), a fake spec graph, and a
+  plan-relevant list — the default profile's unless the scenario says otherwise.
 - Set `--git-head` to a fixed SHA string for byte-identical output assertions.
 
 ## Scenarios
@@ -67,6 +68,33 @@ implementation task.
   - A's create has empty `deps`.
   - B's create has `deps: [{"ref":"op","op_id":"<A op>"}]`.
   - C's create has `deps: [{"ref":"op","op_id":"<B op>"}]`.
+  - The batch holds components only, so no layer edge joins them: the deps are the spec graph's
+    alone.
+
+### Layer edges follow the profile's order
+
+- Under the default profile, a batch of: the proposal epic create, two data_flow creates F1 and
+  F2, three component creates A, B, C where B uses A and only A appears in F1's `uses`, and one
+  multi-component test_section create T describing B. Assert:
+  - the file order is the epic, then F1 and F2 (lex order), then A, B, C, then T.
+  - F1 and F2 carry no deps: the epic is no layer's predecessor, so the first non-empty layer
+    has spec-graph deps alone.
+  - A's `deps` is exactly `[{"ref":"op","op_id":"<F1>"}, {"ref":"op","op_id":"<F2>"}]` — F1
+    once, although the add-on and the layer edge both name it; B's is F1, F2, A; C's is F1, F2:
+    every create of the previous layer, in file order, plus the spec graph's own.
+  - T's `deps` is A, B, C as `ref:op` — the whole component layer, not only the B it describes —
+    and names neither flow: adjacent layers only.
+- Rerun with F1 and F2 removed from the batch and assert A, B and C carry spec-graph deps alone
+  while T still carries A, B, C: the previous *non-empty* layer is the predecessor, and an empty
+  layer is skipped, not waited on.
+- Rerun under a profile whose plan-relevant list reads `component, data_flow, test_section` and
+  assert `Build()` returns an error naming A and F1: the add-on makes A depend on F1, which now
+  sits in a later layer, and a forward `ref:op` is refused rather than emitted.
+- Rerun under a profile that appends an `endpoint` type to the list, with one `endpoint` create
+  E in the batch, and assert E is emitted last among the non-cleanup creates with
+  `spec_node_kind: "endpoint"` and deps naming T as `ref:op`; then strike `endpoint` from the
+  list, keep the create, and assert `Build()` errors naming the kind — the profile places kinds,
+  and an unplaced one is refused.
 
 ### Live-task dep resolves to ref:task
 
@@ -155,8 +183,10 @@ implementation task.
   - `spec_node_kind: "cleanup"`.
   - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"`
     form).
-  - no `deps` naming the finished task — the cleanup's tie to the node is its label and its
-    `task_created` referent, not a tracker edge — and no `labels` key: what marks the task as
+  - `deps` empty — the fixture holds nothing else for the layer edges to name; the "Cleanup layer
+    waits" scenario below covers them — and in any batch nothing naming the finished task: the
+    cleanup's tie to the node is its label and its `task_created` referent, not a tracker edge.
+    No `labels` key: what marks the task as
     cleanup tracker-side is nothing at all, because cleanup classification is answered by the
     journal (the task's `task_created` references a `removed` event), and `Op.Labels` is
     populated only on retargets.
@@ -168,6 +198,23 @@ implementation task.
   - The changeset carries no close op naming the removed node at all.
   - `priority: 3` (`plan.FallbackPriority`).
 
+### Cleanup layer waits for the batch's last layer and its retargets
+
+- A batch of: the proposal epic create, two component creates, one multi-component test_section
+  create T, one retarget of open task `spexmachina-hun`, and two cleanup actions
+  (`Code cleanup: m/X`, `Code cleanup: m/Y`). Assert:
+  - the two cleanup ops are the last creates, their order decided by the lex tiebreak on
+    `spec_node_id`.
+  - each cleanup's `deps` is exactly
+    `[{"ref":"op","op_id":"<T>"}, {"ref":"task","task_id":"spexmachina-hun"}]` — the previous
+    non-empty layer is the test_section layer alone, the components being two layers back, and
+    the retarget's target rides beside it.
+  - neither cleanup names the other: cleanups delete independently.
+- Rerun with T removed and assert each cleanup names the two component creates instead: the
+  layer before the cleanups is whichever non-empty layer is nearest.
+- Rerun with a batch holding one cleanup action and nothing else, and assert its `deps` is empty:
+  what landed in an earlier run is outside the batch and is not named.
+
 ### Cleanup create for a prior-batch removal
 
 - The journal's latest change event for the node is a `removed` event (eid `E1`, from an earlier
@@ -175,24 +222,32 @@ implementation task.
 - Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
   this op — so a re-run at a moved HEAD still carries the label of the removal it answers, and
   label and `task_created` referent stay one fact across runs.
-  - `deps` is empty: no lineage edge to the finished task.
+  - `deps` names nothing for the finished task — empty here because the cleanup is the whole
+    batch.
   - `priority: 3` (`plan.FallbackPriority`).
 - Vary the fixture so the node's `removed` event `E1` is followed by an `added` event (the node
   was re-added and is now removed a second time): assert the label is this op's own
   `spex:<git_head>:<op_id>`, not `spex:E1`. The fold answers only when the removal is the
   node's latest state; an older removal in the lineage is history, not a referent.
 
-### Op id numbering across a batch mixing every kind
+### Op ids are canonical keys across a batch mixing every kind
 
-- One batch carrying all of it together: two conventional creates, one cleanup create for a
-  removed node whose task is finished, one retarget, and two closes — a removal close for a
-  node whose task is open, and a fold-back close on a live test_section.
-- Assert op ids run from `op-1` in creates → retargets → closes order, with no gap and no reuse,
-  zero-padded to the digit width of the total op count across all three kinds.
+- One batch carrying all of it together: a component create and a data_flow create, one cleanup
+  create for a removed node whose task is finished, one retarget, and two closes — a removal
+  close for a node whose task is open, and a fold-back close on a live test_section.
+- Assert every op_id is `op-<kind>-<key>`: `op-component-<hash>` and `op-data_flow-<hash>` for
+  the conventional creates, `op-cleanup-<hash>` for the cleanup, `op-retarget-<hash>` for the
+  retarget, `op-close-<task_id>` for each close — and `op-proposal_epic-<proposal ref>` for the
+  epic when one is emitted. No id encodes a position, and no two ids collide.
+- Assert the file order is still creates → retargets → closes, the creates layered, so the ids
+  and the order are two facts, not one.
+- Add a second component create to the batch and rebuild: every op already present keeps its
+  op_id byte for byte, so the eids ingest derives from `(git_head, op_id)` still name the same
+  events.
 - Assert the cleanup create's `idempotency.label` embeds the cleanup op's own `op_id` as read out
   of the emitted document, and that no label anywhere in the document embeds a close op's id:
   every label is derived from the op that carries it or read from the fold, never predicted
-  from where another block of ops will be numbered.
+  from another op.
 
 ### Cross-component scenario: Resolver + Sorter + Labeler + Builder produce byte-identical output across runs
 
@@ -200,8 +255,9 @@ implementation task.
   live-task dep, and one retarget), identical journal, identical spec graph, identical
   `--git-head`. Run the builder twice in two separate processes.
 - **Components exercised together**: `Resolver` classifies each dep into ref:op or ref:task;
-  `TopologicalSorter` orders the create ops — proposal epic first, then in-batch dep
-  predecessors, with lex-tiebreak among independent ops; `IdempotencyLabeler` stamps each create's
+  `TopologicalSorter` orders the create ops — proposal epic first, then layer by layer in the
+  profile's order, in-batch dep predecessors first inside each, with lex-tiebreak among
+  independent ops; `IdempotencyLabeler` stamps each create's
   label with its referent event's eid; `ChangesetBuilder` composes the final changeset with
   canonical field order, retarget ops and the absorbed array included.
 - **Assertions**:
@@ -240,25 +296,26 @@ implementation task.
   - `Builder.Build()` returns a non-nil error naming both spec_node_ids in the cycle.
   - No partial `changeset.json` is written (Builder either writes the full file or no file).
 
-### Cross-component scenario: spec_node_kind per declared type comes from the profile
+### Cross-component scenario: spec_node_kind and layer per declared type come from the profile
 
 - **Setup**: an action batch carrying one create per plan-relevant node type, built once under
   the default profile and once under a profile declaring an additional plan-relevant `endpoint`
-  type.
+  type, appended to its list, with one `endpoint` create in the batch.
 - **Components exercised together**: ChangesetBuilder fills each op's `spec_node_kind` from the
-  action's node type; the profile declares only which types are plan-relevant — no tracker types.
+  action's node type and adds the layer edges; TopologicalSorter layers the creates by the
+  profile's list; the profile declares which types are plan-relevant and in what order — no
+  tracker types.
 - **Assertions**:
-  - Under the default profile, every op's `spec_node_kind` matches today's vocabulary exactly —
-    the output is byte-identical to the pre-profile builder's over the same batch.
-  - Under the extended profile, `Build()` returns an error naming the `endpoint` kind and
-    writes no changeset: TopologicalSorter tiers only the built-in kind vocabulary and refuses
-    a batch holding a create whose spec node kind belongs to no tier (per
-    `arch_topological_sorter.md`), so a profile-declared plan-relevant type outside that
-    vocabulary reaches it as an untierable create. ChangesetBuilder itself copies
-    `spec_node_kind` from the action's node type verbatim and validates nothing against the
-    vocabulary — the refusal is the sorter's, surfaced through `Build()`. Extending the tier
-    assignment to profile-declared types is a change to the sorter's own contract, made in the
-    authoring loop, not something this component can deliver.
+  - Under the default profile, every op's `spec_node_kind` matches today's vocabulary exactly,
+    and the layers run data_flow, component, test_section.
+  - Under the extended profile, `Build()` succeeds: the `endpoint` create is emitted with
+    `spec_node_kind: "endpoint"`, last among the non-cleanup creates, its deps naming every
+    test_section create as `ref:op`. ChangesetBuilder copies `spec_node_kind` from the action's
+    node type verbatim and validates nothing against a vocabulary of its own — the placement is
+    the list's.
+  - Under the extended profile with `endpoint` struck from the list but the create still in the
+    batch, `Build()` returns an error naming the kind and writes no changeset: the sorter
+    refuses a create the list does not place, surfaced through `Build()`.
 
 ## Fixtures
 

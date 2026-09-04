@@ -9,7 +9,7 @@ The tracker's own name for what it manages never enters this contract. The scrip
 ### Export half
 
 - Read the tracker's listing — `br list --json --all --limit 0`, status-unfiltered and unbounded because `br list`'s defaults hide finished tasks and cap the row count — and project it onto the version-1 task-state document: keep only tasks whose status is `open` or `in_progress`, carry each one's id as `task_id` and its status verbatim, drop every other field.
-- Write `{"version": 1, "tasks": [...]}` to stdout or `$1`. A tracker with nothing in flight yields an empty `tasks` array, not an absent file and not an error.
+- Write `{"version": 1, "tasks": [...]}` to stdout or `$1`. A tracker with nothing in flight yields an empty `tasks` array, not an absent file and not an error. A failure of the listing itself exits 1 and writes no document — not an empty one — so that `spex plan` refuses for want of its required input rather than reading every task as finished.
 - Own the tracker-format boundary in the inbound direction: a change to `br list`'s output shape is a change to this script and never to the binary, because the document it writes is validated by plan against `schema/task-state.schema.json`, and a field that leaked through would fail there.
 
 ### Apply half
@@ -106,7 +106,7 @@ Two consequences follow, and both are contract rather than convention:
 
 ## Op Translation
 
-The adapter maps changeset op fields to `br` subcommand flags. Three of those mappings are contract rather than incidental detail, because the obvious reading of the changeset gets each of them wrong:
+The adapter maps changeset op fields to `br` subcommand flags. Four of those mappings are contract rather than incidental detail, because the obvious reading of the changeset gets each of them wrong:
 
 ### `spec_node_kind` → `br --type`
 
@@ -168,7 +168,7 @@ If the adapter crashes mid-run, partial receipts are lost — the reference adap
   "status": "complete | partial",
   "ops": [
     {
-      "op_id": "op-0001",
+      "op_id": "op-component-a1b2c3d4e5f6",
       "status": "ok | skipped | error",
       "task_id": "<the task reached, or empty if none was>",
       "was_existing": true,

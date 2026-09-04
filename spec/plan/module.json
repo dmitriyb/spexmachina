@@ -96,7 +96,14 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "name": "Topological ordering within type levels",
-      "description": "Ops are emitted in an order that respects type tiers (proposal epic first, then features and data_flow tasks, then multi-component test tasks) and respects spec-graph dependencies within each tier. When new task B depends on new task A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. Same-tier ties break deterministically by spec_node_id."
+      "description": "Create ops are emitted layer by layer: the proposal epic first, then one layer per plan-relevant node type in the order the resolved profile's plan-relevant list declares them, then the cleanups last; within a layer, spec-graph dependencies order the ops and ties break deterministically by spec_node_id. When new task B depends on new task A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. A create whose kind the list does not place is refused with an error naming the kind, and a dep that points at a later layer's op with an error naming both ops — never a silently reordered file. The op_id an op carries is derived from its canonical key, not its position, so reordering the list moves ops in the file and renames none."
+    },
+    {
+      "id": "abfb10394fdd",
+      "preq_id": "81f8102ae1b5",
+      "type": "functional",
+      "name": "Layer order as blocking edges",
+      "description": "Every create op depends, as ref:op, on every create op of the previous non-empty layer, in addition to the deps its spec-graph edges resolve to — adjacent layers only, since the tracker's blocking is transitive — so the profile's plan-relevant order holds in the tracker and not only in the changeset file. The proposal epic is no layer's predecessor: it is every create's parent, and an edge on it would clear only when the epic closes. The cleanup layer, last by rule, additionally names each retarget op's target task as ref:task, because a retarget is the batch's work too and the code a cleanup deletes may be called until that work lands. The edges are cycle-free by construction — every one points at an earlier layer — and the cost accepted is over-waiting: a task waits for the whole previous layer, never for less than the nodes it relates to."
     },
     {
       "id": "ab7176690bfb",
@@ -197,7 +204,7 @@
     {
       "id": "8aa1ab5ac102",
       "name": "ActionClassifier",
-      "description": "Determines the action for each matched or unmatched spec node using the state transition table — two decisions on one bounded input, the task-state artifact. added→create; a modified node — or a matched added one with differing hashes — splits on the live pairing's status: open→retarget, in_progress→refuse the run, absent from the artifact→one plain create with no close and no lineage; a matched change whose pairing already records the change's current after hash is already tracked and yields no action. A removed node's pairing splits the same way: open→close, in_progress→refuse, absent→cleanup create, phrased from the journal's removed event — the surviving record of the node's name, kind and module. For create and retarget actions, collects DepSpecNodeIDs — the list of spec_node_ids the task will depend on — from component uses (direct), transitive requires_module edges, and, for a test_section node, its describes array (unconditional; the Resolver filters). Task-id resolution is NOT performed here; it belongs to the Resolver. Gates task creation by node type: the gate admits module, component, data_flow and test_section and skips every other node type, but no change ever carries node_type=module, so that entry of the admitted set is unreachable; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature task, if len(describes) >= 2 a cross-component test task is produced. Data_flow nodes always produce a task.",
+      "description": "Determines the action for each matched or unmatched spec node using the state transition table — two decisions on one bounded input, the task-state artifact. added→create; a modified node — or a matched added one with differing hashes — splits on the live pairing's status: open→retarget, in_progress→refuse the run, absent from the artifact→one plain create with no close and no lineage; a matched change whose pairing already records the change's current after hash is already tracked and yields no action. A removed node's pairing splits the same way: open→close, in_progress→refuse, absent→cleanup create, phrased from the journal's removed event — the surviving record of the node's name, kind and module. For create and retarget actions, collects DepSpecNodeIDs — the list of spec_node_ids the task will depend on — from component uses (direct), transitive requires_module edges, and, for a test_section node, its describes array (unconditional; the Resolver filters). Task-id resolution is NOT performed here; it belongs to the Resolver. Gates task creation by node type: the gate admits the types the resolved profile's plan-relevant list names — data_flow, component and test_section under the default — and skips every other node type; test_section is additionally gated by its describes array length — if len(describes) == 1 the test is bundled with that component's feature task, if len(describes) >= 2 a cross-component test task is produced. Data_flow nodes always produce a task.",
       "content": "arch_action_classifier.md",
       "implements": [
         "de42d9efa750",
@@ -251,7 +258,7 @@
         "26b2fdc6e7ea",
         "7f275787df34",
         "77f5182ac5f7",
-        "049e8ae9cc51"
+        "049e8ae9cc51", "abfb10394fdd"
       ],
       "uses": [
         "8aa1ab5ac102",

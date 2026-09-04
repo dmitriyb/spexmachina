@@ -73,7 +73,7 @@ $ spex map context a1b2c3d4e5f6
   "test_files": ["spec/plan/test_classification.md"],
   "flow_files": ["spec/plan/flow_plan.md"],
   "module_file": "spec/plan/module.json",
-  "eid": "cafe1234:op-7",
+  "eid": "cafe1234:op-component-a1b2c3d4e5f6",
   "event": "modified",
   "before_head": "beef5678",
   "after_head": "cafe1234"

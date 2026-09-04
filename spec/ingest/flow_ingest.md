@@ -97,19 +97,19 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
   "status": "complete",
   "ops": [
     {
-      "op_id": "op-0001",
+      "op_id": "op-component-a1b2c3d4e5f6",
       "status": "ok",
       "task_id": "spexmachina-abc",
       "was_existing": false
     },
     {
-      "op_id": "op-0002",
+      "op_id": "op-component-b2c3d4e5f6a1",
       "status": "ok",
       "task_id": "spexmachina-def",
       "was_existing": true
     },
     {
-      "op_id": "op-0003",
+      "op_id": "op-component-c3d4e5f6a1b2",
       "status": "error",
       "task_id": "",
       "error": "br create exited 1: invalid priority"
