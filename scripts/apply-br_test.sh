@@ -46,7 +46,6 @@ MOCK_BR="$ROOT/testdata/mock_br.sh"
 # itself — needed for scenarios (re-run idempotency) whose setup IS a prior
 # adapter run, not raw br state.
 export SPEX_ADAPTER_SCRIPT="$SCRIPT"
-export SPEX_EXPORT_SCRIPT="$EXPORT_SCRIPT"
 
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq not on PATH — cannot run adapter tests" >&2
