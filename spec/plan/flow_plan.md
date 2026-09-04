@@ -126,7 +126,7 @@ digraph plan_internals {
    here, exit 2.
 5. **Order.** [[659abe167891|TopologicalSorter]] partitions the create actions
    by tier — the proposal epic, then components and data_flows, then
-   multi-component test sections — and runs Kahn's algorithm inside each tier
+   multi-component test sections, then cleanups — and runs Kahn's algorithm inside each tier
    with a lex tiebreak on `spec_node_id`. The op ids, and the
    spec_node_id-to-op_id map the later steps need, are assigned from that order
    by ChangesetBuilder once the retarget and close ops have been counted.
@@ -139,13 +139,14 @@ digraph plan_internals {
    an epic keys the proposal's `registered` event read from the run's
    registration. A retarget's event label follows the same derivation and
    rides in its `labels` array.
-7. **Resolve the references.** [[e9a3b1b85953|Resolver]] writes each dep —
-   create and retarget alike — as `ref:op` or `ref:task` (a finished task's dep
+7. **Resolve the references.** [[e9a3b1b85953|Resolver]] writes each
+   `DepSpecNodeIDs` entry — create and retarget alike — as `ref:op` or `ref:task` (a finished task's dep
    is dropped; an unresolvable dep is a plan error, not a deferred shape),
    points every non-epic create's parent at the proposal epic, and walks
    implements → preq_id → priority for each create's priority number.
 8. **Compose and write.** [[4c1146bb7287|ChangesetBuilder]] assembles the
-   create ops, appends the retarget ops and one close op per close action —
+   create ops — composing each cleanup's deps from the batch's other ops, since
+   a cleanup action carries no `DepSpecNodeIDs` — appends the retarget ops and one close op per close action —
    target and reason alone, no labels — writes the
    absorbed entries PlanCommand composed into the top-level `absorbed` array,
    and answers with the finished v4 changeset in canonical field order.

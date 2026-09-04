@@ -34,9 +34,9 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Create: cleanup task production
 
-- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:E1"` (the eid of the removal event the cleanup answers), `title: "Code cleanup: m/X"`, no `labels` key, no `deps`, `priority: 3`.
+- Changeset create op with `spec_node_kind: "cleanup"`, `idempotency.label: "spex:E1"` (the eid of the removal event the cleanup answers), `title: "Code cleanup: m/X"`, no `labels` key, no `deps` (the changeset holds no other op for the cleanup to wait on), `priority: 3`.
 - br sandbox empty.
-- Expected: idempotency check via `br list --json --all --limit 0 --label spex:E1` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:E1 --type task --json --priority 3` — no `--deps` flag at all, because the cleanup carries no lineage edge to the finished task it follows, and no `br update` — a cleanup create carries no `op.Labels` to apply. Receipt `status=ok`, `was_existing=false`, `task_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task`, `labels` contains exactly `spex:E1`, and no dependency.
+- Expected: idempotency check via `br list --json --all --limit 0 --label spex:E1` finds nothing → adapter invokes `br create --title "Code cleanup: m/X" --labels spex:E1 --type task --json --priority 3` — no `--deps` flag at all, because the changeset holds no other op for the cleanup to wait on and the finished task it follows is never named, and no `br update` — a cleanup create carries no `op.Labels` to apply. Receipt `status=ok`, `was_existing=false`, `task_id=<new>`. After the run, `br show <new> --json` returns `issue_type=task`, `labels` contains exactly `spex:E1`, and no dependency.
 - Rationale: what marks the task as cleanup bookkeeping is the journal, not a tracker label or edge — its receipt pairs with the removal event it answers rather than a fresh change event, and "is this task cleanup?" is answered by the `removed` event its `task_created` references; the idempotency label is that removal event's own eid, so the linkage key and the receipt's referent are one fact. Type `task` (not `feature` derived from the underlying `component` kind) marks cleanup as bookkeeping work.
 
 ### Create: cleanup task re-run is idempotent

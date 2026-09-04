@@ -6,7 +6,7 @@ Orders the create ops within a batch so every in-batch dependency comes before i
 
 [[483fdc961d3e|Order is decided on two levels at once]], the outer one by node kind and the inner one by the spec graph:
 
-1. **Type tier** (outer): proposal epic first, then features + data_flow tasks, then multi-component test tasks. Retarget and close ops sit after all creates in one fixed order — retargets first, then closes, each block in the classifier's deterministic action order — so the adapter builds, then adjusts, then cancels, and two runs number the same ops identically.
+1. **Type tier** (outer): proposal epic first, then features + data_flow tasks, then multi-component test tasks, then cleanups. Cleanups come last because each one depends on every non-cleanup, non-epic create in the batch (ChangesetBuilder's cleanup op shape), so every `ref:op` a cleanup names has to be in the adapter's substitution table before the adapter reaches it. Retarget and close ops sit after all creates in one fixed order — retargets first, then closes, each block in the classifier's deterministic action order — so the adapter builds, then adjusts, then cancels, and two runs number the same ops identically.
 2. **Spec-graph deps** (inner, within each tier): if create op B declares a dep on the spec_node_id of op A, A comes before B.
 
 A retarget is not tiered — it targets a task that already exists, so nothing forward-references it — but its recomputed deps can point at in-batch creates, which is why retargets sit after the creates: by the time the adapter reaches one, every `ref:op` in its deps is already in the substitution table.
@@ -18,7 +18,7 @@ The creates-before-closes order carries no lineage. No create in a batch names a
 Kahn's algorithm with deterministic tiebreak:
 
 1. Build a DAG over the create ops in the current batch. Node = op; edge A → B if B declares a dep on A's spec_node_id AND A is in the same batch.
-2. Partition nodes by type tier. Process tiers in order (epic → features/flows → test tasks); within a tier run Kahn. The DAG is rebuilt per tier, so a dep pointing outside the tier — or outside the batch — is invisible to the sort and is left for Resolver to classify.
+2. Partition nodes by type tier. Process tiers in order (epic → features/flows → test tasks → cleanups); within a tier run Kahn. The DAG is rebuilt per tier, so a dep pointing outside the tier — or outside the batch — is invisible to the sort and is left for Resolver to classify.
 3. Kahn with priority queue: at each step, among nodes with zero remaining incoming edges, pick the one with the smallest `spec_node_id` lex order (tiebreak). This makes the output deterministic across runs.
 4. Emit the ops in that order. The `op_id` each one carries in the changeset is stamped downstream by ChangesetBuilder, in this order and numbered from 1. Those op_ids now outlive the changeset: ingest derives each journal event's id from `(git_head, op_id)`, so the sorter's deterministic ordering is also what pins journal event identity — a reordering bug here would mint new event ids for old work and break ingest's append-nothing re-runs.
 

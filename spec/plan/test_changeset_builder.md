@@ -155,8 +155,10 @@ implementation task.
   - `spec_node_kind: "cleanup"`.
   - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"`
     form).
-  - no `deps` naming the finished task — the cleanup's tie to the node is its label and its
-    `task_created` referent, not a tracker edge — and no `labels` key: what marks the task as
+  - `deps` naming every non-cleanup, non-epic create op in the batch as `ref:op` and each
+    retarget's target task as `ref:task`, in op order, and nothing naming the finished task — the
+    cleanup's tie to the node is its label and its `task_created` referent, not a tracker edge —
+    and no `labels` key: what marks the task as
     cleanup tracker-side is nothing at all, because cleanup classification is answered by the
     journal (the task's `task_created` references a `removed` event), and `Op.Labels` is
     populated only on retargets.
@@ -168,6 +170,20 @@ implementation task.
   - The changeset carries no close op naming the removed node at all.
   - `priority: 3` (`plan.FallbackPriority`).
 
+### Cleanup deps close over the batch
+
+- A batch of: the proposal epic create, two component creates where the second declares a dep on
+  the first, one retarget of an open task, and two cleanup actions (`Code cleanup: m/X`,
+  `Code cleanup: m/Y`). Assert:
+  - the two cleanup ops are the last creates, after the component creates, each other's order
+    decided by the lex tiebreak on `spec_node_id`.
+  - each cleanup's `deps` is exactly the two component creates as `ref:op` and the retarget's
+    target as `{"ref":"task","task_id":…}`, in op order — not the epic, not the other cleanup,
+    and not the first component alone: the closure is stated in full, never reduced to a frontier.
+  - the component creates' deps are untouched — the rule adds edges to cleanups only.
+- Rerun with a batch holding one cleanup action and nothing else, and assert its `deps` is empty:
+  what landed in an earlier run is outside the batch and is not named.
+
 ### Cleanup create for a prior-batch removal
 
 - The journal's latest change event for the node is a `removed` event (eid `E1`, from an earlier
@@ -175,7 +191,7 @@ implementation task.
 - Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
   this op — so a re-run at a moved HEAD still carries the label of the removal it answers, and
   label and `task_created` referent stay one fact across runs.
-  - `deps` is empty: no lineage edge to the finished task.
+  - `deps` names nothing for the finished task — empty here because the cleanup is the whole batch.
   - `priority: 3` (`plan.FallbackPriority`).
 - Vary the fixture so the node's `removed` event `E1` is followed by an `added` event (the node
   was re-added and is now removed a second time): assert the label is this op's own

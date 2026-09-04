@@ -9,7 +9,7 @@ Every decision is made from one bounded input beside the diff and the journal: t
 - Assign actions based on match results, change types, and — for matched changes — the live pairing's status or its absence.
 - Handle a modified node whose pairing's task is absent by generating one plain create — no close of the predecessor, no old task id carried, no lineage dependency; handle a modified node with an open pairing by generating [[7d45c20bd0f7|one retarget action that moves the task's target instead of recreating it]]; refuse the whole run when a modified node's pairing is claimed (`in_progress`).
 - Gate action production by node type and, for test_sections, by `len(describes)`.
-- Decide a removed node's fate from the same three states, read off [[80afb22dab75|TaskReader]]'s entries joined onto the journal's pairings: an open task is closed, because cancelling live work is a real action; a claimed task refuses the run; [[8987ef169e48|an absent task means the code already shipped]], so the repository now holds code answering to no spec node and a cleanup task is created to have it deleted. There is no close beside a cleanup — nothing is live to close.
+- Decide a removed node's fate from the same three states, read off [[80afb22dab75|TaskReader]]'s entries joined onto the journal's pairings: an open task is closed, because cancelling live work is a real action; a claimed task refuses the run; [[8987ef169e48|an absent task means the code already shipped]], so the repository now holds code answering to no spec node — or, when the removal is the old half of a rename, code a live node still calls until the new half and its callers land — and a cleanup task is created to have it deleted. Which of the two it is the classifier cannot tell and does not decide: the diff ties a rename's halves to nothing, and the ordering that makes the deletion safe is the cleanup op's deps, composed by ChangesetBuilder from the batch. There is no close beside a cleanup — nothing is live to close.
 - For each create or retarget action, collect `DepSpecNodeIDs` by walking component `uses` (direct), module `requires_module` (transitive) and — for a test_section — its `describes` array.
 
 ## Node-Type Gate
@@ -113,6 +113,7 @@ An `Action` is a decision about *what happened to a spec node*, never an instruc
 | `spec_node_kind` on the op | ChangesetBuilder |
 | parent (the proposal epic) | Resolver |
 | dep refs resolved from an action's `DepSpecNodeIDs`, and whether each takes the `ref:op` or `ref:task` shape | Resolver |
+| a cleanup op's deps, composed from the batch's other ops | ChangesetBuilder |
 | the idempotency label — `spex:<eid>` of the op's referent journal event — and the retarget op's event label | IdempotencyLabeler and ChangesetBuilder respectively |
 | priority, via the `implements → preq_id → priority` chain | Resolver |
 | op ordering and `op_id` assignment | TopologicalSorter |

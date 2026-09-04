@@ -16,7 +16,7 @@ fi
 ### Export against a live sandbox
 
 - Seed br sandbox: two open tasks, one claimed (`in_progress`) task, two closed tasks.
-- Run `scripts/export-br.sh tasks.json`.
+- Run `scripts/export-br.sh` with stdout captured to `tasks.json` — the stdout form; the script's `<tasks.json>` argument form is exercised by no fixture in either suite.
 - Assertions:
   - `tasks.json` validates against `schema/task-state.schema.json`.
   - It lists exactly the three unfinished tasks with their statuses as `br list` reports them, and neither closed one.
@@ -84,14 +84,12 @@ for case in "$TESTS_DIR"/*/; do
         ./seed.sh
     fi
 
-    if [[ -f expected_tasks.json ]]; then
-        ./export-br.sh > tasks.json
-        diff <(jq -S . tasks.json) <(jq -S . expected_tasks.json)
-    fi
-
     if [[ -f changeset.json ]]; then
         ./apply-br.sh < changeset.json > receipts.json
         diff <(jq -S . receipts.json) <(jq -S . expected_receipts.json)
+    else
+        # No changeset: an export-half case. verify.sh reads tasks.json.
+        ./export-br.sh > tasks.json
     fi
 
     if [[ -f verify.sh ]]; then
@@ -105,8 +103,8 @@ echo "ok"
 
 ## Fixtures
 
-- `scripts/testdata/integration/export/` — seed.sh + expected_tasks.json.
-- `scripts/testdata/integration/happy_path/` — changeset.json + expected_receipts.json + verify.sh. It seeds nothing: `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one.
+- `scripts/testdata/integration/export/` — seed.sh + verify.sh. There is no `expected_tasks.json`: real `br` assigns task ids the fixture cannot predict, so an exact diff of the export is unreachable and verify.sh checks the document against the ids the seed recorded instead.
+- `scripts/testdata/integration/happy_path/` — seed.sh + changeset.json + expected_receipts.json + verify.sh. The seed establishes what the scenario presupposes: the task the close op cancels, and the finished predecessor the modified node's new create must not depend on. `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one.
 - `scripts/testdata/integration/close_removed/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
 
 The partial-run, re-run-idempotency and both-ref-shape scenarios above have no integration fixture, and neither does the retarget path; their coverage is the mock-mode suite under `scripts/testdata/{idempotency,substitution}/`.

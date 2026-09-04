@@ -4,8 +4,8 @@ Composes `changeset.json` v4 from the classified actions, the spec graph, the ta
 
 ## Responsibilities
 
-- Take the classified actions (create, close, retarget) and classify the creates by spec node type tier (proposal epic / feature+data_flow task / multi-component test task).
-- **Detect cleanup actions** by the `"Code cleanup:"` prefix on the action's reason. Cleanup actions get a distinct op shape — see "Cleanup op shape" below.
+- Take the classified actions (create, close, retarget) and classify the creates by spec node type tier (proposal epic / feature+data_flow task / multi-component test task / cleanup).
+- **Detect cleanup actions** by the `"Code cleanup:"` prefix on the action's reason. Cleanup actions get a distinct op shape — see "Cleanup op shape" below — and their deps are composed here from the batch itself, not resolved from `DepSpecNodeIDs`: a cleanup action carries none.
 - Resolve each create action's parent and deps — and each retarget action's deps — via Resolver into the two ref shapes.
 - Order the create ops via TopologicalSorter so in-batch deps come before dependents.
 - **Ask IdempotencyLabeler for one label at a time, one create action at a time — never for a block of labels reserved up front.** Every label is `spex:<eid>` of the op's referent journal event; which event that is depends on what the action is (a cleanup, an epic, or a node-bearing create), not on where the action sits in the ordered batch; see `arch_idempotency_labeler.md` for the referent rules. Eids embed [[26b2fdc6e7ea|the SHA the caller passed in]] — the builder never asks git for it.
@@ -84,11 +84,13 @@ Cleanup actions — those whose reason starts with `"Code cleanup:"` — are emi
 | `spec_node_id`    | the identity hash of the now-removed spec node, for traceability                            |
 | `idempotency.label` | `"spex:<eid>"` of the removal event the cleanup answers — the journal's latest `removed` event for the node when that is the node's latest state, else the `removed` event this op itself will mint, derived from its own `(git_head, op_id)` — per the labeler's cleanup referent rule |
 | `parent`          | proposal-epic ref (same as other creates)                                                   |
-| `deps`            | none — the finished task the cleanup follows is not named; the journal's `removed` event is the tie |
+| `deps`            | every non-cleanup, non-epic create op in the batch as `ref:op`, and each retarget op's target task as `ref:task`, in op order — the batch's other work, so the cleanup is ready only when the last of it closes. The finished task the cleanup follows is not named; the journal's `removed` event is the tie |
 | `priority`        | `3`, the fallback                                                                           |
 | `title`           | the action's reason verbatim (e.g. `"Code cleanup: m/X"`) — NOT `"<module>: <node>"`         |
 | `body`            | empty                                                                                       |
 | `labels`          | not populated — the retired `spex:cleanup` discriminator is gone. What marks the op as cleanup is its `spec_node_kind`, and what answers "is this task cleanup?" afterwards is the journal: its `task_created` references a `removed` event. `Op.Labels` is populated only on retarget ops. |
+
+The deps are the batch's other work rather than nothing because a removed node's code is not necessarily dead. The diff reports a rename as one `removed` and one `added` with nothing tying them together, so the node a cleanup answers may be the old half of a rename whose code a live node still calls until the new half and the caller's own change land — and those land through creates and retargets in this same batch. Nothing the builder reads says which ops those are: the spec graph is the post-change one and the snapshot carries no edges. So the cleanup waits for every non-cleanup, non-epic create and every retarget of the batch, and the only failure that rule admits is over-waiting, which the changeset shows. The epic is excluded because it is the cleanup's parent, a grouping rather than work, and an edge on it would never clear; other cleanups are excluded because they delete independently. Ops that landed in an earlier, partial run are outside the batch and are not named — a re-run's cleanup waits only for what the re-run carries, and a cleanup that is the whole batch carries no deps at all.
 
 No close op accompanies a cleanup. The removed node's task is absent from the task-state artifact — finished — so there is nothing live to close, and the `removed` event the cleanup pairs to is minted by the cleanup op itself at ingest rather than by a close. A close op for a removed node is emitted only when its task is open, and then no cleanup accompanies *it*: nothing shipped, so nothing needs deleting.
 

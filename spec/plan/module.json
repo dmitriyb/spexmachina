@@ -96,7 +96,7 @@
       "preq_id": "81f8102ae1b5",
       "type": "functional",
       "name": "Topological ordering within type levels",
-      "description": "Ops are emitted in an order that respects type tiers (proposal epic first, then features and data_flow tasks, then multi-component test tasks) and respects spec-graph dependencies within each tier. When new task B depends on new task A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. Same-tier ties break deterministically by spec_node_id."
+      "description": "Ops are emitted in an order that respects type tiers (proposal epic first, then features and data_flow tasks, then multi-component test tasks, then cleanups) and respects spec-graph dependencies within each tier. When new task B depends on new task A, A's create op comes before B's, so the adapter can build A first and forward-resolve B's dep at exec time. Same-tier ties break deterministically by spec_node_id."
     },
     {
       "id": "ab7176690bfb",
