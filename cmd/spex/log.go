@@ -55,31 +55,39 @@ func runLogE(cmd *cobra.Command, args []string) error {
 	return hv.ShowHistory(beads)
 }
 
+// TODO(bead:spexmachina-swvx.18): ProposalCommands owns this file's wiring
+// per spec/proposal/arch_proposal_commands.md — the "no bead/task data on
+// stdin" and "parse bead JSON" wording below still needs aligning to that
+// spec's documented "no task data on stdin" / "parse task JSON" messages,
+// and cmd/spex/proposal_test.go's REQ30 log scenarios need the same pass.
+// This function is renamed only enough to compile against HistoryViewer's
+// proposal.TaskRecord (spexmachina-swvx.17).
+
 // parseBeadRecords accepts either the {"issues": [...]} envelope produced by
-// `br list --json` or a bare JSON array of bead records and returns the slice
-// in proposal.BeadRecord shape. Stays in lockstep with plan.ReadBeadsBytes
+// `br list --json` or a bare JSON array of task records and returns the slice
+// in proposal.TaskRecord shape. Stays in lockstep with plan.ReadBeadsBytes
 // so the same tracker output drives both pipelines.
-func parseBeadRecords(data []byte) ([]proposal.BeadRecord, error) {
+func parseBeadRecords(data []byte) ([]proposal.TaskRecord, error) {
 	var wrap struct {
-		Issues []proposal.BeadRecord `json:"issues"`
+		Issues []proposal.TaskRecord `json:"issues"`
 	}
 	if err := json.Unmarshal(data, &wrap); err == nil && wrap.Issues != nil {
 		return wrap.Issues, nil
 	}
-	var bare []proposal.BeadRecord
+	var bare []proposal.TaskRecord
 	if err := json.Unmarshal(data, &bare); err != nil {
 		return nil, fmt.Errorf("parse bead JSON: %w", err)
 	}
 	return bare, nil
 }
 
-// filterByProposalRef keeps only beads carrying a spec_proposal:<stem> label
+// filterByProposalRef keeps only tasks carrying a spec_proposal:<stem> label
 // matching ref. Both the bare stem and a trailing-".md" form are accepted, to
 // match the tolerance HistoryViewer.firstProposalStem already gives writers.
-func filterByProposalRef(beads []proposal.BeadRecord, ref string) []proposal.BeadRecord {
+func filterByProposalRef(beads []proposal.TaskRecord, ref string) []proposal.TaskRecord {
 	stem := strings.TrimSuffix(ref, ".md")
 	want := "spec_proposal:" + stem
-	out := make([]proposal.BeadRecord, 0, len(beads))
+	out := make([]proposal.TaskRecord, 0, len(beads))
 	for _, b := range beads {
 		for _, lbl := range b.Labels {
 			if lbl == want || lbl == want+".md" {
