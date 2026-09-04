@@ -130,6 +130,12 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, absorb
 		}
 	}
 
+	// TODO(bead:spexmachina-swvx.21): spec/plan/flow_plan.md's 822b817
+	// correction adds an error path this command does not implement yet: an
+	// empty resolved graph.profileOrDefault().PlanRelevant list is not a
+	// refusal — a warning on stderr that no node type produces tasks and an
+	// adapter run would create none, with the run proceeding, exit 0.
+
 	pairings := planPairingsForMatching(fold, beadStatus)
 	matches, unmatched, orphaned := plan.MatchNodes(changes, pairings)
 

@@ -10,6 +10,17 @@ import (
 // (spec/plan/arch_topological_sorter.md, "Ordering Rules"): proposal epic
 // first, then components and data_flows together, then multi-component
 // test sections. A NodeType absent from this table belongs to no tier.
+//
+// TODO(bead:spexmachina-swvx.38): spec/plan/flow_plan.md's 822b817
+// correction (module.json's abfb10394fdd) turns this fixed table into the
+// resolved profile's plan-relevant order — data_flow, then component, then
+// test_section under the default, no longer sharing a tier — plus a final
+// layer for cleanup creates (isCleanup, plan/labeler.go) that this table
+// has no entry for today. Sort will need the resolved profile (via
+// SpecGraph) threaded in to read that order, and a check that a
+// spec-graph dep does not point at a later layer's op
+// (spec/plan/flow_plan.md, "Error Paths": "abort naming both ops"), which
+// this function does not perform yet.
 var tierOf = map[string]int{
 	KindProposalEpic: TierProposalEpic,
 	KindComponent:    TierFeatureOrFlow,
