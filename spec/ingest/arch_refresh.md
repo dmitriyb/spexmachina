@@ -53,7 +53,7 @@ exactly that.
   structural set (their `node_type` spans the absorbable kinds, `requirement` and `api` included) —
   closed by one `refresh` receipt whose `absorbed` list names exactly those event ids. The one
   entry kind absorbed without an event is a `meta` modification — the project.json or module.json
-  envelope leaf: the journal-line schema's `node_type` enum deliberately has no `meta`, so its
+  envelope leaf: no profile declares `meta` as a node type, so the write boundary admits no change event for it and its
   drift is folded into the snapshot rewrite with no change event; the run's `refresh` receipt
   still lands, and a meta-only run's receipt carries an empty `absorbed` list. A
   refresh-born event has no op behind it, so its `eid` derives from `(node, before, after)` — the

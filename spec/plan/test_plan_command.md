@@ -83,7 +83,8 @@ Run S1 five times. All five stdout captures are byte-for-byte identical: same di
 
 - Valid inputs → 0.
 - Unreadable or malformed inputs (missing diff file, malformed JSON, missing, unreadable or schema-invalid `--tasks`) → 1, stderr naming the input.
-- Contract refusals (claimed task's node changed or removed, invalid absorb entry, unresolvable dep, dep cycle) → 2, stderr naming the spec_node_ids or tasks implicated.
+- Contract refusals (claimed task's node changed or removed, invalid absorb entry, unresolvable dep, dep cycle, a create whose kind the profile's plan-relevant list does not place, a dep pointing at a later layer's op) → 2, stderr naming the spec_node_ids, kinds or tasks implicated.
+- A resolved profile whose plan-relevant list is empty → 0, changeset written with no create op, stderr carrying one warning that no node type produces tasks and an adapter run would create none.
 - No project state at the resolved location (no snapshot ever seeded) → the not-a-spex-project code, stderr naming `spex init`; a present but unloadable snapshot, or a malformed journal line, is a broken project → the same code, stderr naming `spex doctor` — never `1`, the pre-flight refuses before the fold reads anything.
 
 ### S13: The diff document itself is malformed or empty

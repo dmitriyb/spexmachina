@@ -13,7 +13,7 @@ package's journal-line read.
 **Fixture: valid change event:**
 
 ```json
-{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}
 ```
@@ -21,8 +21,8 @@ package's journal-line read.
 **Fixture: valid task receipts:**
 
 ```json
-{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}
-{"event":"task_retargeted","for":"cafe1234:op-9","task_id":"spexmachina-abc"}
+{"event":"task_created","for":"cafe1234:op-component-a1b2c3d4e5f6","task_id":"spexmachina-abc"}
+{"event":"task_retargeted","for":"cafe1234:op-retarget-a1b2c3d4e5f6","task_id":"spexmachina-abc"}
 ```
 
 **Fixture: valid registered event:**
@@ -41,7 +41,7 @@ package's journal-line read.
 **Fixture: valid refresh receipt:**
 
 ```json
-{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-7"]}
+{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-component-a1b2c3d4e5f6"]}
 ```
 
 ## Scenarios
@@ -107,13 +107,14 @@ and admits no `node`.
 node carries several task pairings across its history with no close between them is the normal
 record of completion, which the journal never states.
 
-### S7: `node_type` is a closed enum
+### S7: `node_type` is shape-checked, not enumerated
 
-**Input:** a change event with `"node_type": "impl_section"`, and another with
-`"node_type": "requirement"`.
-**Expected:** the first fails — the enum admits exactly `component`, `data_flow`,
-`test_section`, `requirement`, `api`; retired kinds have no entry. The second passes: refresh
-absorption puts requirement and api events on the record.
+**Input:** change events with `"node_type": "requirement"`, `"node_type": "endpoint"` and
+`"node_type": "impl_section"`, and a fourth with `"node_type": "Impl Section"`.
+**Expected:** the first three pass — the schema admits any type-name-shaped string, and whether
+a name is a kind the resolved profile declares is JournalEncoder's check on the write path, not
+the schema's; the fourth fails the pattern. Refresh absorption puts requirement and api events on
+the record, and a profile-declared kind's events land through the same door.
 
 ### S8: Refresh receipt shape
 

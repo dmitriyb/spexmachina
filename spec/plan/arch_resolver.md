@@ -135,13 +135,14 @@ because the fold does not carry it: a registration with no epic task yet is not 
 no place in a list of pairings.
 
 The batch map must be complete before any dep is resolved. TopologicalSorter runs first for
-exactly that reason: it fixes the order the op_ids are handed out in, and ChangesetBuilder hands
-Resolver the finished map before the first dep is classified.
+exactly that reason: it fixes the file order every `ref:op` relies on, and ChangesetBuilder hands
+Resolver the finished map — op_ids derived from each op's canonical key — before the first dep is
+classified.
 
 ## Every ref names a node that can own a task
 
 `DepSpecNodeIDs` arrives already filtered: the classifier produces actions only for the node kinds
-that can own a task, and the sorter refuses to tier a create whose kind it does not recognise. The
+that can own a task, and the sorter refuses to place a create whose kind the profile's plan-relevant list does not place — the epic and cleanup kinds being placed by rule. The
 two ref shapes plus the drop and the error are therefore exhaustive over what actually reaches
 Resolver. A spec node that has no task and can never acquire one has no place in a dep list; that
 malformation surfaces at build time as the unresolvable-dep error instead of travelling to
@@ -154,7 +155,8 @@ the requirement and through no other kind of node.
 ## Determinism
 
 - Iteration order over `DepSpecNodeIDs` is preserved as the classifier emitted it (a
-  deterministic order).
+  deterministic order) — the order Resolver answers in. The order the document carries is
+  ChangesetBuilder's: `ref:op` in file order, then `ref:task` by task id.
 - Priority computation uses `min` on a finite set; result is independent of enumeration order.
 - Parent resolution has one deterministic output per `(proposal, journal state)` pair.
 

@@ -5,26 +5,26 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 ## Setup
 
 - Synthetic changeset fixtures under `scripts/testdata/idempotency/`.
-- A br sandbox (a fresh tracker directory per test via `br init`) OR a mocked br CLI that records invocations.
+- A mocked br CLI that records invocations — `scripts/testdata/mock_br.sh`, reached through the adapter's `BR_BIN` override — so the suite runs wherever `jq` runs, with no `br` on PATH. The real-sandbox counterpart is `test_br_integration.md`, the one suite gated on `br`; both live in the same harness file.
 - The adapter under test is `scripts/apply-br.sh`; the export scenarios drive `scripts/export-br.sh`.
 
 ## Scenarios
 
 ### Create: first run
 
-- Changeset with one create op, idempotency.label = `spex:cafe1234:op-1`.
+- Changeset with one create op, idempotency.label = `spex:cafe1234:op-component-a1b2c3d4e5f6`.
 - br sandbox empty.
 - Expected: `br create` invoked; new task created; receipt `was_existing=false`, `task_id=<new>`, `status=ok`.
 
 ### Create: re-run matches existing
 
-- Same changeset, same label `spex:cafe1234:op-1`.
-- br sandbox has a task with label `spex:cafe1234:op-1` (from a prior run).
+- Same changeset, same label `spex:cafe1234:op-component-a1b2c3d4e5f6`.
+- br sandbox has a task with label `spex:cafe1234:op-component-a1b2c3d4e5f6` (from a prior run).
 - Expected: `br create` NOT invoked; the status-unfiltered probe (`br list --json --all --limit 0 --label …`) locates the existing task; receipt `was_existing=true`, `task_id=<existing>`, `status=ok`.
 
 ### Create: re-run matches a closed task too
 
-- Same changeset, same label. The sandbox task carrying `spex:cafe1234:op-1` is closed in the tracker.
+- Same changeset, same label. The sandbox task carrying `spex:cafe1234:op-component-a1b2c3d4e5f6` is closed in the tracker.
 - Expected: still a match — exact label, any status; `br create` NOT invoked; receipt `was_existing=true`, `task_id=<existing>`, `status=ok`. The open-only filter died with the node-keyed labels whose collisions it dodged: a task carrying this exact eid label, whatever its status, can only be this op's own earlier product.
 
 ### Create: label mismatch surfaces as new create
@@ -63,10 +63,10 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 
 ### Retarget: first run
 
-- Changeset retarget op targeting task `br-open` with `labels: ["spex:cafe1234:op-4"]` and two
+- Changeset retarget op targeting task `br-open` with `labels: ["spex:cafe1234:op-retarget-a1b2c3d4e5f6"]` and two
   deps resolving to `br-dep1` (which `br-open` already carries) and `br-dep2` (which it does not).
 - Expected: no probe — no `br list` precedes the update; `br show br-open --format json` reads
-  current deps; `br update br-open --add-label spex:cafe1234:op-4` for the label and
+  current deps; `br update br-open --add-label spex:cafe1234:op-retarget-a1b2c3d4e5f6` for the label and
   `br dep add br-open br-dep2 --type blocks` for the missing dep only — a second `br update` is
   not what carries a dep, and `blocks` is the tracker's name for the edge the changeset's create
   path spells `blocked-by`; nothing removed. Receipt `status=ok`, `task_id=br-open`, no
@@ -115,15 +115,17 @@ Tests that exercise the adapter's idempotency guarantees on both create and clos
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-require_br_on_path
+MOCK_BR=scripts/testdata/mock_br.sh
 for case in scripts/testdata/idempotency/*/; do
-    setup_sandbox "$case"
-    actual=$(scripts/apply-br.sh "$case/changeset.json")
+    seed_mock_state "$case/state_before.json"      # the mock's state, never a real tracker
+    actual=$(BR_BIN="$MOCK_BR" scripts/apply-br.sh "$case/changeset.json")
     expected=$(cat "$case/expected_receipts.json")
     diff <(jq -S . <<< "$actual") <(jq -S . <<< "$expected")
 done
 for case in scripts/testdata/export/*/; do
-    setup_sandbox "$case"
-    diff <(scripts/export-br.sh | jq -S .) <(jq -S . "$case/expected_tasks.json")
+    seed_mock_state "$case/state_before.json"
+    diff <(BR_BIN="$MOCK_BR" scripts/export-br.sh | jq -S .) <(jq -S . "$case/expected_tasks.json")
 done
 ```
+
+No PATH gate: the mock is a script in the tree, so these cases run unconditionally, and only the integration suite behind them checks for `br`.

@@ -108,6 +108,9 @@ digraph plan_internals {
    every validly marked change from the stream the next steps see, and
    composes the absorbed entries off the withheld diff entries — absorption is
    settled here, before any pairing or status is consulted.
+   The resolved profile's plan-relevant list is read here too — the
+   classifier's gate consults it for membership and the builder for the
+   layer order.
 2. **Join the tracker's view.** [[80afb22dab75|TaskReader]] validates and parses
    the `--tasks` artifact — the only tracker state in the run, a file the
    adapter's export half wrote, never a command this binary ran — and each
@@ -125,11 +128,14 @@ digraph plan_internals {
    (`in_progress`) task whose node changed or was removed refuses the run
    here, exit 2.
 5. **Order.** [[659abe167891|TopologicalSorter]] partitions the create actions
-   by tier — the proposal epic, then components and data_flows, then
-   multi-component test sections — and runs Kahn's algorithm inside each tier
-   with a lex tiebreak on `spec_node_id`. The op ids, and the
-   spec_node_id-to-op_id map the later steps need, are assigned from that order
-   by ChangesetBuilder once the retarget and close ops have been counted.
+   into layers — the proposal epic, then one layer per kind in the profile's
+   plan-relevant order (data_flows, then components, then multi-component test
+   sections under the default), then cleanups — and runs Kahn's algorithm
+   inside each layer with a lex tiebreak on `spec_node_id`, refusing a kind the
+   list does not place and a dep that points at a later layer. The op ids, and
+   the spec_node_id-to-op_id map the later steps need, are derived by
+   ChangesetBuilder from each op's canonical key — its kind and the node or
+   task it acts on — never from its position.
 6. **Label.** [[6efd7f8ebdb2|IdempotencyLabeler]] answers with one label per
    create action — `spex:<eid>` of the journal event the op's `task_created`
    will reference: every node-bearing create keys the change event derived
@@ -145,7 +151,9 @@ digraph plan_internals {
    points every non-epic create's parent at the proposal epic, and walks
    implements → preq_id → priority for each create's priority number.
 8. **Compose and write.** [[4c1146bb7287|ChangesetBuilder]] assembles the
-   create ops, appends the retarget ops and one close op per close action —
+   create ops — adding to each the layer edges, every create of the previous
+   non-empty layer as `ref:op`, and to each cleanup every retarget's target as
+   `ref:task` — appends the retarget ops and one close op per close action —
    target and reason alone, no labels — writes the
    absorbed entries PlanCommand composed into the top-level `absorbed` array,
    and answers with the finished v4 changeset in canonical field order.
@@ -153,10 +161,11 @@ digraph plan_internals {
    `--out` — the builder composes the document, the command owns the sink.
 
 Steps 5 and 6 come before step 7 for a reason: a dep can only be written as
-`ref:op` once the op it points at has an op_id — and a label can only be derived
-once the op id it embeds is assigned. Ordering settles for the batch as a whole
-before the first ref is written; labelling runs per action, each op's label
-derived from that same op's own referent event.
+`ref:op` once the op it points at is known to precede it in the file, and the
+layer edges exist only once the layers do. Ordering settles for the batch as a
+whole before the first ref is written; labelling runs per action, each op's
+label derived from that same op's own referent event, whose op_id is the op's
+canonical key.
 
 ## Data Shapes
 
@@ -263,7 +272,7 @@ was actually made, moved or cancelled.
   "proposal": "2026-08-31-task-lifecycle",
   "ops": [
     {
-      "op_id": "op-1",
+      "op_id": "op-proposal_epic-2026-08-31-task-lifecycle",
       "type": "create",
       "spec_node_kind": "proposal_epic",
       "spec_node_id": "2026-08-31-task-lifecycle",
@@ -272,24 +281,24 @@ was actually made, moved or cancelled.
       "title": "Proposal: 2026-08-31-task-lifecycle"
     },
     {
-      "op_id": "op-2",
+      "op_id": "op-component-4c1146bb7287",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "4c1146bb7287",
-      "idempotency": { "label": "spex:deadbeef:op-2" },
-      "parent": { "ref": "op", "op_id": "op-1" },
+      "idempotency": { "label": "spex:deadbeef:op-component-4c1146bb7287" },
+      "parent": { "ref": "op", "op_id": "op-proposal_epic-2026-08-31-task-lifecycle" },
       "priority": 1,
       "title": "plan: ChangesetBuilder",
       "body": "…"
     },
     {
-      "op_id": "op-3",
+      "op_id": "op-retarget-80afb22dab75",
       "type": "retarget",
       "spec_node_id": "80afb22dab75",
       "spec_hash": "bbb...",
-      "deps": [ { "ref": "op", "op_id": "op-2" } ],
+      "deps": [ { "ref": "op", "op_id": "op-component-4c1146bb7287" } ],
       "target": { "ref": "task", "task_id": "spexmachina-hun" },
-      "labels": ["spex:deadbeef:op-3"],
+      "labels": ["spex:deadbeef:op-retarget-80afb22dab75"],
       "reason": "Spec node modified (retarget): plan/TaskReader"
     }
   ],
@@ -314,6 +323,9 @@ and nothing else.
 - A claimed (`in_progress`) task's node changed or was removed → abort naming every such task. Exit 2.
 - An absorb entry marks a node that is not `modified` in the diff → abort naming the node. Exit 2.
 - Cycle in in-batch deps → abort after sort. Exit 2.
+- A create whose kind the profile's plan-relevant list does not place → abort naming the kind. Exit 2.
+- A spec-graph dep pointing at a later layer's op → abort naming both ops. Exit 2.
+- An empty plan-relevant list → a warning on stderr that no node type produces tasks and an adapter run would create none; the run proceeds. Exit 0.
 - Dep neither in-batch nor in the fold → abort naming the spec_node_id. Exit 2.
 - Missing project requirement in priority chain → default priority `3`, silently. No error, no warning, and nothing in the changeset marks the op.
 - `--git-head` missing or malformed → pre-flight rejection before any processing. Exit 1.

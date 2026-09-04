@@ -89,6 +89,11 @@ writes.
 - Construct a batch that would append a change event missing its `node` field.
 - Expected: the journal-line schema validation fails before the write; error names the violated
   constraint; the on-disk journal is untouched.
+- Construct a batch that would append a change event whose `node_type` is `endpoint` while the
+  resolved profile is the default, which declares no such type.
+- Expected: the line passes the schema and is refused by the encoder's profile check before the
+  write, error naming the kind; the journal is untouched. Rerun under a profile declaring
+  `endpoint` and assert the line is appended.
 
 ### Invariant 5: the encoder refuses at its own boundary
 

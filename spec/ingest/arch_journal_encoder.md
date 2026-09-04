@@ -14,6 +14,13 @@ component rather than as helpers at the bottom of a larger file.
   The error names the violated constraint; the on-disk journal is untouched. There is no partial
   append — the validation gate sits between construction and the atomic commit, so a refused
   line refuses the whole run.
+- A change event whose `node_type` names a kind the resolved profile does not declare is refused
+  the same way, with the error naming the kind. The schema fixes the field's shape and enumerates
+  nothing; the encoder holds the membership check against the profile's declared types, so a
+  profile-declared kind's event lands and a `meta` leaf, a retired kind or a misspelling never
+  does. The check runs on the write path only: a line already in the journal, written under a
+  profile that has since dropped a type, still reads back, because the journal is permanent and
+  the profile is not.
 
 Validation is against the journal-line schema — the document the schema module's
 JournalLineSchema ships as `schema/journal-line.schema.json`, read through the schema package —

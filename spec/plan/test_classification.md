@@ -57,8 +57,8 @@ An unmatched `added` api yields zero actions; a test_section with `len(describes
 
 The task-producing set the node-type gate consults is read from the resolved profile rather than from a compiled-in constant. Two arms:
 
-- Under the default profile, S5's verdicts hold byte-for-byte — the default declares today's plan-relevant set, so api stays outside it, data_flow always produces, and the describes-length rule binds test_section.
-- Under a profile declaring an `endpoint` type as plan-relevant, an unmatched `added` endpoint produces one create action carrying the type name; whether a changeset can be built from that action is the sorter's contract, not the classifier's (see `test_changeset_builder`). A profile leaving `endpoint` outside the set yields zero actions for the same change. The classifier branches on the declaration, never on the type name.
+- Under the default profile, S5's verdicts hold byte-for-byte — the default declares today's plan-relevant list, so api stays outside it, data_flow always produces, and the describes-length rule binds test_section.
+- Under a profile declaring an `endpoint` type as plan-relevant, an unmatched `added` endpoint produces one create action carrying the type name; whether a changeset can be built from that action is the sorter's contract, not the classifier's (see `test_changeset_builder`). A profile leaving `endpoint` outside the list yields zero actions for the same change. The classifier branches on the declaration, never on the type name.
 
 ### S6: Resolver recomputes a retarget's deps add-only
 
@@ -138,11 +138,11 @@ Length zero, on creates and retargets alike.
 
 ### D7: Data_flow add-on — component gains the flow's identity hash when both are in the same batch
 
-Data_flow F with `uses: [X]`, both F and X in the batch: X's `DepSpecNodeIDs` contains `id_F`, so the sorter places F's op first and X gains a `ref:op` dep on it. Components the flow does not list gain nothing, and a flow outside the batch adds nothing — pre-existing flow deps resolve to `ref:task` from the fold, or drop when the flow's task is finished.
+Data_flow F with `uses: [X]`, both F and X in the batch: X's `DepSpecNodeIDs` contains `id_F`, so the layer order places F's op before X's and X gains a `ref:op` dep on F. Components the flow does not list gain nothing, and a flow outside the batch adds nothing — pre-existing flow deps resolve to `ref:task` from the fold, or drop when the flow's task is finished.
 
 ### D8: Non-component creates do not walk `uses` / `requires_module`
 
-Data_flow creates carry no spec-graph deps from classification; their ordering inside the batch is driven by the data_flow add-on applied to the components on the other side. A test_section create is not dep-free — it collects its `describes` array (D10) — but it walks no `uses` and no `requires_module`; those two walks stay component-only.
+Data_flow creates carry no spec-graph deps from classification; their place in the batch is the data_flow layer's, ahead of the components, and the add-on gives the components on the other side their edges. A test_section create is not dep-free — it collects its `describes` array (D10) — but it walks no `uses` and no `requires_module`; those two walks stay component-only.
 
 ### D9: Close actions never carry `DepSpecNodeIDs`
 

@@ -30,10 +30,11 @@ Defines the JSON Schema for one journal line, covering:
   `modified` events with the same receipt.
 - **Format constraints**: `node` is constrained to the 12-character identity-hash pattern; a
   *legacy* epic receipt's `proposal` carries the slug-shaped reference instead — current epic
-  receipts reference the registered event through `for` like every other receipt. `node_type` is the closed
-  enum of node kinds a change event may describe — the task-owning kinds `component`,
-  `data_flow`, `test_section`, plus `requirement` and `api`, which only refresh-born events
-  carry — and each line is a self-contained object: there is no envelope, no counter, and no
+  receipts reference the registered event through `for` like every other receipt. `node_type` names the kind of node a change event describes, as a
+  type-name-shaped string (`^[a-z][a-z0-9_]*$`), not a compiled-in enumeration: which names are
+  admissible is the resolved profile's declaration, checked at the write boundary by ingest's
+  JournalEncoder, so the format is the same for every project while the admissible kinds follow
+  the profile — and each line is a self-contained object: there is no envelope, no counter, and no
   integer id anywhere in the format. Every line shape also admits an optional integer `v` — the
   journal-line [[b1baa51bd7a9|format version]], metadata outside any hashed payload: absent
   means version 1, so no existing line changes meaning; a writer stamps the current version, 1;
@@ -52,22 +53,29 @@ node key. Earlier formats used `<module>/<node_type>/<integer_id>` keys
 that required rekeying between merkle and the retired record file; that translation layer died when
 identity hashes were introduced, and the journal keeps the single-format property.
 
-### `node_type` is the closed set of things an event may describe
+### `node_type` names a declared kind, and the schema does not enumerate them
 
-The enum is the schema's own statement of what a change event may describe: the task-owning kinds
-(component, data_flow, test_section) plus the refresh-absorbable ones (requirement, api) —
-a proposal is never a change event's subject; it appears as the slug on the `registered` event
-that opens its lifecycle. Task receipts pair with events of task-owning kinds and, for epics,
-with the registered event; requirement and api events exist so refresh absorption is on the
-record, never to mint tasks. A
-kind of spec content that exists only as part of a component's contract has no entry, because it
-never owns a task of its own — it reaches the tracker inside the task of the component it belongs
-to.
+The schema fixes the field's shape; the resolved profile fixes its membership. What a change event
+may describe is a node type the profile declares: the task-owning kinds — the plan-relevant list,
+`data_flow`, `component` and `test_section` under the default — and the refresh-absorbable ones,
+`requirement` and `api` under the default. A proposal is never a change event's subject; it
+appears as the slug on the `registered` event that opens its lifecycle. A `meta` leaf is never a
+declared type, so no change event carries it. Task receipts pair with events of task-owning kinds
+and, for epics, with the registered event; requirement and api events exist so refresh absorption
+is on the record, never to mint tasks. A kind of spec content that exists only as part of a
+component's contract is not a declared type and has no event, because it never owns a task of its
+own — it reaches the tracker inside the task of the component it belongs to.
 
-Stating that in the schema rather than leaving it implied is what makes the boundary fail closed:
-ingest validates every line against this schema before the append commits, so a batch that somehow
-constructed an event for an untaskable kind is rejected at the write boundary, leaving the journal
-untouched. The corollary is that retiring a kind of spec content that was never in the enum is not
+The schema once enumerated those five names itself. It stopped for two reasons. A profile may
+declare a further task-owning kind — an `endpoint`, say — and the receipt of that kind's task has
+to reach the journal, or the profile is not usable end to end. And the journal is append-only and
+permanent while a profile is not: a line written under a profile that later drops a type must
+still validate on every read, which a schema composed from the current profile could not promise.
+So the format stays profile-independent, and the boundary still fails closed — one step later:
+ingest validates every line against this schema and then checks each change event's `node_type`
+against the resolved profile's declared types before the append commits, so a batch that somehow
+constructed an event for an undeclared kind is rejected at the write boundary, leaving the journal
+untouched. The corollary is that retiring a kind of spec content that never owned an event is not
 a journal migration: no line named one, so no line has to be rewritten.
 
 ### The journal records what the pipeline did, never completion
