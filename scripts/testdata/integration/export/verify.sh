@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# tasks.json is produced by the harness (export-br.sh > tasks.json) before
-# this script runs.
+# tasks.json is produced by the harness (export-br.sh tasks.json, the
+# <tasks.json> argument form) before this script runs.
 
 jq -e '.version == 1' tasks.json >/dev/null || { echo "version != 1"; exit 1; }
 jq -e '.tasks | length == 3' tasks.json >/dev/null || { echo "expected exactly 3 tasks"; jq . tasks.json; exit 1; }

@@ -1,35 +1,35 @@
 {
   "version": 4,
-  "git_head": "11112222",
-  "proposal": "test/substitution",
+  "git_head": "deadbeefcafef00d",
+  "proposal": "test/integration",
   "ops": [
     {
-      "op_id": "op-component-c3d4e5f6a1b2",
+      "op_id": "op-component-a1b2c3d4e5f6",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-anchor",
       "idempotency": {
-        "label": "spex:1"
+        "label": "spex:deadbeefcafef00d:op-component-a1b2c3d4e5f6"
       },
-      "priority": 2,
+      "priority": 1,
       "title": "Anchor"
     },
     {
-      "op_id": "op-component-f6a1b2c3d4e5",
+      "op_id": "op-component-b2c3d4e5f6a1",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-mixed",
       "idempotency": {
-        "label": "spex:2"
+        "label": "spex:deadbeefcafef00d:op-component-b2c3d4e5f6a1"
       },
       "deps": [
         {
           "ref": "op",
-          "op_id": "op-component-c3d4e5f6a1b2"
+          "op_id": "op-component-a1b2c3d4e5f6"
         },
         {
           "ref": "task",
-          "task_id": "br-77"
+          "task_id": "__EXISTING__"
         }
       ],
       "priority": 1,

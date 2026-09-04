@@ -4,7 +4,7 @@
   "proposal": "test/substitution",
   "ops": [
     {
-      "op_id": "op-0004",
+      "op_id": "op-component-d4e5f6a1b2c3",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-bad",
@@ -15,7 +15,7 @@
       "title": ""
     },
     {
-      "op_id": "op-0005",
+      "op_id": "op-component-e5f6a1b2c3d4",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-dep",
@@ -25,7 +25,7 @@
       "deps": [
         {
           "ref": "op",
-          "op_id": "op-0004"
+          "op_id": "op-component-d4e5f6a1b2c3"
         }
       ],
       "priority": 1,

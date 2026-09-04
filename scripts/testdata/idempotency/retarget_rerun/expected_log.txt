@@ -1,3 +1,3 @@
 br --version
 br show br-open --format json
-br update br-open --add-label spex:cafe1234:op-4
+br update br-open --add-label spex:cafe1234:op-retarget-a1b2c3d4e5f6

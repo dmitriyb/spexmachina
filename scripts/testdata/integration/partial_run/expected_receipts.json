@@ -1,0 +1,9 @@
+{
+  "version": 2,
+  "status": "partial",
+  "ops": [
+    {"op_id":"op-component-a1b2c3d4e5f6","status":"ok","task_id":"__ANY__","was_existing":false},
+    {"op_id":"op-component-b2c3d4e5f6a1","status":"error","task_id":"","was_existing":false,"error":"br create exited 4: {\n  \"error\": {\n    \"code\": \"INVALID_PRIORITY\",\n    \"message\": \"Priority must be 0-4, got: 99\",\n    \"hint\": \"Use a priority between 0 (critical) and 4 (backlog)\",\n    \"retryable\": true,\n    \"context\": {\n      \"priority\": \"99\",\n      \"hint\": \"Priority must be 0-4 (0=critical, 4=backlog).\"\n    }\n  }\n}"},
+    {"op_id":"op-component-c3d4e5f6a1b2","status":"ok","task_id":"__ANY__","was_existing":false}
+  ]
+}

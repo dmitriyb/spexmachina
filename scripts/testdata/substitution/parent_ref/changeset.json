@@ -4,7 +4,7 @@
   "proposal": "test/substitution",
   "ops": [
     {
-      "op_id": "op-0001",
+      "op_id": "op-proposal_epic-2026-04-18-decouple-spex-from-br",
       "type": "create",
       "spec_node_kind": "proposal_epic",
       "spec_node_id": "sn-epic",
@@ -15,7 +15,7 @@
       "title": "Proposal: parent_ref"
     },
     {
-      "op_id": "op-0002",
+      "op_id": "op-component-a1b2c3d4e5f6",
       "type": "create",
       "spec_node_kind": "component",
       "spec_node_id": "sn-comp",
@@ -24,7 +24,7 @@
       },
       "parent": {
         "ref": "op",
-        "op_id": "op-0001"
+        "op_id": "op-proposal_epic-2026-04-18-decouple-spex-from-br"
       },
       "priority": 1,
       "title": "Child"

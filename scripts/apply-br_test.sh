@@ -42,6 +42,12 @@ SCRIPT="$ROOT/apply-br.sh"
 EXPORT_SCRIPT="$ROOT/export-br.sh"
 MOCK_BR="$ROOT/testdata/mock_br.sh"
 
+# Exported so an integration fixture's seed.sh can drive the real adapter
+# itself — needed for scenarios (re-run idempotency) whose setup IS a prior
+# adapter run, not raw br state.
+export SPEX_ADAPTER_SCRIPT="$SCRIPT"
+export SPEX_EXPORT_SCRIPT="$EXPORT_SCRIPT"
+
 if ! command -v jq >/dev/null 2>&1; then
     echo "jq not on PATH — cannot run adapter tests" >&2
     exit 1
@@ -258,9 +264,10 @@ run_integration_case() {
             return
         fi
     else
-        # No changeset.json: an export-half fixture. Run export-br.sh and
-        # hand its output to verify.sh as tasks.json.
-        (cd "$sandbox" && "$EXPORT_SCRIPT" > tasks.json 2>stderr.txt) || {
+        # No changeset.json: an export-half fixture. Run export-br.sh with
+        # the <tasks.json> argument form — the one place that form runs
+        # under test — and hand the file it writes to verify.sh.
+        (cd "$sandbox" && "$EXPORT_SCRIPT" tasks.json 2>stderr.txt) || {
             echo "  [FAIL] $name: export-br.sh exited non-zero"
             sed 's/^/    /' "$sandbox/stderr.txt"
             FAIL=$((FAIL+1))

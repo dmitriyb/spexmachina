@@ -1,26 +1,26 @@
 {
   "version": 4,
-  "git_head": "cafe1234",
-  "proposal": "test/idempotency",
+  "git_head": "deadbeefcafef00d",
+  "proposal": "test/integration",
   "ops": [
     {
       "op_id": "op-retarget-a1b2c3d4e5f6",
       "type": "retarget",
       "target": {
         "ref": "task",
-        "task_id": "br-open"
+        "task_id": "__OPEN__"
       },
       "labels": [
-        "spex:cafe1234:op-retarget-a1b2c3d4e5f6"
+        "spex:deadbeefcafef00d:op-retarget-a1b2c3d4e5f6"
       ],
       "deps": [
         {
           "ref": "task",
-          "task_id": "br-dep1"
+          "task_id": "__DEP1__"
         },
         {
           "ref": "task",
-          "task_id": "br-dep2"
+          "task_id": "__DEP2__"
         }
       ]
     }
