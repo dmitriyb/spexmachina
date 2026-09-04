@@ -74,7 +74,7 @@
 // its call site.
 //
 // A second, later delta sits on top of the first: the 822b817 baseline
-// correction minted drift-spexmachina-h4gv.21's report — TopologicalSorter's
+// correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
 // tiering had no profile awareness — into flow_plan.md step 5 and module.json's
 // abfb10394fdd ("Layer order as blocking edges"). TopologicalSorter's tierOf
 // table (plan/sorter.go) is still the fixed epic / component+data_flow /
