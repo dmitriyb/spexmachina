@@ -25,8 +25,8 @@ var ErrNotFound = errors.New("map: not found")
 // two are interchangeable ways to reach one node's fold entry.
 var nodeHashPattern = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
-// Event is one line of the task journal (spec/.history.jsonl): a change
-// event (added/removed/modified), a task receipt
+// Event is one line of the task journal: a change event
+// (added/removed/modified), a task receipt
 // (task_created/task_closed/task_retargeted) or a refresh receipt. Fields
 // are populated according to the line's shape — see
 // spec/map/arch_mapping_store.md for the full field table.

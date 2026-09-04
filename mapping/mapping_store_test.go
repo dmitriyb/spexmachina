@@ -299,17 +299,22 @@ func TestREQ_934d627f0e90_RemovedNodeWithCleanupTaskStaysRemoved(t *testing.T) {
 // TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID keys a removed
 // node by its cleanup task id — the half of "the two keys are
 // interchangeable ways to reach one node" that removed nodes were missing.
-// Both file orders are exercised because pairing is by eid, not by
-// position: ingest lands a batch in which a cleanup's task_created can sit
-// either side of the removal event it names, and the fold must answer the
-// same either way.
+// The fixture carries node Z's pre-removal pairing (task D) so the removal
+// supersedes a real task, pinning that the superseded id stops resolving —
+// the behaviour arch_mapping_store.md's "Why a removed entry carries the
+// cleanup task" rationale says breaks silently if broadened. Both file
+// orders are exercised because pairing is by eid, not by position: ingest
+// lands a batch in which a cleanup's task_created can sit either side of
+// the removal event it names, and the fold must answer the same either way.
 func TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID(t *testing.T) {
+	added := changeLine("added", "e1", "ffffffffffff", "CompV", "component", "modE", "", "h1", "g1", "add-prop")
+	taskD := taskCreatedLine("e1", "", "task-D")
 	removal := changeLine("removed", "e9", "ffffffffffff", "CompV", "component", "modE", "h1", "", "g-removed", "remove-prop")
 	cleanup := taskCreatedLine("e9", "", "task-cleanup")
 
 	orders := map[string][]string{
-		"receipt after removal":  {removal, cleanup},
-		"receipt before removal": {cleanup, removal},
+		"receipt after removal":  {added, taskD, removal, cleanup},
+		"receipt before removal": {added, taskD, cleanup, removal},
 	}
 
 	for name, lines := range orders {
@@ -347,6 +352,9 @@ func TestREQ_934d627f0e90_RemovedNodeReachableByCleanupTaskID(t *testing.T) {
 				byTask.Source.Module != "modE" || byTask.Source.Proposal != "remove-prop" ||
 				byTask.Source.GitHead != "g-removed" {
 				t.Fatalf("cleanup task must answer with the biography, got %+v", byTask.Source)
+			}
+			if _, err := store.Get("task-D"); !errors.Is(err, ErrNotFound) {
+				t.Fatalf("superseded task D must not resolve, got err=%v", err)
 			}
 		})
 	}
