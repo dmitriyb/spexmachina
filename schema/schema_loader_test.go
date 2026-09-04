@@ -925,14 +925,9 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		t.Fatalf("coverage chains = %d, want 3", len(p.CoverageChains))
 	}
 
-	wantPlanRelevant := map[string]bool{"component": true, "data_flow": true, "test_section": true}
-	if len(p.PlanRelevant) != len(wantPlanRelevant) {
-		t.Fatalf("plan-relevant set = %v, want %v", p.PlanRelevant, wantPlanRelevant)
-	}
-	for _, n := range p.PlanRelevant {
-		if !wantPlanRelevant[n] {
-			t.Fatalf("plan-relevant set has unexpected member %q", n)
-		}
+	wantPlanRelevant := []string{"data_flow", "component", "test_section"}
+	if !reflect.DeepEqual(p.PlanRelevant, wantPlanRelevant) {
+		t.Fatalf("plan-relevant list = %v, want %v in declared order", p.PlanRelevant, wantPlanRelevant)
 	}
 
 	wantImpact := map[string]string{

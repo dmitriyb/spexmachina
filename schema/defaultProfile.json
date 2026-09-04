@@ -72,7 +72,7 @@
     {"covered_type": "requirement", "covered_scope": "module", "edge": "implements", "covering_type": "component"},
     {"covered_type": "component", "edge": "describes", "covering_type": "test_section"}
   ],
-  "plan_relevant": ["component", "data_flow", "test_section"],
+  "plan_relevant": ["data_flow", "component", "test_section"],
   "impact_levels": {
     "test_section": "impl_only",
     "data_flow": "contract",
