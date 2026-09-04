@@ -296,9 +296,12 @@ func pairReceipts(cs plan.Changeset, rc adapters.Receipts) (map[string]adapters.
 // deriveEID derives a change event's id from the batch's git_head and the
 // constructing op's own id. Re-deriving the same pair on a later run
 // yields the same eid — the mechanism that makes the whole batch
-// idempotent by construction.
+// idempotent by construction. It delegates to plan.DeriveEID, the same
+// formula IdempotencyLabeler mints the op's spex:<eid> label from, so the
+// label and the event it names can never drift apart (see
+// spec/map/flow_task_mapping.md, "Data Flow").
 func deriveEID(gitHead, opID string) string {
-	return gitHead + ":" + opID
+	return plan.DeriveEID(gitHead, opID)
 }
 
 // Invariants 1 and 2 (double-pairing and dangling referents) are

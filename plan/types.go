@@ -97,6 +97,21 @@ const (
 	CleanupLabel           = "spex:cleanup"
 )
 
+// DeriveEID derives a node-bearing create or retarget op's journal event
+// id from this run's git_head and the op's own id — the one formula every
+// participant in spec/map/flow_task_mapping.md's data flow shares: Labeler
+// mints it to build the spex:<eid> idempotency label a create or retarget
+// op carries, and ingest's EventBuilder derives it again, unchanged, to
+// mint the referent event the label names. Sharing the formula, rather
+// than each side reimplementing "git_head + op_id", is what keeps the
+// label and the event it points at one fact instead of two copies that
+// could drift. Cleanup and proposal-epic creates reach their label from a
+// different referent (the fold's removed event, or the run's
+// registration) and never call this.
+func DeriveEID(gitHead, opID string) string {
+	return gitHead + ":" + opID
+}
+
 // Ref encodes a forward-resolvable reference. Exactly one of TaskID or
 // OpID is set per Ref; omitempty keeps the JSON clean. v4 renamed the
 // pre-existing-task shape's kind from "bead" to "task" and its id field
