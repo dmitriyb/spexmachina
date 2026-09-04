@@ -77,6 +77,25 @@ func TestResolveDeps_FoldClosedIsDropped(t *testing.T) {
 	}
 }
 
+// TestResolveDeps_FoldAbsentStatusIsDropped pins the real v4 shape
+// arch_resolver.md's "The Two Ref Shapes" describes: there is no "closed"
+// status to read, only absence from the task-state artifact — a fold
+// pairing whose BeadStatus is unset (plan/node_matcher.go's Pairing doc:
+// "A pairing for which no bead was supplied arrives with BeadStatus unset")
+// drops exactly as a legacy "closed" literal does.
+func TestResolveDeps_FoldAbsentStatusIsDropped(t *testing.T) {
+	batch := map[string]string{}
+	fold := fakeFold{"dep1": {TaskID: "spexmachina-abc"}}
+
+	refs, err := ResolveDeps([]string{"dep1"}, batch, fold)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(refs) != 0 {
+		t.Fatalf("want dropped dep to produce no ref, got %+v", refs)
+	}
+}
+
 func TestResolveDeps_UnresolvableIsError(t *testing.T) {
 	_, err := ResolveDeps([]string{"missing"}, map[string]string{}, fakeFold{})
 	if err == nil {

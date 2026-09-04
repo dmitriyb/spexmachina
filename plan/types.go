@@ -15,13 +15,17 @@ package plan
 // target shape: a genuinely changed node with an open task retargets in
 // place, and a task absent from the artifact yields one plain create
 // carrying no old task id and no lineage dep — no close-and-recreate step.
-// Resolver (spexmachina-swvx.19) and ChangesetBuilder (spexmachina-swvx.20)
-// still carry remnants of the pre-task-lifecycle "obsolete, then recreate"
-// shape pending their own beads; IdempotencyLabeler (spexmachina-swvx.13)
-// already self-mints a cleanup create's label from its own (git_head, op_id)
-// when neither the journal fold nor a same-batch close answers. The
-// task-state artifact (--tasks, TaskReader) that replaces --beads/BeadReader
-// is spexmachina-swvx.14 and spexmachina-swvx.7. See spec/plan/flow_plan.md.
+// Resolver (spexmachina-swvx.19) now drops a dep on a fold pairing whose
+// status is anything other than live (open or in_progress) rather than
+// checking for the literal "closed" the obsolete-then-recreate shape used
+// to write — there is no closed status in the vocabulary, only absence.
+// ChangesetBuilder (spexmachina-swvx.20) still carries remnants of the
+// pre-task-lifecycle "obsolete, then recreate" shape pending its own bead;
+// IdempotencyLabeler (spexmachina-swvx.13) already self-mints a cleanup
+// create's label from its own (git_head, op_id) when neither the journal
+// fold nor a same-batch close answers. The task-state artifact (--tasks,
+// TaskReader) that replaces --beads/BeadReader is spexmachina-swvx.14 and
+// spexmachina-swvx.7. See spec/plan/flow_plan.md.
 const ChangesetVersion = 4
 
 // Op type vocabulary. Tool-agnostic — adapters for br, bd, GitHub Issues,

@@ -8,8 +8,8 @@ import "fmt"
 // adapts the parsed journal fold onto this surface; tests substitute a
 // stand-in. Lookup's key is a spec node's identity hash, or the proposal
 // slug for the epic; of the returned Pairing, Resolver's dep and parent
-// resolution consults only TaskID (and, for a dep, whether BeadStatus is
-// "closed").
+// resolution consults only TaskID (and, for a dep, whether the pairing's
+// BeadStatus is live).
 type FoldLookup interface {
 	Lookup(key string) (Pairing, bool)
 }
@@ -22,29 +22,35 @@ type Registration struct {
 	EID string
 }
 
+// isLiveBeadStatus reports whether status marks a task still in flight.
+// "open" and "in_progress" are the only two values the task-state
+// artifact's schema admits; every other value — most often "", because a
+// pairing whose task the artifact does not list arrives with BeadStatus
+// unset (plan/node_matcher.go's Pairing doc) — reads as finished. There is
+// no "closed" status in the vocabulary to check for
+// (spec/plan/arch_resolver.md, "The Two Ref Shapes": "There is no closed
+// status to read; absence from the artifact is the whole signal, exactly as
+// it is for the classifier upstream."); this is the same live/absent split
+// ActionClassifier's own status switch applies (plan/action_classifier.go).
+func isLiveBeadStatus(status string) bool {
+	return status == "open" || status == "in_progress"
+}
+
 // ResolveDeps classifies each dep identity hash into a ref the adapter can
 // apply blind, in the input order (spec/plan/arch_resolver.md, "The Two Ref
 // Shapes" and "Determinism"). First match wins:
 //
 //  1. batch holds the id (another create op in this same run) -> ref:op.
 //  2. Otherwise the fold holds a pairing for the id -> ref:task, unless that
-//     pairing's BeadStatus is "closed", in which case the dep is dropped —
-//     the work is already satisfied and needs no edge.
+//     pairing's status is not live (isLiveBeadStatus), in which case the dep
+//     is dropped — the task the fold names is absent from the task-state
+//     artifact, so the work is already satisfied and needs no edge.
 //
 // A dep that is neither in-batch nor in the fold is a plan error naming the
 // spec_node_id — v4 has no adapter-time fallback, so nothing downstream
 // could resolve what this function cannot. Used identically for a create
 // action's DepSpecNodeIDs and a retarget action's freshly recomputed ones
 // (spec/plan/arch_resolver.md, "Retarget deps").
-//
-// TODO(bead:spexmachina-swvx.19): the BeadStatus == "closed" drop branch
-// exists for the obsolete-then-recreate shape — a dep on a node that was
-// itself obsoleted resolves to a task already closed by this run's own
-// close op, so the edge is dropped rather than pointed at a dead task.
-// ActionClassifier (spexmachina-swvx.16) now retargets in place instead of
-// closing, so a changed node's task stays open across the change and this
-// branch no longer fires for that case; Resolver's own bead is to confirm
-// nothing else still relies on it before removing it.
 func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLookup) ([]Ref, error) {
 	var refs []Ref
 	for _, dep := range depSpecNodeIDs {
@@ -53,7 +59,7 @@ func ResolveDeps(depSpecNodeIDs []string, batch map[string]string, fold FoldLook
 			continue
 		}
 		if p, ok := fold.Lookup(dep); ok {
-			if p.BeadStatus == "closed" {
+			if !isLiveBeadStatus(p.BeadStatus) {
 				continue
 			}
 			refs = append(refs, Ref{Kind: RefTask, TaskID: p.TaskID})
