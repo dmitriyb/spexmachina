@@ -11,23 +11,23 @@ import (
 	"strings"
 )
 
-// specProposalLabelPrefix is the bead-label prefix that links a bead to a
-// proposal stem (filename without .md). The first such label on a bead
-// determines the bead's proposal grouping; additional matching labels are
+// specProposalLabelPrefix is the tracker-label prefix that links a task to a
+// proposal stem (filename without .md). The first such label on a task
+// determines the task's proposal grouping; additional matching labels are
 // ignored.
 const specProposalLabelPrefix = "spec_proposal:"
 
-// missingProposalLabel is the human-readable suffix shown when a bead's
+// missingProposalLabel is the human-readable suffix shown when a task's
 // spec_proposal label points at a file that does not exist under
-// spec/proposals/. The bead is still surfaced so its provenance remains
+// spec/proposals/. The task is still surfaced so its provenance remains
 // visible.
 const missingProposalLabel = "proposal file missing"
 
-// BeadRecord is the shape HistoryViewer consumes. The caller (ProposalCommands)
+// TaskRecord is the shape HistoryViewer consumes. The caller (ProposalCommands)
 // parses tracker output (typically `br list --json`) into a slice of these
 // records and hands it to the viewer; HistoryViewer never performs subprocess
 // invocation of its own.
-type BeadRecord struct {
+type TaskRecord struct {
 	ID        string   `json:"id"`
 	Status    string   `json:"status"`
 	Labels    []string `json:"labels"`
@@ -36,7 +36,7 @@ type BeadRecord struct {
 	ClosedAt  string   `json:"closed_at,omitempty"`
 }
 
-// HistoryViewer renders proposal-grouped bead history.
+// HistoryViewer renders proposal-grouped task history.
 //
 // SpecDir is the spec root (proposals are read from SpecDir/proposals).
 // Out is the destination writer. JSON toggles between human-readable text
@@ -52,24 +52,24 @@ type HistoryViewer struct {
 type proposalEntry struct {
 	Filename string      `json:"filename"`
 	Title    string      `json:"title"`
-	Beads    []beadEntry `json:"beads"`
+	Tasks    []taskEntry `json:"tasks"`
 }
 
-// beadEntry is the JSON shape for a single bead within a proposal group.
-type beadEntry struct {
+// taskEntry is the JSON shape for a single task within a proposal group.
+type taskEntry struct {
 	ID      string `json:"id"`
 	Status  string `json:"status"`
 	Action  string `json:"action"`
 	Summary string `json:"summary"`
 }
 
-// ShowHistory groups beads by their first spec_proposal:<stem> label, resolves
+// ShowHistory groups tasks by their first spec_proposal:<stem> label, resolves
 // each group's proposal file under SpecDir/proposals, and writes the rendered
-// history to Out. Beads without a spec_proposal label are silently skipped.
+// history to Out. Tasks without a spec_proposal label are silently skipped.
 // Groups whose proposal files are missing are still rendered, with a "proposal
-// file missing" annotation, so the bead's provenance stays visible.
-func (h *HistoryViewer) ShowHistory(beads []BeadRecord) error {
-	groups := groupBeadsByProposal(beads)
+// file missing" annotation, so the task's provenance stays visible.
+func (h *HistoryViewer) ShowHistory(tasks []TaskRecord) error {
+	groups := groupTasksByProposal(tasks)
 
 	stems := make([]string, 0, len(groups))
 	for stem := range groups {
@@ -89,14 +89,14 @@ func (h *HistoryViewer) ShowHistory(beads []BeadRecord) error {
 		entry := proposalEntry{
 			Filename: filename,
 			Title:    title,
-			Beads:    make([]beadEntry, 0, len(groups[stem])),
+			Tasks:    make([]taskEntry, 0, len(groups[stem])),
 		}
-		for _, b := range groups[stem] {
-			entry.Beads = append(entry.Beads, beadEntry{
-				ID:      b.ID,
-				Status:  b.Status,
-				Action:  deriveAction(b),
-				Summary: b.Title,
+		for _, t := range groups[stem] {
+			entry.Tasks = append(entry.Tasks, taskEntry{
+				ID:      t.ID,
+				Status:  t.Status,
+				Action:  deriveAction(t),
+				Summary: t.Title,
 			})
 		}
 		entries = append(entries, entry)
@@ -119,17 +119,17 @@ type proposalDisplay struct {
 	label    string
 }
 
-// groupBeadsByProposal walks beads and returns a map keyed by proposal stem
-// (no .md). A bead with multiple spec_proposal labels is placed under the
+// groupTasksByProposal walks tasks and returns a map keyed by proposal stem
+// (no .md). A task with multiple spec_proposal labels is placed under the
 // first one — defensive handling per arch_history_viewer.md.
-func groupBeadsByProposal(beads []BeadRecord) map[string][]BeadRecord {
-	groups := make(map[string][]BeadRecord)
-	for _, b := range beads {
-		stem, ok := firstProposalStem(b.Labels)
+func groupTasksByProposal(tasks []TaskRecord) map[string][]TaskRecord {
+	groups := make(map[string][]TaskRecord)
+	for _, t := range tasks {
+		stem, ok := firstProposalStem(t.Labels)
 		if !ok {
 			continue
 		}
-		groups[stem] = append(groups[stem], b)
+		groups[stem] = append(groups[stem], t)
 	}
 	return groups
 }
@@ -195,11 +195,11 @@ func proposalLabel(ptype string, exists bool) string {
 	return "proposal"
 }
 
-// deriveAction maps a bead's lifecycle to the human-facing action label.
-// Closed beads are rendered as "closed" (the proposal closed them); all
+// deriveAction maps a task's lifecycle to the human-facing action label.
+// Closed tasks are rendered as "closed" (the proposal closed them); all
 // others are rendered as "created" (the proposal created and still owns them).
-func deriveAction(b BeadRecord) string {
-	if strings.EqualFold(b.Status, "closed") {
+func deriveAction(t TaskRecord) string {
+	if strings.EqualFold(t.Status, "closed") {
 		return "closed"
 	}
 	return "created"
@@ -225,9 +225,9 @@ func (h *HistoryViewer) writeText(entries []proposalEntry, meta []proposalDispla
 		if _, err := fmt.Fprintf(h.Out, "%s (%s)\n", entry.Filename, meta[i].label); err != nil {
 			return err
 		}
-		for _, b := range entry.Beads {
-			action := strings.ToUpper(b.Action[:1]) + b.Action[1:]
-			if _, err := fmt.Fprintf(h.Out, "  %s: %s (%s)\t%s\n", action, b.ID, b.Status, b.Summary); err != nil {
+		for _, t := range entry.Tasks {
+			action := strings.ToUpper(t.Action[:1]) + t.Action[1:]
+			if _, err := fmt.Fprintf(h.Out, "  %s: %s (%s)\t%s\n", action, t.ID, t.Status, t.Summary); err != nil {
 				return err
 			}
 		}

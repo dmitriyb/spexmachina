@@ -388,11 +388,11 @@ func TestREQ30_S7_LogJSON(t *testing.T) {
 	var payload struct {
 		Proposals []struct {
 			Filename string `json:"filename"`
-			Beads    []struct {
+			Tasks    []struct {
 				ID     string `json:"id"`
 				Action string `json:"action"`
 				Status string `json:"status"`
-			} `json:"beads"`
+			} `json:"tasks"`
 		} `json:"proposals"`
 	}
 	if err := json.Unmarshal([]byte(out), &payload); err != nil {
@@ -405,8 +405,8 @@ func TestREQ30_S7_LogJSON(t *testing.T) {
 	if p.Filename != "2026-04-18-decouple.md" {
 		t.Errorf("want filename, got %q", p.Filename)
 	}
-	if len(p.Beads) != 1 || p.Beads[0].ID != "spexmachina-xyz" || p.Beads[0].Action != "closed" {
-		t.Errorf("unexpected bead entry: %+v", p.Beads)
+	if len(p.Tasks) != 1 || p.Tasks[0].ID != "spexmachina-xyz" || p.Tasks[0].Action != "closed" {
+		t.Errorf("unexpected task entry: %+v", p.Tasks)
 	}
 }
 
@@ -527,7 +527,7 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 	var envelope struct {
 		Proposals []struct {
 			Filename string `json:"filename"`
-			Beads    []any  `json:"beads"`
+			Tasks    []any  `json:"tasks"`
 		} `json:"proposals"`
 	}
 	if err := json.Unmarshal([]byte(out), &envelope); err != nil {
