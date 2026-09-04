@@ -439,12 +439,12 @@ func TestBuild_ExistingTaskDepResolvesToRefBead(t *testing.T) {
 	}
 }
 
-// --- Closed-task dep is dropped ---
+// --- Absent-task dep is dropped ---
 
-func TestBuild_ClosedTaskDepIsDropped(t *testing.T) {
+func TestBuild_AbsentTaskDepIsDropped(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
-	env.fold.fakeFold["Y"] = Pairing{TaskID: "spexmachina-y", BeadStatus: "closed"}
+	env.fold.fakeFold["Y"] = Pairing{TaskID: "spexmachina-y"}
 	actions := []Action{sampleComponentCreate("X", "m", "X", []string{"Y"})}
 
 	cs, err := env.build(actions, "p", "h")
@@ -453,7 +453,7 @@ func TestBuild_ClosedTaskDepIsDropped(t *testing.T) {
 	}
 	x := findOp(t, cs.Ops, "X")
 	if len(x.Deps) != 0 {
-		t.Errorf("X.deps: want empty (closed dep satisfied), got %+v", x.Deps)
+		t.Errorf("X.deps: want empty (absent dep satisfied), got %+v", x.Deps)
 	}
 }
 
@@ -1302,10 +1302,10 @@ func TestBuild_OnlyClosesNoCreates(t *testing.T) {
 	}
 }
 
-func TestBuild_InBatchDepWinsOverClosedFoldEntry(t *testing.T) {
+func TestBuild_InBatchDepWinsOverAbsentFoldEntry(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
-	env.fold.fakeFold["Y"] = Pairing{TaskID: "spexmachina-y-old", BeadStatus: "closed"}
+	env.fold.fakeFold["Y"] = Pairing{TaskID: "spexmachina-y-old"}
 	actions := []Action{
 		sampleComponentCreate("Y", "m", "Y", nil),
 		sampleComponentCreate("X", "m", "X", []string{"Y"}),
@@ -1317,7 +1317,7 @@ func TestBuild_InBatchDepWinsOverClosedFoldEntry(t *testing.T) {
 	y := findOp(t, cs.Ops, "Y")
 	x := findOp(t, cs.Ops, "X")
 	if len(x.Deps) != 1 || x.Deps[0] != (Ref{Kind: RefOp, OpID: y.OpID}) {
-		t.Errorf("X.deps: want [ref:op %s] (in-batch wins over closed fold entry), got %+v", y.OpID, x.Deps)
+		t.Errorf("X.deps: want [ref:op %s] (in-batch wins over absent fold entry), got %+v", y.OpID, x.Deps)
 	}
 }
 
