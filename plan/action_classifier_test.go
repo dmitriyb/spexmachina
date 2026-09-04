@@ -427,6 +427,51 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 	})
 }
 
+// TestClassifyMatched_S1b_AbsentCreateMatchesFreshCreate pins S1b: the create
+// a matched-but-absent node yields (SCHK_HASH in S1) is the same create a
+// never-tracked node yields, field for field, except the reason string. Both
+// sides use the same identity hash and new content hash so every other field
+// — Module, Node, NodeType, SpecNodeID, SpecHash, TaskID, OldTaskID and
+// DepSpecNodeIDs — lines up exactly; only Reason is blanked before the
+// comparison.
+func TestClassifyMatched_S1b_AbsentCreateMatchesFreshCreate(t *testing.T) {
+	f := newClassifierFixture()
+
+	modified := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
+	m := Match{Change: modified, Records: []Pairing{{TaskID: "spex-001"}}} // BeadStatus unset: absent
+	matchedActions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("matched: err: %v", err)
+	}
+	if len(matchedActions) != 1 {
+		t.Fatalf("matched: want 1 action, got %+v", matchedActions)
+	}
+
+	added := change(f.CompX, "plan", "component", merkle.Added, "", "new")
+	u := Unmatched{Change: added}
+	unmatchedActions, err := ClassifyActions(nil, []Unmatched{u}, nil, f.Graph)
+	if err != nil {
+		t.Fatalf("unmatched: err: %v", err)
+	}
+	if len(unmatchedActions) != 1 {
+		t.Fatalf("unmatched: want 1 action, got %+v", unmatchedActions)
+	}
+
+	matchedAction, unmatchedAction := matchedActions[0], unmatchedActions[0]
+
+	if matchedAction.Reason != "Spec node modified (new): plan/CompX" {
+		t.Errorf("matched reason: got %q", matchedAction.Reason)
+	}
+	if unmatchedAction.Reason != "New spec node: plan/CompX" {
+		t.Errorf("unmatched reason: got %q", unmatchedAction.Reason)
+	}
+
+	matchedAction.Reason, unmatchedAction.Reason = "", ""
+	if !reflect.DeepEqual(matchedAction, unmatchedAction) {
+		t.Errorf("matched-absent create must equal a fresh create in every field but Reason:\nmatched=%+v\nunmatched=%+v", matchedAction, unmatchedAction)
+	}
+}
+
 func TestClassifyMatched_RefusalIsTotal_NamesEveryClaimedTask(t *testing.T) {
 	f := newClassifierFixture()
 	m1 := Match{
@@ -822,9 +867,10 @@ func TestObsoleteActions_NeverCarryDeps(t *testing.T) {
 	f := newClassifierFixture()
 	// TSOne folds back with an open pairing, yielding a close — the only
 	// shape this test needs. CompX rides along, open, so its retarget's
-	// real DepSpecNodeIDs (CompY, and transitively CompW) are in the same
-	// list the close is checked against, proving the close stays deps-free
-	// rather than merely never having had any to carry.
+	// real DepSpecNodeIDs (CompY directly, plus CompZ and CompS
+	// transitively via requires_module) are in the same list the close is
+	// checked against, proving the close stays deps-free rather than
+	// merely never having had any to carry.
 	foldback := change(f.TSOne, "plan", "test_section", merkle.Modified, "old", "new")
 	retarget := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
 	matches := []Match{
