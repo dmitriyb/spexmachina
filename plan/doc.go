@@ -39,19 +39,25 @@
 //     retarget actions, consulting the spec directory for what the diff
 //     cannot tell it. An open task's node changing retargets it in place;
 //     there is no close-and-recreate step.
-//  5. TopologicalSorter partitions the create actions by tier and orders
-//     each tier with Kahn's algorithm and a lex tiebreak.
+//  5. TopologicalSorter partitions the create actions into layers — the
+//     proposal epic, then one layer per plan-relevant node type in the
+//     resolved profile's own order, then cleanups last — and orders each
+//     layer with Kahn's algorithm and a lex tiebreak.
 //  6. IdempotencyLabeler answers with one spex:<eid> label per create
 //     action, keyed to the journal event its task_created will reference.
 //  7. Resolver writes each dep as ref:op or ref:task, points every
 //     non-epic create's parent at the proposal epic, and walks
 //     implements -> preq_id -> priority for each create's priority number.
-//  8. ChangesetBuilder assembles the create ops, appends the retarget ops
-//     and one close op per closed task, writes the absorbed array, and
-//     answers with the finished changeset.json v4 in canonical field
-//     order. PlanCommand writes that answer to stdout, or atomically to
-//     --out — the builder composes the document, the command owns the
-//     sink.
+//  8. ChangesetBuilder assembles the create ops — each depending, as
+//     ref:op, on every create of the previous non-empty layer, and the
+//     cleanup layer's creates additionally depending on every retarget's
+//     target as ref:task — derives every op_id from its own canonical key
+//     (kind plus the node or task it acts on) rather than its position,
+//     appends the retarget ops and one close op per closed task, writes
+//     the absorbed array, and answers with the finished changeset.json v4
+//     in canonical field order. PlanCommand writes that answer to
+//     stdout, or atomically to --out — the builder composes the
+//     document, the command owns the sink.
 //
 // This package's wire shape — ChangesetVersion, Ref/RefTask/Ref.TaskID,
 // the create/close/retarget-only Op vocabulary — is v4 as of
@@ -66,6 +72,20 @@
 // behind --beads pending spexmachina-swvx.14 (TaskReader) and
 // spexmachina-swvx.7 (BeadReader cleanup). See each named TODO(bead:…) at
 // its call site.
+//
+// A second, later delta sits on top of the first: the 822b817 baseline
+// correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
+// tiering had no profile awareness — into flow_plan.md step 5 and module.json's
+// abfb10394fdd ("Layer order as blocking edges"). TopologicalSorter's tierOf
+// table (plan/sorter.go) is still the fixed epic / component+data_flow /
+// test_section split rather than one layer per plan-relevant node type in
+// the resolved profile's own order, plus a final layer for cleanup creates —
+// pending spexmachina-swvx.38. ChangesetBuilder's op_id (plan/builder.go) is
+// still the positional, digit-padded op-<n> shape rather than one derived
+// from each op's own canonical key, and Build does not yet add the
+// layer-boundary ref:op/ref:task edges abfb10394fdd requires — pending
+// spexmachina-swvx.20. PlanCommand does not yet warn and proceed (exit 0) on
+// an empty resolved plan-relevant list — pending spexmachina-swvx.21.
 //
 // # Contract surface
 //

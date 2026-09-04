@@ -66,11 +66,22 @@ const (
 	ActionRetarget = "retarget"
 )
 
-// Type tiers control create-op ordering (spec/plan/flow_plan.md, step 5;
-// spec/plan/arch_topological_sorter.md, "Ordering Rules"). Within each
-// tier TopologicalSorter applies Kahn's algorithm with a lex-spec_node_id
-// tiebreak. Lower tiers emit first: the proposal epic, then components and
-// data_flows together, then multi-component test sections.
+// Type tiers control create-op ordering (spec/plan/arch_topological_sorter.md,
+// "Ordering Rules"). Within each tier TopologicalSorter applies Kahn's
+// algorithm with a lex-spec_node_id tiebreak. Lower tiers emit first: the
+// proposal epic, then components and data_flows together, then
+// multi-component test sections.
+//
+// TODO(bead:spexmachina-swvx.38): spec/plan/flow_plan.md step 5, as
+// corrected by the 822b817 baseline (module.json's abfb10394fdd, "Layer
+// order as blocking edges"), replaces this fixed three-tier split with one
+// layer per plan-relevant node type in the resolved profile's own order —
+// under the default profile that separates data_flow from component
+// instead of sharing TierFeatureOrFlow — plus a final layer for cleanup
+// creates, which this table does not carve out today. These three
+// constants and plan/sorter.go's tierOf stay as the pre-correction shape
+// until TopologicalSorter's own bead replaces them with a profile-driven
+// layer list.
 const (
 	TierProposalEpic  = 0
 	TierFeatureOrFlow = 1
@@ -245,6 +256,14 @@ type Action struct {
 // spec_node_id-to-op_id map; ChangesetBuilder keeps the order and
 // discards both, renumbering every op itself once the retarget and close
 // ops are counted.
+//
+// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817-corrected
+// step 8 renumbers from each op's own canonical key — its kind plus the
+// node or task it acts on — never from position; plan/builder.go's
+// digit-padded op-%0*d renumbering is the pre-correction shape until
+// ChangesetBuilder's own bead switches to the canonical-key form the
+// changeset.json example (spec/plan/flow_plan.md, "changeset.json
+// (output)") now shows.
 type OrderedOp struct {
 	OpID   string
 	Action Action

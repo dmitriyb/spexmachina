@@ -74,6 +74,20 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 	// first, then retargets, then closes — and zero-padded to the digit
 	// width of the total. Sort/TopologicalSorter is handed the creates
 	// alone and so cannot compute this width itself.
+	//
+	// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817
+	// correction derives every op_id from its own canonical key — kind plus
+	// the node or task id it acts on, e.g. "op-component-4c1146bb7287",
+	// "op-retarget-80afb22dab75" — never from position (see the
+	// changeset.json example in "changeset.json (output)"), and adds a
+	// layer-boundary edge to every create: a ref:op dep on every create of
+	// the previous non-empty layer, with the cleanup layer's creates also
+	// carrying a ref:task dep on each retarget's target (module.json's
+	// abfb10394fdd, "Layer order as blocking edges"). Neither the
+	// digit-padded op-%0*d renumbering below nor any layer-edge wiring
+	// exists yet; both are ChangesetBuilder's own bead to add, once
+	// TopologicalSorter (spexmachina-swvx.38) exposes layer boundaries for
+	// Build to read.
 	total := len(ordered) + len(retargets) + len(obsoletes)
 	pad := digits(total)
 	for i := range ordered {
