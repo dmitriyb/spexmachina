@@ -44,20 +44,20 @@ func validateJournalLine(t *testing.T, sch *jsonschema.Schema, doc string) error
 
 // Fixtures, verbatim from test_journal_line_schema.md.
 const (
-	jlFixtureChangeEvent = `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+	jlFixtureChangeEvent = `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 
-	jlFixtureTaskCreated = `{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}`
+	jlFixtureTaskCreated = `{"event":"task_created","for":"cafe1234:op-component-a1b2c3d4e5f6","task_id":"spexmachina-abc"}`
 
-	jlFixtureTaskRetargeted = `{"event":"task_retargeted","for":"cafe1234:op-9","task_id":"spexmachina-abc"}`
+	jlFixtureTaskRetargeted = `{"event":"task_retargeted","for":"cafe1234:op-retarget-a1b2c3d4e5f6","task_id":"spexmachina-abc"}`
 
 	jlFixtureRegisteredEvent = `{"event":"registered","eid":"cafe1234:2026-08-11-event-keyed-linkage",
  "proposal":"2026-08-11-event-keyed-linkage","git_head":"cafe1234"}`
 
 	jlFixtureLegacyEpicReceipt = `{"event":"task_created","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-0lk"}`
 
-	jlFixtureRefreshReceipt = `{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-7"]}`
+	jlFixtureRefreshReceipt = `{"event":"refresh","git_head":"cafe1234","absorbed":["cafe1234:op-component-a1b2c3d4e5f6"]}`
 )
 
 // --- S1: Each fixture line passes validation ---
@@ -89,7 +89,7 @@ func TestJournalLineSchema_S1_FixturesPass(t *testing.T) {
 
 func TestJournalLineSchema_S2_UnknownEventFails(t *testing.T) {
 	sch := compileJournalLineSchema(t)
-	doc := `{"event":"renamed","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+	doc := `{"event":"renamed","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 	if err := validateJournalLine(t, sch, doc); err == nil {
@@ -101,7 +101,7 @@ func TestJournalLineSchema_S2_UnknownEventFails(t *testing.T) {
 
 func TestJournalLineSchema_S3_ChangeEventMissingNodeFails(t *testing.T) {
 	sch := compileJournalLineSchema(t)
-	doc := `{"event":"added","eid":"cafe1234:op-7","name":"ActionClassifier",
+	doc := `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 	if err := validateJournalLine(t, sch, doc); err == nil {
@@ -115,7 +115,7 @@ func TestJournalLineSchema_S4_NodePattern(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
 	changeEventWithNode := func(node string) string {
-		return `{"event":"added","eid":"cafe1234:op-7","node":"` + node + `","name":"ActionClassifier",
+		return `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"` + node + `","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 	}
@@ -144,7 +144,7 @@ func TestJournalLineSchema_S5_BeforeAfterNullVsAbsent(t *testing.T) {
 	})
 
 	t.Run("omitted before fails", func(t *testing.T) {
-		doc := `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+		doc := `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 		if err := validateJournalLine(t, sch, doc); err == nil {
@@ -159,7 +159,7 @@ func TestJournalLineSchema_S6_TaskReceiptExactlyOneReferent(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
 	t.Run("both for and proposal fails", func(t *testing.T) {
-		doc := `{"event":"task_created","for":"cafe1234:op-7","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-abc"}`
+		doc := `{"event":"task_created","for":"cafe1234:op-component-a1b2c3d4e5f6","proposal":"2026-04-18-decouple-spex-from-br","task_id":"spexmachina-abc"}`
 		if err := validateJournalLine(t, sch, doc); err == nil {
 			t.Fatal("expected validation error when both for and proposal are present")
 		}
@@ -238,7 +238,7 @@ func TestJournalLineSchema_S6c_TaskRetargetedStrictShape(t *testing.T) {
 func TestJournalLineSchema_S6d_TwoTaskCreatedLinesValidateIndependently(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
-	first := `{"event":"task_created","for":"cafe1234:op-7","task_id":"spexmachina-abc"}`
+	first := `{"event":"task_created","for":"cafe1234:op-component-a1b2c3d4e5f6","task_id":"spexmachina-abc"}`
 	second := `{"event":"task_created","for":"cafe1235:op-3","task_id":"spexmachina-xyz"}`
 
 	if err := validateJournalLine(t, sch, first); err != nil {
@@ -255,7 +255,7 @@ func TestJournalLineSchema_S7_NodeTypeShapeCheckedNotEnumerated(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
 	changeEventWithNodeType := func(nodeType string) string {
-		return `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+		return `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"` + nodeType + `","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 	}
@@ -307,7 +307,7 @@ func TestJournalLineSchema_S8b_OptionalPath(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
 	t.Run("with path passes", func(t *testing.T) {
-		doc := `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+		doc := `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal","path":"impact/arch_action_classifier.md"}`
 		if err := validateJournalLine(t, sch, doc); err != nil {
@@ -377,7 +377,7 @@ func TestJournalLineSchema_S9_NoIntegerIDs(t *testing.T) {
 
 func TestJournalLineSchema_E1_ExtraPropertiesRejected(t *testing.T) {
 	sch := compileJournalLineSchema(t)
-	doc := `{"event":"added","eid":"cafe1234:op-7","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+	doc := `{"event":"added","eid":"cafe1234:op-component-a1b2c3d4e5f6","node":"a1b2c3d4e5f6","name":"ActionClassifier",
  "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal","color":"red"}`
 	if err := validateJournalLine(t, sch, doc); err == nil {
