@@ -4,14 +4,14 @@
   "proposal": "test/idempotency",
   "ops": [
     {
-      "op_id": "op-0004",
+      "op_id": "op-retarget-a1b2c3d4e5f6",
       "type": "retarget",
       "target": {
         "ref": "task",
         "task_id": "br-open"
       },
       "labels": [
-        "spex:cafe1234:op-4"
+        "spex:cafe1234:op-retarget-a1b2c3d4e5f6"
       ],
       "deps": [
         {

@@ -4,7 +4,7 @@
   "proposal": "test/substitution",
   "ops": [
     {"op_id":"op-0001","type":"create","spec_node_kind":"component","spec_node_id":"sn-anchor","idempotency":{"label":"spex:1"},"priority":1,"title":"Anchor"},
-    {"op_id":"op-0002","type":"create","spec_node_kind":"component","spec_node_id":"sn-legacy","idempotency":{"label":"spex:2"},"deps":[
+    {"op_id":"op-component-b2c3d4e5f6a1","type":"create","spec_node_kind":"component","spec_node_id":"sn-legacy","idempotency":{"label":"spex:2"},"deps":[
       {"ref":"bead","bead_id":"br-77"}
     ],"priority":1,"title":"Legacy dep"}
   ]

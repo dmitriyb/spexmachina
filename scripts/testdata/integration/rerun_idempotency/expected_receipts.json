@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "status": "complete",
+  "ops": [
+    {"op_id":"op-0001","status":"ok","task_id":"__ANY__","was_existing":true},
+    {"op_id":"op-0002","status":"ok","task_id":"__ANY__","was_existing":true},
+    {"op_id":"op-0003","status":"ok","task_id":"__ANY__","was_existing":false},
+    {"op_id":"op-0004","status":"ok","task_id":"__ANY__","was_existing":true}
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "bead": "spexmachina-swvx.35",
+  "node": "e62fbe481413",
+  "files": ["spec/adapters/test_br_integration.md"],
+  "claim": "test_br_integration.md's Fixtures section states: \"The partial-run, re-run-idempotency and both-ref-shape scenarios above, and the retarget path, are owed integration fixtures of the same shape and have none yet. The mock-mode suite under `scripts/testdata/{idempotency,substitution}/` covers them meanwhile against the stand-in `br`, which does not discharge what this test claims: the requirement asks for those cases against a real sandbox.\" The Fixtures inventory immediately above it also enumerates only `export/`, `happy_path/` and `close_removed/`.",
+  "authoritative_source": "This same PR (spexmachina-swvx.35) adds `scripts/testdata/integration/partial_run/`, `rerun_idempotency/`, `both_ref_shapes/`, and `retarget/`, each exercising its named scenario against a real `br` sandbox, discharging exactly the debt this leaf describes as outstanding.",
+  "evidence": "The four fixture directories now exist on disk and pass under `scripts/apply-br_test.sh` against real `br`, so the leaf's \"have none yet\" / \"does not discharge\" language is false as of this bead, and its Fixtures inventory omits four directories that exist.",
+  "blocking": false,
+  "proposed_fix": "Update the Fixtures section to list `partial_run/`, `rerun_idempotency/`, `both_ref_shapes/`, and `retarget/` alongside `export/`, `happy_path/`, `close_removed/`, and remove or rewrite the trailing paragraph that claims these scenarios have no integration fixture."
+}

@@ -1,6 +1,6 @@
 {
   "issues": [
-    {"id":"existing-7","title":"prior bead","status":"open","issue_type":"feature","labels":["spex:cafe1234:op-1"]}
+    {"id":"existing-7","title":"prior bead","status":"open","issue_type":"feature","labels":["spex:cafe1234:op-component-a1b2c3d4e5f6"]}
   ],
   "create_ids": ["mock-001"]
 }
