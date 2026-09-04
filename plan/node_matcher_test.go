@@ -9,7 +9,7 @@ import (
 )
 
 // fixtureHashes holds the canonical identity hashes used across the
-// bead-matching test scenarios in spec/plan/test_bead_matching.md. Computed
+// task-matching test scenarios in spec/plan/test_task_matching.md. Computed
 // once so fixtures stay readable (SCHK_HASH, HASR_HASH, ...) while still
 // exercising the real IdentityHash derivation used in production.
 type fixtureHashes struct {
@@ -36,7 +36,7 @@ func newFixture() fixtureHashes {
 
 // basePairings are the journal-fold pairings shared by several scenarios:
 // one entry per node, matching the fixture's `added` + `task_created` pairs
-// from spec/plan/test_bead_matching.md's Setup section.
+// from spec/plan/test_task_matching.md's Setup section.
 func basePairings(h fixtureHashes) []Pairing {
 	return []Pairing{
 		{SpecNodeID: h.SCHK, TaskID: "spex-001", NodeType: "component", Module: "validator", Name: "SchemaChecker"},
@@ -99,14 +99,15 @@ func TestS3_MatchedUnmatchedOrphaned(t *testing.T) {
 
 // S4: NodeMatcher handles multiple beads per spec node — across a node's
 // lineage, not simultaneously. The fold answers with one current pairing
-// per node (latest task-bearing event wins): after a task_closed followed
-// by a second task_created, MatchNodes sees just that current pairing. The
-// prior task remains reachable through the journal history, not through
-// matching.
+// per node (latest task-bearing event wins): a successor task_created with
+// no task_closed between it and the first — the journal never records
+// completion — still leaves MatchNodes seeing just that current pairing.
+// The prior task remains reachable through the journal history, not
+// through matching.
 func TestS4_MultipleBeadsPerNode(t *testing.T) {
 	h := newFixture()
 	pairings := basePairings(h)
-	pairings[0].TaskID = "spex-001-followup" // SCHK's current pairing after task_closed + task_created
+	pairings[0].TaskID = "spex-001-followup" // SCHK's current pairing after a successor task_created, no task_closed between them
 	changes := []merkle.ClassifiedChange{
 		{
 			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
@@ -188,6 +189,91 @@ func TestS4b_RetargetedPairingMatchesLikeAnyOther(t *testing.T) {
 	}
 	if matched[0].Records[0].After != "post-retarget-hash" {
 		t.Errorf("want the pairing's After hash carried through untouched, got %q", matched[0].Records[0].After)
+	}
+}
+
+// S4c: TaskReader's output joins onto the pairings, and NodeMatcher carries
+// the result untouched. The one scenario that crosses both components: an
+// artifact lists spex-001 as open and spex-002 as in_progress and says
+// nothing about spex-003; that status is joined onto the fixture pairings
+// by task id (the join PlanCommand performs, reproduced here directly) and
+// handed to MatchNodes alongside the fixture diff. A matcher that dropped
+// unlisted pairings, or a reader that mislabeled the statuses, fails here
+// and nowhere in S1-S4b.
+func TestS4c_TaskReaderStatusJoinsThenMatches(t *testing.T) {
+	h := newFixture()
+
+	tasks, err := ReadTasksBytes([]byte(`{"version": 1, "tasks": [
+		{"task_id": "spex-001", "status": "open"},
+		{"task_id": "spex-002", "status": "in_progress"}
+	]}`))
+	if err != nil {
+		t.Fatalf("ReadTasksBytes: %v", err)
+	}
+	statusByTask := map[string]string{}
+	for _, task := range tasks {
+		statusByTask[task.ID] = task.Status
+	}
+	joinStatus := func(pairings []Pairing) []Pairing {
+		joined := make([]Pairing, len(pairings))
+		for i, p := range pairings {
+			p.BeadStatus = statusByTask[p.TaskID]
+			joined[i] = p
+		}
+		return joined
+	}
+
+	pairings := joinStatus(basePairings(h))
+
+	// SCHK_HASH and HTST_HASH are in the diff (as in S3); HASR_HASH is not.
+	changes := []merkle.ClassifiedChange{
+		{
+			Change: merkle.Change{Key: h.SCHK, Type: merkle.Modified, NodeType: "component", Module: h.VALIDMOD},
+			Impact: merkle.ArchImpl,
+			Module: "validator",
+		},
+		{
+			Change: merkle.Change{Key: h.HTST, Type: merkle.Modified, NodeType: "test_section", Module: h.MERKLMOD},
+			Impact: merkle.ImplOnly,
+			Module: "merkle",
+		},
+	}
+
+	matched, _, _ := MatchNodes(changes, pairings)
+	byKey := map[string]Match{}
+	for _, m := range matched {
+		byKey[m.Change.Key] = m
+	}
+
+	if m, ok := byKey[h.SCHK]; !ok || len(m.Records) != 1 || m.Records[0].BeadStatus != "open" {
+		t.Fatalf("want SCHK matched carrying status open, got %+v", m)
+	}
+	for _, m := range matched {
+		if m.Change.Key == h.HASR {
+			t.Fatalf("want HASR to reach no list while absent from the diff, got %+v", m)
+		}
+	}
+	if m, ok := byKey[h.HTST]; !ok || len(m.Records) != 1 || m.Records[0].BeadStatus != "" {
+		t.Fatalf("want HTST matched carrying unset status, got %+v", m)
+	} else if m.Records[0].TaskID != "spex-003" {
+		t.Errorf("want HTST paired with spex-003 exactly as in S3, got %+v", m.Records[0])
+	}
+
+	// Modify HASR_HASH in the diff too; its matched entry must now carry
+	// in_progress verbatim.
+	changes = append(changes, merkle.ClassifiedChange{
+		Change: merkle.Change{Key: h.HASR, Type: merkle.Modified, NodeType: "component", Module: h.MERKLMOD},
+		Impact: merkle.ArchImpl,
+		Module: "merkle",
+	})
+
+	matched, _, _ = MatchNodes(changes, pairings)
+	byKey = map[string]Match{}
+	for _, m := range matched {
+		byKey[m.Change.Key] = m
+	}
+	if m, ok := byKey[h.HASR]; !ok || len(m.Records) != 1 || m.Records[0].BeadStatus != "in_progress" {
+		t.Fatalf("want HASR matched carrying status in_progress once in the diff, got %+v", m)
 	}
 }
 
