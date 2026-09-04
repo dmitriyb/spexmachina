@@ -1,90 +1,18 @@
 [
   {
-    "node": "dfe1467b7a4b",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (three sentences on identity-hash keying and the meta graduation); no interface, flag, exit code or field moved; pinned by merkle/tree_builder_test.go"
-  },
-  {
-    "node": "cb262b280963",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (the rename-is-destructive paragraph); no interface, flag, exit code or field moved; pinned by merkle/diff_engine_test.go"
-  },
-  {
-    "node": "c8b958ec310d",
-    "reason": "example error message follows the retitled requirement 'Match changed nodes to tasks'; the checker prints the live requirement name, so the output changes with no code change; pinned by cmd/spex/diff_test.go"
-  },
-  {
-    "node": "de3309dfbd3c",
-    "reason": "example error message follows the retitled requirement 'Match changed nodes to tasks'; the message is built from the live requirement name; pinned by merkle/completeness_checker_test.go"
-  },
-  {
-    "node": "f1a672216ce9",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one sentence on the contract level reaching plan); no interface, flag, exit code or field moved; pinned by merkle/impact_classifier_test.go"
-  },
-  {
-    "node": "35f39388bc76",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one sentence on the first cycle); no interface, flag, exit code or field moved; pinned by merkle/empty_tree_test.go"
-  },
-  {
-    "node": "45a52ae06265",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (two sentences on what feeds plan); no interface, flag, exit code or field moved; pinned by merkle/diff_engine_test.go"
-  },
-  {
-    "node": "49a61e0d5737",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one rationale sentence); no interface, flag, exit code or field moved; pinned by cmd/spex/diff_test.go"
-  },
-  {
-    "node": "95a279cbdcbc",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one rationale sentence); no interface, flag, exit code or field moved; pinned by merkle/impact_classifier_test.go"
-  },
-  {
-    "node": "b6758cdfabc4",
-    "reason": "one historical phrase in the global-flags paragraph names the retired record file instead of its old name; behaviour unchanged; pinned by cli/root_test.go"
-  },
-  {
-    "node": "8aae44eabf47",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one sentence on spex log's stdin); no interface, flag, exit code or field moved; pinned by cmd/spex/proposal_test.go"
-  },
-  {
-    "node": "172d16ca0eac",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (one sentence in the --slim rationale); no interface, flag, exit code or field moved; pinned by render/renderer_test.go"
-  },
-  {
-    "node": "cd726f8b088b",
-    "reason": "Expose bullet clarifies that the plan-relevant set says which types produce tasks and nothing about their lifecycle; describes the shipped declaration; pinned by schema/schema_loader_test.go"
-  },
-  {
-    "node": "659abe167891",
-    "reason": "Ordering Rules gains the no-lineage paragraph: no create names a close's target, so the block order is build-adjust-cancel only; tiers, Kahn and tiebreak unchanged; pinned by plan/sorter_test.go"
-  },
-  {
-    "node": "5fd9613616e1",
-    "reason": "new section 'What Is Deliberately Not an Invariant' records that the checker asserts per event and demands no task_closed between a node's generations, which is the shipped check set; pinned by ingest/invariant_checker_test.go"
-  },
-  {
-    "node": "f85bd2f94aeb",
-    "reason": "Interface and Why-the-Gate sentences record that the saver reads only the top-level status off receipts v2, the version being IngestCommand's check; behaviour unchanged; pinned by ingest/snapshot_saver_test.go"
-  },
-  {
     "node": "f9033352c13f",
-    "reason": "Inputs and Refusal contract gloss the removal gate as unclosed-pairing, which is how refresh.go already decides liveness from the fold's latest pairing and closedTaskIDs; message text unchanged; pinned by ingest/refresh_test.go"
+    "reason": "one sentence in the absorb-set rationale: why a meta leaf gets no change event now reads off the profile's declared types instead of the retired journal enum; no table, flag or exit code moved; pinned by ingest/refresh_test.go"
+  },
+  {
+    "node": "703128d3ebd6",
+    "reason": "receipt example ids rewritten to the canonical op-<kind>-<key> shape; the adapter treats op_id as an opaque key, no phase or failure rule moved; pinned by scripts/apply-br_test.sh"
+  },
+  {
+    "node": "6fd1f0cbb76c",
+    "reason": "receipt example ids rewritten to the canonical op-<kind>-<key> shape; ingest pairs receipts to ops by op_id as an opaque key, no step moved; pinned by ingest/reconciler_test.go"
   },
   {
     "node": "08909d62930b",
-    "reason": "spex map get paragraph states that the reported task_id's liveness is not in the journal; describes shipped output; pinned by cmd/spex/map_test.go"
-  },
-  {
-    "node": "6b79188dff4c",
-    "reason": "Responsibilities bullet states a successor task's bracket starts at the preceding change event, the existing latest-task-bearing-event rule; pinned by mapping/context_resolver_test.go"
-  },
-  {
-    "node": "24180f55c0b4",
-    "reason": "opening paragraph adds that the epic the registered event pairs is never status-read by plan; registration behaviour unchanged; pinned by proposal/register_test.go"
-  },
-  {
-    "node": "cc8adc823719",
-    "reason": "Change Proposal Template section states the template pre-prints the three required sections and not the optional Retired vocabulary one; template bytes unchanged; pinned by proposal/template_test.go"
-  },
-  {
-    "node": "1d33b4c6c36e",
-    "reason": "vocabulary sweep only, bead \u2192 task in prose (DOT labels, the traceability list and the output shape's key names, which describe HistoryViewer's payload owned by that component's task); no interface, flag, exit code or field moved; pinned by proposal/history_test.go"
+    "reason": "one example eid rewritten to the canonical shape; the command prints the journal's eid verbatim, no output field moved; pinned by cmd/spex/map_test.go"
   }
 ]
