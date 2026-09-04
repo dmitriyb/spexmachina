@@ -350,9 +350,10 @@ func (p *Profile) findField(typeName, scope, fieldName string) (Field, bool) {
 // type ("module" is never declared, so a reference field naming it always
 // fails here), an enumeration on a non-text field, bounds on a non-integer
 // field, a duplicate field name within one type, a field name colliding
-// with an envelope field, or a coverage/plan-relevant/impact-level/
-// absorbable entry naming an undeclared type or a field that does not
-// exist, is not a reference field, or does not target the covered type —
+// with an envelope field, a plan-relevant entry naming an undeclared type
+// or a type already listed, or a coverage/impact-level/absorbable entry
+// naming an undeclared type or a field that does not exist, is not a
+// reference field, or does not target the covered type —
 // is collected and returned together via errors.Join, so a malformed
 // profile is reported in one pass rather than one field at a time across
 // repeated runs.
@@ -440,8 +441,12 @@ func (p *Profile) Validate() error {
 		}
 	}
 
-	for _, name := range p.PlanRelevant {
-		check(declared[name], "plan_relevant", fmt.Sprintf("undeclared node type %q", name))
+	seenPlanRelevant := map[string]bool{}
+	for i, name := range p.PlanRelevant {
+		path := fmt.Sprintf("plan_relevant[%d]", i)
+		check(declared[name], path, fmt.Sprintf("undeclared node type %q", name))
+		check(!seenPlanRelevant[name], path, fmt.Sprintf("node type %q already listed", name))
+		seenPlanRelevant[name] = true
 	}
 	for name := range p.ImpactLevels {
 		check(declared[name], "impact_levels", fmt.Sprintf("undeclared node type %q", name))

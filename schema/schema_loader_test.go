@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -1646,6 +1647,102 @@ func TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument(t *testing.T) {
 	if !jsonEqual(t, composedProject, shippedProject) {
 		t.Fatal("composing from the file-backed copy of the embedded document should still reproduce the shipped project schema (P2 holds over both)")
 	}
+}
+
+// TestFR9_P10_PlanRelevantValidatedAsOrderedListOfDeclaredTypes covers
+// test_schema_loading.md's P10: plan_relevant is validated as an ordered
+// list of declared types — a repeated entry or an undeclared entry fails
+// early, exactly as P7's field-declaration defects do, while a reordering
+// or an empty list are both legal declarations, and the resolved profile
+// exposes the list in the declared order rather than just the membership.
+func TestFR9_P10_PlanRelevantValidatedAsOrderedListOfDeclaredTypes(t *testing.T) {
+	withPlanRelevant := func(t *testing.T, planRelevant any) []byte {
+		t.Helper()
+		data, err := defaultProfileFS.ReadFile("defaultProfile.json")
+		if err != nil {
+			t.Fatalf("read embedded defaultProfile.json: %v", err)
+		}
+		var doc map[string]any
+		if err := json.Unmarshal(data, &doc); err != nil {
+			t.Fatalf("unmarshal embedded defaultProfile.json: %v", err)
+		}
+		doc["plan_relevant"] = planRelevant
+		out, err := json.Marshal(doc)
+		if err != nil {
+			t.Fatalf("marshal modified profile: %v", err)
+		}
+		return out
+	}
+
+	t.Run("a type listed twice fails early", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := withPlanRelevant(t, []string{"component", "component", "data_flow", "test_section"})
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), doc, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), `"component"`) || !strings.Contains(err.Error(), "already listed") {
+			t.Fatalf("error should name the repeated entry, got: %v", err)
+		}
+	})
+
+	t.Run("an undeclared type fails early", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := withPlanRelevant(t, []string{"endpoint"})
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), doc, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), `"endpoint"`) || !strings.Contains(err.Error(), "undeclared node type") {
+			t.Fatalf("error should name the undeclared entry, got: %v", err)
+		}
+	})
+
+	t.Run("a reordering resolves and preserves the declared order", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := withPlanRelevant(t, []string{"test_section", "component", "data_flow"})
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), doc, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		p, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("a reordered plan_relevant should resolve cleanly: %v", err)
+		}
+		want := []string{"test_section", "component", "data_flow"}
+		if !slices.Equal(p.PlanRelevant, want) {
+			t.Fatalf("PlanRelevant = %v, want %v (declared order)", p.PlanRelevant, want)
+		}
+		if slices.Equal(p.PlanRelevant, DefaultProfile().PlanRelevant) {
+			t.Fatal("the reordered profile's PlanRelevant should differ from the default's")
+		}
+	})
+
+	t.Run("an empty list is a legal declaration that no type produces tasks", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := withPlanRelevant(t, []string{})
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), doc, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		p, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("an empty plan_relevant should resolve cleanly: %v", err)
+		}
+		if len(p.PlanRelevant) != 0 {
+			t.Fatalf("PlanRelevant = %v, want empty", p.PlanRelevant)
+		}
+	})
 }
 
 // TestFR3_FormatVersionDeclarations covers arch_schema_loader.md's format
