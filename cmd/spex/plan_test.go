@@ -463,9 +463,9 @@ func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
 	}
 }
 
-// --- S6: --beads drives the cleanup gate ---
+// --- S6: --beads drives the status split (retarget vs. plain create) ---
 
-func TestPlanCommand_S6_BeadsFlagDrivesCleanupGate(t *testing.T) {
+func TestPlanCommand_S6_BeadsFlagDrivesStatusSplit(t *testing.T) {
 	f := setupPlanFixture(t)
 
 	stdout, stderr, err := runPlan(t, "",

@@ -50,9 +50,12 @@ type Labeler struct {
 	// removed event, when the removal already landed in an earlier batch.
 	Fold RemovalLookup
 	// CloseOpIDs maps a to-be-closed task_id to the op_id the builder
-	// assigned its close op in this batch. A cleanup action's OldTaskID
-	// indexes into it when the fold carries no removed event yet — the
-	// removal this run's own same-batch close op is about to record.
+	// assigned its close op in this batch — consulted by cleanupLabel's
+	// same-batch fallback for the modify-pair cleanup shape spexmachina-swvx.16
+	// retired. A cleanup action carries no OldTaskID from this package's own
+	// classifier output any more, so the lookup never matches in-process; it
+	// stays only because CloseOpIDs and its plan/builder.go wiring are not
+	// this bead's to retire (see cleanupLabel's TODO).
 	CloseOpIDs map[string]string
 }
 
@@ -70,9 +73,11 @@ type Labeler struct {
 // verdict Resolver's missing-parent error reads, both decided on the run's
 // registration.
 //
-// Cleanup is checked next: a cleanup action also carries OldTaskID
-// (lineage to the closed task it dismantles), which would otherwise be
-// indistinguishable from a modify-pair's node-bearing shape.
+// Cleanup is checked next, discriminated by isCleanup's Reason prefix
+// rather than by OldTaskID — a cleanup action carries no OldTaskID any
+// more (spexmachina-swvx.16), which is exactly why cleanupLabel's
+// self-mint fallback exists for when neither the fold nor CloseOpIDs
+// answers.
 func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string, error) {
 	if action.NodeType == KindProposalEpic {
 		if reg.EID == "" {

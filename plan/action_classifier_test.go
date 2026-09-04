@@ -820,16 +820,32 @@ func TestDeps_TestSectionUnresolvableYieldsEmpty(t *testing.T) {
 
 func TestObsoleteActions_NeverCarryDeps(t *testing.T) {
 	f := newClassifierFixture()
-	c := change(f.CompX, "plan", "component", merkle.Modified, "a", "b")
-	m := Match{Change: c, Records: []Pairing{{TaskID: "spex-1", BeadStatus: "closed"}}}
-	actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+	// TSOne folds back with an open pairing, yielding a close — the only
+	// shape this test needs. CompX rides along, open, so its retarget's
+	// real DepSpecNodeIDs (CompY, and transitively CompW) are in the same
+	// list the close is checked against, proving the close stays deps-free
+	// rather than merely never having had any to carry.
+	foldback := change(f.TSOne, "plan", "test_section", merkle.Modified, "old", "new")
+	retarget := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
+	matches := []Match{
+		{Change: foldback, Records: []Pairing{{TaskID: "spex-ts", BeadStatus: "open"}}},
+		{Change: retarget, Records: []Pairing{{TaskID: "spex-cx", BeadStatus: "open", After: "old"}}},
+	}
+	actions, err := ClassifyActions(matches, nil, nil, f.Graph)
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
+	found := false
 	for _, a := range actions {
-		if a.Type == ActionObsolete && len(a.DepSpecNodeIDs) != 0 {
-			t.Errorf("obsolete action must carry no deps: %+v", a)
+		if a.Type == ActionObsolete {
+			found = true
+			if len(a.DepSpecNodeIDs) != 0 {
+				t.Errorf("obsolete action must carry no deps: %+v", a)
+			}
 		}
+	}
+	if !found {
+		t.Fatalf("want an obsolete action in the list, got %+v", actions)
 	}
 }
 
@@ -1153,7 +1169,7 @@ func TestClassifyActions_DeterministicAcrossShuffledInput(t *testing.T) {
 		{Change: change(f.CompW, "plan", "component", merkle.Added, "", "w")},
 	}
 	orphaned := []Orphaned{
-		{Record: Pairing{SpecNodeID: "legacy", TaskID: "spex-010", Module: "plan", Name: "Legacy", BeadStatus: "closed"}, NodeType: "component"},
+		{Record: Pairing{SpecNodeID: "legacy", TaskID: "spex-010", Module: "plan", Name: "Legacy", BeadStatus: "open"}, NodeType: "component"},
 	}
 
 	a1, err1 := ClassifyActions(matches, unmatched, orphaned, f.Graph)
