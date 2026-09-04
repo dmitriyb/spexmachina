@@ -67,11 +67,11 @@
 // then recreate" shape the flow above describes as the target
 // (ActionObsolete, Action.OldTaskID, the create's blocks-edge lineage dep
 // on Ref.EdgeType) pending their own beads — spexmachina-swvx.16, .19, .20
-// and .13 respectively — and the --beads/BeadReader task-state input this
-// doc's step 2 describes as TaskReader/--tasks is still ReadBeads/ReadBeadsBytes
-// behind --beads pending spexmachina-swvx.14 (TaskReader) and
-// spexmachina-swvx.7 (BeadReader cleanup). See each named TODO(bead:…) at
-// its call site.
+// and .13 respectively. This doc's step 2, TaskReader/--tasks, landed as
+// plan.ReadTasks/ReadTasksBytes in spexmachina-swvx.14; the pre-task-
+// lifecycle ReadBeads/ReadBeadsBytes trio it replaces still runs behind
+// --beads, wired alongside it, pending spexmachina-swvx.7 (BeadReader
+// cleanup). See each named TODO(bead:…) at its call site.
 //
 // A second, later delta sits on top of the first: the 822b817 baseline
 // correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
@@ -95,8 +95,9 @@
 // action-type, spec_node_kind, ref-kind and label vocabularies, the tier
 // and fallback-priority constants, and the schema version constant, are
 // all public. Each step of the flow above ships as a component in this
-// package: ReadBeads/ReadBeadsBytes (BeadReader, standing in for
-// TaskReader until spexmachina-swvx.14), MatchNodes (NodeMatcher),
+// package: ReadTasks/ReadTasksBytes (TaskReader; ReadBeads/ReadBeadsBytes,
+// BeadReader, still runs alongside it behind --beads pending
+// spexmachina-swvx.7), MatchNodes (NodeMatcher),
 // ClassifyActions (ActionClassifier), Sort (TopologicalSorter), Labeler
 // (IdempotencyLabeler),
 // ResolveDeps/ResolveEpicAction/ResolveParent/ResolvePriority (Resolver),

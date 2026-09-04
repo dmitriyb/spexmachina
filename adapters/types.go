@@ -69,11 +69,11 @@ type TaskStateEntry struct {
 // spec/schema/arch_task_state_schema.md). An empty Tasks slice is a legal,
 // explicit statement that nothing is in flight, not a degenerate case.
 //
-// TODO(bead:spexmachina-swvx.14): this type is the canonical shape
-// TaskReader parses and validates a --tasks document into, replacing the
-// pre-task-lifecycle Bead/ReadBeads/ReadBeadsBytes trio in
-// plan/bead_reader.go (see the TODO(bead:spexmachina-swvx.7) there) that
-// stands in for it today behind --beads.
+// This is the wire shape; plan.ReadTasks/ReadTasksBytes (TaskReader)
+// parses and validates a --tasks document into plan.Task, mirroring
+// TaskStateEntry's two fields. The pre-task-lifecycle Bead/ReadBeads/
+// ReadBeadsBytes trio in plan/bead_reader.go still stands in behind
+// --beads pending its removal (TODO(bead:spexmachina-swvx.7)).
 type TaskState struct {
 	Version int              `json:"version"`
 	Tasks   []TaskStateEntry `json:"tasks"`
