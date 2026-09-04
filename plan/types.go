@@ -246,7 +246,7 @@ type Changeset struct {
 // output any more — spexmachina-swvx.16 retired the close-and-recreate step
 // whose create carried it as lineage to the task it replaced — but the
 // field itself stays on Action for plan/builder.go's own use pending
-// Resolver (spexmachina-swvx.19) and ChangesetBuilder (spexmachina-swvx.20).
+// ChangesetBuilder (spexmachina-swvx.20).
 // ChangeType ("modified" or "removed") is set on an obsolete only.
 // DepSpecNodeIDs is collected for create and retarget actions only — an
 // obsolete inherits its task's existing graph position.
