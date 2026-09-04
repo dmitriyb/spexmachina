@@ -11,10 +11,15 @@ package plan
 // as ref:op or ref:task only.
 //
 // This bump lands plan's wire shape ahead of the component rewrites that
-// consume it: the create/close/retarget action logic still speaks the pre-
-// task-lifecycle "obsolete, then recreate" shape pending ActionClassifier
-// (spexmachina-swvx.16), Resolver (spexmachina-swvx.19), ChangesetBuilder
-// (spexmachina-swvx.20) and IdempotencyLabeler (spexmachina-swvx.13); the
+// consume it. ActionClassifier (spexmachina-swvx.16) now implements the
+// target shape: a genuinely changed node with an open task retargets in
+// place, and a task absent from the artifact yields one plain create
+// carrying no old task id and no lineage dep — no close-and-recreate step.
+// Resolver (spexmachina-swvx.19) and ChangesetBuilder (spexmachina-swvx.20)
+// still carry remnants of the pre-task-lifecycle "obsolete, then recreate"
+// shape pending their own beads; IdempotencyLabeler (spexmachina-swvx.13)
+// already self-mints a cleanup create's label from its own (git_head, op_id)
+// when neither the journal fold nor a same-batch close answers. The
 // task-state artifact (--tasks, TaskReader) that replaces --beads/BeadReader
 // is spexmachina-swvx.14 and spexmachina-swvx.7. See spec/plan/flow_plan.md.
 const ChangesetVersion = 4
@@ -231,11 +236,16 @@ type Changeset struct {
 // no file boundary and no command seam.
 //
 // TaskID is the existing task on an obsolete or retarget, empty on a
-// create. SpecHash is set on a create or retarget; OldTaskID is set on a
-// create that replaces an obsoleted task. ChangeType ("modified" or
-// "removed") is set on an obsolete only. DepSpecNodeIDs is collected for
-// create and retarget actions only — an obsolete inherits its task's
-// existing graph position.
+// create — a create never names a prior task
+// (spec/plan/arch_action_classifier.md's Interface table). SpecHash is set
+// on a create or retarget. OldTaskID is never set by ActionClassifier's own
+// output any more — spexmachina-swvx.16 retired the close-and-recreate step
+// whose create carried it as lineage to the task it replaced — but the
+// field itself stays on Action for plan/builder.go's own use pending
+// Resolver (spexmachina-swvx.19) and ChangesetBuilder (spexmachina-swvx.20).
+// ChangeType ("modified" or "removed") is set on an obsolete only.
+// DepSpecNodeIDs is collected for create and retarget actions only — an
+// obsolete inherits its task's existing graph position.
 type Action struct {
 	Type           string
 	TaskID         string

@@ -10,17 +10,27 @@ import (
 )
 
 // ClassifyActions turns NodeMatcher's three lists into a flat, ordered list
-// of create, obsolete and retarget actions (spec/plan/arch_action_classifier.md).
+// of create, close and retarget actions (spec/plan/arch_action_classifier.md).
 // graph is the current spec directory, consulted for what the diff alone
 // cannot answer: a test_section's current describes length, a component's
 // uses edges, a module's requires_module edges, and a data_flow's uses
 // edges.
 //
-// When a matched change's pairing is claimed (in_progress), the run refuses
-// entirely: the error names every such task and no action list is returned
-// — a partial classification never leaks. The claim check runs over every
-// matched entry before any action is returned, so the error always names
-// every claimed task at once, not just the first.
+// Every pairing's task is in exactly one of three states — open,
+// in_progress, or absent from the task-state artifact — and there is no
+// fourth: absence means the task has no live work, and completion is never
+// read as a status (arch_action_classifier.md's introduction). A pairing
+// whose live status is anything other than "open" or "in_progress" —
+// unjoined, or carrying a tracker status the task-state artifact's schema
+// does not admit — is therefore read as absent.
+//
+// When a matched or orphaned pairing is claimed (in_progress), the run
+// refuses entirely: the error names every such task and no action list is
+// returned — a partial classification never leaks. Every matched and
+// orphaned entry is classified before the claim check runs, so the error
+// always names every claimed task at once, not just the first, and a
+// cleanly classifiable entry elsewhere in the same batch never leaks an
+// action past the refusal.
 func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned, graph SpecGraph) ([]Action, error) {
 	flowUses := changedDataFlowUses(matches, unmatched, graph)
 
@@ -31,6 +41,14 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		acts, claims := classifyMatch(m, graph)
 		actions = append(actions, acts...)
 		claimed = append(claimed, claims...)
+	}
+
+	for _, o := range orphaned {
+		acts, claim := classifyOrphaned(o)
+		actions = append(actions, acts...)
+		if claim != "" {
+			claimed = append(claimed, claim)
+		}
 	}
 
 	if len(claimed) > 0 {
@@ -44,10 +62,6 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 		}
 	}
 
-	for _, o := range orphaned {
-		actions = append(actions, classifyOrphaned(o)...)
-	}
-
 	applyDataFlowAddOn(actions, flowUses)
 	sortActions(actions)
 
@@ -56,16 +70,32 @@ func ClassifyActions(matches []Match, unmatched []Unmatched, orphaned []Orphaned
 
 // classifyMatch applies the state transition table to every pairing a
 // matched change carries. The test_section fold-back and the already-
-// tracked cell are both checked before the open/in_progress/closed status
+// tracked cell are both checked before the open/in_progress/absent status
 // split, in that order — fold-back first, because a section that no longer
 // owes a task of its own never reaches a status split; already-tracked
 // second, because it is the only cell within the split's scope that
 // short-circuits it.
+//
+// The status split itself has no "unknown" cell: open retargets, in_progress
+// claims, and everything else — absent from the artifact, whatever the
+// change's own type (added or modified alike, S3) — is one plain create.
+// There is no close-and-recreate step here: no close against the
+// predecessor, no old task id carried on the create, no lineage dependency
+// minted. The predecessor's completion is not the classifier's to record;
+// the journal pairing plus the absence is the whole story.
 func classifyMatch(m Match, graph SpecGraph) (actions []Action, claimed []string) {
 	change := m.Change
 	for _, rec := range m.Records {
 		if isTestSectionFoldback(change, graph) {
-			actions = append(actions, obsoleteAction(change.Module, matchedNodeName(change, graph), change.NodeType, change.Key, rec.TaskID, "modified"))
+			switch rec.BeadStatus {
+			case "open":
+				actions = append(actions, closeAction(change.Module, matchedNodeName(change, graph), change.NodeType, change.Key, rec.TaskID, "modified"))
+			case "in_progress":
+				claimed = append(claimed, rec.TaskID)
+			default:
+				// absent from the artifact: the section's task is finished
+				// and the node owes nothing further — no action at all.
+			}
 			continue
 		}
 
@@ -79,11 +109,9 @@ func classifyMatch(m Match, graph SpecGraph) (actions []Action, claimed []string
 		case "in_progress":
 			claimed = append(claimed, rec.TaskID)
 		default:
-			// closed, or a status that never joined (no --beads file, or the
-			// bead absent from the listing) — not known-open, so it takes
-			// the direction that never moves a task silently.
-			actions = append(actions, obsoleteAction(change.Module, matchedNodeName(change, graph), change.NodeType, change.Key, rec.TaskID, "modified"))
-			actions = append(actions, createSuccessorAction(change, rec.TaskID, graph))
+			// absent from the artifact: the earlier task, if any, is
+			// finished — a plain create, exactly like a never-tracked node.
+			actions = append(actions, matchedCreateAction(change, graph))
 		}
 	}
 	return actions, claimed
@@ -123,26 +151,25 @@ func classifyUnmatched(u Unmatched, graph SpecGraph) (Action, bool) {
 	}, true
 }
 
-// classifyOrphaned always obsoletes the removed node's bead, and mints a
-// cleanup create alongside it when the bead was closed — code shipped to
-// main with no spec node left to answer for it.
-func classifyOrphaned(o Orphaned) []Action {
+// classifyOrphaned decides a removed node's fate from the same three states
+// the matched path splits on: open cancels live work with a close action;
+// in_progress refuses the run (the claimed task id is returned for the
+// caller to collect, rather than an action — removing a node under a
+// claimed task is the largest move a target can make); absent from the
+// artifact means the code already shipped with nothing left to answer for
+// it, so a cleanup create is minted to have it deleted. There is no close
+// beside a cleanup — nothing is live to close — and no retarget ever
+// applies to a removed node: there is no new state to move the task to.
+func classifyOrphaned(o Orphaned) (actions []Action, claimedTaskID string) {
 	rec := o.Record
-	obsolete := obsoleteAction(rec.Module, rec.Name, o.NodeType, rec.SpecNodeID, rec.TaskID, "removed")
-	if rec.BeadStatus != "closed" {
-		return []Action{obsolete}
+	switch rec.BeadStatus {
+	case "open":
+		return []Action{closeAction(rec.Module, rec.Name, o.NodeType, rec.SpecNodeID, rec.TaskID, "removed")}, ""
+	case "in_progress":
+		return nil, rec.TaskID
+	default:
+		return []Action{cleanupAction(rec, o.NodeType)}, ""
 	}
-
-	cleanup := Action{
-		Type:       ActionCreate,
-		Module:     rec.Module,
-		Node:       rec.Name,
-		NodeType:   o.NodeType,
-		SpecNodeID: rec.SpecNodeID,
-		OldTaskID:  rec.TaskID,
-		Reason:     fmt.Sprintf("Code cleanup: %s/%s", rec.Module, rec.Name),
-	}
-	return []Action{obsolete, cleanup}
 }
 
 // isTestSectionFoldback reports whether a matched test_section's current
@@ -401,26 +428,23 @@ func applyDataFlowAddOn(actions []Action, flowUses map[string][]string) {
 	}
 }
 
-// obsoleteAction builds an obsolete action. changeType is "modified" for
-// every matched-path obsolete (an added change matched to a differing hash
-// behaves exactly as a modified one — see spec/plan/test_classification.md
-// S3) or "removed" for an orphaned one.
-//
-// TODO(bead:spexmachina-swvx.16): a "modified" obsolete paired with
-// createSuccessorAction is the pre-task-lifecycle obsolete-then-recreate
-// shape plan/doc.go describes as target-superseded: spec/plan/flow_plan.md's
-// v4 flow retargets an open task's node change in place instead (step 4),
-// so this changeType == "modified" path — and its createSuccessorAction
-// pairing — is ActionClassifier's own bead to rewrite. The "removed" path
-// (an orphaned node's cleanup) is unaffected and stays.
-func obsoleteAction(module, node, nodeType, specNodeID, beadID, changeType string) Action {
+// closeAction builds a close action: a task is cancelled outright, never
+// paired with a create — a close is the whole story, not half of one
+// (spec/plan/arch_action_classifier.md, "Where classification stops": "No
+// row for lineage: there is none to own"). changeType is "modified" for the
+// test_section fold-back close (an added change matched to a differing hash
+// behaves exactly as a modified one for this purpose too — see
+// spec/plan/test_classification.md S3) or "removed" for an orphaned one; the
+// two reason prefixes are contract, not decoration — ingest discriminates a
+// removal close from a fold-back close on them.
+func closeAction(module, node, nodeType, specNodeID, taskID, changeType string) Action {
 	reason := fmt.Sprintf("Spec node modified: %s/%s", module, node)
 	if changeType == "removed" {
 		reason = fmt.Sprintf("Spec node removed: %s/%s", module, node)
 	}
 	return Action{
 		Type:       ActionObsolete,
-		TaskID:     beadID,
+		TaskID:     taskID,
 		Module:     module,
 		Node:       node,
 		NodeType:   nodeType,
@@ -430,8 +454,13 @@ func obsoleteAction(module, node, nodeType, specNodeID, beadID, changeType strin
 	}
 }
 
-// createSuccessorAction builds the create half of an obsolete+create pair.
-func createSuccessorAction(change merkle.ClassifiedChange, oldBeadID string, graph SpecGraph) Action {
+// matchedCreateAction builds the plain create a matched change yields once
+// its earlier task, if it had one, is absent from the artifact — the same
+// create shape classifyUnmatched builds for a never-tracked node, down to
+// carrying no prior task id: there is no lineage to carry, whatever the
+// node's history (spec/plan/arch_action_classifier.md, "Where classification
+// stops"). Only the reason differs from a fresh node's — S1b.
+func matchedCreateAction(change merkle.ClassifiedChange, graph SpecGraph) Action {
 	name := matchedNodeName(change, graph)
 	return Action{
 		Type:           ActionCreate,
@@ -440,9 +469,26 @@ func createSuccessorAction(change merkle.ClassifiedChange, oldBeadID string, gra
 		NodeType:       change.NodeType,
 		SpecNodeID:     change.Key,
 		SpecHash:       change.NewHash,
-		OldTaskID:      oldBeadID,
 		DepSpecNodeIDs: depsFor(change, graph),
 		Reason:         fmt.Sprintf("Spec node modified (new): %s/%s", change.Module, name),
+	}
+}
+
+// cleanupAction builds the cleanup create an orphaned pairing yields when
+// its task is absent from the artifact: the code shipped to main with no
+// spec node left to answer for it. It carries no old task id and no
+// DepSpecNodeIDs — there is no live task to close and no dependency on the
+// finished one (spec/plan/test_classification.md S4). Module and name come
+// from the journal pairing, never the graph: the removed node is already
+// gone from the spec by the time this run reads it.
+func cleanupAction(rec Pairing, nodeType string) Action {
+	return Action{
+		Type:       ActionCreate,
+		Module:     rec.Module,
+		Node:       rec.Name,
+		NodeType:   nodeType,
+		SpecNodeID: rec.SpecNodeID,
+		Reason:     fmt.Sprintf("Code cleanup: %s/%s", rec.Module, rec.Name),
 	}
 }
 
