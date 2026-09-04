@@ -1,0 +1,15 @@
+{
+  "bead": "spexmachina-swvx.18",
+  "node": "21bc124a46c0",
+  "files": [
+    "spec/proposal/test_proposal_commands.md",
+    "spec/proposal/arch_proposal_commands.md",
+    "spec/proposal/arch_history_viewer.md",
+    "spec/proposal/module.json"
+  ],
+  "claim": "test_proposal_commands.md S16's `Then` requires: \"Step 4 output includes the newly registered proposal in the JSON array. The registered proposal has an empty `tasks` array (no tasks tagged with it yet).\" S17's `Then` requires: \"No side effects outside the spec directory.\"",
+  "authoritative_source": "arch_history_viewer.md and proposal/history.go:71-76 (ShowHistory): groups are built solely from tasks' `spec_proposal:` labels — `ShowHistory` never lists `spec/proposals/` and has no path that can surface a proposal with zero tagged tasks. arch_proposal_commands.md's `spex register` interface, and requirement `2b62ad5e8ef2` in module.json, mandate that a successful registration append the `registered` event to the task journal through MappingStore at the location the lifecycle pre-flight resolves — `.spex/history.jsonl`, a sibling of `spec/` per `lifecycle/project_resolver.go` (`StateDirName = \".spex\"`), not a path under the spec directory.",
+  "evidence": "S16: step 4 runs `spex log --json` with no task data fed in (the scenario never pipes any stdin), yet the stdin contract this same bead's arch section (`spex log` stdin contract) establishes exits non-zero on empty stdin (`spex log: no task data on stdin; ...`) rather than emitting `{\"proposals\":[]}`; and even granting non-empty stdin, ShowHistory groups by task label, never by directory listing, so a proposal with no tagged tasks can never appear in the JSON array at all — the leaf's expected outcome is unreachable by the architecture it is supposed to be testing. S17: the `registered` event that `2b62ad5e8ef2` requires is written to `.spex/history.jsonl`, which is outside `spec/` — S2 in this same leaf already concedes state lives at whatever location the lifecycle pre-flight resolves, i.e. not spec/ — so \"no side effects outside the spec directory\" is contradicted by mandatory, spec-required behavior, not by an implementation bug.",
+  "blocking": false,
+  "proposed_fix": "Reword S16's `Then` to either drop the empty-tasks-array assertion (since ShowHistory cannot surface an untagged proposal) or restate step 4 as a task-tagged round-trip that pipes a task record carrying the proposal's `spec_proposal:<stem>` label, matching how ShowHistory actually groups. Reword S17's \"no side effects outside the spec directory\" clause to explicitly except the `.spex/` state directory the lifecycle pre-flight resolves, consistent with S2's own concession in the same leaf."
+}

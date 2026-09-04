@@ -524,8 +524,12 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	// Step 2: log --json with empty task list — registered proposal should
-	// not appear (HistoryViewer keys off task labels, not directory listing).
+	// Step 2: log --json with empty task list. S16's leaf asserts the
+	// registered proposal appears with an empty tasks array; drift report
+	// drifts/drift-spexmachina-swvx.18.json contends that outcome is
+	// unreachable (ShowHistory groups by task label, never by directory
+	// listing) and asserts the actual, reachable outcome here pending
+	// triage.
 	out, err := runLogWith(t, specDir, `[]`, "--json")
 	if err != nil {
 		t.Fatalf("log --json: %v", err)
@@ -668,9 +672,14 @@ func TestREQ30_S17_RegisterComposability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// "spec" is the spec directory itself; ".spex" is the lifecycle state
-	// dir seedProjectState pre-seeded as a sibling before register ran; the
-	// input file is the one thing this run reads. Nothing else may appear.
+	// "spec" is the spec directory itself; the input file is the one thing
+	// this run reads. ".spex" is the lifecycle state dir the registered
+	// journal event is written into per requirement 2b62ad5e8ef2 — that
+	// write is itself a side effect outside the spec directory, which
+	// contradicts S17's leaf; drift report
+	// drifts/drift-spexmachina-swvx.18.json contends the leaf, not this
+	// write, is wrong. ".spex" is allow-listed here rather than asserted
+	// against, pending triage.
 	allowed := map[string]bool{"spec": true, ".spex": true, filepath.Base(inputFile): true}
 	for _, e := range rootEntries {
 		if !allowed[e.Name()] {
