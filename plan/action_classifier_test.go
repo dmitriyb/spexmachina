@@ -871,14 +871,14 @@ func TestDeps_RetargetRecomputesFreshDeps(t *testing.T) {
 func TestDeps_ClassifierIgnoresDependencyBeadStatus(t *testing.T) {
 	f := newClassifierFixture()
 	// CompX (unmatched, added) uses CompY directly. CompY itself is
-	// matched with a closed pairing in the same run, so Y gets its own
-	// obsolete+create pair — but that must not filter Y out of X's
+	// matched with a pairing absent from the artifact in the same run, so
+	// Y yields one plain create — but that must not filter Y out of X's
 	// DepSpecNodeIDs: filtering already-satisfied deps belongs to the
 	// Resolver, not the classifier.
 	unmatched := Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")}
 	yMatch := Match{
 		Change:  change(f.CompY, "plan", "component", merkle.Modified, "old", "new"),
-		Records: []Pairing{{TaskID: "spex-y", BeadStatus: "closed"}},
+		Records: []Pairing{{TaskID: "spex-y"}}, // BeadStatus unset: absent
 	}
 	actions, err := ClassifyActions([]Match{yMatch}, []Unmatched{unmatched}, nil, f.Graph)
 	if err != nil {
@@ -900,7 +900,7 @@ func TestDeps_ClassifierIgnoresDependencyBeadStatus(t *testing.T) {
 		}
 	}
 	if !found {
-		t.Errorf("D2: dependency collection must ignore Y's closed bead status, got deps=%v", xAction.DepSpecNodeIDs)
+		t.Errorf("D2: dependency collection must ignore Y's absent bead status, got deps=%v", xAction.DepSpecNodeIDs)
 	}
 }
 
