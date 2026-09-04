@@ -39,6 +39,46 @@ const (
 	IdempotencyLabelPrefix = "spex:"
 )
 
+// TaskStateVersion is the wire-format version of tasks.json, the
+// task-state artifact plan reads through its required --tasks flag. plan
+// refuses any version it does not recognize (spec/schema/arch_task_state_schema.md,
+// "Versioned and refused, not tolerated").
+const TaskStateVersion = 1
+
+// Task status vocabulary on a TaskStateEntry. Exactly these two — there is
+// no closed, no done, and no third status: a task the artifact does not
+// list has no live work, and what that means for its node is plan's
+// decision, never a status the artifact carries
+// (spec/schema/arch_task_state_schema.md, "Why no closed status").
+const (
+	TaskStatusOpen       = "open"
+	TaskStatusInProgress = "in_progress"
+)
+
+// TaskStateEntry is one in-flight task in tasks.json: the tracker's own id
+// and its live status, the same task_id a receipt and a journal receipt
+// carry, so the join onto a journal pairing is a string comparison.
+type TaskStateEntry struct {
+	TaskID string `json:"task_id"`
+	Status string `json:"status"`
+}
+
+// TaskState is the v1 task-state artifact an adapter's export half derives
+// from the tracker and plan's TaskReader reads via --tasks: in-flight
+// tasks only, nothing more (spec/map/flow_task_mapping.md, "Data Shapes";
+// spec/schema/arch_task_state_schema.md). An empty Tasks slice is a legal,
+// explicit statement that nothing is in flight, not a degenerate case.
+//
+// TODO(bead:spexmachina-swvx.14): this type is the canonical shape
+// TaskReader parses and validates a --tasks document into, replacing the
+// pre-task-lifecycle Bead/ReadBeads/ReadBeadsBytes trio in
+// plan/bead_reader.go (see the TODO(bead:spexmachina-swvx.7) there) that
+// stands in for it today behind --beads.
+type TaskState struct {
+	Version int              `json:"version"`
+	Tasks   []TaskStateEntry `json:"tasks"`
+}
+
 // OpReceipt is the per-op record an adapter writes after attempting one
 // op. Field order on this struct IS the canonical JSON field order — do
 // not reorder. TaskID and WasExisting always serialize (no omitempty)

@@ -86,7 +86,7 @@ func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string
 	if isCleanup(action) {
 		return l.cleanupLabel(action)
 	}
-	return fmt.Sprintf("%s%s:%s", IdempotencyLabelPrefix, l.GitHead, opID), nil
+	return IdempotencyLabelPrefix + DeriveEID(l.GitHead, opID), nil
 }
 
 // cleanupLabel resolves a cleanup create's referent: the fold's removed
@@ -114,7 +114,7 @@ func (l *Labeler) cleanupLabel(action Action) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("plan: label: cleanup for spec_node_id %q has no same-batch close op for old bead %q and no removed event in the journal fold", action.SpecNodeID, action.OldTaskID)
 	}
-	return fmt.Sprintf("%s%s:%s", IdempotencyLabelPrefix, l.GitHead, closeOpID), nil
+	return IdempotencyLabelPrefix + DeriveEID(l.GitHead, closeOpID), nil
 }
 
 // isCleanup reports whether the action is a code-cleanup create — the same
