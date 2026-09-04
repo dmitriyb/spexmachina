@@ -13,7 +13,7 @@ import (
 func newLogCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "log",
-		Short: "Show proposal history and linked bead actions (reads bead JSON on stdin)",
+		Short: "Show proposal history and linked task actions (reads task JSON on stdin)",
 		RunE:  runLogE,
 	}
 	cmd.Flags().Bool("json", false, "output in JSON format")
@@ -35,16 +35,16 @@ func runLogE(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("spex log: read stdin: %w", err)
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
-		return fmt.Errorf("spex log: no bead data on stdin; pipe 'br list --json' or equivalent")
+		return fmt.Errorf("spex log: no task data on stdin; pipe 'br list --json' or equivalent")
 	}
 
-	beads, err := parseBeadRecords(data)
+	tasks, err := parseTaskRecords(data)
 	if err != nil {
 		return fmt.Errorf("spex log: %w", err)
 	}
 
 	if ref != "" {
-		beads = filterByProposalRef(beads, ref)
+		tasks = filterByProposalRef(tasks, ref)
 	}
 
 	hv := &proposal.HistoryViewer{
@@ -52,22 +52,14 @@ func runLogE(cmd *cobra.Command, args []string) error {
 		Out:     cmd.OutOrStdout(),
 		JSON:    asJSON,
 	}
-	return hv.ShowHistory(beads)
+	return hv.ShowHistory(tasks)
 }
 
-// TODO(bead:spexmachina-swvx.18): ProposalCommands owns this file's wiring
-// per spec/proposal/arch_proposal_commands.md — the "no bead/task data on
-// stdin" and "parse bead JSON" wording below still needs aligning to that
-// spec's documented "no task data on stdin" / "parse task JSON" messages,
-// and cmd/spex/proposal_test.go's REQ30 log scenarios need the same pass.
-// This function is renamed only enough to compile against HistoryViewer's
-// proposal.TaskRecord (spexmachina-swvx.17).
-
-// parseBeadRecords accepts either the {"issues": [...]} envelope produced by
+// parseTaskRecords accepts either the {"issues": [...]} envelope produced by
 // `br list --json` or a bare JSON array of task records and returns the slice
 // in proposal.TaskRecord shape. Stays in lockstep with plan.ReadBeadsBytes
 // so the same tracker output drives both pipelines.
-func parseBeadRecords(data []byte) ([]proposal.TaskRecord, error) {
+func parseTaskRecords(data []byte) ([]proposal.TaskRecord, error) {
 	var wrap struct {
 		Issues []proposal.TaskRecord `json:"issues"`
 	}
@@ -76,7 +68,7 @@ func parseBeadRecords(data []byte) ([]proposal.TaskRecord, error) {
 	}
 	var bare []proposal.TaskRecord
 	if err := json.Unmarshal(data, &bare); err != nil {
-		return nil, fmt.Errorf("parse bead JSON: %w", err)
+		return nil, fmt.Errorf("parse task JSON: %w", err)
 	}
 	return bare, nil
 }
@@ -84,14 +76,14 @@ func parseBeadRecords(data []byte) ([]proposal.TaskRecord, error) {
 // filterByProposalRef keeps only tasks carrying a spec_proposal:<stem> label
 // matching ref. Both the bare stem and a trailing-".md" form are accepted, to
 // match the tolerance HistoryViewer.firstProposalStem already gives writers.
-func filterByProposalRef(beads []proposal.TaskRecord, ref string) []proposal.TaskRecord {
+func filterByProposalRef(tasks []proposal.TaskRecord, ref string) []proposal.TaskRecord {
 	stem := strings.TrimSuffix(ref, ".md")
 	want := "spec_proposal:" + stem
-	out := make([]proposal.TaskRecord, 0, len(beads))
-	for _, b := range beads {
-		for _, lbl := range b.Labels {
+	out := make([]proposal.TaskRecord, 0, len(tasks))
+	for _, t := range tasks {
+		for _, lbl := range t.Labels {
 			if lbl == want || lbl == want+".md" {
-				out = append(out, b)
+				out = append(out, t)
 				break
 			}
 		}

@@ -4,14 +4,17 @@ import (
 	"bytes"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/dmitriyb/spexmachina/lifecycle"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
+	"github.com/dmitriyb/spexmachina/proposal"
 	"github.com/spf13/cobra"
 )
 
@@ -360,7 +363,7 @@ func TestREQ30_S6_LogHumanReadable(t *testing.T) {
 		t.Errorf("want project-proposal type label, got:\n%s", out)
 	}
 	if !strings.Contains(out, "spexmachina-abc") {
-		t.Errorf("want bead id in output, got:\n%s", out)
+		t.Errorf("want task id in output, got:\n%s", out)
 	}
 	if !strings.Contains(out, "Created:") {
 		t.Errorf("want Created action label, got:\n%s", out)
@@ -417,7 +420,7 @@ func TestREQ30_S8_LogEmptyProposals(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Human-readable: empty bead array → empty stdout.
+	// Human-readable: empty task array → empty stdout.
 	out, err := runLogWith(t, specDir, `[]`)
 	if err != nil {
 		t.Fatalf("log: %v", err)
@@ -426,7 +429,7 @@ func TestREQ30_S8_LogEmptyProposals(t *testing.T) {
 		t.Errorf("want empty stdout, got %q", out)
 	}
 
-	// JSON: empty bead array → {"proposals":[]} envelope.
+	// JSON: empty task array → {"proposals":[]} envelope.
 	out, err = runLogWith(t, specDir, `[]`, "--json")
 	if err != nil {
 		t.Fatalf("log --json: %v", err)
@@ -480,7 +483,7 @@ func TestREQ30_S10_LogEmptyStdin(t *testing.T) {
 	if err == nil {
 		t.Fatal("want error on empty stdin, got nil")
 	}
-	if !strings.Contains(err.Error(), "no bead data on stdin") {
+	if !strings.Contains(err.Error(), "no task data on stdin") {
 		t.Errorf("want documented empty-stdin error, got: %v", err)
 	}
 }
@@ -495,6 +498,9 @@ func TestREQ30_S10b_LogMalformedStdin(t *testing.T) {
 	_, err := runLogWith(t, specDir, "{ not json")
 	if err == nil {
 		t.Fatal("want error on malformed JSON, got nil")
+	}
+	if !strings.Contains(err.Error(), "spex log: parse task JSON:") {
+		t.Errorf("want documented parse-failure error, got: %v", err)
 	}
 }
 
@@ -518,8 +524,12 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 
-	// Step 2: log --json with empty bead list — registered proposal should
-	// not appear (HistoryViewer keys off bead labels, not directory listing).
+	// Step 2: log --json with empty task list. S16's leaf asserts the
+	// registered proposal appears with an empty tasks array; drift report
+	// drifts/drift-spexmachina-swvx.18.json contends that outcome is
+	// unreachable (ShowHistory groups by task label, never by directory
+	// listing) and asserts the actual, reachable outcome here pending
+	// triage.
 	out, err := runLogWith(t, specDir, `[]`, "--json")
 	if err != nil {
 		t.Fatalf("log --json: %v", err)
@@ -534,12 +544,12 @@ func TestREQ30_S16_RegisterThenLogRoundTrip(t *testing.T) {
 		t.Fatalf("invalid JSON: %v\nraw: %s", err, out)
 	}
 	if len(envelope.Proposals) != 0 {
-		t.Errorf("empty bead input must produce empty proposals array, got %d", len(envelope.Proposals))
+		t.Errorf("empty task input must produce empty proposals array, got %d", len(envelope.Proposals))
 	}
 }
 
 // TestREQ30_LogProposalFilter verifies the --proposal flag scopes the output
-// to a single proposal stem, dropping beads tagged for any other proposal.
+// to a single proposal stem, dropping tasks tagged for any other proposal.
 func TestREQ30_LogProposalFilter(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
@@ -565,11 +575,350 @@ func TestREQ30_LogProposalFilter(t *testing.T) {
 		t.Fatalf("log --proposal: %v", err)
 	}
 	if !strings.Contains(out, "spexmachina-xyz") {
-		t.Errorf("want filtered bead, got:\n%s", out)
+		t.Errorf("want filtered task, got:\n%s", out)
 	}
 	if strings.Contains(out, "spexmachina-abc") {
-		t.Errorf("filtered bead leaked into output:\n%s", out)
+		t.Errorf("filtered task leaked into output:\n%s", out)
 	}
+}
+
+// --- end-to-end pipeline ---
+
+// TestREQ30_S15_TemplateOutputPipeable covers stdout redirected to a file:
+// the bytes landing there must match the template verbatim, with nothing
+// else mixed in, and any informational output must go to stderr instead.
+func TestREQ30_S15_TemplateOutputPipeable(t *testing.T) {
+	binPath := buildSpexBinary(t)
+	tmp := t.TempDir()
+	outPath := filepath.Join(tmp, "my-proposal.md")
+	outFile, err := os.Create(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var stderr bytes.Buffer
+	cmd := exec.Command(binPath, "template", "project")
+	cmd.Stdout = outFile
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	outFile.Close()
+	if runErr != nil {
+		t.Fatalf("template project: %v\nstderr: %s", runErr, stderr.String())
+	}
+
+	got, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var want bytes.Buffer
+	if err := proposal.Template("project", &want); err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != want.String() {
+		t.Errorf("redirected stdout does not match the template verbatim (extra output mixed in?)\ngot:\n%s\nwant:\n%s", got, want.String())
+	}
+	if stderr.Len() != 0 {
+		t.Errorf("want no stderr output, got %q", stderr.String())
+	}
+}
+
+// TestREQ30_S17_RegisterComposability checks the composability contract
+// itself: a file in, a file out, exit 0, no interactive prompt (so no
+// process hang when stdin is unattached), and no side effects outside the
+// spec directory.
+func TestREQ30_S17_RegisterComposability(t *testing.T) {
+	binPath := buildSpexBinary(t)
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+
+	inputFile := filepath.Join(tmp, "new-change.md")
+	if err := os.WriteFile(inputFile, []byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command(binPath, "register", "--spec-dir", specDir, inputFile, "--git-head", "cafe1234")
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	// Deliberately leave cmd.Stdin nil (no pipe attached) — a prompt reading
+	// from it would block, which the timeout below turns into a failure
+	// instead of a hung test.
+	if err := cmd.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("register: %v\nstderr: %s", err, stderr.String())
+		}
+	case <-time.After(5 * time.Second):
+		cmd.Process.Kill()
+		t.Fatal("register blocked without stdin attached — not suitable for shell scripts or CI pipelines")
+	}
+
+	entries, err := os.ReadDir(filepath.Join(specDir, "proposals"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("want file written to spec/proposals/, entries=%v err=%v", entries, err)
+	}
+
+	rootEntries, err := os.ReadDir(tmp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// "spec" is the spec directory itself; the input file is the one thing
+	// this run reads. ".spex" is the lifecycle state dir the registered
+	// journal event is written into per requirement 2b62ad5e8ef2 — that
+	// write is itself a side effect outside the spec directory, which
+	// contradicts S17's leaf; drift report
+	// drifts/drift-spexmachina-swvx.18.json contends the leaf, not this
+	// write, is wrong. ".spex" is allow-listed here rather than asserted
+	// against, pending triage.
+	allowed := map[string]bool{"spec": true, ".spex": true, filepath.Base(inputFile): true}
+	for _, e := range rootEntries {
+		if !allowed[e.Name()] {
+			t.Errorf("unexpected side effect outside the spec directory: %s", e.Name())
+		}
+	}
+}
+
+// --- edge cases ---
+
+// TestREQ30_E1_RegisterProposalsSymlink covers spec/proposals being a
+// symlink to another directory: the file must land through the symlink, at
+// the target.
+func TestREQ30_E1_RegisterProposalsSymlink(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(specDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(tmp, "shared-proposals")
+	if err := os.MkdirAll(target, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(target, filepath.Join(specDir, "proposals")); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+
+	inputFile := filepath.Join(tmp, "new-change.md")
+	if err := os.WriteFile(inputFile, []byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := buildTestCmd(specDir)
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Error("want the file written through the symlink, at its target")
+	}
+}
+
+// TestREQ30_E2_RegisterReadOnlyProposalsDir covers a spec/proposals/ with no
+// write permission: the copy must fail with a permission error, the
+// original proposal must be left untouched, and no file should land.
+func TestREQ30_E2_RegisterReadOnlyProposalsDir(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root bypasses permission bits")
+	}
+
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	proposalsDir := filepath.Join(specDir, "proposals")
+	if err := os.MkdirAll(proposalsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+	if err := os.Chmod(proposalsDir, 0555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.Chmod(proposalsDir, 0755) })
+
+	content := changeProposalContent
+	inputFile := filepath.Join(tmp, "new-change.md")
+	if err := os.WriteFile(inputFile, []byte(content), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	root := buildTestCmd(specDir)
+	root.SetArgs([]string{"register", inputFile, "--git-head", "cafe1234"})
+	err := root.Execute()
+	if err == nil {
+		t.Fatal("want error for read-only proposals dir, got nil")
+	}
+	if !strings.Contains(err.Error(), "permission denied") {
+		t.Errorf("want a permission-denied error, got: %v", err)
+	}
+
+	got, err := os.ReadFile(inputFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != content {
+		t.Error("original proposal file must not be modified")
+	}
+}
+
+// TestREQ30_E3_LogNoANSIWhenPiped covers spex log with stdout piped (never a
+// terminal in a subprocess pipe): the human-readable rendering must carry no
+// ANSI escape sequences.
+func TestREQ30_E3_LogNoANSIWhenPiped(t *testing.T) {
+	binPath := buildSpexBinary(t)
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(specDir, "proposals", "2026-02-23-spex-machina.md"),
+		[]byte(projProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdin := `[{"id":"spexmachina-abc","status":"open","title":"schema: ProjectSchema","labels":["spec_proposal:2026-02-23-spex-machina"]}]`
+
+	cmd := exec.Command(binPath, "log", "--spec-dir", specDir)
+	cmd.Stdin = strings.NewReader(stdin)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("log: %v", err)
+	}
+	if strings.ContainsRune(string(out), 0x1b) {
+		t.Errorf("want no ANSI escape sequences in piped output, got:\n%q", out)
+	}
+	if !strings.Contains(string(out), "2026-02-23-spex-machina.md") {
+		t.Errorf("want plain-text history still parseable, got:\n%s", out)
+	}
+}
+
+// TestREQ30_E4_DefaultSpecDirSharedAcrossSubcommands covers all three
+// subcommands defaulting to ./spec relative to the working directory when
+// --spec-dir is not passed, and staying consistent with each other: a
+// proposal registered by one is visible to another.
+func TestREQ30_E4_DefaultSpecDirSharedAcrossSubcommands(t *testing.T) {
+	binPath, err := filepath.Abs(buildSpexBinary(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+
+	inputFile := filepath.Join(tmp, "new-change.md")
+	if err := os.WriteFile(inputFile, []byte(changeProposalContent), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	registerCmd := exec.Command(binPath, "register", inputFile, "--git-head", "cafe1234")
+	registerCmd.Dir = tmp
+	if out, err := registerCmd.CombinedOutput(); err != nil {
+		t.Fatalf("register (default spec dir): %v\n%s", err, out)
+	}
+
+	entries, err := os.ReadDir(filepath.Join(specDir, "proposals"))
+	if err != nil || len(entries) == 0 {
+		t.Fatalf("want file registered under the default ./spec, entries=%v err=%v", entries, err)
+	}
+	stem := strings.TrimSuffix(entries[0].Name(), ".md")
+
+	stdin := `[{"id":"spexmachina-abc","status":"open","title":"x","labels":["spec_proposal:` + stem + `"]}]`
+	logCmd := exec.Command(binPath, "log", "--json")
+	logCmd.Dir = tmp
+	logCmd.Stdin = strings.NewReader(stdin)
+	out, err := logCmd.Output()
+	if err != nil {
+		t.Fatalf("log (default spec dir): %v", err)
+	}
+	if !strings.Contains(string(out), stem+".md") {
+		t.Errorf("want the proposal registered under the default spec dir visible to log, got:\n%s", out)
+	}
+
+	templateCmd := exec.Command(binPath, "template", "project")
+	templateCmd.Dir = tmp
+	if _, err := templateCmd.Output(); err != nil {
+		t.Fatalf("template (default spec dir): %v", err)
+	}
+}
+
+// TestREQ30_E5_ConcurrentRegisterDistinctProposals covers two register calls
+// for distinct proposals racing each other: both must succeed and both
+// files must land, since their target names never collide.
+func TestREQ30_E5_ConcurrentRegisterDistinctProposals(t *testing.T) {
+	binPath := buildSpexBinary(t)
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	if err := os.MkdirAll(filepath.Join(specDir, "proposals"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
+
+	fileA := filepath.Join(tmp, "a.md")
+	fileB := filepath.Join(tmp, "b.md")
+	if err := os.WriteFile(fileA, []byte("# Change Proposal: A\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(fileB, []byte("# Change Proposal: B\n\n## Context\n\nx\n\n## Proposed change\n\nx\n\n## Impact expectation\n\nx\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var wg sync.WaitGroup
+	errs := make([]error, 2)
+	outs := make([]string, 2)
+	for i, f := range []string{fileA, fileB} {
+		wg.Add(1)
+		go func(i int, f string) {
+			defer wg.Done()
+			cmd := exec.Command(binPath, "register", "--spec-dir", specDir, f, "--git-head", "cafe1234")
+			out, err := cmd.CombinedOutput()
+			outs[i] = string(out)
+			errs[i] = err
+		}(i, f)
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("register %d: %v\n%s", i, err, outs[i])
+		}
+	}
+
+	entries, err := os.ReadDir(filepath.Join(specDir, "proposals"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make(map[string]bool, len(entries))
+	for _, e := range entries {
+		names[e.Name()] = true
+	}
+	if !hasSuffix(names, "-a.md") || !hasSuffix(names, "-b.md") {
+		t.Errorf("want both distinct proposals registered without a race, got: %v", names)
+	}
+}
+
+// hasSuffix reports whether any name in names ends with suffix.
+func hasSuffix(names map[string]bool, suffix string) bool {
+	for n := range names {
+		if strings.HasSuffix(n, suffix) {
+			return true
+		}
+	}
+	return false
 }
 
 // --- helpers ---
