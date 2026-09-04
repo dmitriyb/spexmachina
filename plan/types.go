@@ -97,17 +97,22 @@ const (
 	CleanupLabel           = "spex:cleanup"
 )
 
-// DeriveEID derives a node-bearing create or retarget op's journal event
-// id from this run's git_head and the op's own id — the one formula every
-// participant in spec/map/flow_task_mapping.md's data flow shares: Labeler
-// mints it to build the spex:<eid> idempotency label a create or retarget
-// op carries, and ingest's EventBuilder derives it again, unchanged, to
-// mint the referent event the label names. Sharing the formula, rather
-// than each side reimplementing "git_head + op_id", is what keeps the
-// label and the event it points at one fact instead of two copies that
-// could drift. Cleanup and proposal-epic creates reach their label from a
-// different referent (the fold's removed event, or the run's
-// registration) and never call this.
+// DeriveEID derives a journal event id from this run's git_head and an
+// op's own id — the one formula every participant in
+// spec/map/flow_task_mapping.md's data flow shares: Labeler mints it to
+// build the spex:<eid> idempotency label a create or retarget op carries,
+// and ingest's EventBuilder derives it again, unchanged, to mint the
+// referent event the label names. Sharing the formula, rather than each
+// side reimplementing "git_head + op_id", is what keeps the label and the
+// event it points at one fact instead of two copies that could drift.
+// Node-bearing creates and retargets call this with their own op_id.
+// cleanupLabel's same-batch-close fallback (plan/labeler.go) is also a
+// caller: when the fold carries no removed event yet, it passes the
+// same-batch close op's id in place of a create's own, deriving the label
+// from the removal that close op is about to record. A cleanup whose
+// removal already landed in an earlier batch reads the fold's removed
+// event instead, and a proposal-epic create reads the run's registration;
+// neither of those two calls this.
 func DeriveEID(gitHead, opID string) string {
 	return gitHead + ":" + opID
 }
