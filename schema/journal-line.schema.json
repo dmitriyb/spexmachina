@@ -66,8 +66,8 @@
         },
         "node_type": {
           "type": "string",
-          "enum": ["component", "data_flow", "test_section", "requirement", "api"],
-          "description": "The task-owning kinds (component, data_flow, test_section) plus the refresh-absorbable kinds (requirement, api). A kind that never owns a task of its own has no entry."
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The kind of node this change event describes, as a type-name-shaped string — not a compiled-in enumeration. Which names are admissible is the resolved profile's declaration, checked at the write boundary by ingest's JournalEncoder before the append commits; the schema only fixes the field's shape."
         },
         "module": {
           "type": "string"

@@ -249,9 +249,9 @@ func TestJournalLineSchema_S6d_TwoTaskCreatedLinesValidateIndependently(t *testi
 	}
 }
 
-// --- S7: node_type is a closed enum ---
+// --- S7: node_type is shape-checked, not enumerated ---
 
-func TestJournalLineSchema_S7_NodeTypeClosedEnum(t *testing.T) {
+func TestJournalLineSchema_S7_NodeTypeShapeCheckedNotEnumerated(t *testing.T) {
 	sch := compileJournalLineSchema(t)
 
 	changeEventWithNodeType := func(nodeType string) string {
@@ -260,15 +260,17 @@ func TestJournalLineSchema_S7_NodeTypeClosedEnum(t *testing.T) {
  "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
 	}
 
-	t.Run("retired kind rejected", func(t *testing.T) {
-		if err := validateJournalLine(t, sch, changeEventWithNodeType("impl_section")); err == nil {
-			t.Fatal("expected validation error for retired node_type impl_section")
-		}
-	})
+	for _, nodeType := range []string{"requirement", "endpoint", "impl_section"} {
+		t.Run(nodeType+" admitted", func(t *testing.T) {
+			if err := validateJournalLine(t, sch, changeEventWithNodeType(nodeType)); err != nil {
+				t.Fatalf("node_type %q should pass: %v", nodeType, err)
+			}
+		})
+	}
 
-	t.Run("requirement admitted", func(t *testing.T) {
-		if err := validateJournalLine(t, sch, changeEventWithNodeType("requirement")); err != nil {
-			t.Fatalf("node_type requirement should pass: %v", err)
+	t.Run("non-type-shaped value rejected", func(t *testing.T) {
+		if err := validateJournalLine(t, sch, changeEventWithNodeType("Impl Section")); err == nil {
+			t.Fatal("expected validation error for node_type \"Impl Section\" (fails the type-name pattern)")
 		}
 	})
 }
