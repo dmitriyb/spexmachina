@@ -64,9 +64,9 @@ func TestResolveDeps_FoldInProgressYieldsRefBead(t *testing.T) {
 	}
 }
 
-func TestResolveDeps_FoldClosedIsDropped(t *testing.T) {
+func TestResolveDeps_FoldAbsentIsDropped(t *testing.T) {
 	batch := map[string]string{}
-	fold := fakeFold{"dep1": {TaskID: "spexmachina-abc", BeadStatus: "closed"}}
+	fold := fakeFold{"dep1": {TaskID: "spexmachina-abc"}}
 
 	refs, err := ResolveDeps([]string{"dep1"}, batch, fold)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 	batch := map[string]string{"y": "op-2"}
 	fold := fakeFold{
 		"z": {TaskID: "spexmachina-z", BeadStatus: "open"},
-		"w": {TaskID: "spexmachina-w", BeadStatus: "closed"},
+		"w": {TaskID: "spexmachina-w"},
 	}
 
 	refs, err := ResolveDeps([]string{"y", "z", "w"}, batch, fold)
@@ -157,7 +157,7 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 		{Kind: RefTask, TaskID: "spexmachina-z"},
 	}
 	if len(refs) != len(want) {
-		t.Fatalf("got %+v, want %+v (w's closed pairing should drop)", refs, want)
+		t.Fatalf("got %+v, want %+v (w's absent pairing should drop)", refs, want)
 	}
 	for i := range want {
 		if refs[i] != want[i] {
@@ -179,7 +179,7 @@ func TestResolveDeps_RetargetSameClassificationAsCreate(t *testing.T) {
 // bullets: a retarget action's DepSpecNodeIDs, as ActionClassifier actually
 // computes them from CompX's real uses/requires_module edges, resolve
 // through Resolver with the same in-batch-wins-over-fold precedence and the
-// same drop-if-closed rule a create's deps use.
+// same drop-if-absent rule a create's deps use.
 func TestRetargetDeps_ClassifierOutputResolvesViaResolver(t *testing.T) {
 	f := newClassifierFixture()
 	c := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
@@ -196,12 +196,12 @@ func TestRetargetDeps_ClassifierOutputResolvesViaResolver(t *testing.T) {
 
 	// CompX's real DepSpecNodeIDs (collectDeps): CompY (direct uses), plus
 	// CompZ and CompS (transitive requires_module, plan -> merkle -> schema).
-	// Y is an in-batch create, Z is open in the fold, S is closed in the
+	// Y is an in-batch create, Z is open in the fold, S is absent from the
 	// fold and must drop.
 	batch := map[string]string{f.CompY: "op-y"}
 	fold := fakeFold{
 		f.CompZ: {TaskID: "spexmachina-z", BeadStatus: "open"},
-		f.CompS: {TaskID: "spexmachina-s", BeadStatus: "closed"},
+		f.CompS: {TaskID: "spexmachina-s"},
 	}
 
 	refs, err := ResolveDeps(retarget.DepSpecNodeIDs, batch, fold)
@@ -217,7 +217,7 @@ func TestRetargetDeps_ClassifierOutputResolvesViaResolver(t *testing.T) {
 		case f.CompZ:
 			want = append(want, Ref{Kind: RefTask, TaskID: "spexmachina-z"})
 		case f.CompS:
-			// closed in the fold: dropped, no ref.
+			// absent from the fold: dropped, no ref.
 		default:
 			t.Fatalf("unexpected dep in retarget.DepSpecNodeIDs: %s", id)
 		}
@@ -347,14 +347,14 @@ func TestResolveDeps_TestSectionDescribes_OpenFoldPairingYieldsRefBead(t *testin
 	}
 }
 
-func TestResolveDeps_TestSectionDescribes_ClosedPairingIsDropped(t *testing.T) {
+func TestResolveDeps_TestSectionDescribes_AbsentPairingIsDropped(t *testing.T) {
 	f := newClassifierFixture()
 	tsAction := resolveTSManyCreate(t, f,
 		Unmatched{Change: change(f.CompX, "plan", "component", merkle.Added, "", "cx-hash")},
 	)
 
 	batch := map[string]string{f.CompX: "op-x"}
-	fold := fakeFold{f.CompY: {TaskID: "spexmachina-y", BeadStatus: "closed"}}
+	fold := fakeFold{f.CompY: {TaskID: "spexmachina-y"}}
 	refs, err := ResolveDeps(tsAction.DepSpecNodeIDs, batch, fold)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -362,7 +362,7 @@ func TestResolveDeps_TestSectionDescribes_ClosedPairingIsDropped(t *testing.T) {
 
 	want := []Ref{{Kind: RefOp, OpID: "op-x"}}
 	if !reflect.DeepEqual(refs, want) {
-		t.Fatalf("got %+v, want %+v — a test against existing code stays immediately actionable, no ref for the closed dep", refs, want)
+		t.Fatalf("got %+v, want %+v — a test against existing code stays immediately actionable, no ref for the dropped dep", refs, want)
 	}
 }
 
@@ -395,7 +395,7 @@ func TestRetargetDeps_TestSectionDescribes_ReMintedSuccessorGainsRefOp(t *testin
 		},
 		{
 			Change:  change(f.CompY, "plan", "component", merkle.Modified, "old-y", "new-y"),
-			Records: []Pairing{{TaskID: "spex-y-old", BeadStatus: "closed"}},
+			Records: []Pairing{{TaskID: "spex-y-old"}},
 		},
 	}
 	actions, err := ClassifyActions(matches, nil, nil, f.Graph)
