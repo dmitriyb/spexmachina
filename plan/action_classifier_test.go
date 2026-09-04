@@ -358,38 +358,24 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 	f := newClassifierFixture()
 	c := change(f.CompX, "plan", "component", merkle.Modified, "old", "new")
 
-	t.Run("closed_obsoletes_and_creates_successor", func(t *testing.T) {
-		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-001", BeadStatus: "closed"}}}
+	// S1: SCHK_HASH — the pairing's task is absent from the artifact: one
+	// plain create, no close against the predecessor, no old task id on the
+	// action, no lineage of any kind.
+	t.Run("absent_from_artifact_yields_plain_create", func(t *testing.T) {
+		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-001"}}} // BeadStatus unset: absent
 		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
-		if len(actions) != 2 {
-			t.Fatalf("want 2 actions, got %+v", actions)
+		if len(actions) != 1 {
+			t.Fatalf("want 1 action, got %+v", actions)
 		}
-		var create, obsolete *Action
-		for i := range actions {
-			switch actions[i].Type {
-			case ActionCreate:
-				create = &actions[i]
-			case ActionObsolete:
-				obsolete = &actions[i]
-			}
+		a := actions[0]
+		if a.Type != ActionCreate || a.TaskID != "" || a.OldTaskID != "" || a.SpecHash != "new" {
+			t.Fatalf("want a plain create with no prior task id, got %+v", a)
 		}
-		if obsolete == nil || create == nil {
-			t.Fatalf("want one create and one obsolete: %+v", actions)
-		}
-		if obsolete.TaskID != "spex-001" || obsolete.ChangeType != "modified" {
-			t.Errorf("obsolete: %+v", *obsolete)
-		}
-		if create.OldTaskID != "spex-001" || create.SpecHash != "new" || create.TaskID != "" {
-			t.Errorf("create: %+v", *create)
-		}
-		if create.Reason != "Spec node modified (new): plan/CompX" {
-			t.Errorf("create reason: got %q", create.Reason)
-		}
-		if obsolete.Reason != "Spec node modified: plan/CompX" {
-			t.Errorf("obsolete reason: got %q", obsolete.Reason)
+		if a.Reason != "Spec node modified (new): plan/CompX" {
+			t.Errorf("reason: got %q", a.Reason)
 		}
 	})
 
@@ -425,14 +411,18 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 		}
 	})
 
-	t.Run("unknown_status_takes_closed_path", func(t *testing.T) {
-		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-099"}}} // BeadStatus unset
+	// The artifact carries no fourth status: any live-status value other than
+	// "open" or "in_progress" — a tracker status the task-state schema does
+	// not admit, surfaced only via the legacy --beads path — is read the
+	// same as "absent from the artifact", never as some other case.
+	t.Run("non_open_non_in_progress_status_also_yields_plain_create", func(t *testing.T) {
+		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-099", BeadStatus: "closed"}}}
 		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
 		if err != nil {
 			t.Fatalf("err: %v", err)
 		}
-		if len(actions) != 2 {
-			t.Fatalf("want obsolete+create for an unjoined status, got %+v", actions)
+		if len(actions) != 1 || actions[0].Type != ActionCreate {
+			t.Fatalf("want a single plain create for a non-open/in_progress status, got %+v", actions)
 		}
 	})
 }
@@ -512,9 +502,9 @@ func TestClassifyMatched_AddedWithExistingPairing_BehavesLikeModified(t *testing
 		t.Errorf("open pairing: want single retarget, got actions=%+v err=%v", actions, err)
 	}
 
-	closedM := Match{Change: c, Records: []Pairing{{TaskID: "spex-y", BeadStatus: "closed"}}}
-	if actions, err := ClassifyActions([]Match{closedM}, nil, nil, f.Graph); err != nil || len(actions) != 2 {
-		t.Errorf("closed pairing: want obsolete+create, got actions=%+v err=%v", actions, err)
+	absentM := Match{Change: c, Records: []Pairing{{TaskID: "spex-y"}}} // BeadStatus unset: absent
+	if actions, err := ClassifyActions([]Match{absentM}, nil, nil, f.Graph); err != nil || len(actions) != 1 || actions[0].Type != ActionCreate {
+		t.Errorf("absent pairing: want a single plain create, got actions=%+v err=%v", actions, err)
 	}
 
 	inProgressM := Match{Change: c, Records: []Pairing{{TaskID: "spex-z", BeadStatus: "in_progress"}}}
@@ -523,23 +513,52 @@ func TestClassifyMatched_AddedWithExistingPairing_BehavesLikeModified(t *testing
 	}
 }
 
-// --- test_section fold-back (E4): precedes the status split entirely ---
+// --- test_section fold-back (E4): precedes the status split entirely,
+// and reads the split the way a removal does: open -> close, in_progress ->
+// refuse, absent -> nothing owed ---
 
 func TestFoldback_BeatsStatusSplit(t *testing.T) {
 	f := newClassifierFixture()
 	c := change(f.TSOne, "plan", "test_section", merkle.Modified, "old", "new")
-	for _, status := range []string{"open", "in_progress", "closed"} {
-		t.Run(status, func(t *testing.T) {
-			m := Match{Change: c, Records: []Pairing{{TaskID: "spex-ts", BeadStatus: status}}}
-			actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
-			if err != nil {
-				t.Fatalf("unexpected error: %v", err)
-			}
-			if len(actions) != 1 || actions[0].Type != ActionObsolete {
-				t.Fatalf("want exactly 1 obsolete action, got %+v", actions)
-			}
-		})
-	}
+
+	t.Run("open", func(t *testing.T) {
+		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-ts", BeadStatus: "open"}}}
+		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(actions) != 1 || actions[0].Type != ActionObsolete {
+			t.Fatalf("want exactly 1 close action, got %+v", actions)
+		}
+		if actions[0].Reason != "Spec node modified: plan/TSOne" {
+			t.Errorf("reason: got %q", actions[0].Reason)
+		}
+	})
+
+	t.Run("in_progress", func(t *testing.T) {
+		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-ts", BeadStatus: "in_progress"}}}
+		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+		if err == nil {
+			t.Fatalf("want refusal error, got actions=%+v", actions)
+		}
+		if !strings.Contains(err.Error(), "spex-ts") {
+			t.Errorf("error must name the claimed task: %v", err)
+		}
+		if len(actions) != 0 {
+			t.Errorf("no action list is returned at all on refusal, got %+v", actions)
+		}
+	})
+
+	t.Run("absent", func(t *testing.T) {
+		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-ts"}}} // BeadStatus unset: absent
+		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(actions) != 0 {
+			t.Fatalf("want no action at all — the section's task is finished and owes nothing further, got %+v", actions)
+		}
+	})
 }
 
 func TestFoldback_PrecedenceIsDescribesLengthNotNodeType(t *testing.T) {
@@ -574,46 +593,45 @@ func TestClassifyOrphaned_OpenYieldsObsoleteOnly(t *testing.T) {
 	}
 }
 
-func TestClassifyOrphaned_InProgressYieldsObsoleteOnly(t *testing.T) {
+// TestClassifyOrphaned_InProgressRefusesTheRun pins S4: a claimed task
+// under a removed node is the largest move a target can make, so the run
+// refuses naming it rather than silently closing — no action list at all.
+func TestClassifyOrphaned_InProgressRefusesTheRun(t *testing.T) {
 	o := Orphaned{
 		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-011", Module: "plan", Name: "Legacy", BeadStatus: "in_progress"},
 		NodeType: "component",
 	}
 	actions, err := ClassifyActions(nil, nil, []Orphaned{o}, SpecGraph{})
-	if err != nil {
-		t.Fatalf("err: %v", err)
+	if err == nil {
+		t.Fatalf("want refusal error, got actions=%+v", actions)
 	}
-	if len(actions) != 1 || actions[0].Type != ActionObsolete {
-		t.Fatalf("want 1 obsolete action (in_progress: nothing shipped), got %+v", actions)
+	if !strings.Contains(err.Error(), "spex-011") {
+		t.Errorf("error must name the claimed task: %v", err)
+	}
+	if len(actions) != 0 {
+		t.Errorf("no action list is returned at all on refusal, got %+v", actions)
 	}
 }
 
-func TestClassifyOrphaned_ClosedYieldsObsoletePlusCleanupCreate(t *testing.T) {
+// TestClassifyOrphaned_AbsentYieldsCleanupCreateOnly pins S4's absent case:
+// the task shipped, so a cleanup create is minted to delete the code, with
+// no close beside it — nothing is live to close — and no old task id or
+// dependency on the finished task.
+func TestClassifyOrphaned_AbsentYieldsCleanupCreateOnly(t *testing.T) {
 	o := Orphaned{
-		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-010", Module: "plan", Name: "Legacy", BeadStatus: "closed"},
+		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-010", Module: "plan", Name: "Legacy"}, // BeadStatus unset: absent
 		NodeType: "component",
 	}
 	actions, err := ClassifyActions(nil, nil, []Orphaned{o}, SpecGraph{})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if len(actions) != 2 {
-		t.Fatalf("want 2 actions, got %+v", actions)
+	if len(actions) != 1 {
+		t.Fatalf("want exactly 1 cleanup create action, no close, got %+v", actions)
 	}
-	var obsolete, cleanup *Action
-	for i := range actions {
-		switch actions[i].Type {
-		case ActionObsolete:
-			obsolete = &actions[i]
-		case ActionCreate:
-			cleanup = &actions[i]
-		}
-	}
-	if obsolete == nil || cleanup == nil {
-		t.Fatalf("want one obsolete and one create: %+v", actions)
-	}
-	if cleanup.OldTaskID != "spex-010" || cleanup.SpecHash != "" {
-		t.Errorf("cleanup create: %+v", *cleanup)
+	cleanup := actions[0]
+	if cleanup.Type != ActionCreate || cleanup.OldTaskID != "" || cleanup.TaskID != "" || cleanup.SpecHash != "" {
+		t.Errorf("cleanup create: %+v", cleanup)
 	}
 	if cleanup.Reason != "Code cleanup: plan/Legacy" {
 		t.Errorf("cleanup reason: got %q", cleanup.Reason)
@@ -991,8 +1009,9 @@ func TestTestSectionCreate_WalksDescribesButNotUsesOrRequiresModule(t *testing.T
 // TestClassifyMatched_NamesResolvedFromGraph_AllNodeKinds pins S8b's first
 // bullet over all three node kinds the matched path can carry — a
 // component-only fixture would pass even if the resolver only ever handled
-// components. Each subtest classifies a closed pairing (obsolete + create
-// successor) so both actions' Node and NodeType are checked at once.
+// components. Each subtest classifies a pairing whose task is absent from
+// the artifact (a plain create) so the resulting action's Node and NodeType
+// are checked directly.
 func TestClassifyMatched_NamesResolvedFromGraph_AllNodeKinds(t *testing.T) {
 	f := newClassifierFixture()
 	tests := []struct {
@@ -1008,21 +1027,20 @@ func TestClassifyMatched_NamesResolvedFromGraph_AllNodeKinds(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := change(tt.nodeID, "plan", tt.nodeType, merkle.Modified, "old", "new")
-			m := Match{Change: c, Records: []Pairing{{TaskID: "spex-100", BeadStatus: "closed"}}}
+			m := Match{Change: c, Records: []Pairing{{TaskID: "spex-100"}}} // BeadStatus unset: absent
 			actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
 			if err != nil {
 				t.Fatalf("err: %v", err)
 			}
-			if len(actions) != 2 {
-				t.Fatalf("want obsolete+create, got %+v", actions)
+			if len(actions) != 1 {
+				t.Fatalf("want 1 plain create, got %+v", actions)
 			}
-			for _, a := range actions {
-				if a.Node != tt.wantName {
-					t.Errorf("%s action: Node = %q, want declared name %q, not the identity hash", a.Type, a.Node, tt.wantName)
-				}
-				if a.NodeType != tt.nodeType {
-					t.Errorf("%s action: NodeType = %q, want %q", a.Type, a.NodeType, tt.nodeType)
-				}
+			a := actions[0]
+			if a.Node != tt.wantName {
+				t.Errorf("%s action: Node = %q, want declared name %q, not the identity hash", a.Type, a.Node, tt.wantName)
+			}
+			if a.NodeType != tt.nodeType {
+				t.Errorf("%s action: NodeType = %q, want %q", a.Type, a.NodeType, tt.nodeType)
 			}
 		})
 	}
@@ -1102,20 +1120,18 @@ func TestClassifyOrphaned_NameAndModuleFromJournalNotGraph(t *testing.T) {
 // default.
 func TestClassifyOrphaned_NodeTypeCarriedFromPairingRecord(t *testing.T) {
 	o := Orphaned{
-		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-010", Module: "plan", Name: "Legacy", BeadStatus: "closed"},
+		Record:   Pairing{SpecNodeID: "legacy1", TaskID: "spex-010", Module: "plan", Name: "Legacy"}, // BeadStatus unset: absent
 		NodeType: "data_flow",
 	}
 	actions, err := ClassifyActions(nil, nil, []Orphaned{o}, SpecGraph{})
 	if err != nil {
 		t.Fatalf("err: %v", err)
 	}
-	if len(actions) != 2 {
-		t.Fatalf("want obsolete+cleanup create, got %+v", actions)
+	if len(actions) != 1 {
+		t.Fatalf("want 1 cleanup create, got %+v", actions)
 	}
-	for _, a := range actions {
-		if a.NodeType != "data_flow" {
-			t.Errorf("%s action: NodeType = %q, want %q carried from the pairing record", a.Type, a.NodeType, "data_flow")
-		}
+	if actions[0].NodeType != "data_flow" {
+		t.Errorf("%s action: NodeType = %q, want %q carried from the pairing record", actions[0].Type, actions[0].NodeType, "data_flow")
 	}
 }
 

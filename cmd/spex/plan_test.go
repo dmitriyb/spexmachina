@@ -269,20 +269,26 @@ func TestPlanCommand_S1_FullPipeline_DiffFileToChangesetStdout(t *testing.T) {
 		t.Errorf("want the epic first, got %+v", cs.Ops[0])
 	}
 
-	lastCreate, firstClose := -1, -1
+	// The one-closed beads variant: task-existing/task-existing2 are open
+	// (retargeted in place — spexmachina-swvx.16 retired the close-and-recreate
+	// step) and task-removed is closed, i.e. absent from the task-state
+	// artifact's three-state model, which mints a cleanup create rather than
+	// a close (spec/plan/test_classification.md S4) — so this fixture
+	// produces no close op at all.
+	lastCreate, firstRetarget := -1, -1
 	for i, op := range cs.Ops {
 		if op.Type == plan.OpCreate {
 			lastCreate = i
 		}
-		if op.Type == plan.OpClose && firstClose == -1 {
-			firstClose = i
+		if op.Type == plan.OpRetarget && firstRetarget == -1 {
+			firstRetarget = i
 		}
 	}
-	if firstClose == -1 {
-		t.Fatal("want at least one close op (the one-closed beads variant obsoletes the removed node)")
+	if firstRetarget == -1 {
+		t.Fatal("want at least one retarget op (the one-closed beads variant retargets the open existing/existing2 pairings)")
 	}
-	if lastCreate > firstClose {
-		t.Errorf("want every create before every close, got ops: %+v", cs.Ops)
+	if lastCreate > firstRetarget {
+		t.Errorf("want every create before every retarget, got ops: %+v", cs.Ops)
 	}
 }
 
@@ -504,25 +510,31 @@ func TestPlanCommand_S6_BeadsFlagDrivesCleanupGate(t *testing.T) {
 	}
 	cs2 := parsePlanChangeset(t, stdout2)
 
-	for _, op := range cs2.Ops {
-		if op.SpecNodeKind == plan.KindCleanup {
-			t.Errorf("want no cleanup create without --beads, got %+v", op)
+	// Without --beads, every pairing's live status is equally unjoined —
+	// including the removed node's — so all three now read as "absent from
+	// the task-state artifact", the same three-state model --beads and
+	// --tasks alike feed (spec/plan/arch_action_classifier.md's
+	// introduction: absence means the task has no live work). That mints
+	// the removed node's cleanup create exactly as the one-closed variant
+	// above does, retargets nothing (no pairing is open), and closes
+	// nothing (spexmachina-swvx.16 retired the close-and-recreate step: an
+	// absent task's node gets one plain create, never a close paired with
+	// one — spec/plan/test_classification.md S1).
+	var cleanupOp2 *plan.Op
+	for i := range cs2.Ops {
+		if cs2.Ops[i].SpecNodeID == f.removedID && cs2.Ops[i].SpecNodeKind == plan.KindCleanup {
+			cleanupOp2 = &cs2.Ops[i]
 		}
+	}
+	if cleanupOp2 == nil {
+		t.Fatalf("want a cleanup create for the removed node without --beads too, got ops: %+v", cs2.Ops)
+	}
+	for _, op := range cs2.Ops {
 		if op.Type == plan.OpRetarget {
-			t.Errorf("want no retarget without --beads (unjoined status defaults closed), got %+v", op)
+			t.Errorf("want no retarget without --beads (no pairing is open), got %+v", op)
 		}
-	}
-	wantClosed := map[string]bool{"task-existing": false, "task-existing2": false}
-	for _, op := range cs2.Ops {
-		if op.Type == plan.OpClose && op.Target != nil {
-			if _, ok := wantClosed[op.Target.TaskID]; ok {
-				wantClosed[op.Target.TaskID] = true
-			}
-		}
-	}
-	for bead, found := range wantClosed {
-		if !found {
-			t.Errorf("want a close op for %s without --beads (defaults to obsolete+create)", bead)
+		if op.Type == plan.OpClose {
+			t.Errorf("want no close op without --beads (an absent task's node gets a plain create, never a close), got %+v", op)
 		}
 	}
 	wantCreates := map[string]bool{f.existingID: false, f.existing2ID: false}
@@ -535,7 +547,7 @@ func TestPlanCommand_S6_BeadsFlagDrivesCleanupGate(t *testing.T) {
 	}
 	for id, found := range wantCreates {
 		if !found {
-			t.Errorf("want a successor create for %s without --beads", id)
+			t.Errorf("want a plain create for %s without --beads", id)
 		}
 	}
 }

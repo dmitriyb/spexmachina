@@ -61,13 +61,20 @@
 //
 // This package's wire shape — ChangesetVersion, Ref/RefTask/Ref.TaskID,
 // the create/close/retarget-only Op vocabulary — is v4 as of
-// spexmachina-swvx.6, ahead of the component rewrites that consume it:
-// today's ActionClassifier, Resolver, ChangesetBuilder and
-// IdempotencyLabeler still implement the pre-task-lifecycle "obsolete,
-// then recreate" shape the flow above describes as the target
-// (ActionObsolete, Action.OldTaskID, the create's blocks-edge lineage dep
-// on Ref.EdgeType) pending their own beads — spexmachina-swvx.16, .19, .20
-// and .13 respectively. This doc's step 2, TaskReader/--tasks, landed as
+// spexmachina-swvx.6, ahead of the component rewrites that consume it.
+// ActionClassifier (spexmachina-swvx.16) now implements the target shape the
+// flow above describes: a genuinely changed node with an open task
+// retargets in place, and a task absent from the artifact yields one plain
+// create carrying no old task id and no lineage dep — no close-and-recreate
+// step. Resolver, ChangesetBuilder and IdempotencyLabeler still carry
+// remnants of the pre-task-lifecycle "obsolete, then recreate" shape
+// (Action.OldTaskID, the create's blocks-edge lineage dep on Ref.EdgeType,
+// plan/labeler.go's CloseOpIDs) pending their own beads — spexmachina-swvx.19,
+// .20 and .13 respectively; IdempotencyLabeler's cleanup-create label
+// already self-mints from the cleanup op's own (git_head, op_id) when
+// neither the journal fold nor a same-batch close answers, per
+// module.json's 885096d4941c, since ActionClassifier's fix made that path
+// reachable in a normal run. This doc's step 2, TaskReader/--tasks, landed as
 // plan.ReadTasks/ReadTasksBytes in spexmachina-swvx.14; the pre-task-
 // lifecycle ReadBeads/ReadBeadsBytes trio it replaces still runs behind
 // --beads, wired alongside it, pending spexmachina-swvx.7 (BeadReader
