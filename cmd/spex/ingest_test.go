@@ -457,6 +457,85 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 	}
 }
 
+// TestIngestCommand_V3PairRefused_Exits1 covers test_ingest_command.md's
+// "A v3 pair is refused at the version envelope": a changeset carrying
+// "version": 3 with a dep in the retired v3 task-ref spelling
+// ({"ref":"bead","bead_id":…}, plan/types.go's ChangesetVersion doc)
+// paired with receipts carrying "version": 1 (the pre-rename
+// bead_id-keyed per-op shape, adapters/types.go's ReceiptsVersion doc).
+// The retired shapes are refused outright by the pre-flight, never
+// adapted: nothing is appended and the snapshot is untouched.
+func TestIngestCommand_V3PairRefused_Exits1(t *testing.T) {
+	f := setupIngestFixture(t, adapters.StatusComplete)
+
+	journalBefore, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapBefore, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v3Changeset := `{
+		"version": 3,
+		"git_head": "deadbeefcafe",
+		"proposal": "test-proposal",
+		"ops": [{
+			"op_id": "op-0001",
+			"type": "create",
+			"spec_node_kind": "component",
+			"spec_node_id": "` + f.compID + `",
+			"idempotency": {"label": "spex:1"},
+			"deps": [{"ref": "bead", "bead_id": "bead-999"}],
+			"title": "Comp1"
+		}]
+	}`
+	if err := os.WriteFile(f.changesetPath, []byte(v3Changeset), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v1Receipts := `{
+		"version": 1,
+		"status": "complete",
+		"ops": [{"op_id": "op-0001", "status": "ok", "bead_id": "bead-1", "was_existing": false}]
+	}`
+	if err := os.WriteFile(f.receiptsPath, []byte(v1Receipts), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, exit, err := runIngest(t,
+		"--spec-dir", f.specDir,
+		"--changeset", f.changesetPath,
+		"--receipts", f.receiptsPath,
+	)
+	if err == nil {
+		t.Fatal("want error for a v3 changeset / v1 receipts pair, got nil")
+	}
+	if exit != 1 {
+		t.Errorf("want exit 1, got %d", exit)
+	}
+	if !strings.Contains(err.Error()+stderr, "version") {
+		t.Errorf("want error naming the version, got err=%v stderr=%s", err, stderr)
+	}
+
+	journalAfter, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(journalAfter) != string(journalBefore) {
+		t.Errorf("refused pair should append nothing, before=%q after=%q", journalBefore, journalAfter)
+	}
+
+	snapAfter, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(snapAfter) != string(snapBefore) {
+		t.Errorf("refused pair should leave the snapshot untouched, before=%q after=%q", snapBefore, snapAfter)
+	}
+}
+
 // TestIngestCommand_InvariantFailure_Exits2_PreservesJournal covers the
 // exit-2 invariant-failure path against the journal model: a close op
 // targeting a bead with no journal pairing at all (Reconciler's
