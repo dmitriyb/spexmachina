@@ -1414,10 +1414,10 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 			Type:       ActionObsolete,
 			TaskID:     "spexmachina-old",
 			Module:     "m",
-			Node:       "X",
+			Node:       "W",
 			NodeType:   KindComponent,
 			ChangeType: "removed",
-			Reason:     "Spec node removed: m/X",
+			Reason:     "Spec node removed: m/W",
 		},
 		{
 			Type:       ActionObsolete,
