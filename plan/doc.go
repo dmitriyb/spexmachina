@@ -81,8 +81,7 @@
 // plan.ReadTasks/ReadTasksBytes in spexmachina-swvx.14 and cmd/spex/plan.go
 // now requires --tasks and no longer wires --beads at all
 // (spexmachina-swvx.21); the pre-task-lifecycle ReadBeads/ReadBeadsBytes
-// trio it replaces is unreferenced dead code pending spexmachina-swvx.7
-// (BeadReader cleanup), which deletes plan/bead_reader.go.
+// trio it replaced was removed in spexmachina-swvx.7 (BeadReader cleanup).
 //
 // A second, later delta sits on top of the first: the 822b817 baseline
 // correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
@@ -106,9 +105,7 @@
 // action-type, spec_node_kind, ref-kind and label vocabularies, the tier
 // and fallback-priority constants, and the schema version constant, are
 // all public. Each step of the flow above ships as a component in this
-// package: ReadTasks/ReadTasksBytes (TaskReader; ReadBeads/ReadBeadsBytes,
-// BeadReader, is unreferenced dead code pending spexmachina-swvx.7),
-// MatchNodes (NodeMatcher),
+// package: ReadTasks/ReadTasksBytes (TaskReader), MatchNodes (NodeMatcher),
 // ClassifyActions (ActionClassifier), Sort (TopologicalSorter), Labeler
 // (IdempotencyLabeler),
 // ResolveDeps/ResolveEpicAction/ResolveParent/ResolvePriority (Resolver),

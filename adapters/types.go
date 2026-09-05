@@ -73,8 +73,8 @@ type TaskStateEntry struct {
 // parses and validates a --tasks document into plan.Task, mirroring
 // TaskStateEntry's two fields. cmd/spex/plan.go now requires --tasks and
 // no longer wires --beads at all (spexmachina-swvx.21); the pre-task-
-// lifecycle Bead/ReadBeads/ReadBeadsBytes trio in plan/bead_reader.go is
-// unreferenced dead code pending its removal (TODO(bead:spexmachina-swvx.7)).
+// lifecycle Bead/ReadBeads/ReadBeadsBytes trio was removed in
+// spexmachina-swvx.7 (BeadReader cleanup).
 type TaskState struct {
 	Version int              `json:"version"`
 	Tasks   []TaskStateEntry `json:"tasks"`
