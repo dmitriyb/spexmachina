@@ -168,10 +168,11 @@ type planFixture struct {
 	removedID   string
 	diffPath    string
 
-	tasksAllOpen       string
-	tasksOneUnlisted   string
-	tasksOneInProgress string
-	tasksEmpty         string
+	tasksAllOpen           string
+	tasksOneUnlisted       string
+	tasksOneInProgress     string
+	tasksRemovedInProgress string
+	tasksEmpty             string
 }
 
 func setupPlanFixture(t *testing.T) planFixture {
@@ -238,16 +239,24 @@ func setupPlanFixture(t *testing.T) planFixture {
 	tasksOneInProgress := writePlanTasks(t, dir, "tasks-one-in-progress.json", map[string]string{
 		"task-existing": "in_progress", "task-existing2": "in_progress", "task-removed": "open",
 	})
+	// removed-in_progress: the removed node's own task is claimed while
+	// existing/existing2 stay open — isolates classifyOrphaned's
+	// in_progress branch (plan/action_classifier.go:168-169) from the
+	// modified-node refusal S7's first arm already covers.
+	tasksRemovedInProgress := writePlanTasks(t, dir, "tasks-removed-in-progress.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open", "task-removed": "in_progress",
+	})
 	tasksEmpty := writePlanTasks(t, dir, "tasks-empty.json", map[string]string{})
 
 	return planFixture{
 		specDir: specDir, proposal: proposal, gitHead: gitHead,
 		existingID: existingID, existing2ID: existing2ID, newID: newID, removedID: removedID,
-		diffPath:           diffPath,
-		tasksAllOpen:       tasksAllOpen,
-		tasksOneUnlisted:   tasksOneUnlisted,
-		tasksOneInProgress: tasksOneInProgress,
-		tasksEmpty:         tasksEmpty,
+		diffPath:               diffPath,
+		tasksAllOpen:           tasksAllOpen,
+		tasksOneUnlisted:       tasksOneUnlisted,
+		tasksOneInProgress:     tasksOneInProgress,
+		tasksRemovedInProgress: tasksRemovedInProgress,
+		tasksEmpty:             tasksEmpty,
 	}
 }
 
@@ -625,6 +634,36 @@ func TestPlanCommand_S7_ClaimedTaskRefusesRun(t *testing.T) {
 	msg := err.Error() + stderr
 	if !strings.Contains(msg, "task-existing") || !strings.Contains(msg, "task-existing2") {
 		t.Errorf("want the error to name both claimed tasks, got %q", msg)
+	}
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Errorf("want no --out file written on refusal")
+	}
+}
+
+// S7's second arm (test_plan_command.md:60): the claimed task's node is
+// removed rather than modified — cancelling claimed work is refused
+// exactly as moving it is.
+func TestPlanCommand_S7_ClaimedTaskRefusesRun_RemovedNode(t *testing.T) {
+	f := setupPlanFixture(t)
+	outPath := filepath.Join(t.TempDir(), "changeset.json")
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--tasks", f.tasksRemovedInProgress, "--spec-dir", f.specDir,
+		"--out", outPath,
+	)
+	if err == nil {
+		t.Fatal("want error when a claimed task's node was removed")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit 2, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout, got %q", stdout)
+	}
+	msg := err.Error() + stderr
+	if !strings.Contains(msg, "task-removed") {
+		t.Errorf("want the error to name the removed node's claimed task, got %q", msg)
 	}
 	if _, statErr := os.Stat(outPath); statErr == nil {
 		t.Errorf("want no --out file written on refusal")
