@@ -1,18 +1,14 @@
 [
   {
-    "node": "f9033352c13f",
-    "reason": "one sentence in the absorb-set rationale: why a meta leaf gets no change event now reads off the profile's declared types instead of the retired journal enum; no table, flag or exit code moved; pinned by ingest/refresh_test.go"
+    "node": "92ae9dab6d6d",
+    "reason": "Exit Codes paragraph: the empty plan-relevant list now states which creates survive (epic, cleanups) and which are refused (a matched create of an unplaced kind); no flag, exit code or interface moved; pinned by TestPlanCommand_S12_EmptyPlanRelevantList_WarnsAndProceeds in cmd/spex/plan_test.go and TestSort_UnplacedKindErrors in plan/sorter_test.go"
   },
   {
-    "node": "703128d3ebd6",
-    "reason": "receipt example ids rewritten to the canonical op-<kind>-<key> shape; the adapter treats op_id as an opaque key, no phase or failure rule moved; pinned by scripts/apply-br_test.sh"
+    "node": "878c885a2517",
+    "reason": "Error Paths bullet for the empty plan-relevant list, the same cells as arch_plan_command.md; no step or data shape moved; pinned by the same two tests"
   },
   {
-    "node": "6fd1f0cbb76c",
-    "reason": "receipt example ids rewritten to the canonical op-<kind>-<key> shape; ingest pairs receipts to ops by op_id as an opaque key, no step moved; pinned by ingest/reconciler_test.go"
-  },
-  {
-    "node": "08909d62930b",
-    "reason": "one example eid rewritten to the canonical shape; the command prints the journal's eid verbatim, no output field moved; pinned by cmd/spex/map_test.go"
+    "node": "7f2e76cecab3",
+    "reason": "one sentence in the environment section: the integration test's fixtures reach every op type, retarget included; no phase, command or failure rule moved; pinned by scripts/apply-br_test.sh, integration retarget case"
   }
 ]
