@@ -19,8 +19,10 @@ package plan
 // status is anything other than live (open or in_progress) rather than
 // checking for the literal "closed" the obsolete-then-recreate shape used
 // to write — there is no closed status in the vocabulary, only absence.
-// ChangesetBuilder (spexmachina-swvx.20) still carries remnants of the
-// pre-task-lifecycle "obsolete, then recreate" shape pending its own bead;
+// ChangesetBuilder (spexmachina-swvx.20) now emits no lineage of any
+// kind — a modified node's create carries no dep naming its predecessor's
+// task, and Ref carries no edge-type field at all — and derives every
+// op_id from its own canonical key rather than its position.
 // IdempotencyLabeler (spexmachina-swvx.13) self-mints a cleanup create's
 // label from its own (git_head, op_id) when the journal fold has no removal
 // entry for the node yet. The task-state artifact (--tasks,
@@ -128,26 +130,17 @@ func DeriveEID(gitHead, opID string) string {
 // OpID is set per Ref; omitempty keeps the JSON clean. v4 renamed the
 // pre-existing-task shape's kind from "bead" to "task" and its id field
 // from bead_id to task_id (spec/plan/flow_plan.md, "changeset.json
-// (output)").
+// (output)"). A ref carries its discriminator and one id, and nothing
+// else: the lineage edge was the only typed dep, and it left the
+// vocabulary with the close-and-recreate step
+// (spec/plan/arch_changeset_builder.md, "Op Shape").
 //
 //	{ "ref": "task", "task_id": "<id>" }   pre-existing task
 //	{ "ref": "op",   "op_id":   "<id>" }   another op in this changeset
-//
-// EdgeType is optional and carries the dep edge label ("blocks") on
-// obsolete+create and cleanup-create lineage refs.
-//
-// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's target v4 ref
-// shape carries no edge-type field at all — the lineage edge was the only
-// typed dep, and it leaves the vocabulary with the close-and-recreate step
-// once ChangesetBuilder (and EventBuilder, spexmachina-swvx.22) stop
-// needing it. EdgeType stays until that lands, so the field-rename this
-// bead lands does not also strand the still-in-use obsolete+create/cleanup
-// lineage mechanism mid-migration.
 type Ref struct {
-	Kind     string `json:"ref"`
-	TaskID   string `json:"task_id,omitempty"`
-	OpID     string `json:"op_id,omitempty"`
-	EdgeType string `json:"type,omitempty"`
+	Kind   string `json:"ref"`
+	TaskID string `json:"task_id,omitempty"`
+	OpID   string `json:"op_id,omitempty"`
 }
 
 // Idem carries the idempotency label the adapter matches against the
@@ -229,14 +222,12 @@ type Changeset struct {
 // TaskID is the existing task on an obsolete or retarget, empty on a
 // create — a create never names a prior task
 // (spec/plan/arch_action_classifier.md's Interface table). SpecHash is set
-// on a create or retarget. OldTaskID is never set by ActionClassifier's own
-// output any more — spexmachina-swvx.16 retired the close-and-recreate step
-// whose create carried it as lineage to the task it replaced — but the
-// field itself stays on Action for plan/builder.go's own use pending
-// ChangesetBuilder (spexmachina-swvx.20).
-// ChangeType ("modified" or "removed") is set on an obsolete only.
-// DepSpecNodeIDs is collected for create and retarget actions only — an
-// obsolete inherits its task's existing graph position.
+// on a create or retarget. A create carries no prior task id at all: there
+// is no lineage to carry — the journal's event chain is where one
+// generation meets the next (spec/plan/arch_changeset_builder.md, "Emit no
+// lineage"). ChangeType ("modified" or "removed") is set on an obsolete
+// only. DepSpecNodeIDs is collected for create and retarget actions only —
+// an obsolete inherits its task's existing graph position.
 type Action struct {
 	Type           string
 	TaskID         string
@@ -245,7 +236,6 @@ type Action struct {
 	NodeType       string
 	SpecNodeID     string
 	SpecHash       string
-	OldTaskID      string
 	DepSpecNodeIDs []string
 	ChangeType     string
 	Reason         string
@@ -254,18 +244,11 @@ type Action struct {
 // OrderedOp pairs an Action with the op_id Build assigns it over Sort's
 // output: TopologicalSorter hands out no op_id at all
 // (spec/plan/arch_topological_sorter.md, "Interface") and returns the
-// ordered actions alone, so Build numbers each OrderedOp and builds the
-// spec_node_id-to-op_id map from those, once the retarget and close ops
-// are counted. IdempotencyLabeler and Resolver then consume []OrderedOp
-// plus that map.
-//
-// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817-corrected
-// step 8 renumbers from each op's own canonical key — its kind plus the
-// node or task it acts on — never from position; plan/builder.go's
-// digit-padded op-%0*d renumbering is the pre-correction shape until
-// ChangesetBuilder's own bead switches to the canonical-key form the
-// changeset.json example (spec/plan/flow_plan.md, "changeset.json
-// (output)") now shows.
+// ordered actions alone, so Build derives each OrderedOp's id from the
+// action's own canonical key — its kind plus the node or task id it acts
+// on, never its position (spec/plan/arch_changeset_builder.md, "Canonical
+// Output") — and builds the spec_node_id-to-op_id map from those.
+// IdempotencyLabeler and Resolver then consume []OrderedOp plus that map.
 type OrderedOp struct {
 	OpID   string
 	Action Action

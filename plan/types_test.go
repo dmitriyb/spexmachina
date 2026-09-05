@@ -198,18 +198,18 @@ func TestOp_CloseMatchesArchSpecExample(t *testing.T) {
 
 // TestOp_CleanupCreateShape matches arch_changeset_builder.md's "Cleanup
 // op shape" table: spec_node_kind "cleanup", the reason verbatim as
-// title, a single blocks-edge dep to the old bead, and no labels key —
-// the retired spex:cleanup discriminator is not emitted; what marks the
-// op as cleanup is its SpecNodeKind alone.
+// title, a layer-edge dep with no edge-type key, and no labels key — the
+// retired spex:cleanup discriminator is not emitted; what marks the op as
+// cleanup is its SpecNodeKind alone.
 func TestOp_CleanupCreateShape(t *testing.T) {
 	op := Op{
-		OpID:         "op-9",
+		OpID:         "op-cleanup-abc123def456",
 		Type:         OpCreate,
 		SpecNodeKind: KindCleanup,
 		SpecNodeID:   "abc123def456",
-		Idempotency:  &Idem{Label: "spex:deadbeef:op-8"},
-		Parent:       &Ref{Kind: RefOp, OpID: "op-1"},
-		Deps:         []Ref{{Kind: RefTask, TaskID: "spexmachina-old", EdgeType: "blocks"}},
+		Idempotency:  &Idem{Label: "spex:deadbeef:op-cleanup-abc123def456"},
+		Parent:       &Ref{Kind: RefOp, OpID: "op-proposal_epic-p"},
+		Deps:         []Ref{{Kind: RefOp, OpID: "op-test_section-t1"}},
 		Priority:     3,
 		Title:        "Code cleanup: m/X",
 	}
@@ -220,8 +220,8 @@ func TestOp_CleanupCreateShape(t *testing.T) {
 	if strings.Contains(got, `"labels"`) {
 		t.Fatalf("cleanup create must carry no labels key: %s", got)
 	}
-	if !strings.Contains(got, `"type":"blocks"`) {
-		t.Fatalf("cleanup create's dep must carry edge type blocks: %s", got)
+	if !strings.Contains(got, `"deps":[{"ref":"op","op_id":"op-test_section-t1"}]`) {
+		t.Fatalf("cleanup create's dep must carry no edge-type key — it left the vocabulary with the lineage edge: %s", got)
 	}
 	fieldOrder(t, got, "cleanup create",
 		"op_id", "type", "spec_node_kind", "spec_node_id",
@@ -286,7 +286,7 @@ func TestOp_RoundTrip(t *testing.T) {
 		SpecHash:   "bbb",
 		Target:     &Ref{Kind: RefTask, TaskID: "spexmachina-hun"},
 		Labels:     []string{"spex:deadbeef:op-3"},
-		Deps:       []Ref{{Kind: RefOp, OpID: "op-2"}, {Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}},
+		Deps:       []Ref{{Kind: RefOp, OpID: "op-2"}, {Kind: RefTask, TaskID: "spexmachina-abc"}},
 		Reason:     "Spec node modified (retarget): plan/BeadReader",
 	}
 	wire := encode(t, original)
@@ -311,19 +311,15 @@ func TestOp_RoundTrip(t *testing.T) {
 	}
 }
 
-func TestRef_EdgeTypeOmittedWhenEmpty(t *testing.T) {
+// TestRef_CarriesNoEdgeTypeKey pins that a Ref has no field to encode an
+// edge type at all — it left the vocabulary with the lineage edge
+// (spec/plan/arch_changeset_builder.md, "Op Shape": "no edge-type key,
+// because the lineage edge was the only typed dep and it is gone").
+func TestRef_CarriesNoEdgeTypeKey(t *testing.T) {
 	r := Ref{Kind: RefTask, TaskID: "spexmachina-abc"}
 	got := encode(t, r)
 	if strings.Contains(got, `"type"`) {
-		t.Fatalf("ref without an edge type must omit the type key: %s", got)
-	}
-}
-
-func TestRef_EdgeTypePresentWhenSet(t *testing.T) {
-	r := Ref{Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}
-	got := encode(t, r)
-	if !strings.Contains(got, `"type":"blocks"`) {
-		t.Fatalf("ref with an edge type must carry it: %s", got)
+		t.Fatalf("a ref carries its discriminator and one id, and nothing else: %s", got)
 	}
 }
 

@@ -3,7 +3,7 @@ package plan
 import (
 	"fmt"
 	"path/filepath"
-	"strconv"
+	"sort"
 )
 
 // Fold is ChangesetBuilder's combined view onto the journal fold: Resolver's
@@ -39,11 +39,13 @@ type Builder struct {
 // Build runs the four-component composition end to end
 // (spec/plan/arch_changeset_builder.md, "Op Kinds" and "Canonical Output"):
 // TopologicalSorter orders the create actions — the proposal epic first,
-// when Resolver's ResolveEpicAction decides one is needed — IdempotencyLabeler
-// assigns every create's label, Resolver classifies every dep and parent ref
-// and computes priority, and Build assembles the retarget and close ops
-// itself before appending the absorbed array. Any sub-component error
-// aborts the whole build; no partial changeset is ever returned.
+// when Resolver's ResolveEpicAction decides one is needed — every op_id is
+// derived from its own canonical key, IdempotencyLabeler assigns every
+// create's label, Resolver classifies every dep and parent ref and computes
+// priority, and Build assembles the retarget and close ops itself — adding
+// the layer-boundary edges "Layer edges" describes — before appending the
+// absorbed array. Any sub-component error aborts the whole build; no
+// partial changeset is ever returned.
 func (b *Builder) Build(actions []Action) (Changeset, error) {
 	var creates, retargets, obsoletes []Action
 	for _, a := range actions {
@@ -65,69 +67,67 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		creates = append([]Action{*epic}, creates...)
 	}
 
-	sorted, err := Sort(creates, b.SpecGraph.profileOrDefault().PlanRelevant)
+	planRelevant := b.SpecGraph.profileOrDefault().PlanRelevant
+	sorted, err := Sort(creates, planRelevant)
 	if err != nil {
 		return Changeset{}, fmt.Errorf("plan: build: %w", err)
 	}
 
-	// Op ids are assigned here, over every op kind together — creates
-	// first, then retargets, then closes — and zero-padded to the digit
-	// width of the total. Sort/TopologicalSorter hands back the creates
-	// alone, with no id of their own, and so cannot compute this width
-	// itself.
-	//
-	// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817
-	// correction derives every op_id from its own canonical key — kind plus
-	// the node or task id it acts on, e.g. "op-component-4c1146bb7287",
-	// "op-retarget-80afb22dab75" — never from position (see the
-	// changeset.json example in "changeset.json (output)"), and adds a
-	// layer-boundary edge to every create: a ref:op dep on every create of
-	// the previous non-empty layer, with the cleanup layer's creates also
-	// carrying a ref:task dep on each retarget's target (module.json's
-	// abfb10394fdd, "Layer order as blocking edges"). Neither the
-	// digit-padded op-%0*d numbering below nor any layer-edge wiring exists
-	// yet; both are ChangesetBuilder's own bead to add. Sort/
-	// TopologicalSorter (spexmachina-swvx.38) returns a flat list of
-	// actions with no layer boundaries of its own to read — this bead
-	// derives them itself from the same PlanRelevant order and layerFor
-	// (plan/sorter.go) Sort already applies internally.
-	total := len(sorted) + len(retargets) + len(obsoletes)
-	pad := digits(total)
-	ordered := make([]OrderedOp, len(sorted))
+	// Op ids are canonical keys — op-<kind>-<key> — derived from each
+	// action alone, never from its position in the batch (spec/plan/
+	// arch_changeset_builder.md, "Canonical Output"). batch maps every
+	// create's spec_node_id to its op_id for Resolver's ref classification;
+	// opIndex maps every op_id back to its file position, the "file order"
+	// a ref:op dep group sorts by.
+	opIDs := make([]string, len(sorted))
 	batch := make(map[string]string, len(sorted))
 	for i, a := range sorted {
-		opID := fmt.Sprintf("op-%0*d", pad, i+1)
-		ordered[i] = OrderedOp{OpID: opID, Action: a}
-		batch[a.SpecNodeID] = opID
+		opIDs[i] = createOpID(a)
+		batch[a.SpecNodeID] = opIDs[i]
 	}
+	opIndex := make(map[string]int, len(sorted))
+	for i, id := range opIDs {
+		opIndex[id] = i
+	}
+
+	layerEdges, err := layerEdgesFor(sorted, opIDs, planRelevant)
+	if err != nil {
+		return Changeset{}, fmt.Errorf("plan: build: %w", err)
+	}
+
+	retargetTargets := make([]string, 0, len(retargets))
+	for _, a := range retargets {
+		retargetTargets = append(retargetTargets, a.TaskID)
+	}
+	sort.Strings(retargetTargets)
 
 	labeler := &Labeler{GitHead: b.GitHead, Fold: b.Fold}
 
+	total := len(sorted) + len(retargets) + len(obsoletes)
 	ops := make([]Op, 0, total)
-	for _, oo := range ordered {
-		label, err := labeler.LabelFor(oo.Action, oo.OpID, b.Registration)
+	for i, a := range sorted {
+		label, err := labeler.LabelFor(a, opIDs[i], b.Registration)
 		if err != nil {
 			return Changeset{}, fmt.Errorf("plan: build: %w", err)
 		}
-		op, err := b.createOp(oo, label, batch)
-		if err != nil {
-			return Changeset{}, fmt.Errorf("plan: build: %w", err)
-		}
-		ops = append(ops, op)
-	}
-
-	for i, a := range retargets {
-		opID := fmt.Sprintf("op-%0*d", pad, len(ordered)+i+1)
-		op, err := b.retargetOp(a, opID, batch, labeler)
+		op, err := b.createOp(a, opIDs[i], label, batch, opIndex, layerEdges[i], retargetTargets)
 		if err != nil {
 			return Changeset{}, fmt.Errorf("plan: build: %w", err)
 		}
 		ops = append(ops, op)
 	}
 
-	for i, a := range obsoletes {
+	for _, a := range retargets {
+		op, err := b.retargetOp(a, batch, opIndex, labeler)
+		if err != nil {
+			return Changeset{}, fmt.Errorf("plan: build: %w", err)
+		}
+		ops = append(ops, op)
+	}
+
+	for _, a := range obsoletes {
 		ops = append(ops, Op{
-			OpID:   fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1),
+			OpID:   closeOpID(a),
 			Type:   OpClose,
 			Target: &Ref{Kind: RefTask, TaskID: a.TaskID},
 			Reason: a.Reason,
@@ -148,19 +148,112 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 	}, nil
 }
 
+// createOpID derives a create action's canonical op_id — op-<kind>-<key>
+// — from the action alone, never from its position in the batch
+// (spec/plan/arch_changeset_builder.md, "Canonical Output"). kind is the
+// emitted spec_node_kind: proposal_epic, cleanup, or the node's own kind.
+// key is the proposal ref for the epic and the node's identity hash for
+// every other create, cleanups included — the removed node's hash, kept
+// for traceability.
+func createOpID(a Action) string {
+	switch {
+	case a.NodeType == KindProposalEpic:
+		return "op-" + KindProposalEpic + "-" + a.SpecNodeID
+	case isCleanup(a):
+		return "op-" + KindCleanup + "-" + a.SpecNodeID
+	default:
+		return "op-" + a.NodeType + "-" + a.SpecNodeID
+	}
+}
+
+// retargetOpID derives a retarget action's canonical op_id: its type,
+// "retarget", plus the modified node's identity hash.
+func retargetOpID(a Action) string {
+	return "op-" + OpRetarget + "-" + a.SpecNodeID
+}
+
+// closeOpID derives a close action's canonical op_id: its type, "close",
+// plus the task id the close targets — a task has at most one close, so
+// this id is unique within the document.
+func closeOpID(a Action) string {
+	return "op-" + OpClose + "-" + a.TaskID
+}
+
+// layerGroup is one contiguous run of sorted's create indices sharing the
+// same layer number. Sort emits only non-empty layers, low to high, each
+// layer's actions contiguous, so a single pass over sorted recovers the
+// groups without recomputing Sort's own partition.
+type layerGroup struct {
+	layer int
+	idx   []int
+}
+
+// layerEdgesFor answers, for every index in sorted, the op ids a layer
+// edge attaches to that create's deps: every create op of the previous
+// non-empty layer (spec/plan/arch_changeset_builder.md, "Layer edges").
+// The epic's own layer (0) is never a predecessor and never receives
+// edges of its own — "the epic is no layer" — so the first non-empty
+// layer after it carries no layer edges at all.
+func layerEdgesFor(sorted []Action, opIDs []string, planRelevant []string) ([][]string, error) {
+	layerIndex, cleanupLayer := layerPlan(planRelevant)
+
+	var groups []layerGroup
+	for i, a := range sorted {
+		l, err := layerFor(a, layerIndex, cleanupLayer)
+		if err != nil {
+			return nil, err
+		}
+		if len(groups) == 0 || groups[len(groups)-1].layer != l {
+			groups = append(groups, layerGroup{layer: l})
+		}
+		groups[len(groups)-1].idx = append(groups[len(groups)-1].idx, i)
+	}
+
+	edges := make([][]string, len(sorted))
+	var prevGroupOpIDs []string
+	for _, g := range groups {
+		if g.layer == 0 {
+			continue // the epic's layer: no predecessor, and never one itself
+		}
+		for _, i := range g.idx {
+			edges[i] = prevGroupOpIDs
+		}
+		ids := make([]string, len(g.idx))
+		for j, i := range g.idx {
+			ids[j] = opIDs[i]
+		}
+		prevGroupOpIDs = ids
+	}
+	return edges, nil
+}
+
+// layerPlan mirrors the layer numbering Sort (plan/sorter.go) computes
+// internally from the same planRelevant list: layer 0 is reserved for the
+// proposal epic, one layer per planRelevant entry follows in declared
+// order, and cleanupLayer is the last layer, one past planRelevant's end.
+// Duplicated here (rather than exported from sorter.go) because it is two
+// lines the layer-edge computation needs to reproduce, not a shared
+// service the two components split responsibility over.
+func layerPlan(planRelevant []string) (map[string]int, int) {
+	layerIndex := make(map[string]int, len(planRelevant))
+	for i, t := range planRelevant {
+		layerIndex[t] = i + 1
+	}
+	return layerIndex, len(planRelevant) + 1
+}
+
 // createOp builds a single create Op: the epic shortcut (no parent, no
 // deps, fixed priority, title = its Reason verbatim), the cleanup shape
 // (distinct spec_node_kind, title = Reason, no labels, fallback priority,
-// empty body), or the conventional component/data_flow/test_section
-// shape — otherwise delegating parent, deps and priority to Resolver
-// (spec/plan/arch_changeset_builder.md, "Cleanup op shape", "Title and
-// body").
-func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) (Op, error) {
-	a := oo.Action
-
+// empty body, deps = layer edges plus every retarget's target), or the
+// conventional component/data_flow/test_section shape — otherwise
+// delegating parent and priority to Resolver and composing deps per
+// composeDeps (spec/plan/arch_changeset_builder.md, "Cleanup op shape",
+// "Title and body").
+func (b *Builder) createOp(a Action, opID, label string, batch map[string]string, opIndex map[string]int, layerEdgeOpIDs, retargetTargets []string) (Op, error) {
 	if a.NodeType == KindProposalEpic {
 		return Op{
-			OpID:         oo.OpID,
+			OpID:         opID,
 			Type:         OpCreate,
 			SpecNodeKind: KindProposalEpic,
 			SpecNodeID:   a.SpecNodeID,
@@ -174,21 +267,20 @@ func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) 
 	if err != nil {
 		return Op{}, err
 	}
-	deps, err := ResolveDeps(a.DepSpecNodeIDs, batch, b.Fold)
+
+	cleanup := isCleanup(a)
+	var extraTasks []string
+	if cleanup {
+		extraTasks = retargetTargets
+	}
+	deps, err := composeDeps(a, b.Fold, batch, opIndex, layerEdgeOpIDs, extraTasks)
 	if err != nil {
 		return Op{}, err
 	}
-	if a.OldTaskID != "" {
-		// Every create that replaces an obsoleted bead — cleanup and
-		// modify-pair alike — carries one extra lineage dep naming the old
-		// bead, so the replacement's lineage survives after the close op
-		// runs.
-		deps = append(deps, Ref{Kind: RefTask, TaskID: a.OldTaskID, EdgeType: "blocks"})
-	}
 
-	if isCleanup(a) {
+	if cleanup {
 		return Op{
-			OpID:         oo.OpID,
+			OpID:         opID,
 			Type:         OpCreate,
 			SpecNodeKind: KindCleanup,
 			SpecNodeID:   a.SpecNodeID,
@@ -201,7 +293,7 @@ func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) 
 	}
 
 	return Op{
-		OpID:         oo.OpID,
+		OpID:         opID,
 		Type:         OpCreate,
 		SpecNodeKind: a.NodeType,
 		SpecNodeID:   a.SpecNodeID,
@@ -214,15 +306,79 @@ func (b *Builder) createOp(oo OrderedOp, label string, batch map[string]string) 
 	}, nil
 }
 
+// composeDeps builds one op's full deps array per the canonical ordering
+// rule in "Canonical Output": resolve the action's spec-graph
+// DepSpecNodeIDs via Resolver, union in the layer-edge ref:op targets and
+// (for a cleanup) every retarget's target as ref:task, dedupe, then emit
+// every ref:op in file order followed by every ref:task in task-id order
+// — "whatever order Resolver answered in"
+// (spec/plan/arch_changeset_builder.md, "Layer edges").
+func composeDeps(a Action, fold FoldLookup, batch map[string]string, opIndex map[string]int, layerEdgeOpIDs, extraTaskIDs []string) ([]Ref, error) {
+	specDeps, err := ResolveDeps(a.DepSpecNodeIDs, batch, fold)
+	if err != nil {
+		return nil, err
+	}
+
+	opSeen := map[string]bool{}
+	var opRefs []string
+	addOp := func(id string) {
+		if !opSeen[id] {
+			opSeen[id] = true
+			opRefs = append(opRefs, id)
+		}
+	}
+	taskSeen := map[string]bool{}
+	var taskRefs []string
+	addTask := func(id string) {
+		if !taskSeen[id] {
+			taskSeen[id] = true
+			taskRefs = append(taskRefs, id)
+		}
+	}
+
+	for _, r := range specDeps {
+		if r.Kind == RefOp {
+			addOp(r.OpID)
+		} else {
+			addTask(r.TaskID)
+		}
+	}
+	for _, id := range layerEdgeOpIDs {
+		addOp(id)
+	}
+	for _, id := range extraTaskIDs {
+		addTask(id)
+	}
+
+	if len(opRefs) == 0 && len(taskRefs) == 0 {
+		return nil, nil
+	}
+
+	sort.Slice(opRefs, func(i, j int) bool { return opIndex[opRefs[i]] < opIndex[opRefs[j]] })
+	sort.Strings(taskRefs)
+
+	deps := make([]Ref, 0, len(opRefs)+len(taskRefs))
+	for _, id := range opRefs {
+		deps = append(deps, Ref{Kind: RefOp, OpID: id})
+	}
+	for _, id := range taskRefs {
+		deps = append(deps, Ref{Kind: RefTask, TaskID: id})
+	}
+	return deps, nil
+}
+
 // retargetOp builds a retarget Op per the shape table in
 // spec/plan/arch_changeset_builder.md, "Retarget op shape": no parent, no
 // priority, no body — the task already sits where it sits, and only its
-// target state and deps move. The label rides in Labels, not Idempotency:
-// updates are naturally idempotent, so there is nothing to probe for. It
-// carries the same (git_head, op_id) derivation as a node-bearing create's
-// label, via Labeler.
-func (b *Builder) retargetOp(a Action, opID string, batch map[string]string, labeler *Labeler) (Op, error) {
-	deps, err := ResolveDeps(a.DepSpecNodeIDs, batch, b.Fold)
+// target state and deps move. Deps carry no layer edges — only a create
+// gets those — but follow the same composeDeps ordering rule as any other
+// op's. The label rides in Labels, not Idempotency: updates are naturally
+// idempotent, so there is nothing to probe for. It carries the same
+// (git_head, op_id) derivation as a node-bearing create's label, via
+// Labeler.
+func (b *Builder) retargetOp(a Action, batch map[string]string, opIndex map[string]int, labeler *Labeler) (Op, error) {
+	opID := retargetOpID(a)
+	deps, err := composeDeps(a, b.Fold, batch, opIndex, nil, nil)
 	if err != nil {
 		return Op{}, err
 	}
@@ -291,15 +447,4 @@ func bodyFor(a Action, graph SpecGraph) string {
 	return fmt.Sprintf("Spec context:\n\n- %s\n- %s\n",
 		filepath.Join("spec", mod.Module.Path, content),
 		filepath.Join("spec", mod.Module.Path, "module.json"))
-}
-
-// digits reports the decimal digit width of n, the zero-padding width
-// Build applies to every op_id (spec/plan/arch_changeset_builder.md,
-// "Canonical Output": "Nine ops number op-1 through op-9; forty number
-// op-01 through op-40"). n <= 0 (an empty batch) still pads to width 1.
-func digits(n int) int {
-	if n <= 0 {
-		return 1
-	}
-	return len(strconv.Itoa(n))
 }

@@ -440,16 +440,21 @@ func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fol
 }
 
 // blocksDepBeadID reports the old bead id an op's lineage dep names, if
-// any. ChangesetBuilder attaches this dep to every create replacing an
-// obsoleted bead — cleanup and modify-pair creates alike — so its
-// presence alone does not select modify-pair handling; BuildCreate only
-// consults it once cleanup and proposal_epic have been ruled out.
+// any. Always false: ChangesetBuilder (spexmachina-swvx.20) stopped
+// attaching a lineage dep to any create, and plan.Ref carries no
+// edge-type field to identify one by even if it did
+// (spec/plan/arch_changeset_builder.md, "Emit no lineage"; "Op Shape": "no
+// edge-type key, because the lineage edge was the only typed dep and it
+// is gone").
+//
+// TODO(bead:spexmachina-swvx.22): this function, its two call sites
+// (BuildCreate's modify-pair branch and claimedByCreate), and
+// EventBuilderState.ModifiedHandled are all now unreachable dead weight —
+// per the TODOs already on BuildCreate and BuildClose above, "The
+// Modified-Node Pair" is retired in the current arch_event_builder.md.
+// Remove them together with the rest of that mechanism rather than
+// leaving this stub behind.
 func blocksDepBeadID(op plan.Op) (string, bool) {
-	for _, d := range op.Deps {
-		if d.Kind == plan.RefTask && d.EdgeType == "blocks" {
-			return d.TaskID, true
-		}
-	}
 	return "", false
 }
 
