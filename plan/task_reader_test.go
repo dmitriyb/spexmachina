@@ -177,24 +177,29 @@ func TestS2_TaskReaderEmptySliceOnEmptyArtifact(t *testing.T) {
 // "plan: read tasks:" and naming the constraint, none returning entries.
 func TestS2b_TaskReaderRefusesNonTaskStateDocuments(t *testing.T) {
 	cases := []struct {
-		name string
-		doc  string
+		name         string
+		doc          string
+		wantContains string
 	}{
 		{
-			name: "unspoken version",
-			doc:  `{"version": 2, "tasks": []}`,
+			name:         "unspoken version",
+			doc:          `{"version": 2, "tasks": []}`,
+			wantContains: "/version",
 		},
 		{
-			name: "closed status the format has no value for",
-			doc:  `{"version": 1, "tasks": [{"task_id": "spex-004", "status": "closed"}]}`,
+			name:         "closed status the format has no value for",
+			doc:          `{"version": 1, "tasks": [{"task_id": "spex-004", "status": "closed"}]}`,
+			wantContains: "'open', 'in_progress'",
 		},
 		{
-			name: "undeclared property on an entry",
-			doc:  `{"version": 1, "tasks": [{"task_id": "spex-005", "status": "open", "labels": []}]}`,
+			name:         "undeclared property on an entry",
+			doc:          `{"version": 1, "tasks": [{"task_id": "spex-005", "status": "open", "labels": []}]}`,
+			wantContains: "'labels' not allowed",
 		},
 		{
-			name: "raw tracker listing, the retired input shape",
-			doc:  `{"issues": [{"id": "spex-006", "status": "open"}]}`,
+			name:         "raw tracker listing, the retired input shape",
+			doc:          `{"issues": [{"id": "spex-006", "status": "open"}]}`,
+			wantContains: "missing properties 'version', 'tasks'",
 		},
 	}
 	for _, tc := range cases {
@@ -205,6 +210,9 @@ func TestS2b_TaskReaderRefusesNonTaskStateDocuments(t *testing.T) {
 			}
 			if !strings.HasPrefix(err.Error(), "plan: read tasks:") {
 				t.Errorf("want 'plan: read tasks:' prefix, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantContains) {
+				t.Errorf("want error naming the constraint (%q), got: %v", tc.wantContains, err)
 			}
 			if got != nil {
 				t.Errorf("want no entries on refusal, got %#v", got)
