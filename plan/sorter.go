@@ -19,18 +19,18 @@ import (
 // the adapter cannot follow, so planRelevant's declared order has to agree
 // with the edges the classifier collected.
 //
-// It answers with the actions in emitted order, each paired with a
-// provisional "op-<n>" id numbered from 1, plus the spec_node_id-to-op_id
-// map built from that order. ChangesetBuilder keeps the order and discards
-// both, renumbering every op itself once the retarget and close ops are
-// counted.
+// It answers with the actions alone, in emitted order. Op ids are not its
+// to hand out: ChangesetBuilder derives each from the op's canonical key
+// and builds the spec_node_id-to-op_id map from those, so nothing
+// provisional is issued here and nothing is renumbered later
+// (arch_topological_sorter.md, "Interface").
 //
 // Three kinds of batch are refused, with no ordering returned at all: one
 // holding an in-batch dependency cycle, one holding a create whose spec
 // node kind belongs to no layer — the epic and cleanup kinds are placed by
 // rule, everything else by planRelevant — and one holding a dep that points
 // at a later layer's op.
-func Sort(actions []Action, planRelevant []string) ([]OrderedOp, map[string]string, error) {
+func Sort(actions []Action, planRelevant []string) ([]Action, error) {
 	layerIndex := make(map[string]int, len(planRelevant))
 	for i, t := range planRelevant {
 		layerIndex[t] = i + 1 // layer 0 is reserved for the proposal epic
@@ -41,13 +41,13 @@ func Sort(actions []Action, planRelevant []string) ([]OrderedOp, map[string]stri
 	for _, a := range actions {
 		l, err := layerFor(a, layerIndex, cleanupLayer)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		layerOf[a.SpecNodeID] = l
 	}
 
 	if err := checkNoForwardLayerDeps(actions, layerOf); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	byLayer := make(map[int][]Action)
@@ -64,19 +64,12 @@ func Sort(actions []Action, planRelevant []string) ([]OrderedOp, map[string]stri
 		}
 		layerOrder, err := kahnSort(nodes)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		ordered = append(ordered, layerOrder...)
 	}
 
-	ops := make([]OrderedOp, len(ordered))
-	specToOp := make(map[string]string, len(ordered))
-	for i, a := range ordered {
-		opID := fmt.Sprintf("op-%d", i+1)
-		ops[i] = OrderedOp{OpID: opID, Action: a}
-		specToOp[a.SpecNodeID] = opID
-	}
-	return ops, specToOp, nil
+	return ordered, nil
 }
 
 // layerFor answers the layer index for one create action. The proposal

@@ -252,12 +252,13 @@ type Action struct {
 	Reason         string
 }
 
-// OrderedOp pairs an Action with the provisional op_id TopologicalSorter
-// assigns it (spec/plan/arch_topological_sorter.md, "Interface").
-// IdempotencyLabeler and Resolver consume []OrderedOp plus the sorter's
-// spec_node_id-to-op_id map; ChangesetBuilder keeps the order and
-// discards both, renumbering every op itself once the retarget and close
-// ops are counted.
+// OrderedOp pairs an Action with the op_id Build assigns it over Sort's
+// output: TopologicalSorter hands out no op_id at all
+// (spec/plan/arch_topological_sorter.md, "Interface") and returns the
+// ordered actions alone, so Build numbers each OrderedOp and builds the
+// spec_node_id-to-op_id map from those, once the retarget and close ops
+// are counted. IdempotencyLabeler and Resolver then consume []OrderedOp
+// plus that map.
 //
 // TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817-corrected
 // step 8 renumbers from each op's own canonical key — its kind plus the

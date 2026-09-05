@@ -65,15 +65,16 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		creates = append([]Action{*epic}, creates...)
 	}
 
-	ordered, batch, err := Sort(creates, b.SpecGraph.profileOrDefault().PlanRelevant)
+	sorted, err := Sort(creates, b.SpecGraph.profileOrDefault().PlanRelevant)
 	if err != nil {
 		return Changeset{}, fmt.Errorf("plan: build: %w", err)
 	}
 
-	// Op ids are renumbered here, over every op kind together — creates
+	// Op ids are assigned here, over every op kind together — creates
 	// first, then retargets, then closes — and zero-padded to the digit
-	// width of the total. Sort/TopologicalSorter is handed the creates
-	// alone and so cannot compute this width itself.
+	// width of the total. Sort/TopologicalSorter hands back the creates
+	// alone, with no id of their own, and so cannot compute this width
+	// itself.
 	//
 	// TODO(bead:spexmachina-swvx.20): spec/plan/flow_plan.md's 822b817
 	// correction derives every op_id from its own canonical key — kind plus
@@ -84,15 +85,20 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 	// the previous non-empty layer, with the cleanup layer's creates also
 	// carrying a ref:task dep on each retarget's target (module.json's
 	// abfb10394fdd, "Layer order as blocking edges"). Neither the
-	// digit-padded op-%0*d renumbering below nor any layer-edge wiring
-	// exists yet; both are ChangesetBuilder's own bead to add, once
-	// TopologicalSorter (spexmachina-swvx.38) exposes layer boundaries for
-	// Build to read.
-	total := len(ordered) + len(retargets) + len(obsoletes)
+	// digit-padded op-%0*d numbering below nor any layer-edge wiring exists
+	// yet; both are ChangesetBuilder's own bead to add. Sort/
+	// TopologicalSorter (spexmachina-swvx.38) returns a flat list of
+	// actions with no layer boundaries of its own to read — this bead
+	// derives them itself from the same PlanRelevant order and layerFor
+	// (plan/sorter.go) Sort already applies internally.
+	total := len(sorted) + len(retargets) + len(obsoletes)
 	pad := digits(total)
-	for i := range ordered {
-		ordered[i].OpID = fmt.Sprintf("op-%0*d", pad, i+1)
-		batch[ordered[i].Action.SpecNodeID] = ordered[i].OpID
+	ordered := make([]OrderedOp, len(sorted))
+	batch := make(map[string]string, len(sorted))
+	for i, a := range sorted {
+		opID := fmt.Sprintf("op-%0*d", pad, i+1)
+		ordered[i] = OrderedOp{OpID: opID, Action: a}
+		batch[a.SpecNodeID] = opID
 	}
 
 	// closeOpIDs maps a to-be-closed task_id to the op_id its close op will
