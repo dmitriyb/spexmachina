@@ -78,10 +78,11 @@
 // derives from exactly two referents, the journal fold's removed event or
 // the cleanup op's own (git_head, op_id), per module.json's 885096d4941c.
 // This doc's step 2, TaskReader/--tasks, landed as
-// plan.ReadTasks/ReadTasksBytes in spexmachina-swvx.14; the pre-task-
-// lifecycle ReadBeads/ReadBeadsBytes trio it replaces still runs behind
-// --beads, wired alongside it, pending spexmachina-swvx.7 (BeadReader
-// cleanup). See each named TODO(bead:…) at its call site.
+// plan.ReadTasks/ReadTasksBytes in spexmachina-swvx.14 and cmd/spex/plan.go
+// now requires --tasks and no longer wires --beads at all
+// (spexmachina-swvx.21); the pre-task-lifecycle ReadBeads/ReadBeadsBytes
+// trio it replaces is unreferenced dead code pending spexmachina-swvx.7
+// (BeadReader cleanup), which deletes this file.
 //
 // A second, later delta sits on top of the first: the 822b817 baseline
 // correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
@@ -94,8 +95,8 @@
 // ChangesetBuilder's op_id (plan/builder.go) is now derived from each op's
 // own canonical key rather than its position, and Build adds the
 // layer-boundary ref:op/ref:task edges abfb10394fdd requires
-// (spexmachina-swvx.20). PlanCommand does not yet warn and proceed (exit 0)
-// on an empty resolved plan-relevant list — pending spexmachina-swvx.21.
+// (spexmachina-swvx.20). PlanCommand now warns and proceeds (exit 0) on an
+// empty resolved plan-relevant list rather than refusing (spexmachina-swvx.21).
 //
 // # Contract surface
 //
@@ -106,8 +107,8 @@
 // and fallback-priority constants, and the schema version constant, are
 // all public. Each step of the flow above ships as a component in this
 // package: ReadTasks/ReadTasksBytes (TaskReader; ReadBeads/ReadBeadsBytes,
-// BeadReader, still runs alongside it behind --beads pending
-// spexmachina-swvx.7), MatchNodes (NodeMatcher),
+// BeadReader, is unreferenced dead code pending spexmachina-swvx.7),
+// MatchNodes (NodeMatcher),
 // ClassifyActions (ActionClassifier), Sort (TopologicalSorter), Labeler
 // (IdempotencyLabeler),
 // ResolveDeps/ResolveEpicAction/ResolveParent/ResolvePriority (Resolver),
