@@ -243,10 +243,13 @@ func TestApply_OkClose_RemovedAppendsRemovedEventAndTaskClosed(t *testing.T) {
 	}
 }
 
-// TestApply_ModifiedPair_LineageExtendedNotRebound covers "Modified node:
-// close+create → lineage extended, not rebound".
-func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): \"Modified node: create+close -> lineage extended, not rebound\" is retired — ChangesetBuilder (spexmachina-swvx.20) never emits the lineage dep this pairing keyed off. Rewrite against the current arch_event_builder.md once this bead lands.")
+// TestApply_CreateOnKnownNode_ModifiedEventLineageExtended covers "Ok
+// create on a known node → modified event, no task_closed": the same op
+// shape a brand-new node gets is emitted for a node whose earlier task
+// already finished, so the modified-vs-added distinction is derived from
+// the journal fold, not carried by the op. The old task_created stays as
+// lineage — nothing is ever rebound or deleted.
+func TestApply_CreateOnKnownNode_ModifiedEventLineageExtended(t *testing.T) {
 	graph := newFakeSpecGraph()
 	graph.nodes["beadbead0002"] = NodeMetadata{
 		Module: "m", Component: "Widget", ContentFile: "m/arch_widget.md",
@@ -265,20 +268,15 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafe0002", Proposal: "p3",
-		Ops: []plan.Op{
-			{
-				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
-				Idempotency: idem("spex:cafe0002:op-1"),
-				Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}},
-			},
-			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/Widget"},
-		},
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "beadbead0002",
+			Idempotency: idem("spex:cafe0002:op-1"),
+		}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
 		Ops: []adapters.OpReceipt{
 			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new", WasExisting: false},
-			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"},
 		},
 	}
 
@@ -286,13 +284,13 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if sum.OkCreates != 1 || sum.OkCloses != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 2 {
-		t.Errorf("summary = %+v, want 1 create/1 close, 1 event, 2 receipts", sum)
+	if sum.OkCreates != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 create, 1 event, 1 receipt", sum)
 	}
 
 	journal := readJournal(t, dir)
-	if len(journal) != 5 {
-		t.Fatalf("journal has %d lines, want 5 (2 seed + 3 new): %+v", len(journal), journal)
+	if len(journal) != 4 {
+		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
 	}
 	modified := journal[2]
 	if modified.Event != "modified" || modified.Node != "beadbead0002" {
@@ -304,17 +302,13 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 	if modified.After == nil || *modified.After != "new-hash" {
 		t.Errorf("modified after = %v, want new-hash", modified.After)
 	}
-	closed := journal[3]
-	created := journal[4]
-	if closed.Event != "task_closed" || closed.TaskID != "br-old" || closed.For != modified.EID {
-		t.Errorf("task_closed = %+v, want for=%s task_id=br-old", closed, modified.EID)
-	}
+	created := journal[3]
 	if created.Event != "task_created" || created.TaskID != "br-new" || created.For != modified.EID {
 		t.Errorf("task_created = %+v, want for=%s task_id=br-new", created, modified.EID)
 	}
 
 	// The fold now answers beadbead0002 → br-new; the br-old pairing
-	// remains as lineage (nothing deleted).
+	// remains as lineage (nothing deleted, nothing closed).
 	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -333,6 +327,11 @@ func TestApply_ModifiedPair_LineageExtendedNotRebound(t *testing.T) {
 	}
 	if journal[1].Event != "task_created" || journal[1].TaskID != "br-old" {
 		t.Errorf("br-old lineage line missing or altered: %+v", journal[1])
+	}
+	for _, ev := range journal {
+		if ev.Event == "task_closed" {
+			t.Errorf("unexpected task_closed in journal: %+v", ev)
+		}
 	}
 }
 
@@ -430,10 +429,10 @@ func TestApply_SkippedStatus_NothingAppended(t *testing.T) {
 }
 
 // TestApply_MixedOps_OrderedAppend covers the "Mixed ops: one batch,
-// ordered append" scenario: a modified lineage pair, a removed close, and
-// a fresh create land in op order.
+// ordered append" scenario: a create for a known node (its earlier task
+// finished), a create for a brand-new node, and a removed close land in
+// op order — plan's real ordering (creates before closes).
 func TestApply_MixedOps_OrderedAppend(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): op-1's expected modify-pair claim on op-3 (via a lineage dep) is retired — ChangesetBuilder (spexmachina-swvx.20) never emits one now, so op-1 builds as a fresh create and op-3 as its own independent modified-close, changing the expected event/line counts. Rewrite the fixture against the current arch_event_builder.md once this bead lands.")
 	graph := newFakeSpecGraph()
 	graph.nodes[hexX] = NodeMetadata{Module: "m", Component: "X", ContentFile: "x.md", SpecHash: "new-x", NodeType: "component"}
 	graph.nodes[hexY] = NodeMetadata{Module: "m", Component: "Y", ContentFile: "y.md", SpecHash: "hy", NodeType: "component"}
@@ -449,10 +448,9 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafe9999", Proposal: "p4",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-A"}}},
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexX, Idempotency: idem("spex:" + hexX)},
 			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexY, Idempotency: idem("spex:" + hexY)},
-			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-A"}, Reason: "Spec node modified: m/X"},
-			{OpID: "op-4", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-B"}, Reason: "Spec node removed: m/Z"},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-B"}, Reason: "Spec node removed: m/Z"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -460,8 +458,7 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 		Ops: []adapters.OpReceipt{
 			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-A2", WasExisting: false},
 			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-Y", WasExisting: false},
-			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-A"},
-			{OpID: "op-4", Status: adapters.OpStatusOk, TaskID: "br-B"},
+			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-B"},
 		},
 	}
 
@@ -469,16 +466,16 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if sum.OkCreates != 2 || sum.OkCloses != 2 || sum.EventsAppended != 3 || sum.ReceiptsAppended != 4 {
-		t.Errorf("summary = %+v, want 2 creates/2 closes, 3 events, 4 receipts", sum)
+	if sum.OkCreates != 2 || sum.OkCloses != 1 || sum.EventsAppended != 3 || sum.ReceiptsAppended != 3 {
+		t.Errorf("summary = %+v, want 2 creates/1 close, 3 events, 3 receipts", sum)
 	}
 
 	journal := readJournal(t, dir)
 	newLines := journal[4:]
-	if len(newLines) != 7 {
-		t.Fatalf("got %d new lines, want 7: %+v", len(newLines), newLines)
+	if len(newLines) != 6 {
+		t.Fatalf("got %d new lines, want 6: %+v", len(newLines), newLines)
 	}
-	wantKinds := []string{"modified", "task_closed", "task_created", "added", "task_created", "removed", "task_closed"}
+	wantKinds := []string{"modified", "task_created", "added", "task_created", "removed", "task_closed"}
 	for i, want := range wantKinds {
 		if newLines[i].Event != want {
 			t.Errorf("new line %d = %q, want %q", i, newLines[i].Event, want)
@@ -501,6 +498,12 @@ func TestApply_MixedOps_OrderedAppend(t *testing.T) {
 	}
 	if byKey[hexY].TaskID != "br-Y" {
 		t.Errorf("Y fold = %+v, want task br-Y", byKey[hexY])
+	}
+	// No line in the batch names X's earlier task.
+	for _, ev := range newLines {
+		if ev.TaskID == "br-A" || ev.For == "seedX" {
+			t.Errorf("new line names X's earlier task: %+v", ev)
+		}
 	}
 }
 
@@ -618,15 +621,13 @@ func TestApply_CleanupCreate_PairsWithPriorRemovedEvent(t *testing.T) {
 	}
 }
 
-// TestApply_CleanupCreate_PairsWithSameBatchRemoval covers the case real
-// plan output actually produces: the cleanup create and the close that
-// removes its node land in the SAME batch, with the create ordered before
-// the close (plan/builder.go orders every changeset create-before-close).
-// At the time the cleanup create is processed, neither the journal's fold
-// nor the batch-so-far shows the node as removed yet — the referent has
-// to come from the precomputed same-batch removal map, not a scan of
-// already-appended lines.
-func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
+// TestApply_CleanupCreate_MintsRemoval covers "Cleanup create → the
+// cleanup mints the removal itself": the node's task finished with no
+// close accompanying this cleanup — plan never pairs a cleanup with a
+// close for the same node, since a cleanup only exists once there is
+// nothing live left to close — so Reconciler's EventBuilder must mint the
+// removal on its own.
+func TestApply_CleanupCreate_MintsRemoval(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)
 
@@ -640,44 +641,48 @@ func TestApply_CleanupCreate_PairsWithSameBatchRemoval(t *testing.T) {
 
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafebeef", Proposal: "p",
-		Ops: []plan.Op{
-			{
-				OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
-				Idempotency: idem("spex:cafebeef:op-2"), Labels: []string{"spex:cleanup"},
-			},
-			{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
-		},
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexGone,
+			Idempotency: idem("spex:cafebeef:op-1"), Labels: []string{"spex:cleanup"},
+		}},
 	}
 	rc := adapters.Receipts{
 		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{
-			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false},
-			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-gone"},
-		},
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false}},
 	}
 
 	sum, err := r.Apply(cs, rc)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)
 	}
-	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 2 {
-		t.Errorf("summary = %+v, want 1 event / 2 receipts", sum)
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
 	}
 
 	journal := readJournal(t, dir)
 	newLines := journal[2:]
-	if len(newLines) != 3 {
-		t.Fatalf("got %d new lines, want 3: %+v", len(newLines), newLines)
+	if len(newLines) != 2 {
+		t.Fatalf("got %d new lines, want 2: %+v", len(newLines), newLines)
 	}
-	cleanupReceipt, removed, closedReceipt := newLines[0], newLines[1], newLines[2]
+	removed, cleanupReceipt := newLines[0], newLines[1]
 	if removed.Event != "removed" || removed.Node != hexGone {
-		t.Fatalf("line 2 = %+v, want removed event for %s", removed, hexGone)
+		t.Fatalf("line 1 = %+v, want removed event for %s", removed, hexGone)
+	}
+	if removed.Before == nil || *removed.Before != "h-gone" {
+		t.Errorf("removed event before = %v, want h-gone", removed.Before)
 	}
 	if cleanupReceipt.Event != "task_created" || cleanupReceipt.TaskID != "br-cleanup" || cleanupReceipt.For != removed.EID {
 		t.Errorf("cleanup receipt = %+v, want for=%s task_id=br-cleanup", cleanupReceipt, removed.EID)
 	}
-	if closedReceipt.Event != "task_closed" || closedReceipt.TaskID != "br-gone" || closedReceipt.For != removed.EID {
-		t.Errorf("task_closed = %+v, want for=%s task_id=br-gone", closedReceipt, removed.EID)
+
+	fold, err := mapping.NewMappingStore(filepath.Join(dir, ".history.jsonl")).List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	for _, e := range fold.Entries {
+		if e.Key == hexGone && !e.Removed {
+			t.Errorf("fold[Gone] = %+v, want removed", e)
+		}
 	}
 }
 
@@ -773,30 +778,31 @@ func TestApply_ModifiedClose_NoPairedCreate_BuildsModifiedFromCloseAlone(t *test
 	}
 }
 
-// TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated covers the
-// partial-receipts shape from the PR discussion: a modify-pair's create
-// errors while its paired close comes back ok, alongside an unrelated ok
-// create. The errored create must not poison the rest of the batch — the
-// unrelated create still lands, and the orphaned close constructs nothing
-// rather than failing the whole run.
-func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): the modify-pair claim this test pins is retired — ChangesetBuilder (spexmachina-swvx.20) never emits the lineage dep the errored create would have claimed the close with. Rewrite against the current arch_event_builder.md once this bead lands.")
+// TestApply_ErroredCreate_TolersatedAlongsideFoldBackClose covers partial-
+// receipts tolerance combined with an independent fold-back close: an
+// errored create must not poison the rest of the batch, and a "Spec node
+// modified" close for a wholly unrelated node still builds its own pair
+// — there is no lineage dep left connecting the two.
+func TestApply_ErroredCreate_TolersatedAlongsideFoldBackClose(t *testing.T) {
 	graph := newFakeSpecGraph()
 	graph.nodes[hexA] = NodeMetadata{Module: "m", Component: "A", ContentFile: "a.md", SpecHash: "new-a", NodeType: "component"}
 	graph.nodes[hexB] = NodeMetadata{Module: "m", Component: "B", ContentFile: "b.md", SpecHash: "hb", NodeType: "component"}
+	graph.nodes[hexMod1] = NodeMetadata{Module: "m", Component: "Sec", ContentFile: "sec.md", SpecHash: "new-hash", NodeType: "test_section"}
 	r, dir := newTestReconciler(t, graph)
 
 	seedJournal(t, dir,
 		mapping.Event{Event: "added", EID: "seedA", Node: hexA, Name: "A", NodeType: "component", Module: "m", After: strPtr("old-a"), GitHead: "seedhead", Proposal: "seed-p", Path: "a.md"},
 		mapping.Event{Event: "task_created", TaskID: "br-old", For: "seedA"},
+		mapping.Event{Event: "added", EID: "seedSec", Node: hexMod1, Name: "Sec", NodeType: "test_section", Module: "m", After: strPtr("old-hash"), GitHead: "seedhead", Proposal: "seed-p", Path: "sec.md"},
+		mapping.Event{Event: "task_created", TaskID: "br-sec", For: "seedSec"},
 	)
 
 	cs := plan.Changeset{
 		Version: plan.ChangesetVersion, GitHead: "cafe4321", Proposal: "p6",
 		Ops: []plan.Op{
-			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}}},
+			{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 			{OpID: "op-2", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/A"},
+			{OpID: "op-3", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-sec"}, Reason: "Spec node modified: m/Sec"},
 		},
 	}
 	rc := adapters.Receipts{
@@ -804,7 +810,7 @@ func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
 		Ops: []adapters.OpReceipt{
 			{OpID: "op-1", Status: adapters.OpStatusError, Error: "tracker boom"},
 			{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-B", WasExisting: false},
-			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-old"},
+			{OpID: "op-3", Status: adapters.OpStatusOk, TaskID: "br-sec"},
 		},
 	}
 
@@ -815,36 +821,43 @@ func TestApply_ModifyPairCreateErrored_ClosePartialRunTolerated(t *testing.T) {
 	if sum.OkCreates != 1 || sum.OkCloses != 1 || sum.Errors != 1 {
 		t.Errorf("summary = %+v, want 1 ok create / 1 ok close / 1 error", sum)
 	}
-	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
-		t.Errorf("summary = %+v, want 1 event / 1 receipt appended (B only)", sum)
+	if sum.EventsAppended != 2 || sum.ReceiptsAppended != 2 {
+		t.Errorf("summary = %+v, want 2 events / 2 receipts appended (B + Sec)", sum)
 	}
 
 	journal := readJournal(t, dir)
-	if len(journal) != 4 {
-		t.Fatalf("journal has %d lines, want 4 (2 seed + 2 new): %+v", len(journal), journal)
+	if len(journal) != 8 {
+		t.Fatalf("journal has %d lines, want 8 (4 seed + 4 new): %+v", len(journal), journal)
 	}
-	for _, ev := range journal[2:] {
+	for _, ev := range journal[4:] {
 		if ev.Node == hexA {
 			t.Fatalf("errored create for A appears in journal: %+v", ev)
 		}
-		if ev.TaskID == "br-old" {
-			t.Fatalf("orphaned close for br-old appears in journal: %+v", ev)
-		}
 	}
-	added := journal[2]
+	added := journal[4]
 	if added.Event != "added" || added.Node != hexB {
-		t.Fatalf("line 3 = %+v, want added event for B", added)
+		t.Fatalf("line 5 = %+v, want added event for B", added)
 	}
-	created := journal[3]
+	created := journal[5]
 	if created.Event != "task_created" || created.TaskID != "br-B" || created.For != added.EID {
 		t.Errorf("task_created = %+v, want for=%s task_id=br-B", created, added.EID)
+	}
+	modified := journal[6]
+	if modified.Event != "modified" || modified.Node != hexMod1 {
+		t.Fatalf("line 7 = %+v, want modified event for %s", modified, hexMod1)
+	}
+	closed := journal[7]
+	if closed.Event != "task_closed" || closed.TaskID != "br-sec" || closed.For != modified.EID {
+		t.Errorf("task_closed = %+v, want for=%s task_id=br-sec", closed, modified.EID)
 	}
 }
 
 // TestApply_CleanupCreate_NoReferentRefusedBeforeAppend covers "Receipt
-// referencing nothing → refused before append": a cleanup whose hash
-// matches no removed event anywhere is a malformed changeset, not a
-// fallback.
+// referencing nothing → refused before append": a cleanup whose hash the
+// journal has never seen at all — no fold entry, so there's no prior
+// `after` to mint the removal's `before` from — is a malformed changeset,
+// not a fallback. A cleanup whose node has journal history but no removed
+// event mints the removal itself instead (buildCleanupCreate).
 func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)

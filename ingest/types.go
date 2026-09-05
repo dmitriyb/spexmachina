@@ -3,11 +3,11 @@ package ingest
 // Close-reason prefix vocabulary. The reconciler discriminates close-op
 // handling on these prefixes: a "Spec node removed" close closes the
 // node's lineage with a removed event, which the fold reads as a
-// tombstone; a "Spec node modified" close is a no-op at the
-// mapping level because the paired create op carries the new bead_id
-// for the same node (see arch_reconciler.md). ActionClassifier emits
-// these reasons in plan/action_classifier.go and ChangesetBuilder
-// propagates them verbatim onto the close op's Reason field.
+// tombstone; a "Spec node modified" close builds its own modified event
+// and task_closed from the journal's live fold entry — see "Fold-Back
+// Closes" in arch_event_builder.md. ActionClassifier emits these reasons
+// in plan/action_classifier.go and ChangesetBuilder propagates them
+// verbatim onto the close op's Reason field.
 const (
 	ReasonRemovedPrefix  = "Spec node removed"
 	ReasonModifiedPrefix = "Spec node modified"

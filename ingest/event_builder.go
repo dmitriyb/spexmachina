@@ -11,11 +11,10 @@ import (
 
 // EventBuilderState is the per-run state every EventBuilder construction
 // path shares — the eid predicate over journal and in-flight batch, the
-// journal fold, the same-batch removals, the registered-by-stem map and
-// the modified-handled set. Reconciler assembles it once per run and
-// hands it to EventBuilder at construction, instead of threading it
-// through every call. See spec/ingest/arch_event_builder.md, "Per-Run
-// State".
+// journal fold and the registered-by-stem map. Reconciler assembles it
+// once per run and hands it to EventBuilder at construction, instead of
+// threading it through every call. See spec/ingest/arch_event_builder.md,
+// "Per-Run State".
 type EventBuilderState struct {
 	// SpecGraph resolves a fresh or modified node's current name, kind and
 	// module — the identity a change event must carry, because the event
@@ -25,18 +24,17 @@ type EventBuilderState struct {
 	// Fold is the journal's live pairings, epic slugs and legacy lines, as
 	// of the start of this run.
 	Fold mapping.Fold
-	// SameBatchRemovals maps a node identity hash this batch's ok
-	// "Spec node removed" closes will retire to the eid their removed
-	// event will carry — resolved before any op is processed, so a
-	// cleanup create resolves its referent regardless of op order.
+	// SameBatchRemovals is unused by EventBuilder: a cleanup create no
+	// longer needs a same-batch removal close to exist at all, since it
+	// mints its own removal when the fold's latest event for the node
+	// isn't already one (see buildCleanupCreate). Reconciler still
+	// populates it — TODO(bead:spexmachina-swvx.24): drop this field, the
+	// sameBatchRemovals() helper and its call site once Reconciler's own
+	// bead lands.
 	SameBatchRemovals map[string]string
 	// RegisteredByStem maps a proposal stem to its `registered` event's
 	// eid, for proposal-epic creates.
 	RegisteredByStem map[string]string
-	// ModifiedHandled records which beads' modified pairs an earlier
-	// create in this batch has already built, so the paired close
-	// constructs nothing twice.
-	ModifiedHandled map[string]bool
 	// HasEID answers whether an eid is already present, in the journal or
 	// in the batch constructed so far. It is mutated as the batch grows,
 	// so a mid-batch collision is caught exactly as a journal-side
@@ -45,8 +43,8 @@ type EventBuilderState struct {
 }
 
 // EventBuilder constructs journal lines per action class from an op (or
-// absorbed entry) and its receipt: the create paths (plain, cleanup,
-// epic), the modified-node pair, retargets, removal closes and absorbed
+// absorbed entry) and its receipt: the create paths (node-bearing,
+// cleanup, epic), retargets, closes (removal and fold-back) and absorbed
 // entries — every receipt references an event. Reconciler builds one
 // per run and calls it once per op. See
 // spec/ingest/arch_event_builder.md and requirements 539030e8c5a4,
@@ -59,69 +57,29 @@ type EventBuilder struct {
 // state. See EventBuilderState and arch_event_builder.md's "Per-Run
 // State".
 func NewEventBuilder(state EventBuilderState) *EventBuilder {
-	if state.ModifiedHandled == nil {
-		state.ModifiedHandled = map[string]bool{}
-	}
 	return &EventBuilder{State: state}
 }
 
 // BuildCreate answers the journal lines an ok create op implies,
 // discriminating spec_node_kind (proposal_epic, cleanup, other) before
-// consulting the spec graph. A plain create whose `blocks` dep names an
-// old bead is the modified-node pair's create half — it builds the
-// modified event and both receipts in one call, off the dep, without
-// waiting for the paired close (see "The Modified-Node Pair"). See
-// "Proposal-Epic Ops" and "Cleanup-Create Ops" in arch_event_builder.md.
-//
-// TODO(bead:spexmachina-swvx.22): "The Modified-Node Pair" this default
-// case builds via blocksDepBeadID is retired in the current
-// arch_event_builder.md ("Node-Bearing Creates" / "Fold-Back Closes"):
-// a node-bearing create no longer carries a `blocks` dep at all, and
-// added-vs-modified is derived instead from the journal fold's latest
-// change event for op.SpecNodeID (no event, or one with a null after,
-// means added; one with an after hash means modified, with that hash as
-// before). A superseded task gets no task_closed — the fold-back close
-// path below covers the one case that still needs one. This is the
-// handoff EventBuilder's own bead consumes; do not build it here.
+// consulting the spec graph. See "Node-Bearing Creates", "Proposal-Epic
+// Ops" and "Cleanup-Create Ops" in arch_event_builder.md.
 func (b *EventBuilder) BuildCreate(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	switch op.SpecNodeKind {
 	case plan.KindProposalEpic:
 		return buildEpicCreate(op, receipt, b.State.Fold, b.State.RegisteredByStem)
 	case plan.KindCleanup:
-		return buildCleanupCreate(op, receipt, b.State.Fold, b.State.SameBatchRemovals)
+		return b.buildCleanupCreate(cs, op, receipt)
 	default:
-		if oldBeadID, ok := blocksDepBeadID(op); ok {
-			// Recorded so a later call to BuildClose for oldBeadID's close
-			// op short-circuits without constructing anything — the pair
-			// is already built. See BuildClose.
-			b.State.ModifiedHandled[oldBeadID] = true
-			return b.buildModifiedPair(cs, op, receipt, oldBeadID)
-		}
-		return b.buildFreshCreate(cs, op, receipt)
+		return b.buildNodeCreate(cs, op, receipt)
 	}
 }
 
 // BuildClose answers the journal lines an ok close op implies: the
-// removed event plus task_closed on a "Spec node removed" reason, or —
-// when no create in the batch claimed the bead — the modified event
-// plus task_closed on a "Spec node modified" reason. When a create in
-// the batch does claim the bead (via a `blocks` dep), this call
-// constructs nothing: either that create already built the whole pair,
-// recognised here via EventBuilderState.ModifiedHandled (ok), or it
-// errored/was skipped — never reaching BuildCreate, so ModifiedHandled
-// stays unset — and the claim is instead recognised by the static
-// changeset scan, so the pair stays incomplete for this partial run —
-// either way there is nothing left for the close to add. See "The
-// Modified-Node Pair" in arch_event_builder.md.
-//
-// TODO(bead:spexmachina-swvx.22): per the current arch_event_builder.md
-// ("Fold-Back Closes"), the ModifiedHandled/claimedByCreate discrimination
-// below is retired along with the modified-node pair: a "Spec node
-// modified" close always builds its own modified event plus task_closed,
-// unconditionally — no create in the same batch ever claims it, because
-// node-bearing creates no longer carry a lineage dep. Once BuildCreate
-// stops populating ModifiedHandled, this case reduces to always calling
-// buildModifiedFromClose.
+// removed event plus task_closed on a "Spec node removed" reason, or the
+// modified event plus task_closed — built from the close alone, with no
+// task_created — on a "Spec node modified" reason (the test_section
+// fold-back shape; see "Fold-Back Closes" in arch_event_builder.md).
 func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	switch {
 	case strings.HasPrefix(op.Reason, ReasonRemovedPrefix):
@@ -129,12 +87,6 @@ func (b *EventBuilder) BuildClose(cs plan.Changeset, op plan.Op, receipt adapter
 	case strings.HasPrefix(op.Reason, ReasonModifiedPrefix):
 		if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
 			return nil, fmt.Errorf("ingest: reconcile: op %s: close target must be ref:task", op.OpID)
-		}
-		if b.State.ModifiedHandled[op.Target.TaskID] {
-			return nil, nil
-		}
-		if claimedByCreate(cs, op.Target.TaskID) {
-			return nil, nil
 		}
 		return b.buildModifiedFromClose(cs, op, receipt)
 	default:
@@ -222,9 +174,17 @@ func (b *EventBuilder) BuildAbsorbed(cs plan.Changeset) ([]mapping.Event, error)
 	return lines, nil
 }
 
-// buildFreshCreate builds the added event plus its task_created for a
-// plain new node — not a cleanup, not an epic, not paired with a close.
-func (b *EventBuilder) buildFreshCreate(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
+// buildNodeCreate builds the change event plus its task_created for a
+// node-bearing create — not a cleanup, not an epic. The event's kind is
+// derived from the journal fold's latest change event for the node, not
+// carried by the op: no entry at all, or one whose after is null (the
+// node was removed and is now coming back), yields an added event with
+// before null; an entry carrying an after hash yields a modified event
+// with that hash as before. A node's earlier pairing (if any) is left
+// exactly as it is — nothing closes it, because the journal never
+// records a task's completion. See "Node-Bearing Creates" in
+// arch_event_builder.md.
+func (b *EventBuilder) buildNodeCreate(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	eid := deriveEID(cs.GitHead, op.OpID)
 	if b.State.HasEID(eid) {
 		return nil, nil
@@ -233,14 +193,19 @@ func (b *EventBuilder) buildFreshCreate(cs plan.Changeset, op plan.Op, receipt a
 	if err != nil {
 		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
 	}
+	before := b.priorHash(op.SpecNodeID)
+	kind := "added"
+	if before != nil {
+		kind = "modified"
+	}
 	ev := mapping.Event{
-		Event:    "added",
+		Event:    kind,
 		EID:      eid,
 		Node:     op.SpecNodeID,
 		Name:     nonEmpty(md.Component, op.Title),
 		NodeType: nonEmpty(md.NodeType, op.SpecNodeKind),
 		Module:   md.Module,
-		Before:   nil,
+		Before:   before,
 		After:    strPtr(md.SpecHash),
 		GitHead:  cs.GitHead,
 		Proposal: cs.Proposal,
@@ -248,40 +213,6 @@ func (b *EventBuilder) buildFreshCreate(cs plan.Changeset, op plan.Op, receipt a
 	}
 	created := mapping.Event{Event: "task_created", TaskID: receipt.TaskID, For: eid}
 	return []mapping.Event{ev, created}, nil
-}
-
-// buildModifiedPair builds the one modified event plus both receipts
-// for a create+close pair replacing the same node identity. The eid
-// derives from the create op's own id — the pair is one event, not two
-// — and the before-hash comes from the node's current live fold entry.
-// oldBeadID is the retiring task, read off the create op's own `blocks`
-// dep by the caller — the paired close need not have been processed
-// yet. See "The Modified-Node Pair" in arch_event_builder.md.
-func (b *EventBuilder) buildModifiedPair(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt, oldBeadID string) ([]mapping.Event, error) {
-	eid := deriveEID(cs.GitHead, op.OpID)
-	if b.State.HasEID(eid) {
-		return nil, nil
-	}
-	md, err := b.lookupMetadata(op.SpecNodeID)
-	if err != nil {
-		return nil, fmt.Errorf("ingest: reconcile: op %s: %w", op.OpID, err)
-	}
-	ev := mapping.Event{
-		Event:    "modified",
-		EID:      eid,
-		Node:     op.SpecNodeID,
-		Name:     nonEmpty(md.Component, op.Title),
-		NodeType: nonEmpty(md.NodeType, op.SpecNodeKind),
-		Module:   md.Module,
-		Before:   b.priorHash(op.SpecNodeID),
-		After:    strPtr(md.SpecHash),
-		GitHead:  cs.GitHead,
-		Proposal: cs.Proposal,
-		Path:     md.ContentFile,
-	}
-	closed := mapping.Event{Event: "task_closed", TaskID: oldBeadID, For: eid}
-	created := mapping.Event{Event: "task_created", TaskID: receipt.TaskID, For: eid}
-	return []mapping.Event{ev, closed, created}, nil
 }
 
 // buildRemoved builds the removed event plus its task_closed for an ok
@@ -320,15 +251,15 @@ func (b *EventBuilder) buildRemoved(cs plan.Changeset, op plan.Op, receipt adapt
 }
 
 // buildModifiedFromClose builds the modified event plus its task_closed
-// for an ok "Spec node modified" close whose bead no create op in the
-// batch ever claimed via a `blocks` dep — the shape ActionClassifier
-// emits for a coupled test_section edit (an obsolete action with no
-// replacement create). The node still exists post-edit, so its current
-// metadata comes from the spec graph; its identity and prior hash come
-// from the journal's live fold entry for the bead being closed, exactly
-// as buildRemoved resolves a removed node's identity. No task_created
-// is built — there is no successor task to pair. See "The Modified-Node
-// Pair" in arch_event_builder.md.
+// for an ok "Spec node modified" close — the shape ActionClassifier
+// emits for a coupled test_section edit whose section's coverage folds
+// into another component, cancelling the section's own open task. The
+// node still exists post-edit, so its current metadata comes from the
+// spec graph; its identity and prior hash come from the journal's live
+// fold entry for the bead being closed, exactly as buildRemoved resolves
+// a removed node's identity. No task_created is built — there is no
+// successor task to pair. See "Fold-Back Closes" in
+// arch_event_builder.md.
 func (b *EventBuilder) buildModifiedFromClose(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	eid := deriveEID(cs.GitHead, op.OpID)
 	if b.State.HasEID(eid) {
@@ -359,26 +290,6 @@ func (b *EventBuilder) buildModifiedFromClose(cs plan.Changeset, op plan.Op, rec
 	return []mapping.Event{ev, closed}, nil
 }
 
-// claimedByCreate reports whether any create op in the changeset — ok,
-// error or skipped alike — claims beadID via a `blocks` dep. BuildClose
-// falls back to this once EventBuilderState.ModifiedHandled has nothing
-// to say — the errored/skipped-create case, since such a create never
-// reaches BuildCreate and so never sets ModifiedHandled: the answer is
-// a static property of the changeset, not of how much of the batch has
-// been processed so far, so it does not matter whether the claiming
-// create ran before or after this close in op order.
-func claimedByCreate(cs plan.Changeset, beadID string) bool {
-	for _, op := range cs.Ops {
-		if op.Type != plan.OpCreate {
-			continue
-		}
-		if oldBeadID, ok := blocksDepBeadID(op); ok && oldBeadID == beadID {
-			return true
-		}
-	}
-	return false
-}
-
 // buildEpicCreate builds the one-line receipt a proposal-epic create
 // implies: a task_created whose for names the proposal's registered event.
 // Dedup is fold-based, not eid-based: an epic's task_created has no change
@@ -402,60 +313,62 @@ func buildEpicCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, 
 	return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: eid}}, nil
 }
 
-// buildCleanupCreate builds the one-line receipt a cleanup create implies:
-// a task_created whose for names the removed node's own removal event.
-// The journal is checked first — a live (not yet removed) fold entry for
-// the hash means the removal is still pending in this same batch, so it
-// falls through to sameBatchRemovals; a hash that matches neither is a
-// malformed changeset, not a fallback. See arch_event_builder.md
-// "Cleanup-Create Ops".
-//
-// TODO(bead:spexmachina-swvx.22): per the current arch_event_builder.md
-// "Cleanup-Create Ops", a cleanup create no longer waits on a same-batch
-// removal close at all — resolve the referent from the node's latest
-// change event in the fold: if it is already a `removed` event, name its
-// eid (the case sameBatchRemovals covers today); otherwise the cleanup
-// itself mints the removal — one `removed` change event with eid derived
-// from the cleanup op's own (git_head, op_id), before taken from the
-// latest event's after, after null, identity from the fold entry —
-// followed by the task_created naming it. A hash the journal has never
-// seen at all stays an invariant failure. Once this lands,
-// EventBuilderState.SameBatchRemovals and Reconciler's sameBatchRemovals
-// helper have no remaining caller.
-func buildCleanupCreate(op plan.Op, receipt adapters.OpReceipt, fold mapping.Fold, sameBatchRemovals map[string]string) ([]mapping.Event, error) {
+// buildCleanupCreate builds the journal lines a cleanup create implies.
+// It discriminates on the op's spec node kind before anything else — the
+// spec graph no longer holds the node, so only the fold is consulted.
+// The referent is resolved from the node's latest change event: if that
+// event is already a `removed` one — the removal landed in an earlier
+// batch whose cleanup never did — the task_created's for names its eid
+// and no new change event is built; otherwise the cleanup mints the
+// removal itself, from its own (git_head, op_id), with before taken from
+// the latest event's after and identity from the fold entry — the
+// biography that outlives the node. A hash the journal has never seen at
+// all is a malformed changeset, not a fallback. See "Cleanup-Create Ops"
+// in arch_event_builder.md.
+func (b *EventBuilder) buildCleanupCreate(cs plan.Changeset, op plan.Op, receipt adapters.OpReceipt) ([]mapping.Event, error) {
 	hash := op.SpecNodeID
-	for _, e := range fold.Entries {
-		if e.Key != hash || !e.Removed {
-			continue
-		}
-		if e.TaskID != "" {
+	entry, found := b.foldEntryByKey(hash)
+	if !found {
+		return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no journal history", op.OpID, hash)
+	}
+	if entry.Removed {
+		if entry.TaskID != "" {
 			return nil, nil // idempotent no-op: cleanup already landed for this removal
 		}
-		return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: e.Source.EID}}, nil
+		return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: entry.Source.EID}}, nil
 	}
-	if eid, ok := sameBatchRemovals[hash]; ok {
-		return []mapping.Event{{Event: "task_created", TaskID: receipt.TaskID, For: eid}}, nil
+
+	eid := deriveEID(cs.GitHead, op.OpID)
+	if b.State.HasEID(eid) {
+		return nil, nil
 	}
-	return nil, fmt.Errorf("ingest: reconcile: invariant 1: op %s: cleanup for spec_node %s matches no removed event", op.OpID, hash)
+	removed := mapping.Event{
+		Event:    "removed",
+		EID:      eid,
+		Node:     hash,
+		Name:     entry.Source.Name,
+		NodeType: entry.Source.NodeType,
+		Module:   entry.Source.Module,
+		Before:   entry.Source.After,
+		After:    nil,
+		GitHead:  cs.GitHead,
+		Proposal: cs.Proposal,
+		Path:     entry.Source.Path,
+	}
+	created := mapping.Event{Event: "task_created", TaskID: receipt.TaskID, For: eid}
+	return []mapping.Event{removed, created}, nil
 }
 
-// blocksDepBeadID reports the old bead id an op's lineage dep names, if
-// any. Always false: ChangesetBuilder (spexmachina-swvx.20) stopped
-// attaching a lineage dep to any create, and plan.Ref carries no
-// edge-type field to identify one by even if it did
-// (spec/plan/arch_changeset_builder.md, "Emit no lineage"; "Op Shape": "no
-// edge-type key, because the lineage edge was the only typed dep and it
-// is gone").
-//
-// TODO(bead:spexmachina-swvx.22): this function, its two call sites
-// (BuildCreate's modify-pair branch and claimedByCreate), and
-// EventBuilderState.ModifiedHandled are all now unreachable dead weight —
-// per the TODOs already on BuildCreate and BuildClose above, "The
-// Modified-Node Pair" is retired in the current arch_event_builder.md.
-// Remove them together with the rest of that mechanism rather than
-// leaving this stub behind.
-func blocksDepBeadID(op plan.Op) (string, bool) {
-	return "", false
+// foldEntryByKey finds the fold entry currently reachable by a node
+// identity hash — the entry a cleanup create's spec_node_id resolves to,
+// whether the node is still live or was already removed.
+func (b *EventBuilder) foldEntryByKey(key string) (mapping.FoldEntry, bool) {
+	for _, e := range b.State.Fold.Entries {
+		if e.Key == key {
+			return e, true
+		}
+	}
+	return mapping.FoldEntry{}, false
 }
 
 // foldEntryByTask finds the fold entry currently reachable by taskID —
@@ -472,20 +385,20 @@ func (b *EventBuilder) foldEntryByTask(taskID string) (mapping.FoldEntry, bool) 
 
 // priorHash answers specNodeID's content hash immediately before this
 // batch, off the journal's live fold entry — nil when the node has no
-// live entry yet (a genuinely new node).
+// live entry yet (a genuinely new node) or when its latest entry is a
+// removal (After is null there too).
 func (b *EventBuilder) priorHash(specNodeID string) *string {
-	for _, e := range b.State.Fold.Entries {
-		if e.Key == specNodeID {
-			return e.Source.After
-		}
+	entry, found := b.foldEntryByKey(specNodeID)
+	if !found {
+		return nil
 	}
-	return nil
+	return entry.Source.After
 }
 
 // lookupMetadata turns a missing SpecGraph or a missing node into a
-// clearly wrapped error. Only fresh creates, modify-pair creates,
-// modified-from-close builds, retargets and absorbed entries call this
-// — cleanup and proposal_epic creates skip the spec graph entirely.
+// clearly wrapped error. Node-bearing creates, modified-from-close
+// builds, retargets and absorbed entries call this — cleanup and
+// proposal_epic creates skip the spec graph entirely.
 func (b *EventBuilder) lookupMetadata(specNodeID string) (NodeMetadata, error) {
 	if b.State.SpecGraph == nil {
 		return NodeMetadata{}, fmt.Errorf("spec graph not configured")
