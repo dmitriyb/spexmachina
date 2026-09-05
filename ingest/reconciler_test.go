@@ -853,9 +853,11 @@ func TestApply_ErroredCreate_TolersatedAlongsideFoldBackClose(t *testing.T) {
 }
 
 // TestApply_CleanupCreate_NoReferentRefusedBeforeAppend covers "Receipt
-// referencing nothing → refused before append": a cleanup whose hash
-// matches no removed event anywhere is a malformed changeset, not a
-// fallback.
+// referencing nothing → refused before append": a cleanup whose hash the
+// journal has never seen at all — no fold entry, so there's no prior
+// `after` to mint the removal's `before` from — is a malformed changeset,
+// not a fallback. A cleanup whose node has journal history but no removed
+// event mints the removal itself instead (buildCleanupCreate).
 func TestApply_CleanupCreate_NoReferentRefusedBeforeAppend(t *testing.T) {
 	graph := newFakeSpecGraph()
 	r, dir := newTestReconciler(t, graph)

@@ -21,9 +21,9 @@ import (
 // invariant_checker_test.go (TestInvariantChecker_Invariant1_*,
 // TestInvariantChecker_Invariant2_*); invariant 3 by
 // TestApply_Idempotent_RerunAppendsNothing and invariant 5 by
-// TestCheckInvariant5_* (reconciler_test.go), and the "lineage replaces
-// the rebind invariant" property is proven by
-// TestApply_ModifiedPair_LineageExtendedNotRebound. What only emerges when
+// TestCheckInvariant5_* (reconciler_test.go), and the "old lineage is
+// extended, never rebound" property is proven by
+// TestApply_CreateOnKnownNode_ModifiedEventLineageExtended. What only emerges when
 // Reconciler.Apply and SnapshotSaver.Save run together against shared
 // on-disk state is invariant 4 (snapshot saved iff complete) and the
 // spec's Happy Path acceptance — that is what the tests below cover. "One

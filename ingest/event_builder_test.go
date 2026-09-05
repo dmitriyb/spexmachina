@@ -478,8 +478,8 @@ func TestEventBuilder_BuildClose_ModifiedAlwaysBuildsOwnPair(t *testing.T) {
 }
 
 // TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead covers
-// "Modified close with no paired create, bead unknown to the journal →
-// refused before append".
+// "Fold-back close naming a task unknown to the journal → refused before
+// append".
 func TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead(t *testing.T) {
 	graph := newFakeSpecGraph()
 	b, _ := newTestEventBuilder(t, graph)
@@ -497,10 +497,9 @@ func TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead(t *testing.T) {
 	}
 }
 
-// TestEventBuilder_BuildClose_ModifiedNoClaim_LiveBead covers "Modified
-// close with no paired create, bead live in the journal → modified event
-// from the close alone" — the shape ActionClassifier emits for a coupled
-// test_section edit.
+// TestEventBuilder_BuildClose_ModifiedNoClaim_LiveBead covers "Fold-back
+// close, task live in the journal → modified event from the close alone"
+// — the shape ActionClassifier emits for a coupled test_section edit.
 func TestEventBuilder_BuildClose_ModifiedNoClaim_LiveBead(t *testing.T) {
 	const node = "cccccccccccc"
 	graph := newFakeSpecGraph()
