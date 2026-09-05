@@ -536,3 +536,73 @@ func TestConsistencyInvariants_Invariant1_AbsorbedBatchClosesUnderOneRefreshRece
 		t.Fatal("InvariantChecker.Check: want error for dangling absorbed referent, got nil")
 	}
 }
+
+// TestConsistencyInvariants_Invariant1_CleanupSelfMintedRemoval covers
+// "Invariant 1: a cleanup's self-minted removal is one referent": a
+// cleanup create for a node with no prior removed event mints its own
+// removal from the op's own (git_head, op_id) and pairs exactly one
+// task_created to it; re-running the identical changeset+receipts pair
+// appends nothing, because the minted removal's eid derives from that
+// same op rather than from anything the re-run could construct anew.
+func TestConsistencyInvariants_Invariant1_CleanupSelfMintedRemoval(t *testing.T) {
+	const hexCleanup = "eeffeeffeeff"
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "added", EID: "E1", Node: hexCleanup, Name: "Cleaned", NodeType: "component",
+			Module: "m", After: strPtr("h-cleaned"), GitHead: "seedhead", Proposal: "seed-p", Path: "m/cleaned.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-cleaned", For: "E1"},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafecleanup", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexCleanup,
+			Idempotency: idem("spex:cafecleanup:op-1"), Labels: []string{"spex:cleanup"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event (the minted removal) / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	newLines := journal[2:]
+	if len(newLines) != 2 {
+		t.Fatalf("got %d new lines, want 2 (removed + task_created): %+v", len(newLines), newLines)
+	}
+	removed, receipt := newLines[0], newLines[1]
+	if removed.Event != "removed" || removed.Node != hexCleanup {
+		t.Fatalf("line 1 = %+v, want removed event for %s", removed, hexCleanup)
+	}
+	if receipt.Event != "task_created" || receipt.TaskID != "br-cleanup" || receipt.For != removed.EID {
+		t.Fatalf("line 2 = %+v, want task_created for=%s task_id=br-cleanup", receipt, removed.EID)
+	}
+
+	// Re-running the identical pair appends nothing: the removal's eid
+	// derives from (git_head, op_id) — the same op — so it dedups exactly
+	// like an op-born create event would.
+	before := journalBytes(t, dir)
+	sum2, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("re-run Apply: %v", err)
+	}
+	if sum2.EventsAppended != 0 || sum2.ReceiptsAppended != 0 {
+		t.Errorf("re-run summary = %+v, want zero appends", sum2)
+	}
+	after := journalBytes(t, dir)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("re-run mutated the journal:\nbefore: %s\nafter:  %s", before, after)
+	}
+}
