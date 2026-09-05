@@ -2,9 +2,40 @@ package proposal
 
 import (
 	"bytes"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+// placeholderPattern matches an angle-bracket placeholder marker like
+// "<Describe the project vision and motivation>".
+var placeholderPattern = regexp.MustCompile(`<[^>\n]+>`)
+
+// sectionBody returns the text of the H2 section named heading, up to (but
+// not including) the next H1/H2 heading or the end of content. Sub-headings
+// (H3 and deeper) inside the section stay part of the body.
+func sectionBody(t *testing.T, content, heading string) string {
+	t.Helper()
+	lines := strings.Split(content, "\n")
+	start := -1
+	for i, line := range lines {
+		if line == heading {
+			start = i + 1
+			break
+		}
+	}
+	if start == -1 {
+		t.Fatalf("heading %q not found in template", heading)
+	}
+	end := len(lines)
+	for i := start; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "# ") || strings.HasPrefix(lines[i], "## ") {
+			end = i
+			break
+		}
+	}
+	return strings.Join(lines[start:end], "\n")
+}
 
 func TestFR3_Template_Project(t *testing.T) {
 	var buf bytes.Buffer
@@ -19,6 +50,10 @@ func TestFR3_Template_Project(t *testing.T) {
 	for _, heading := range []string{"## Vision", "## Modules", "## Key requirements", "## Design decisions"} {
 		if !strings.Contains(out, heading) {
 			t.Errorf("project template missing heading %q", heading)
+			continue
+		}
+		if body := sectionBody(t, out, heading); !placeholderPattern.MatchString(body) {
+			t.Errorf("project template section %q missing placeholder text (e.g. <...>), got: %q", heading, body)
 		}
 	}
 }
@@ -36,6 +71,10 @@ func TestFR3_Template_Change(t *testing.T) {
 	for _, heading := range []string{"## Context", "## Proposed change", "## Impact expectation"} {
 		if !strings.Contains(out, heading) {
 			t.Errorf("change template missing heading %q", heading)
+			continue
+		}
+		if body := sectionBody(t, out, heading); !placeholderPattern.MatchString(body) {
+			t.Errorf("change template section %q missing placeholder text (e.g. <...>), got: %q", heading, body)
 		}
 	}
 }
