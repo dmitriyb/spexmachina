@@ -43,20 +43,12 @@ type RemovalLookup interface {
 type Labeler struct {
 	// GitHead is this run's git HEAD SHA, embedded in every eid this
 	// Labeler derives itself (node-bearing creates, retargets, and
-	// same-batch-close cleanups). The epic and prior-batch-removal cleanup
+	// same-batch-mint cleanups). The epic and prior-batch-removal cleanup
 	// branches use an eid read whole from Registration/Fold instead.
 	GitHead string
 	// Fold is the task journal fold, consulted only for a cleanup create's
 	// removed event, when the removal already landed in an earlier batch.
 	Fold RemovalLookup
-	// CloseOpIDs maps a to-be-closed task_id to the op_id the builder
-	// assigned its close op in this batch — consulted by cleanupLabel's
-	// same-batch fallback for the modify-pair cleanup shape spexmachina-swvx.16
-	// retired. A cleanup action carries no OldTaskID from this package's own
-	// classifier output any more, so the lookup never matches in-process; it
-	// stays only because CloseOpIDs and its plan/builder.go wiring are not
-	// this bead's to retire (see cleanupLabel's TODO).
-	CloseOpIDs map[string]string
 }
 
 // LabelFor returns the idempotency label for one create or retarget action,
@@ -76,8 +68,7 @@ type Labeler struct {
 // Cleanup is checked next, discriminated by isCleanup's Reason prefix
 // rather than by OldTaskID — a cleanup action carries no OldTaskID any
 // more (spexmachina-swvx.16), which is exactly why cleanupLabel's
-// self-mint fallback exists for when neither the fold nor CloseOpIDs
-// answers.
+// self-mint fallback exists for when the fold has no removal entry yet.
 func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string, error) {
 	if action.NodeType == KindProposalEpic {
 		if reg.EID == "" {
@@ -96,35 +87,20 @@ func (l *Labeler) LabelFor(action Action, opID string, reg Registration) (string
 
 // cleanupLabel resolves a cleanup create's referent: the fold's removed
 // event for the node when the removal already landed in an earlier batch,
-// else the removal this run's own same-batch close op implies, else — a
-// removed node whose task was already absent from the artifact when this
-// run first observed the removal, so no close accompanies the cleanup at
-// all (spexmachina-swvx.16 retired that pairing per
-// spec/plan/test_classification.md S4: "carries no old task id") — the
-// removed event the cleanup op itself mints, from its own (git_head, op_id)
-// exactly as any node-bearing create's (module.json's 885096d4941c). The
-// fold is checked first — the same order the reconciler pairs the receipt
-// by, so label and referent stay one fact whichever run the removal
-// actually landed in.
-//
-// TODO(bead:spexmachina-swvx.13): the CloseOpIDs[action.OldTaskID] fallback
-// is the pre-task-lifecycle obsolete-then-recreate shape's same-batch
-// close op — a modify-pair cleanup's OldTaskID named the task
-// ActionClassifier's obsolete path used to close in the same run. That
-// path is retired (spexmachina-swvx.16), so a modify-pair cleanup create no
-// longer exists and OldTaskID is always empty from this package's own
-// classifier output; the branch is dead in-process but left in place since
-// CloseOpIDs and its builder-side wiring (plan/builder.go) are this
-// package's own concern to retire, not this bead's;
-// IdempotencyLabeler's own bead is to drop it then.
+// else the removed event the cleanup op itself mints, from its own
+// (git_head, op_id) exactly as any node-bearing create's (module.json's
+// 885096d4941c) — a cleanup carries no OldTaskID and no same-batch close op
+// (spexmachina-swvx.16 retired that pairing per
+// spec/plan/test_classification.md S4: "carries no old task id"), so there
+// is nothing else in the batch that could mint the removal. The fold is
+// checked first — the same order the reconciler pairs the receipt by, so
+// label and referent stay one fact whichever run the removal actually
+// landed in.
 func (l *Labeler) cleanupLabel(action Action, opID string) (string, error) {
 	if l.Fold != nil {
 		if entry, ok := l.Fold.Removal(action.SpecNodeID); ok && entry.Removed && entry.EID != "" {
 			return IdempotencyLabelPrefix + entry.EID, nil
 		}
-	}
-	if closeOpID, ok := l.CloseOpIDs[action.OldTaskID]; ok {
-		return IdempotencyLabelPrefix + DeriveEID(l.GitHead, closeOpID), nil
 	}
 	return IdempotencyLabelPrefix + DeriveEID(l.GitHead, opID), nil
 }

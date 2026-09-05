@@ -101,16 +101,7 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		batch[a.SpecNodeID] = opID
 	}
 
-	// closeOpIDs maps a to-be-closed task_id to the op_id its close op will
-	// carry, computed up front so a cleanup create can key its label off
-	// the same-batch close op that answers its removal, before that close
-	// Op is actually assembled.
-	closeOpIDs := make(map[string]string, len(obsoletes))
-	for i, o := range obsoletes {
-		closeOpIDs[o.TaskID] = fmt.Sprintf("op-%0*d", pad, len(ordered)+len(retargets)+i+1)
-	}
-
-	labeler := &Labeler{GitHead: b.GitHead, Fold: b.Fold, CloseOpIDs: closeOpIDs}
+	labeler := &Labeler{GitHead: b.GitHead, Fold: b.Fold}
 
 	ops := make([]Op, 0, total)
 	for _, oo := range ordered {

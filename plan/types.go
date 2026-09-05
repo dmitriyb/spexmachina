@@ -21,9 +21,9 @@ package plan
 // to write — there is no closed status in the vocabulary, only absence.
 // ChangesetBuilder (spexmachina-swvx.20) still carries remnants of the
 // pre-task-lifecycle "obsolete, then recreate" shape pending its own bead;
-// IdempotencyLabeler (spexmachina-swvx.13) already self-mints a cleanup
-// create's label from its own (git_head, op_id) when neither the journal
-// fold nor a same-batch close answers. The task-state artifact (--tasks,
+// IdempotencyLabeler (spexmachina-swvx.13) self-mints a cleanup create's
+// label from its own (git_head, op_id) when the journal fold has no removal
+// entry for the node yet. The task-state artifact (--tasks,
 // TaskReader) that replaces --beads/BeadReader is spexmachina-swvx.14 and
 // spexmachina-swvx.7. See spec/plan/flow_plan.md.
 const ChangesetVersion = 4
