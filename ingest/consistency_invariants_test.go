@@ -20,9 +20,10 @@ import (
 // are exercised in isolation, against InvariantChecker directly, in
 // invariant_checker_test.go (TestInvariantChecker_Invariant1_*,
 // TestInvariantChecker_Invariant2_*); invariant 3 by
-// TestApply_Idempotent_RerunAppendsNothing and invariant 5 by
-// TestCheckInvariant5_* (reconciler_test.go), and the "old lineage is
-// extended, never rebound" property is proven by
+// TestApply_Idempotent_RerunAppendsNothing and invariant 5's schema half
+// by TestCheckInvariant5_* (reconciler_test.go) and its profile half by
+// TestConsistencyInvariants_Invariant5_ProfileChecksNodeType below, and
+// the "old lineage is extended, never rebound" property is proven by
 // TestApply_CreateOnKnownNode_ModifiedEventLineageExtended. What only emerges when
 // Reconciler.Apply and SnapshotSaver.Save run together against shared
 // on-disk state is invariant 4 (snapshot saved iff complete) and the
@@ -347,6 +348,91 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 	}
 	if !strings.Contains(err.Error(), "node") {
 		t.Errorf("Validate error = %v, want it to name the violated constraint (node)", err)
+	}
+}
+
+// TestConsistencyInvariants_Invariant5_ProfileChecksNodeType covers the
+// second half of "Invariant 5: schema-invalid line refused": a change
+// event whose node_type names a kind the resolved profile does not
+// declare passes the journal-line schema — which fixes only the field's
+// shape — but is refused by the encoder's profile check, with the error
+// naming the kind; the identical line is appended once the resolved
+// profile declares it. Driven through Reconciler.Apply against a fixture
+// spec dir carrying profile.json (the pattern refresh_test.go uses for
+// TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections),
+// so the assertion also pins reconciler.go's own
+// schema.ResolveProfile(r.SpecDir) call rather than only checkInvariant5
+// in isolation: a reconciler.go that swapped that call for
+// schema.DefaultProfile() would see "api" as declared even under the
+// restrictive profile.json below, and the first assertion would wrongly
+// pass instead of refusing.
+//
+// The kind under test is "api", not the spec leaf's illustrative
+// "endpoint": MappingStore's own write-time schema (schema.BeadMapSchema,
+// its retired predecessor of the journal-line schema this bead's encoder
+// validates against — see journal_encoder.go's getLineSchema comment) has
+// not yet migrated off a hardcoded node_type enum matching exactly the
+// default profile's five built-in kinds (bead spexmachina-swvx.9,
+// sequenced later in this epic). Until that migration lands, no kind
+// outside that fixed five — "endpoint" included — can actually reach disk
+// through MappingStore.Append regardless of what profile.json declares,
+// so "api" (one of the five, and therefore round-trippable today) is
+// substituted to exercise the identical profile-gate transition this
+// scenario is about, with a real on-disk append rather than a stubbed
+// one.
+func TestConsistencyInvariants_Invariant5_ProfileChecksNodeType(t *testing.T) {
+	const hexAPI = "ddeeddeeddee"
+	specDir := setupSpecDir(t)
+
+	// Declares only "component" — "api" is deliberately absent, so the
+	// resolved profile refuses it despite "api" being one of
+	// MappingStore's five write-time-permitted kinds.
+	writeFile(t, specDir, "profile.json", `{
+		"node_types": [
+			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true}
+		]
+	}`)
+
+	graph := newFakeSpecGraph()
+	graph.nodes[hexAPI] = NodeMetadata{Module: "m", Component: "Widget API", NodeType: "api"}
+
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "api", SpecNodeID: hexAPI, Idempotency: idem("spex:" + hexAPI)},
+	}}
+	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-api"},
+	}}
+
+	r := &Reconciler{SpecDir: specDir, SpecGraph: graph}
+
+	before := journalBytes(t, specDir)
+	if _, err := r.Apply(cs, rc); err == nil || !strings.Contains(err.Error(), "api") {
+		t.Fatalf("Apply under a profile that omits api: got %v, want error naming %q", err, "api")
+	}
+	if after := journalBytes(t, specDir); !bytes.Equal(before, after) {
+		t.Fatalf("journal mutated by a refused profile check: before %q after %q", before, after)
+	}
+
+	// Removing profile.json falls back to schema.DefaultProfile(), which
+	// does declare "api" — the same ResolveProfile call, now resolving a
+	// different answer for the same specDir.
+	if err := os.Remove(filepath.Join(specDir, "profile.json")); err != nil {
+		t.Fatalf("remove profile.json: %v", err)
+	}
+
+	if _, err := r.Apply(cs, rc); err != nil {
+		t.Fatalf("Apply once profile.json is absent (default declares api): unexpected error %v", err)
+	}
+
+	journal := readJournal(t, specDir)
+	appended := false
+	for _, ev := range journal {
+		if ev.Event == "added" && ev.Node == hexAPI && ev.NodeType == "api" {
+			appended = true
+		}
+	}
+	if !appended {
+		t.Fatalf("journal = %+v, want the api node's added event appended once the profile declares it", journal)
 	}
 }
 

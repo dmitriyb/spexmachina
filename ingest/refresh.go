@@ -393,7 +393,7 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	}
 	batch = append(batch, mapping.Event{Event: "refresh", GitHead: gitHead, Absorbed: absorbed})
 
-	if err := checkInvariant5(batch); err != nil {
+	if err := checkInvariant5(batch, profile); err != nil {
 		return summary, err
 	}
 

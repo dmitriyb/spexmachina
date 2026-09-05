@@ -22,11 +22,35 @@ import (
 // Reconciler (normal mode, via checkInvariant5) and RefreshHandler
 // (refresh mode) encode through it, so neither pathway can drift from
 // the other's wire shape. See spec/ingest/arch_journal_encoder.md.
-type JournalEncoder struct{}
+//
+// Validate also holds the membership check the journal-line schema
+// deliberately leaves open: a change event's node_type is only a
+// type-name-shaped string as far as the schema is concerned (see
+// schema/journal-line.schema.json), and which names are admissible is
+// Profile's declaration. A nil Profile resolves to schema.DefaultProfile()
+// — the caller's own resolved profile is what makes a profile.json's
+// custom node types (or a dropped one) actually gate the write.
+type JournalEncoder struct {
+	// Profile is the resolved project profile whose declared node types
+	// gate a change event's node_type. Nil defaults to
+	// schema.DefaultProfile().
+	Profile *schema.Profile
+}
 
-// NewJournalEncoder constructs a JournalEncoder.
+// NewJournalEncoder constructs a JournalEncoder that validates change
+// events against the default profile. Callers holding a project's
+// resolved profile (a profile.json may declare types the default does
+// not) set Profile directly instead.
 func NewJournalEncoder() *JournalEncoder {
 	return &JournalEncoder{}
+}
+
+// resolvedProfile returns Profile, or schema.DefaultProfile() when unset.
+func (e *JournalEncoder) resolvedProfile() *schema.Profile {
+	if e.Profile != nil {
+		return e.Profile
+	}
+	return schema.DefaultProfile()
 }
 
 // Encode renders one journal event or receipt as the wire JSON its
@@ -38,7 +62,11 @@ func (e *JournalEncoder) Encode(ev mapping.Event) ([]byte, error) {
 
 // Validate encodes ev and validates the result against the journal-line
 // schema, refusing the line before any write is attempted. The error
-// names the violated constraint.
+// names the violated constraint. A change event (added/modified/removed)
+// that passes the schema is then checked against the resolved profile's
+// declared node types — the schema fixes node_type's shape and
+// enumerates nothing, so this membership check is Validate's own second
+// gate, run only for the write path a caller drives through it.
 func (e *JournalEncoder) Validate(ev mapping.Event) error {
 	sch, err := getLineSchema()
 	if err != nil {
@@ -55,15 +83,49 @@ func (e *JournalEncoder) Validate(ev mapping.Event) error {
 	if err := sch.Validate(doc); err != nil {
 		return fmt.Errorf("ingest: journal encoder: %s line: %w", ev.Event, err)
 	}
+	if err := e.checkNodeTypeDeclared(ev); err != nil {
+		return err
+	}
 	return nil
 }
 
+// checkNodeTypeDeclared refuses a change event whose node_type names a
+// kind the resolved profile does not declare — a profile-declared kind's
+// event lands, a meta leaf, a retired kind or a misspelling never does.
+// Every other journal-line kind carries no node_type and is exempt.
+func (e *JournalEncoder) checkNodeTypeDeclared(ev mapping.Event) error {
+	switch ev.Event {
+	case "added", "modified", "removed":
+	default:
+		return nil
+	}
+	if nodeTypeDeclared(e.resolvedProfile(), ev.NodeType) {
+		return nil
+	}
+	return fmt.Errorf("ingest: journal encoder: %s line: node_type %q is not declared by the resolved profile", ev.Event, ev.NodeType)
+}
+
+// nodeTypeDeclared reports whether profile declares a node type named
+// name, in either scope — the encoder asks only whether the name exists
+// at all, the same membership schema.Profile.Validate itself checks
+// project- and module-scoped declarations against uniformly.
+func nodeTypeDeclared(profile *schema.Profile, name string) bool {
+	for _, t := range profile.NodeTypes {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
+
 // checkInvariant5 asserts that every line in the batch validates against
-// the journal-line schema before any of it is written — invariant 5,
-// delegated line-by-line to JournalEncoder.Validate so Reconciler and
-// RefreshHandler inherit the gate rather than re-implementing it.
-func checkInvariant5(batch []mapping.Event) error {
-	enc := NewJournalEncoder()
+// the journal-line schema — and, for change events, the resolved
+// profile's declared node types — before any of it is written; invariant
+// 5, delegated line-by-line to JournalEncoder.Validate so Reconciler and
+// RefreshHandler inherit the gate rather than re-implementing it. A nil
+// profile validates against schema.DefaultProfile().
+func checkInvariant5(batch []mapping.Event, profile *schema.Profile) error {
+	enc := &JournalEncoder{Profile: profile}
 	for _, ev := range batch {
 		if err := enc.Validate(ev); err != nil {
 			return fmt.Errorf("ingest: reconcile: invariant 5: %w", err)

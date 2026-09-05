@@ -1356,7 +1356,7 @@ func TestCheckInvariant5_SchemaInvalidLine(t *testing.T) {
 		Event: "added", EID: "e1", Node: "", Name: "x", NodeType: "component",
 		Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p",
 	}}
-	err := checkInvariant5(batch)
+	err := checkInvariant5(batch, nil)
 	if err == nil || !strings.Contains(err.Error(), "invariant 5") {
 		t.Fatalf("checkInvariant5: got %v, want invariant 5 error", err)
 	}
@@ -1369,7 +1369,7 @@ func TestCheckInvariant5_ValidLinePasses(t *testing.T) {
 		{Event: "added", EID: "e1", Node: "aabbccddeeff", Name: "x", NodeType: "component", Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p"},
 		{Event: "task_created", TaskID: "t1", For: "e1"},
 	}
-	if err := checkInvariant5(batch); err != nil {
+	if err := checkInvariant5(batch, nil); err != nil {
 		t.Fatalf("checkInvariant5: unexpected error %v", err)
 	}
 }
@@ -1384,7 +1384,7 @@ func TestCheckInvariant5_RetargetAndRefreshLinesValidate(t *testing.T) {
 		{Event: "modified", EID: "e2", Node: "112233445566", Name: "y", NodeType: "component", Module: "m", Before: strPtr("h2"), After: strPtr("h3"), GitHead: "g", Proposal: "p"},
 		{Event: "refresh", GitHead: "g", Absorbed: []string{"e2"}},
 	}
-	if err := checkInvariant5(batch); err != nil {
+	if err := checkInvariant5(batch, nil); err != nil {
 		t.Fatalf("checkInvariant5: unexpected error %v", err)
 	}
 }
