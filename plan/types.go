@@ -25,8 +25,8 @@ package plan
 // op_id from its own canonical key rather than its position.
 // IdempotencyLabeler (spexmachina-swvx.13) self-mints a cleanup create's
 // label from its own (git_head, op_id) when the journal fold has no removal
-// entry for the node yet. The task-state artifact (--tasks,
-// TaskReader) that replaces --beads/BeadReader is spexmachina-swvx.14 and
+// entry for the node yet. The task-state artifact (--tasks, TaskReader)
+// replaced --beads/BeadReader across spexmachina-swvx.14 and
 // spexmachina-swvx.7. See spec/plan/flow_plan.md.
 const ChangesetVersion = 4
 
