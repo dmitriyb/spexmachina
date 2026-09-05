@@ -13,16 +13,30 @@ import (
 
 // Within runs fn and asserts it finished inside budget. In a race-instrumented
 // build the elapsed time is logged and the assertion is skipped.
+//
+// A single sample on a shared, concurrently-loaded test runner can overshoot
+// the budget from scheduling contention alone rather than from the code
+// being slow, so an overshoot is given one retry before it fails — that
+// keeps the assertion honest about the code while ignoring a lone outlier.
 func Within(t *testing.T, budget time.Duration, fn func()) {
 	t.Helper()
-	start := time.Now()
-	fn()
-	elapsed := time.Since(start)
+	elapsed := measure(fn)
 	if RaceEnabled {
 		t.Logf("perf: %s elapsed (budget %s) — not asserted under the race detector", elapsed, budget)
 		return
 	}
-	if elapsed > budget {
-		t.Fatalf("perf: want completion under %s, took %s", budget, elapsed)
+	if elapsed <= budget {
+		return
 	}
+	retryElapsed := measure(fn)
+	if retryElapsed <= budget {
+		return
+	}
+	t.Fatalf("perf: want completion under %s, took %s (retry took %s)", budget, elapsed, retryElapsed)
+}
+
+func measure(fn func()) time.Duration {
+	start := time.Now()
+	fn()
+	return time.Since(start)
 }

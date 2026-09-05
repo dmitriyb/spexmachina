@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -52,6 +53,7 @@ type HistoryViewer struct {
 type proposalEntry struct {
 	Filename string      `json:"filename"`
 	Title    string      `json:"title"`
+	Date     string      `json:"date"`
 	Tasks    []taskEntry `json:"tasks"`
 }
 
@@ -89,6 +91,7 @@ func (h *HistoryViewer) ShowHistory(tasks []TaskRecord) error {
 		entry := proposalEntry{
 			Filename: filename,
 			Title:    title,
+			Date:     proposalDate(stem),
 			Tasks:    make([]taskEntry, 0, len(groups[stem])),
 		}
 		for _, t := range groups[stem] {
@@ -149,6 +152,21 @@ func firstProposalStem(labels []string) (string, bool) {
 		return ref, true
 	}
 	return "", false
+}
+
+// proposalDatePattern matches the registrar's naming convention, a leading
+// YYYY-MM-DD date followed by either a separator or the end of the stem.
+var proposalDatePattern = regexp.MustCompile(`^(\d{4}-\d{2}-\d{2})(-|$)`)
+
+// proposalDate returns the stem's leading YYYY-MM-DD date prefix, or the
+// empty string when the stem carries no such prefix. It reads the filename
+// alone — never file modification time or any other source.
+func proposalDate(stem string) string {
+	m := proposalDatePattern.FindStringSubmatch(stem)
+	if m == nil {
+		return ""
+	}
+	return m[1]
 }
 
 // resolveProposalFile reads the proposal at path. It returns the H1 title, the
