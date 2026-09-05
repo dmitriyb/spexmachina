@@ -891,17 +891,7 @@ func TestBuild_CleanupBeadCreate(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "abc123def456",
-			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
-		},
-		{
-			Type:       ActionObsolete,
-			TaskID:     "spexmachina-old",
-			Module:     "m",
-			Node:       "X",
-			NodeType:   KindComponent,
-			ChangeType: "removed",
-			Reason:     "Spec node removed: m/X",
 		},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
@@ -918,10 +908,20 @@ func TestBuild_CleanupBeadCreate(t *testing.T) {
 	if len(op.Labels) != 0 {
 		t.Errorf("labels: want none (retired spex:cleanup discriminator), got %+v", op.Labels)
 	}
-	closeOp := findClose(t, cs.Ops, "spexmachina-old")
-	wantLabel := "spex:deadbeef:" + closeOp.OpID
+	if len(op.Deps) != 0 {
+		t.Errorf("deps: want empty — no close op accompanies a cleanup, got %+v", op.Deps)
+	}
+	wantLabel := "spex:deadbeef:" + op.OpID
 	if op.Idempotency == nil || op.Idempotency.Label != wantLabel {
-		t.Errorf("idempotency.label: want %q (same-batch close op's eid), got %+v", wantLabel, op.Idempotency)
+		t.Errorf("idempotency.label: want %q (the removal event the cleanup itself mints), got %+v", wantLabel, op.Idempotency)
+	}
+	if op.Priority != FallbackPriority {
+		t.Errorf("priority: want fallback %d, got %d", FallbackPriority, op.Priority)
+	}
+	for _, o := range cs.Ops {
+		if o.Type == OpClose {
+			t.Errorf("changeset carries a close op %q: no close accompanies a cleanup", o.OpID)
+		}
 	}
 }
 
@@ -936,7 +936,6 @@ func TestBuild_CleanupBeadCreatePriorBatchRemoval(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "abc123def456",
-			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
 		},
 	}
@@ -948,14 +947,8 @@ func TestBuild_CleanupBeadCreatePriorBatchRemoval(t *testing.T) {
 	if op.Idempotency == nil || op.Idempotency.Label != "spex:E1" {
 		t.Errorf("idempotency.label: want spex:E1 (fold's removed event, not derived from any op in this batch), got %+v", op.Idempotency)
 	}
-	var foundLineage bool
-	for _, d := range op.Deps {
-		if d == (Ref{Kind: RefTask, TaskID: "spexmachina-old", EdgeType: "blocks"}) {
-			foundLineage = true
-		}
-	}
-	if !foundLineage {
-		t.Errorf("deps: want ref:task spexmachina-old type:blocks, got %+v", op.Deps)
+	if len(op.Deps) != 0 {
+		t.Errorf("deps: want empty — nothing names the finished task, got %+v", op.Deps)
 	}
 	if op.Priority != FallbackPriority {
 		t.Errorf("priority: want fallback %d, got %d", FallbackPriority, op.Priority)
@@ -1378,20 +1371,18 @@ func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
 
 // TestBuild_OpIDNumberingAcrossMixedBatch mixes every op kind in one batch —
 // five conventional creates, one cleanup create for a removed node, one
-// retarget, and three closes, one of them the removal close the cleanup
-// answers — and asserts op ids run from op-01 in creates -> retargets ->
-// closes order with no gap and no reuse. The batch is sized to ten ops
-// total, and only reaches ten when the retarget is counted alongside the
-// creates and closes: six creates plus three closes alone is nine, which a
-// pad rule blind to retargets (test_changeset_builder.md, "Op id numbering
-// across a batch mixing every kind") would leave unpadded at op-1..op-9;
-// counting the retarget crosses the batch to ten and forces op-01..op-10.
-// It also pins that the cleanup's idempotency.label reads the removal
-// close's actual op_id out of the emitted document: the label is derived
-// before the close ops are numbered, so it rests on a prediction of where
-// the closes will start, and the retarget block sitting between the
-// creates and the closes is exactly what that prediction has to account
-// for.
+// retarget, and three closes for unrelated removed nodes — and asserts op
+// ids run from op-01 in creates -> retargets -> closes order with no gap
+// and no reuse. The batch is sized to ten ops total, and only reaches ten
+// when the retarget is counted alongside the creates and closes: six
+// creates plus three closes alone is nine, which a pad rule blind to
+// retargets (test_changeset_builder.md, "Op id numbering across a batch
+// mixing every kind") would leave unpadded at op-1..op-9; counting the
+// retarget crosses the batch to ten and forces op-01..op-10.
+// It also pins that the cleanup's idempotency.label embeds the cleanup
+// op's own op_id and never one of the batch's close op ids — no close
+// accompanies a cleanup, so there is nothing for the label to borrow
+// from.
 func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
@@ -1407,7 +1398,6 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 			Node:       "X",
 			NodeType:   KindComponent,
 			SpecNodeID: "cleanup-node",
-			OldTaskID:  "spexmachina-old",
 			Reason:     "Code cleanup: m/X",
 		},
 		{
@@ -1424,10 +1414,10 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 			Type:       ActionObsolete,
 			TaskID:     "spexmachina-old",
 			Module:     "m",
-			Node:       "X",
+			Node:       "W",
 			NodeType:   KindComponent,
 			ChangeType: "removed",
-			Reason:     "Spec node removed: m/X",
+			Reason:     "Spec node removed: m/W",
 		},
 		{
 			Type:       ActionObsolete,
@@ -1483,9 +1473,16 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 	}
 
 	cleanup := findOp(t, cs.Ops, "cleanup-node")
-	removalClose := findClose(t, cs.Ops, "spexmachina-old")
-	wantLabel := "spex:deadbeef:" + removalClose.OpID
+	wantLabel := "spex:deadbeef:" + cleanup.OpID
 	if cleanup.Idempotency == nil || cleanup.Idempotency.Label != wantLabel {
-		t.Errorf("cleanup idempotency.label: want %s (the removal close's actual op_id), got %+v", wantLabel, cleanup.Idempotency)
+		t.Errorf("cleanup idempotency.label: want %s (the cleanup op's own op_id — no close accompanies a cleanup), got %+v", wantLabel, cleanup.Idempotency)
+	}
+	for _, op := range cs.Ops {
+		if op.Type != OpClose {
+			continue
+		}
+		if cleanup.Idempotency != nil && strings.Contains(cleanup.Idempotency.Label, op.OpID) {
+			t.Errorf("cleanup label %q embeds close op %s's id: every label is derived from the op that carries it or read from the fold, never predicted from another op", cleanup.Idempotency.Label, op.OpID)
+		}
 	}
 }

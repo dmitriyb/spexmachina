@@ -161,19 +161,22 @@ func TestLabelFor_Epic_NoRegistration_IsError(t *testing.T) {
 	}
 }
 
-// --- LabelFor: cleanup, same-batch close ---
+// --- LabelFor: cleanup, no fold entry ---
 
-func TestLabelFor_Cleanup_SameBatchClose_DerivesFromCloseOpID(t *testing.T) {
-	l := &Labeler{
-		GitHead:    "deadbeef",
-		Fold:       fakeRemovalFold{},
-		CloseOpIDs: map[string]string{"spexmachina-old": "op-8"},
-	}
+// TestLabelFor_Cleanup_NoFoldEntry_SelfMintsFromOwnOpID pins the case a
+// cleanup for a removed node's task-absent pairing takes: no fold removal
+// entry yet (the removal is this run's own first observation of it) and no
+// same-batch close op accompanies a cleanup at all (spexmachina-swvx.16
+// retired that pairing — spec/plan/test_classification.md S4: "carries no
+// old task id"), so the cleanup mints its own referent from its own
+// (git_head, op_id), exactly as any node-bearing create does (module.json's
+// 885096d4941c).
+func TestLabelFor_Cleanup_NoFoldEntry_SelfMintsFromOwnOpID(t *testing.T) {
+	l := &Labeler{GitHead: "deadbeef", Fold: fakeRemovalFold{}}
 	action := Action{
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -181,22 +184,17 @@ func TestLabelFor_Cleanup_SameBatchClose_DerivesFromCloseOpID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "spex:deadbeef:op-8"
+	want := "spex:deadbeef:op-9"
 	if got != want {
-		t.Fatalf("got %q, want %q (the close op's own op_id, not the cleanup create's op-9)", got, want)
+		t.Fatalf("got %q, want %q (self-minted from the cleanup op's own op_id)", got, want)
 	}
 }
 
-// TestLabelFor_Cleanup_NoFoldEntry_NoSameBatchClose_SelfMintsFromOwnOpID
-// pins the case a cleanup for a removed node's task-absent pairing takes
-// once ActionClassifier (spexmachina-swvx.16) stopped pairing a cleanup
-// with a same-batch close: no fold removal entry yet (the removal is
-// this run's own first observation of it) and OldTaskID is empty (no
-// lineage — spec/plan/test_classification.md S4), so the cleanup mints its
-// own referent from its own (git_head, op_id), exactly as any node-bearing
-// create does (module.json's 885096d4941c).
-func TestLabelFor_Cleanup_NoFoldEntry_NoSameBatchClose_SelfMintsFromOwnOpID(t *testing.T) {
-	l := &Labeler{GitHead: "deadbeef", Fold: fakeRemovalFold{}, CloseOpIDs: map[string]string{}}
+// TestLabelFor_Cleanup_NilFold_SelfMintsFromOwnOpID pins the same self-mint
+// behavior when Fold itself is nil (no journal fold wired at all), not just
+// empty of a matching entry.
+func TestLabelFor_Cleanup_NilFold_SelfMintsFromOwnOpID(t *testing.T) {
+	l := &Labeler{GitHead: "deadbeef", Fold: nil}
 	action := Action{
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
@@ -222,13 +220,11 @@ func TestLabelFor_Cleanup_PriorBatchRemoval_ReadsFoldEID(t *testing.T) {
 		Fold: fakeRemovalFold{
 			"abc123def456": {Removed: true, EID: "E1"},
 		},
-		CloseOpIDs: map[string]string{}, // no same-batch close: it landed last run
 	}
 	action := Action{
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -242,37 +238,7 @@ func TestLabelFor_Cleanup_PriorBatchRemoval_ReadsFoldEID(t *testing.T) {
 	}
 }
 
-func TestLabelFor_Cleanup_FoldCheckedBeforeSameBatchClose(t *testing.T) {
-	// Even when a same-batch close op exists, a fold removal entry answers
-	// first — the same resolution order the reconciler pairs the receipt
-	// by, so label and referent stay one fact whichever run the removal
-	// actually landed in.
-	l := &Labeler{
-		GitHead: "deadbeef",
-		Fold: fakeRemovalFold{
-			"abc123def456": {Removed: true, EID: "E1"},
-		},
-		CloseOpIDs: map[string]string{"spexmachina-old": "op-8"},
-	}
-	action := Action{
-		Type:       ActionCreate,
-		NodeType:   KindComponent,
-		SpecNodeID: "abc123def456",
-		OldTaskID:  "spexmachina-old",
-		Reason:     "Code cleanup: m/X",
-	}
-
-	got, err := l.LabelFor(action, "op-9", Registration{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := "spex:E1"
-	if got != want {
-		t.Fatalf("got %q, want %q (fold wins over the same-batch close derivation)", got, want)
-	}
-}
-
-func TestLabelFor_Cleanup_FoldEntryNotRemoved_FallsBackToSameBatchClose(t *testing.T) {
+func TestLabelFor_Cleanup_FoldEntryNotRemoved_SelfMintsFromOwnOpID(t *testing.T) {
 	// A fold entry that exists but is not (yet) a removal must not be
 	// mistaken for one.
 	l := &Labeler{
@@ -280,13 +246,11 @@ func TestLabelFor_Cleanup_FoldEntryNotRemoved_FallsBackToSameBatchClose(t *testi
 		Fold: fakeRemovalFold{
 			"abc123def456": {Removed: false},
 		},
-		CloseOpIDs: map[string]string{"spexmachina-old": "op-8"},
 	}
 	action := Action{
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "abc123def456",
-		OldTaskID:  "spexmachina-old",
 		Reason:     "Code cleanup: m/X",
 	}
 
@@ -294,31 +258,7 @@ func TestLabelFor_Cleanup_FoldEntryNotRemoved_FallsBackToSameBatchClose(t *testi
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := "spex:deadbeef:op-8"
-	if got != want {
-		t.Fatalf("got %q, want %q", got, want)
-	}
-}
-
-func TestLabelFor_Cleanup_NilFold_FallsBackToSameBatchClose(t *testing.T) {
-	l := &Labeler{
-		GitHead:    "deadbeef",
-		Fold:       nil,
-		CloseOpIDs: map[string]string{"spexmachina-old": "op-8"},
-	}
-	action := Action{
-		Type:       ActionCreate,
-		NodeType:   KindComponent,
-		SpecNodeID: "abc123def456",
-		OldTaskID:  "spexmachina-old",
-		Reason:     "Code cleanup: m/X",
-	}
-
-	got, err := l.LabelFor(action, "op-9", Registration{})
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	want := "spex:deadbeef:op-8"
+	want := "spex:deadbeef:op-9"
 	if got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
