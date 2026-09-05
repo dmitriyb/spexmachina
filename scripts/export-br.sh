@@ -44,11 +44,14 @@ fi
 
 # Project onto the version-1 task-state document: keep only tasks whose
 # status is open or in_progress, carry id as task_id and status verbatim,
-# drop every other field. Entries keep the listing's order.
-DOC=$(jq -n --argjson listing "$LISTING" '{
+# drop every other field. Entries keep the listing's order. The listing
+# reaches jq on stdin, never as an argument: a real tracker's listing grows
+# past the kernel's per-argument cap (128 KB on Linux) long before ARG_MAX,
+# and --argjson would fail with "Argument list too long".
+DOC=$(printf '%s' "$LISTING" | jq '{
     version: 1,
     tasks: (
-        ($listing.issues // [])
+        (.issues // [])
         | map(select(.status == "open" or .status == "in_progress"))
         | map({task_id: .id, status: .status})
     )

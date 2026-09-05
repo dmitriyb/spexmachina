@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "tasks": [
+    {
+      "task_id": "br-open",
+      "status": "open"
+    },
+    {
+      "task_id": "br-claimed",
+      "status": "in_progress"
+    }
+  ]
+}
