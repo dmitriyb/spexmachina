@@ -362,81 +362,72 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 // shape — but is refused by the encoder's profile check, with the error
 // naming the kind; the identical line is appended once the resolved
 // profile declares it. Driven through Reconciler.Apply against a fixture
-// spec dir carrying profile.json (the pattern refresh_test.go uses for
-// TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections),
-// so the assertion also pins reconciler.go's own
+// spec dir with no profile.json yet for the first call, then a
+// profile.json declaring "endpoint" written before the second, so it
+// is the second assertion that pins reconciler.go's own
 // schema.ResolveProfile(r.SpecDir) call rather than only checkInvariant5
-// in isolation: a reconciler.go that swapped that call for
-// schema.DefaultProfile() would see "api" as declared even under the
-// restrictive profile.json below, and the first assertion would wrongly
-// pass instead of refusing.
+// in isolation: a reconciler.go that swapped that call for a hardcoded
+// schema.DefaultProfile() would still correctly refuse the first Apply —
+// DefaultProfile declares no "endpoint" either — but would wrongly keep
+// refusing the second Apply once profile.json declares "endpoint",
+// instead of appending.
 //
-// The kind under test is "api", not the spec leaf's illustrative
-// "endpoint": MappingStore's own write-time schema (schema.BeadMapSchema,
-// its retired predecessor of the journal-line schema this bead's encoder
-// validates against — see journal_encoder.go's getLineSchema comment) has
-// not yet migrated off a hardcoded node_type enum matching exactly the
-// default profile's five built-in kinds (bead spexmachina-swvx.9,
-// sequenced later in this epic). Until that migration lands, no kind
-// outside that fixed five — "endpoint" included — can actually reach disk
-// through MappingStore.Append regardless of what profile.json declares,
-// so "api" (one of the five, and therefore round-trippable today) is
-// substituted to exercise the identical profile-gate transition this
-// scenario is about, with a real on-disk append rather than a stubbed
-// one.
+// The kind under test is "endpoint", per spec/ingest/test_consistency_invariants.md:92-96:
+// node_type "endpoint" under the default profile (which declares no such
+// type), refused; then rerun under a profile declaring "endpoint",
+// appended. "endpoint" is not one of MappingStore's built-in kinds — bead
+// spexmachina-swvx.9 removed MappingStore's node_type enum in favor of the
+// journal-line schema's `^[a-z][a-z0-9_]*$` shape check, so no kind is
+// more or less round-trippable through MappingStore.Append than another;
+// this scenario now exists solely to pin the profile-gate transition, not
+// MappingStore's write path.
 func TestConsistencyInvariants_Invariant5_ProfileChecksNodeType(t *testing.T) {
-	const hexAPI = "ddeeddeeddee"
+	const hexEndpoint = "ddeeddeeddee"
 	specDir := setupSpecDir(t)
 
-	// Declares only "component" — "api" is deliberately absent, so the
-	// resolved profile refuses it despite "api" being one of
-	// MappingStore's five write-time-permitted kinds.
-	writeFile(t, specDir, "profile.json", `{
-		"node_types": [
-			{"name": "component", "plural_key": "components", "scope": "module", "requires_content": true}
-		]
-	}`)
-
 	graph := newFakeSpecGraph()
-	graph.nodes[hexAPI] = NodeMetadata{Module: "m", Component: "Widget API", NodeType: "api"}
+	graph.nodes[hexEndpoint] = NodeMetadata{Module: "m", Component: "Widget Endpoint", NodeType: "endpoint"}
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g", Proposal: "p", Ops: []plan.Op{
-		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "api", SpecNodeID: hexAPI, Idempotency: idem("spex:" + hexAPI)},
+		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "endpoint", SpecNodeID: hexEndpoint, Idempotency: idem("spex:" + hexEndpoint)},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
-		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-api"},
+		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-endpoint"},
 	}}
 
 	r := &Reconciler{SpecDir: specDir, SpecGraph: graph}
 
+	// No profile.json yet: resolves to schema.DefaultProfile(), which
+	// declares no "endpoint" type.
 	before := journalBytes(t, specDir)
-	if _, err := r.Apply(cs, rc); err == nil || !strings.Contains(err.Error(), "api") {
-		t.Fatalf("Apply under a profile that omits api: got %v, want error naming %q", err, "api")
+	if _, err := r.Apply(cs, rc); err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("Apply under the default profile: got %v, want error naming %q", err, "endpoint")
 	}
 	if after := journalBytes(t, specDir); !bytes.Equal(before, after) {
 		t.Fatalf("journal mutated by a refused profile check: before %q after %q", before, after)
 	}
 
-	// Removing profile.json falls back to schema.DefaultProfile(), which
-	// does declare "api" — the same ResolveProfile call, now resolving a
-	// different answer for the same specDir.
-	if err := os.Remove(filepath.Join(specDir, "profile.json")); err != nil {
-		t.Fatalf("remove profile.json: %v", err)
-	}
+	// A profile.json declaring "endpoint" resolves to a different answer
+	// for the same specDir via the same ResolveProfile call.
+	writeFile(t, specDir, "profile.json", `{
+		"node_types": [
+			{"name": "endpoint", "plural_key": "endpoints", "scope": "module", "requires_content": true}
+		]
+	}`)
 
 	if _, err := r.Apply(cs, rc); err != nil {
-		t.Fatalf("Apply once profile.json is absent (default declares api): unexpected error %v", err)
+		t.Fatalf("Apply once profile.json declares endpoint: unexpected error %v", err)
 	}
 
 	journal := readJournal(t, specDir)
 	appended := false
 	for _, ev := range journal {
-		if ev.Event == "added" && ev.Node == hexAPI && ev.NodeType == "api" {
+		if ev.Event == "added" && ev.Node == hexEndpoint && ev.NodeType == "endpoint" {
 			appended = true
 		}
 	}
 	if !appended {
-		t.Fatalf("journal = %+v, want the api node's added event appended once the profile declares it", journal)
+		t.Fatalf("journal = %+v, want the endpoint node's added event appended once the profile declares it", journal)
 	}
 }
 

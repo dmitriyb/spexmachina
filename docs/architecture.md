@@ -193,7 +193,7 @@ whose task is still open is refused regardless of type.
 ## The journal
 
 `spec/.history.jsonl` is append-only, one JSON object per line, schema in
-`schema/bead-map.schema.json`. It is the link between spec nodes and tracker
+`schema/journal-line.schema.json`. It is the link between spec nodes and tracker
 tasks, and it is deliberately a log rather than a table: folding it forward
 gives the current mapping, while reading it whole gives the biography of a
 node that no longer exists.

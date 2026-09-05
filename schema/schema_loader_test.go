@@ -598,7 +598,7 @@ func TestFR3_E2_SchemaStartsWithJSONObject(t *testing.T) {
 	}{
 		{"project", ProjectSchema},
 		{"module", ModuleSchema},
-		{"bead-map", BeadMapSchema},
+		{"journal-line", JournalLineSchema},
 	} {
 		t.Run(load.name, func(t *testing.T) {
 			data, err := load.fn()
@@ -765,52 +765,6 @@ func TestFR3_E6_SchemaRefsResolveToDefs(t *testing.T) {
 	}
 }
 
-// --- BeadMapSchema tests (BM1-BM2) ---
-
-func TestFR7_BM1_BeadMapSchemaLoads(t *testing.T) {
-	data, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	if len(data) == 0 {
-		t.Fatal("BeadMapSchema() returned empty bytes")
-	}
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("not valid JSON: %v", err)
-	}
-}
-
-func TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries(t *testing.T) {
-	schData, err := BeadMapSchema()
-	if err != nil {
-		t.Fatalf("BeadMapSchema(): %v", err)
-	}
-	sch := compileSchema(t, schData)
-
-	// A change event's node is the identity hash.
-	changeEvent := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
- "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
- "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
-	if err := validateJSON(t, sch, []byte(changeEvent)); err != nil {
-		t.Fatalf("change event with identity-hash node should pass: %v", err)
-	}
-
-	// An epic receipt's proposal is the slug-shaped reference.
-	epicReceipt := `{"event":"task_created","proposal":"2026-04-12-data-flow-contract-layer","task_id":"spexmachina-epic"}`
-	if err := validateJSON(t, sch, []byte(epicReceipt)); err != nil {
-		t.Fatalf("epic receipt with proposal slug should pass: %v", err)
-	}
-
-	// An empty node always fails the identity-hash pattern.
-	emptyNode := `{"event":"added","eid":"9f2c41a0b7d3","node":"","name":"ActionClassifier",
- "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
- "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
-	if err := validateJSON(t, sch, []byte(emptyNode)); err == nil {
-		t.Fatal("empty node should fail validation")
-	}
-}
-
 // --- JournalLineSchema / TaskStateSchema loading tests (JL1-JL2, TS1-TS2) ---
 
 func TestFR3_JL1_JournalLineSchemaLoads(t *testing.T) {
@@ -827,12 +781,10 @@ func TestFR3_JL1_JournalLineSchemaLoads(t *testing.T) {
 	}
 }
 
-// TestFR3_JL2_JournalLineSchemaAcceptsBothIdentities mirrors
-// TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries for the current
-// JournalLineSchema() reader rather than its retired BeadMapSchema()
-// predecessor: node keys and proposal slugs live in different fields with
-// different constraints — the identity-hash pattern lives where the hash
-// lives, and slugs never share its field.
+// TestFR3_JL2_JournalLineSchemaAcceptsBothIdentities checks that node keys
+// and proposal slugs live in different fields with different constraints —
+// the identity-hash pattern lives where the hash lives, and slugs never
+// share its field.
 func TestFR3_JL2_JournalLineSchemaAcceptsBothIdentities(t *testing.T) {
 	data, err := JournalLineSchema()
 	if err != nil {

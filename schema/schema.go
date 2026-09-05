@@ -4,9 +4,8 @@
 // [ProjectSchema] and [ModuleSchema] compose the effective project and
 // module schemas from the resolved profile on every call, rather than
 // loading two fixed documents; [JournalLineSchema] hands back the embedded
-// journal-line schema unparsed ([BeadMapSchema] is its retired predecessor,
-// still read by callers pending their own migration). The Go types mirror
-// the schema structure for unmarshaling.
+// journal-line schema unparsed. The Go types mirror the schema structure
+// for unmarshaling.
 //
 // Node types: requirement, component, data_flow, api, module, test_section.
 // Edge types: implements, uses, describes, described_in, provided_by, depends_on, requires_module.
@@ -20,7 +19,7 @@ import (
 	"strings"
 )
 
-//go:embed project.schema.json module.schema.json bead-map.schema.json journal-line.schema.json task-state.schema.json
+//go:embed project.schema.json module.schema.json journal-line.schema.json task-state.schema.json
 var schemaFS embed.FS
 
 // identityHashPattern is the pattern every node id and cross-reference field
@@ -60,13 +59,6 @@ func projectSchemaBytes() ([]byte, error) {
 // [ModuleSchema] to avoid recomposing what it is itself building.
 func moduleSchemaBytes() ([]byte, error) {
 	return schemaFS.ReadFile("module.schema.json")
-}
-
-// BeadMapSchema returns the raw JSON Schema bytes for one line of the
-// task journal linking spec nodes to tasks, independent of where the
-// journal file lives.
-func BeadMapSchema() ([]byte, error) {
-	return schemaFS.ReadFile("bead-map.schema.json")
 }
 
 // JournalLineSchema returns the raw JSON Schema bytes for one line of the
