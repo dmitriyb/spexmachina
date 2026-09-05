@@ -105,6 +105,36 @@ func TestHistoryViewer_RendersProposalTypeAndStatus(t *testing.T) {
 	}
 }
 
+// TestHistoryViewer_TaskLineFormat covers S2: each task line under a
+// proposal follows the exact "  %s: %s (%s)\t%s\n" format — title-cased
+// action, task ID, status in parentheses, then a tab and the summary. No
+// module or component name appears anywhere in the line.
+func TestHistoryViewer_TaskLineFormat(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	writeProposal(t, specDir, "2026-02-23-spex-machina.md", projContent)
+
+	tasks := []TaskRecord{
+		{ID: "spexmachina-abc", Status: "closed", Title: "ProjectSchema",
+			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
+		{ID: "spexmachina-def", Status: "closed", Title: "SchemaChecker",
+			Labels: []string{"spec_proposal:2026-02-23-spex-machina"}},
+	}
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf}
+	if err := hv.ShowHistory(tasks); err != nil {
+		t.Fatalf("ShowHistory: %v", err)
+	}
+
+	const want = "2026-02-23-spex-machina.md (project proposal)\n" +
+		"  Closed: spexmachina-abc (closed)\tProjectSchema\n" +
+		"  Closed: spexmachina-def (closed)\tSchemaChecker\n"
+	if buf.String() != want {
+		t.Errorf("want exact output:\n%q\ngot:\n%q", want, buf.String())
+	}
+}
+
 func TestHistoryViewer_MissingProposalFile(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
@@ -221,6 +251,67 @@ func TestHistoryViewer_JSONMode(t *testing.T) {
 	// The envelope speaks the corpus vocabulary: "tasks", never "beads".
 	if strings.Contains(buf.String(), `"beads"`) {
 		t.Errorf("retired key 'beads' must not appear in envelope:\n%s", buf.String())
+	}
+}
+
+// TestHistoryViewer_JSONEnvelopeOmitsRetiredKeys covers S4: a proposal record
+// carries only filename, title and tasks — no proposal, type or date key —
+// and a task entry carries only id, status, action and summary — no module
+// or component key.
+func TestHistoryViewer_JSONEnvelopeOmitsRetiredKeys(t *testing.T) {
+	tmp := t.TempDir()
+	specDir := filepath.Join(tmp, "spec")
+	writeProposal(t, specDir, "2026-04-18-decouple.md", changeContent)
+
+	tasks := []TaskRecord{
+		{ID: "spexmachina-abc", Status: "open", Title: "emit: ChangesetBuilder",
+			Labels: []string{"spec_proposal:2026-04-18-decouple"}},
+	}
+
+	var buf bytes.Buffer
+	hv := &HistoryViewer{SpecDir: specDir, Out: &buf, JSON: true}
+	if err := hv.ShowHistory(tasks); err != nil {
+		t.Fatalf("ShowHistory JSON: %v", err)
+	}
+
+	var raw struct {
+		Proposals []map[string]json.RawMessage `json:"proposals"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &raw); err != nil {
+		t.Fatalf("json unmarshal: %v\nraw: %s", err, buf.String())
+	}
+	if len(raw.Proposals) != 1 {
+		t.Fatalf("want 1 proposal entry, got %d", len(raw.Proposals))
+	}
+	proposal := raw.Proposals[0]
+	for _, key := range []string{"filename", "title", "tasks"} {
+		if _, ok := proposal[key]; !ok {
+			t.Errorf("want proposal key %q present, got %+v", key, proposal)
+		}
+	}
+	for _, retired := range []string{"proposal", "type", "date"} {
+		if _, ok := proposal[retired]; ok {
+			t.Errorf("retired proposal key %q must not appear:\n%s", retired, buf.String())
+		}
+	}
+
+	var tasksRaw []map[string]json.RawMessage
+	if err := json.Unmarshal(proposal["tasks"], &tasksRaw); err != nil {
+		t.Fatalf("json unmarshal tasks: %v", err)
+	}
+	if len(tasksRaw) != 1 {
+		t.Fatalf("want 1 task entry, got %d", len(tasksRaw))
+	}
+	task := tasksRaw[0]
+	for _, key := range []string{"id", "status", "action", "summary"} {
+		if _, ok := task[key]; !ok {
+			t.Errorf("want task key %q present, got %+v", key, task)
+		}
+	}
+	for _, retired := range []string{"module", "component"} {
+		if _, ok := task[retired]; ok {
+			t.Errorf("retired task key %q must not appear:\n%s", retired, buf.String())
+		}
 	}
 }
 
