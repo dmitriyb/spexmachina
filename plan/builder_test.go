@@ -1371,20 +1371,18 @@ func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
 
 // TestBuild_OpIDNumberingAcrossMixedBatch mixes every op kind in one batch —
 // five conventional creates, one cleanup create for a removed node, one
-// retarget, and three closes, one of them the removal close the cleanup
-// answers — and asserts op ids run from op-01 in creates -> retargets ->
-// closes order with no gap and no reuse. The batch is sized to ten ops
-// total, and only reaches ten when the retarget is counted alongside the
-// creates and closes: six creates plus three closes alone is nine, which a
-// pad rule blind to retargets (test_changeset_builder.md, "Op id numbering
-// across a batch mixing every kind") would leave unpadded at op-1..op-9;
-// counting the retarget crosses the batch to ten and forces op-01..op-10.
-// It also pins that the cleanup's idempotency.label reads the removal
-// close's actual op_id out of the emitted document: the label is derived
-// before the close ops are numbered, so it rests on a prediction of where
-// the closes will start, and the retarget block sitting between the
-// creates and the closes is exactly what that prediction has to account
-// for.
+// retarget, and three closes for unrelated removed nodes — and asserts op
+// ids run from op-01 in creates -> retargets -> closes order with no gap
+// and no reuse. The batch is sized to ten ops total, and only reaches ten
+// when the retarget is counted alongside the creates and closes: six
+// creates plus three closes alone is nine, which a pad rule blind to
+// retargets (test_changeset_builder.md, "Op id numbering across a batch
+// mixing every kind") would leave unpadded at op-1..op-9; counting the
+// retarget crosses the batch to ten and forces op-01..op-10.
+// It also pins that the cleanup's idempotency.label embeds the cleanup
+// op's own op_id and never one of the batch's close op ids — no close
+// accompanies a cleanup, so there is nothing for the label to borrow
+// from.
 func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}

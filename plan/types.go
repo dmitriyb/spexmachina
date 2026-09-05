@@ -114,13 +114,12 @@ const (
 // side reimplementing "git_head + op_id", is what keeps the label and the
 // event it points at one fact instead of two copies that could drift.
 // Node-bearing creates and retargets call this with their own op_id.
-// cleanupLabel's same-batch-close fallback (plan/labeler.go) is also a
-// caller: when the fold carries no removed event yet, it passes the
-// same-batch close op's id in place of a create's own, deriving the label
-// from the removal that close op is about to record. A cleanup whose
-// removal already landed in an earlier batch reads the fold's removed
-// event instead, and a proposal-epic create reads the run's registration;
-// neither of those two calls this.
+// cleanupLabel (plan/labeler.go) is also a caller: when the fold carries
+// no removed event yet, it self-mints the label from the cleanup create
+// op's own op_id, exactly as any node-bearing create would. A cleanup
+// whose removal already landed in an earlier batch reads the fold's
+// removed event instead, and a proposal-epic create reads the run's
+// registration; neither of those two calls this.
 func DeriveEID(gitHead, opID string) string {
 	return gitHead + ":" + opID
 }
