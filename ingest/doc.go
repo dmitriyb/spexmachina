@@ -35,10 +35,10 @@
 // journal fold's latest change event per node, and a cleanup create
 // mints its own removal event when the journal shows none — the
 // pre-task-lifecycle "Modified-Node Pair" mechanism (a create's `blocks`
-// dep naming the bead its paired close retired) is gone. Reconciler's
-// own batch-wide same-batch-removal pre-pass is now dead weight left for
-// its own bead to retire — see TODO(bead:spexmachina-swvx.24) in
-// reconciler.go. The changeset/receipts version check likewise stays at
+// dep naming the bead its paired close retired) is gone, and so is
+// Reconciler's own batch-wide same-batch-removal pre-pass: no op's lines
+// depend on another op in the batch, so there is nothing left to resolve
+// up front. The changeset/receipts version check likewise stays at
 // 3/1 pending the v4/v2 bump plan (spexmachina-swvx.6) and adapters
 // (spexmachina-swvx.4) still owe their own wire types — see
 // TODO(bead:spexmachina-swvx.25) in cmd/spex/ingest.go.

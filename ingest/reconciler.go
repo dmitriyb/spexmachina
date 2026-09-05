@@ -3,7 +3,6 @@ package ingest
 import (
 	"fmt"
 	"path/filepath"
-	"strings"
 
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/mapping"
@@ -115,11 +114,10 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 	hasEID := func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] }
 
 	builder := NewEventBuilder(EventBuilderState{
-		SpecGraph:         r.SpecGraph,
-		Fold:              fold,
-		SameBatchRemovals: sameBatchRemovals(cs, receiptsByOp, fold),
-		RegisteredByStem:  registeredByStem,
-		HasEID:            hasEID,
+		SpecGraph:        r.SpecGraph,
+		Fold:             fold,
+		RegisteredByStem: registeredByStem,
+		HasEID:           hasEID,
 	})
 
 	var (
@@ -231,45 +229,6 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		}
 	}
 	return sum, nil
-}
-
-// sameBatchRemovals maps every node identity hash this batch's ok
-// "Spec node removed" closes will retire to the eid their removed event
-// will carry — computed once, before any op is processed, so a cleanup
-// create for that same hash resolves its referent regardless of whether
-// plan placed the cleanup's create before or after its own removal close
-// (real changesets always put it before — see arch_reconciler.md
-// "Ordering"). Node hash comes from the fold's live entry for the close's
-// target bead, exactly as buildRemoved resolves it.
-//
-// TODO(bead:spexmachina-swvx.24): current arch_reconciler.md ("No
-// op's lines depend on another op in the batch") retires this batch-wide
-// pre-pass along with the modified-node pair: a cleanup create no longer
-// needs a same-batch removal close to exist at all, since it now mints
-// its own removal when the fold's latest event for the node isn't
-// already one (landed in event_builder.go's buildCleanupCreate). Drop
-// this helper, the EventBuilderState.SameBatchRemovals field and this
-// call site — the result of this function has no remaining reader.
-func sameBatchRemovals(cs plan.Changeset, receiptsByOp map[string]adapters.OpReceipt, fold mapping.Fold) map[string]string {
-	out := map[string]string{}
-	for _, op := range cs.Ops {
-		if op.Type != plan.OpClose || !strings.HasPrefix(op.Reason, ReasonRemovedPrefix) {
-			continue
-		}
-		if receiptsByOp[op.OpID].Status != adapters.OpStatusOk {
-			continue
-		}
-		if op.Target == nil || op.Target.Kind != plan.RefTask || op.Target.TaskID == "" {
-			continue
-		}
-		for _, e := range fold.Entries {
-			if e.TaskID == op.Target.TaskID {
-				out[e.Key] = deriveEID(cs.GitHead, op.OpID)
-				break
-			}
-		}
-	}
-	return out
 }
 
 // pairReceipts builds an op_id → OpReceipt index after asserting that the

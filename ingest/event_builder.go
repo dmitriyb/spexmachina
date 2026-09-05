@@ -24,14 +24,6 @@ type EventBuilderState struct {
 	// Fold is the journal's live pairings, epic slugs and legacy lines, as
 	// of the start of this run.
 	Fold mapping.Fold
-	// SameBatchRemovals is unused by EventBuilder: a cleanup create no
-	// longer needs a same-batch removal close to exist at all, since it
-	// mints its own removal when the fold's latest event for the node
-	// isn't already one (see buildCleanupCreate). Reconciler still
-	// populates it — TODO(bead:spexmachina-swvx.24): drop this field, the
-	// sameBatchRemovals() helper and its call site once Reconciler's own
-	// bead lands.
-	SameBatchRemovals map[string]string
 	// RegisteredByStem maps a proposal stem to its `registered` event's
 	// eid, for proposal-epic creates.
 	RegisteredByStem map[string]string
