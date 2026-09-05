@@ -65,7 +65,7 @@ func (b *Builder) Build(actions []Action) (Changeset, error) {
 		creates = append([]Action{*epic}, creates...)
 	}
 
-	ordered, batch, err := Sort(creates)
+	ordered, batch, err := Sort(creates, b.SpecGraph.profileOrDefault().PlanRelevant)
 	if err != nil {
 		return Changeset{}, fmt.Errorf("plan: build: %w", err)
 	}

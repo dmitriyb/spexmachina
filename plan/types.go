@@ -75,27 +75,15 @@ const (
 	ActionRetarget = "retarget"
 )
 
-// Type tiers control create-op ordering (spec/plan/arch_topological_sorter.md,
-// "Ordering Rules"). Within each tier TopologicalSorter applies Kahn's
-// algorithm with a lex-spec_node_id tiebreak. Lower tiers emit first: the
-// proposal epic, then components and data_flows together, then
-// multi-component test sections.
-//
-// TODO(bead:spexmachina-swvx.38): spec/plan/flow_plan.md step 5, as
-// corrected by the 822b817 baseline (module.json's abfb10394fdd, "Layer
-// order as blocking edges"), replaces this fixed three-tier split with one
-// layer per plan-relevant node type in the resolved profile's own order —
-// under the default profile that separates data_flow from component
-// instead of sharing TierFeatureOrFlow — plus a final layer for cleanup
-// creates, which this table does not carve out today. These three
-// constants and plan/sorter.go's tierOf stay as the pre-correction shape
-// until TopologicalSorter's own bead replaces them with a profile-driven
-// layer list.
-const (
-	TierProposalEpic  = 0
-	TierFeatureOrFlow = 1
-	TierMultiCompTest = 2
-)
+// Layer ordering controls create-op emission (spec/plan/arch_topological_sorter.md,
+// "Ordering Rules"): the proposal epic first, then one layer per
+// plan-relevant node type in the resolved profile's own PlanRelevant order,
+// then cleanup creates last. Within each layer TopologicalSorter applies
+// Kahn's algorithm with a lex-spec_node_id tiebreak. There are no fixed tier
+// constants — plan/sorter.go's layerFor derives layer 0 for the epic and the
+// final layer for cleanups by rule, and every other layer from the caller-
+// supplied PlanRelevant list's position, so reordering that list reorders
+// the layers without this package changing at all.
 
 // FallbackPriority is the priority a create op carries when the
 // implements -> preq_id -> priority chain cannot be walked

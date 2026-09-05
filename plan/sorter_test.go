@@ -5,6 +5,12 @@ import (
 	"testing"
 )
 
+// defaultPlanRelevant mirrors schema.DefaultProfile().PlanRelevant
+// ([]string{"data_flow", "component", "test_section"}) without importing
+// schema into this test file: TopologicalSorter only ever consumes the
+// ordered list of names, never the Profile type itself.
+var defaultPlanRelevant = []string{"data_flow", "component", "test_section"}
+
 func opIDs(ops []OrderedOp) []string {
 	ids := make([]string, len(ops))
 	for i, o := range ops {
@@ -21,9 +27,9 @@ func specIDs(ops []OrderedOp) []string {
 	return ids
 }
 
-func mustSort(t *testing.T, actions []Action) ([]OrderedOp, map[string]string) {
+func mustSort(t *testing.T, actions []Action, planRelevant []string) ([]OrderedOp, map[string]string) {
 	t.Helper()
-	ops, m, err := Sort(actions)
+	ops, m, err := Sort(actions, planRelevant)
 	if err != nil {
 		t.Fatalf("Sort: unexpected error: %v", err)
 	}
@@ -33,7 +39,7 @@ func mustSort(t *testing.T, actions []Action) ([]OrderedOp, map[string]string) {
 // TestSort_EmptyBatch matches "empty action batch" edge case: no error,
 // no ops, no map entries.
 func TestSort_EmptyBatch(t *testing.T) {
-	ops, m := mustSort(t, nil)
+	ops, m := mustSort(t, nil, defaultPlanRelevant)
 	if len(ops) != 0 {
 		t.Fatalf("ops: got %d want 0", len(ops))
 	}
@@ -48,7 +54,7 @@ func TestSort_EmptyBatch(t *testing.T) {
 func TestSort_InBatchDepOrdersBefore(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent}
 	b := Action{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
-	ops, m := mustSort(t, []Action{b, a})
+	ops, m := mustSort(t, []Action{b, a}, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "a" || got[1] != "b" {
 		t.Fatalf("order: got %v want [a b]", got)
@@ -64,7 +70,7 @@ func TestSort_ChainOrdersTransitively(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent}
 	b := Action{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
 	c := Action{Type: ActionCreate, SpecNodeID: "c", NodeType: KindComponent, DepSpecNodeIDs: []string{"b"}}
-	ops, _ := mustSort(t, []Action{c, b, a})
+	ops, _ := mustSort(t, []Action{c, b, a}, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "a" || got[1] != "b" || got[2] != "c" {
 		t.Fatalf("order: got %v want [a b c]", got)
@@ -72,14 +78,14 @@ func TestSort_ChainOrdersTransitively(t *testing.T) {
 }
 
 // TestSort_LexTiebreakAmongIndependentNodes: with no dependency relation,
-// same-tier nodes emit in spec_node_id lex order.
+// same-layer nodes emit in spec_node_id lex order.
 func TestSort_LexTiebreakAmongIndependentNodes(t *testing.T) {
 	actions := []Action{
 		{Type: ActionCreate, SpecNodeID: "zzz", NodeType: KindComponent},
 		{Type: ActionCreate, SpecNodeID: "aaa", NodeType: KindComponent},
 		{Type: ActionCreate, SpecNodeID: "mmm", NodeType: KindComponent},
 	}
-	ops, _ := mustSort(t, actions)
+	ops, _ := mustSort(t, actions, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "aaa" || got[1] != "mmm" || got[2] != "zzz" {
 		t.Fatalf("order: got %v want [aaa mmm zzz]", got)
@@ -93,22 +99,23 @@ func TestSort_TiebreakRespectsNewlyReadyNodes(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent}
 	c := Action{Type: ActionCreate, SpecNodeID: "c", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
 	b := Action{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
-	ops, _ := mustSort(t, []Action{c, b, a})
+	ops, _ := mustSort(t, []Action{c, b, a}, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "a" || got[1] != "b" || got[2] != "c" {
 		t.Fatalf("order: got %v want [a b c]", got)
 	}
 }
 
-// TestSort_TierOrderingOverridesDependency: the proposal epic tier always
-// emits first, and the multi-component test tier always emits last,
-// regardless of any lex ordering that would otherwise interleave them.
-func TestSort_TierOrderingOverridesDependency(t *testing.T) {
+// TestSort_LayerOrderOverridesDependency: under the default profile, the
+// proposal epic always emits first and the test_section layer always
+// emits last, regardless of any lex ordering that would otherwise
+// interleave them — layer order comes from planRelevant, not spec_node_id.
+func TestSort_LayerOrderOverridesDependency(t *testing.T) {
 	epic := Action{Type: ActionCreate, SpecNodeID: "z-epic", NodeType: KindProposalEpic}
 	test := Action{Type: ActionCreate, SpecNodeID: "a-test", NodeType: KindTestSection}
 	comp := Action{Type: ActionCreate, SpecNodeID: "m-comp", NodeType: KindComponent}
 	flow := Action{Type: ActionCreate, SpecNodeID: "b-flow", NodeType: KindDataFlow}
-	ops, _ := mustSort(t, []Action{test, comp, flow, epic})
+	ops, _ := mustSort(t, []Action{test, comp, flow, epic}, defaultPlanRelevant)
 	got := specIDs(ops)
 	want := []string{"z-epic", "b-flow", "m-comp", "a-test"}
 	for i := range want {
@@ -118,28 +125,44 @@ func TestSort_TierOrderingOverridesDependency(t *testing.T) {
 	}
 }
 
-// TestSort_ComponentAndDataFlowShareATier: components and data_flows sit
-// in the same tier, so an in-batch dep between them still orders within
-// that shared tier rather than being invisible across a tier boundary.
-func TestSort_ComponentAndDataFlowShareATier(t *testing.T) {
+// TestSort_DataFlowAndComponentSitInSeparateLayers: under the default
+// profile, data_flow and component no longer share a layer (the retired
+// fixed-tier scheme's behavior) — data_flow occupies its own, earlier
+// layer. A component's in-batch dep on a data_flow is satisfied by layer
+// order alone: the edge is invisible to Kahn (cross-layer), but the layers
+// already place the data_flow first.
+func TestSort_DataFlowAndComponentSitInSeparateLayers(t *testing.T) {
 	flow := Action{Type: ActionCreate, SpecNodeID: "flow", NodeType: KindDataFlow}
 	comp := Action{Type: ActionCreate, SpecNodeID: "comp", NodeType: KindComponent, DepSpecNodeIDs: []string{"flow"}}
-	ops, _ := mustSort(t, []Action{comp, flow})
+	ops, _ := mustSort(t, []Action{comp, flow}, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "flow" || got[1] != "comp" {
 		t.Fatalf("order: got %v want [flow comp]", got)
 	}
 }
 
-// TestSort_DepOutsideTierIsInvisible: a dep naming a spec_node_id in a
-// different tier is invisible to the sort (left for Resolver to
-// classify) — it neither errors nor affects ordering within the tier.
-func TestSort_DepOutsideTierIsInvisible(t *testing.T) {
+// TestSort_CustomProfileOrderReordersLayers: a profile listing "component"
+// before "data_flow" places the component layer first — the layer order is
+// entirely planRelevant's to decide, not a compiled-in constant.
+func TestSort_CustomProfileOrderReordersLayers(t *testing.T) {
+	flow := Action{Type: ActionCreate, SpecNodeID: "flow", NodeType: KindDataFlow}
+	comp := Action{Type: ActionCreate, SpecNodeID: "comp", NodeType: KindComponent}
+	ops, _ := mustSort(t, []Action{flow, comp}, []string{"component", "data_flow", "test_section"})
+	got := specIDs(ops)
+	if got[0] != "comp" || got[1] != "flow" {
+		t.Fatalf("order: got %v want [comp flow]", got)
+	}
+}
+
+// TestSort_DepOutsideLayerIsInvisible: a dep naming a spec_node_id in an
+// earlier layer is invisible to the sort (left for Resolver to classify) —
+// it neither errors nor affects ordering within the layer.
+func TestSort_DepOutsideLayerIsInvisible(t *testing.T) {
 	epic := Action{Type: ActionCreate, SpecNodeID: "epic", NodeType: KindProposalEpic}
 	// comp declares a dep on the epic's spec_node_id, which sits in a
-	// different (already-earlier) tier, so the edge is invisible here.
+	// different (already-earlier) layer, so the edge is invisible here.
 	comp := Action{Type: ActionCreate, SpecNodeID: "comp", NodeType: KindComponent, DepSpecNodeIDs: []string{"epic"}}
-	ops, _ := mustSort(t, []Action{comp, epic})
+	ops, _ := mustSort(t, []Action{comp, epic}, defaultPlanRelevant)
 	got := specIDs(ops)
 	if got[0] != "epic" || got[1] != "comp" {
 		t.Fatalf("order: got %v want [epic comp]", got)
@@ -150,12 +173,62 @@ func TestSort_DepOutsideTierIsInvisible(t *testing.T) {
 // never appears in the batch at all is likewise invisible to the sort.
 func TestSort_DepOutsideBatchIsInvisible(t *testing.T) {
 	comp := Action{Type: ActionCreate, SpecNodeID: "comp", NodeType: KindComponent, DepSpecNodeIDs: []string{"not-in-batch"}}
-	ops, m := mustSort(t, []Action{comp})
+	ops, m := mustSort(t, []Action{comp}, defaultPlanRelevant)
 	if len(ops) != 1 || ops[0].Action.SpecNodeID != "comp" {
 		t.Fatalf("ops: got %+v", ops)
 	}
 	if _, ok := m["not-in-batch"]; ok {
 		t.Fatalf("map must not carry an entry for a node outside the batch: %+v", m)
+	}
+}
+
+// TestSort_DepPointingAtLaterLayerErrors: under a profile ordering
+// component before data_flow, a component depending on a data_flow points
+// at a later layer's op — refused naming both spec_node_ids, never a
+// silently reordered file (arch_topological_sorter.md, "Algorithm", step 2).
+func TestSort_DepPointingAtLaterLayerErrors(t *testing.T) {
+	comp := Action{Type: ActionCreate, SpecNodeID: "a-comp", NodeType: KindComponent, DepSpecNodeIDs: []string{"f-flow"}}
+	flow := Action{Type: ActionCreate, SpecNodeID: "f-flow", NodeType: KindDataFlow}
+	ops, m, err := Sort([]Action{comp, flow}, []string{"component", "data_flow", "test_section"})
+	if err == nil {
+		t.Fatalf("Sort: want error for forward-layer dep, got ops=%+v map=%+v", ops, m)
+	}
+	if ops != nil || m != nil {
+		t.Fatalf("Sort: want no ordering on forward-layer error, got ops=%+v map=%+v", ops, m)
+	}
+	if !strings.Contains(err.Error(), "a-comp") || !strings.Contains(err.Error(), "f-flow") {
+		t.Fatalf("forward-layer error must name both nodes: %v", err)
+	}
+}
+
+// TestSort_CleanupLayerIsLast: a cleanup create (discriminated by the
+// "Code cleanup:" reason prefix) is placed after every plan-relevant
+// layer, including test_section — the last layer, by rule.
+func TestSort_CleanupLayerIsLast(t *testing.T) {
+	test := Action{Type: ActionCreate, SpecNodeID: "t1", NodeType: KindTestSection}
+	comp := Action{Type: ActionCreate, SpecNodeID: "c1", NodeType: KindComponent}
+	cleanup := Action{Type: ActionCreate, SpecNodeID: "x1", NodeType: KindComponent, Reason: "Code cleanup: m/X"}
+	ops, _ := mustSort(t, []Action{cleanup, test, comp}, defaultPlanRelevant)
+	got := specIDs(ops)
+	want := []string{"c1", "t1", "x1"}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("order: got %v want %v (cleanup must be last)", got, want)
+		}
+	}
+}
+
+// TestSort_CleanupPlacementIgnoresItsOwnNodeType: a cleanup action carries
+// the removed node's own NodeType (here "component"), but that never
+// places it in the component layer — the "Code cleanup:" reason prefix
+// decides, not NodeType.
+func TestSort_CleanupPlacementIgnoresItsOwnNodeType(t *testing.T) {
+	comp := Action{Type: ActionCreate, SpecNodeID: "live-comp", NodeType: KindComponent}
+	cleanup := Action{Type: ActionCreate, SpecNodeID: "dead-comp", NodeType: KindComponent, Reason: "Code cleanup: m/Dead"}
+	ops, _ := mustSort(t, []Action{cleanup, comp}, defaultPlanRelevant)
+	got := specIDs(ops)
+	if got[0] != "live-comp" || got[1] != "dead-comp" {
+		t.Fatalf("order: got %v want [live-comp dead-comp] (cleanup after the component layer)", got)
 	}
 }
 
@@ -166,7 +239,7 @@ func TestSort_OpIDsNumberedFromOneInEmittedOrder(t *testing.T) {
 		{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}},
 		{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent},
 	}
-	ops, m := mustSort(t, actions)
+	ops, m := mustSort(t, actions, defaultPlanRelevant)
 	got := opIDs(ops)
 	if got[0] != "op-1" || got[1] != "op-2" {
 		t.Fatalf("op ids: got %v want [op-1 op-2]", got)
@@ -181,7 +254,7 @@ func TestSort_OpIDsNumberedFromOneInEmittedOrder(t *testing.T) {
 func TestSort_CycleDetected(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent, DepSpecNodeIDs: []string{"b"}}
 	b := Action{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
-	ops, m, err := Sort([]Action{a, b})
+	ops, m, err := Sort([]Action{a, b}, defaultPlanRelevant)
 	if err == nil {
 		t.Fatalf("Sort: want error for cycle, got ops=%+v map=%+v", ops, m)
 	}
@@ -200,7 +273,7 @@ func TestSort_CycleErrorIncludesStrandedNode(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent, DepSpecNodeIDs: []string{"b"}}
 	b := Action{Type: ActionCreate, SpecNodeID: "b", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
 	c := Action{Type: ActionCreate, SpecNodeID: "c", NodeType: KindComponent, DepSpecNodeIDs: []string{"b"}}
-	_, _, err := Sort([]Action{a, b, c})
+	_, _, err := Sort([]Action{a, b, c}, defaultPlanRelevant)
 	if err == nil {
 		t.Fatalf("Sort: want error for cycle")
 	}
@@ -217,7 +290,7 @@ func TestSort_CycleErrorIncludesStrandedNode(t *testing.T) {
 func TestSort_CycleErrorMessageIsLexOrdered(t *testing.T) {
 	z := Action{Type: ActionCreate, SpecNodeID: "z", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent, DepSpecNodeIDs: []string{"z"}}
-	_, _, err := Sort([]Action{z, a})
+	_, _, err := Sort([]Action{z, a}, defaultPlanRelevant)
 	if err == nil {
 		t.Fatalf("Sort: want error for cycle")
 	}
@@ -231,7 +304,7 @@ func TestSort_CycleErrorMessageIsLexOrdered(t *testing.T) {
 // cycle of one.
 func TestSort_SelfDependencyIsACycle(t *testing.T) {
 	a := Action{Type: ActionCreate, SpecNodeID: "a", NodeType: KindComponent, DepSpecNodeIDs: []string{"a"}}
-	_, _, err := Sort([]Action{a})
+	_, _, err := Sort([]Action{a}, defaultPlanRelevant)
 	if err == nil {
 		t.Fatalf("Sort: want error for self-dependency")
 	}
@@ -240,20 +313,36 @@ func TestSort_SelfDependencyIsACycle(t *testing.T) {
 	}
 }
 
-// TestSort_UnknownNodeKindErrors: a create whose spec node kind belongs
-// to no tier is refused with no ordering returned at all.
-func TestSort_UnknownNodeKindErrors(t *testing.T) {
-	bad := Action{Type: ActionCreate, SpecNodeID: "x", NodeType: KindCleanup}
+// TestSort_UnplacedKindErrors: a create whose spec node kind is placed by
+// none of the three rules (epic, cleanup, planRelevant) is refused with no
+// ordering returned at all.
+func TestSort_UnplacedKindErrors(t *testing.T) {
+	bad := Action{Type: ActionCreate, SpecNodeID: "x", NodeType: "endpoint"}
 	good := Action{Type: ActionCreate, SpecNodeID: "y", NodeType: KindComponent}
-	ops, m, err := Sort([]Action{good, bad})
+	ops, m, err := Sort([]Action{good, bad}, defaultPlanRelevant)
 	if err == nil {
-		t.Fatalf("Sort: want error for untiered node kind, got ops=%+v map=%+v", ops, m)
+		t.Fatalf("Sort: want error for unplaced node kind, got ops=%+v map=%+v", ops, m)
 	}
 	if ops != nil || m != nil {
-		t.Fatalf("Sort: want no ordering on tier error, got ops=%+v map=%+v", ops, m)
+		t.Fatalf("Sort: want no ordering on unplaced-kind error, got ops=%+v map=%+v", ops, m)
 	}
 	if !strings.Contains(err.Error(), "x") {
-		t.Fatalf("tier error must name the offending node: %v", err)
+		t.Fatalf("unplaced-kind error must name the offending node: %v", err)
+	}
+}
+
+// TestSort_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced: a profile
+// that appends a node type ("endpoint") the default profile never declared
+// is honored — the sorter consults planRelevant, never a compiled-in
+// vocabulary, so the new kind is placed in its own layer, last among the
+// non-cleanup layers.
+func TestSort_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced(t *testing.T) {
+	test := Action{Type: ActionCreate, SpecNodeID: "t1", NodeType: KindTestSection}
+	endpoint := Action{Type: ActionCreate, SpecNodeID: "e1", NodeType: "endpoint"}
+	ops, _ := mustSort(t, []Action{endpoint, test}, []string{"data_flow", "component", "test_section", "endpoint"})
+	got := specIDs(ops)
+	if got[0] != "t1" || got[1] != "e1" {
+		t.Fatalf("order: got %v want [t1 e1]", got)
 	}
 }
 
@@ -267,9 +356,9 @@ func TestSort_Deterministic(t *testing.T) {
 		{Type: ActionCreate, SpecNodeID: "comp-a", NodeType: KindComponent},
 		{Type: ActionCreate, SpecNodeID: "test", NodeType: KindTestSection},
 	}
-	ops1, m1 := mustSort(t, actions)
-	ops2, m2 := mustSort(t, actions)
-	if strings := opIDs(ops1); len(strings) != len(opIDs(ops2)) {
+	ops1, m1 := mustSort(t, actions, defaultPlanRelevant)
+	ops2, m2 := mustSort(t, actions, defaultPlanRelevant)
+	if len(opIDs(ops1)) != len(opIDs(ops2)) {
 		t.Fatalf("op id count differs across runs")
 	}
 	for i := range ops1 {

@@ -87,16 +87,17 @@
 // A second, later delta sits on top of the first: the 822b817 baseline
 // correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
 // tiering had no profile awareness — into flow_plan.md step 5 and module.json's
-// abfb10394fdd ("Layer order as blocking edges"). TopologicalSorter's tierOf
-// table (plan/sorter.go) is still the fixed epic / component+data_flow /
-// test_section split rather than one layer per plan-relevant node type in
-// the resolved profile's own order, plus a final layer for cleanup creates —
-// pending spexmachina-swvx.38. ChangesetBuilder's op_id (plan/builder.go) is
-// still the positional, digit-padded op-<n> shape rather than one derived
-// from each op's own canonical key, and Build does not yet add the
-// layer-boundary ref:op/ref:task edges abfb10394fdd requires — pending
-// spexmachina-swvx.20. PlanCommand does not yet warn and proceed (exit 0) on
-// an empty resolved plan-relevant list — pending spexmachina-swvx.21.
+// abfb10394fdd ("Layer order as blocking edges"). TopologicalSorter (Sort,
+// plan/sorter.go) now layers by the caller-supplied PlanRelevant order —
+// the proposal epic first, then one layer per plan-relevant node type in
+// that order, then cleanup creates last — refusing a kind the list does not
+// place and a dep pointing at a later layer, per spexmachina-swvx.38.
+// ChangesetBuilder's op_id (plan/builder.go) is still the positional,
+// digit-padded op-<n> shape rather than one derived from each op's own
+// canonical key, and Build does not yet add the layer-boundary ref:op/ref:task
+// edges abfb10394fdd requires — pending spexmachina-swvx.20. PlanCommand does
+// not yet warn and proceed (exit 0) on an empty resolved plan-relevant list —
+// pending spexmachina-swvx.21.
 //
 // # Contract surface
 //
