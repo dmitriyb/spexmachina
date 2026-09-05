@@ -8,6 +8,7 @@ import (
 	"github.com/dmitriyb/spexmachina/adapters"
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/plan"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // SpecGraph supplies the spec-side metadata the Reconciler needs to build a
@@ -76,6 +77,14 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 	receiptsByOp, err := pairReceipts(cs, rc)
 	if err != nil {
 		return ReconcileSummary{}, err
+	}
+
+	// The resolved profile gates JournalEncoder's node_type membership
+	// check (invariant 5) below — a profile.json's declared types, not a
+	// compiled-in default, decide which change events this run may write.
+	profile, err := schema.ResolveProfile(r.SpecDir)
+	if err != nil {
+		return ReconcileSummary{}, fmt.Errorf("ingest: reconcile: %w", err)
 	}
 
 	journalPath := r.JournalPath
@@ -205,7 +214,7 @@ func (r *Reconciler) Apply(cs plan.Changeset, rc adapters.Receipts) (ReconcileSu
 		if err := NewInvariantChecker().Check(existing, batch); err != nil {
 			return ReconcileSummary{}, err
 		}
-		if err := checkInvariant5(batch); err != nil {
+		if err := checkInvariant5(batch, profile); err != nil {
 			return ReconcileSummary{}, err
 		}
 		if err := store.Append(batch); err != nil {

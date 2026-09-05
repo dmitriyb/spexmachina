@@ -14,15 +14,17 @@ import (
 	"github.com/dmitriyb/spexmachina/mapping"
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/plan"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // Tests for spec/ingest/test_consistency_invariants.md. Invariants 1 and 2
 // are exercised in isolation, against InvariantChecker directly, in
 // invariant_checker_test.go (TestInvariantChecker_Invariant1_*,
 // TestInvariantChecker_Invariant2_*); invariant 3 by
-// TestApply_Idempotent_RerunAppendsNothing and invariant 5 by
-// TestCheckInvariant5_* (reconciler_test.go), and the "old lineage is
-// extended, never rebound" property is proven by
+// TestApply_Idempotent_RerunAppendsNothing and invariant 5's schema half
+// by TestCheckInvariant5_* (reconciler_test.go) and its profile half by
+// TestConsistencyInvariants_Invariant5_ProfileChecksNodeType below, and
+// the "old lineage is extended, never rebound" property is proven by
 // TestApply_CreateOnKnownNode_ModifiedEventLineageExtended. What only emerges when
 // Reconciler.Apply and SnapshotSaver.Save run together against shared
 // on-disk state is invariant 4 (snapshot saved iff complete) and the
@@ -347,6 +349,34 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 	}
 	if !strings.Contains(err.Error(), "node") {
 		t.Errorf("Validate error = %v, want it to name the violated constraint (node)", err)
+	}
+}
+
+// TestConsistencyInvariants_Invariant5_ProfileChecksNodeType covers the
+// second half of "Invariant 5: schema-invalid line refused": a change
+// event whose node_type is "endpoint" passes the journal-line schema —
+// which fixes only the field's shape — but is refused by the encoder's
+// profile check when the resolved profile is the default, which declares
+// no such type, with the error naming the kind; the identical line is
+// appended once checked against a profile that declares "endpoint".
+func TestConsistencyInvariants_Invariant5_ProfileChecksNodeType(t *testing.T) {
+	batch := []mapping.Event{{
+		Event: "added", EID: "e1", Node: "aabbccddeeff", Name: "x",
+		NodeType: "endpoint", Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p",
+	}}
+
+	if err := checkInvariant5(batch, schema.DefaultProfile()); err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("checkInvariant5 under the default profile: got %v, want error naming %q", err, "endpoint")
+	}
+
+	declaringEndpoint := &schema.Profile{NodeTypes: []schema.NodeType{
+		{Name: "endpoint", PluralKey: "endpoints", Scope: "module"},
+	}}
+	if err := declaringEndpoint.Validate(); err != nil {
+		t.Fatalf("profile declaring endpoint failed to validate: %v", err)
+	}
+	if err := checkInvariant5(batch, declaringEndpoint); err != nil {
+		t.Fatalf("checkInvariant5 under a profile declaring endpoint: unexpected error %v", err)
 	}
 }
 

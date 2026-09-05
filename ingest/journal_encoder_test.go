@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/dmitriyb/spexmachina/mapping"
+	"github.com/dmitriyb/spexmachina/schema"
 )
 
 // Unit tests for spec/ingest/arch_journal_encoder.md, calling
@@ -227,5 +228,58 @@ func TestJournalEncoder_Validate_UnknownKind(t *testing.T) {
 	err := NewJournalEncoder().Validate(mapping.Event{Event: "bogus"})
 	if err == nil || !strings.Contains(err.Error(), "bogus") {
 		t.Fatalf("Validate: got %v, want error naming the unknown kind", err)
+	}
+}
+
+// TestJournalEncoder_Validate_NodeTypeNotDeclared covers the encoder's
+// own membership check: a change event that is schema-valid in every
+// other respect is still refused when its node_type names a kind the
+// resolved profile does not declare — the default profile, here, since
+// Profile is left unset.
+func TestJournalEncoder_Validate_NodeTypeNotDeclared(t *testing.T) {
+	ev := mapping.Event{
+		Event: "added", EID: "e1", Node: "aabbccddeeff", Name: "x",
+		NodeType: "endpoint", Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p",
+	}
+	err := NewJournalEncoder().Validate(ev)
+	if err == nil || !strings.Contains(err.Error(), "endpoint") {
+		t.Fatalf("Validate: got %v, want error naming the undeclared kind %q", err, "endpoint")
+	}
+}
+
+// TestJournalEncoder_Validate_NodeTypeDeclaredByCustomProfile is the
+// control: the same otherwise-refused event validates once handed an
+// encoder resolved against a profile that declares "endpoint".
+func TestJournalEncoder_Validate_NodeTypeDeclaredByCustomProfile(t *testing.T) {
+	ev := mapping.Event{
+		Event: "added", EID: "e1", Node: "aabbccddeeff", Name: "x",
+		NodeType: "endpoint", Module: "m", After: strPtr("h"), GitHead: "g", Proposal: "p",
+	}
+	enc := &JournalEncoder{Profile: &schema.Profile{NodeTypes: []schema.NodeType{
+		{Name: "endpoint", PluralKey: "endpoints", Scope: "module"},
+	}}}
+	if err := enc.Validate(ev); err != nil {
+		t.Fatalf("Validate under a profile declaring %q: unexpected error %v", "endpoint", err)
+	}
+}
+
+// TestJournalEncoder_Validate_ProfileCheckExemptsNonChangeEvents covers
+// every journal-line kind that carries no node_type at all: registered,
+// task receipts, task_retargeted and refresh must all validate against
+// an encoder whose profile declares nothing, since the membership check
+// only ever applies to added/modified/removed.
+func TestJournalEncoder_Validate_ProfileCheckExemptsNonChangeEvents(t *testing.T) {
+	enc := &JournalEncoder{Profile: &schema.Profile{}}
+	lines := []mapping.Event{
+		{Event: "registered", EID: "e1", Proposal: "stem", GitHead: "g"},
+		{Event: "task_created", TaskID: "t1", For: "e1"},
+		{Event: "task_closed", TaskID: "t1", For: "e1"},
+		{Event: "task_retargeted", TaskID: "t1", For: "e1"},
+		{Event: "refresh", GitHead: "g", Absorbed: []string{"e1"}},
+	}
+	for _, ev := range lines {
+		if err := enc.Validate(ev); err != nil {
+			t.Errorf("Validate(%s): unexpected error %v", ev.Event, err)
+		}
 	}
 }
