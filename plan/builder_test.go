@@ -623,6 +623,27 @@ func TestBuild_ExistingTaskDepResolvesToRefBead(t *testing.T) {
 	}
 }
 
+// TestBuild_ExistingTaskDepInProgressResolvesToRefBead repeats the open
+// case with the paired task listed as in_progress: a claimed dependency
+// is still live work to wait on, so the same ref:task shape holds
+// (spec/plan/test_changeset_builder.md, "Live-task dep resolves to
+// ref:task").
+func TestBuild_ExistingTaskDepInProgressResolvesToRefBead(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	env.fold.fakeFold["Y"] = Pairing{TaskID: "spexmachina-y", BeadStatus: "in_progress"}
+	actions := []Action{sampleComponentCreate("X", "m", "X", []string{"Y"})}
+
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	x := findOp(t, cs.Ops, "X")
+	if len(x.Deps) != 1 || x.Deps[0] != (Ref{Kind: RefTask, TaskID: "spexmachina-y"}) {
+		t.Fatalf("X.deps: want [ref:task spexmachina-y], got %+v", x.Deps)
+	}
+}
+
 // --- Absent-task dep is dropped ---
 
 func TestBuild_AbsentTaskDepIsDropped(t *testing.T) {
@@ -805,9 +826,15 @@ func TestBuild_AbsorbedArrayCarriesEntriesVerbatim(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if len(cs.Absorbed) != 1 || cs.Absorbed[0].Node != "n1" || cs.Absorbed[0].Reason != "cosmetic rewording" {
-		t.Errorf("absorbed: want the entry verbatim, got %+v", cs.Absorbed)
+	want := AbsorbedEntry{Node: "n1", Before: "b1", After: "a1", Reason: "cosmetic rewording"}
+	if len(cs.Absorbed) != 1 || cs.Absorbed[0] != want {
+		t.Errorf("absorbed: want the entry verbatim %+v, got %+v", want, cs.Absorbed)
 	}
+	raw, err := json.Marshal(cs.Absorbed[0])
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	fieldOrder(t, string(raw), "absorbed entry", "node", "before", "after", "reason")
 	for _, op := range cs.Ops {
 		if op.SpecNodeID == "n1" {
 			t.Fatal("no op should name an absorbed node")
