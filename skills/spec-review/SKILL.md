@@ -142,7 +142,7 @@ comm -3 /tmp/declared /tmp/ondisk   # empty output = clean
 
 This is LLM judgment: every question below is one neither gate can answer.
 
-### Mandatory lenses — run all seven, count what you check
+### Mandatory lenses — run all eight, count what you check
 
 These lenses exist because implementation keeps catching what linear reading misses. Each is a
 forced enumeration: build the pair list first, then check every pair. The final report must state
@@ -186,6 +186,17 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
    reason as a comment), never by rewriting the example into something that could not occur.
    Both halves must match, so a new stale reference in an already-listed file still fires;
    suppressions are counted in the output and a dead entry is reported.
+8. **Requirements vs the leaves that implement them** — `scripts/lens-requirements.sh [module…]`
+   (worksheet): for every component in scope, each requirement in its `implements`, and the
+   project requirement behind it, paired with the component's arch leaf and the test leaves that
+   describe it. Read each requirement claim by claim against those leaves. A claim the leaves no
+   longer honour is a **critical** finding: it goes first in the Step 7 table, and its fix
+   direction — bend the requirement to the leaves, or the leaves back to the requirement — is a
+   question put to the user, never a silent edit of the requirement. The "with their dates"
+   class: an arch leaf rewritten for a different purpose dropped a field the requirement still
+   asks for; the code followed the leaf, a later review corrected the test leaf against the arch
+   leaf, and nothing in three passes read one level up. Lens 3 reads flows against arch leaves;
+   this lens is the same read one level higher, and the only place the requirement is re-read.
 
 **Component (`arch_*.md`)**
 
@@ -337,6 +348,7 @@ spec-review: no actionable findings (N nodes audited across M modules)
   lens 5 surfaces-vs-constraints: <surface x constraint pairs>
   lens 6 intersections: <cells checked>
   lens 7 dissolved-modules: <modules swept> (script exit 0)
+  lens 8 requirements-vs-leaves: <component x requirement pairs read>
 ```
 
 Where N and M come from the audit scope. A clean verdict asserts only "nothing found at these

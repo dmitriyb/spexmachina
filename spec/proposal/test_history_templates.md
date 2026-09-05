@@ -79,13 +79,14 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
 
 **Given** three proposals with linked tasks as in setup.
 **When** `ShowHistory` is called with a JSON output flag.
-**Then** output is the envelope `{"proposals": [...]}`, each entry carrying `filename`, `title` and a `tasks` array of `{id, status, action, summary}`:
+**Then** output is the envelope `{"proposals": [...]}`, each entry carrying `filename`, `title`, `date` and a `tasks` array of `{id, status, action, summary}`:
 ```json
 {
   "proposals": [
     {
       "filename": "2026-02-23-spex-machina.md",
       "title": "Project Proposal: Spex Machina",
+      "date": "2026-02-23",
       "tasks": [
         {"id": "spexmachina-abc", "status": "closed", "action": "closed", "summary": "ProjectSchema"},
         {"id": "spexmachina-def", "status": "closed", "action": "closed", "summary": "SchemaChecker"}
@@ -94,6 +95,7 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
     {
       "filename": "2026-03-01-add-caching.md",
       "title": "Change Proposal: Add caching",
+      "date": "2026-03-01",
       "tasks": [
         {"id": "spexmachina-ghi", "status": "in_progress", "action": "created", "summary": "CacheLayer"},
         {"id": "spexmachina-jkl", "status": "closed", "action": "closed", "summary": "SnapshotStore"}
@@ -102,6 +104,7 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
     {
       "filename": "2026-03-05-refactor-validator.md",
       "title": "Change Proposal: Refactor validator",
+      "date": "2026-03-05",
       "tasks": [
         {"id": "spexmachina-mno", "status": "open", "action": "created", "summary": "DagChecker"}
       ]
@@ -110,7 +113,8 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
 }
 ```
 - JSON is parseable by `json.Unmarshal`.
-- Each proposal record includes `filename`, `title` and `tasks`; there is no `proposal`, `type` or `date` key, and a task entry carries `id`, `status`, `action` and `summary`, not `module`/`component`. The array is keyed `tasks`: the envelope speaks the corpus vocabulary, and the retired key is not emitted as an alias.
+- Each proposal record includes `filename`, `title`, `date` and `tasks`; there is no `proposal` or `type` key, and a task entry carries `id`, `status`, `action` and `summary`, not `module`/`component`. The array is keyed `tasks`: the envelope speaks the corpus vocabulary, and the retired key is not emitted as an alias.
+- `date` is the filename's `YYYY-MM-DD` prefix, and nothing else supplies it.
 - `action` is derived from status and takes only two values — `closed` for a closed task, `created` for anything else (`proposal/history.go:201-206`).
 - Groups come out in ascending stem order (`proposal/history.go:78`), and `title` is the proposal file's H1, empty when the file is missing.
 - Tasks with no `spec_proposal:` label (like `spexmachina-pqr`) do not appear in any proposal's task list.
@@ -192,28 +196,19 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
 
 ### E1: Proposals directory contains non-markdown files
 
-**Given** `spec/proposals/` contains `notes.txt`, `diagram.png`, and `2026-02-23-spex-machina.md`.
-**When** `ShowHistory` is called.
+**Given** `spec/proposals/` contains `notes.txt`, `diagram.png`, and `2026-02-23-spex-machina.md`, and the supplied tasks carry only `spec_proposal:2026-02-23-spex-machina`.
+**When** `ShowHistory(tasks)` is called.
 **Then:**
-- Only `.md` files are listed. Non-markdown files are silently ignored.
-- Output contains one proposal entry.
+- Output contains one proposal entry, `2026-02-23-spex-machina.md`. The other files are never consulted: the listing is driven by the tasks' labels, and only `<stem>.md` for each labelled stem is read.
 
 ### E2: Proposal filename does not follow date convention
 
-**Given** `spec/proposals/` contains `random-notes.md` (no date prefix).
-**When** `ShowHistory` is called.
+**Given** `spec/proposals/` contains `random-notes.md` (no date prefix), and a supplied task carries `spec_proposal:random-notes`.
+**When** `ShowHistory(tasks)` is called.
 **Then:**
 - The file is still listed as a proposal.
-- The `date` field in JSON output is empty or derived from file modification time.
+- The `date` field in JSON output is the empty string: no prefix, no date — file modification time is never consulted.
 - Task matching still works using the full filename stem as the `spec_proposal:` label value; `firstProposalStem` also tolerates a trailing `.md` (`proposal/history.go:139-152`).
-
-### E3: Tracker CLI returns malformed JSON
-
-**Given** `br list --json` returns invalid JSON (e.g., truncated output).
-**When** `ShowHistory` is called.
-**Then:**
-- Function returns an error wrapping the JSON parse failure.
-- Error message includes context about what was being parsed ("task list output").
 
 ### E4: Template output is deterministic
 
@@ -225,11 +220,11 @@ Each task line is `"  %s: %s (%s)\t%s\n"` — action, task ID, the task's status
 
 ### E5: Very large number of proposals
 
-**Given** `spec/proposals/` contains 500 `.md` files and `br list --json` returns 2000 tasks.
-**When** `ShowHistory` is called.
+**Given** `spec/proposals/` contains 500 `.md` files and 2000 task records are supplied, labelled across those proposals.
+**When** `ShowHistory(tasks)` is called.
 **Then:**
 - Function completes without error.
-- Task listing is done once (single `br list --json` call). Filtering is done in-memory.
+- Grouping is done in-memory over the supplied records; nothing is fetched.
 - Output correctly groups tasks by proposal.
 
 ### E6: Empty string template type

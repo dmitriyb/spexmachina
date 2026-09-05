@@ -76,14 +76,14 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 
 #### S6: Show proposal history in human-readable format
 
-**Given** `spec/proposals/` contains `2026-02-23-spex-machina.md` and tasks are tagged with this proposal.
-**When** `spex log` is executed.
+**Given** `spec/proposals/` contains `2026-02-23-spex-machina.md` and the task JSON on stdin carries tasks labelled `spec_proposal:2026-02-23-spex-machina`.
+**When** `spex log` is executed with that JSON on stdin.
 **Then:**
 - Exit code is 0.
-- Stdout contains the proposal filename and its linked task actions, formatted as described in the HistoryViewer architecture:
+- Stdout contains the proposal filename and its linked task actions, in the line format the HistoryViewer architecture fixes — action, id, status in parentheses, a tab, the title:
   ```
   2026-02-23-spex-machina.md (project proposal)
-    Created: spexmachina-abc (schema: ProjectSchema)
+    Created: spexmachina-abc (open)	ProjectSchema
   ```
 
 #### S7: Show proposal history in JSON format
@@ -93,23 +93,23 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **Then:**
 - Exit code is 0.
 - Stdout is valid JSON parseable by `jq` or `json.Unmarshal`.
-- JSON structure matches the HistoryViewer envelope: `{"proposals": [{"filename", "title", "tasks": [{"id", "status", "action", "summary"}]}]}`.
+- JSON structure matches the HistoryViewer envelope: `{"proposals": [{"filename", "title", "date", "tasks": [{"id", "status", "action", "summary"}]}]}`.
 
 #### S8: Log with empty proposals directory
 
-**Given** `spec/proposals/` exists but is empty.
-**When** `spex log` is executed.
+**Given** the task JSON on stdin is a non-empty listing in which no task carries a `spec_proposal:` label (whatever `spec/proposals/` holds — the directory is never scanned).
+**When** `spex log` is executed with that JSON on stdin.
 **Then:**
 - Exit code is 0.
 - Stdout is empty (human-readable) or `{"proposals":[]}` (JSON mode), matching the HistoryViewer envelope.
-- No error output.
+- No error output. (Empty stdin is a different case: S10, exit 1.)
 
 #### S9: Log with explicit spec directory
 
-**Given** proposals exist at `/tmp/otherspec/proposals/`.
-**When** `spex log --spec-dir /tmp/otherspec` is executed.
+**Given** a proposal file exists at `/tmp/otherspec/proposals/<stem>.md` and the task JSON on stdin carries a task labelled `spec_proposal:<stem>`.
+**When** `spex log --spec-dir /tmp/otherspec` is executed with that JSON on stdin.
 **Then:**
-- History is read from `/tmp/otherspec/proposals/`.
+- The proposal's title and type are read from `/tmp/otherspec/proposals/<stem>.md`, not from `spec/proposals/`; the same stdin with no `--spec-dir` renders the entry as "proposal file missing".
 - Exit code is 0.
 
 #### S10: Log with empty stdin
@@ -173,11 +173,11 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 1. `spex template change > /tmp/new-proposal.md` (generate template).
 2. Fill in required sections in `/tmp/new-proposal.md` with real content.
 3. `spex register /tmp/new-proposal.md --git-head cafe1234` (register the filled-in proposal).
-4. `spex log --json` (view history).
+4. `spex log --json` with one task record on stdin whose `labels` carry `spec_proposal:<stem>`, the stem being the filename step 3 reported without `.md` (view history).
 **Then:**
 - Step 3 succeeds (exit code 0).
-- Step 4 output includes the newly registered proposal in the JSON array.
-- The registered proposal has an empty `tasks` array (no tasks tagged with it yet).
+- Step 4 output includes the newly registered proposal in the JSON array, with that one task under it and `title` read from the registered file.
+- A proposal no supplied task is tagged with never appears — the listing is driven by labels, not by the directory — so the round-trip needs the tagged record; with empty stdin step 4 exits 1 as S10 specifies.
 
 #### S17: Register preserves composability contract
 
@@ -185,7 +185,7 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 **When** `spex register input/new-change.md --git-head cafe1234` is executed.
 **Then:**
 - The command reads a file (input), writes a file (output to `spec/proposals/`), and exits 0 or 1.
-- No interactive prompts. No network calls. No side effects outside the spec directory.
+- No interactive prompts. No network calls. The only side effect outside the spec directory is the `registered` event appended to the journal at the location the lifecycle pre-flight resolves (see S2) — the append the register requirement mandates.
 - Suitable for use in shell scripts and CI pipelines.
 
 ## Edge Cases
@@ -218,11 +218,12 @@ For exit code tests, run `spex` via `exec.Command` and inspect `cmd.Run()` error
 ### E4: Multiple subcommands share the same spec directory default
 
 **Given** the working directory contains `spec/proposals/` with existing proposals.
-**When** `spex register <path> --git-head cafe1234`, `spex log`, and `spex template` are each run
+**When** `spex register <path> --git-head cafe1234`, `spex log` (with a task on stdin labelled
+`spec_proposal:<stem>` for the file just registered), and `spex template` are each run
 without `--spec-dir`.
 **Then:**
 - All three commands default to `spec/` as the spec directory relative to the current working directory.
-- Behavior is consistent: a file registered with `spex register` is visible in `spex log` output.
+- Behavior is consistent: the file registered with `spex register` is the one `spex log` reads the title from for that stem.
 
 ### E5: Concurrent register calls for different proposals
 
@@ -265,3 +266,12 @@ and a value shorter than 7 characters).
 - Stderr carries the pre-flight message naming the expected form, as `spex plan` does for the same
   flag.
 - No file is created in `spec/proposals/`, and nothing is appended to the journal.
+
+### E9: Log with malformed task JSON on stdin
+
+**Given** stdin carries non-whitespace data that is not task JSON (e.g., a truncated `br list --json` payload).
+**When** `spex log` is executed.
+**Then:**
+- Exit code is 1.
+- Stderr carries `spex log: parse task JSON: <detail>`, naming the decode failure — not the empty-stdin message of S10.
+- Nothing is written to stdout.
