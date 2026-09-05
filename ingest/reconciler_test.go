@@ -335,6 +335,75 @@ func TestApply_CreateOnKnownNode_ModifiedEventLineageExtended(t *testing.T) {
 	}
 }
 
+// TestApply_OkCreate_ReAddedNode_AddedEvent covers "Ok create on a
+// re-added node → added event": the node's latest change event is itself
+// a removal (after null), not an absence of history, so buildNodeCreate
+// must treat it exactly like a brand-new node — born again, not modified.
+func TestApply_OkCreate_ReAddedNode_AddedEvent(t *testing.T) {
+	graph := newFakeSpecGraph()
+	graph.nodes["feedface0005"] = NodeMetadata{
+		Module: "m", Component: "Phoenix", ContentFile: "m/arch_phoenix.md",
+		SpecHash: "hash-reborn", NodeType: "component",
+	}
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "added", EID: "E1", Node: "feedface0005", Name: "Phoenix",
+			NodeType: "component", Module: "m", After: strPtr("hash-old"),
+			GitHead: "seedhead", Proposal: "seed-p", Path: "m/arch_phoenix.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-1", For: "E1"},
+		mapping.Event{
+			Event: "removed", EID: "E2", Node: "feedface0005", Name: "Phoenix",
+			NodeType: "component", Module: "m", Before: strPtr("hash-old"),
+			GitHead: "deadhead", Proposal: "seed-p", Path: "m/arch_phoenix.md",
+		},
+		mapping.Event{Event: "task_closed", TaskID: "br-1", For: "E2"},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe0005", Proposal: "p4",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: "feedface0005",
+			Idempotency: idem("spex:cafe0005:op-1"),
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{
+			{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-2", WasExisting: false},
+		},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.OkCreates != 1 || sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 create, 1 event, 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	if len(journal) != 6 {
+		t.Fatalf("journal has %d lines, want 6 (4 seed + 2 new): %+v", len(journal), journal)
+	}
+	added := journal[4]
+	if added.Event != "added" || added.Node != "feedface0005" {
+		t.Fatalf("line 5 = %+v, want added event for feedface0005", added)
+	}
+	if added.Before != nil {
+		t.Errorf("added event before = %v, want nil", added.Before)
+	}
+	if added.After == nil || *added.After != "hash-reborn" {
+		t.Errorf("added event after = %v, want hash-reborn", added.After)
+	}
+	created := journal[5]
+	if created.Event != "task_created" || created.TaskID != "br-2" || created.For != added.EID {
+		t.Errorf("task_created = %+v, want for=%s task_id=br-2", created, added.EID)
+	}
+}
+
 // TestApply_WasExisting_IdempotentNoOp covers "Was_existing=true →
 // idempotent no-op": the reconciler's own idempotency is eid-derived, not
 // keyed off the receipt's was_existing flag — replaying the identical
@@ -683,6 +752,67 @@ func TestApply_CleanupCreate_MintsRemoval(t *testing.T) {
 		if e.Key == hexGone && !e.Removed {
 			t.Errorf("fold[Gone] = %+v, want removed", e)
 		}
+	}
+}
+
+// TestApply_CleanupCreate_AfterReAdd_FreshRemoval covers "Cleanup create
+// after a re-add → a fresh removal, not the old one": the node's earlier
+// removal (E1) is not its latest change event — it was re-added and
+// finished since — so buildCleanupCreate must mint a brand-new removal
+// from the cleanup op's own (git_head, op_id) rather than pairing with E1.
+func TestApply_CleanupCreate_AfterReAdd_FreshRemoval(t *testing.T) {
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "removed", EID: "E1", Node: hexR, Name: "Old", NodeType: "component",
+			Module: "m", Before: strPtr("h0"), GitHead: "deadhead", Proposal: "seed-p", Path: "m/old.md",
+		},
+		mapping.Event{
+			Event: "added", EID: "E2", Node: hexR, Name: "Old", NodeType: "component",
+			Module: "m", After: strPtr("h1"), GitHead: "beefhead", Proposal: "seed-p2", Path: "m/old.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-again", For: "E2"},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafe00r", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexR,
+			Idempotency: idem("spex:cafe00r:op-1"), Labels: []string{"spex:cleanup"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup2", WasExisting: false}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	newLines := journal[3:]
+	if len(newLines) != 2 {
+		t.Fatalf("got %d new lines, want 2: %+v", len(newLines), newLines)
+	}
+	removed, cleanupReceipt := newLines[0], newLines[1]
+	if removed.Event != "removed" || removed.Node != hexR {
+		t.Fatalf("line 1 = %+v, want removed event for %s", removed, hexR)
+	}
+	if removed.EID == "E1" {
+		t.Errorf("removed event reused E1, want a fresh eid derived from the cleanup op")
+	}
+	if removed.Before == nil || *removed.Before != "h1" {
+		t.Errorf("removed event before = %v, want h1 (from the re-add, not the original removal)", removed.Before)
+	}
+	if cleanupReceipt.Event != "task_created" || cleanupReceipt.TaskID != "br-cleanup2" || cleanupReceipt.For != removed.EID {
+		t.Errorf("cleanup receipt = %+v, want for=%s task_id=br-cleanup2", cleanupReceipt, removed.EID)
 	}
 }
 
