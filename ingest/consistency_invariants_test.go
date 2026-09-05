@@ -363,10 +363,8 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 // naming the kind; the identical line is appended once the resolved
 // profile declares it. Driven through Reconciler.Apply against a fixture
 // spec dir with no profile.json yet for the first call, then a
-// profile.json declaring "endpoint" written before the second (the
-// pattern refresh_test.go uses for
-// TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections),
-// so it is the second assertion that pins reconciler.go's own
+// profile.json declaring "endpoint" written before the second, so it
+// is the second assertion that pins reconciler.go's own
 // schema.ResolveProfile(r.SpecDir) call rather than only checkInvariant5
 // in isolation: a reconciler.go that swapped that call for a hardcoded
 // schema.DefaultProfile() would still correctly refuse the first Apply —
