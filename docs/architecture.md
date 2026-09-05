@@ -148,21 +148,25 @@ and composes the changeset. Three action types
   under the implementer holding it. A closed task is not retargeted either —
   it takes obsolete+create, like an unknown status.
 
-Pass `--beads <file>` (the tracker's own `list --json` output) so live task
-status participates in the classification. Without it no pairing is
-known-open and the cleanup gate defaults closed: nothing is retargeted, no
-cleanup task is minted for a removed node, and a matched modified node takes
-the obsolete+create path unless the journal already records that new hash or it is
-a test section folding back.
+Pass `--tasks <file>` (the version-1 task-state artifact the adapter's
+export half derives from the tracker, listing in-flight tasks only) so live
+task status participates in the classification. The flag is required: a run
+without a task-state artifact is exit 1, not a run with an empty one, since
+an absent artifact would read every task as finished and re-create
+in-flight work. An empty artifact is the explicit nothing-in-flight case:
+no pairing is known-open and the cleanup gate defaults closed — nothing is
+retargeted, no cleanup task is minted for a removed node, and a matched
+modified node takes the obsolete+create path unless the journal already
+records that new hash or it is a test section folding back.
 
 The output is `changeset.json` (v4) — an ordered, tool-agnostic list of
 operations drawn from a `create` / `close` / `retarget` vocabulary, with
 forward references encoded so an adapter can apply them in order without
 resolving IDs itself, plus a top-level `absorbed` array carrying the nodes
 `--absorb` marked as cosmetic, which yield no operation at all. `plan` is a
-pure function of the diff, the tracker listing, the task journal, the spec
-graph, the absorb list, a proposal ref and a caller-supplied git HEAD SHA. It
-is the last step that knows anything about specs.
+pure function of the diff, the task-state artifact, the task journal, the
+spec graph, the absorb list, a proposal ref and a caller-supplied git HEAD
+SHA. It is the last step that knows anything about specs.
 
 ### adapter
 

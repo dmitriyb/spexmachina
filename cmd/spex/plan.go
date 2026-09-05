@@ -22,7 +22,7 @@ import (
 var hexNodeIDRe = regexp.MustCompile(`^[a-f0-9]{12}$`)
 
 func newPlanCmd() *cobra.Command {
-	var proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath string
+	var proposal, gitHead, diffPath, tasksPath, absorbPath, outPath string
 
 	cmd := &cobra.Command{
 		Use:   "plan",
@@ -33,32 +33,31 @@ a caller-supplied --tasks file, maps changed spec nodes to actions, and
 composes changeset.json — one invocation, no intermediate document.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runPlanE(cmd, proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath)
+			return runPlanE(cmd, proposal, gitHead, diffPath, tasksPath, absorbPath, outPath)
 		},
 	}
 
 	cmd.Flags().StringVar(&proposal, "proposal", "", "proposal ref (filename stem)")
 	cmd.Flags().StringVar(&gitHead, "git-head", "", "git HEAD SHA (7-40 hex chars)")
 	cmd.Flags().StringVar(&diffPath, "diff", "", "path to the diff document spex diff --json writes (default: stdin; '-' selects stdin explicitly)")
-	// TODO(bead:spexmachina-swvx.7): --beads/beadsPath is BeadReader, the
-	// pre-task-lifecycle tracker-listing input TaskReader/--tasks replaces
-	// (spec/plan/flow_plan.md step 2). Remove this flag and its wiring once
-	// spexmachina-swvx.7 lands and every caller has moved to --tasks.
-	cmd.Flags().StringVar(&beadsPath, "beads", "", "tracker listing (br list --json or compatible) [deprecated: use --tasks]")
 	cmd.Flags().StringVar(&tasksPath, "tasks", "", "task-state artifact: the version-1 document listing in-flight tasks (schema/task-state.schema.json)")
 	cmd.Flags().StringVar(&absorbPath, "absorb", "", "git-committed JSON list of {node, reason} cosmetic-modification marks")
 	cmd.Flags().StringVar(&outPath, "out", "", "changeset output path (default: stdout)")
 	_ = cmd.MarkFlagRequired("proposal")
 	_ = cmd.MarkFlagRequired("git-head")
+	_ = cmd.MarkFlagRequired("tasks")
 	return cmd
 }
 
-func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksPath, absorbPath, outPath string) error {
+func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, tasksPath, absorbPath, outPath string) error {
 	if proposal == "" {
 		return planInputErr(fmt.Errorf("plan: --proposal is required"))
 	}
 	if !gitHeadRe.MatchString(gitHead) {
 		return planInputErr(fmt.Errorf("plan: --git-head must be a hex SHA (7-40 chars), got %q", gitHead))
+	}
+	if tasksPath == "" {
+		return planInputErr(fmt.Errorf("plan: --tasks is required"))
 	}
 
 	specDir, err := resolveSpecDir(cmd)
@@ -98,41 +97,20 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksP
 		return planInputErr(fmt.Errorf("plan: load spec graph: %w", err))
 	}
 
-	var beadStatus map[string]string
-	if beadsPath != "" {
-		data, err := os.ReadFile(beadsPath)
-		if err != nil {
-			return planInputErr(fmt.Errorf("plan: read beads: %w", err))
-		}
-		beads, err := plan.ReadBeadsBytes(data)
-		if err != nil {
-			return planInputErr(err)
-		}
-		beadStatus = make(map[string]string, len(beads))
-		for _, b := range beads {
-			beadStatus[b.ID] = b.Status
-		}
+	// TaskReader validates and parses the required --tasks artifact; each
+	// listed task's live status joins onto the fold's pairing whose task id
+	// matches (spec/plan/arch_plan_command.md, pre-flight step 5).
+	data, err := os.ReadFile(tasksPath)
+	if err != nil {
+		return planInputErr(fmt.Errorf("plan: read tasks: %w", err))
 	}
-	// --tasks joins onto the same live-status map --beads populates above:
-	// both feed Pairing.BeadStatus, and a --tasks entry overrides a --beads
-	// entry for the same task id (arch_task_reader.md's replacement input
-	// wins where the two overlap). Requiredness and the --beads removal
-	// belong to spexmachina-swvx.7, not here.
-	if tasksPath != "" {
-		data, err := os.ReadFile(tasksPath)
-		if err != nil {
-			return planInputErr(fmt.Errorf("plan: read tasks: %w", err))
-		}
-		tasks, err := plan.ReadTasksBytes(data)
-		if err != nil {
-			return planInputErr(err)
-		}
-		if beadStatus == nil {
-			beadStatus = make(map[string]string, len(tasks))
-		}
-		for _, tsk := range tasks {
-			beadStatus[tsk.ID] = tsk.Status
-		}
+	tasks, err := plan.ReadTasksBytes(data)
+	if err != nil {
+		return planInputErr(err)
+	}
+	taskStatus := make(map[string]string, len(tasks))
+	for _, tsk := range tasks {
+		taskStatus[tsk.ID] = tsk.Status
 	}
 
 	absorbed := []plan.AbsorbedEntry{}
@@ -151,13 +129,17 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksP
 		}
 	}
 
-	// TODO(bead:spexmachina-swvx.21): spec/plan/flow_plan.md's 822b817
-	// correction adds an error path this command does not implement yet: an
-	// empty resolved graph.profileOrDefault().PlanRelevant list is not a
-	// refusal — a warning on stderr that no node type produces tasks and an
-	// adapter run would create none, with the run proceeding, exit 0.
+	// An empty plan-relevant list is not a refusal: it warns and the run
+	// proceeds, exit 0 (spec/plan/arch_plan_command.md, "Exit Codes": "One
+	// condition warns and does not fail"). What survives in the changeset
+	// regardless — the proposal epic, any cleanup create — is left unstated
+	// here: arch_plan_command.md and flow_plan.md disagree on that point
+	// (drifts/drift-spexmachina-swvx.21-empty-plan-relevant-scope.json).
+	if len(graph.PlanRelevant()) == 0 {
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: plan: no node type in the resolved profile's plan-relevant list produces tasks")
+	}
 
-	pairings := planPairingsForMatching(fold, beadStatus)
+	pairings := planPairingsForMatching(fold, taskStatus)
 	matches, unmatched, orphaned := plan.MatchNodes(changes, pairings)
 
 	actions, err := plan.ClassifyActions(matches, unmatched, orphaned, graph)
@@ -167,7 +149,7 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksP
 
 	builder := &plan.Builder{
 		SpecGraph:    graph,
-		Fold:         newPlanFold(fold, beadStatus),
+		Fold:         newPlanFold(fold, taskStatus),
 		Registration: registration,
 		GitHead:      gitHead,
 		Proposal:     proposal,
@@ -308,9 +290,9 @@ func resolvePlanRegistration(events []mapping.Event, proposal string) plan.Regis
 }
 
 // planPairingFromEntry adapts one journal fold entry into plan.Pairing,
-// joining live bead status by task id when beadStatus is non-nil
+// joining live task status by task id when taskStatus is non-nil
 // (spec/plan/arch_plan_command.md, pre-flight step 5).
-func planPairingFromEntry(e mapping.FoldEntry, beadStatus map[string]string) plan.Pairing {
+func planPairingFromEntry(e mapping.FoldEntry, taskStatus map[string]string) plan.Pairing {
 	var after string
 	if e.Source.After != nil {
 		after = *e.Source.After
@@ -323,7 +305,7 @@ func planPairingFromEntry(e mapping.FoldEntry, beadStatus map[string]string) pla
 		Name:       e.Source.Name,
 		After:      after,
 	}
-	if status, ok := beadStatus[e.TaskID]; ok {
+	if status, ok := taskStatus[e.TaskID]; ok {
 		p.BeadStatus = status
 	}
 	return p
@@ -333,13 +315,13 @@ func planPairingFromEntry(e mapping.FoldEntry, beadStatus map[string]string) pla
 // pairings NodeMatcher correlates against the diff's changes: proposal-epic
 // entries (no Source.Node) and removed-node tombstones are excluded, since
 // neither ever matches a changed spec node by identity hash.
-func planPairingsForMatching(fold mapping.Fold, beadStatus map[string]string) []plan.Pairing {
+func planPairingsForMatching(fold mapping.Fold, taskStatus map[string]string) []plan.Pairing {
 	var out []plan.Pairing
 	for _, e := range fold.Entries {
 		if e.Removed || e.Source.Node == "" {
 			continue
 		}
-		out = append(out, planPairingFromEntry(e, beadStatus))
+		out = append(out, planPairingFromEntry(e, taskStatus))
 	}
 	return out
 }
@@ -354,7 +336,7 @@ type planFold struct {
 	removal map[string]plan.RemovalEntry
 }
 
-func newPlanFold(fold mapping.Fold, beadStatus map[string]string) planFold {
+func newPlanFold(fold mapping.Fold, taskStatus map[string]string) planFold {
 	lookup := make(map[string]plan.Pairing, len(fold.Entries))
 	removal := make(map[string]plan.RemovalEntry, len(fold.Entries))
 	for _, e := range fold.Entries {
@@ -362,7 +344,7 @@ func newPlanFold(fold mapping.Fold, beadStatus map[string]string) planFold {
 			removal[e.Key] = plan.RemovalEntry{Removed: true, EID: e.Source.EID}
 			continue
 		}
-		lookup[e.Key] = planPairingFromEntry(e, beadStatus)
+		lookup[e.Key] = planPairingFromEntry(e, taskStatus)
 	}
 	return planFold{lookup: lookup, removal: removal}
 }

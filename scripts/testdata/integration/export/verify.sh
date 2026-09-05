@@ -21,7 +21,9 @@ while IFS= read -r id; do
         || { echo "closed task $id unexpectedly present in tasks.json"; jq . tasks.json; exit 1; }
 done < closed_ids.txt
 
-# TODO(bead:spexmachina-swvx.21): once PlanCommand's --tasks flag ships
-# (still --beads today; PlanCommand and TaskReader are open beads in this
-# epic), also assert `spex plan --tasks tasks.json ...` exits 0 here, per
-# test_br_integration.md's "Export against a live sandbox" scenario.
+# test_br_integration.md's "Export against a live sandbox" scenario also
+# asserts that feeding tasks.json to `spex plan --tasks tasks.json` over a
+# fixture diff and journal exits 0. PlanCommand's --tasks flag has shipped
+# (spexmachina-swvx.21; --beads no longer exists), but that assertion needs
+# its own fixture diff and journal — scope for the adapters module's own
+# test suite (BrReferenceAdapter, 7f2e76cecab3), not added here.

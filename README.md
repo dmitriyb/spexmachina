@@ -117,8 +117,9 @@ See [`docs/commands.md`](docs/commands.md) for the full flag reference.
 
 ```sh
 spex validate                                   # DAG, refs, coverage — before anything else
+scripts/export-br.sh tasks.json
 spex diff --json | spex plan --proposal <stem> --git-head "$(git rev-parse --short HEAD)" \
-  --beads beads.json > changeset.json
+  --tasks tasks.json > changeset.json
 scripts/apply-br.sh changeset.json > receipts.json   # the adapter — outside the binary
 spex ingest --changeset changeset.json --receipts receipts.json
 ```

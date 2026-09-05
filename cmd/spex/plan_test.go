@@ -84,19 +84,23 @@ func writePlanDiff(t *testing.T, dir, name string, changes []diffChange, errs []
 	return path
 }
 
-func writePlanBeads(t *testing.T, dir, name string, statuses map[string]string) string {
+// writePlanTasks writes a version-1 task-state artifact (schema/task-state.
+// schema.json) listing one entry per statuses map key, the shape --tasks
+// expects (spec/plan/test_plan_command.md, Setup item 4).
+func writePlanTasks(t *testing.T, dir, name string, statuses map[string]string) string {
 	t.Helper()
-	type bead struct {
-		ID     string `json:"id"`
+	type taskEntry struct {
+		TaskID string `json:"task_id"`
 		Status string `json:"status"`
 	}
-	issues := make([]bead, 0, len(statuses))
+	tasks := make([]taskEntry, 0, len(statuses))
 	for id, status := range statuses {
-		issues = append(issues, bead{ID: id, Status: status})
+		tasks = append(tasks, taskEntry{TaskID: id, Status: status})
 	}
 	data, err := json.Marshal(struct {
-		Issues []bead `json:"issues"`
-	}{Issues: issues})
+		Version int         `json:"version"`
+		Tasks   []taskEntry `json:"tasks"`
+	}{Version: 1, Tasks: tasks})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,8 +155,9 @@ func setupMinimalPlanSpec(t *testing.T) string {
 // survives in the journal, a journal seeding one added event + task_created
 // per tracked node and a registered event for the fixture's proposal, a
 // diff reporting Existing/Existing2 modified, New added and Removed
-// removed, and three --beads variants driving the cleanup gate and the
-// claimed-task refusal.
+// removed, and task-state artifact variants (--tasks) driving the cleanup
+// gate and the claimed-task refusal: all-open, one-unlisted (task-removed
+// absent), one-in_progress and empty.
 type planFixture struct {
 	specDir     string
 	proposal    string
@@ -163,9 +168,11 @@ type planFixture struct {
 	removedID   string
 	diffPath    string
 
-	beadsAllOpen       string
-	beadsOneClosed     string
-	beadsOneInProgress string
+	tasksAllOpen           string
+	tasksOneUnlisted       string
+	tasksOneInProgress     string
+	tasksRemovedInProgress string
+	tasksEmpty             string
 }
 
 func setupPlanFixture(t *testing.T) planFixture {
@@ -220,23 +227,36 @@ func setupPlanFixture(t *testing.T) planFixture {
 	}
 	diffPath := writePlanDiff(t, dir, "diff.json", changes, nil)
 
-	beadsAllOpen := writePlanBeads(t, dir, "beads-all-open.json", map[string]string{
+	tasksAllOpen := writePlanTasks(t, dir, "tasks-all-open.json", map[string]string{
 		"task-existing": "open", "task-existing2": "open", "task-removed": "open",
 	})
-	beadsOneClosed := writePlanBeads(t, dir, "beads-one-closed.json", map[string]string{
-		"task-existing": "open", "task-existing2": "open", "task-removed": "closed",
+	// one-unlisted: task-removed is absent from the artifact — the fold's
+	// pairing for the removed node then joins no status, which the classifier
+	// reads as "finished", driving the cleanup gate rather than a close.
+	tasksOneUnlisted := writePlanTasks(t, dir, "tasks-one-unlisted.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open",
 	})
-	beadsOneInProgress := writePlanBeads(t, dir, "beads-one-in-progress.json", map[string]string{
+	tasksOneInProgress := writePlanTasks(t, dir, "tasks-one-in-progress.json", map[string]string{
 		"task-existing": "in_progress", "task-existing2": "in_progress", "task-removed": "open",
 	})
+	// removed-in_progress: the removed node's own task is claimed while
+	// existing/existing2 stay open — isolates classifyOrphaned's
+	// in_progress branch (plan/action_classifier.go:168-169) from the
+	// modified-node refusal S7's first arm already covers.
+	tasksRemovedInProgress := writePlanTasks(t, dir, "tasks-removed-in-progress.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open", "task-removed": "in_progress",
+	})
+	tasksEmpty := writePlanTasks(t, dir, "tasks-empty.json", map[string]string{})
 
 	return planFixture{
 		specDir: specDir, proposal: proposal, gitHead: gitHead,
 		existingID: existingID, existing2ID: existing2ID, newID: newID, removedID: removedID,
-		diffPath:           diffPath,
-		beadsAllOpen:       beadsAllOpen,
-		beadsOneClosed:     beadsOneClosed,
-		beadsOneInProgress: beadsOneInProgress,
+		diffPath:               diffPath,
+		tasksAllOpen:           tasksAllOpen,
+		tasksOneUnlisted:       tasksOneUnlisted,
+		tasksOneInProgress:     tasksOneInProgress,
+		tasksRemovedInProgress: tasksRemovedInProgress,
+		tasksEmpty:             tasksEmpty,
 	}
 }
 
@@ -246,7 +266,7 @@ func TestPlanCommand_S1_FullPipeline_DiffFileToChangesetStdout(t *testing.T) {
 	f := setupPlanFixture(t)
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan failed: %v\nstderr: %s", err, stderr)
@@ -269,12 +289,12 @@ func TestPlanCommand_S1_FullPipeline_DiffFileToChangesetStdout(t *testing.T) {
 		t.Errorf("want the epic first, got %+v", cs.Ops[0])
 	}
 
-	// The one-closed beads variant: task-existing/task-existing2 are open
-	// (retargeted in place — spexmachina-swvx.16 retired the close-and-recreate
-	// step) and task-removed is closed, i.e. absent from the task-state
-	// artifact's three-state model, which mints a cleanup create rather than
-	// a close (spec/plan/test_classification.md S4) — so this fixture
-	// produces no close op at all.
+	// The one-unlisted task-state variant: task-existing/task-existing2 are
+	// open (retargeted in place — spexmachina-swvx.16 retired the
+	// close-and-recreate step) and task-removed is absent from the artifact,
+	// which mints a cleanup create rather than a close
+	// (spec/plan/test_classification.md S4) — so this fixture produces no
+	// close op at all.
 	lastCreate, firstRetarget := -1, -1
 	for i, op := range cs.Ops {
 		if op.Type == plan.OpCreate {
@@ -285,7 +305,7 @@ func TestPlanCommand_S1_FullPipeline_DiffFileToChangesetStdout(t *testing.T) {
 		}
 	}
 	if firstRetarget == -1 {
-		t.Fatal("want at least one retarget op (the one-closed beads variant retargets the open existing/existing2 pairings)")
+		t.Fatal("want at least one retarget op (the one-unlisted task-state variant retargets the open existing/existing2 pairings)")
 	}
 	if lastCreate > firstRetarget {
 		t.Errorf("want every create before every retarget, got ops: %+v", cs.Ops)
@@ -303,7 +323,7 @@ func TestPlanCommand_S2_DiffFromStdinAndDashFlag(t *testing.T) {
 
 	want, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("file form: %v\n%s", err, stderr)
@@ -311,7 +331,7 @@ func TestPlanCommand_S2_DiffFromStdinAndDashFlag(t *testing.T) {
 
 	stdinOut, stderr, err := runPlan(t, string(diffData),
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		"--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("stdin form: %v\n%s", err, stderr)
@@ -322,7 +342,7 @@ func TestPlanCommand_S2_DiffFromStdinAndDashFlag(t *testing.T) {
 
 	dashOut, stderr, err := runPlan(t, string(diffData),
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", "-", "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		"--diff", "-", "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("--diff - form: %v\n%s", err, stderr)
@@ -376,8 +396,9 @@ func TestPlanCommand_S3_PipelineComposition_DiffIntoPlan(t *testing.T) {
 		`{"event":"registered","eid":"cafe0000:pipeline-prop","proposal":"pipeline-prop","git_head":"cafe0000"}`,
 	})
 
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 	stdout, stderr, err := runPlan(t, diffOut,
-		"--proposal", "pipeline-prop", "--git-head", "deadbeefcafe", "--spec-dir", dir,
+		"--proposal", "pipeline-prop", "--git-head", "deadbeefcafe", "--tasks", tasksPath, "--spec-dir", dir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\nstderr: %s\ndiff output: %s", err, stderr, diffOut)
@@ -399,9 +420,10 @@ func TestPlanCommand_S4_EmptyDiff_SynthesizesEpicWhenUnregisteredInFold(t *testi
 		`{"event":"registered","eid":"cafe:prop-a","proposal":"prop-a","git_head":"cafe0000"}`,
 	})
 	diffPath := writePlanDiff(t, t.TempDir(), "empty.json", nil, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, stderr, err := runPlan(t, "",
-		"--proposal", "prop-a", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "prop-a", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -418,9 +440,10 @@ func TestPlanCommand_S4_EmptyDiff_NoOpsWhenEpicAlreadyPaired(t *testing.T) {
 		`{"event":"task_created","proposal":"prop-b","task_id":"existing-epic"}`,
 	})
 	diffPath := writePlanDiff(t, t.TempDir(), "empty.json", nil, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, stderr, err := runPlan(t, "",
-		"--proposal", "prop-b", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "prop-b", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -443,8 +466,9 @@ func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
 		{Type: "surviving_name", Message: "removed node's name is claimed by a surviving node", Path: "fedcba987654", Related: []string{"fedcba987654"}},
 	})
 
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 	stdout, stderr, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error when the diff carries errors")
@@ -463,92 +487,127 @@ func TestPlanCommand_S5_DiffErrors_RefusesToProceed(t *testing.T) {
 	}
 }
 
-// --- S6: --beads drives the status split (retarget vs. plain create) ---
+// --- S6: --tasks drives both decisions ---
 
-func TestPlanCommand_S6_BeadsFlagDrivesStatusSplit(t *testing.T) {
+// TestPlanCommand_S6_TasksDriveBothDecisions runs the fixture's one diff
+// (existing/existing2 modified, removed removed) through three task-state
+// files that differ in nothing else: one-unlisted (existing's task absent —
+// modified with no live work; removed's task absent too), all-open (every
+// pairing open) and empty ("tasks": []). The empty run must match the
+// one-unlisted run's treatment extended to every pairing
+// (spec/plan/test_plan_command.md S6).
+func TestPlanCommand_S6_TasksDriveBothDecisions(t *testing.T) {
 	f := setupPlanFixture(t)
+	dir := t.TempDir()
 
-	stdout, stderr, err := runPlan(t, "",
-		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
-	)
-	if err != nil {
-		t.Fatalf("with beads: %v\n%s", err, stderr)
+	// One modified node's task (existing) and the removed node's task
+	// (removed) are unlisted; the other modified node's task (existing2)
+	// stays open, so the one-unlisted and all-open runs actually differ.
+	tasksOneUnlisted := writePlanTasks(t, dir, "one-unlisted.json", map[string]string{
+		"task-existing2": "open",
+	})
+	tasksAllOpen := writePlanTasks(t, dir, "all-open.json", map[string]string{
+		"task-existing": "open", "task-existing2": "open", "task-removed": "open",
+	})
+	tasksEmpty := writePlanTasks(t, dir, "empty.json", map[string]string{})
+
+	run := func(tasksPath string) plan.Changeset {
+		t.Helper()
+		stdout, stderr, err := runPlan(t, "",
+			"--proposal", f.proposal, "--git-head", f.gitHead,
+			"--diff", f.diffPath, "--tasks", tasksPath, "--spec-dir", f.specDir,
+		)
+		if err != nil {
+			t.Fatalf("plan --tasks %s: %v\n%s", tasksPath, err, stderr)
+		}
+		return parsePlanChangeset(t, stdout)
 	}
-	cs := parsePlanChangeset(t, stdout)
 
+	// opsFor collects every op naming id, either as SpecNodeID (create,
+	// retarget) or as a close op's Target.TaskID — a close carries no
+	// SpecNodeID, only the task ref it closes (arch_changeset_builder.md,
+	// "Close ops use Target and Reason alone").
+	opsFor := func(cs plan.Changeset, id, taskID string) []plan.Op {
+		var out []plan.Op
+		for _, op := range cs.Ops {
+			if op.SpecNodeID == id {
+				out = append(out, op)
+			}
+			if op.Type == plan.OpClose && op.Target != nil && op.Target.TaskID == taskID {
+				out = append(out, op)
+			}
+		}
+		return out
+	}
+	hasType := func(ops []plan.Op, kind string) bool {
+		for _, op := range ops {
+			if op.Type == kind {
+				return true
+			}
+		}
+		return false
+	}
+
+	// one-unlisted: existing (modified, unlisted task) -> one plain create,
+	// no close; removed (removed, unlisted task) -> cleanup create, no
+	// close; existing2 (modified, open task) -> retarget.
+	unlisted := run(tasksOneUnlisted)
+	existingOps := opsFor(unlisted, f.existingID, "task-existing")
+	if !hasType(existingOps, plan.OpCreate) || hasType(existingOps, plan.OpClose) || hasType(existingOps, plan.OpRetarget) {
+		t.Errorf("one-unlisted: want a plain create and nothing else for existing, got %+v", existingOps)
+	}
+	removedOps := opsFor(unlisted, f.removedID, "task-removed")
 	var cleanupOp *plan.Op
-	for i := range cs.Ops {
-		if cs.Ops[i].SpecNodeID == f.removedID && cs.Ops[i].SpecNodeKind == plan.KindCleanup {
-			cleanupOp = &cs.Ops[i]
+	for i := range removedOps {
+		if removedOps[i].SpecNodeKind == plan.KindCleanup {
+			cleanupOp = &removedOps[i]
 		}
 	}
-	if cleanupOp == nil {
-		t.Fatalf("want a cleanup create for the removed node, got ops: %+v", cs.Ops)
-	}
-	if cleanupOp.Title != "Code cleanup: alpha/Removed" {
+	if cleanupOp == nil || hasType(removedOps, plan.OpClose) {
+		t.Errorf("one-unlisted: want a cleanup create and no close for removed, got %+v", removedOps)
+	} else if cleanupOp.Title != "Code cleanup: alpha/Removed" {
 		t.Errorf("cleanup title: got %q", cleanupOp.Title)
 	}
-	for _, id := range []string{f.existingID, f.existing2ID} {
-		found := false
-		for _, op := range cs.Ops {
-			if op.SpecNodeID == id && op.Type == plan.OpRetarget {
-				found = true
-			}
+	if !hasType(opsFor(unlisted, f.existing2ID, "task-existing2"), plan.OpRetarget) {
+		t.Errorf("one-unlisted: want a retarget for the still-open existing2 pairing, got %+v", opsFor(unlisted, f.existing2ID, "task-existing2"))
+	}
+
+	// all-open: both modified nodes retarget, the removed node closes, and
+	// no cleanup is minted.
+	allOpen := run(tasksAllOpen)
+	for _, tc := range []struct{ id, taskID string }{{f.existingID, "task-existing"}, {f.existing2ID, "task-existing2"}} {
+		if !hasType(opsFor(allOpen, tc.id, tc.taskID), plan.OpRetarget) {
+			t.Errorf("all-open: want a retarget for %s, got %+v", tc.id, opsFor(allOpen, tc.id, tc.taskID))
 		}
-		if !found {
-			t.Errorf("want a retarget op for open pairing %s", id)
+	}
+	removedAllOpen := opsFor(allOpen, f.removedID, "task-removed")
+	if !hasType(removedAllOpen, plan.OpClose) {
+		t.Errorf("all-open: want a close for removed, got %+v", removedAllOpen)
+	}
+	for _, op := range removedAllOpen {
+		if op.SpecNodeKind == plan.KindCleanup {
+			t.Errorf("all-open: want no cleanup create for removed, got %+v", op)
 		}
 	}
 
-	stdout2, stderr2, err := runPlan(t, "",
-		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--spec-dir", f.specDir,
-	)
-	if err != nil {
-		t.Fatalf("without beads: %v\n%s", err, stderr2)
-	}
-	cs2 := parsePlanChangeset(t, stdout2)
-
-	// Without --beads, every pairing's live status is equally unjoined —
-	// including the removed node's — so all three now read as "absent from
-	// the task-state artifact", the same three-state model --beads and
-	// --tasks alike feed (spec/plan/arch_action_classifier.md's
-	// introduction: absence means the task has no live work). That mints
-	// the removed node's cleanup create exactly as the one-closed variant
-	// above does, retargets nothing (no pairing is open), and closes
-	// nothing (spexmachina-swvx.16 retired the close-and-recreate step: an
-	// absent task's node gets one plain create, never a close paired with
-	// one — spec/plan/test_classification.md S1).
-	var cleanupOp2 *plan.Op
-	for i := range cs2.Ops {
-		if cs2.Ops[i].SpecNodeID == f.removedID && cs2.Ops[i].SpecNodeKind == plan.KindCleanup {
-			cleanupOp2 = &cs2.Ops[i]
+	// empty: every tracked node reads as finished — the one-unlisted run's
+	// treatment of existing/removed, now extended to existing2 too.
+	empty := run(tasksEmpty)
+	for _, tc := range []struct{ id, taskID string }{{f.existingID, "task-existing"}, {f.existing2ID, "task-existing2"}} {
+		ops := opsFor(empty, tc.id, tc.taskID)
+		if !hasType(ops, plan.OpCreate) || hasType(ops, plan.OpClose) || hasType(ops, plan.OpRetarget) {
+			t.Errorf("empty: want a plain create and nothing else for %s, got %+v", tc.id, ops)
 		}
 	}
-	if cleanupOp2 == nil {
-		t.Fatalf("want a cleanup create for the removed node without --beads too, got ops: %+v", cs2.Ops)
-	}
-	for _, op := range cs2.Ops {
-		if op.Type == plan.OpRetarget {
-			t.Errorf("want no retarget without --beads (no pairing is open), got %+v", op)
-		}
-		if op.Type == plan.OpClose {
-			t.Errorf("want no close op without --beads (an absent task's node gets a plain create, never a close), got %+v", op)
+	removedEmpty := opsFor(empty, f.removedID, "task-removed")
+	hasCleanup := false
+	for _, op := range removedEmpty {
+		if op.SpecNodeKind == plan.KindCleanup {
+			hasCleanup = true
 		}
 	}
-	wantCreates := map[string]bool{f.existingID: false, f.existing2ID: false}
-	for _, op := range cs2.Ops {
-		if op.Type == plan.OpCreate && op.SpecNodeKind == plan.KindComponent {
-			if _, ok := wantCreates[op.SpecNodeID]; ok {
-				wantCreates[op.SpecNodeID] = true
-			}
-		}
-	}
-	for id, found := range wantCreates {
-		if !found {
-			t.Errorf("want a plain create for %s without --beads", id)
-		}
+	if !hasCleanup || hasType(removedEmpty, plan.OpClose) {
+		t.Errorf("empty: want a cleanup create and no close for removed, got %+v", removedEmpty)
 	}
 }
 
@@ -560,7 +619,7 @@ func TestPlanCommand_S7_ClaimedTaskRefusesRun(t *testing.T) {
 
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneInProgress, "--spec-dir", f.specDir,
 		"--out", outPath,
 	)
 	if err == nil {
@@ -581,6 +640,36 @@ func TestPlanCommand_S7_ClaimedTaskRefusesRun(t *testing.T) {
 	}
 }
 
+// S7's second arm (test_plan_command.md:60): the claimed task's node is
+// removed rather than modified — cancelling claimed work is refused
+// exactly as moving it is.
+func TestPlanCommand_S7_ClaimedTaskRefusesRun_RemovedNode(t *testing.T) {
+	f := setupPlanFixture(t)
+	outPath := filepath.Join(t.TempDir(), "changeset.json")
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead,
+		"--diff", f.diffPath, "--tasks", f.tasksRemovedInProgress, "--spec-dir", f.specDir,
+		"--out", outPath,
+	)
+	if err == nil {
+		t.Fatal("want error when a claimed task's node was removed")
+	}
+	if code := exitCodeOf(err); code != 2 {
+		t.Errorf("want exit 2, got %d (%v)", code, err)
+	}
+	if stdout != "" {
+		t.Errorf("want empty stdout, got %q", stdout)
+	}
+	msg := err.Error() + stderr
+	if !strings.Contains(msg, "task-removed") {
+		t.Errorf("want the error to name the removed node's claimed task, got %q", msg)
+	}
+	if _, statErr := os.Stat(outPath); statErr == nil {
+		t.Errorf("want no --out file written on refusal")
+	}
+}
+
 // --- S8: --absorb marks a node out of the op stream ---
 
 func TestPlanCommand_S8_AbsorbMarksNodeOutOfStream(t *testing.T) {
@@ -591,7 +680,7 @@ func TestPlanCommand_S8_AbsorbMarksNodeOutOfStream(t *testing.T) {
 
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", absorbPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--absorb", absorbPath, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -628,7 +717,7 @@ func TestPlanCommand_S8_AbsorbInvalidMarks_Exit2(t *testing.T) {
 			})
 			stdout, _, err := runPlan(t, "",
 				"--proposal", f.proposal, "--git-head", f.gitHead,
-				"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", absorbPath, "--spec-dir", f.specDir,
+				"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--absorb", absorbPath, "--spec-dir", f.specDir,
 			)
 			if err == nil {
 				t.Fatalf("want error marking %s", tc.name)
@@ -655,7 +744,7 @@ func TestPlanCommand_S8_AbsorbBypassesClaimedTaskRefusal(t *testing.T) {
 
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--absorb", absorbPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneInProgress, "--absorb", absorbPath, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("with absorb marks on both in_progress nodes: want exit 0, got %v\n%s", err, stderr)
@@ -667,7 +756,7 @@ func TestPlanCommand_S8_AbsorbBypassesClaimedTaskRefusal(t *testing.T) {
 
 	_, _, err2 := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneInProgress, "--spec-dir", f.specDir,
 	)
 	if err2 == nil {
 		t.Fatal("want the same fixture, unmarked, to refuse — proving the mark is what makes the difference")
@@ -686,9 +775,14 @@ func TestPlanCommand_S9_MissingRequiredFlags(t *testing.T) {
 		args     []string
 		wantFlag string
 	}{
-		{"missing proposal", []string{"--git-head", f.gitHead, "--diff", f.diffPath, "--spec-dir", f.specDir}, "proposal"},
-		{"missing git-head", []string{"--proposal", f.proposal, "--diff", f.diffPath, "--spec-dir", f.specDir}, "git-head"},
-		{"malformed git-head", []string{"--proposal", f.proposal, "--git-head", "not-a-sha", "--diff", f.diffPath, "--spec-dir", f.specDir}, "git-head"},
+		{"missing proposal", []string{"--git-head", f.gitHead, "--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--spec-dir", f.specDir}, "proposal"},
+		{"missing git-head", []string{"--proposal", f.proposal, "--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--spec-dir", f.specDir}, "git-head"},
+		{"malformed git-head", []string{"--proposal", f.proposal, "--git-head", "not-a-sha", "--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--spec-dir", f.specDir}, "git-head"},
+		// The --tasks arm is what pins the flag as required: a command that
+		// defaulted a missing artifact to "nothing in flight" would pass
+		// every other scenario and re-create in-flight work in production
+		// (spec/plan/test_plan_command.md, S9).
+		{"missing tasks", []string{"--proposal", f.proposal, "--git-head", f.gitHead, "--diff", f.diffPath, "--spec-dir", f.specDir}, "tasks"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -715,7 +809,7 @@ func TestPlanCommand_S10_OutWritesAtomically(t *testing.T) {
 
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--out", outPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--out", outPath, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -730,7 +824,7 @@ func TestPlanCommand_S10_OutWritesAtomically(t *testing.T) {
 
 	stdoutForm, _, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("stdout form: %v", err)
@@ -752,7 +846,7 @@ func TestPlanCommand_S10_OutWritesAtomically(t *testing.T) {
 	prior := string(data)
 	_, _, err2 := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneInProgress, "--out", outPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneInProgress, "--out", outPath, "--spec-dir", f.specDir,
 	)
 	if err2 == nil {
 		t.Fatal("want the claimed-task fixture to refuse")
@@ -774,7 +868,7 @@ func TestPlanCommand_S11_DeterministicAcrossRuns(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		stdout, stderr, err := runPlan(t, "",
 			"--proposal", f.proposal, "--git-head", f.gitHead,
-			"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir,
+			"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir,
 		)
 		if err != nil {
 			t.Fatalf("run %d: %v\n%s", i, err, stderr)
@@ -808,7 +902,7 @@ func TestPlanCommand_S12_MalformedJournalLine_BrokenProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, err := runPlan(t, "",
-		"--proposal", f.proposal, "--git-head", f.gitHead, "--diff", f.diffPath, "--spec-dir", f.specDir,
+		"--proposal", f.proposal, "--git-head", f.gitHead, "--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--spec-dir", f.specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for a malformed journal line")
@@ -846,9 +940,10 @@ func TestPlanCommand_S12_UnresolvableDep_Exit2(t *testing.T) {
 	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", []diffChange{
 		{Path: aID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-a"},
 	}, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	_, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for an unresolvable dep")
@@ -861,37 +956,37 @@ func TestPlanCommand_S12_UnresolvableDep_Exit2(t *testing.T) {
 	}
 }
 
-// --- E1: --beads names a file that does not exist ---
+// --- E1: --tasks names a file that does not exist ---
 
-func TestPlanCommand_E1_BeadsFileMissing(t *testing.T) {
+func TestPlanCommand_E1_TasksFileMissing(t *testing.T) {
 	f := setupPlanFixture(t)
 	stdout, _, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", filepath.Join(t.TempDir(), "does-not-exist.json"), "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", filepath.Join(t.TempDir(), "does-not-exist.json"), "--spec-dir", f.specDir,
 	)
 	if err == nil {
-		t.Fatal("want error for a missing --beads file")
+		t.Fatal("want error for a missing --tasks file")
 	}
 	if code := exitCodeOf(err); code != 1 {
 		t.Errorf("want exit 1, got %d (%v)", code, err)
 	}
-	if !strings.Contains(err.Error(), "plan: read beads:") {
-		t.Errorf("want error prefixed 'plan: read beads:', got %v", err)
+	if !strings.Contains(err.Error(), "plan: read tasks:") {
+		t.Errorf("want error prefixed 'plan: read tasks:', got %v", err)
 	}
 	if stdout != "" {
 		t.Errorf("want empty stdout, got %q", stdout)
 	}
 }
 
-// --- E2: Bead file parses but names no bead the fold knows ---
+// --- E2: The task-state file is valid but names no task the fold knows ---
 
-func TestPlanCommand_E2_BeadsFileNamesUnknownBead_MatchesOmitted(t *testing.T) {
+func TestPlanCommand_E2_TasksFileNamesUnknownTask_MatchesEmpty(t *testing.T) {
 	f := setupPlanFixture(t)
-	beadsPath := writePlanBeads(t, t.TempDir(), "beads.json", map[string]string{"task-unknown": "open"})
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{"task-unknown": "open"})
 
 	stdout, stderr, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", beadsPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", tasksPath, "--spec-dir", f.specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -899,34 +994,38 @@ func TestPlanCommand_E2_BeadsFileNamesUnknownBead_MatchesOmitted(t *testing.T) {
 
 	stdout2, _, err2 := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksEmpty, "--spec-dir", f.specDir,
 	)
 	if err2 != nil {
-		t.Fatalf("plan (no beads): %v", err2)
+		t.Fatalf("plan (empty tasks): %v", err2)
 	}
 	if stdout != stdout2 {
-		t.Errorf("want output identical to --beads omitted\nwith:    %s\nwithout: %s", stdout, stdout2)
+		t.Errorf("want output identical to the empty task-state variant\nwith unknown task: %s\nempty:             %s", stdout, stdout2)
 	}
 }
 
-func TestPlanCommand_E2_BeadWithNoID_Exit1(t *testing.T) {
+// A file failing the task-state schema — here, a closed status, which the
+// artifact's two-value enum (open, in_progress) forbids — exits 1 naming the
+// violated constraint; plan never adapts a foreign shape
+// (spec/plan/test_plan_command.md, E2).
+func TestPlanCommand_E2_TasksFileFailsSchema_Exit1(t *testing.T) {
 	f := setupPlanFixture(t)
-	path := filepath.Join(t.TempDir(), "beads.json")
-	if err := os.WriteFile(path, []byte(`{"issues":[{"status":"open"}]}`), 0644); err != nil {
+	path := filepath.Join(t.TempDir(), "tasks.json")
+	if err := os.WriteFile(path, []byte(`{"version":1,"tasks":[{"task_id":"task-existing","status":"closed"}]}`), 0644); err != nil {
 		t.Fatal(err)
 	}
 	_, _, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", path, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", path, "--spec-dir", f.specDir,
 	)
 	if err == nil {
-		t.Fatal("want error for a bead with no id")
+		t.Fatal("want error for a task-state file with a closed status")
 	}
 	if code := exitCodeOf(err); code != 1 {
 		t.Errorf("want exit 1, got %d (%v)", code, err)
 	}
-	if !strings.Contains(err.Error(), "index 0") {
-		t.Errorf("want error naming the offending index, got %v", err)
+	if !strings.Contains(err.Error(), "plan: read tasks:") {
+		t.Errorf("want error prefixed 'plan: read tasks:', got %v", err)
 	}
 }
 
@@ -940,7 +1039,7 @@ func TestPlanCommand_E3_MalformedAbsorbJSON_Exit1(t *testing.T) {
 	}
 	_, _, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--absorb", path, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--absorb", path, "--spec-dir", f.specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for malformed absorb JSON")
@@ -960,7 +1059,7 @@ func TestPlanCommand_E3_AbsorbEntryNotHex_Exit2(t *testing.T) {
 	})
 	_, _, err := runPlan(t, "",
 		"--proposal", f.proposal, "--git-head", f.gitHead,
-		"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--absorb", path, "--spec-dir", f.specDir,
+		"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--absorb", path, "--spec-dir", f.specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for a non-hex absorb entry")
@@ -989,7 +1088,7 @@ func TestPlanCommand_E4_ConcurrentInvocationsSafe(t *testing.T) {
 			defer wg.Done()
 			cmd := exec.Command(binPath, "plan",
 				"--proposal", f.proposal, "--git-head", f.gitHead,
-				"--diff", f.diffPath, "--beads", f.beadsOneClosed, "--spec-dir", f.specDir)
+				"--diff", f.diffPath, "--tasks", f.tasksOneUnlisted, "--spec-dir", f.specDir)
 			out, err := cmd.Output()
 			outs[i] = string(out)
 			errs[i] = err
@@ -1069,11 +1168,11 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 		`{"event":"registered","eid":"cafe:large-prop","proposal":"large-prop","git_head":"cafe0000"}`,
 	})
 
-	beadStatus := make(map[string]string, 300)
+	taskStatus := make(map[string]string, 300)
 	for i := 0; i < 300; i++ {
-		beadStatus[fmt.Sprintf("task-unrelated-%d", i)] = "open"
+		taskStatus[fmt.Sprintf("task-unrelated-%d", i)] = "open"
 	}
-	beadsPath := writePlanBeads(t, dir, "beads.json", beadStatus)
+	tasksPath := writePlanTasks(t, dir, "tasks.json", taskStatus)
 	diffPath := writePlanDiff(t, dir, "diff.json", changes, nil)
 
 	var (
@@ -1082,7 +1181,7 @@ func TestPlanCommand_E5_LargeDiffPerformance(t *testing.T) {
 	)
 	perf.Within(t, 5*time.Second, func() {
 		stdout, stderr, err = runPlan(t, "",
-			"--proposal", "large-prop", "--git-head", "deadbeefcafe", "--diff", diffPath, "--beads", beadsPath, "--spec-dir", specDir,
+			"--proposal", "large-prop", "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 		)
 	})
 	if err != nil {
@@ -1103,9 +1202,10 @@ func TestPlanCommand_DiffFileMalformedJSON_Exit1(t *testing.T) {
 	if err := os.WriteFile(diffPath, []byte(`[{"path": "foo"`), 0644); err != nil {
 		t.Fatal(err)
 	}
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for malformed diff JSON")
@@ -1127,9 +1227,10 @@ func TestPlanCommand_DiffFileEmpty_Exit1(t *testing.T) {
 	if err := os.WriteFile(diffPath, nil, 0644); err != nil {
 		t.Fatal(err)
 	}
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for a zero-length diff file")
@@ -1149,9 +1250,10 @@ func TestPlanCommand_S13_BareArrayDiff_Exit1(t *testing.T) {
 		t.Fatal(err)
 	}
 	outPath := filepath.Join(t.TempDir(), "changeset.json")
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 		"--out", outPath,
 	)
 	if err == nil {
@@ -1170,9 +1272,10 @@ func TestPlanCommand_S13_BareArrayDiff_Exit1(t *testing.T) {
 
 func TestPlanCommand_S13_ZeroBytesOnStdin_Exit1(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for zero bytes piped on stdin")
@@ -1192,9 +1295,10 @@ func TestPlanCommand_S13_ZeroBytesOnStdin_Exit1(t *testing.T) {
 func TestPlanCommand_S12_MissingDiffFile_Exit1(t *testing.T) {
 	specDir := setupMinimalPlanSpec(t)
 	diffPath := filepath.Join(t.TempDir(), "does-not-exist.json")
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeef", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for a nonexistent --diff path")
@@ -1224,9 +1328,10 @@ func TestPlanCommand_NotAProject_ExitNotAProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	diffPath := writePlanDiff(t, dir, "diff.json", nil, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	_, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error when no project state exists")
@@ -1252,9 +1357,10 @@ func TestPlanCommand_BrokenProject_ExitNotAProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	diffPath := writePlanDiff(t, t.TempDir(), "diff.json", nil, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	_, _, err := runPlan(t, "",
-		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", "p", "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err == nil {
 		t.Fatal("want error for a corrupted snapshot")
@@ -1308,9 +1414,10 @@ func TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate(t *testing.T) {
 	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
 		{Path: ghostID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h2"},
 	}, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, stderr, err := runPlan(t, "",
-		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -1392,9 +1499,10 @@ func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
 	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
 		{Path: newID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-new"},
 	}, nil)
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
 
 	stdout, stderr, err := runPlan(t, "",
-		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+		"--proposal", proposal, "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
 	)
 	if err != nil {
 		t.Fatalf("plan: %v\n%s", err, stderr)
@@ -1431,5 +1539,67 @@ func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
 		}
 	default:
 		t.Errorf("want a bead or op parent ref, got %+v", newOp.Parent)
+	}
+}
+
+// --- S12: An empty plan-relevant list warns rather than refuses ---
+
+func TestPlanCommand_S12_EmptyPlanRelevantList_WarnsAndProceeds(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	aID := schema.IdentityHash("alpha", "component", "A")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+aID+`", "name": "A", "content": "arch_a.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
+	// A resolved profile whose plan_relevant list is empty: legal per
+	// schema.Profile.Validate — no minimum-length rule applies — and the
+	// one shape the node-type gate reads as "nothing is task-producing"
+	// (spec/plan/arch_action_classifier.md, "Node-Type Gate").
+	writeTestFile(t, specDir, "profile.json", `{
+		"node_types": [],
+		"coverage_chains": [],
+		"plan_relevant": [],
+		"impact_levels": {},
+		"absorbable": {}
+	}`)
+	seedPlanSnapshot(t, specDir)
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"cafe:p-empty-plan-relevant","proposal":"p-empty-plan-relevant","git_head":"cafe0000"}`,
+	})
+
+	tasksPath := writePlanTasks(t, t.TempDir(), "tasks.json", map[string]string{})
+	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
+		{Path: aID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-a"},
+	}, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "p-empty-plan-relevant", "--git-head", "deadbeefcafe", "--diff", diffPath, "--tasks", tasksPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("want exit 0 for an empty plan-relevant list, got %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "no node type") {
+		t.Errorf("want stderr to warn that no node type produces tasks, got %q", stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	// Assert only what the empty plan-relevant list actually gates: no
+	// create op for the component itself. Whether the epic (or a cleanup,
+	// in a fixture that had one) also survives is left to
+	// drifts/drift-spexmachina-swvx.21-empty-plan-relevant-scope.json —
+	// neither leaf settles it, so the test does not assume an answer.
+	for _, op := range cs.Ops {
+		if op.SpecNodeID == aID {
+			t.Errorf("want no op for the gated-out component, got %+v", op)
+		}
 	}
 }

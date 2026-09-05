@@ -80,30 +80,30 @@ nodes marked cosmetic, ready for an adapter.
 |---|---|---|
 | `--proposal <stem>` | — | Proposal filename stem, e.g. `2026-08-13-plan-module`. Required |
 | `--git-head <sha>` | — | Caller-supplied git HEAD SHA, 7–40 hex characters. Required |
+| `--tasks <path>` | — | Version-1 task-state artifact (`schema/task-state.schema.json`) the adapter's export half derived from the tracker, listing in-flight tasks only. Required |
 | `--diff <path>` | stdin | Diff JSON to read; `-` selects stdin explicitly |
-| `--beads <path>` | — | Tracker list JSON (e.g. `br list --json` output), supplying live task status |
 | `--absorb <path>` | — | Git-committed JSON list of `{node, reason}` marks; a marked node's change yields no op and rides in `absorbed` instead |
 | `--out <path>` | stdout | Changeset output path |
 
-Without `--beads` no pairing is known-open and the cleanup gate defaults
-closed: nothing is retargeted, and no cleanup task is minted for a removed
-node.
+`--tasks` is required: a run without a task-state artifact is exit 1, not
+a run with an empty one, since an absent artifact would read every task as
+finished and re-create in-flight work.
 
 Prefer a short `--git-head`: a node-bearing create's idempotency label is
 `spex:<git-head>:op-NN`, and `br` rejects a label over 50 characters. (The
 proposal epic's label is fixed earlier, at `spex register`.)
 
 ```sh
-br list --all --json > beads.json
+scripts/export-br.sh tasks.json
 spex diff --json | spex plan --proposal 2026-08-13-plan-module \
                              --git-head "$(git rev-parse --short HEAD)" \
-                             --beads beads.json --out changeset.json
+                             --tasks tasks.json --out changeset.json
 ```
 
 | Exit | Meaning |
 |---|---|
 | 0 | changeset written |
-| 1 | input error: bad flags, malformed JSON, bad SHA, unreadable `--beads` or journal, or a diff that still carries completeness errors |
+| 1 | input error: bad or missing flags (`--tasks` included), malformed JSON, bad SHA, unreadable `--tasks` or journal, or a diff that still carries completeness errors |
 | 2 | contract refusal: a claimed (`in_progress`) task's node changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent |
 
 ### `spex ingest`

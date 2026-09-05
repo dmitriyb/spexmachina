@@ -8,9 +8,9 @@ import (
 
 // TODO(bead:spexmachina-swvx.7): BeadReader (Bead, ReadBeads, ReadBeadsBytes
 // below) is the pre-task-lifecycle --beads input spec/plan/flow_plan.md step
-// 2 replaces with TaskReader/--tasks. Remove this file and its callers once
-// spexmachina-swvx.14 lands TaskReader and cmd/spex/plan.go's --beads flag
-// retires.
+// 2 replaces with TaskReader/--tasks. TaskReader has landed and
+// cmd/spex/plan.go's --beads flag has retired; this file has zero callers
+// now. Remove it.
 
 // Bead is BeadReader's per-entry output: the tracker's own bead id and its
 // live status, exactly as the input reported it. Nothing else survives the
