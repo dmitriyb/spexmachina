@@ -1433,3 +1433,59 @@ func TestPlanCommand_S14_DeadEpicTombstoneNeverParents(t *testing.T) {
 		t.Errorf("want a bead or op parent ref, got %+v", newOp.Parent)
 	}
 }
+
+// --- S12: An empty plan-relevant list warns rather than refuses ---
+
+func TestPlanCommand_S12_EmptyPlanRelevantList_WarnsAndProceeds(t *testing.T) {
+	dir := t.TempDir()
+	specDir := filepath.Join(dir, "spec")
+	modID := schema.IdentityHash("module", "alpha")
+	aID := schema.IdentityHash("alpha", "component", "A")
+
+	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, specDir, "project.json", `{"name":"m","modules":[{"id":"`+modID+`","name":"alpha","path":"alpha"}]}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", `{
+		"name": "alpha",
+		"components": [
+			{"id": "`+aID+`", "name": "A", "content": "arch_a.md"}
+		]
+	}`)
+	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_a.md", "# A\n")
+	// A resolved profile whose plan_relevant list is empty: legal per
+	// schema.Profile.Validate — no minimum-length rule applies — and the
+	// one shape the node-type gate reads as "nothing is task-producing"
+	// (spec/plan/arch_action_classifier.md, "Node-Type Gate").
+	writeTestFile(t, specDir, "profile.json", `{
+		"node_types": [],
+		"coverage_chains": [],
+		"plan_relevant": [],
+		"impact_levels": {},
+		"absorbable": {}
+	}`)
+	seedPlanSnapshot(t, specDir)
+	writeTestJournal(t, specDir, []string{
+		`{"event":"registered","eid":"cafe:p-empty-plan-relevant","proposal":"p-empty-plan-relevant","git_head":"cafe0000"}`,
+	})
+
+	diffPath := writePlanDiff(t, dir, "diff.json", []diffChange{
+		{Path: aID, Type: "added", Impact: "arch_impl", Module: "alpha", NodeType: "component", NewHash: "h-a"},
+	}, nil)
+
+	stdout, stderr, err := runPlan(t, "",
+		"--proposal", "p-empty-plan-relevant", "--git-head", "deadbeefcafe", "--diff", diffPath, "--spec-dir", specDir,
+	)
+	if err != nil {
+		t.Fatalf("want exit 0 for an empty plan-relevant list, got %v\nstderr: %s", err, stderr)
+	}
+	if !strings.Contains(stderr, "no node type") {
+		t.Errorf("want stderr to warn that no node type produces tasks, got %q", stderr)
+	}
+	cs := parsePlanChangeset(t, stdout)
+	for _, op := range cs.Ops {
+		if op.Type == plan.OpCreate && op.SpecNodeKind != plan.KindProposalEpic {
+			t.Errorf("want no create op for the gated-out component, got %+v", op)
+		}
+	}
+}

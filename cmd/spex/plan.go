@@ -151,11 +151,12 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, beadsPath, tasksP
 		}
 	}
 
-	// TODO(bead:spexmachina-swvx.21): spec/plan/flow_plan.md's 822b817
-	// correction adds an error path this command does not implement yet: an
-	// empty resolved graph.profileOrDefault().PlanRelevant list is not a
-	// refusal — a warning on stderr that no node type produces tasks and an
-	// adapter run would create none, with the run proceeding, exit 0.
+	// An empty plan-relevant list is not a refusal: it warns and the run
+	// proceeds, exit 0 (spec/plan/arch_plan_command.md, "Exit Codes": "One
+	// condition warns and does not fail").
+	if len(graph.PlanRelevant()) == 0 {
+		fmt.Fprintln(cmd.ErrOrStderr(), "warning: plan: no node type in the resolved profile's plan-relevant list produces tasks; an adapter run would create none")
+	}
 
 	pairings := planPairingsForMatching(fold, beadStatus)
 	matches, unmatched, orphaned := plan.MatchNodes(changes, pairings)

@@ -72,6 +72,15 @@ func (g SpecGraph) profileOrDefault() *schema.Profile {
 	return schema.DefaultProfile()
 }
 
+// PlanRelevant returns the resolved profile's plan-relevant node-type
+// declaration — the list ActionClassifier's node-type gate admits and
+// TopologicalSorter layers by. Exported so PlanCommand can warn, rather
+// than refuse, when the list is empty (spec/plan/arch_plan_command.md,
+// "Exit Codes": "One condition warns and does not fail").
+func (g SpecGraph) PlanRelevant() []string {
+	return g.profileOrDefault().PlanRelevant
+}
+
 func (g SpecGraph) moduleByName(name string) (moduleEntry, bool) {
 	e, ok := g.byName[name]
 	return e, ok
