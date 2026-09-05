@@ -56,7 +56,7 @@ Tell the user which mode was detected and why before proceeding.
 
 ## Node types
 
-| Type | Declared in | Content leaf | Produces a bead |
+| Type | Declared in | Content leaf | Produces a task |
 |------|-------------|--------------|-----------------|
 | project requirement | `project.json` → `requirements` | no | no |
 | module | `project.json` → `modules` | no — it surfaces in a diff as a `meta/<hash>` leaf hashed from `module.json` | no |
@@ -117,7 +117,7 @@ An `api` is one entry point exactly as callers write it: `spex diff`, `GET /v1/s
 
 - Identity is `<module>/api/<name>` — `bin/spex hash-id --type api --module <mod> --name "<name>"`.
 - **No content file.** An api hashes from its JSON fields alone, exactly as a project requirement does. It is still a merkle leaf, so it is a valid link target.
-- **Not bead-producing.** An added, modified or removed api yields zero create/obsolete actions; its impact level is `contract`, and the components behind it carry the work.
+- **Not task-producing.** An added, modified or removed api yields no create, close or retarget action; its impact level is `contract`, and the components behind it carry the work.
 - **`provided_by` is module-local** and referentially checked: every hash in it must be a component declared in *this* `module.json`. A real component id from another module is as wrong as one that exists nowhere —
   `provided_by references non-existent component <id> (provided_by is module-local)`.
   Another module's involvement is already expressed by component `uses` edges.
@@ -174,11 +174,11 @@ cannot be recovered from its hash after removal
 This covers module requirements, components, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
 
 > **Legacy project requirement hashes — never recompute them.**
-> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every bead already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
+> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every task already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
 
 Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
 
-There are no integer IDs in the system. The task journal (`.spex/history.jsonl`) files every change event under the changed node's own identity hash, and keys the event itself by an `eid`: `<git_head>:<op_id>` for an event a mint produced from an op, `refresh:<node>:<before>:<after>` (plus a `#N` suffix on the rare collision) for one produced without an op behind it — a whole-run refresh, or a node absorbed inside a normal run, which are indistinguishable on the wire. A tracker label carries that eid — `spex:<eid>` — but the label is optional insurance an adapter may stamp, not identity: the journal is what every downstream stage reads. The older `spex:<spec_node_id>` labels still on beads predate the eid scheme.
+There are no integer IDs in the system. The task journal (`.spex/history.jsonl`) files every change event under the changed node's own identity hash, and keys the event itself by an `eid`: `<git_head>:<op_id>` for an event a mint produced from an op, `refresh:<node>:<before>:<after>` (plus a `#N` suffix on the rare collision) for one produced without an op behind it — a whole-run refresh, or a node absorbed inside a normal run, which are indistinguishable on the wire. A tracker label carries that eid — `spex:<eid>` — but the label is optional insurance an adapter may stamp, not identity: the journal is what every downstream stage reads. The older `spex:<spec_node_id>` labels still on tasks predate the eid scheme.
 
 ### Declarable names — component and api
 
@@ -412,7 +412,7 @@ Write tests BEFORE implementation content to avoid confirmation bias — test co
   - **Setup**: fixtures, test data, preconditions
   - **Cases**: concrete input → expected output pairs
   - **Edge cases**: boundary conditions, error paths, invalid inputs
-- Group related components into shared test_sections where they have natural testing affinity (components forming a pipeline). A test_section produces its own bead only when `describes` has ≥ 2 entries; a single-component one is bundled into that component's work.
+- Group related components into shared test_sections where they have natural testing affinity (components forming a pipeline). A test_section produces its own task only when `describes` has ≥ 2 entries; a single-component one is bundled into that component's work.
 - **Per-node check**: after writing each `test_*.md`, append the test_section to the log AND run the per-node check on it. The `describes >= 2` ⇔ the-content-actually-spans-multiple-components rule is the highest-value check here.
 
 ### 5. Write architecture and data-flow content leaves
@@ -558,13 +558,14 @@ When modifying an existing spec:
    - *Edges*: update every graph edge the change affects — if a component is removed, drop its id from every `uses`, `describes` and `provided_by` array.
    - *Links*: a `[[<hash>|…]]` pointing at a removed or renamed node no longer resolves and is a `link` error. Find them with `git grep '\[\[<old-hash>' spec/` and repoint or remove each one.
    - *Prose footprint*: a removed or renamed component, api, command, flag or identifier can be named as prose in content leaves of **any** module — pipeline diagrams, narrative, examples — not only the module the proposal names. `git grep` the old name across the whole `spec/` tree. Rewrite every leaf that still presents the removed or renamed thing as current; keep deliberate negative or historical mentions ("there is no `spex hash` command"). Scope the edits to what the grep finds, not to the modules the proposal happened to enumerate.
-7. **Module-level supersession: delete old, create new.** When a proposal restructures modules — splitting one, merging several, or reshaping a module's components significantly — delete the old module entry from `project.json`, delete the old module directory and all its content files, and create the new module(s) as entirely fresh structures. Do not keep the old directory for the new module, do not reuse IDs, and do not leave component shells pointing forward. Rule 5 handles individual renames; this extends the same intent to whole-module restructuring, so the pipeline sees clean `removed → obsolete + cleanup` signals for the old nodes and `added → create` for the new ones, with no false lineage between old and new component beads. Note that retiring a whole module is the case the removal-time sweep is weakest at: with the module name gone from `project.json`, it may report `unverifiable_module` and leave the prose sweep entirely to you.
+7. **Module-level supersession: delete old, create new.** When a proposal restructures modules — splitting one, merging several, or reshaping a module's components significantly — delete the old module entry from `project.json`, delete the old module directory and all its content files, and create the new module(s) as entirely fresh structures. Do not keep the old directory for the new module, do not reuse IDs, and do not leave component shells pointing forward. Rule 5 handles individual renames; this extends the same intent to whole-module restructuring, so the pipeline sees clean `removed` signals for the old nodes — a `close` where the old node's task is still open, a cleanup `create` where it is finished — and `added → create` for the new ones, with no lineage edge between old and new component tasks: generation history lives in the journal's event chain, never in a dependency. Note that retiring a whole module is the case the removal-time sweep is weakest at: with the module name gone from `project.json`, it may report `unverifiable_module` and leave the prose sweep entirely to you.
 
 ## Handing the spec to the pipeline
 
 `/spec` writes the spec and stops: gates green, edits committed by the user, baseline untouched.
-Everything after that — the per-node mint-vs-absorb assessment, `spex plan`, the adapter,
-`spex ingest`, the label budgets, and the refresh pathway — is `/mint`'s, the one skill that
+Everything after that — the per-node mint-vs-absorb assessment, the adapter's export of the
+task-state artifact, `spex plan --tasks`, the adapter's apply half, `spex ingest`, the label
+budgets, and the refresh pathway — is `/mint`'s, the one skill that
 moves the baseline and the canonical home of that doctrine. Author with it in view:
 
 - The mint runs against the commit carrying these edits — the SHA the user hands
@@ -574,5 +575,10 @@ moves the baseline and the canonical home of that doctrine. Author with it in vi
 - A run that carries sweep-only leaves (a retired name rewritten across modules, say) should
   name them in the step 7 report as absorb candidates, so `/mint`'s assessment starts from the
   author's own knowledge of what changed.
+- `spex plan` reads task status from one bounded input, the task-state artifact the adapter
+  exports before every run (`--tasks tasks.json`, in-flight tasks only). A node whose earlier
+  task is finished is simply absent from it and gets one plain create — no close of the
+  predecessor, no lineage dependency — so a re-described node never owes the author any
+  bookkeeping beyond the leaf edit itself.
 - A claimed (`in_progress`) task's node must not change — mint a module's changes in one run
-  rather than dribbling them across several while beads are in flight.
+  rather than dribbling them across several while tasks are in flight.
