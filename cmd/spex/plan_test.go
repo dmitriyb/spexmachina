@@ -1592,14 +1592,17 @@ func TestPlanCommand_S12_EmptyPlanRelevantList_WarnsAndProceeds(t *testing.T) {
 		t.Errorf("want stderr to warn that no node type produces tasks, got %q", stderr)
 	}
 	cs := parsePlanChangeset(t, stdout)
-	// Assert only what the empty plan-relevant list actually gates: no
-	// create op for the component itself. Whether the epic (or a cleanup,
-	// in a fixture that had one) also survives is left to
-	// drifts/drift-spexmachina-swvx.21-empty-plan-relevant-scope.json —
-	// neither leaf settles it, so the test does not assume an answer.
-	for _, op := range cs.Ops {
-		if op.SpecNodeID == aID {
-			t.Errorf("want no op for the gated-out component, got %+v", op)
-		}
+	// The empty list gates the unmatched component out, and nothing else:
+	// the proposal epic sits outside the plan-relevant order and survives
+	// (spec/plan/arch_plan_command.md, "Exit Codes"), so the changeset
+	// holds exactly the epic create and no op for the component.
+	if len(cs.Ops) != 1 {
+		t.Fatalf("want exactly the proposal epic op, got %d ops: %+v", len(cs.Ops), cs.Ops)
+	}
+	if cs.Ops[0].SpecNodeKind != plan.KindProposalEpic {
+		t.Errorf("want the surviving op to be the proposal epic, got %+v", cs.Ops[0])
+	}
+	if cs.Ops[0].SpecNodeID == aID {
+		t.Errorf("want no op for the gated-out component, got %+v", cs.Ops[0])
 	}
 }

@@ -131,10 +131,10 @@ func runPlanE(cmd *cobra.Command, proposal, gitHead, diffPath, tasksPath, absorb
 
 	// An empty plan-relevant list is not a refusal: it warns and the run
 	// proceeds, exit 0 (spec/plan/arch_plan_command.md, "Exit Codes": "One
-	// condition warns and does not fail"). What survives in the changeset
-	// regardless — the proposal epic, any cleanup create — is left unstated
-	// here: arch_plan_command.md and flow_plan.md disagree on that point
-	// (drifts/drift-spexmachina-swvx.21-empty-plan-relevant-scope.json).
+	// condition warns and does not fail"). The gate drops every unmatched
+	// change; the proposal epic and any cleanup create survive, because
+	// those layers sit outside the plan-relevant order; a create the
+	// matched path still owes is refused by the sorter as an unplaced kind.
 	if len(graph.PlanRelevant()) == 0 {
 		fmt.Fprintln(cmd.ErrOrStderr(), "warning: plan: no node type in the resolved profile's plan-relevant list produces tasks")
 	}
