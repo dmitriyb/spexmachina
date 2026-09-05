@@ -54,11 +54,10 @@ func newTestEventBuilder(t *testing.T, graph SpecGraph, journalLines ...mapping.
 	}
 	batchEIDs := map[string]bool{}
 	state := EventBuilderState{
-		SpecGraph:         graph,
-		Fold:              fold,
-		SameBatchRemovals: map[string]string{},
-		RegisteredByStem:  registeredByStem,
-		HasEID:            func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] },
+		SpecGraph:        graph,
+		Fold:             fold,
+		RegisteredByStem: registeredByStem,
+		HasEID:           func(eid string) bool { return existingEIDs[eid] || batchEIDs[eid] },
 	}
 	return NewEventBuilder(state), batchEIDs
 }
