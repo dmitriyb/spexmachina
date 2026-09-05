@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-driven development. It defines specs as a typed graph (JSON skeleton + markdown content leaves), tracks changes via a merkle tree, computes impact deterministically, and maps spec nodes to beads tasks. The LLM focuses on creative work and calls `spex` for everything mechanical.
+Spex Machina is a standalone CLI (`spex`) that owns the structural half of spec-driven development. It defines specs as a typed graph (JSON skeleton + markdown content leaves), tracks changes via a merkle tree, computes impact deterministically, and maps spec nodes to tasks. The LLM focuses on creative work and calls `spex` for everything mechanical.
 
 ## Module Hierarchy
 
@@ -15,9 +15,9 @@ The pipeline is `spex validate → diff → plan → <adapter> → ingest`.
 | Schema | JSON Schema for project.json + module.json + the journal line format | — |
 | Validator | Spec directory validation (DAG, refs, coverage) | Schema |
 | Merkle | Hash tree, snapshots, diff, impact classification | Schema |
-| Plan | Decide the bead-action changeset in one pass from the merkle diff — match, classify, order, label, resolve, compose | Merkle, Mapping |
+| Plan | Decide the task-action changeset in one pass from the merkle diff — match, classify, order, label, resolve, compose | Merkle, Mapping |
 | Adapters | Contract for external adapters (`scripts/apply-br.sh` is the reference) that apply a changeset and write receipts | Plan |
-| Ingest | Append journal events + save the snapshot from changeset+receipts; `--mode refresh` absorbs no-bead-work drift | Plan, Adapters, Merkle |
+| Ingest | Append journal events + save the snapshot from changeset+receipts; `--mode refresh` absorbs no-task-work drift | Plan, Adapters, Merkle |
 | Mapping | Task journal (`spec/.history.jsonl`) linking spec nodes to tasks (`spex map context`) | Schema |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |
@@ -43,27 +43,27 @@ The pipeline is `spex validate → diff → plan → <adapter> → ingest`.
 
 ## Issue Tracking
 
-This project uses `br` (beads_rust) for issue tracking. Do NOT use markdown TODOs.
+This project uses `br` for issue tracking. Do NOT use markdown TODOs.
 
-Your task's spec context is provided on input, and the spec files are the source of truth — beads do not duplicate spec content. `design`, `acceptance_criteria` and `notes` are absent from bead data entirely; `description` is empty except on a legacy tail of older beads that still carries prose copied from the spec — read the spec, not the copy. To reach *another* bead's context mid-work, `br` is the entrypoint: `br show <id> --json` to inspect the bead and find its `spex:<spec_node_id>` label, then `bin/spex map context <spec_node_id>` for its full spec (`arch_file`, `test_files`, `flow_files`, `module_file`); a bead id works as the key too.
+Your task's spec context is provided on input, and the spec files are the source of truth — tasks do not duplicate spec content. `design`, `acceptance_criteria` and `notes` are absent from task data entirely; `description` is empty except on a legacy tail of older tasks that still carries prose copied from the spec — read the spec, not the copy. To reach *another* task's context mid-work, `br` is the entrypoint: `br show <id> --json` to inspect the task and find its `spex:<spec_node_id>` label, then `bin/spex map context <spec_node_id>` for its full spec (`arch_file`, `test_files`, `flow_files`, `module_file`); a task id works as the key too.
 
-- Cleanup beads (label `spex:cleanup`) resolve through the journal: their `spex:cleanup-<hash>` hash names a removed node whose biography `spex map context` still answers.
+- Cleanup tasks (label `spex:cleanup`) resolve through the journal: their `spex:cleanup-<hash>` hash names a removed node whose biography `spex map context` still answers.
 - `br` reads a local sqlite db rebuilt from `.beads/issues.jsonl`; pass `--no-db` to any `br` command to read JSONL-only (always fresh). `br list` hides rows by default (open-only, `--limit 50`) — use `br ready`, `br show`, or `br list --all --limit 0`.
 
 ## Spec Change Doctrine
 
 - **The spec is the truth; it changes only in the authoring loop** (interactive sessions using `/propose`, `/spec`, `/spec-review`, `/drift` — orchestrated by the user-level `/drift-workflow`). Implementer boxes never write `spec/` — the portitor gate denies it structurally.
-- **An implementer that finds a spec defect files a drift report**, `drifts/drift-<bead-id>.json` (schema: `schema/drift.schema.json`), never a spec edit. Non-blocking reports ride along in the bead's own PR and are triaged after the epic. A blocking report (the bead's own contract is ambiguous) travels as its own PR — the drift file plus the bead's return to `open` in the same commit — and stops the epic via the settle sentinel; the reviewer of that PR validates the drift claim itself. `/drift` (via `/drift-workflow`) consumes all reports.
+- **An implementer that finds a spec defect files a drift report**, `drifts/drift-<task-id>.json` (schema: `schema/drift.schema.json`), never a spec edit. Non-blocking reports ride along in the task's own PR and are triaged after the epic. A blocking report (the task's own contract is ambiguous) travels as its own PR — the drift file plus the task's return to `open` in the same commit — and stops the epic via the settle sentinel; the reviewer of that PR validates the drift claim itself. `/drift` (via `/drift-workflow`) consumes all reports.
 - **The baseline (`spec/.snapshot.json`) moves only deliberately** — a mint when work is born, a refresh when a correction owes none — always in the authoring loop, never automated, never in a box. Every refresh states its reason.
 - **An epic whose drifts/ is non-empty is not closed** until `/drift` has triaged the reports.
 
 ## Organizational Constraints
 
-- **Spec traceability**: All code traces back to bead requirements.
+- **Spec traceability**: All code traces back to spec requirements through tasks.
 - **Self-hosting**: Spex Machina's own spec is managed by Spex Machina.
 
 ## Where to Find Details
 
 - **Authoring skills**: `skills/` — `/propose` (draft a proposal in plan mode), `/spec` (author spec files), `/spec-review` (audit spec internal consistency), `/mint` (move the baseline: per-node mint-vs-absorb assessment, pipeline or refresh), `/drift` (triage implementer drift reports; the sequence through `/spec-review` and `/mint` is the user-level `/drift-workflow`).
 - **Proposals**: `spec/proposals/`
-- **Beads**: `.beads/`
+- **Tasks**: `.beads/`
