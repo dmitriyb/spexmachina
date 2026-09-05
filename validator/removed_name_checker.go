@@ -371,7 +371,7 @@ func removedNameTargets(changes []merkle.ClassifiedChange, declarable []schema.N
 // journalRemovedEvent is the subset of one journal `removed` change event's
 // fields the removal sweep needs: enough to answer "what was this identity
 // hash called, and under which module" for a node the current spec can no
-// longer name. See spec/schema/arch_bead_map_schema.md for the full line
+// longer name. See spec/schema/arch_journal_line_schema.md for the full line
 // shape.
 type journalRemovedEvent struct {
 	Event    string `json:"event"`

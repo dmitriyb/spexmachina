@@ -5,7 +5,7 @@ machine-readable and carries structure and identity; the markdown is
 human-readable and carries prose. The merkle tree hashes both.
 
 The authoritative definitions are the JSON Schemas in `schema/` —
-`project.schema.json`, `module.schema.json`, `bead-map.schema.json` and
+`project.schema.json`, `module.schema.json`, `journal-line.schema.json` and
 `drift.schema.json`. `spex validate` enforces them. This document explains
 what the fields mean and why they are shaped that way.
 
@@ -193,6 +193,6 @@ It moves only when `spex ingest` writes it, and moving it is a deliberate act
 — see the drift and baseline discussion in [`skills.md`](skills.md).
 
 `spec/.history.jsonl` is the task journal: append-only, one JSON object per
-line, schema in `schema/bead-map.schema.json`. Fold it forward for the current
+line, schema in `schema/journal-line.schema.json`. Fold it forward for the current
 node-to-task mapping; read it whole for the biography of a node that has since
 been removed. `spex map` queries it.

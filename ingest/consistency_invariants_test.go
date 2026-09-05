@@ -372,18 +372,10 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 // pass instead of refusing.
 //
 // The kind under test is "api", not the spec leaf's illustrative
-// "endpoint": MappingStore's own write-time schema (schema.BeadMapSchema,
-// its retired predecessor of the journal-line schema this bead's encoder
-// validates against — see journal_encoder.go's getLineSchema comment) has
-// not yet migrated off a hardcoded node_type enum matching exactly the
-// default profile's five built-in kinds (bead spexmachina-swvx.9,
-// sequenced later in this epic). Until that migration lands, no kind
-// outside that fixed five — "endpoint" included — can actually reach disk
-// through MappingStore.Append regardless of what profile.json declares,
-// so "api" (one of the five, and therefore round-trippable today) is
-// substituted to exercise the identical profile-gate transition this
-// scenario is about, with a real on-disk append rather than a stubbed
-// one.
+// "endpoint": "api" is one of the default profile's built-in kinds, so it
+// stays round-trippable through MappingStore.Append regardless of the
+// node_type shape check's own evolution, keeping this scenario's assertion
+// about the profile-gate transition independent of that detail.
 func TestConsistencyInvariants_Invariant5_ProfileChecksNodeType(t *testing.T) {
 	const hexAPI = "ddeeddeeddee"
 	specDir := setupSpecDir(t)

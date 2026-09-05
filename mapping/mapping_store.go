@@ -135,10 +135,10 @@ var (
 )
 
 // getJournalLineSchema compiles the embedded journal-line schema
-// (schema.BeadMapSchema) once and caches it.
+// (schema.JournalLineSchema) once and caches it.
 func getJournalLineSchema() (*jsonschema.Schema, error) {
 	journalLineSchemaOnce.Do(func() {
-		raw, err := schema.BeadMapSchema()
+		raw, err := schema.JournalLineSchema()
 		if err != nil {
 			journalLineSchemaErr = fmt.Errorf("load journal-line schema: %w", err)
 			return
@@ -149,11 +149,11 @@ func getJournalLineSchema() (*jsonschema.Schema, error) {
 			return
 		}
 		c := jsonschema.NewCompiler()
-		if err := c.AddResource("bead-map.schema.json", doc); err != nil {
+		if err := c.AddResource("journal-line.schema.json", doc); err != nil {
 			journalLineSchemaErr = fmt.Errorf("add journal-line schema: %w", err)
 			return
 		}
-		journalLineSchema, journalLineSchemaErr = c.Compile("bead-map.schema.json")
+		journalLineSchema, journalLineSchemaErr = c.Compile("journal-line.schema.json")
 	})
 	return journalLineSchema, journalLineSchemaErr
 }
@@ -380,7 +380,7 @@ func (e *AppendError) Unwrap() error {
 
 // changeEventLine, registeredEventLine, taskReceiptLine and
 // refreshReceiptLine mirror the journal-line shapes in
-// schema/bead-map.schema.json exactly, since additionalProperties is false
+// schema/journal-line.schema.json exactly, since additionalProperties is false
 // on every shape: changeEventLine always serialises its ten required keys
 // (before/after admit null), registeredEventLine carries no node because
 // registration precedes any spec change, and taskReceiptLine omits

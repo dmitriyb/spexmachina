@@ -75,7 +75,7 @@ var (
 )
 
 // getBeadMapSchema compiles the embedded .bead-map.json envelope schema once
-// and caches it. This schema is local to mapping (schema.BeadMapSchema now
+// and caches it. This schema is local to mapping (schema.JournalLineSchema
 // validates one line of the journal, spec/.history.jsonl, not this envelope)
 // and goes away with MappingStore's migration onto the journal
 // (spexmachina-y0wc.19).
