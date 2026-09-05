@@ -811,6 +811,100 @@ func TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries(t *testing.T) {
 	}
 }
 
+// --- JournalLineSchema / TaskStateSchema loading tests (JL1-JL2, TS1-TS2) ---
+
+func TestFR3_JL1_JournalLineSchemaLoads(t *testing.T) {
+	data, err := JournalLineSchema()
+	if err != nil {
+		t.Fatalf("JournalLineSchema(): %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("JournalLineSchema() returned empty bytes")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+}
+
+// TestFR3_JL2_JournalLineSchemaAcceptsBothIdentities mirrors
+// TestFR7_BM2_BeadMapAcceptsBothIdentitiesNodeCarries for the current
+// JournalLineSchema() reader rather than its retired BeadMapSchema()
+// predecessor: node keys and proposal slugs live in different fields with
+// different constraints — the identity-hash pattern lives where the hash
+// lives, and slugs never share its field.
+func TestFR3_JL2_JournalLineSchemaAcceptsBothIdentities(t *testing.T) {
+	data, err := JournalLineSchema()
+	if err != nil {
+		t.Fatalf("JournalLineSchema(): %v", err)
+	}
+	sch := compileSchema(t, data)
+
+	// A change event's node is the identity hash.
+	changeEvent := `{"event":"added","eid":"9f2c41a0b7d3","node":"a1b2c3d4e5f6","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	if err := validateJSON(t, sch, []byte(changeEvent)); err != nil {
+		t.Fatalf("change event with identity-hash node should pass: %v", err)
+	}
+
+	// An epic receipt's proposal is the slug-shaped reference.
+	epicReceipt := `{"event":"task_created","proposal":"2026-04-12-data-flow-contract-layer","task_id":"spexmachina-epic"}`
+	if err := validateJSON(t, sch, []byte(epicReceipt)); err != nil {
+		t.Fatalf("epic receipt with proposal slug should pass: %v", err)
+	}
+
+	// An empty node always fails the identity-hash pattern.
+	emptyNode := `{"event":"added","eid":"9f2c41a0b7d3","node":"","name":"ActionClassifier",
+ "node_type":"component","module":"impact","before":null,"after":"e3b0c44298fc",
+ "git_head":"cafe1234","proposal":"2026-08-01-task-journal"}`
+	if err := validateJSON(t, sch, []byte(emptyNode)); err == nil {
+		t.Fatal("empty node should fail the identity-hash pattern")
+	}
+}
+
+func TestFR3_TS1_TaskStateSchemaLoads(t *testing.T) {
+	data, err := TaskStateSchema()
+	if err != nil {
+		t.Fatalf("TaskStateSchema(): %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("TaskStateSchema() returned empty bytes")
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+	// Must also compile as a JSON Schema document, not merely parse as JSON.
+	compileSchema(t, data)
+}
+
+// TestFR3_TS2_EmbeddedTaskStateSchemaIsWhatPlanValidatesAgainst pins that the
+// loader serves the same document TaskReader refuses a "closed" status
+// against, so the two cannot drift: one embedded file, read by one function,
+// compiled by its one consumer.
+func TestFR3_TS2_EmbeddedTaskStateSchemaIsWhatPlanValidatesAgainst(t *testing.T) {
+	data, err := TaskStateSchema()
+	if err != nil {
+		t.Fatalf("TaskStateSchema(): %v", err)
+	}
+	sch := compileSchema(t, data)
+
+	open := `{"version": 1, "tasks": [{"task_id": "spexmachina-abc", "status": "open"}]}`
+	if err := validateJSON(t, sch, []byte(open)); err != nil {
+		t.Fatalf("open status should pass: %v", err)
+	}
+
+	closed := `{"version": 1, "tasks": [{"task_id": "spexmachina-abc", "status": "closed"}]}`
+	err = validateJSON(t, sch, []byte(closed))
+	if err == nil {
+		t.Fatal("closed status should fail the status enum")
+	}
+	if !strings.Contains(err.Error(), "status") {
+		t.Fatalf("error should name the status constraint, got: %v", err)
+	}
+}
+
 // --- ProfileLoader tests (P1-P5) ---
 
 // jsonEqual compares two JSON documents structurally, ignoring key order —
