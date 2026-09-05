@@ -57,8 +57,7 @@ func runLogE(cmd *cobra.Command, args []string) error {
 
 // parseTaskRecords accepts either the {"issues": [...]} envelope produced by
 // `br list --json` or a bare JSON array of task records and returns the slice
-// in proposal.TaskRecord shape. Stays in lockstep with plan.ReadBeadsBytes
-// so the same tracker output drives both pipelines.
+// in proposal.TaskRecord shape.
 func parseTaskRecords(data []byte) ([]proposal.TaskRecord, error) {
 	var wrap struct {
 		Issues []proposal.TaskRecord `json:"issues"`

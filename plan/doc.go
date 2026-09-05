@@ -82,7 +82,7 @@
 // now requires --tasks and no longer wires --beads at all
 // (spexmachina-swvx.21); the pre-task-lifecycle ReadBeads/ReadBeadsBytes
 // trio it replaces is unreferenced dead code pending spexmachina-swvx.7
-// (BeadReader cleanup), which deletes this file.
+// (BeadReader cleanup), which deletes plan/bead_reader.go.
 //
 // A second, later delta sits on top of the first: the 822b817 baseline
 // correction minted drift-spexmachina-swvx.7's report — TopologicalSorter's
