@@ -1215,26 +1215,14 @@ func TestBuild_SpecNodeKindMatchesPlanRelevantTypesUnderDefaultProfile(t *testin
 	}
 }
 
-// TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors pins the
-// extended-profile half's actual, current behavior rather than the
-// scenario's literal premise. test_changeset_builder.md asserts Build()
-// succeeds end to end for a create whose NodeType is a profile-declared
-// plan-relevant type outside today's four-entry tier table (e.g.
-// "endpoint"), carrying that kind straight through to spec_node_kind. But
-// TopologicalSorter — a sibling component with its own owning bead and
-// arch/test leaves, not this one — refuses any create whose kind belongs to
-// no tier (arch_topological_sorter.md, "Interface": "a create whose spec
-// node kind belongs to no tier"), and its tier table (plan/sorter.go,
-// tierOf) has no profile awareness; ActionClassifier's plan-relevant gate
-// does (graph.profileOrDefault().PlanRelevant) but the sorter's tiering
-// does not. This exact gap is a filed, non-blocking drift —
-// drifts/drift-spexmachina-h4gv.21.json — because resolving it means either
-// teaching TopologicalSorter to consult a profile-declared tier mapping or
-// narrowing the scenario, and neither is authorized by this bead's leaves.
-// Until /drift-fix triages that report, this test pins ChangesetBuilder's
-// actual composed behavior: the whole build refuses, naming the untiered
-// kind, with no partial changeset.
-func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors(t *testing.T) {
+// TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced pins the
+// resolution of drift-spexmachina-h4gv.21.json: TopologicalSorter
+// (spexmachina-swvx.38) now reads the resolved profile's plan-relevant list
+// instead of a compiled-in tier table, so a profile-declared kind outside
+// today's three-entry default vocabulary (e.g. "endpoint") places into its
+// own layer instead of refusing the whole build; ChangesetBuilder copies
+// spec_node_kind from Action.NodeType verbatim, same as any other kind.
+func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced(t *testing.T) {
 	env := newBuilderEnv()
 	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section", "endpoint"}})
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
@@ -1242,11 +1230,32 @@ func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyErrors(t *testing.T) {
 		{Type: ActionCreate, Module: "m", Node: "EP", NodeType: "endpoint", SpecNodeID: "e1", SpecHash: "h-e1", Reason: "New spec node: m/EP"},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	op := findOp(t, cs.Ops, "e1")
+	if op.SpecNodeKind != "endpoint" {
+		t.Errorf("spec_node_kind: got %q want %q", op.SpecNodeKind, "endpoint")
+	}
+}
+
+// TestBuild_KindStruckFromPlanRelevantListStillErrors pins the other half:
+// a kind the resolved profile does not place is still refused, naming the
+// kind, with no partial changeset — the profile places kinds, and an
+// unplaced one is an error, not a silent drop.
+func TestBuild_KindStruckFromPlanRelevantListStillErrors(t *testing.T) {
+	env := newBuilderEnv()
+	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section"}})
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "EP", NodeType: "endpoint", SpecNodeID: "e1", SpecHash: "h-e1", Reason: "New spec node: m/EP"},
+	}
+	cs, err := env.build(actions, "p", "deadbeef")
 	if err == nil {
-		t.Fatalf("Build: want error for untiered profile-declared kind \"endpoint\", got %d ops", len(cs.Ops))
+		t.Fatalf("Build: want error for unplaced kind \"endpoint\", got %d ops", len(cs.Ops))
 	}
 	if !strings.Contains(err.Error(), "endpoint") {
-		t.Errorf("error must name the untiered kind: %v", err)
+		t.Errorf("error must name the unplaced kind: %v", err)
 	}
 	if len(cs.Ops) != 0 {
 		t.Errorf("no partial changeset: got %d ops", len(cs.Ops))

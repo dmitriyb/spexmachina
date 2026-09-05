@@ -353,16 +353,6 @@ func TestActionTypeConstants(t *testing.T) {
 	}
 }
 
-func TestTierConstants_Ordered(t *testing.T) {
-	if !(TierProposalEpic < TierFeatureOrFlow && TierFeatureOrFlow < TierMultiCompTest) {
-		t.Fatalf("tiers must be strictly ascending: epic=%d feature_or_flow=%d multi_comp_test=%d",
-			TierProposalEpic, TierFeatureOrFlow, TierMultiCompTest)
-	}
-	if TierProposalEpic != 0 {
-		t.Fatalf("TierProposalEpic must be 0 (first tier emitted), got %d", TierProposalEpic)
-	}
-}
-
 func TestFallbackPriority_IsThree(t *testing.T) {
 	if FallbackPriority != 3 {
 		t.Fatalf("FallbackPriority: got %d want 3", FallbackPriority)
