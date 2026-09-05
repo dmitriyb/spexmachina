@@ -198,10 +198,10 @@ func loadReceipts(path string) (adapters.Receipts, error) {
 // to 2, nor when plan (spexmachina-swvx.6) bumped its own to 4: it
 // enforces whatever those packages currently declare.
 // TODO(bead:spexmachina-swvx.25): IngestCommand's own component bead —
-// EventBuilder and Reconciler's TODOs (spexmachina-swvx.22,
-// spexmachina-swvx.24) still name the deeper v4 behavior (no lineage
-// dep, unconditional fold-back closes) this pre-flight's version check
-// alone does not exercise; revisit once those land.
+// this pre-flight only checks the changeset/receipts version numbers.
+// End-to-end coverage that the landed v4 semantics (creates carrying no
+// lineage dependency, fold-back closes built unconditionally) survive
+// the full ingest pipeline is this bead's own scope to add.
 func preflightPair(cs plan.Changeset, rc adapters.Receipts) error {
 	if cs.Version != plan.ChangesetVersion {
 		return fmt.Errorf("ingest: changeset version must be %d, got %d", plan.ChangesetVersion, cs.Version)
