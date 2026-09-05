@@ -362,13 +362,17 @@ func TestConsistencyInvariants_Invariant5_EncoderRefusesAtOwnBoundary(t *testing
 // shape — but is refused by the encoder's profile check, with the error
 // naming the kind; the identical line is appended once the resolved
 // profile declares it. Driven through Reconciler.Apply against a fixture
-// spec dir carrying profile.json (the pattern refresh_test.go uses for
+// spec dir with no profile.json yet for the first call, then a
+// profile.json declaring "endpoint" written before the second (the
+// pattern refresh_test.go uses for
 // TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections),
-// so the assertion also pins reconciler.go's own
+// so it is the second assertion that pins reconciler.go's own
 // schema.ResolveProfile(r.SpecDir) call rather than only checkInvariant5
 // in isolation: a reconciler.go that swapped that call for a hardcoded
-// profile would see "endpoint" as declared under the default profile
-// below, and the first assertion would wrongly pass instead of refusing.
+// schema.DefaultProfile() would still correctly refuse the first Apply —
+// DefaultProfile declares no "endpoint" either — but would wrongly keep
+// refusing the second Apply once profile.json declares "endpoint",
+// instead of appending.
 //
 // The kind under test is "endpoint", per spec/ingest/test_consistency_invariants.md:92-96:
 // node_type "endpoint" under the default profile (which declares no such

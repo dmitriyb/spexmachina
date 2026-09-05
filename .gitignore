@@ -4,6 +4,9 @@ bin/
 # Local scratch tmpdir for `go test` binaries (/tmp is noexec in some sandboxes)
 .gotmp/
 
+# Local Go build cache (/tmp is noexec in some sandboxes)
+.gocache3/
+
 # bv (beads viewer) local config and caches
 .bv/
 
