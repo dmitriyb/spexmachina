@@ -1336,10 +1336,8 @@ func TestPlanCommand_S14_ReAddedNode_YieldsPlainCreate(t *testing.T) {
 	if ghostOp.SpecNodeKind != plan.KindComponent {
 		t.Errorf("want a plain component create, got kind %q", ghostOp.SpecNodeKind)
 	}
-	for _, dep := range ghostOp.Deps {
-		if dep.EdgeType == "blocks" {
-			t.Errorf("want no old_bead_id/blocks lineage dep on the re-add, got %+v", ghostOp.Deps)
-		}
+	if len(ghostOp.Deps) != 0 {
+		t.Errorf("want no lineage dep (or any other dep) on the re-add, got %+v", ghostOp.Deps)
 	}
 	if len(ghostOp.Labels) > 0 {
 		for _, l := range ghostOp.Labels {

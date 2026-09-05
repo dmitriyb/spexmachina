@@ -34,17 +34,19 @@ func TestLabelFor_NodeBearingCreate_DerivesFromGitHeadAndOpID(t *testing.T) {
 	}
 }
 
-func TestLabelFor_ModifyPairCreate_SameDerivationAsFreshCreate(t *testing.T) {
-	// A modify-pair create (OldTaskID set, Reason "modified (new)") carries
-	// no shape distinct from a fresh create in the label rule — only
-	// cleanup and epic branch differently.
+// TestLabelFor_ModifiedNodeCreate_SameDerivationAsFreshCreate pins that a
+// modified node's create (Reason "modified (new)") carries no shape
+// distinct from a fresh create in the label rule — only cleanup and epic
+// branch differently. Modified and fresh creates are field-for-field
+// identical but for Reason: there is no lineage field left to set
+// (spec/plan/arch_changeset_builder.md, "Emit no lineage").
+func TestLabelFor_ModifiedNodeCreate_SameDerivationAsFreshCreate(t *testing.T) {
 	l := &Labeler{GitHead: "deadbeef"}
 	action := Action{
 		Type:       ActionCreate,
 		NodeType:   KindComponent,
 		SpecNodeID: "4c1146bb7287",
 		SpecHash:   "abc",
-		OldTaskID:  "spexmachina-abc",
 		Reason:     "Spec node modified (new): plan/ChangesetBuilder",
 	}
 

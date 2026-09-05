@@ -161,6 +161,7 @@ func TestEventBuilder_BuildCreate_WasExistingIdempotent(t *testing.T) {
 // for the new one — is built off the create's own `blocks` dep, without
 // waiting for the paired close.
 func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
+	t.Skip("TODO(bead:spexmachina-swvx.22): \"The Modified-Node Pair\" this test pins is retired — ChangesetBuilder (spexmachina-swvx.20) stopped emitting a lineage dep on any create, so blocksDepBeadID (event_builder.go) is now unconditionally false and this path is unreachable. Rewrite against the current arch_event_builder.md (\"Node-Bearing Creates\"/\"Fold-Back Closes\") once this bead lands.")
 	const node = "bbbbbbbbbbbb"
 	graph := newFakeSpecGraph()
 	graph.nodes[node] = NodeMetadata{Module: "m", Component: "B", ContentFile: "B.md", SpecHash: "h-new", NodeType: "component"}
@@ -173,7 +174,7 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 	op := plan.Op{
 		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
 		Idempotency: idem("spex:cafe1234:op-1"),
-		Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}},
+		Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}},
 	}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 
@@ -362,10 +363,11 @@ func TestEventBuilder_BuildClose_Removed(t *testing.T) {
 // leaves op-1 unbuilt — its receipt never reaches BuildCreate — so
 // BuildClose must fall back to the static changeset scan instead.
 func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
+	t.Skip("TODO(bead:spexmachina-swvx.22): \"The Modified-Node Pair\"/ModifiedHandled claim-tracking this test pins is retired along with the lineage dep it keys off — ChangesetBuilder (spexmachina-swvx.20) never emits one now, so blocksDepBeadID is unconditionally false. Rewrite against the current arch_event_builder.md (\"Fold-Back Closes\": a \"Spec node modified\" close always builds its own modified event, unconditionally) once this bead lands.")
 	const node = "bbbbbbbbbbbb"
 	createOp := plan.Op{
 		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
-		Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old", EdgeType: "blocks"}},
+		Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}},
 	}
 	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified (new): m/N"}
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{createOp, closeOp}}

@@ -3,7 +3,7 @@ package plan
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -98,17 +98,6 @@ func opIndex(ops []Op, specNodeID string) int {
 		}
 	}
 	return -1
-}
-
-func findClose(t *testing.T, ops []Op, beadID string) Op {
-	t.Helper()
-	for _, op := range ops {
-		if op.Type == OpClose && op.Target != nil && op.Target.TaskID == beadID {
-			return op
-		}
-	}
-	t.Fatalf("no close op targeting %q in %+v", beadID, ops)
-	return Op{}
 }
 
 // --- Canonical schema and field order ---
@@ -228,8 +217,11 @@ func TestBuild_CanonicalFieldOrderMixedBatch(t *testing.T) {
 // TestBuild_RefWireKeyNames pins each ref object's own key names on the
 // wire: the adapter reads .op_id off an in-batch dep to resolve it against
 // the ops it has already applied, so renaming the key silently resolves
-// every in-batch dep to nothing rather than failing loudly
-// (test_changeset_builder.md, "Canonical schema and field order").
+// every in-batch dep to nothing rather than failing loudly. It also pins
+// that no ref carries any further key — the edge-type field left the
+// vocabulary with the lineage edge — so a create for a modified node
+// carries no typed dep at all (test_changeset_builder.md, "Canonical
+// schema and field order").
 func TestBuild_RefWireKeyNames(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
@@ -237,16 +229,6 @@ func TestBuild_RefWireKeyNames(t *testing.T) {
 	actions := []Action{
 		sampleComponentCreate("a1", "m", "A", nil),
 		sampleComponentCreate("b1", "m", "B", []string{"a1", "y-open"}),
-		{
-			Type:       ActionCreate,
-			Module:     "m",
-			Node:       "Q",
-			NodeType:   KindComponent,
-			SpecNodeID: "q1",
-			SpecHash:   "h-q1",
-			OldTaskID:  "spexmachina-abc",
-			Reason:     "Spec node modified (new): m/Q",
-		},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
 	if err != nil {
@@ -264,16 +246,6 @@ func TestBuild_RefWireKeyNames(t *testing.T) {
 	}
 	if !strings.Contains(got, `{"ref":"task","task_id":"spexmachina-y"}`) {
 		t.Errorf("existing-task dep: want literal {\"ref\":\"task\",\"task_id\":...} on the wire, got %s", got)
-	}
-
-	q := findOp(t, cs.Ops, "q1")
-	raw2, err := json.Marshal(q)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	got2 := string(raw2)
-	if !strings.Contains(got2, `{"ref":"task","task_id":"spexmachina-abc","type":"blocks"}`) {
-		t.Errorf("lineage dep: want type naming the edge on the wire, got %s", got2)
 	}
 }
 
@@ -323,6 +295,9 @@ func TestBuild_EpicSynthesizedAndParentsNonEpicCreates(t *testing.T) {
 	first := cs.Ops[0]
 	if first.Type != OpCreate || first.SpecNodeKind != KindProposalEpic {
 		t.Errorf("first op: want type=create kind=proposal_epic, got type=%s kind=%s", first.Type, first.SpecNodeKind)
+	}
+	if first.OpID != "op-proposal_epic-p-ref" {
+		t.Errorf("epic op_id: want op-proposal_epic-p-ref (op-<kind>-<proposal ref>), got %q", first.OpID)
 	}
 	if first.Idempotency == nil || first.Idempotency.Label != "spex:reg-head1:p-ref" {
 		t.Errorf("epic label: want spex:reg-head1:p-ref (registration eid, not git_head head1), got %+v", first.Idempotency)
@@ -418,6 +393,215 @@ func TestBuild_InBatchDepChainResolvesToRefOp(t *testing.T) {
 	}
 	if len(c.Deps) != 1 || c.Deps[0] != (Ref{Kind: RefOp, OpID: b.OpID}) {
 		t.Errorf("C.deps: want [ref:op %s], got %+v", b.OpID, c.Deps)
+	}
+}
+
+// --- Layer edges follow the profile's order ---
+
+// TestBuild_LayerEdgesFollowProfileOrder pins
+// test_changeset_builder.md's "Layer edges follow the profile's order"
+// under the default profile: the epic first, then F1/F2 (lex order), then
+// the component layer A/B/C, then T — with every create depending, as
+// ref:op, on every create of the previous non-empty layer, and the epic
+// carrying no edge of its own since it is no layer's predecessor.
+func TestBuild_LayerEdgesFollowProfileOrder(t *testing.T) {
+	env := newBuilderEnv()
+	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "F1", NodeType: KindDataFlow, SpecNodeID: "f1", SpecHash: "h", Reason: "New spec node: m/F1"},
+		{Type: ActionCreate, Module: "m", Node: "F2", NodeType: KindDataFlow, SpecNodeID: "f2", SpecHash: "h", Reason: "New spec node: m/F2"},
+		sampleComponentCreate("a1", "m", "A", []string{"f1"}), // the data_flow add-on: F1 names A in its uses
+		sampleComponentCreate("b1", "m", "B", []string{"a1"}), // B uses A
+		sampleComponentCreate("c1", "m", "C", nil),
+		{Type: ActionCreate, Module: "m", Node: "T", NodeType: KindTestSection, SpecNodeID: "t1", SpecHash: "h", DepSpecNodeIDs: []string{"b1"}, Reason: "New spec node: m/T"},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(cs.Ops) != 7 {
+		t.Fatalf("want 7 ops (epic + 2 flows + 3 components + 1 test), got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+	if cs.Ops[0].SpecNodeKind != KindProposalEpic {
+		t.Fatalf("op[0]: want proposal_epic, got %+v", cs.Ops[0])
+	}
+	for i, specID := range []string{"f1", "f2", "a1", "b1", "c1", "t1"} {
+		if cs.Ops[i+1].SpecNodeID != specID {
+			t.Errorf("op[%d]: want spec_node_id %s, got %s", i+1, specID, cs.Ops[i+1].SpecNodeID)
+		}
+	}
+
+	f1, f2 := findOp(t, cs.Ops, "f1"), findOp(t, cs.Ops, "f2")
+	a, b, c, tSec := findOp(t, cs.Ops, "a1"), findOp(t, cs.Ops, "b1"), findOp(t, cs.Ops, "c1"), findOp(t, cs.Ops, "t1")
+
+	if len(f1.Deps) != 0 || len(f2.Deps) != 0 {
+		t.Errorf("F1/F2 must carry no deps (the epic is no layer's predecessor), got %+v / %+v", f1.Deps, f2.Deps)
+	}
+	wantA := []Ref{{Kind: RefOp, OpID: f1.OpID}, {Kind: RefOp, OpID: f2.OpID}}
+	if !reflect.DeepEqual(a.Deps, wantA) {
+		t.Errorf("A.deps: want %+v (F1 once, though the add-on and the layer edge both name it), got %+v", wantA, a.Deps)
+	}
+	wantB := []Ref{{Kind: RefOp, OpID: f1.OpID}, {Kind: RefOp, OpID: f2.OpID}, {Kind: RefOp, OpID: a.OpID}}
+	if !reflect.DeepEqual(b.Deps, wantB) {
+		t.Errorf("B.deps: want %+v, got %+v", wantB, b.Deps)
+	}
+	wantC := []Ref{{Kind: RefOp, OpID: f1.OpID}, {Kind: RefOp, OpID: f2.OpID}}
+	if !reflect.DeepEqual(c.Deps, wantC) {
+		t.Errorf("C.deps: want %+v, got %+v", wantC, c.Deps)
+	}
+	wantT := []Ref{{Kind: RefOp, OpID: a.OpID}, {Kind: RefOp, OpID: b.OpID}, {Kind: RefOp, OpID: c.OpID}}
+	if !reflect.DeepEqual(tSec.Deps, wantT) {
+		t.Errorf("T.deps: want the whole component layer %+v (not either flow — adjacent layers only), got %+v", wantT, tSec.Deps)
+	}
+}
+
+// TestBuild_LayerEdgesSkipEmptyLayer reruns the fixture above with F1 and
+// F2 struck from the batch (and, consistently, from A's own DepSpecNodeIDs
+// — the add-on only ever fires when a changed data_flow is in the batch):
+// A, B and C carry spec-graph deps alone, while T still carries A, B, C —
+// the previous *non-empty* layer is the predecessor, and an empty layer is
+// skipped, not waited on.
+func TestBuild_LayerEdgesSkipEmptyLayer(t *testing.T) {
+	env := newBuilderEnv()
+	actions := []Action{
+		sampleComponentCreate("a1", "m", "A", nil),
+		sampleComponentCreate("b1", "m", "B", []string{"a1"}),
+		sampleComponentCreate("c1", "m", "C", nil),
+		{Type: ActionCreate, Module: "m", Node: "T", NodeType: KindTestSection, SpecNodeID: "t1", SpecHash: "h", DepSpecNodeIDs: []string{"b1"}, Reason: "New spec node: m/T"},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	a, b, c, tSec := findOp(t, cs.Ops, "a1"), findOp(t, cs.Ops, "b1"), findOp(t, cs.Ops, "c1"), findOp(t, cs.Ops, "t1")
+	if len(a.Deps) != 0 {
+		t.Errorf("A.deps: want empty (no data_flow layer to wait on), got %+v", a.Deps)
+	}
+	wantB := []Ref{{Kind: RefOp, OpID: a.OpID}}
+	if !reflect.DeepEqual(b.Deps, wantB) {
+		t.Errorf("B.deps: want %+v (spec-graph dep alone), got %+v", wantB, b.Deps)
+	}
+	if len(c.Deps) != 0 {
+		t.Errorf("C.deps: want empty, got %+v", c.Deps)
+	}
+	wantT := []Ref{{Kind: RefOp, OpID: a.OpID}, {Kind: RefOp, OpID: b.OpID}, {Kind: RefOp, OpID: c.OpID}}
+	if !reflect.DeepEqual(tSec.Deps, wantT) {
+		t.Errorf("T.deps: want the whole component layer %+v even with the data_flow layer empty, got %+v", wantT, tSec.Deps)
+	}
+}
+
+// TestBuild_LayerEdgesRefuseForwardDepUnderReorderedProfile reruns under a
+// profile whose plan-relevant list reads component, data_flow, test_section
+// — swapping the default's first two entries. A now depends on F1
+// (the add-on), but F1 sits in a *later* layer under this order, so
+// Build() must refuse rather than emit a forward ref:op, naming both ops.
+func TestBuild_LayerEdgesRefuseForwardDepUnderReorderedProfile(t *testing.T) {
+	env := newBuilderEnv()
+	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section"}})
+	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "F1", NodeType: KindDataFlow, SpecNodeID: "f1", SpecHash: "h", Reason: "New spec node: m/F1"},
+		sampleComponentCreate("a1", "m", "A", []string{"f1"}),
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err == nil {
+		t.Fatalf("want a forward-layer-dep error, got %d ops", len(cs.Ops))
+	}
+	if !strings.Contains(err.Error(), "a1") || !strings.Contains(err.Error(), "f1") {
+		t.Errorf("error must name both the dependent and the later-layer dep: %v", err)
+	}
+	if len(cs.Ops) != 0 {
+		t.Errorf("no partial changeset: got %d ops", len(cs.Ops))
+	}
+}
+
+// --- Cleanup layer waits for the batch's last layer and its retargets ---
+
+// TestBuild_CleanupLayerWaitsForLastLayerAndRetargets pins
+// test_changeset_builder.md's "Cleanup layer waits for the batch's last
+// layer and its retargets": the two cleanup ops are the last creates,
+// ordered by the lex tiebreak on spec_node_id, and each depends on every
+// create of the nearest non-empty layer before them plus every retarget's
+// target — but never on each other.
+func TestBuild_CleanupLayerWaitsForLastLayerAndRetargets(t *testing.T) {
+	env := newBuilderEnv()
+	actions := []Action{
+		sampleComponentCreate("compA", "m", "A", nil),
+		sampleComponentCreate("compB", "m", "B", nil),
+		{Type: ActionCreate, Module: "m", Node: "T", NodeType: KindTestSection, SpecNodeID: "t1", SpecHash: "h", DepSpecNodeIDs: []string{"compA", "compB"}, Reason: "New spec node: m/T"},
+		{Type: ActionRetarget, TaskID: "spexmachina-hun", Module: "m", Node: "R", NodeType: KindComponent, SpecNodeID: "ret-node", SpecHash: "new-hash", Reason: "Spec node modified (retarget): m/R"},
+		{Type: ActionCreate, Module: "m", Node: "X", NodeType: KindComponent, SpecNodeID: "aaa111", Reason: "Code cleanup: m/X"},
+		{Type: ActionCreate, Module: "m", Node: "Y", NodeType: KindComponent, SpecNodeID: "bbb222", Reason: "Code cleanup: m/Y"},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	tSec := findOp(t, cs.Ops, "t1")
+	cleanX := findOp(t, cs.Ops, "aaa111")
+	cleanY := findOp(t, cs.Ops, "bbb222")
+
+	if opIndex(cs.Ops, "aaa111") >= opIndex(cs.Ops, "bbb222") {
+		t.Errorf("cleanups must sort by lex spec_node_id: want aaa111 before bbb222 in %+v", cs.Ops)
+	}
+	lastTwoCreates := 0
+	for _, op := range cs.Ops {
+		if op.Type == OpCreate {
+			lastTwoCreates++
+		}
+	}
+	if cs.Ops[lastTwoCreates-2].SpecNodeID != "aaa111" || cs.Ops[lastTwoCreates-1].SpecNodeID != "bbb222" {
+		t.Errorf("the two cleanups must be the last two creates, got %+v", cs.Ops)
+	}
+
+	wantDeps := []Ref{{Kind: RefOp, OpID: tSec.OpID}, {Kind: RefTask, TaskID: "spexmachina-hun"}}
+	if !reflect.DeepEqual(cleanX.Deps, wantDeps) {
+		t.Errorf("cleanup X deps: want %+v (T alone — the components are two layers back — plus the retarget's target), got %+v", wantDeps, cleanX.Deps)
+	}
+	if !reflect.DeepEqual(cleanY.Deps, wantDeps) {
+		t.Errorf("cleanup Y deps: want %+v, got %+v", wantDeps, cleanY.Deps)
+	}
+}
+
+// TestBuild_CleanupLayerWaitsForNearestNonEmptyLayer reruns the fixture
+// above with T struck from the batch: each cleanup names the two
+// component creates instead — the layer before the cleanups is whichever
+// non-empty layer is nearest.
+func TestBuild_CleanupLayerWaitsForNearestNonEmptyLayer(t *testing.T) {
+	env := newBuilderEnv()
+	actions := []Action{
+		sampleComponentCreate("compA", "m", "A", nil),
+		sampleComponentCreate("compB", "m", "B", nil),
+		{Type: ActionRetarget, TaskID: "spexmachina-hun", Module: "m", Node: "R", NodeType: KindComponent, SpecNodeID: "ret-node", SpecHash: "new-hash", Reason: "Spec node modified (retarget): m/R"},
+		{Type: ActionCreate, Module: "m", Node: "X", NodeType: KindComponent, SpecNodeID: "aaa111", Reason: "Code cleanup: m/X"},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	compA := findOp(t, cs.Ops, "compA")
+	compB := findOp(t, cs.Ops, "compB")
+	cleanX := findOp(t, cs.Ops, "aaa111")
+	wantDeps := []Ref{{Kind: RefOp, OpID: compA.OpID}, {Kind: RefOp, OpID: compB.OpID}, {Kind: RefTask, TaskID: "spexmachina-hun"}}
+	if !reflect.DeepEqual(cleanX.Deps, wantDeps) {
+		t.Errorf("cleanup X deps: want %+v, got %+v", wantDeps, cleanX.Deps)
+	}
+}
+
+// TestBuild_CleanupAloneInBatchHasNoDeps reruns with a batch holding one
+// cleanup action and nothing else: what landed in an earlier run is
+// outside the batch and is not named.
+func TestBuild_CleanupAloneInBatchHasNoDeps(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "X", NodeType: KindComponent, SpecNodeID: "aaa111", Reason: "Code cleanup: m/X"},
+	}
+	cs, err := env.build(actions, "p", "h")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	cleanX := findOp(t, cs.Ops, "aaa111")
+	if len(cleanX.Deps) != 0 {
+		t.Errorf("cleanup alone in the batch: want empty deps, got %+v", cleanX.Deps)
 	}
 }
 
@@ -763,9 +947,14 @@ func TestBuild_PrioritySkipsUnreachableRequirement(t *testing.T) {
 	}
 }
 
-// --- Obsolete + create lineage ---
+// --- A modified node's create carries no lineage ---
 
-func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
+// TestBuild_ModifiedNodeCreateCarriesNoLineage pins
+// test_changeset_builder.md's "A modified node's create carries no
+// lineage": a create for a modified node whose earlier task finished is
+// the same op a fresh node gets — no close, no dep naming the
+// predecessor, no field carrying its id anywhere in the document.
+func TestBuild_ModifiedNodeCreateCarriesNoLineage(t *testing.T) {
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
@@ -776,18 +965,7 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 			NodeType:   KindComponent,
 			SpecNodeID: "Q",
 			SpecHash:   "h-Q",
-			OldTaskID:  "spexmachina-abc",
 			Reason:     "Spec node modified (new): m/Q",
-		},
-		{
-			Type:       ActionObsolete,
-			TaskID:     "spexmachina-abc",
-			Module:     "m",
-			Node:       "Q",
-			NodeType:   KindComponent,
-			SpecNodeID: "Q",
-			ChangeType: "modified",
-			Reason:     "Spec node modified: m/Q",
 		},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
@@ -795,32 +973,34 @@ func TestBuild_ObsoleteAndCreateLineage(t *testing.T) {
 		t.Fatalf("Build: %v", err)
 	}
 
-	q := findOp(t, cs.Ops, "Q")
-	var foundLineage bool
-	for _, d := range q.Deps {
-		if d == (Ref{Kind: RefTask, TaskID: "spexmachina-abc", EdgeType: "blocks"}) {
-			foundLineage = true
+	for _, op := range cs.Ops {
+		if op.Type == OpClose {
+			t.Errorf("changeset carries a close op %q: no close accompanies a modified node's create", op.OpID)
 		}
 	}
-	if !foundLineage {
-		t.Errorf("Q.deps: want ref:task spexmachina-abc type:blocks, got %+v", q.Deps)
-	}
 
-	closeOp := findClose(t, cs.Ops, "spexmachina-abc")
-	if len(closeOp.Labels) != 0 {
-		t.Errorf("close labels: want none (retired spex:obsolete/commit:<HEAD> markers), got %v", closeOp.Labels)
+	q := findOp(t, cs.Ops, "Q")
+	if len(q.Deps) != 0 {
+		t.Errorf("Q.deps: want empty — no spec-graph edges and no lineage dep of any kind, got %+v", q.Deps)
 	}
-	if closeOp.Reason != "Spec node modified: m/Q" {
-		t.Errorf("close reason: got %q", closeOp.Reason)
+	raw, err := json.Marshal(q)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(raw), "spexmachina-abc") {
+		t.Errorf("no field anywhere may carry the predecessor task's id, got %s", raw)
 	}
 
 	wantLabel := "spex:deadbeef:" + q.OpID
 	if q.Idempotency == nil || q.Idempotency.Label != wantLabel {
-		t.Errorf("Q.idempotency.label: want %q (own op_id), got %+v", wantLabel, q.Idempotency)
+		t.Errorf("Q.idempotency.label: want %q (this run's own modified event, no lookup), got %+v", wantLabel, q.Idempotency)
 	}
 }
 
-func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
+// TestBuild_ModifiedNodeCreateCarriesNoLineageWithEmptyFold reruns the
+// fixture above against an empty fold: nothing needs seeding to make the
+// no-lookup label derivation true.
+func TestBuild_ModifiedNodeCreateCarriesNoLineageWithEmptyFold(t *testing.T) {
 	env := newBuilderEnv()
 	actions := []Action{
 		{
@@ -830,7 +1010,6 @@ func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
 			NodeType:   KindComponent,
 			SpecNodeID: "Q",
 			SpecHash:   "h-Q",
-			OldTaskID:  "spexmachina-abc",
 			Reason:     "Spec node modified (new): m/Q",
 		},
 	}
@@ -845,9 +1024,12 @@ func TestBuild_ObsoleteAndCreateLineageLabelHoldsWithEmptyFold(t *testing.T) {
 	}
 }
 
+// TestBuild_OpenPairingRetargetsWithNoLineage reruns the fixture above
+// with the pairing's task open: a single retarget op, again with no close
+// and no lineage dep — the two paths differ in whether the task moves or
+// a successor is born, and neither writes history into the tracker,
+// because the journal holds it.
 func TestBuild_OpenPairingRetargetsWithNoLineage(t *testing.T) {
-	// Rerun of TestBuild_ObsoleteAndCreateLineage's fixture with the
-	// pairing open: a single retarget op, no blocks dep anywhere.
 	env := newBuilderEnv()
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
@@ -870,12 +1052,8 @@ func TestBuild_OpenPairingRetargetsWithNoLineage(t *testing.T) {
 	if len(cs.Ops) != 1 || cs.Ops[0].Type != OpRetarget {
 		t.Fatalf("want a single retarget op, got %+v", cs.Ops)
 	}
-	for _, op := range cs.Ops {
-		for _, d := range op.Deps {
-			if d.EdgeType == "blocks" {
-				t.Errorf("retarget path must mint no blocks lineage dep, got %+v", op.Deps)
-			}
-		}
+	if len(cs.Ops[0].Deps) != 0 {
+		t.Errorf("retarget path must mint no lineage dep, got %+v", cs.Ops[0].Deps)
 	}
 }
 
@@ -952,6 +1130,39 @@ func TestBuild_CleanupBeadCreatePriorBatchRemoval(t *testing.T) {
 	}
 	if op.Priority != FallbackPriority {
 		t.Errorf("priority: want fallback %d, got %d", FallbackPriority, op.Priority)
+	}
+}
+
+// TestBuild_CleanupBeadCreateReAddedSinceRemovalSelfMints varies the fixture
+// above: the node's removed event E1 was followed by an added event (the
+// node was re-added and is now removed a second time), so the removal E1
+// is history, not the node's latest state. The fold answers only when the
+// removal is latest; here it is not, so the label falls back to this op's
+// own (git_head, op_id) mint, exactly as the never-removed-before case
+// does (test_changeset_builder.md, "Cleanup create for a prior-batch
+// removal").
+func TestBuild_CleanupBeadCreateReAddedSinceRemovalSelfMints(t *testing.T) {
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	env.fold.removals["abc123def456"] = RemovalEntry{Removed: false}
+	actions := []Action{
+		{
+			Type:       ActionCreate,
+			Module:     "m",
+			Node:       "X",
+			NodeType:   KindComponent,
+			SpecNodeID: "abc123def456",
+			Reason:     "Code cleanup: m/X",
+		},
+	}
+	cs, err := env.build(actions, "p", "deadbeef-moved")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	op := findOp(t, cs.Ops, "abc123def456")
+	wantLabel := "spex:deadbeef-moved:" + op.OpID
+	if op.Idempotency == nil || op.Idempotency.Label != wantLabel {
+		t.Errorf("idempotency.label: want %q (this op's own mint, not the stale E1 removal), got %+v", wantLabel, op.Idempotency)
 	}
 }
 
@@ -1220,6 +1431,7 @@ func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced(t *testing.T)
 	env.graph = env.graph.WithProfile(&schema.Profile{PlanRelevant: []string{"component", "data_flow", "test_section", "endpoint"}})
 	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
 	actions := []Action{
+		{Type: ActionCreate, Module: "m", Node: "T", NodeType: KindTestSection, SpecNodeID: "t1", SpecHash: "h-t1", Reason: "New spec node: m/T"},
 		{Type: ActionCreate, Module: "m", Node: "EP", NodeType: "endpoint", SpecNodeID: "e1", SpecHash: "h-e1", Reason: "New spec node: m/EP"},
 	}
 	cs, err := env.build(actions, "p", "deadbeef")
@@ -1229,6 +1441,14 @@ func TestBuild_ProfileDeclaredKindOutsideDefaultVocabularyIsPlaced(t *testing.T)
 	op := findOp(t, cs.Ops, "e1")
 	if op.SpecNodeKind != "endpoint" {
 		t.Errorf("spec_node_kind: got %q want %q", op.SpecNodeKind, "endpoint")
+	}
+	if opIndex(cs.Ops, "e1") <= opIndex(cs.Ops, "t1") {
+		t.Errorf("endpoint must be emitted last among the non-cleanup creates, got %+v", cs.Ops)
+	}
+	tSec := findOp(t, cs.Ops, "t1")
+	wantDeps := []Ref{{Kind: RefOp, OpID: tSec.OpID}}
+	if !reflect.DeepEqual(op.Deps, wantDeps) {
+		t.Errorf("endpoint deps: want the whole test_section layer %+v via the layer edge, got %+v", wantDeps, op.Deps)
 	}
 }
 
@@ -1323,156 +1543,97 @@ func TestBuild_InBatchDepWinsOverAbsentFoldEntry(t *testing.T) {
 	}
 }
 
-func TestBuild_OpIDsUnpaddedUnderTen(t *testing.T) {
-	env := newBuilderEnv()
-	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
-	actions := make([]Action, 0, 8)
-	for i := 0; i < 8; i++ {
-		id := string(rune('A' + i))
-		actions = append(actions, sampleComponentCreate(id, "m", id, nil))
-	}
-	actions = append(actions, Action{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
+// --- Op ids are canonical keys across a batch mixing every kind ---
 
-	cs, err := env.build(actions, "p", "h")
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if len(cs.Ops) != 9 {
-		t.Fatalf("want 9 ops, got %d", len(cs.Ops))
-	}
-	if cs.Ops[0].OpID != "op-1" || cs.Ops[8].OpID != "op-9" {
-		t.Errorf("want unpadded ids op-1..op-9, got %s .. %s", cs.Ops[0].OpID, cs.Ops[8].OpID)
-	}
-}
-
-func TestBuild_OpIDsPaddedAtTenthOp(t *testing.T) {
-	env := newBuilderEnv()
-	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
-	actions := make([]Action, 0, 9)
-	for i := 0; i < 9; i++ {
-		id := string(rune('A' + i))
-		actions = append(actions, sampleComponentCreate(id, "m", id, nil))
-	}
-	actions = append(actions, Action{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "Z", NodeType: KindComponent, Reason: "removed"})
-
-	cs, err := env.build(actions, "p", "h")
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if len(cs.Ops) != 10 {
-		t.Fatalf("want 10 ops, got %d", len(cs.Ops))
-	}
-	if cs.Ops[0].OpID != "op-01" || cs.Ops[9].OpID != "op-10" {
-		t.Errorf("10 total ops: want zero-padded ids op-01..op-10, got %s .. %s", cs.Ops[0].OpID, cs.Ops[9].OpID)
-	}
-}
-
-// --- Op id numbering across a batch mixing every kind ---
-
-// TestBuild_OpIDNumberingAcrossMixedBatch mixes every op kind in one batch —
-// five conventional creates, one cleanup create for a removed node, one
-// retarget, and three closes for unrelated removed nodes — and asserts op
-// ids run from op-01 in creates -> retargets -> closes order with no gap
-// and no reuse. The batch is sized to ten ops total, and only reaches ten
-// when the retarget is counted alongside the creates and closes: six
-// creates plus three closes alone is nine, which a pad rule blind to
-// retargets (test_changeset_builder.md, "Op id numbering across a batch
-// mixing every kind") would leave unpadded at op-1..op-9; counting the
-// retarget crosses the batch to ten and forces op-01..op-10.
-// It also pins that the cleanup's idempotency.label embeds the cleanup
-// op's own op_id and never one of the batch's close op ids — no close
-// accompanies a cleanup, so there is nothing for the label to borrow
-// from.
-func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
-	env := newBuilderEnv()
-	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
-	actions := []Action{
-		sampleComponentCreate("c1", "m", "C1", nil),
-		sampleComponentCreate("c2", "m", "C2", nil),
-		sampleComponentCreate("c3", "m", "C3", nil),
-		sampleComponentCreate("c4", "m", "C4", nil),
-		sampleComponentCreate("c5", "m", "C5", nil),
-		{
-			Type:       ActionCreate,
-			Module:     "m",
-			Node:       "X",
-			NodeType:   KindComponent,
-			SpecNodeID: "cleanup-node",
-			Reason:     "Code cleanup: m/X",
-		},
-		{
-			Type:       ActionRetarget,
-			TaskID:     "spexmachina-hun",
-			Module:     "m",
-			Node:       "R",
-			NodeType:   KindComponent,
-			SpecNodeID: "r-node",
-			SpecHash:   "new-hash",
-			Reason:     "Spec node modified (retarget): m/R",
-		},
-		{
-			Type:       ActionObsolete,
-			TaskID:     "spexmachina-old",
-			Module:     "m",
-			Node:       "W",
-			NodeType:   KindComponent,
-			ChangeType: "removed",
-			Reason:     "Spec node removed: m/W",
-		},
-		{
-			Type:       ActionObsolete,
-			TaskID:     "spexmachina-other",
-			Module:     "m",
-			Node:       "Y",
-			NodeType:   KindComponent,
-			ChangeType: "removed",
-			Reason:     "Spec node removed: m/Y",
-		},
-		{
-			Type:       ActionObsolete,
-			TaskID:     "spexmachina-third",
-			Module:     "m",
-			Node:       "Z",
-			NodeType:   KindComponent,
-			ChangeType: "removed",
-			Reason:     "Spec node removed: m/Z",
-		},
-	}
-	cs, err := env.build(actions, "p", "deadbeef")
-	if err != nil {
-		t.Fatalf("Build: %v", err)
-	}
-	if len(cs.Ops) != 10 {
-		t.Fatalf("want 10 ops, got %d: %+v", len(cs.Ops), cs.Ops)
-	}
-
-	seen := make(map[string]bool, len(cs.Ops))
-	for i, op := range cs.Ops {
-		want := fmt.Sprintf("op-%02d", i+1)
-		if op.OpID != want {
-			t.Errorf("op[%d]: want id %s, got %s", i, want, op.OpID)
+// TestBuild_OpIDsCanonicalKeysAcrossMixedBatch mixes every op kind in one
+// batch — a component create, a data_flow create, a cleanup create for a
+// removed node, a retarget, and two closes (a removal close and a
+// fold-back close) — and asserts every op_id is op-<kind>-<key>: never a
+// position, so a node has at most one op per batch and a task at most one
+// close, and no two ids collide (test_changeset_builder.md, "Op ids are
+// canonical keys across a batch mixing every kind").
+func TestBuild_OpIDsCanonicalKeysAcrossMixedBatch(t *testing.T) {
+	baseActions := func() []Action {
+		return []Action{
+			sampleComponentCreate("c1", "m", "C1", nil),
+			{Type: ActionCreate, Module: "m", Node: "Flow", NodeType: KindDataFlow, SpecNodeID: "f1", SpecHash: "h-f1", Reason: "New spec node: m/Flow"},
+			{Type: ActionCreate, Module: "m", Node: "X", NodeType: KindComponent, SpecNodeID: "cleanup1", Reason: "Code cleanup: m/X"},
+			{Type: ActionRetarget, TaskID: "spexmachina-hun", Module: "m", Node: "R", NodeType: KindComponent, SpecNodeID: "r-node", SpecHash: "new-hash", Reason: "Spec node modified (retarget): m/R"},
+			{Type: ActionObsolete, TaskID: "spexmachina-old", Module: "m", Node: "W", NodeType: KindComponent, ChangeType: "removed", Reason: "Spec node removed: m/W"},
+			{Type: ActionObsolete, TaskID: "spexmachina-ts", Module: "m", Node: "TS", NodeType: KindTestSection, ChangeType: "modified", Reason: "Spec node modified: m/TS"},
 		}
+	}
+
+	env := newBuilderEnv()
+	env.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	cs, err := env.build(baseActions(), "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(cs.Ops) != 6 {
+		t.Fatalf("want 6 ops, got %d: %+v", len(cs.Ops), cs.Ops)
+	}
+
+	wantIDs := map[string]string{
+		"c1":       "op-component-c1",
+		"f1":       "op-data_flow-f1",
+		"cleanup1": "op-cleanup-cleanup1",
+		"r-node":   "op-retarget-r-node",
+	}
+	for specID, want := range wantIDs {
+		op := findOp(t, cs.Ops, specID)
+		if op.OpID != want {
+			t.Errorf("%s: op_id want %q, got %q", specID, want, op.OpID)
+		}
+	}
+	for _, taskID := range []string{"spexmachina-old", "spexmachina-ts"} {
+		want := "op-close-" + taskID
+		var found bool
+		for _, op := range cs.Ops {
+			if op.Type == OpClose && op.Target != nil && op.Target.TaskID == taskID {
+				found = true
+				if op.OpID != want {
+					t.Errorf("close on %s: op_id want %q, got %q", taskID, want, op.OpID)
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("no close op targeting %q", taskID)
+		}
+	}
+
+	seen := map[string]bool{}
+	for _, op := range cs.Ops {
 		if seen[op.OpID] {
 			t.Errorf("op id %s reused", op.OpID)
 		}
 		seen[op.OpID] = true
 	}
 
-	for i := 0; i < 6; i++ {
-		if cs.Ops[i].Type != OpCreate {
-			t.Errorf("op[%d]: want create (creates come first), got %s", i, cs.Ops[i].Type)
+	var creates, retargetIdx, closeStart int
+	for i, op := range cs.Ops {
+		switch op.Type {
+		case OpCreate:
+			creates++
+		case OpRetarget:
+			retargetIdx = i
+		case OpClose:
+			if closeStart == 0 {
+				closeStart = i
+			}
 		}
 	}
-	if cs.Ops[6].Type != OpRetarget {
-		t.Errorf("op[6]: want retarget (after creates, before closes), got %s", cs.Ops[6].Type)
+	if creates != 3 {
+		t.Errorf("want 3 creates, got %d", creates)
 	}
-	for i := 7; i < 10; i++ {
-		if cs.Ops[i].Type != OpClose {
-			t.Errorf("op[%d]: want close (closes come last), got %s", i, cs.Ops[i].Type)
-		}
+	if retargetIdx != creates {
+		t.Errorf("retarget must immediately follow the creates block: retarget at %d, creates=%d", retargetIdx, creates)
+	}
+	if closeStart != creates+1 {
+		t.Errorf("closes must follow the retarget: closes start at %d, want %d", closeStart, creates+1)
 	}
 
-	cleanup := findOp(t, cs.Ops, "cleanup-node")
+	cleanup := findOp(t, cs.Ops, "cleanup1")
 	wantLabel := "spex:deadbeef:" + cleanup.OpID
 	if cleanup.Idempotency == nil || cleanup.Idempotency.Label != wantLabel {
 		t.Errorf("cleanup idempotency.label: want %s (the cleanup op's own op_id — no close accompanies a cleanup), got %+v", wantLabel, cleanup.Idempotency)
@@ -1481,8 +1642,24 @@ func TestBuild_OpIDNumberingAcrossMixedBatch(t *testing.T) {
 		if op.Type != OpClose {
 			continue
 		}
-		if cleanup.Idempotency != nil && strings.Contains(cleanup.Idempotency.Label, op.OpID) {
+		if strings.Contains(cleanup.Idempotency.Label, op.OpID) {
 			t.Errorf("cleanup label %q embeds close op %s's id: every label is derived from the op that carries it or read from the fold, never predicted from another op", cleanup.Idempotency.Label, op.OpID)
+		}
+	}
+
+	// A second component create added to the batch must not rename any op
+	// already present — every id is derived from its own action alone.
+	env2 := newBuilderEnv()
+	env2.fold.fakeFold["p"] = Pairing{TaskID: "spexmachina-epic"}
+	moreActions := append(baseActions(), sampleComponentCreate("c2", "m", "C2", nil))
+	cs2, err := env2.build(moreActions, "p", "deadbeef")
+	if err != nil {
+		t.Fatalf("Build (extra create): %v", err)
+	}
+	for specID, want := range wantIDs {
+		op := findOp(t, cs2.Ops, specID)
+		if op.OpID != want {
+			t.Errorf("after adding c2, %s kept a different op_id: want %q, got %q", specID, want, op.OpID)
 		}
 	}
 }

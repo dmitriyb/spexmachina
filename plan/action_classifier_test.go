@@ -371,7 +371,7 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 			t.Fatalf("want 1 action, got %+v", actions)
 		}
 		a := actions[0]
-		if a.Type != ActionCreate || a.TaskID != "" || a.OldTaskID != "" || a.SpecHash != "new" {
+		if a.Type != ActionCreate || a.TaskID != "" || a.SpecHash != "new" {
 			t.Fatalf("want a plain create with no prior task id, got %+v", a)
 		}
 		if a.Reason != "Spec node modified (new): plan/CompX" {
@@ -431,7 +431,7 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 // a matched-but-absent node yields (SCHK_HASH in S1) is the same create a
 // never-tracked node yields, field for field, except the reason string. Both
 // sides use the same identity hash and new content hash so every other field
-// — Module, Node, NodeType, SpecNodeID, SpecHash, TaskID, OldTaskID and
+// — Module, Node, NodeType, SpecNodeID, SpecHash, TaskID and
 // DepSpecNodeIDs — lines up exactly; only Reason is blanked before the
 // comparison.
 func TestClassifyMatched_S1b_AbsentCreateMatchesFreshCreate(t *testing.T) {
@@ -675,7 +675,7 @@ func TestClassifyOrphaned_AbsentYieldsCleanupCreateOnly(t *testing.T) {
 		t.Fatalf("want exactly 1 cleanup create action, no close, got %+v", actions)
 	}
 	cleanup := actions[0]
-	if cleanup.Type != ActionCreate || cleanup.OldTaskID != "" || cleanup.TaskID != "" || cleanup.SpecHash != "" {
+	if cleanup.Type != ActionCreate || cleanup.TaskID != "" || cleanup.SpecHash != "" {
 		t.Errorf("cleanup create: %+v", cleanup)
 	}
 	if cleanup.Reason != "Code cleanup: plan/Legacy" {
