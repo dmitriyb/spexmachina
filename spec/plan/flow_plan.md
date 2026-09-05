@@ -325,7 +325,7 @@ and nothing else.
 - Cycle in in-batch deps → abort after sort. Exit 2.
 - A create whose kind the profile's plan-relevant list does not place → abort naming the kind. Exit 2.
 - A spec-graph dep pointing at a later layer's op → abort naming both ops. Exit 2.
-- An empty plan-relevant list → a warning on stderr that no node type produces tasks and an adapter run would create none; the run proceeds. Exit 0.
+- An empty plan-relevant list → a warning on stderr that no node type produces tasks; no create op for any node kind, while the epic and cleanup layers are unaffected; the run proceeds. Exit 0. A create the matched path still owes — a modified node whose earlier task is finished — is the "kind the list does not place" refusal above, exit 2.
 - Dep neither in-batch nor in the fold → abort naming the spec_node_id. Exit 2.
 - Missing project requirement in priority chain → default priority `3`, silently. No error, no warning, and nothing in the changeset marks the op.
 - `--git-head` missing or malformed → pre-flight rejection before any processing. Exit 1.

@@ -56,6 +56,15 @@ fi
 - Changeset mixing ref:op (new-to-new) and ref:task (existing, listed as open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
 - Assertions: each new task's `--deps blocked-by:<>` is correct per the ref resolution.
 
+### Retarget
+
+- Seed sandbox: one open task already carrying one dependency, and a second task the retarget adds as a new dependency.
+- Run the adapter with a changeset holding one retarget op aimed at the open task, whose `deps` name both tasks — the one already carried and the new one — so the add-only skip is exercised alongside the add.
+- Assertions:
+  - The open task carries the retarget op's `spex:<eid>` label.
+  - The dependency it already carried is still present.
+  - The newly named dependency is present.
+
 ## Harness
 
 `scripts/apply-br_test.sh`:
@@ -111,8 +120,12 @@ echo "ok"
 - `scripts/testdata/integration/export/` — seed.sh + verify.sh. There is no `expected_tasks.json`: real `br` assigns task ids the fixture cannot predict, so an exact diff of the export is unreachable, and verify.sh checks the document against the ids the seed recorded instead. This case is the one place the script's `<tasks.json>` argument form runs under test — the mock-mode export suite captures stdout.
 - `scripts/testdata/integration/happy_path/` — seed.sh + changeset.json + expected_receipts.json + verify.sh. The seed establishes what the scenario presupposes: the task the close op cancels — its id written into `changeset.json`'s close target in place of a placeholder, since the fixture cannot know it — and the finished predecessor the modified node's new create must not depend on. `expected_receipts.json` carries `__ANY__` wherever a br-assigned id lands. `scripts/apply-br_test.sh` runs `seed.sh` only when the case supplies one, and runs the shipped scripts from `scripts/` rather than copies.
 - `scripts/testdata/integration/close_removed/` — seed.sh + changeset.json + expected_receipts.json + verify.sh.
+- `scripts/testdata/integration/partial_run/` — changeset.json + expected_receipts.json + verify.sh; no seed, the changeset's bad op needs nothing pre-existing to be rejected.
+- `scripts/testdata/integration/rerun_idempotency/` — seed.sh + changeset.json + expected_receipts.json + verify.sh; the seed runs the changeset once and snapshots the tracker, verify.sh diffs that snapshot against the state after the harness's run.
+- `scripts/testdata/integration/both_ref_shapes/` — seed.sh + changeset.json + expected_receipts.json + verify.sh; the seed creates the existing task the ref:task shape points at.
+- `scripts/testdata/integration/retarget/` — seed.sh + changeset.json + expected_receipts.json + verify.sh; the seed creates the open task and both dependencies.
 
-The partial-run, re-run-idempotency and both-ref-shape scenarios above, and the retarget path, are owed integration fixtures of the same shape and have none yet. The mock-mode suite under `scripts/testdata/{idempotency,substitution}/` covers them meanwhile against the stand-in `br`, which does not discharge what this test claims: the requirement asks for those cases against a real sandbox.
+Every scenario above has a fixture of this shape against real `br`. The mock-mode suite under `scripts/testdata/{idempotency,substitution}/` exercises the same paths against the stand-in `br` and runs without the gate.
 
 ## Non-Responsibilities
 

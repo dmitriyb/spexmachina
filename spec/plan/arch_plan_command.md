@@ -58,7 +58,7 @@ Once the builder answers, the command has one job left: serialize the changeset 
 
 Failure modes never write a partial changeset.
 
-One condition warns and does not fail: a resolved profile whose plan-relevant list is empty. Stderr says that no node type produces tasks, so the changeset carries no create op and an adapter run creates none; the run then proceeds as usual — exit 0, changeset written — because the spec side of the tool is whole without tasks, and a project may use it that way.
+One condition warns and does not fail: a resolved profile whose plan-relevant list is empty. Stderr says that no node type produces tasks, so the changeset carries no create op for any node kind: the gate drops every unmatched change, and the proposal epic and any cleanup create are unaffected, because those layers sit outside the plan-relevant order by construction — an epic of cleanups alone is a valid run. One case does fail: a matched modified node whose earlier task is finished still owes a plain create carrying its node type, and the sorter refuses that as a kind the list does not place — the contract refusal above, exit 2, naming the kind. Otherwise the run proceeds as usual — exit 0, changeset written — because the spec side of the tool is whole without tasks, and a project may use it that way.
 
 ## Composability
 

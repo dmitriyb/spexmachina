@@ -49,7 +49,7 @@
       "preq_id": "92dfddf840b0",
       "type": "functional",
       "name": "Integration test against real br",
-      "description": "A shell-based integration test (scripts/apply-br_test.sh) exercises the full adapter against a real br sandbox. It validates: the export half's task-state artifact against the live listing, changeset parsing, both ref shapes resolving correctly, idempotency on re-run, receipt output matches the v2 receipts schema, and partial-receipt handling when a synthetic failure is injected mid-run. The test is gated on br being present on PATH and is excluded from the Go test suite."
+      "description": "A shell-based integration test (scripts/apply-br_test.sh) exercises the full adapter against a real br sandbox. It validates: the export half's task-state artifact against the live listing, changeset parsing, both ref shapes resolving correctly, idempotency on re-run, a retarget op relabelling an open task and adding only the dependencies it does not yet carry, receipt output matches the v2 receipts schema, and partial-receipt handling when a synthetic failure is injected mid-run. The test is gated on br being present on PATH and is excluded from the Go test suite."
     },
     {
       "id": "7c2fea6b1963",

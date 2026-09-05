@@ -84,6 +84,7 @@ rather than erroring. The task's provenance is still visible; the user can inves
     {
       "filename": "2026-04-18-decouple-spex-from-br.md",
       "title": "Decouple spex binary from br/bd",
+      "date": "2026-04-18",
       "tasks": [
         {"id": "spexmachina-abc", "status": "open", "action": "created", "summary": "emit: ChangesetBuilder"},
         ...
@@ -94,6 +95,8 @@ rather than erroring. The task's provenance is still visible; the user can inves
 ```
 
 Useful for piping into other tools. Not the default (human-readable text is default). The per-proposal array is keyed `tasks`; the envelope speaks the corpus vocabulary and emits no alias for the retired key.
+
+`date` is the proposal's date as [[2e38135487be|Show proposal history]] asks for it, and it is read from the filename alone: the `YYYY-MM-DD` prefix the registrar's naming convention puts first, or the empty string when the stem carries no such prefix. Nothing else supplies it — not the file's modification time, not the tracker's timestamps — so the same records over the same directory always render the same envelope. The text rendering carries no separate date: the filename it prints already leads with the same prefix.
 
 ## Non-Responsibilities
 

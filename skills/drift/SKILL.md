@@ -51,6 +51,11 @@ authorized act.
   prose, no Go in arch leaves, completeness obligations honored.
 - Scope guard: the smallest edit that decides each accepted report. Every changed node beyond
   a report's justification widens the downstream task count.
+- After every edited leaf, re-read each requirement the node implements (and the project
+  requirement behind it) against the leaf as it now reads — `scripts/lens-requirements.sh
+  <module>` lists the pairs. A requirement claim the corrected leaf no longer honours is a
+  critical finding of this triage, not something the later audit is left to catch: stop, name
+  it, and put the fix direction to the user before going on.
 - Both gates green: `bin/spex validate` 0/0 and `bin/spex diff` with `errors: []`.
 
 ## Step 4: Report
