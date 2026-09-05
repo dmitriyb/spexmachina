@@ -78,26 +78,25 @@ func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, journalPath,
 // TestConsistencyInvariants_HappyPath covers the spec's "Happy Path"
 // acceptance: a full complete run with 5 ok creates (2 on known nodes
 // whose earlier tasks already finished, so each builds a modified event
-// with no task_closed; 3 on brand-new nodes) and 3 ok closes (2
-// independent test_section fold-backs, the third a removal). Every op
-// contributes exactly one event and one receipt — there is no longer any
-// merging across ops. All invariants pass; the journal gains exactly the
-// expected events and receipts, the snapshot is rewritten, and every
-// appended line validates against the journal-line schema (proven by
-// Reconciler.Apply not erroring, since invariant 5 is checked before any
-// write).
+// with no task_closed; 1 a cleanup, minting its own removal; 2 on
+// brand-new nodes) and 2 ok closes (a removal and a test_section
+// fold-back). Every op contributes exactly one event and one receipt —
+// there is no merging across ops. All invariants pass; the journal gains
+// exactly the expected events and receipts, the snapshot is rewritten,
+// and every appended line validates against the journal-line schema
+// (proven by Reconciler.Apply not erroring, since invariant 5 is checked
+// before any write).
 func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	const hexSec1 = "dededededede"
-	const hexSec2 = "cececececece"
+	const hexCleanup = "efefefefefef"
 	specDir := setupSpecDir(t)
 	ctx := resolvedProjectContext(t, specDir)
 
 	graph := newFakeSpecGraph()
-	for _, id := range []string{hexMod1, hexMod2, hexA, hexB, hexC} {
+	for _, id := range []string{hexMod1, hexMod2, hexA, hexB} {
 		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "new-" + id, NodeType: "component"}
 	}
 	graph.nodes[hexSec1] = NodeMetadata{Module: "m", Component: "Sec1", ContentFile: "Sec1.md", SpecHash: "new-Sec1", NodeType: "test_section"}
-	graph.nodes[hexSec2] = NodeMetadata{Module: "m", Component: "Sec2", ContentFile: "Sec2.md", SpecHash: "new-Sec2", NodeType: "test_section"}
 
 	if err := mapping.NewMappingStore(ctx.JournalPath).Append([]mapping.Event{
 		{Event: "added", EID: "seed-Mod1", Node: hexMod1, Name: "Mod1", NodeType: "component", Module: "m", After: strPtr("old-Mod1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod1.md"},
@@ -108,8 +107,8 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
 		{Event: "added", EID: "seed-Sec1", Node: hexSec1, Name: "Sec1", NodeType: "test_section", Module: "m", After: strPtr("old-Sec1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Sec1.md"},
 		{Event: "task_created", TaskID: "br-sec1", For: "seed-Sec1"},
-		{Event: "added", EID: "seed-Sec2", Node: hexSec2, Name: "Sec2", NodeType: "test_section", Module: "m", After: strPtr("old-Sec2"), GitHead: "seedhead", Proposal: "seed-p", Path: "Sec2.md"},
-		{Event: "task_created", TaskID: "br-sec2", For: "seed-Sec2"},
+		{Event: "added", EID: "seed-Cleanup", Node: hexCleanup, Name: "Cleaned", NodeType: "component", Module: "m", After: strPtr("h-cleaned"), GitHead: "seedhead", Proposal: "seed-p", Path: "Cleaned.md"},
+		{Event: "task_created", TaskID: "br-cleaned", For: "seed-Cleanup"},
 	}); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
@@ -117,38 +116,38 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []plan.Op{
 		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1)},
 		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2)},
-		{OpID: "op-03", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
-		{OpID: "op-04", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
-		{OpID: "op-05", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
+		{OpID: "op-03", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: hexCleanup, Idempotency: idem("spex:cafehappy:op-03"), Labels: []string{"spex:cleanup"}},
+		{OpID: "op-04", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
+		{OpID: "op-05", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
 		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-sec1"}, Reason: "Spec node modified: m/Sec1"},
-		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-sec2"}, Reason: "Spec node modified: m/Sec2"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-01", Status: adapters.OpStatusOk, TaskID: "br-new1"},
 		{OpID: "op-02", Status: adapters.OpStatusOk, TaskID: "br-new2"},
-		{OpID: "op-03", Status: adapters.OpStatusOk, TaskID: "br-A"},
-		{OpID: "op-04", Status: adapters.OpStatusOk, TaskID: "br-B"},
-		{OpID: "op-05", Status: adapters.OpStatusOk, TaskID: "br-C"},
+		{OpID: "op-03", Status: adapters.OpStatusOk, TaskID: "br-cleanup"},
+		{OpID: "op-04", Status: adapters.OpStatusOk, TaskID: "br-A"},
+		{OpID: "op-05", Status: adapters.OpStatusOk, TaskID: "br-B"},
 		{OpID: "op-06", Status: adapters.OpStatusOk, TaskID: "br-gone"},
 		{OpID: "op-07", Status: adapters.OpStatusOk, TaskID: "br-sec1"},
-		{OpID: "op-08", Status: adapters.OpStatusOk, TaskID: "br-sec2"},
 	}}
 
 	sum, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)
 
-	if sum.OkCreates != 5 || sum.OkCloses != 3 {
-		t.Errorf("summary = %+v, want 5 ok creates / 3 ok closes", sum)
+	if sum.OkCreates != 5 || sum.OkCloses != 2 {
+		t.Errorf("summary = %+v, want 5 ok creates / 2 ok closes", sum)
 	}
-	// Every one of the 8 ops contributes exactly one event: 2 modified
-	// (known nodes), 3 added (fresh), 1 removed, 2 modified (fold-back).
-	if sum.EventsAppended != 8 {
-		t.Errorf("events_appended = %d, want 8", sum.EventsAppended)
+	// Every one of the 7 ops contributes exactly one event: 2 modified
+	// (known nodes), 1 removed (the cleanup's self-minted removal), 2
+	// added (fresh), 1 removed (the removal close), 1 modified (the
+	// fold-back close).
+	if sum.EventsAppended != 7 {
+		t.Errorf("events_appended = %d, want 7", sum.EventsAppended)
 	}
-	// Every one of the 8 ops contributes exactly one receipt: 5
-	// task_created (the 5 creates), 3 task_closed (the 3 closes).
-	if sum.ReceiptsAppended != 8 {
-		t.Errorf("receipts_appended = %d, want 8", sum.ReceiptsAppended)
+	// Every one of the 7 ops contributes exactly one receipt: 5
+	// task_created (the 5 creates), 2 task_closed (the 2 closes).
+	if sum.ReceiptsAppended != 7 {
+		t.Errorf("receipts_appended = %d, want 7", sum.ReceiptsAppended)
 	}
 
 	fold, err := mapping.NewMappingStore(ctx.JournalPath).List()
@@ -159,11 +158,14 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	for _, e := range fold.Entries {
 		byKey[e.Key] = e
 	}
-	want := map[string]string{hexMod1: "br-new1", hexMod2: "br-new2", hexA: "br-A", hexB: "br-B", hexC: "br-C"}
+	want := map[string]string{hexMod1: "br-new1", hexMod2: "br-new2", hexA: "br-A", hexB: "br-B"}
 	for key, task := range want {
 		if byKey[key].TaskID != task {
 			t.Errorf("fold[%s].TaskID = %q, want %q", key, byKey[key].TaskID, task)
 		}
+	}
+	if byKey[hexCleanup].TaskID != "br-cleanup" || !byKey[hexCleanup].Removed {
+		t.Errorf("fold[Cleanup] = %+v, want task br-cleanup, removed", byKey[hexCleanup])
 	}
 	if !byKey[hexGone].Removed {
 		t.Errorf("fold[Gone] = %+v, want removed", byKey[hexGone])
@@ -279,11 +281,12 @@ func TestConsistencyInvariants_Invariant4_CompleteSavesSnapshot(t *testing.T) {
 }
 
 // TestConsistencyInvariants_LineageReplacesRebind covers "Lineage
-// replaces the rebind invariant": after a modified-node create+close pair
-// runs, the journal holds BOTH pairings — the retired task_created for
-// the old bead stays present — and the fold answers with the new task
-// only. No assertion demands the old line be gone; asserting its
-// continued presence IS the test.
+// replaces the rebind invariant": a plain create for a node whose earlier
+// task is finished — no close beside it — leaves the journal holding
+// BOTH pairings — the retired task_created for the old bead stays
+// present, with no task_closed after it — and the fold answers with the
+// new task only. No assertion demands the old line be gone or closed;
+// asserting its continued, unclosed presence IS the test.
 func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 	graph := newFakeSpecGraph()
 	graph.nodes[hexM] = NodeMetadata{Module: "m", Component: "M", ContentFile: "m.md", SpecHash: "new-hash", NodeType: "component"}
@@ -296,11 +299,9 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "g2", Proposal: "p2", Ops: []plan.Op{
 		{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexM, Idempotency: idem("spex:" + hexM), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}}},
-		{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified: m/M"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"},
-		{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"},
 	}}
 
 	if _, err := r.Apply(cs, rc); err != nil {
@@ -312,6 +313,9 @@ func TestConsistencyInvariants_LineageReplacesRebind(t *testing.T) {
 	for _, ev := range journal {
 		if ev.Event == "task_created" && ev.TaskID == "br-old" {
 			oldPairingStillPresent = true
+		}
+		if ev.Event == "task_closed" {
+			t.Errorf("journal = %+v, want no task_closed anywhere — a plain create runs with no close beside it", journal)
 		}
 	}
 	if !oldPairingStillPresent {
@@ -534,5 +538,75 @@ func TestConsistencyInvariants_Invariant1_AbsorbedBatchClosesUnderOneRefreshRece
 	dangling := []mapping.Event{{Event: "refresh", GitHead: "g", Absorbed: []string{journal[0].EID, "no-such-eid"}}}
 	if err := NewInvariantChecker().Check(journal, dangling); err == nil {
 		t.Fatal("InvariantChecker.Check: want error for dangling absorbed referent, got nil")
+	}
+}
+
+// TestConsistencyInvariants_Invariant1_CleanupSelfMintedRemoval covers
+// "Invariant 1: a cleanup's self-minted removal is one referent": a
+// cleanup create for a node with no prior removed event mints its own
+// removal from the op's own (git_head, op_id) and pairs exactly one
+// task_created to it; re-running the identical changeset+receipts pair
+// appends nothing, because the minted removal's eid derives from that
+// same op rather than from anything the re-run could construct anew.
+func TestConsistencyInvariants_Invariant1_CleanupSelfMintedRemoval(t *testing.T) {
+	const hexCleanup = "eeffeeffeeff"
+	graph := newFakeSpecGraph()
+	r, dir := newTestReconciler(t, graph)
+
+	seedJournal(t, dir,
+		mapping.Event{
+			Event: "added", EID: "E1", Node: hexCleanup, Name: "Cleaned", NodeType: "component",
+			Module: "m", After: strPtr("h-cleaned"), GitHead: "seedhead", Proposal: "seed-p", Path: "m/cleaned.md",
+		},
+		mapping.Event{Event: "task_created", TaskID: "br-cleaned", For: "E1"},
+	)
+
+	cs := plan.Changeset{
+		Version: plan.ChangesetVersion, GitHead: "cafecleanup", Proposal: "p",
+		Ops: []plan.Op{{
+			OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "cleanup", SpecNodeID: hexCleanup,
+			Idempotency: idem("spex:cafecleanup:op-1"), Labels: []string{"spex:cleanup"},
+		}},
+	}
+	rc := adapters.Receipts{
+		Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete,
+		Ops: []adapters.OpReceipt{{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup", WasExisting: false}},
+	}
+
+	sum, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if sum.EventsAppended != 1 || sum.ReceiptsAppended != 1 {
+		t.Errorf("summary = %+v, want 1 event (the minted removal) / 1 receipt", sum)
+	}
+
+	journal := readJournal(t, dir)
+	newLines := journal[2:]
+	if len(newLines) != 2 {
+		t.Fatalf("got %d new lines, want 2 (removed + task_created): %+v", len(newLines), newLines)
+	}
+	removed, receipt := newLines[0], newLines[1]
+	if removed.Event != "removed" || removed.Node != hexCleanup {
+		t.Fatalf("line 1 = %+v, want removed event for %s", removed, hexCleanup)
+	}
+	if receipt.Event != "task_created" || receipt.TaskID != "br-cleanup" || receipt.For != removed.EID {
+		t.Fatalf("line 2 = %+v, want task_created for=%s task_id=br-cleanup", receipt, removed.EID)
+	}
+
+	// Re-running the identical pair appends nothing: the removal's eid
+	// derives from (git_head, op_id) — the same op — so it dedups exactly
+	// like an op-born create event would.
+	before := journalBytes(t, dir)
+	sum2, err := r.Apply(cs, rc)
+	if err != nil {
+		t.Fatalf("re-run Apply: %v", err)
+	}
+	if sum2.EventsAppended != 0 || sum2.ReceiptsAppended != 0 {
+		t.Errorf("re-run summary = %+v, want zero appends", sum2)
+	}
+	after := journalBytes(t, dir)
+	if !bytes.Equal(before, after) {
+		t.Fatalf("re-run mutated the journal:\nbefore: %s\nafter:  %s", before, after)
 	}
 }
