@@ -11,9 +11,9 @@
 // plan) + receipts.json (typed by adapters). Pure function over local
 // files — no subprocesses, no tracker calls, no git calls:
 //
-//  1. Pre-flight: parse both files, changeset version == 3 / receipts
-//     version == 1 check, op_id set equality between changeset and
-//     receipts.
+//  1. Pre-flight: parse both files, changeset version ==
+//     plan.ChangesetVersion / receipts version == adapters.ReceiptsVersion
+//     check, op_id set equality between changeset and receipts.
 //  2. Reconciler.Apply: assembles the per-run state and constructs one
 //     EventBuilder, dispatching every op (and the changeset's absorbed
 //     entries) to it — change events and task receipts, with event ids
@@ -38,10 +38,11 @@
 // dep naming the bead its paired close retired) is gone, and so is
 // Reconciler's own batch-wide same-batch-removal pre-pass: no op's lines
 // depend on another op in the batch, so there is nothing left to resolve
-// up front. The changeset/receipts version check likewise stays at
-// 3/1 pending the v4/v2 bump plan (spexmachina-swvx.6) and adapters
-// (spexmachina-swvx.4) still owe their own wire types — see
-// TODO(bead:spexmachina-swvx.25) in cmd/spex/ingest.go.
+// up front. The changeset/receipts version check reads
+// plan.ChangesetVersion and adapters.ReceiptsVersion symbolically rather
+// than hardcoding either — see TODO(bead:spexmachina-swvx.25) in
+// cmd/spex/ingest.go for the deeper v4 behavior this pre-flight check
+// alone does not yet exercise.
 //
 // # Mode: refresh
 //
