@@ -40,9 +40,9 @@
 // depend on another op in the batch, so there is nothing left to resolve
 // up front. The changeset/receipts version check reads
 // plan.ChangesetVersion and adapters.ReceiptsVersion symbolically rather
-// than hardcoding either; cmd/spex/ingest_test.go's *_E2E tests cover the
-// deeper v4 behavior (lineage-free creates, unconditional fold-back
-// closes) surviving the full CLI pipeline.
+// than hardcoding either; ingest/reconciler_test.go covers the deeper v4
+// behavior (lineage-free creates, unconditional fold-back closes)
+// surviving Reconciler.Apply.
 //
 // # Mode: refresh
 //

@@ -317,278 +317,6 @@ func TestIngestCommand_PartialRun_SkipsSnapshot(t *testing.T) {
 	}
 }
 
-// TestIngestCommand_ModifiedNodeCreate_NoLineageDep_E2E covers the v4
-// create shape end to end through the CLI (arch_ingest_command.md's
-// "Wiring", plan/types.go's ChangesetVersion doc: "a modified node's
-// create carries no dep naming its predecessor's task, and Ref carries
-// no edge-type field at all"). A create op for a node that already has a
-// finished journal pairing carries nothing but spec_node_kind/id/hash and
-// idempotency — no Deps, no old task id — and the full pipeline (flag
-// parse -> file load -> pre-flight -> Reconciler -> SnapshotSaver) must
-// still land a "modified" event (not "added", since the fold shows a
-// prior after-hash) plus a fresh task_created, while the old pairing is
-// left exactly as journaled: no task_closed is synthesised for it,
-// because completion is never recorded.
-func TestIngestCommand_ModifiedNodeCreate_NoLineageDep_E2E(t *testing.T) {
-	dir := t.TempDir()
-	specDir := filepath.Join(dir, "spec")
-
-	modID := schema.IdentityHash("module", "alpha")
-	compID := schema.IdentityHash("alpha", "component", "Comp1")
-
-	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	proj := `{
-		"name": "test-ingest",
-		"modules": [{"id": "` + modID + `", "name": "alpha", "path": "alpha"}]
-	}`
-	writeTestFile(t, specDir, "project.json", proj)
-	mod := `{
-		"name": "alpha",
-		"components": [{"id": "` + compID + `", "name": "Comp1", "content": "arch_comp1.md"}]
-	}`
-	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
-	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1 (revised)\n")
-
-	_, journalPath := seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
-
-	// Seed a finished predecessor pairing directly in the journal: an
-	// earlier cycle added the node and paired it to bead-1, with no
-	// task_closed — the journal never records completion.
-	oldHash := "old-hash-of-comp1"
-	if err := mapping.NewMappingStore(journalPath).Append([]mapping.Event{
-		{Event: "added", EID: "seed1", Node: compID, Name: "Comp1", NodeType: "component", Module: "alpha", After: &oldHash, GitHead: "seedhead", Proposal: "seed-p", Path: "spec/alpha/arch_comp1.md"},
-		{Event: "task_created", TaskID: "bead-1", For: "seed1"},
-	}); err != nil {
-		t.Fatalf("seed journal: %v", err)
-	}
-
-	dirCS := t.TempDir()
-	// The create op carries spec_node_kind/id/hash and idempotency only —
-	// no Deps field and no reference to bead-1 anywhere: the vocabulary
-	// itself has nowhere to carry a lineage dep (plan.Op's doc comment).
-	cs := plan.Changeset{
-		Version:  plan.ChangesetVersion,
-		GitHead:  "newhead0001",
-		Proposal: "test-proposal-2",
-		Ops: []plan.Op{{
-			OpID:         "op-0002",
-			Type:         plan.OpCreate,
-			SpecNodeKind: "component",
-			SpecNodeID:   compID,
-			Idempotency:  &plan.Idem{Label: "spex:2"},
-			Title:        "Comp1",
-		}},
-	}
-	csPath := filepath.Join(dirCS, "changeset.json")
-	writeJSON(t, csPath, cs)
-
-	rc := adapters.Receipts{
-		Version: adapters.ReceiptsVersion,
-		Status:  adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{
-			OpID:        "op-0002",
-			Status:      adapters.OpStatusOk,
-			TaskID:      "bead-2",
-			WasExisting: false,
-		}},
-	}
-	rcPath := filepath.Join(dirCS, "receipts.json")
-	writeJSON(t, rcPath, rc)
-
-	_, stderr, exit, err := runIngest(t,
-		"--spec-dir", specDir,
-		"--changeset", csPath,
-		"--receipts", rcPath,
-	)
-	if err != nil {
-		t.Fatalf("ingest failed: %v\nstderr: %s", err, stderr)
-	}
-	if exit != 0 {
-		t.Errorf("want exit 0, got %d", exit)
-	}
-
-	events, err := mapping.NewMappingStore(journalPath).Parse()
-	if err != nil {
-		t.Fatalf("parse journal: %v", err)
-	}
-
-	wantHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "arch_comp1.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var newChange *mapping.Event
-	for i := range events {
-		if events[i].EID != "" && events[i].EID != "seed1" && events[i].Node == compID {
-			newChange = &events[i]
-		}
-	}
-	if newChange == nil {
-		t.Fatalf("want a new change event for %s, journal: %+v", compID, events)
-	}
-	if newChange.Event != "modified" {
-		t.Errorf("want event=modified (fold shows a prior after-hash), got %q", newChange.Event)
-	}
-	if newChange.Before == nil || *newChange.Before != oldHash {
-		t.Errorf("want before=%s (the predecessor's after-hash), got %+v", oldHash, newChange.Before)
-	}
-	if newChange.After == nil || *newChange.After != wantHash {
-		t.Errorf("want after=%s, got %+v", wantHash, newChange.After)
-	}
-
-	var newTaskCreated, oldTaskClosed *mapping.Event
-	for i := range events {
-		switch {
-		case events[i].Event == "task_created" && events[i].For == newChange.EID:
-			newTaskCreated = &events[i]
-		case events[i].Event == "task_closed" && events[i].For == "seed1":
-			oldTaskClosed = &events[i]
-		}
-	}
-	if newTaskCreated == nil || newTaskCreated.TaskID != "bead-2" {
-		t.Errorf("want a task_created for bead-2 referencing the new event, got %+v", newTaskCreated)
-	}
-	if oldTaskClosed != nil {
-		t.Errorf("the predecessor pairing must get no task_closed — completion is never journaled, got %+v", oldTaskClosed)
-	}
-
-	entry, err := mapping.NewMappingStore(journalPath).Get(compID)
-	if err != nil {
-		t.Fatalf("get fold entry: %v", err)
-	}
-	if entry.TaskID != "bead-2" {
-		t.Errorf("fold's latest-wins pairing: want bead-2, got %s", entry.TaskID)
-	}
-}
-
-// TestIngestCommand_FoldBackClose_E2E covers the "Spec node modified"
-// close reason end to end through the CLI (flow_ingest.md: "an ok close
-// on a live node — the test_section fold-back — appends the modified
-// event and a task_closed"; arch_event_builder.md "Fold-Back Closes":
-// built from the close alone, unconditionally, with no task_created).
-// The node is still live in the spec — only its own task is cancelled
-// because its coverage folded back into another component's task — so
-// the modified event's after-hash must reflect current spec content, and
-// no task_created must appear for the closed pairing.
-func TestIngestCommand_FoldBackClose_E2E(t *testing.T) {
-	dir := t.TempDir()
-	specDir := filepath.Join(dir, "spec")
-
-	modID := schema.IdentityHash("module", "alpha")
-	compID := schema.IdentityHash("alpha", "component", "Comp1")
-	secID := schema.IdentityHash("alpha", "test_section", "Sec1")
-
-	if err := os.MkdirAll(filepath.Join(specDir, "alpha"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	proj := `{
-		"name": "test-ingest",
-		"modules": [{"id": "` + modID + `", "name": "alpha", "path": "alpha"}]
-	}`
-	writeTestFile(t, specDir, "project.json", proj)
-	mod := `{
-		"name": "alpha",
-		"components": [{"id": "` + compID + `", "name": "Comp1", "content": "arch_comp1.md"}],
-		"test_sections": [{"id": "` + secID + `", "name": "Sec1", "content": "test_sec1.md", "describes": ["` + compID + `"]}]
-	}`
-	writeTestFile(t, filepath.Join(specDir, "alpha"), "module.json", mod)
-	writeTestFile(t, filepath.Join(specDir, "alpha"), "arch_comp1.md", "# Comp1\n")
-	writeTestFile(t, filepath.Join(specDir, "alpha"), "test_sec1.md", "# Sec1 (revised)\n")
-
-	_, journalPath := seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
-
-	oldHash := "old-hash-of-sec1"
-	if err := mapping.NewMappingStore(journalPath).Append([]mapping.Event{
-		{Event: "added", EID: "seedsec", Node: secID, Name: "Sec1", NodeType: "test_section", Module: "alpha", After: &oldHash, GitHead: "seedhead", Proposal: "seed-p", Path: "spec/alpha/test_sec1.md"},
-		{Event: "task_created", TaskID: "bead-sec", For: "seedsec"},
-	}); err != nil {
-		t.Fatalf("seed journal: %v", err)
-	}
-
-	dirCS := t.TempDir()
-	cs := plan.Changeset{
-		Version:  plan.ChangesetVersion,
-		GitHead:  "newhead0002",
-		Proposal: "test-proposal-3",
-		Ops: []plan.Op{{
-			OpID:   "op-0003",
-			Type:   plan.OpClose,
-			Target: &plan.Ref{Kind: plan.RefTask, TaskID: "bead-sec"},
-			Reason: "Spec node modified: alpha/Sec1",
-		}},
-	}
-	csPath := filepath.Join(dirCS, "changeset.json")
-	writeJSON(t, csPath, cs)
-
-	rc := adapters.Receipts{
-		Version: adapters.ReceiptsVersion,
-		Status:  adapters.StatusComplete,
-		Ops: []adapters.OpReceipt{{
-			OpID:   "op-0003",
-			Status: adapters.OpStatusOk,
-			TaskID: "bead-sec",
-		}},
-	}
-	rcPath := filepath.Join(dirCS, "receipts.json")
-	writeJSON(t, rcPath, rc)
-
-	_, stderr, exit, err := runIngest(t,
-		"--spec-dir", specDir,
-		"--changeset", csPath,
-		"--receipts", rcPath,
-	)
-	if err != nil {
-		t.Fatalf("ingest failed: %v\nstderr: %s", err, stderr)
-	}
-	if exit != 0 {
-		t.Errorf("want exit 0, got %d", exit)
-	}
-
-	events, err := mapping.NewMappingStore(journalPath).Parse()
-	if err != nil {
-		t.Fatalf("parse journal: %v", err)
-	}
-
-	wantHash, err := merkle.HashFile(filepath.Join(specDir, "alpha", "test_sec1.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	var modified *mapping.Event
-	for i := range events {
-		if events[i].Event == "modified" && events[i].Node == secID {
-			modified = &events[i]
-		}
-	}
-	if modified == nil {
-		t.Fatalf("want a modified event for %s (fold-back close), journal: %+v", secID, events)
-	}
-	if modified.Before == nil || *modified.Before != oldHash {
-		t.Errorf("want before=%s, got %+v", oldHash, modified.Before)
-	}
-	if modified.After == nil || *modified.After != wantHash {
-		t.Errorf("want after=%s (current spec content), got %+v", wantHash, modified.After)
-	}
-
-	var taskClosed, taskCreated *mapping.Event
-	for i := range events {
-		switch {
-		case events[i].Event == "task_closed" && events[i].For == modified.EID:
-			taskClosed = &events[i]
-		case events[i].Event == "task_created" && events[i].For == modified.EID:
-			taskCreated = &events[i]
-		}
-	}
-	if taskClosed == nil || taskClosed.TaskID != "bead-sec" {
-		t.Errorf("want a task_closed for bead-sec referencing the modified event, got %+v", taskClosed)
-	}
-	if taskCreated != nil {
-		t.Errorf("a fold-back close builds no task_created — there is no successor task to pair, got %+v", taskCreated)
-	}
-}
-
 func TestIngestCommand_MissingChangesetFlag_Exits1(t *testing.T) {
 	f := setupIngestFixture(t, adapters.StatusComplete)
 
@@ -726,6 +454,85 @@ func TestIngestCommand_BadVersionInChangeset_Exits1(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "changeset version") {
 		t.Errorf("want changeset-version error, got: %v", err)
+	}
+}
+
+// TestIngestCommand_V3PairRefused_Exits1 covers test_ingest_command.md's
+// "A v3 pair is refused at the version envelope": a changeset carrying
+// "version": 3 with a dep in the retired v3 task-ref spelling
+// ({"ref":"bead","bead_id":…}, plan/types.go's ChangesetVersion doc)
+// paired with receipts carrying "version": 1 (the pre-rename
+// bead_id-keyed per-op shape, adapters/types.go's ReceiptsVersion doc).
+// The retired shapes are refused outright by the pre-flight, never
+// adapted: nothing is appended and the snapshot is untouched.
+func TestIngestCommand_V3PairRefused_Exits1(t *testing.T) {
+	f := setupIngestFixture(t, adapters.StatusComplete)
+
+	journalBefore, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapBefore, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	v3Changeset := `{
+		"version": 3,
+		"git_head": "deadbeefcafe",
+		"proposal": "test-proposal",
+		"ops": [{
+			"op_id": "op-0001",
+			"type": "create",
+			"spec_node_kind": "component",
+			"spec_node_id": "` + f.compID + `",
+			"idempotency": {"label": "spex:1"},
+			"deps": [{"ref": "bead", "bead_id": "bead-999"}],
+			"title": "Comp1"
+		}]
+	}`
+	if err := os.WriteFile(f.changesetPath, []byte(v3Changeset), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	v1Receipts := `{
+		"version": 1,
+		"status": "complete",
+		"ops": [{"op_id": "op-0001", "status": "ok", "bead_id": "bead-1", "was_existing": false}]
+	}`
+	if err := os.WriteFile(f.receiptsPath, []byte(v1Receipts), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, exit, err := runIngest(t,
+		"--spec-dir", f.specDir,
+		"--changeset", f.changesetPath,
+		"--receipts", f.receiptsPath,
+	)
+	if err == nil {
+		t.Fatal("want error for a v3 changeset / v1 receipts pair, got nil")
+	}
+	if exit != 1 {
+		t.Errorf("want exit 1, got %d", exit)
+	}
+	if !strings.Contains(err.Error()+stderr, "version") {
+		t.Errorf("want error naming the version, got err=%v stderr=%s", err, stderr)
+	}
+
+	journalAfter, err := os.ReadFile(f.journalPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(journalAfter) != string(journalBefore) {
+		t.Errorf("refused pair should append nothing, before=%q after=%q", journalBefore, journalAfter)
+	}
+
+	snapAfter, err := os.ReadFile(f.snapshotPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(snapAfter) != string(snapBefore) {
+		t.Errorf("refused pair should leave the snapshot untouched, before=%q after=%q", snapBefore, snapAfter)
 	}
 }
 
