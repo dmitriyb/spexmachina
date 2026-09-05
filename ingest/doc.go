@@ -50,7 +50,7 @@
 // leaf, plus additions and removals of the node types the resolved
 // profile declares absorbable (requirements and apis in either
 // direction, component removals, in the default profile) — without any
-// bead lifecycle running. The changeset and receipts must be empty; the
+// task lifecycle running. The changeset and receipts must be empty; the
 // pre-refresh snapshot is the diff baseline and must exist:
 //
 //  1. Pre-flight: both artifacts empty, snapshot present.

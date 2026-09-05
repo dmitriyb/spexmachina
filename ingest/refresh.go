@@ -64,7 +64,7 @@ type RefreshSummary struct {
 // and removals of the node types the resolved profile declares
 // absorbable — by appending one change event per absorbed drift entry to
 // the task journal, closed by one refresh receipt, and rewriting the
-// snapshot — atomically, with no bead lifecycle. See
+// snapshot — atomically, with no task lifecycle. See
 // spec/ingest/arch_refresh.md for the refusal contract.
 type RefreshHandler struct {
 	// SnapshotPath is the diff baseline and rewrite target. Defaults to
