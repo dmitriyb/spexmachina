@@ -31,7 +31,7 @@ axis and both misfire alone.
 - **Spec yields to code** — no work is born; the correction records behaviour that is shipped,
   reviewed, and pinned by a test: **refresh**, Step 4.
 - **Mixed** — mint, with the yielding nodes marked in an `--absorb` file (Step 2) so the run
-  does not open beads that owe nothing.
+  does not open tasks that owe nothing.
 
 The spec-yields verdict is evidenced, never asserted: for every yielding node, name the test
 that pins the corrected behaviour — in the PR description for a whole-run refresh, in the mark's
@@ -46,7 +46,7 @@ get their confirmation **before** running `spex plan`. An unclassified node mint
 safe direction; the table exists so no node is absorbed by omission or minted by inattention.
 
 `--absorb` names a git-committed JSON list of `{node, reason}`. A marked node's change is
-withheld before matching, so it yields no op at all — no create, no obsolete, no retarget, no
+withheld before matching, so it yields no op at all — no create, no close, no retarget, no
 claimed-task refusal — and rides in the changeset's `absorbed` array instead; `ingest` mints its
 `modified` event (keyed `refresh:<node>:<before>:<after>`, the same scheme a whole-run refresh
 uses) and the batch's single non-task-bearing `refresh` receipt names every absorbed eid the
@@ -72,7 +72,7 @@ the node yields is **not checked and cannot be**; these four rules are the whole
 
 Rule 2's carve-out is deliberately narrow, and the record shows why: on 2026-08-16 a triage run
 absorbed five contract-bearing leaves on a bare "owes no code" — nothing pinned the claimed
-compliance, the changes did owe code, and the mint had to be reverted and re-run as eight beads.
+compliance, the changes did owe code, and the mint had to be reverted and re-run as eight tasks.
 Nothing enforces rules 1–4: `spex plan` validates shape only, and skill prose is advisory by
 construction. Making any of them binding is a change to `spex` behaviour and needs a proposal
 first; until one lands, the PR review is the only check there is.
@@ -94,43 +94,65 @@ becomes the epic's idempotency label, which is why `/propose` caps the slug at 2
 
 ```
 bin/spex diff --json > diff.json
+<adapter export> → tasks.json                 # scripts/export-br.sh tasks.json is the reference
 bin/spex plan --proposal <stem> --git-head <sha> --diff diff.json \
-              [--beads <br list --json>] [--absorb <file>] --out changeset.json
-<adapter> changeset.json → receipts.json      # scripts/apply-br.sh is the reference
+              --tasks tasks.json [--absorb <file>] --out changeset.json
+<adapter apply> changeset.json → receipts.json   # scripts/apply-br.sh is the reference
 bin/spex ingest --changeset changeset.json --receipts receipts.json
 ```
+
+The export runs before **every** plan, never once per session: the task-state artifact is
+required, and it describes the tracker at the moment it was written. A run that reads a stale
+one retargets or closes tasks the tracker no longer holds live, or misses a claim made since.
 
 | `spex plan` flag | Required | What it is |
 |---|---|---|
 | `--proposal` | yes | the proposal stem, without `.md`; the epic resolves through it — a live epic task in the journal fold first, else a `registered` event with the same stem, else the run fails |
 | `--git-head` | yes | the commit carrying the spec edits — hand it a **7-character short SHA** (label budget below) |
 | `--diff` | no | `spex diff --json` output; stdin by default |
-| `--beads` | no | tracker listing (`br list --json`). Omitting it defaults the cleanup gate closed and sends each *matched* modified node (journal-paired, new hash unrecorded) down the obsolete+create path |
+| `--tasks` | yes | the task-state artifact, `{"version":1,"tasks":[{"task_id":…,"status":…}]}` with `status` ∈ {`open`, `in_progress`} (`schema/task-state.schema.json`). It lists **in-flight tasks and nothing else** — a handful mid-epic, `[]` after one, and an empty list is a legal, explicit "nothing in flight". The adapter's export half writes it from the tracker (for br: `scripts/export-br.sh tasks.json`, the listing filtered to open/in_progress and projected to two fields); spex never runs the tracker itself, and never reads the raw listing |
 | `--absorb` | no | the Step 2 file |
 | `--out` | no | changeset path; stdout by default |
 
 Exit codes: `0` changeset written; `1` input validation (bad flags, malformed JSON, a diff that
-still carries errors — `plan: diff contains N error(s), refusing to proceed` — or unreadable
-`--beads`); `2` contract refusal (a claimed task's node changed, an invalid absorb entry, a dep
-cycle, an unresolvable dep or parent); `3` not a spex project — the lifecycle pre-flight's own
+still carries errors — `plan: diff contains N error(s), refusing to proceed` — or a missing,
+unreadable or wrong-version `--tasks` document); `2` contract refusal (a claimed task's node
+changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent); `3` not a spex project — the lifecycle pre-flight's own
 code, uninitialised (naming `spex init`) or broken snapshot/journal (naming `spex doctor`). A
 malformed journal never takes `1`: the pre-flight refuses before the fold reads anything.
 
-Changeset v4 vocabulary: ops are `create`, `close`, `retarget` (`obsolete` is an action word —
-an obsoleted node reaches the adapter as a `close`); `spec_node_kind` on a create is
-`proposal_epic`, `component`, `data_flow`, `test_section` or `cleanup` (no `api`, no
-`requirement` — neither produces a bead); refs are `{"ref":"task"}` or `{"ref":"op"}`, resolved
-at build time; `absorbed` is a top-level array beside `ops`, never an op.
+**The lifecycle plan decides.** A pairing's task is in one of exactly three states — `open` or
+`in_progress` in the artifact, or absent from it — and absence *means* finished: completion is
+derived from the journal pairing plus absence, never carried as a status. Two decisions follow
+(`spec/plan/arch_action_classifier.md` holds the table):
+
+| Change | Task `open` | Task `in_progress` | Task absent |
+|---|---|---|---|
+| added / modified, hash unrecorded | **retarget** the task | **refuse the run** | one plain **create** |
+| removed | **close** the task | **refuse the run** | **create** a cleanup task |
+
+The create on an absent task is plain: no close of the predecessor, no old task id carried, no
+`blocks` dependency onto the finished task. Generation history is the journal's event chain,
+which `spex map context` surfaces — the changeset never encodes it. Closing is reserved for
+live work; there is no obsolete+create path and no no-op close against a finished task.
+
+Changeset v4 vocabulary: ops are `create`, `close`, `retarget` — `obsolete` is not in it;
+`spec_node_kind` on a create is `proposal_epic`, `component`, `data_flow`, `test_section` or
+`cleanup` (no `api`, no `requirement` — neither produces a task); refs are `{"ref":"task",
+"task_id":…}` or `{"ref":"op","op_id":…}`, resolved at build time; `absorbed` is a top-level
+array beside `ops`, never an op. Receipts are v2: every entry is keyed `task_id`. Inside the
+spec corpus and these skills the word is task(s), everywhere; the tracker's own name for its
+objects enters only through the reference adapter's command strings (`br create`, `br list`).
 
 **The 50-character label budget.** br rejects any label over 50 characters, in the same
-`br create` as the bead, so an overflow fails the create outright mid-mint. Two labels are the
+`br create` as the task, so an overflow fails the create outright mid-mint. Two labels are the
 author's to size: the epic's `spex:<git_head>:<proposal_stem>` (fixed at `spex register` — the
 stem budget is why `/propose` caps slugs at 26), and every op's `spex:<git_head>:op-NN` — a
 40-character SHA overflows at ten ops, the 7-character abbreviation never does. Nothing enforces
 these budgets until br fails partway through.
 
 Exit 2 on a claimed task is the reason to mint a module's changes in one run rather than
-dribbling them across several while beads are in flight.
+dribbling them across several while tasks are in flight.
 
 ## Step 4: Refresh
 
@@ -140,8 +162,9 @@ For the pure spec-yields run — every node's correction pinned, no ops owed:
 bin/spex ingest --mode refresh --changeset <empty> --receipts <empty> [--git-head <sha>]
 ```
 
-Both artifacts are required and must be empty: `{"version":3,"ops":[],"absorbed":[]}` and
-`{"version":1,"status":"complete","ops":[]}`. Refresh walks the current graph itself, absorbs
+Both artifacts are required and must be empty: `{"version":4,"ops":[],"absorbed":[]}` and
+`{"version":2,"status":"complete","ops":[]}` — the same versions a mint's changeset and receipts
+carry; ingest refuses any other (`changeset version must be 4`, `receipts version must be 2`). Refresh walks the current graph itself, absorbs
 every drift entry as a `modified` event, writes one refresh receipt (stamped with `--git-head`
 when given), and commits journal and snapshot under one atomic boundary. It refuses non-empty
 artifacts and structural entries outside its absorbable set (`requirement` and `api` both

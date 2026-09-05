@@ -9,7 +9,7 @@ func NewRootCmd() *cobra.Command {
 		Short: "The spec state machine",
 		Long: `spex owns the structural half of spec-driven development.
 It defines specs as a typed graph, tracks changes via a merkle tree,
-computes impact deterministically, and maps spec nodes to beads tasks.`,
+computes impact deterministically, and maps spec nodes to tasks.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}

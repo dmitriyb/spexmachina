@@ -178,7 +178,7 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
    `"module": "<name>"`, and "the <name> module", each tolerating backticks around the name.
    Precision over recall by design: a clean run does **not** mean the corpus is free of stale
    module references. A module named as a bare subject ("so impact never sees it"), as an
-   adjectival compound ("impact analysis"), or in a `<module>: <Component>` bead title matches
+   adjectival compound ("impact analysis"), or in a `<module>: <Component>` task title matches
    nothing and must still be read for. The kfem class: nine sites lens 4 reported clean over.
    A hit that is *correct* — a leaf documenting the journal must quote a removal record, and a
    removal record names the dead module permanently — is excused by name in
@@ -246,7 +246,7 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 
 - `len(describes) >= 2` — the scenarios must exercise behaviour spanning at least two of the
   described components. One component, one method, one assertion is a unit test and does not belong
-  at this shape. This shape produces a bead; the other does not.
+  at this shape. This shape produces a task; the other does not.
 - `len(describes) == 1` — unit/component tests bundled with that component's work. Appropriate here.
 
 **Requirements (`project.json` + `module.json`)**
@@ -263,12 +263,12 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 
 ## Step 6: Bucket findings by lifecycle
 
-Bead-producing node types are **`component`, `data_flow`, and `test_section` with `describes >= 2`**
-(contract in `spec/plan/arch_action_classifier.md`). Everything else produces no bead: `requirement`
+Task-producing node types are **`component`, `data_flow`, and `test_section` with `describes >= 2`**
+(contract in `spec/plan/arch_action_classifier.md`). Everything else produces no task: `requirement`
 (project or module), **`api`**, `test_section` with `describes == 1`, `meta`, and
 **`module`**. A module is not a leaf, so no change ever reaches the classifier carrying node type
 `module`; a `module.json` edit surfaces as that module's `meta/<hash>` leaf, and `meta` produces no
-bead.
+task.
 
 `spex ingest --mode refresh` **has shipped.** It absorbs content-only edits to any leaf, plus
 structural additions and removals of an explicit type list, read from the resolved profile's
@@ -284,8 +284,11 @@ declares the table below:
 
 So:
 
-- Findings on bead-producing leaves → the fix owes beads; say so in the Step 7 report.
-- Findings on both kinds → the bead-producing changes drive the lifecycle; the fix owes beads.
+- Findings on task-producing leaves → the fix owes tasks; say so in the Step 7 report. What
+  each owes is decided at mint time from the task-state artifact: a node whose earlier task is
+  finished (absent from the artifact) takes one plain create, an open one is retargeted, a
+  claimed one refuses the run — never a close-and-recreate.
+- Findings on both kinds → the task-producing changes drive the lifecycle; the fix owes tasks.
 - Findings confined to the absorbable set → the fix owes none; say so in the Step 7 report.
 
 ## Step 7: Present findings and stop (if findings)
@@ -296,7 +299,7 @@ The findings report is the deliverable of the audit. Present it as a table, one 
 |---|------|------|-----------|--------|--------|
 
 `Node` carries the full node name with the identity hash in parentheses — `Action Classifier
-(72ab19c303f1)`. `Bucket` is the Step 6 lifecycle bucket (bead-producing or absorbable), so the
+(72ab19c303f1)`. `Bucket` is the Step 6 lifecycle bucket (task-producing or absorbable), so the
 user sees what each fix will owe downstream.
 
 Below the table, per finding: the exact spec edit that resolves it — which field, which prose

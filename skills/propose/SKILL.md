@@ -63,7 +63,7 @@ Nodes only — `{id, type, name, module}` — with bare identity hashes. Roughly
 
 These are the only things a proposal can ask for. Identity is `<module>/<type>/<name>` for module-scoped nodes and `project/requirement/<title>` for project requirements.
 
-| Node | Declared in | Content leaf | Produces a bead |
+| Node | Declared in | Content leaf | Produces a task |
 |---|---|---|---|
 | project requirement | `project.json` → `requirements[]` | none — hashes from its JSON fields | no |
 | module | `project.json` → `modules[]` + `<mod>/module.json` | none — a synthetic `meta/<hash>` leaf hashes the whole `module.json` | no — the `meta` leaf is what changes, and `meta` produces none |
@@ -175,7 +175,7 @@ modified   structural   widgets    meta/3fe17d5b8078
 diff: 1 completeness error(s) found     # exit 2
 ```
 
-**Renaming a node is delete-plus-create.** The name is the identity, so a rename destroys one node and mints another: a new hash, an obsolete bead and a create bead, every inbound link rewritten, and a corpus-wide sweep for surviving mentions of the old name. A proposal that renames things is proposing expensive work — name the cost in the Impact expectation rather than letting `/spec` discover it.
+**Renaming a node is delete-plus-create.** The name is the identity, so a rename destroys one node and mints another: a new hash, a close of the old node's task if it is still open (a cleanup create if it is finished), a create for the new node with no lineage edge back, every inbound link rewritten, and a corpus-wide sweep for surviving mentions of the old name. A proposal that renames things is proposing expensive work — name the cost in the Impact expectation rather than letting `/spec` discover it.
 
 `spex validate` has no warnings. Every finding is an error, `warning_count` is always 0, and a spec either validates or does not.
 
@@ -184,7 +184,7 @@ diff: 1 completeness error(s) found     # exit 2
 A proposal whose whole effect is corrective — spec text converged onto shipped, test-pinned
 behaviour, no work born — should declare it: prepend `mode: refresh` YAML frontmatter (the
 convention `/spec-review`'s correction proposals already use) and name the pinning evidence in
-the Impact expectation. `/mint` then executes it as a refresh instead of minting beads that owe
+the Impact expectation. `/mint` then executes it as a refresh instead of minting tasks that owe
 nothing. A proposal that births any work omits the frontmatter; mixed changes stay a mint, with
 the yielding nodes argued per `/mint`'s absorb rules.
 
@@ -231,7 +231,7 @@ If the user discusses changes to the draft, update the proposal content in Part 
 
 1. **Context** — What is the current state? What triggered this change?
 2. **Proposed change** — What specifically will change in the spec? Which modules, requirements, apis or components are affected, and are they added, modified or removed?
-3. **Impact expectation** — What beads will be created, modified or closed? Which content leaves must change to satisfy the completeness rules of 5.6? What is the expected scope of work?
+3. **Impact expectation** — What tasks will be created, retargeted or closed? Which content leaves must change to satisfy the completeness rules of 5.6? What is the expected scope of work?
 
 ### Project Proposal Template
 
@@ -288,7 +288,7 @@ If the user discusses changes to the draft, update the proposal content in Part 
 
 ## Impact expectation
 
-<What beads will be created, modified, or closed? Which content leaves must change? Estimated scope.>
+<What tasks will be created, retargeted, or closed? Which content leaves must change? Estimated scope.>
 ```
 
 The H2 headings in both templates are the ones `spex register` requires. Renaming or dropping one makes the proposal unregisterable.
@@ -305,7 +305,7 @@ After the user approves:
 
 1. Create `spec/proposals/` directory if it does not exist.
 2. Write the approved draft to `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
-   **The slug is capped at 26 characters**, making the stem (`YYYY-MM-DD-<name>`) at most 37. `spex register` keys the proposal's `registered` event as `<git_head>:<stem>`, and that eid becomes the epic bead's idempotency label, `spex:<git_head>:<stem>`; br rejects any label over 50 characters (`Error: Validation failed: label: exceeds 50 characters`) — with the 7-character short SHA the pipeline uses, 37 is exactly the budget left for the stem. An over-long slug does not degrade: it fails the `br create` partway through the mint, long after this session ended. Shorten it here: if the slug the user gave (or the one the title implies) is longer, propose a shortened one and say why — never trim it silently.
+   **The slug is capped at 26 characters**, making the stem (`YYYY-MM-DD-<name>`) at most 37. `spex register` keys the proposal's `registered` event as `<git_head>:<stem>`, and that eid becomes the epic task's idempotency label, `spex:<git_head>:<stem>`; br rejects any label over 50 characters (`Error: Validation failed: label: exceeds 50 characters`) — with the 7-character short SHA the pipeline uses, 37 is exactly the budget left for the stem. An over-long slug does not degrade: it fails the `br create` partway through the mint, long after this session ended. Shorten it here: if the slug the user gave (or the one the title implies) is longer, propose a shortened one and say why — never trim it silently.
 3. Tell the user the file path.
 4. Remind them to review and commit to git.
 
