@@ -214,6 +214,7 @@ func TestHistoryViewer_JSONMode(t *testing.T) {
 		Proposals []struct {
 			Filename string `json:"filename"`
 			Title    string `json:"title"`
+			Date     string `json:"date"`
 			Tasks    []struct {
 				ID      string `json:"id"`
 				Status  string `json:"status"`
@@ -235,6 +236,9 @@ func TestHistoryViewer_JSONMode(t *testing.T) {
 	if p.Title != "Change Proposal: Decouple spex from br" {
 		t.Errorf("want H1 title, got %q", p.Title)
 	}
+	if p.Date != "2026-04-18" {
+		t.Errorf("want date from filename prefix, got %q", p.Date)
+	}
 	if len(p.Tasks) != 2 {
 		t.Fatalf("want 2 tasks, got %d", len(p.Tasks))
 	}
@@ -255,9 +259,9 @@ func TestHistoryViewer_JSONMode(t *testing.T) {
 }
 
 // TestHistoryViewer_JSONEnvelopeOmitsRetiredKeys covers S4: a proposal record
-// carries only filename, title and tasks — no proposal, type or date key —
-// and a task entry carries only id, status, action and summary — no module
-// or component key.
+// carries filename, title, date and tasks — no proposal or type key — and a
+// task entry carries only id, status, action and summary — no module or
+// component key.
 func TestHistoryViewer_JSONEnvelopeOmitsRetiredKeys(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
@@ -284,12 +288,12 @@ func TestHistoryViewer_JSONEnvelopeOmitsRetiredKeys(t *testing.T) {
 		t.Fatalf("want 1 proposal entry, got %d", len(raw.Proposals))
 	}
 	proposal := raw.Proposals[0]
-	for _, key := range []string{"filename", "title", "tasks"} {
+	for _, key := range []string{"filename", "title", "date", "tasks"} {
 		if _, ok := proposal[key]; !ok {
 			t.Errorf("want proposal key %q present, got %+v", key, proposal)
 		}
 	}
-	for _, retired := range []string{"proposal", "type", "date"} {
+	for _, retired := range []string{"proposal", "type"} {
 		if _, ok := proposal[retired]; ok {
 			t.Errorf("retired proposal key %q must not appear:\n%s", retired, buf.String())
 		}
@@ -493,7 +497,8 @@ func TestHistoryViewer_NonMarkdownFilesIgnored(t *testing.T) {
 }
 
 // TestHistoryViewer_NonDatedFilenameStillResolves covers E2: a proposal
-// filename with no YYYY-MM-DD- prefix is still resolved by its full stem.
+// filename with no YYYY-MM-DD- prefix is still resolved by its full stem, and
+// its JSON date is the empty string — never derived from file mtime.
 func TestHistoryViewer_NonDatedFilenameStillResolves(t *testing.T) {
 	tmp := t.TempDir()
 	specDir := filepath.Join(tmp, "spec")
@@ -519,6 +524,26 @@ func TestHistoryViewer_NonDatedFilenameStillResolves(t *testing.T) {
 	}
 	if !strings.Contains(out, "spexmachina-abc") || !strings.Contains(out, "spexmachina-def") {
 		t.Errorf("want both tasks grouped under the same stem:\n%s", out)
+	}
+
+	buf.Reset()
+	hv.JSON = true
+	if err := hv.ShowHistory(tasks); err != nil {
+		t.Fatalf("ShowHistory JSON: %v", err)
+	}
+	var payload struct {
+		Proposals []struct {
+			Date string `json:"date"`
+		} `json:"proposals"`
+	}
+	if err := json.Unmarshal(buf.Bytes(), &payload); err != nil {
+		t.Fatalf("json unmarshal: %v\nraw: %s", err, buf.String())
+	}
+	if len(payload.Proposals) != 1 {
+		t.Fatalf("want 1 proposal entry, got %d", len(payload.Proposals))
+	}
+	if payload.Proposals[0].Date != "" {
+		t.Errorf("want empty date for non-dated filename, got %q", payload.Proposals[0].Date)
 	}
 }
 
