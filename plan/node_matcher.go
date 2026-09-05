@@ -8,12 +8,12 @@ import (
 
 // Pairing is one journal fold entry — a spec node's current task linkage, as
 // mapping.MappingStore folds it from spec/.history.jsonl — enriched with the
-// bead's live status. Folding the journal and joining BeadReader's live
-// status onto each entry by task id happens upstream of NodeMatcher, in
+// task's live status. Folding the journal and joining the --tasks artifact's
+// live status onto each entry by task id happens upstream of NodeMatcher, in
 // PlanCommand; matching reads neither TaskID's status nor alters it, only
 // carrying BeadStatus through untouched for ActionClassifier's cleanup gate
-// and retarget split further down (arch_node_matcher.md). A pairing for
-// which no bead was supplied arrives with BeadStatus unset.
+// and retarget split further down (arch_node_matcher.md). A pairing whose
+// task the artifact does not list arrives with BeadStatus unset.
 type Pairing struct {
 	SpecNodeID string // the fold entry's node key: a 12-character hex identity hash
 	TaskID     string // the fold entry's current task/bead id

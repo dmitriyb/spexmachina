@@ -412,9 +412,11 @@ func TestClassifyMatched_StatusSplit(t *testing.T) {
 	})
 
 	// The artifact carries no fourth status: any live-status value other than
-	// "open" or "in_progress" — a tracker status the task-state schema does
-	// not admit, surfaced only via the legacy --beads path — is read the
-	// same as "absent from the artifact", never as some other case.
+	// "open" or "in_progress" — a status the task-state schema rejects at
+	// the ReadTasksBytes boundary before ClassifyActions ever sees it — is
+	// read the same as "absent from the artifact", never as some other
+	// case. This defends ClassifyActions's own contract directly, in case
+	// that boundary ever changes.
 	t.Run("non_open_non_in_progress_status_also_yields_plain_create", func(t *testing.T) {
 		m := Match{Change: c, Records: []Pairing{{TaskID: "spex-099", BeadStatus: "closed"}}}
 		actions, err := ClassifyActions([]Match{m}, nil, nil, f.Graph)
