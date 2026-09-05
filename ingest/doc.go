@@ -31,16 +31,15 @@
 //     against the unchanged baseline.
 //  4. Emit a JSON Summary to stdout.
 //
-// EventBuilder's own construction paths still implement the pre-task-
-// lifecycle "Modified-Node Pair" mechanism (a create's `blocks` dep
-// names the bead its paired close retires) that spec/ingest/module.json
-// and spec/ingest/arch_event_builder.md have since retired in favor of
-// deriving added-vs-modified from the journal fold's latest change event
-// per node, and a cleanup create minting its own removal event when the
-// journal shows none — see TODO(bead:spexmachina-swvx.22) in
-// event_builder.go and TODO(bead:spexmachina-swvx.24) in reconciler.go.
-// The changeset/receipts version check likewise stays at 3/1 pending the
-// v4/v2 bump plan (spexmachina-swvx.6) and adapters
+// EventBuilder's construction paths derive added-vs-modified from the
+// journal fold's latest change event per node, and a cleanup create
+// mints its own removal event when the journal shows none — the
+// pre-task-lifecycle "Modified-Node Pair" mechanism (a create's `blocks`
+// dep naming the bead its paired close retired) is gone. Reconciler's
+// own batch-wide same-batch-removal pre-pass is now dead weight left for
+// its own bead to retire — see TODO(bead:spexmachina-swvx.24) in
+// reconciler.go. The changeset/receipts version check likewise stays at
+// 3/1 pending the v4/v2 bump plan (spexmachina-swvx.6) and adapters
 // (spexmachina-swvx.4) still owe their own wire types — see
 // TODO(bead:spexmachina-swvx.25) in cmd/spex/ingest.go.
 //

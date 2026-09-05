@@ -75,15 +75,19 @@ func runWithSnapshot(t *testing.T, specDir string, graph SpecGraph, journalPath,
 }
 
 // TestConsistencyInvariants_HappyPath covers the spec's "Happy Path"
-// acceptance: a full complete run with 5 ok creates and 3 ok closes — 2
-// of the creates paired with 2 of the closes as modify pairs, the third
-// close a removal. All invariants pass; the journal gains exactly the
+// acceptance: a full complete run with 5 ok creates (2 on known nodes
+// whose earlier tasks already finished, so each builds a modified event
+// with no task_closed; 3 on brand-new nodes) and 3 ok closes (2
+// independent test_section fold-backs, the third a removal). Every op
+// contributes exactly one event and one receipt — there is no longer any
+// merging across ops. All invariants pass; the journal gains exactly the
 // expected events and receipts, the snapshot is rewritten, and every
 // appended line validates against the journal-line schema (proven by
 // Reconciler.Apply not erroring, since invariant 5 is checked before any
 // write).
 func TestConsistencyInvariants_HappyPath(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): 2 of this fixture's 5 creates are modify-pairs claiming 2 of its 3 closes via a lineage dep — retired now that ChangesetBuilder (spexmachina-swvx.20) never emits one, which changes the expected event count. Rewrite against the current arch_event_builder.md once this bead lands.")
+	const hexSec1 = "dededededede"
+	const hexSec2 = "cececececece"
 	specDir := setupSpecDir(t)
 	ctx := resolvedProjectContext(t, specDir)
 
@@ -91,6 +95,8 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	for _, id := range []string{hexMod1, hexMod2, hexA, hexB, hexC} {
 		graph.nodes[id] = NodeMetadata{Module: "m", Component: id, ContentFile: id + ".md", SpecHash: "new-" + id, NodeType: "component"}
 	}
+	graph.nodes[hexSec1] = NodeMetadata{Module: "m", Component: "Sec1", ContentFile: "Sec1.md", SpecHash: "new-Sec1", NodeType: "test_section"}
+	graph.nodes[hexSec2] = NodeMetadata{Module: "m", Component: "Sec2", ContentFile: "Sec2.md", SpecHash: "new-Sec2", NodeType: "test_section"}
 
 	if err := mapping.NewMappingStore(ctx.JournalPath).Append([]mapping.Event{
 		{Event: "added", EID: "seed-Mod1", Node: hexMod1, Name: "Mod1", NodeType: "component", Module: "m", After: strPtr("old-Mod1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Mod1.md"},
@@ -99,19 +105,23 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		{Event: "task_created", TaskID: "br-old2", For: "seed-Mod2"},
 		{Event: "added", EID: "seed-Gone", Node: hexGone, Name: "Gone", NodeType: "component", Module: "m", After: strPtr("h-gone"), GitHead: "seedhead", Proposal: "seed-p", Path: "Gone.md"},
 		{Event: "task_created", TaskID: "br-gone", For: "seed-Gone"},
+		{Event: "added", EID: "seed-Sec1", Node: hexSec1, Name: "Sec1", NodeType: "test_section", Module: "m", After: strPtr("old-Sec1"), GitHead: "seedhead", Proposal: "seed-p", Path: "Sec1.md"},
+		{Event: "task_created", TaskID: "br-sec1", For: "seed-Sec1"},
+		{Event: "added", EID: "seed-Sec2", Node: hexSec2, Name: "Sec2", NodeType: "test_section", Module: "m", After: strPtr("old-Sec2"), GitHead: "seedhead", Proposal: "seed-p", Path: "Sec2.md"},
+		{Event: "task_created", TaskID: "br-sec2", For: "seed-Sec2"},
 	}); err != nil {
 		t.Fatalf("seed journal: %v", err)
 	}
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafehappy", Proposal: "happy-p", Ops: []plan.Op{
-		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old1"}}},
-		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2), Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old2"}}},
+		{OpID: "op-01", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod1, Idempotency: idem("spex:" + hexMod1)},
+		{OpID: "op-02", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexMod2, Idempotency: idem("spex:" + hexMod2)},
 		{OpID: "op-03", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexA, Idempotency: idem("spex:" + hexA)},
 		{OpID: "op-04", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexB, Idempotency: idem("spex:" + hexB)},
 		{OpID: "op-05", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: hexC, Idempotency: idem("spex:" + hexC)},
-		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old1"}, Reason: "Spec node modified: m/Mod1"},
-		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old2"}, Reason: "Spec node modified: m/Mod2"},
-		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+		{OpID: "op-06", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-gone"}, Reason: "Spec node removed: m/Gone"},
+		{OpID: "op-07", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-sec1"}, Reason: "Spec node modified: m/Sec1"},
+		{OpID: "op-08", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-sec2"}, Reason: "Spec node modified: m/Sec2"},
 	}}
 	rc := adapters.Receipts{Version: adapters.ReceiptsVersion, Status: adapters.StatusComplete, Ops: []adapters.OpReceipt{
 		{OpID: "op-01", Status: adapters.OpStatusOk, TaskID: "br-new1"},
@@ -119,9 +129,9 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 		{OpID: "op-03", Status: adapters.OpStatusOk, TaskID: "br-A"},
 		{OpID: "op-04", Status: adapters.OpStatusOk, TaskID: "br-B"},
 		{OpID: "op-05", Status: adapters.OpStatusOk, TaskID: "br-C"},
-		{OpID: "op-06", Status: adapters.OpStatusOk, TaskID: "br-old1"},
-		{OpID: "op-07", Status: adapters.OpStatusOk, TaskID: "br-old2"},
-		{OpID: "op-08", Status: adapters.OpStatusOk, TaskID: "br-gone"},
+		{OpID: "op-06", Status: adapters.OpStatusOk, TaskID: "br-gone"},
+		{OpID: "op-07", Status: adapters.OpStatusOk, TaskID: "br-sec1"},
+		{OpID: "op-08", Status: adapters.OpStatusOk, TaskID: "br-sec2"},
 	}}
 
 	sum, wrote := runWithSnapshot(t, specDir, graph, ctx.JournalPath, ctx.SnapshotPath, cs, rc)
@@ -129,15 +139,13 @@ func TestConsistencyInvariants_HappyPath(t *testing.T) {
 	if sum.OkCreates != 5 || sum.OkCloses != 3 {
 		t.Errorf("summary = %+v, want 5 ok creates / 3 ok closes", sum)
 	}
-	// 2 modify pairs contribute 1 event each (2), the removal contributes
-	// 1 event (1), the 3 fresh creates contribute 1 event each (3) = 6
-	// events.
-	if sum.EventsAppended != 6 {
-		t.Errorf("events_appended = %d, want 6", sum.EventsAppended)
+	// Every one of the 8 ops contributes exactly one event: 2 modified
+	// (known nodes), 3 added (fresh), 1 removed, 2 modified (fold-back).
+	if sum.EventsAppended != 8 {
+		t.Errorf("events_appended = %d, want 8", sum.EventsAppended)
 	}
-	// Receipts: 2 modify pairs × 2 receipts (closed+created) = 4, 1
-	// removed close × 1 receipt (closed) = 1, 3 fresh creates × 1 receipt
-	// (created) = 3. Total 8.
+	// Every one of the 8 ops contributes exactly one receipt: 5
+	// task_created (the 5 creates), 3 task_closed (the 3 closes).
 	if sum.ReceiptsAppended != 8 {
 		t.Errorf("receipts_appended = %d, want 8", sum.ReceiptsAppended)
 	}

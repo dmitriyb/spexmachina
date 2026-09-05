@@ -155,13 +155,11 @@ func TestEventBuilder_BuildCreate_WasExistingIdempotent(t *testing.T) {
 	}
 }
 
-// TestEventBuilder_BuildCreate_ModifiedPair covers "Modified node:
-// create+close → lineage extended, not rebound", the create half: the
-// whole pair — modified event, task_closed for the old bead, task_created
-// for the new one — is built off the create's own `blocks` dep, without
-// waiting for the paired close.
-func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): \"The Modified-Node Pair\" this test pins is retired — ChangesetBuilder (spexmachina-swvx.20) stopped emitting a lineage dep on any create, so blocksDepBeadID (event_builder.go) is now unconditionally false and this path is unreachable. Rewrite against the current arch_event_builder.md (\"Node-Bearing Creates\"/\"Fold-Back Closes\") once this bead lands.")
+// TestEventBuilder_BuildCreate_KnownNode_ModifiedEvent covers "Ok create
+// on a known node → modified event, no task_closed": the create op
+// itself carries no change type — added-vs-modified is derived from the
+// journal fold's latest change event for the node.
+func TestEventBuilder_BuildCreate_KnownNode_ModifiedEvent(t *testing.T) {
 	const node = "bbbbbbbbbbbb"
 	graph := newFakeSpecGraph()
 	graph.nodes[node] = NodeMetadata{Module: "m", Component: "B", ContentFile: "B.md", SpecHash: "h-new", NodeType: "component"}
@@ -174,7 +172,6 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 	op := plan.Op{
 		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
 		Idempotency: idem("spex:cafe1234:op-1"),
-		Deps:        []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}},
 	}
 	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
 
@@ -182,8 +179,8 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCreate: %v", err)
 	}
-	if len(lines) != 3 {
-		t.Fatalf("BuildCreate returned %d lines, want 3: %+v", len(lines), lines)
+	if len(lines) != 2 {
+		t.Fatalf("BuildCreate returned %d lines, want 2: %+v", len(lines), lines)
 	}
 	modified := eventByKind(t, lines, "modified")
 	wantEID := deriveEID("cafe1234", "op-1")
@@ -196,16 +193,48 @@ func TestEventBuilder_BuildCreate_ModifiedPair(t *testing.T) {
 	if modified.After == nil || *modified.After != "h-new" {
 		t.Errorf("modified event after = %v, want h-new", modified.After)
 	}
-	closed := eventByKind(t, lines, "task_closed")
-	if closed.TaskID != "br-old" || closed.For != wantEID {
-		t.Errorf("task_closed = %+v, want task_id=br-old for=%s", closed, wantEID)
-	}
 	created := eventByKind(t, lines, "task_created")
 	if created.TaskID != "br-new" || created.For != wantEID {
 		t.Errorf("task_created = %+v, want task_id=br-new for=%s", created, wantEID)
 	}
-	if !b.State.ModifiedHandled["br-old"] {
-		t.Error("ModifiedHandled[br-old] not set after building the pair")
+	if _, err := findEvent(lines, "task_closed"); err == nil {
+		t.Error("BuildCreate built a task_closed — the journal never records a task's completion")
+	}
+}
+
+// TestEventBuilder_BuildCreate_ReAdded covers "Ok create on a re-added
+// node → added event": the journal's latest change event for the node
+// is a removal (after null), so the node is born again rather than
+// modified.
+func TestEventBuilder_BuildCreate_ReAdded(t *testing.T) {
+	const node = "feedface0005"
+	graph := newFakeSpecGraph()
+	graph.nodes[node] = NodeMetadata{Module: "m", Component: "N", ContentFile: "N.md", SpecHash: "h-2", NodeType: "component"}
+	b, _ := newTestEventBuilder(t, graph,
+		mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h-1")},
+		mapping.Event{Event: "task_created", TaskID: "br-1", For: "seed"},
+		mapping.Event{Event: "removed", EID: "removed-1", Node: node, Name: "N", NodeType: "component", Module: "m", Before: strPtr("h-1")},
+		mapping.Event{Event: "task_closed", TaskID: "br-1", For: "removed-1"},
+	)
+
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
+	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-1")}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-2"}
+
+	lines, err := b.BuildCreate(cs, op, receipt)
+	if err != nil {
+		t.Fatalf("BuildCreate: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("BuildCreate returned %d lines, want 2: %+v", len(lines), lines)
+	}
+	added := eventByKind(t, lines, "added")
+	if added.Before != nil {
+		t.Errorf("added event before = %v, want nil", added.Before)
+	}
+	created := eventByKind(t, lines, "task_created")
+	if created.TaskID != "br-2" || created.For != added.EID {
+		t.Errorf("task_created = %+v, want task_id=br-2 for=%s", created, added.EID)
 	}
 }
 
@@ -291,31 +320,84 @@ func TestEventBuilder_BuildCreate_Cleanup_PriorRemovedEvent(t *testing.T) {
 	}
 }
 
-// TestEventBuilder_BuildCreate_Cleanup_SameBatchRemoval covers "Cleanup
-// create → receipt pairs with a same-batch removal": the node is still
-// live in the journal (its removal comes later in this same batch), so
-// the referent is resolved from EventBuilderState.SameBatchRemovals —
-// Reconciler's precomputed, order-independent resolution — not from the
-// fold.
-func TestEventBuilder_BuildCreate_Cleanup_SameBatchRemoval(t *testing.T) {
+// TestEventBuilder_BuildCreate_Cleanup_MintsRemoval covers "Cleanup
+// create → the cleanup mints the removal itself": the node's task
+// finished with no close accompanying this cleanup in the batch, so
+// EventBuilder itself must mint the removal — no close op does it.
+func TestEventBuilder_BuildCreate_Cleanup_MintsRemoval(t *testing.T) {
 	const node = "abc123def456"
-	graph := newFakeSpecGraph()
+	graph := newFakeSpecGraph() // empty: cleanup creates never reach the spec graph
 	b, _ := newTestEventBuilder(t, graph,
-		mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
+		mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("aaa")},
 		mapping.Event{Event: "task_created", TaskID: "br-gone", For: "seed"},
 	)
-	b.State.SameBatchRemovals[node] = "cafe1234:op-close"
 
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
-	op := plan.Op{OpID: "op-cleanup", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-close")}
-	receipt := adapters.OpReceipt{OpID: "op-cleanup", Status: adapters.OpStatusOk, TaskID: "br-cleanup"}
+	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-1")}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup"}
 
 	lines, err := b.BuildCreate(cs, op, receipt)
 	if err != nil {
 		t.Fatalf("BuildCreate: %v", err)
 	}
-	if len(lines) != 1 || lines[0].Event != "task_created" || lines[0].For != "cafe1234:op-close" || lines[0].TaskID != "br-cleanup" {
-		t.Fatalf("BuildCreate = %+v, want single task_created for=cafe1234:op-close task_id=br-cleanup", lines)
+	if len(lines) != 2 {
+		t.Fatalf("BuildCreate returned %d lines, want 2: %+v", len(lines), lines)
+	}
+	removed := eventByKind(t, lines, "removed")
+	wantEID := deriveEID("cafe1234", "op-1")
+	if removed.EID != wantEID || removed.Node != node {
+		t.Errorf("removed event = %+v, want eid=%s node=%s", removed, wantEID, node)
+	}
+	if removed.Before == nil || *removed.Before != "aaa" || removed.After != nil {
+		t.Errorf("removed event before/after = %v/%v, want aaa/nil", removed.Before, removed.After)
+	}
+	if removed.Name != "N" || removed.NodeType != "component" || removed.Module != "m" {
+		t.Errorf("removed event metadata = %+v, want the fold entry's biography", removed)
+	}
+	created := eventByKind(t, lines, "task_created")
+	if created.TaskID != "br-cleanup" || created.For != wantEID {
+		t.Errorf("task_created = %+v, want task_id=br-cleanup for=%s", created, wantEID)
+	}
+	if _, err := findEvent(lines, "task_closed"); err == nil {
+		t.Error("BuildCreate built a task_closed for the finished task — the journal never records a task's completion")
+	}
+}
+
+// TestEventBuilder_BuildCreate_Cleanup_AfterReAdd covers "Cleanup create
+// after a re-add → a fresh removal, not the old one": the node's
+// earliest removal (E1) is not its latest state, so the cleanup must not
+// reference it.
+func TestEventBuilder_BuildCreate_Cleanup_AfterReAdd(t *testing.T) {
+	const node = "abc123def456"
+	graph := newFakeSpecGraph()
+	b, _ := newTestEventBuilder(t, graph,
+		mapping.Event{Event: "removed", EID: "E1", Node: node, Name: "N", NodeType: "component", Module: "m", Before: strPtr("old")},
+		mapping.Event{Event: "added", EID: "E2", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("new")},
+		mapping.Event{Event: "task_created", TaskID: "br-new", For: "E2"},
+	)
+
+	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234"}
+	op := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: plan.KindCleanup, SpecNodeID: node, Idempotency: idem("spex:cafe1234:op-1")}
+	receipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-cleanup"}
+
+	lines, err := b.BuildCreate(cs, op, receipt)
+	if err != nil {
+		t.Fatalf("BuildCreate: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("BuildCreate returned %d lines, want 2: %+v", len(lines), lines)
+	}
+	removed := eventByKind(t, lines, "removed")
+	wantEID := deriveEID("cafe1234", "op-1")
+	if removed.EID != wantEID {
+		t.Errorf("removed event eid = %q, want %q (E1 is not the node's latest state)", removed.EID, wantEID)
+	}
+	if removed.Before == nil || *removed.Before != "new" {
+		t.Errorf("removed event before = %v, want new", removed.Before)
+	}
+	created := eventByKind(t, lines, "task_created")
+	if created.For != wantEID {
+		t.Errorf("task_created.for = %q, want %q, not the old removal E1", created.For, wantEID)
 	}
 }
 
@@ -352,74 +434,47 @@ func TestEventBuilder_BuildClose_Removed(t *testing.T) {
 	}
 }
 
-// TestEventBuilder_BuildClose_ModifiedPairClaimed covers the two "claimed
-// by a create in this batch" rows in the per-op construction table:
-// whether that create's own receipt was ok or errored, the close's own
-// call constructs nothing — the create either already built the whole
-// pair, or the pair stays incomplete for this partial run. The two
-// subtests are distinguished by whether BuildCreate is actually called
-// for op-1 first: the ok case sets EventBuilderState.ModifiedHandled,
-// which BuildClose must consult (see event_builder.go); the errored case
-// leaves op-1 unbuilt — its receipt never reaches BuildCreate — so
-// BuildClose must fall back to the static changeset scan instead.
-func TestEventBuilder_BuildClose_ModifiedPairClaimed(t *testing.T) {
-	t.Skip("TODO(bead:spexmachina-swvx.22): \"The Modified-Node Pair\"/ModifiedHandled claim-tracking this test pins is retired along with the lineage dep it keys off — ChangesetBuilder (spexmachina-swvx.20) never emits one now, so blocksDepBeadID is unconditionally false. Rewrite against the current arch_event_builder.md (\"Fold-Back Closes\": a \"Spec node modified\" close always builds its own modified event, unconditionally) once this bead lands.")
-	const node = "bbbbbbbbbbbb"
-	createOp := plan.Op{
-		OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: node,
-		Deps: []plan.Ref{{Kind: plan.RefTask, TaskID: "br-old"}},
-	}
+// TestEventBuilder_BuildClose_ModifiedAlwaysBuildsOwnPair proves the
+// retired "Modified-Node Pair" claim-tracking is gone: a "Spec node
+// modified" close builds its own modified event plus task_closed
+// unconditionally, even when the same changeset also carries a create
+// for a different node (there is no lineage dep left for it to claim the
+// close with).
+func TestEventBuilder_BuildClose_ModifiedAlwaysBuildsOwnPair(t *testing.T) {
+	const closingNode = "bbbbbbbbbbbb"
+	const otherNode = "cccccccccccc"
+	createOp := plan.Op{OpID: "op-1", Type: plan.OpCreate, SpecNodeKind: "component", SpecNodeID: otherNode}
 	closeOp := plan.Op{OpID: "op-2", Type: plan.OpClose, Target: &plan.Ref{Kind: plan.RefTask, TaskID: "br-old"}, Reason: "Spec node modified (new): m/N"}
 	cs := plan.Changeset{Version: plan.ChangesetVersion, GitHead: "cafe1234", Ops: []plan.Op{createOp, closeOp}}
-	closeReceipt := adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"}
 
-	t.Run("ok", func(t *testing.T) {
-		graph := newFakeSpecGraph()
-		graph.nodes[node] = NodeMetadata{Module: "m", Component: "B", ContentFile: "B.md", SpecHash: "h-new", NodeType: "component"}
-		b, _ := newTestEventBuilder(t, graph,
-			mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
-			mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
-		)
-		createReceipt := adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-new"}
-		createLines, err := b.BuildCreate(cs, createOp, createReceipt)
-		if err != nil {
-			t.Fatalf("BuildCreate: %v", err)
-		}
-		if len(createLines) == 0 {
-			t.Fatalf("BuildCreate returned no lines, want the built pair")
-		}
-		if !b.State.ModifiedHandled["br-old"] {
-			t.Fatalf("ModifiedHandled[br-old] not set after BuildCreate")
-		}
+	graph := newFakeSpecGraph()
+	graph.nodes[closingNode] = NodeMetadata{Module: "m", Component: "B", ContentFile: "B.md", SpecHash: "h-new", NodeType: "component"}
+	graph.nodes[otherNode] = NodeMetadata{Module: "m", Component: "C", ContentFile: "C.md", SpecHash: "h-other", NodeType: "component"}
+	b, _ := newTestEventBuilder(t, graph,
+		mapping.Event{Event: "added", EID: "seed", Node: closingNode, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
+		mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
+	)
 
-		lines, err := b.BuildClose(cs, closeOp, closeReceipt)
-		if err != nil {
-			t.Fatalf("BuildClose: %v", err)
-		}
-		if len(lines) != 0 {
-			t.Fatalf("BuildClose returned %d lines, want 0 (owned by the paired create): %+v", len(lines), lines)
-		}
-	})
+	// The unrelated create builds independently, first.
+	if _, err := b.BuildCreate(cs, createOp, adapters.OpReceipt{OpID: "op-1", Status: adapters.OpStatusOk, TaskID: "br-other"}); err != nil {
+		t.Fatalf("BuildCreate: %v", err)
+	}
 
-	t.Run("errored", func(t *testing.T) {
-		graph := newFakeSpecGraph()
-		b, _ := newTestEventBuilder(t, graph,
-			mapping.Event{Event: "added", EID: "seed", Node: node, Name: "N", NodeType: "component", Module: "m", After: strPtr("h")},
-			mapping.Event{Event: "task_created", TaskID: "br-old", For: "seed"},
-		)
-		// op-1's own receipt was error/skipped, so per the per-op
-		// construction table BuildCreate is never called for it —
-		// ModifiedHandled stays unset, and BuildClose must recognise the
-		// claim via the static changeset scan instead.
-
-		lines, err := b.BuildClose(cs, closeOp, closeReceipt)
-		if err != nil {
-			t.Fatalf("BuildClose: %v", err)
-		}
-		if len(lines) != 0 {
-			t.Fatalf("BuildClose returned %d lines, want 0 (partial run — paired create errored/skipped): %+v", len(lines), lines)
-		}
-	})
+	lines, err := b.BuildClose(cs, closeOp, adapters.OpReceipt{OpID: "op-2", Status: adapters.OpStatusOk, TaskID: "br-old"})
+	if err != nil {
+		t.Fatalf("BuildClose: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("BuildClose returned %d lines, want 2 (modified + task_closed, built on its own): %+v", len(lines), lines)
+	}
+	modified := eventByKind(t, lines, "modified")
+	if modified.Node != closingNode {
+		t.Errorf("modified event node = %q, want %q", modified.Node, closingNode)
+	}
+	closed := eventByKind(t, lines, "task_closed")
+	if closed.TaskID != "br-old" || closed.For != modified.EID {
+		t.Errorf("task_closed = %+v, want task_id=br-old for=%s", closed, modified.EID)
+	}
 }
 
 // TestEventBuilder_BuildClose_ModifiedNoClaim_UnknownBead covers
