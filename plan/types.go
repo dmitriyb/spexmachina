@@ -159,9 +159,10 @@ type Idem struct {
 // spec_node_kind, spec_node_id, spec_hash, idempotency, parent, deps,
 // priority, title, body, target, labels, reason.
 //
-// Conventional creates use SpecNodeKind through Body; a cleanup or
-// modify-pair create additionally carries Deps (lineage, edge type
-// "blocks") but no Labels — creates never populate Labels. Retarget ops
+// Conventional creates use SpecNodeKind through Body; a cleanup create
+// additionally carries Deps (the layer edges plus every retarget's
+// target, never a lineage dep on its predecessor) but no Labels —
+// creates never populate Labels. Retarget ops
 // use SpecNodeID, SpecHash, Target, Labels, Deps and Reason: Labels is
 // the one field only a retarget populates, carrying this run's
 // modified-event label. Close ops use Target and Reason alone, no
@@ -239,17 +240,4 @@ type Action struct {
 	DepSpecNodeIDs []string
 	ChangeType     string
 	Reason         string
-}
-
-// OrderedOp pairs an Action with the op_id Build assigns it over Sort's
-// output: TopologicalSorter hands out no op_id at all
-// (spec/plan/arch_topological_sorter.md, "Interface") and returns the
-// ordered actions alone, so Build derives each OrderedOp's id from the
-// action's own canonical key — its kind plus the node or task id it acts
-// on, never its position (spec/plan/arch_changeset_builder.md, "Canonical
-// Output") — and builds the spec_node_id-to-op_id map from those.
-// IdempotencyLabeler and Resolver then consume []OrderedOp plus that map.
-type OrderedOp struct {
-	OpID   string
-	Action Action
 }

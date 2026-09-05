@@ -384,13 +384,3 @@ func TestAction_ObsoleteCarriesTaskIDAndChangeType(t *testing.T) {
 		t.Fatalf("obsolete action must carry task id and change type: %+v", a)
 	}
 }
-
-func TestOrderedOp_PairsActionWithOpID(t *testing.T) {
-	o := OrderedOp{
-		OpID:   "op-0007",
-		Action: Action{SpecNodeID: "x"},
-	}
-	if o.OpID != "op-0007" || o.Action.SpecNodeID != "x" {
-		t.Fatalf("OrderedOp wiring wrong: %+v", o)
-	}
-}

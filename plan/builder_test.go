@@ -296,6 +296,9 @@ func TestBuild_EpicSynthesizedAndParentsNonEpicCreates(t *testing.T) {
 	if first.Type != OpCreate || first.SpecNodeKind != KindProposalEpic {
 		t.Errorf("first op: want type=create kind=proposal_epic, got type=%s kind=%s", first.Type, first.SpecNodeKind)
 	}
+	if first.OpID != "op-proposal_epic-p-ref" {
+		t.Errorf("epic op_id: want op-proposal_epic-p-ref (op-<kind>-<proposal ref>), got %q", first.OpID)
+	}
 	if first.Idempotency == nil || first.Idempotency.Label != "spex:reg-head1:p-ref" {
 		t.Errorf("epic label: want spex:reg-head1:p-ref (registration eid, not git_head head1), got %+v", first.Idempotency)
 	}

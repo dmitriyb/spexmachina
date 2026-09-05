@@ -70,9 +70,9 @@
 // whose status is anything other than live (open or in_progress) rather
 // than checking for the literal "closed" the obsolete-then-recreate shape
 // used to write — there is no closed status in the vocabulary, only
-// absence. ChangesetBuilder still carries a remnant of the pre-task-lifecycle
-// "obsolete, then recreate" shape (the create's blocks-edge lineage dep on
-// Ref.EdgeType) pending its own bead, spexmachina-swvx.20.
+// absence. ChangesetBuilder (spexmachina-swvx.20) now emits no lineage of
+// any kind — a modified node's create carries no dep naming its
+// predecessor's task, and Ref carries no edge-type field at all.
 // IdempotencyLabeler (spexmachina-swvx.13) dropped its own remnant, the
 // dead CloseOpIDs same-batch-close fallback: a cleanup create's label now
 // derives from exactly two referents, the journal fold's removed event or
@@ -91,18 +91,17 @@
 // the proposal epic first, then one layer per plan-relevant node type in
 // that order, then cleanup creates last — refusing a kind the list does not
 // place and a dep pointing at a later layer, per spexmachina-swvx.38.
-// ChangesetBuilder's op_id (plan/builder.go) is still the positional,
-// digit-padded op-<n> shape rather than one derived from each op's own
-// canonical key, and Build does not yet add the layer-boundary ref:op/ref:task
-// edges abfb10394fdd requires — pending spexmachina-swvx.20. PlanCommand does
-// not yet warn and proceed (exit 0) on an empty resolved plan-relevant list —
-// pending spexmachina-swvx.21.
+// ChangesetBuilder's op_id (plan/builder.go) is now derived from each op's
+// own canonical key rather than its position, and Build adds the
+// layer-boundary ref:op/ref:task edges abfb10394fdd requires
+// (spexmachina-swvx.20). PlanCommand does not yet warn and proceed (exit 0)
+// on an empty resolved plan-relevant list — pending spexmachina-swvx.21.
 //
 // # Contract surface
 //
 // The wire-format Changeset / Op / Ref / Idem / AbsorbedEntry types — the
 // JSON changeset.json v4 composes and the external adapter reads — the
-// classifier -> builder-chain Action / OrderedOp shapes, plus the op-kind,
+// classifier -> builder-chain Action shape, plus the op-kind,
 // action-type, spec_node_kind, ref-kind and label vocabularies, the tier
 // and fallback-priority constants, and the schema version constant, are
 // all public. Each step of the flow above ships as a component in this
