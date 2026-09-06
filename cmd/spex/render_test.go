@@ -569,3 +569,50 @@ func TestFR3_E10_SlimRequiresJSON(t *testing.T) {
 		}
 	}
 }
+
+// TestFR2_S3b_DOTShapesAndEdgeLabels pins the DOT contract beyond the
+// digraph wrapper S3 asserts: every declared kind is drawn with its
+// arch_dot_renderer.md shape, every node's label is its declared name,
+// every edge carries a label naming its kind, and the graph is laid out
+// left to right.
+func TestFR2_S3b_DOTShapesAndEdgeLabels(t *testing.T) {
+	dir := setupRenderSpec(t)
+	out, stderr, err := runRenderSpex(t, "render", "--spec-dir", dir, "--format", "dot")
+	if err != nil {
+		t.Fatalf("want no error, got %v", err)
+	}
+	if stderr != "" {
+		t.Fatalf("stderr should be empty, got: %s", stderr)
+	}
+	if strings.Count(out, "rankdir=LR;") != 1 {
+		t.Fatalf("want rankdir=LR exactly once, got %d in:\n%s", strings.Count(out, "rankdir=LR;"), out)
+	}
+	wantNodes := []string{
+		`[label="alpha", shape=folder`,
+		`[label="beta", shape=folder`,
+		`[label="Parse", shape=box`,
+		`[label="Build", shape=box`,
+		`[label="Parser", shape=component`,
+		`[label="Builder", shape=component`,
+		`[label="Build Pipeline", shape=ellipse`,
+	}
+	for _, w := range wantNodes {
+		if !strings.Contains(out, w) {
+			t.Errorf("DOT output should declare %s", w)
+		}
+	}
+	wantEdges := []string{
+		`[label="implements"`,
+		`[label="uses", style=dotted`,
+		`[label="requires_module"]`,
+		`[label="preq_id", style=dashed`,
+	}
+	for _, w := range wantEdges {
+		if !strings.Contains(out, w) {
+			t.Errorf("DOT output should carry an edge %s", w)
+		}
+	}
+	if t.Failed() {
+		t.Logf("output was:\n%s", out)
+	}
+}

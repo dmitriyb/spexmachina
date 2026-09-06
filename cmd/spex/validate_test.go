@@ -852,3 +852,145 @@ func setupInvalidTestSpec(t *testing.T) string {
 func makeDir(path string) error {
 	return os.MkdirAll(path, 0755)
 }
+
+// TestFR7_V17_ValidateCommand_CoupledSectionErrorsExit1 drives the
+// coupled-section checker through spex validate: a coupled section whose
+// name matches no module, and a second section duplicating that name,
+// each yield a coupled_section error located by array index; with the
+// module present, its section.schema.json in place, a body valid against
+// it and the duplicate removed, the same spec validates clean.
+func TestFR7_V17_ValidateCommand_CoupledSectionErrorsExit1(t *testing.T) {
+	dir := t.TempDir()
+	writeValidSpecFiles(t, dir)
+	sectionSchema := `{"$schema":"https://json-schema.org/draft/2020-12/schema","type":"object","required":["versioning"],"properties":{"versioning":{"type":"object","required":["scheme"],"properties":{"scheme":{"type":"string"}}}},"additionalProperties":false}`
+
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
+		],
+		"sections": [
+			{"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}},
+			{"id": "000000000002", "name": "delivery", "type": "informational"}
+		]
+	}`)
+	out, err := runSpex(t, "validate", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want exit 1 for coupled-section errors, got nil")
+	}
+	report := parseReport(t, out)
+	if report.Valid {
+		t.Fatalf("want valid:false, got report %+v", report)
+	}
+	var absentModule, duplicateName bool
+	for _, e := range report.Errors {
+		if e.Check != "coupled_section" {
+			t.Fatalf("only coupled_section errors expected on this spec, got %s at %s: %s", e.Check, e.Path, e.Message)
+		}
+		switch e.Path {
+		case "project.json:/sections/0":
+			if strings.Contains(e.Message, "delivery") && strings.Contains(strings.ToLower(e.Message), "module") {
+				absentModule = true
+			}
+		case "project.json:/sections/1":
+			if strings.Contains(e.Message, "duplicate section name") {
+				duplicateName = true
+			}
+		default:
+			t.Fatalf("coupled_section error should be located by sections index, got path %q", e.Path)
+		}
+	}
+	if !absentModule || !duplicateName {
+		t.Fatalf("want an absent-module error at sections/0 and a duplicate-name error at sections/1, got: %v", report.Errors)
+	}
+
+	// The positive arm: module present, schema in place, body valid, duplicate gone.
+	deliveryDir := filepath.Join(dir, "delivery")
+	if err := os.MkdirAll(deliveryDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, deliveryDir, "module.json", `{"name": "delivery"}`)
+	writeTestFile(t, deliveryDir, "section.schema.json", sectionSchema)
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"modules": [
+			{"id": "000000000001", "name": "alpha", "path": "alpha"},
+			{"id": "000000000002", "name": "delivery", "path": "delivery"}
+		],
+		"sections": [
+			{"id": "000000000001", "name": "delivery", "type": "coupled", "versioning": {"scheme": "semver"}}
+		]
+	}`)
+	out, err = runSpex(t, "validate", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("want exit 0 once the coupled section is satisfied, got %v\n%s", err, out)
+	}
+	if hasCheck(parseReport(t, out), "coupled_section") {
+		t.Fatalf("want no coupled_section error after the fix, got: %s", out)
+	}
+}
+
+// TestFR7_V18_ValidateCommand_UnimplementedModuleRequirementExit1 drives
+// the requirement-coverage checker's module half through spex validate: a
+// module requirement no component implements is a requirement_coverage
+// error naming it; once a component implements it the spec validates clean.
+func TestFR7_V18_ValidateCommand_UnimplementedModuleRequirementExit1(t *testing.T) {
+	dir := t.TempDir()
+	writeValidSpecFiles(t, dir)
+	writeTestFile(t, dir, "project.json", `{
+		"name": "test-project",
+		"requirements": [
+			{"id": "000000000001", "name": "Project feature", "type": "functional", "priority": 1}
+		],
+		"modules": [
+			{"id": "000000000001", "name": "alpha", "path": "alpha"}
+		]
+	}`)
+	comp1Hash := schema.IdentityHash("alpha", "component", "Comp1")
+	test1Hash := schema.IdentityHash("alpha", "test_section", "Comp1 tests")
+	reqHash := schema.IdentityHash("alpha", "requirement", "Mod Feat B")
+	alphaMod := func(implements string) string {
+		return `{
+		"name": "alpha",
+		"requirements": [
+			{"id": "` + reqHash + `", "name": "Mod Feat B", "type": "functional", "preq_id": "000000000001"}
+		],
+		"components": [
+			{"id": "` + comp1Hash + `", "name": "Comp1", "content": "arch_comp1.md"` + implements + `}
+		],
+		"test_sections": [
+			{"id": "` + test1Hash + `", "name": "Comp1 tests", "content": "test_comp1.md", "describes": ["` + comp1Hash + `"]}
+		]
+	}`
+	}
+	writeTestFile(t, filepath.Join(dir, "alpha"), "module.json", alphaMod(""))
+	out, err := runSpex(t, "validate", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want exit 1 for an unimplemented module requirement, got nil")
+	}
+	report := parseReport(t, out)
+	if report.Valid {
+		t.Fatalf("want valid:false, got %+v", report)
+	}
+	found := 0
+	for _, e := range report.Errors {
+		if e.Check != "requirement_coverage" {
+			t.Fatalf("only a requirement_coverage error expected on this spec, got %s at %s: %s", e.Check, e.Path, e.Message)
+		}
+		if strings.Contains(e.Message, reqHash) && strings.Contains(e.Message, "Mod Feat B") {
+			found++
+		}
+	}
+	if found != 1 {
+		t.Fatalf("want exactly one requirement_coverage error naming %s \"Mod Feat B\", got: %v", reqHash, report.Errors)
+	}
+
+	writeTestFile(t, filepath.Join(dir, "alpha"), "module.json", alphaMod(`, "implements": ["`+reqHash+`"]`))
+	out, err = runSpex(t, "validate", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("want exit 0 once Comp1 implements the requirement, got %v\n%s", err, out)
+	}
+	if hasCheck(parseReport(t, out), "requirement_coverage") {
+		t.Fatalf("want no requirement_coverage error after the fix, got: %s", out)
+	}
+}
