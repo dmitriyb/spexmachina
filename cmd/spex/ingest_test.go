@@ -803,20 +803,28 @@ func TestIngestCommand_RefreshMode_GitHeadStampsReceipt(t *testing.T) {
 }
 
 // TestIngestCommand_RefreshMode_RefusalExits2 covers the exit-code
-// contract: a structural diff (added leaf) maps the RefreshRefusal to
-// exit code 2 with the entries named on the error.
+// contract: a refused structural diff entry maps the RefreshRefusal to
+// exit code 2 with the entries named on the error. The refused entry is
+// a whole new module's envelope leaf — "meta" is the handler's fixed
+// refusal, the one case no profile can grant, and so the refusal that
+// stays reachable now that the default profile declares each of its own
+// node types absorbable in both directions.
 func TestIngestCommand_RefreshMode_RefusalExits2(t *testing.T) {
 	f, emptyCS, emptyRC := setupRefreshedFixture(t)
 
-	newID := schema.IdentityHash("alpha", "component", "Comp2")
-	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "module.json", `{
-		"name": "alpha",
-		"components": [
-			{"id": "`+f.compID+`", "name": "Comp1", "content": "arch_comp1.md"},
-			{"id": "`+newID+`", "name": "Comp2", "content": "arch_comp2.md"}
+	betaID := schema.IdentityHash("module", "beta")
+	writeTestFile(t, f.specDir, "project.json", `{
+		"name": "test-ingest",
+		"modules": [
+			{"id": "`+schema.IdentityHash("module", "alpha")+`", "name": "alpha", "path": "alpha"},
+			{"id": "`+betaID+`", "name": "beta", "path": "beta"}
 		]
 	}`)
-	writeTestFile(t, filepath.Join(f.specDir, "alpha"), "arch_comp2.md", "# Comp2\n")
+	if err := os.MkdirAll(filepath.Join(f.specDir, "beta"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(f.specDir, "beta"), "module.json", `{"name": "beta"}`)
+	newID := "meta/" + betaID
 
 	journalPath := f.journalPath
 	journalBefore, err := os.ReadFile(journalPath)

@@ -996,12 +996,17 @@ func TestFR9_P1_AbsentProfileResolvesToDefault(t *testing.T) {
 		t.Fatalf("hashed field allowlists = %v, want %v", p.HashedFields, wantHashedFields)
 	}
 
+	// Every declared node type is absorbable in both directions: refresh
+	// is the authoring loop's deliberate override, taken with a stated
+	// reason, so the default profile does not withhold any of its own
+	// types from it. "meta" and "module" are the frame's fixed leaves and
+	// appear in no profile's table.
 	wantAbsorbable := map[string]AbsorbDirections{
 		"requirement":  {Added: true, Removed: true},
 		"api":          {Added: true, Removed: true},
-		"component":    {Added: false, Removed: true},
-		"data_flow":    {Added: false, Removed: false},
-		"test_section": {Added: false, Removed: false},
+		"component":    {Added: true, Removed: true},
+		"data_flow":    {Added: true, Removed: true},
+		"test_section": {Added: true, Removed: true},
 	}
 	if !reflect.DeepEqual(p.Absorbable, wantAbsorbable) {
 		t.Fatalf("absorbable directions = %v, want %v", p.Absorbable, wantAbsorbable)

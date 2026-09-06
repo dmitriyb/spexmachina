@@ -75,11 +75,10 @@ Exit code reflects the outcome:
 - `0` — success.
 - `1` — input error (bad flags, malformed JSON, op_id mismatch in normal mode, non-empty
   changeset/receipts in refresh mode, atomic-write failure).
-- `2` — invariant failure (normal mode) or refresh refusal (a *non-absorbable* added or removed
-  entry, or a removed node whose journal pairing is still live). Not every structural entry
-  refuses: refresh absorbs `requirement` and `api` entries in either direction, plus `component`
-  removals. See RefreshHandler's absorbable set for the full table — declaring an api is the
-  common case that would otherwise refuse for nothing.
+- `2` — invariant failure (normal mode) or refresh refusal (an added or removed entry the
+  resolved profile declares non-absorbable in that direction, or an added or removed `meta`/`module`
+  leaf). Under the default profile every declared node type is absorbable in both directions, so
+  only the module and envelope leaves refuse. See RefreshHandler's absorbable set.
 - not a spex project — the pre-flight's own stable exit code, distinct from both codes above:
   the directory was never initialised (naming `spex init`), or its snapshot or journal is
   missing or unparseable (broken, naming `spex doctor`). The missing pre-refresh snapshot

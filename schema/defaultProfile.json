@@ -83,8 +83,8 @@
   "absorbable": {
     "requirement": {"added": true, "removed": true},
     "api": {"added": true, "removed": true},
-    "component": {"added": false, "removed": true},
-    "data_flow": {"added": false, "removed": false},
-    "test_section": {"added": false, "removed": false}
+    "component": {"added": true, "removed": true},
+    "data_flow": {"added": true, "removed": true},
+    "test_section": {"added": true, "removed": true}
   }
 }
