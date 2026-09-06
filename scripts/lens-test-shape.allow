@@ -1,0 +1,95 @@
+# lens-test-shape.allow — scenarios that call a Go identifier in code yet are integration-level.
+#
+# Format: <path><TAB><heading substring>. Every entry needs a reason above it: this file is
+# where the judgment is recorded, not where it is hidden. Reasons come from the 2026-09-06
+# audit (per-scenario verdicts, tightened rubric: a fixture directory is the component's
+# input; KEEP needs two or more components on the path, a spex subcommand, a module
+# boundary, or an external system the process does not own).
+
+# The spec-derived file set and the journal-sourced event bracket are asserted together, so 
+# resolver and store both act on the path.
+spec/map/test_context_resolver.md	S1: Resolve context for a live component by identity hash
+
+# The assertion is that the bracket follows the journal lineage's latest event, which only the 
+# resolver plus the store's fold can produce.
+spec/map/test_context_resolver.md	S1b: Bracket follows the lineage's latest event
+
+# Bracket widening across consecutive task_retargeted receipts is asserted through the resolver 
+# over the store's fold.
+spec/map/test_context_resolver.md	S1d: Retargeted task widens the bracket
+
+# The null bracket is asserted against a journal that has history but no task-bearing event, so 
+# the store's fold is load-bearing alongside the spec derivation.
+spec/map/test_context_resolver.md	S1c: Live node with no task-bearing event serves a null bracket
+
+# The task id must be mapped to an identity hash through the journal fold before the spec 
+# derivation runs, so two components chain.
+spec/map/test_context_resolver.md	S2: Resolve by task id reaches the same node
+
+# The removed node's whole answer (biography plus bracket) comes from the store's fold surfaced 
+# through the resolver.
+spec/map/test_context_resolver.md	S5: Removed node resolves from the journal
+
+# The not-found error must distinguish unknown-everywhere from removed-but-remembered, which 
+# requires the spec scan and the journal fold to both come up empty.
+spec/map/test_context_resolver.md	E2: Key known to neither spec nor journal
+
+# Explicit end-to-end pairing where real trees flow through Diff into Classify and the composed 
+# result is asserted.
+spec/merkle/test_diff_classification.md	S14: Diff then Classify end-to-end integration
+
+# Asserts the composition of the two components by checking every built hash against HashFile 
+# and HashChildren bottom-up.
+spec/merkle/test_hashing.md	S6: BuildTree hashes propagate bottom-up
+
+# Multi-module build whose root hash is asserted against HashChildren, exercising both 
+# components together.
+spec/merkle/test_hashing.md	S8: Multi-module tree construction
+
+# Epic emission, parent refs and epic label come from Resolver plus Labeler acting together 
+# inside Build().
+spec/plan/test_changeset_builder.md	Proposal epic parents every non-epic create
+
+# Layer ordering, layer edges and profile-driven refusals are asserted on the emitted op stream 
+# produced by several components.
+spec/plan/test_changeset_builder.md	Layer edges follow the profile's order
+
+# Resolver's unresolvable-dep error is asserted as it surfaces out of Builder.Build().
+spec/plan/test_changeset_builder.md	Unresolvable dep is a plan error
+
+# Explicit cross-component scenario joining Resolver classification, sorter ordering and 
+# builder composition or refusal.
+spec/plan/test_changeset_builder.md	Cross-component scenario: dep classification round-trip through Builder
+
+# Cycle is detected by the sorter and asserted as the error propagated out of Builder.Build().
+spec/plan/test_changeset_builder.md	Cross-component scenario: cycle detection surfaces through Builder.Build error
+
+# spec_node_kind fill and profile-driven layering are asserted together on built changesets 
+# under two profiles.
+spec/plan/test_changeset_builder.md	Cross-component scenario: spec_node_kind and layer per declared type come from the profile
+
+
+
+# Asserts the copied file and the journal line appended through the map module's MappingStore, 
+# crossing the module boundary.
+spec/proposal/test_registration.md	S1: Register a valid project proposal
+
+# Asserts the refusal leaves no journal line in the map module's journal as well as no file.
+spec/proposal/test_registration.md	S3: Reject project proposal with missing sections
+
+# A profile.json fixture is resolved by the schema module's ProfileLoader and drives which 
+# arrays SpecReader walks, so the scenario crosses a module boundary.
+spec/render/test_spec_reading.md	S9: Declared arrays are read through the resolved profile
+
+# The scenario drives the build harness itself, rebuilding the binary and comparing hashes 
+# across builds.
+spec/schema/test_schema_loading.md	E3: Schema content is deterministic across builds
+
+
+# The assertion is on profile-composed schemas resolved outside the checker, crossing into the 
+# schema/profile module.
+spec/validator/test_conformance_and_content.md	S16: Conformance runs against the profile-composed schemas
+
+# The walked type set comes from the resolved profile, so profile resolution outside the 
+# component is on the asserted path.
+spec/validator/test_conformance_and_content.md	S18: Content resolution walks the declared content-bearing types

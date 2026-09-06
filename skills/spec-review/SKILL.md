@@ -142,7 +142,7 @@ comm -3 /tmp/declared /tmp/ondisk   # empty output = clean
 
 This is LLM judgment: every question below is one neither gate can answer.
 
-### Mandatory lenses — run all eight, count what you check
+### Mandatory lenses — run all ten, count what you check
 
 These lenses exist because implementation keeps catching what linear reading misses. Each is a
 forced enumeration: build the pair list first, then check every pair. The final report must state
@@ -189,14 +189,40 @@ the pair count per lens (see Step 9) — a verdict without coverage numbers is n
 8. **Requirements vs the leaves that implement them** — `scripts/lens-requirements.sh [module…]`
    (worksheet): for every component in scope, each requirement in its `implements`, and the
    project requirement behind it, paired with the component's arch leaf and the test leaves that
-   describe it. Read each requirement claim by claim against those leaves. A claim the leaves no
-   longer honour is a **critical** finding: it goes first in the Step 7 table, and its fix
+   describe it. Read each requirement claim by claim against the **arch leaf**: the arch leaf is
+   what honours a requirement, a test leaf only asserts it, and a claim carried by a test scenario
+   alone is contract that leaked out of the arch leaf (the 2026-09-06 class). A claim the arch
+   leaf no longer honours is a **critical** finding: it goes first in the Step 7 table, and its fix
    direction — bend the requirement to the leaves, or the leaves back to the requirement — is a
    question put to the user, never a silent edit of the requirement. The "with their dates"
    class: an arch leaf rewritten for a different purpose dropped a field the requirement still
    asks for; the code followed the leaf, a later review corrected the test leaf against the arch
    leaf, and nothing in three passes read one level up. Lens 3 reads flows against arch leaves;
    this lens is the same read one level higher, and the only place the requirement is re-read.
+9. **Unit-shaped scenarios in test leaves** — `scripts/lens-test-shape.sh` (deterministic, exit 1
+   on hits): a scenario in a `test_*.md` leaf that calls a Go identifier in code (`Name(...)`) and
+   never invokes a `spex` subcommand. Test leaves hold module integration/acceptance scenarios
+   only; unit cases live in Go `_test.go` files (`spec/proposals/2026-03-09-test-strategy.md`,
+   Level 1). The 2026-09-06 class: 412 unit-shaped scenarios accumulated across 26 leaves, and
+   every task born from such a leaf closed empty because the Go test already existed. The lens
+   sees only the code-formatted call; a unit case written in prose passes it. So for every
+   scenario in the audit scope, judge by shape as well: UNIT when one component is exercised in
+   isolation — one function or one component's input→output on a specific case, the assertion on
+   its return value or error, a fixture directory being that component's input, not an external
+   system; KEEP when a `spex` subcommand is invoked and its exit code, stdout or files asserted,
+   when two or more components act together, when a module boundary is crossed, or when an
+   external system the process does not own is driven (sandbox tracker, git repository, HTTP
+   server, CI harness). A unit-shaped scenario is a finding: the fix is deletion, never a
+   rewrite into acceptance language. A kept scenario that legitimately calls a Go identifier is
+   excused in `scripts/lens-test-shape.allow` (`<path><TAB><heading substring>`, reason as a
+   comment); a dead entry is reported. The same script holds the leaf's shape: every test leaf
+   carries a `## Setup` section (NO-SETUP otherwise) and every heading scenario opens with a bold
+   `**Given**` line (NO-GIVEN otherwise); bullet cases carry their state inline.
+10. **Requirement carried by an arch leaf** — `scripts/lens-requirement-links.sh` (deterministic,
+   exit 1 on hits): every module requirement is linked by id (`[[<id>|...]]`) from the arch leaf of
+   at least one component that implements it. The structural half of lens 8: a requirement whose
+   only carrier is a test leaf fails here before anyone has to read for it. Whether the linking
+   leaf actually states the claim is lens 8's judgment.
 
 **Component (`arch_*.md`)**
 

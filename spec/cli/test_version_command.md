@@ -14,6 +14,7 @@ Integration and acceptance tests for the VersionCommand component.
 
 ### 1. Version with injected values
 
+**Given** a `spex` binary built with version, commit and date injected through ldflags.
 **Input**: `spex version` (built with ldflags above)
 **Expected**: Exit 0. Output contains:
 - `v1.2.3`
@@ -23,6 +24,7 @@ Integration and acceptance tests for the VersionCommand component.
 
 ### 2. Version with dev defaults
 
+**Given** a `spex` binary built without ldflags, so no version, commit or date was injected.
 **Input**: `spex version` (built without ldflags)
 **Expected**: Exit 0. Output contains:
 - `dev`
@@ -31,11 +33,13 @@ Integration and acceptance tests for the VersionCommand component.
 
 ### 3. Version --help
 
+**Given** the compiled `spex` binary, invoked in any working directory.
 **Input**: `spex version --help`
 **Expected**: Exit 0. Stdout contains usage text for the version subcommand.
 
 ### 4. Version exits cleanly
 
+**Given** the compiled `spex` binary, invoked in any working directory.
 **Input**: `spex version`
 **Expected**: Exit code 0. No output to stderr.
 

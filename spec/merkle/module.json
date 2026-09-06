@@ -61,7 +61,7 @@
       "preq_id": "e291989b1599",
       "type": "functional",
       "name": "Identity-hash tree keying",
-      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/\u003cmodule-hash\u003e` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add. The set of node types keyed into the tree, and each type's hashed serialization — derived from its field declarations, the policy deciding what counts as a semantic change — are read from the resolved profile; the tree shape itself (project root, module interior nodes, identity-hash-keyed leaves, the synthetic meta leaf per module) is fixed and not declarable."
+      "description": "Tree nodes are keyed by the spec node's identity hash (the same 12-character hex string stored in the JSON `id` field). The merkle key for a component, requirement, data_flow, test_section, or api is exactly its identity hash — no nested module/type/id path. The keys for synthetic meta leaves use a fixed prefix plus the parent's identity hash (e.g., `meta/<module-hash>` for module.json, `meta/project` for project.json). This makes merkle keys identical to mapping-store `spec_node_id` values, eliminating the rekeying layer that previously translated between the two formats. Renaming a file or moving a directory with the same identity hash is detected as a modification, not a delete + add. The set of node types keyed into the tree, and each type's hashed serialization — derived from its field declarations, the policy deciding what counts as a semantic change — are read from the resolved profile; the tree shape itself (project root, module interior nodes, identity-hash-keyed leaves, the synthetic meta leaf per module) is fixed and not declarable."
     },
     {
       "id": "6f8284df92a2",
@@ -211,8 +211,7 @@
       "content": "test_diff_classification.md",
       "describes": [
         "cb262b280963",
-        "f1a672216ce9",
-        "de3309dfbd3c"
+        "f1a672216ce9"
       ]
     },
     {
@@ -220,7 +219,8 @@
       "name": "Merkle command tests",
       "content": "test_merkle_commands.md",
       "describes": [
-        "c8b958ec310d"
+        "c8b958ec310d",
+        "de3309dfbd3c"
       ]
     }
   ],

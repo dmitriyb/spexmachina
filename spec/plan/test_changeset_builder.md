@@ -22,6 +22,8 @@ implementation task.
 
 ### Canonical schema and field order
 
+**Given** a single-create action batch, the fixed `--git-head` SHA and the default profile's plan-relevant list.
+
 - Build a changeset from a single-create action batch. Assert the output has `"version": 4` at
   the top, `git_head` set to the fixed SHA, and canonical field order on every op (`op_id`,
   `type`, `spec_node_kind`, `spec_node_id`, `spec_hash`, `idempotency`, `parent`, `deps`,
@@ -41,6 +43,8 @@ implementation task.
 - Same inputs produce byte-identical output across two runs.
 
 ### Proposal epic parents every non-epic create
+
+**Given** an action batch with one proposal, one component create and one data_flow create, with the fold's epic pairing and the proposal's registration varied per case.
 
 - An action batch with one proposal, one component create, one data_flow create; the run's
   registration carries the proposal's `registered` event (`eid: "<reg-head>:<slug>"`) and the fold
@@ -63,8 +67,9 @@ implementation task.
 
 ### In-batch dep chain resolves to ref:op
 
-- Three new components A, B, C where B uses A and C uses B, each with DepSpecNodeIDs collected.
-  Assert:
+**Given** three new components A, B, C where B uses A and C uses B, each with DepSpecNodeIDs collected.
+
+- Assert:
   - A's create has empty `deps`.
   - B's create has `deps: [{"ref":"op","op_id":"<A op>"}]`.
   - C's create has `deps: [{"ref":"op","op_id":"<B op>"}]`.
@@ -73,9 +78,9 @@ implementation task.
 
 ### Layer edges follow the profile's order
 
-- Under the default profile, a batch of: the proposal epic create, two data_flow creates F1 and
-  F2, three component creates A, B, C where B uses A and only A appears in F1's `uses`, and one
-  multi-component test_section create T describing B. Assert:
+**Given** the default profile and a batch of: the proposal epic create, two data_flow creates F1 and F2, three component creates A, B, C where B uses A and only A appears in F1's `uses`, and one multi-component test_section create T describing B.
+
+- Assert:
   - the file order is the epic, then F1 and F2 (lex order), then A, B, C, then T.
   - F1 and F2 carry no deps: the epic is no layer's predecessor, so the first non-empty layer
     has spec-graph deps alone.
@@ -98,30 +103,34 @@ implementation task.
 
 ### Live-task dep resolves to ref:task
 
-- New component X uses existing component Y, whose journal fold entry pairs it with a task the
-  task-state artifact lists as open. Assert X's create has
-  `deps: [{"ref":"task","task_id":"<Y's task>"}]`. Repeat with the task listed as `in_progress`
-  and assert the same ref — a claimed dependency is still live work to wait on.
+**Given** new component X uses existing component Y, whose journal fold entry pairs it with a task the task-state artifact lists as open.
+
+- Assert X's create has `deps: [{"ref":"task","task_id":"<Y's task>"}]`. Repeat with the task
+  listed as `in_progress` and assert the same ref — a claimed dependency is still live work to
+  wait on.
 
 ### Finished-task dep is dropped
 
-- New component X uses Y; Y's fold entry pairs it with a task the artifact does not list. Assert
-  X's `deps` is empty: a dependency whose task is absent from the artifact is satisfied, and no
-  edge is written. Nothing in the fixture's journal says the task closed — no `task_closed` line
-  exists for it — because absence from the artifact is the only signal the builder reads.
+**Given** new component X uses Y, whose fold entry pairs it with a task the artifact does not list.
+
+- Assert X's `deps` is empty: a dependency whose task is absent from the artifact is satisfied,
+  and no edge is written. Nothing in the fixture's journal says the task closed — no
+  `task_closed` line exists for it — because absence from the artifact is the only signal the
+  builder reads.
 
 ### Unresolvable dep is a plan error
 
-- New component X uses spec_node Z; Z has no in-batch op and no fold entry. Assert
-  `Builder.Build()` returns an error naming Z. There is no `ref:spec_node` fallback — the
+**Given** new component X uses spec_node Z, which has no in-batch op and no fold entry.
+
+- Assert `Builder.Build()` returns an error naming Z. There is no `ref:spec_node` fallback — the
   adapter reads no spex-owned file, so a dep the builder cannot resolve is a hard error at build
   time, where the operator can still fix the input.
 
 ### Retarget op shape
 
-- A retarget action for component X (open task `spexmachina-hun`), whose recomputed
-  DepSpecNodeIDs name one in-batch create and one fold-paired live task. Assert the resulting op
-  carries:
+**Given** a retarget action for component X (open task `spexmachina-hun`), whose recomputed DepSpecNodeIDs name one in-batch create and one fold-paired live task.
+
+- Assert the resulting op carries:
   - `type: "retarget"`.
   - `spec_node_id`: X's identity hash.
   - `spec_hash`: X's new content hash — the state the task now targets.
@@ -137,9 +146,9 @@ implementation task.
 
 ### Absorbed array
 
-- Build with one composed absorbed entry for node N (reason R) alongside an unrelated action
-  batch — the entry arrives finished from the command layer, and no action for N is in the
-  batch, because absorption withheld N's change upstream of classification. Assert:
+**Given** one composed absorbed entry for node N (reason R) alongside an unrelated action batch — the entry arrives finished from the command layer, and no action for N is in the batch, because absorption withheld N's change upstream of classification.
+
+- Assert:
   - No op in `ops` names N, and the builder consulted no absorb rule — it received entries,
     not a list to filter.
   - The top-level `absorbed` array carries N's entry verbatim: node, before hash, after hash,
@@ -148,6 +157,8 @@ implementation task.
     whichever the canonical form fixes) and byte-identical output still holds.
 
 ### Priority propagation
+
+**Given** create actions for components whose `implements` edges reach the module requirements each case names.
 
 - Component implements two module requirements with preq priorities `2` and `1`. Assert the
   create op's `priority` is `1` (lowest wins).
@@ -161,8 +172,9 @@ implementation task.
 
 ### A modified node's create carries no lineage
 
-- Modified component Q whose fold pairing names task `spexmachina-abc`, absent from the
-  task-state artifact — the classifier emitted one plain create for it. Assert:
+**Given** modified component Q whose fold pairing names task `spexmachina-abc`, absent from the task-state artifact — the classifier emitted one plain create for it.
+
+- Assert:
   - The changeset carries no close op at all: `spexmachina-abc` is named nowhere in the
     document.
   - The create op's `deps` carries only what Q's spec-graph edges resolve to — no
@@ -178,8 +190,9 @@ implementation task.
 
 ### Cleanup create
 
-- Action with `Reason: "Code cleanup: m/X"`, `SpecNodeID: "abc123def456"`, from a removed node
-  whose task the artifact does not list. Assert the resulting create op carries:
+**Given** an action with `Reason: "Code cleanup: m/X"`, `SpecNodeID: "abc123def456"`, from a removed node whose task the artifact does not list.
+
+- Assert the resulting create op carries:
   - `spec_node_kind: "cleanup"`.
   - `title: "Code cleanup: m/X"` (the Reason verbatim, NOT the conventional `"<module>: <node>"`
     form).
@@ -200,9 +213,9 @@ implementation task.
 
 ### Cleanup layer waits for the batch's last layer and its retargets
 
-- A batch of: the proposal epic create, two component creates, one multi-component test_section
-  create T, one retarget of open task `spexmachina-hun`, and two cleanup actions
-  (`Code cleanup: m/X`, `Code cleanup: m/Y`). Assert:
+**Given** a batch of: the proposal epic create, two component creates, one multi-component test_section create T, one retarget of open task `spexmachina-hun`, and two cleanup actions (`Code cleanup: m/X`, `Code cleanup: m/Y`).
+
+- Assert:
   - the two cleanup ops are the last creates, their order decided by the lex tiebreak on
     `spec_node_id`.
   - each cleanup's `deps` is exactly
@@ -217,8 +230,8 @@ implementation task.
 
 ### Cleanup create for a prior-batch removal
 
-- The journal's latest change event for the node is a `removed` event (eid `E1`, from an earlier
-  run whose cleanup errored); the batch carries the cleanup create again.
+**Given** the journal's latest change event for the node is a `removed` event (eid `E1`, from an earlier run whose cleanup errored), and the batch carries the cleanup create again.
+
 - Assert the cleanup op's `idempotency.label` is `spex:E1` — read from the fold, not derived from
   this op — so a re-run at a moved HEAD still carries the label of the removal it answers, and
   label and `task_created` referent stay one fact across runs.
@@ -232,9 +245,8 @@ implementation task.
 
 ### Op ids are canonical keys across a batch mixing every kind
 
-- One batch carrying all of it together: a component create and a data_flow create, one cleanup
-  create for a removed node whose task is finished, one retarget, and two closes — a removal
-  close for a node whose task is open, and a fold-back close on a live test_section.
+**Given** one batch carrying all of it together: a component create and a data_flow create, one cleanup create for a removed node whose task is finished, one retarget, and two closes — a removal close for a node whose task is open, and a fold-back close on a live test_section.
+
 - Assert every op_id is `op-<kind>-<key>`: `op-component-<hash>` and `op-data_flow-<hash>` for
   the conventional creates, `op-cleanup-<hash>` for the cleanup, `op-retarget-<hash>` for the
   retarget, `op-close-<task_id>` for each close — and `op-proposal_epic-<proposal ref>` for the
@@ -251,9 +263,8 @@ implementation task.
 
 ### Cross-component scenario: Resolver + Sorter + Labeler + Builder produce byte-identical output across runs
 
-- **Setup**: identical action batch (multi-create with at least one in-batch dep, one
-  live-task dep, and one retarget), identical journal, identical spec graph, identical
-  `--git-head`. Run the builder twice in two separate processes.
+**Given** an identical action batch (multi-create with at least one in-batch dep, one live-task dep, and one retarget), identical journal, identical spec graph and identical `--git-head`, with the builder run twice in two separate processes.
+
 - **Components exercised together**: `Resolver` classifies each dep into ref:op or ref:task;
   `TopologicalSorter` orders the create ops — proposal epic first, then layer by layer in the
   profile's order, in-batch dep predecessors first inside each, with lex-tiebreak among
@@ -274,8 +285,8 @@ implementation task.
 
 ### Cross-component scenario: dep classification round-trip through Builder
 
-- **Setup**: a multi-create action batch with deps exercising both live code paths — in-batch
-  (`ref:op`) and live-task (`ref:task`) — plus one dep constructed to be unresolvable.
+**Given** a multi-create action batch with deps exercising both live code paths — in-batch (`ref:op`) and live-task (`ref:task`) — plus one dep constructed to be unresolvable.
+
 - **Components exercised together**: Resolver classifies, Sorter orders so the in-batch
   predecessor is sequenced before its dependent, Builder composes or refuses.
 - **Assertions**:
@@ -287,8 +298,8 @@ implementation task.
 
 ### Cross-component scenario: cycle detection surfaces through Builder.Build error
 
-- **Setup**: a constructed action batch with an in-batch dep cycle (A's DepSpecNodeIDs includes
-  B; B's includes A). This is an invalid spec, fabricated for the test.
+**Given** a constructed action batch with an in-batch dep cycle (A's DepSpecNodeIDs includes B; B's includes A) — an invalid spec, fabricated for the test.
+
 - **Components exercised together**: Resolver classifies both deps as `ref:op`, Sorter detects
   the cycle when running Kahn's algorithm, Builder receives the structured error and propagates
   it.
@@ -298,9 +309,8 @@ implementation task.
 
 ### Cross-component scenario: spec_node_kind and layer per declared type come from the profile
 
-- **Setup**: an action batch carrying one create per plan-relevant node type, built once under
-  the default profile and once under a profile declaring an additional plan-relevant `endpoint`
-  type, appended to its list, with one `endpoint` create in the batch.
+**Given** an action batch carrying one create per plan-relevant node type, built once under the default profile and once under a profile declaring an additional plan-relevant `endpoint` type, appended to its list, with one `endpoint` create in the batch.
+
 - **Components exercised together**: ChangesetBuilder fills each op's `spec_node_kind` from the
   action's node type and adds the layer edges; TopologicalSorter layers the creates by the
   profile's list; the profile declares which types are plan-relevant and in what order — no

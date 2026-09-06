@@ -107,7 +107,7 @@
       "preq_id": "a65bbd37c7ec",
       "type": "functional",
       "name": "Validate sections and coupled modules",
-      "description": "Validate the sections array: unique IDs, unique names, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/\u003cmodule-path\u003e/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
+      "description": "Validate the sections array: unique IDs, unique names, required envelope fields (id, name, type). For type 'coupled', enforce that a module with matching name exists and that spec/<module-path>/section.schema.json exists. Load the section schema and validate the section's freeform content against it."
     }
   ],
   "components": [
@@ -255,22 +255,12 @@
       ]
     },
     {
-      "id": "78ac211428bb",
-      "name": "Graph structure tests",
-      "content": "test_graph_structure.md",
-      "describes": [
-        "c6c770a59d68",
-        "00beeeda5ddd"
-      ]
-    },
-    {
       "id": "15d919047039",
       "name": "Name and coverage tests",
       "content": "test_name_and_coverage.md",
       "describes": [
         "88dd4060cb44",
-        "ed7a40b68995",
-        "c7d0282b0e05"
+        "ed7a40b68995"
       ]
     },
     {
@@ -279,15 +269,11 @@
       "content": "test_validation_pipeline.md",
       "describes": [
         "0f98ca780873",
-        "59235a75aa44"
-      ]
-    },
-    {
-      "id": "7d0545b7779b",
-      "name": "Coupled section tests",
-      "content": "test_coupled_sections.md",
-      "describes": [
-        "e36112523589"
+        "59235a75aa44",
+        "c6c770a59d68",
+        "00beeeda5ddd",
+        "e36112523589",
+        "c7d0282b0e05"
       ]
     }
   ],

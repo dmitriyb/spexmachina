@@ -36,6 +36,8 @@ answering from the journal, not a property of the orchestrator's loop.
 
 ### Assertions
 
+**Given** the full pipeline fixture run twice — Run 1 with A and B ok, C error and top-level status partial, and Run 2 with C ok and status complete.
+
 - After Run 1: the journal pairs A and B with their tasks, records the close, and carries nothing
   for C; no snapshot write.
 - After Run 2: the journal additionally pairs C; the snapshot is rewritten. The A and B lines are
@@ -57,6 +59,8 @@ The same-changeset discipline is what the label guards; a *fresh* plan run would
 run is re-run, not re-planned, exactly as the adapters module's receipts contract states.
 
 ### Assertion
+
+**Given** the dead adapter run's changeset re-run unchanged, with the adapter mocked to return `was_existing: true` for C's receipt.
 
 Tested by mocking the adapter to return `was_existing: true` for C's receipt in the same-changeset
 re-run. Expected: the pairing lands normally; no error; no duplicate task in the tracker.

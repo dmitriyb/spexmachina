@@ -20,6 +20,8 @@ in the orchestrator both surface here.
 
 ### Ok create on an unknown node → added event and receipt appended
 
+**Given** a journal holding no change event for node `abc123def456`, and a changeset+receipts pair whose single ok create op for that node names task `br-new`.
+
 - Changeset: one create op, spec_node_id `abc123def456`, idempotency label
   `spex:cafe1234:<op_id>` (the eid the event below will carry), git_head `cafe1234`. The journal
   holds no change event for the node.
@@ -29,6 +31,8 @@ in the orchestrator both surface here.
   and `task_id: "br-new"`.
 
 ### Ok create on a known node → modified event, no task_closed
+
+**Given** a journal holding `added` (after `aaa`) and `task_created` (task `br-old`) for node `feedface0002`, and a changeset whose lone create op for that node carries no dep and no accompanying close.
 
 - Initial journal: `added` (after `aaa`) + `task_created` (task `br-old`) for node `feedface0002`.
 - Changeset: one create op for `feedface0002` labeled `spex:<git_head>:<its op_id>`, carrying no
@@ -43,6 +47,8 @@ in the orchestrator both surface here.
 
 ### Ok create on a re-added node → added event
 
+**Given** a journal holding `added` + `task_created` (task `br-1`) then `removed` + `task_closed` for node `feedface0005`, and a changeset re-adding that node under one ok create.
+
 - Initial journal: `added` + `task_created` (task `br-1`), then `removed` (after null) +
   `task_closed` for node `feedface0005`.
 - Changeset: one create op for `feedface0005`, the node re-added under the same name.
@@ -51,6 +57,8 @@ in the orchestrator both surface here.
   `after`, so the node is born again rather than modified — and a `task_created` for `br-2`.
 
 ### Ok close on removed → removed event and task_closed appended
+
+**Given** a journal holding `added` + `task_created` (task `br-old`) for node `feedface0001`, and a changeset whose lone close op targets `br-old` for a removal, receipted ok.
 
 - Initial journal: `added` + `task_created` (task `br-old`) for node `feedface0001`.
 - Changeset: one close op targeting task `br-old`, `reason` starting with "Spec node removed".
@@ -61,6 +69,8 @@ in the orchestrator both surface here.
 
 ### Was_existing=true → idempotent no-op
 
+**Given** a journal already holding the change event and `task_created` for node `A` with task `br-7`, and the same create op re-emitted under an ok, `was_existing: true` receipt.
+
 - Initial journal already holds the change event and `task_created` for node `A`, task `br-7`.
 - Changeset: the same create op re-emitted (same git_head, same op_id).
 - Receipts: create op `status: "ok"`, `task_id: "br-7"`, `was_existing: true`.
@@ -69,6 +79,8 @@ in the orchestrator both surface here.
 
 ### Error status → op skipped, nothing appended
 
+**Given** a changeset with one create op whose receipt carries `status: "error"` and an empty `task_id`.
+
 - Changeset: one create op.
 - Receipts: that op with `status: "error"`, `task_id: ""`.
 - Expected: no event, no receipt; no error from the reconciler (the adapter's failure is the
@@ -76,11 +88,15 @@ in the orchestrator both surface here.
 
 ### Skipped status → op no-op
 
+**Given** a changeset with one create op whose receipt carries `status: "skipped"`.
+
 - Changeset: create op.
 - Receipts: op with `status: "skipped"`.
 - Expected: nothing appended.
 
 ### Mixed ops: one batch, ordered append
+
+**Given** a changeset of three ops in plan's ordering — a create for known node X whose earlier task is finished, a create for new node Y, and a close of `br-B` — with all receipts ok.
 
 - Changeset: [create for known node X (its earlier task finished), create for new node Y, close
   br-B (removed)] — plan's real ordering (creates before closes).
@@ -91,6 +107,8 @@ in the orchestrator both surface here.
   in the batch names X's earlier task.
 
 ### Proposal-epic create → receipt references the registered event, no spec-graph lookup
+
+**Given** a journal holding a `registered` event for the proposal, an empty spec graph, and a changeset whose lone `proposal_epic` create is labelled with that registered eid and receipted ok as `br-epic`.
 
 - Initial journal: a `registered` event for the proposal
   (`eid: "beef0001:2026-04-29-decouple-contract-gaps"`).
@@ -106,11 +124,15 @@ in the orchestrator both surface here.
 
 ### Proposal-epic create without a registered event → invariant failure
 
+**Given** that same proposal-epic changeset over a journal holding no `registered` event for the slug.
+
 - Same changeset as above, but the journal holds no `registered` event for the slug.
 - Expected: a structured error naming the slug and the missing referent; nothing appended. Plan
   refuses to build such an op, so its arrival marks a malformed changeset.
 
 ### Cleanup create → receipt pairs with the prior removed event
+
+**Given** a journal whose latest change event for node `abc123def456` is a `removed` event with eid `E1`, and a changeset whose lone `cleanup` create is labelled `spex:E1` and receipted ok as `br-cleanup`.
 
 - Initial journal: the node `abc123def456`'s latest change event is a `removed` event (eid
   `E1`), from a prior run whose cleanup errored.
@@ -121,6 +143,8 @@ in the orchestrator both surface here.
   task is born pointing at the removal it answers. No new change event.
 
 ### Cleanup create → the cleanup mints the removal itself
+
+**Given** a journal holding `added` (after `aaa`) + `task_created` (task `br-gone`) for the node and no `removed` event for it, and a changeset carrying only a cleanup create for that node's hash, receipted ok as `br-cleanup`.
 
 - Initial journal: `added` (after `aaa`) + `task_created` (task `br-gone`) for the node being
   cleaned up; no `removed` event exists for it.
@@ -136,6 +160,8 @@ in the orchestrator both surface here.
 
 ### Cleanup create after a re-add → a fresh removal, not the old one
 
+**Given** a journal holding `removed` (eid `E1`) for the node followed by `added` + `task_created` for the same hash, and a changeset carrying a cleanup create labelled `spex:<git_head>:<its op_id>`.
+
 - Initial journal: `removed` (eid `E1`) for the node, then `added` + `task_created` for the same
   hash — re-added, then finished.
 - Changeset: a cleanup create labeled `spex:<git_head>:<its op_id>`.
@@ -143,6 +169,8 @@ in the orchestrator both surface here.
   `E1` is not the referent, because it is not the node's latest state.
 
 ### Fold-back close, task live in the journal → modified event from the close alone
+
+**Given** a journal holding `added` + `task_created` (task `br-old`) for a `test_section` node, and a changeset whose lone close op targets `br-old` with a "Spec node modified" reason, receipted ok.
 
 - Initial journal: `added` + `task_created` (task `br-old`) for a `test_section` node.
 - Changeset: one close op, reason starting "Spec node modified", targeting `br-old` — the shape
@@ -155,6 +183,8 @@ in the orchestrator both surface here.
 
 ### Fold-back close naming a task unknown to the journal → refused before append
 
+**Given** a changeset whose lone close op carries a "Spec node modified" reason and targets a task with no fold entry in the journal, receipted ok.
+
 - Changeset: one close op, reason starting "Spec node modified", targeting a task that has no
   fold entry at all.
 - Receipts: close op `status: "ok"`.
@@ -163,6 +193,8 @@ in the orchestrator both surface here.
   so a close the journal cannot place is a malformed changeset.
 
 ### Ok retarget → modified event and task_retargeted appended
+
+**Given** a journal holding `added` + `task_created` (task `br-open`) for node `feedface0003`, and a changeset whose lone retarget op targets `br-open` with that node's new content hash, receipted ok.
 
 - Initial journal: `added` + `task_created` (task `br-open`) for node `feedface0003`.
 - Changeset: one retarget op targeting `br-open`, `spec_node_id: "feedface0003"`, its new content
@@ -176,16 +208,22 @@ in the orchestrator both surface here.
 
 ### Retarget re-run → idempotent no-op
 
+**Given** a journal already holding the retarget's `modified` event and its `task_retargeted` line, and the same changeset+receipts pair.
+
 - Initial journal already holds the retarget's `modified` event and its `task_retargeted` line.
 - The same changeset+receipts pair is reconciled again.
 - Expected: nothing appended — both lines dedup by derived event id, like every other batch.
 
 ### Retarget with error receipt → nothing appended
 
+**Given** that same retarget changeset with its receipt carrying `status: "error"`.
+
 - Same retarget changeset; receipt `status: "error"`.
 - Expected: no event, no receipt, no error from the reconciler.
 
 ### Absorbed entry → modified event and refresh receipt appended
+
+**Given** a changeset with empty `ops` and one `absorbed` entry — node `feedface0004`, before `aaa`, after `bbb`, reason "typo sweep" — and receipts with empty `ops` and status complete.
 
 - Changeset: empty `ops`, one `absorbed` entry — node `feedface0004`, before `aaa`, after `bbb`,
   reason "typo sweep". Receipts: empty `ops`, status complete.
@@ -196,6 +234,8 @@ in the orchestrator both surface here.
 
 ### Absorbed entries land on partial runs too
 
+**Given** a changeset carrying one create op plus one `absorbed` entry, the create receipted `status: "error"` and the top-level status partial.
+
 - Changeset: one create op plus one `absorbed` entry; receipts: the create `status: "error"`,
   top-level status partial.
 - Expected: nothing for the errored create; the absorbed entry's `modified` event and the
@@ -204,11 +244,15 @@ in the orchestrator both surface here.
 
 ### Absorbed re-run → idempotent no-op
 
+**Given** the journal the prior scenario left behind, and that same changeset+receipts pair.
+
 - The same changeset+receipts pair reconciled again over the journal the prior scenario left.
 - Expected: nothing appended — the `(node, before, after)` derivation finds the event present, and
   an empty remainder appends no second `refresh` receipt.
 
 ### Receipt referencing nothing → refused before append
+
+**Given** a changeset and receipts constructed so an ok create's op matches no change event and no prior removed event, and carries no proposal stem.
 
 - Changeset/receipts constructed so an ok create's op matches no change event and no prior removed
   event, and carries no proposal stem.
@@ -216,6 +260,8 @@ in the orchestrator both surface here.
   state — a refused batch appends nothing.
 
 ### Eid predicate sees the journal and the in-flight batch
+
+**Given** a journal holding the change event and `task_created` for node `A`, and a changeset of three ok creates — `A` re-emitted, a create for node `B`, and a second op whose derived eid collides with `B`'s.
 
 - Initial journal: the change event and `task_created` for node `A` (a journal-side duplicate).
 - Changeset: [the same create op for `A` re-emitted (same git_head, same op_id), a create op for

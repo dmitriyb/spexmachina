@@ -14,8 +14,6 @@
 map/arch_mapping_store.md	"module": "impact"
 map/arch_mapping_store.md	"path": "impact/arch_action_classifier.md"
 map/arch_map_command.md	"module":"impact"
-schema/test_journal_line_schema.md	"module":"impact"
-schema/test_journal_line_schema.md	the change-event fixture with `"path": "impact/
 
 # A close op's reason carries the module the removed node lived in, for the
 # same reason. Sample output of a real changeset.

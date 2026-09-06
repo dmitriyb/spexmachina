@@ -2,7 +2,7 @@
 
 ## Setup
 
-All scenarios invoke the `spex render` CLI command against a temporary spec directory containing a valid spec fixture. The fixture is the same multi-module spec described in the SpecReader and Renderer test setups:
+All scenarios invoke the `spex render` CLI command against a temporary spec directory containing a valid spec fixture. The fixture is the multi-module spec the render command test builds in place:
 
 - `project.json` with 2 modules (alpha, beta) and project-level requirements
 - Module alpha: 2 components with content leaves, 1 test_section, 1 data_flow
@@ -50,6 +50,12 @@ No `spex` process is spawned. Each scenario assembles the command tree itself, h
 - Output contains `subgraph cluster_alpha` and `subgraph cluster_beta`
 - Output ends with `}`
 - Stderr is empty
+
+
+### S3b: DOT output carries the declared shapes and edge labels
+**Given** the leaf's fixture: module `alpha` with two components of which the second `implements` a module requirement and `uses` the first, a data_flow that `uses` both, and module `beta` declaring `requires_module` on alpha.
+**When** `spex render --spec-dir <dir> --format dot` is executed.
+**Then** exit code is 0 and stdout declares each module as `shape=folder`, each module requirement as `shape=box`, each component as `shape=component` and the data_flow as `shape=ellipse`; every node's label is its declared name; and one edge per declared relationship, every edge carrying `label="<edge kind>"` — `implements` and `requires_module` drawn solid, `uses` dotted, `preq_id` dashed. `rankdir=LR` appears once at the top of the graph.
 
 ### S4: JSON format output
 
@@ -238,6 +244,8 @@ There is no third outcome: the command either returns without error or returns o
 - Alternatively, the empty string is treated as the default (markdown) -- either behavior is acceptable as long as it is consistent and documented
 
 ### E9: Help flag
+
+**Given** the Setup fixture — a temporary spec directory holding the valid multi-module spec — with the command tree assembled in place rather than a process spawned.
 
 **When** `spex render --help` is executed.
 

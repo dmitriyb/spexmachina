@@ -1,6 +1,6 @@
 # Lifecycle command tests
 
-Acceptance coverage spanning [[f64995aaeb56|InitCommand]] and [[3accd139a00d|DoctorCommand]]: what init writes, what init refuses, what doctor reports, and the round-trip between them. All cases run in temporary directories.
+Acceptance coverage spanning [[f64995aaeb56|InitCommand]], [[3accd139a00d|DoctorCommand]] and, through the pre-flight both run, [[a9aa93774cc2|ProjectResolver]]: what init writes, what init refuses, what doctor reports, and the round-trip between them. All cases run in temporary directories.
 
 ## Setup
 

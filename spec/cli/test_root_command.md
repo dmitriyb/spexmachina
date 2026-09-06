@@ -11,31 +11,37 @@ Integration and acceptance tests for the RootCommand component.
 
 ### 1. No arguments prints help
 
+**Given** the compiled `spex` binary with every subcommand registered.
 **Input**: `spex` (no args)
 **Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, plan, map, register, log, template, version, render, ingest, upgrade, init, doctor), plus cobra's own `completion` and `help`.
 
 ### 2. --help flag prints help
 
+**Given** the compiled `spex` binary with every subcommand registered.
 **Input**: `spex --help`
 **Expected**: Exit 0. Same output as no-args case.
 
 ### 3. Unknown subcommand suggests alternatives
 
+**Given** the compiled `spex` binary and a subcommand name that matches nothing registered.
 **Input**: `spex valdate` (typo)
 **Expected**: Exit 1. Stderr contains "unknown command". The "Did you mean" suggestion is cobra's and is not asserted by any test.
 
 ### 4. Global --spec-dir flag is inherited
 
+**Given** the compiled `spex` binary and a valid spec directory at `./testdata/valid-spec`.
 **Input**: `spex validate --spec-dir ./testdata/valid-spec`
 **Expected**: The validate subcommand receives `./testdata/valid-spec` as the spec directory, not the default `spec/`.
 
 ### 5. All subcommands registered
 
+**Given** the compiled `spex` binary built from `cmd/spex/main.go`'s registration list.
 **Input**: `spex --help`
 **Expected**: Output lists all expected subcommands. No test executes this against the real registration list in `cmd/spex/main.go` — `cli/root_test.go` substitutes dummy subcommands and asserts only that an "Available Commands:" block is printed.
 
 ### 6. Subcommand --help works
 
+**Given** the compiled `spex` binary with the validate subcommand registered.
 **Input**: `spex validate --help`
 **Expected**: Exit 0. Stdout contains validate-specific usage text and flags.
 

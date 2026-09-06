@@ -73,3 +73,8 @@ jobs:
         env:
           SPEX_BIN: ${{ runner.temp }}/spex
         run: ./scripts/spec-gate.sh
+
+      - name: Test-leaf shape lens
+        run: ./scripts/lens-test-shape.sh
+      - name: Requirement-links lens
+        run: ./scripts/lens-requirement-links.sh
