@@ -193,22 +193,8 @@
       "content": "test_schema_loading.md",
       "describes": [
         "ee88263d6555",
-        "cd726f8b088b"
-      ]
-    },
-    {
-      "id": "f858fd18824b",
-      "name": "Journal line schema tests",
-      "content": "test_journal_line_schema.md",
-      "describes": [
-        "65013bcc73e6"
-      ]
-    },
-    {
-      "id": "05dd9467425f",
-      "name": "Task state schema tests",
-      "content": "test_task_state_schema.md",
-      "describes": [
+        "cd726f8b088b",
+        "65013bcc73e6",
         "b9ef2bb77f63"
       ]
     }

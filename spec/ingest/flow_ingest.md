@@ -77,9 +77,9 @@ absorption in the journal. See `arch_refresh.md` for the refusal contract and th
    presence can no longer stand in for that fact.
 2. **Compute the diff.** [[f9033352c13f|RefreshHandler]] rebuilds the current merkle tree, loads
    the pre-refresh snapshot, and diffs one against the other.
-3. **Refusal gates.** Any added or removed entry the absorbable set does not cover refuses the
-   run, as does any removed node whose journal pairing is unclosed — no `task_closed` follows it. A refusal is a structured
-   error and leaves both files exactly as they were.
+3. **Refusal gates.** Any added or removed entry the resolved profile declares non-absorbable in
+   that direction, or any added or removed `meta`/`module` leaf, refuses the run. A refusal is a
+   structured error and leaves both files exactly as they were. Journal pairings are not gated.
 4. **Construct the absorption.** One change event per absorbed drift entry — before/after hashes
    off the two trees — closed by one `refresh` receipt naming those event ids, stamped with
    `--git-head` when given.
@@ -218,9 +218,8 @@ the journal and snapshot byte-identical to their pre-call state.
 - Missing pre-refresh snapshot → refused one layer up, before refresh runs: the lifecycle
   pre-flight exits with the not-a-spex-project code, naming `spex doctor`; files unchanged.
 - Non-empty changeset or receipts → exit 1, files unchanged.
-- Diff carries an added or removed entry outside the absorbable set → exit 2 (structured error),
-  files unchanged.
-- Live pairing on a removed node → exit 2 (structured error), files unchanged.
+- Diff carries an added or removed entry the resolved profile declares non-absorbable, or an
+  added or removed `meta`/`module` leaf → exit 2 (structured error), files unchanged.
 - Atomic-write failure of either file → exit 1, both files rolled back to pre-call state.
 
 ## Success Paths

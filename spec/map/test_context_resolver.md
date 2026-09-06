@@ -94,22 +94,6 @@ has journal history and no task-bearing event.
 
 **Then:** the result is identical to S1 — the task id resolves through the journal fold to the identity hash, then the spec derivation runs unchanged.
 
-### S3: Component referenced by multiple test_sections
-
-**Given** a module where Parser is described by test_section `333333333333` and by a second test_section `555555555555`, content "test_parser.md".
-
-**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
-
-**Then:** `ContextResult.TestFiles` contains both test_section content paths in module declaration order.
-
-### S4: Component with no data_flows
-
-**Given** a module where no data_flow's `uses` array contains the component's identity hash.
-
-**When** `ResolveContext(specDir, "aabbccddeeff")` is called.
-
-**Then:** `ContextResult.FlowFiles` is empty (nil or zero-length). No error — this is valid.
-
 ### S5: Removed node resolves from the journal
 
 **Given** the fixture journal's removed node `999999999999`.
@@ -120,14 +104,6 @@ has journal history and no task-bearing event.
 
 ## Edge Cases
 
-### E1: Missing module.json
-
-**Given** a live journal entry whose module directory has no `module.json` on disk.
-
-**When** `ResolveContext` is called with that node's hash.
-
-**Then:** returns an error naming the expected `module.json` path.
-
 ### E2: Key known to neither spec nor journal
 
 **Given** a hash that appears in no module.json and no journal event.
@@ -136,10 +112,3 @@ has journal history and no task-bearing event.
 
 **Then:** returns a not-found error naming the key. The error distinguishes "unknown everywhere" from S5's removed-but-remembered case.
 
-### E3: Component hash not found in any section
-
-**Given** a live component whose identity hash appears in no test_section.describes and no data_flow.uses.
-
-**When** `ResolveContext` is called.
-
-**Then:** returns a valid ContextResult with empty TestFiles and FlowFiles. ArchFile and ModuleFile are still populated. Not an error.

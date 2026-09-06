@@ -31,10 +31,13 @@ With --mode refresh (empty changeset + empty receipts), ingest instead
 absorbs spec drift: one change event per drifted or absorbable
 added/removed leaf is appended to the task journal, closed by a refresh
 receipt, and the snapshot is rewritten — atomically, with no bead
-lifecycle. Added/removed leaves are refused unless their node type is
-in the refresh absorbable set — requirement and api in both directions,
-component in the removed direction only — and a removed node with a
-still-open task is refused regardless of its type.
+lifecycle. Added and removed leaves are absorbed like modified ones —
+the refresh is the authoring loop's deliberate override, taken with a
+stated reason — for every node type the resolved profile declares
+absorbable in that direction (the default profile declares every type
+in both directions); only the module and envelope leaves are always
+refused, because baselining one would hide a whole module appearing or
+vanishing from every downstream tool.
 
 Inputs:
   --changeset <file>   changeset JSON (required)
@@ -49,8 +52,8 @@ Exit codes:
   1 — input error (bad flags, malformed JSON, op_id mismatch, IO failure,
       non-empty refresh artifacts)
   2 — invariant failure (journal unchanged on disk) or refresh refusal
-      (non-absorbable added/removed entries, a live task pairing on a
-      removed node)`,
+      (an added/removed entry the resolved profile declares
+      non-absorbable, or a module/envelope leaf added or removed)`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			specDir, err := resolveSpecDir(cmd)

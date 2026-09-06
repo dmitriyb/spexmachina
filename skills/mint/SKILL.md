@@ -167,8 +167,12 @@ Both artifacts are required and must be empty: `{"version":4,"ops":[],"absorbed"
 carry; ingest refuses any other (`changeset version must be 4`, `receipts version must be 2`). Refresh walks the current graph itself, absorbs
 every drift entry as a `modified` event, writes one refresh receipt (stamped with `--git-head`
 when given), and commits journal and snapshot under one atomic boundary. It refuses non-empty
-artifacts and structural entries outside its absorbable set (`requirement` and `api` both
-directions, `component` removals — see RefreshHandler's table).
+artifacts, and added or removed `meta`/`module` leaves; every other change kind — content drift,
+and structural additions and removals of any node type the resolved profile declares absorbable,
+which the default profile does for all of them in both directions — is absorbed, each as its own
+`added`/`removed`/`modified` event under the one refresh receipt. Refresh is the authoring loop's
+deliberate override: the reason for absorbing a structural change (the tests landed in the same
+change; what the removed leaf described were unit tests that stay) goes in the PR description.
 
 **The gates bind asymmetrically.** `spex plan` refuses a red diff structurally; refresh runs
 neither `spex validate` nor the completeness checker, so a diff flagged with `incomplete_change`

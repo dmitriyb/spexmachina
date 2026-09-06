@@ -78,20 +78,13 @@
   ],
   "test_sections": [
     {
-      "id": "3baf321bfb97",
-      "name": "Resolver tests",
-      "content": "test_resolver.md",
-      "describes": [
-        "a9aa93774cc2"
-      ]
-    },
-    {
       "id": "7fb345b743f3",
       "name": "Lifecycle command tests",
       "content": "test_lifecycle_commands.md",
       "describes": [
         "f64995aaeb56",
-        "3accd139a00d"
+        "3accd139a00d",
+        "a9aa93774cc2"
       ]
     }
   ],

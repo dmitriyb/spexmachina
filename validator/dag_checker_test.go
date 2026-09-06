@@ -446,3 +446,34 @@ func TestREQ3_DetectCyclesUnit(t *testing.T) {
 		})
 	}
 }
+
+// TestREQ3_D7_CyclesInMultipleGraphsReportedIndependently pins the
+// scenario the graph-structure leaf carried as "no implementing test": one
+// spec holding a module cycle (alpha <-> beta) AND a requirement cycle
+// inside alpha yields at least one error per graph, each tagged with its
+// own graph kind — the checker does not stop at the first cycle it finds.
+func TestREQ3_D7_CyclesInMultipleGraphsReportedIndependently(t *testing.T) {
+	errs := CheckDAG(filepath.Join("testdata", "dag_two_graph_cycles"))
+	var moduleCycle, requirementCycle bool
+	for _, e := range errs {
+		if e.Check != "dag" {
+			t.Fatalf("expected check=dag, got %q: %s", e.Check, e.Message)
+		}
+		switch {
+		case strings.HasPrefix(e.Message, "module dependency cycle:"):
+			moduleCycle = true
+			if !strings.Contains(e.Message, "alpha") || !strings.Contains(e.Message, "beta") {
+				t.Fatalf("module cycle path should name alpha and beta, got: %s", e.Message)
+			}
+		case strings.HasPrefix(e.Message, "requirement dependency cycle:"):
+			requirementCycle = true
+			if !strings.Contains(e.Message, "Feature A") || !strings.Contains(e.Message, "Feature B") {
+				t.Fatalf("requirement cycle path should name both requirements, got: %s", e.Message)
+			}
+		}
+	}
+	if !moduleCycle || !requirementCycle {
+		t.Fatalf("want one module-graph and one requirement-graph cycle error, got module=%v requirement=%v in: %v",
+			moduleCycle, requirementCycle, errs)
+	}
+}

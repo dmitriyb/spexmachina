@@ -2,6 +2,10 @@
 
 End-to-end adapter run against a real br sandbox — both halves, export and apply. Gated on `br` being present on PATH; skipped otherwise. Lives at `scripts/apply-br_test.sh` — outside the Go test suite.
 
+## Setup
+
+A throwaway `br` sandbox seeded per scenario: each scenario states the tasks and dependencies it plants before the run. The reference adapter under test is `scripts/apply-br.sh`; export and apply both run against the same sandbox. Nothing outside the sandbox is touched, and the gate below skips the whole leaf when `br` is absent.
+
 ## Gate
 
 ```bash
@@ -15,7 +19,8 @@ fi
 
 ### Export against a live sandbox
 
-- Seed br sandbox: two open tasks, one claimed (`in_progress`) task, two closed tasks.
+**Given** a br sandbox seeded with two open tasks, one claimed (`in_progress`) task, and two closed tasks.
+
 - Run `scripts/export-br.sh tasks.json`.
 - Assertions:
   - `tasks.json` validates against `schema/task-state.schema.json`.
@@ -24,7 +29,8 @@ fi
 
 ### Full happy path
 
-- Seed br sandbox: create a fake proposal epic and a handful of feature tasks (analogues of existing journal pairings).
+**Given** a br sandbox seeded with a fake proposal epic and a handful of feature tasks (analogues of existing journal pairings).
+
 - Run `scripts/apply-br.sh` with a changeset containing 2 new creates, 1 close (removed), and 1 create for a modified node whose earlier task is finished.
 - Assertions:
   - All 4 ops land as receipts.
@@ -36,7 +42,8 @@ fi
 
 ### Partial run (injected failure)
 
-- Seed sandbox.
+**Given** a br sandbox seeded with the proposal epic, and a changeset of three create ops of which one carries a priority br rejects.
+
 - Run adapter against a changeset where one create op has an invalid priority (e.g., priority=-1) that br rejects.
 - Assertions:
   - Adapter processes ops until the bad one; records error receipt; continues with remaining ops OR halts depending on the adapter's documented policy (this test pins the policy).
@@ -44,6 +51,8 @@ fi
   - Successful ops left their traces in br; failed one did not.
 
 ### Re-run idempotency
+
+**Given** the happy-path changeset and the br sandbox it runs against.
 
 - Run the happy-path changeset once. Capture the br state.
 - Run it again with the same changeset.
@@ -53,12 +62,14 @@ fi
 
 ### Both ref shapes
 
-- Changeset mixing ref:op (new-to-new) and ref:task (existing, listed as open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
+**Given** a br sandbox in which one open task is planted, and a changeset mixing ref:op (new-to-new) and ref:task (that planted task, listed as open) — the two shapes the changeset admits; a dep plan could not resolve never reaches the adapter.
+
 - Assertions: each new task's `--deps blocked-by:<>` is correct per the ref resolution.
 
 ### Retarget
 
-- Seed sandbox: one open task already carrying one dependency, and a second task the retarget adds as a new dependency.
+**Given** a br sandbox seeded with one open task already carrying one dependency, and a second task the retarget adds as a new dependency.
+
 - Run the adapter with a changeset holding one retarget op aimed at the open task, whose `deps` name both tasks — the one already carried and the new one — so the add-only skip is exercised alongside the add.
 - Assertions:
   - The open task carries the retarget op's `spex:<eid>` label.

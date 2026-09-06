@@ -134,21 +134,14 @@
       ]
     },
     {
-      "id": "23b86e6f80c7",
-      "name": "Renderer tests",
-      "content": "test_renderers.md",
-      "describes": [
-        "b4b4eba6b551",
-        "45331bdc0bd0",
-        "172d16ca0eac"
-      ]
-    },
-    {
       "id": "6aad73fe1bc2",
       "name": "Render command tests",
       "content": "test_render_command.md",
       "describes": [
-        "c56eefd05f42"
+        "c56eefd05f42",
+        "b4b4eba6b551",
+        "45331bdc0bd0",
+        "172d16ca0eac"
       ]
     }
   ],

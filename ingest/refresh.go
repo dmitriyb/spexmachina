@@ -208,14 +208,14 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 		return summary, &RefreshRefusal{
 			Kind:    "added_entries",
 			Entries: addedRefused,
-			Hint:    "refresh mode does not absorb structural changes; use the normal pipeline",
+			Hint:    "the resolved profile declares this node type non-absorbable in that direction; use the normal pipeline or declare it",
 		}
 	}
 	if len(removedRefused) > 0 {
 		return summary, &RefreshRefusal{
 			Kind:    "removed_entries",
 			Entries: removedRefused,
-			Hint:    "refresh mode does not absorb structural changes; use the normal pipeline",
+			Hint:    "the resolved profile declares this node type non-absorbable in that direction; use the normal pipeline or declare it",
 		}
 	}
 
@@ -228,44 +228,15 @@ func (h *RefreshHandler) Apply(specDir string) (RefreshSummary, error) {
 	for _, e := range fold.Entries {
 		foldByKey[e.Key] = e
 	}
-	closedTaskIDs := map[string]bool{}
 	lastChangeByNode := map[string]mapping.Event{}
 	seenEIDs := make(map[string]bool, len(existing))
 	for _, ev := range existing {
 		switch ev.Event {
-		case "task_closed":
-			closedTaskIDs[ev.TaskID] = true
 		case "added", "modified", "removed":
 			lastChangeByNode[ev.Node] = ev
 		}
 		if ev.EID != "" {
 			seenEIDs[ev.EID] = true
-		}
-	}
-
-	// Live-pairing gate: a removed entry whose node's current fold
-	// linkage is still a live, unclosed task_created refuses the run —
-	// bead work is owed and the normal pipeline must close or clean it
-	// up first. Liveness is decided from TaskID/closedTaskIDs alone: the
-	// fold's Removed flag says nothing about whether that task is open —
-	// a cleanup's task_created folds to Removed:true too, since it
-	// inherits Removed from the removal event it pairs with — so it must
-	// not gate this check.
-	var livePairing []string
-	for _, c := range changes {
-		if c.Type != merkle.Removed {
-			continue
-		}
-		entry, ok := foldByKey[c.Key]
-		if ok && entry.TaskID != "" && !closedTaskIDs[entry.TaskID] {
-			livePairing = append(livePairing, fmt.Sprintf("%s (%s)", c.Key, entry.TaskID))
-		}
-	}
-	if len(livePairing) > 0 {
-		return summary, &RefreshRefusal{
-			Kind:    "live_task_pairing",
-			Entries: livePairing,
-			Hint:    "live task for removed node; structural drift requires the normal pipeline",
 		}
 	}
 

@@ -35,7 +35,7 @@
       "preq_id": "58ea35f52b86",
       "type": "functional",
       "name": "Task data via stdin",
-      "description": "spex log reads tracker task data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed task records from its caller \u2014 no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which \u2014 ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
+      "description": "spex log reads tracker task data (JSON array from 'br list --json' or compatible) from stdin rather than invoking the tracker CLI directly. Usage: br list --json | spex log --proposal <ref>. HistoryViewer accepts the parsed task records from its caller — no subprocess invocation inside the proposal module. The surface is declared as the api `spex log`, and its provided_by names both halves of that split: ProposalCommands reads and parses stdin, HistoryViewer consumes the slice. This module exposes three surfaces through a single command component, so provided_by is the only place in the graph that records which worker realises which — ProposalCommands' `uses` edges cannot, because they are the same three edges whichever of the three is invoked."
     }
   ],
   "components": [
@@ -52,7 +52,7 @@
     {
       "id": "97f73ced5a02",
       "name": "HistoryViewer",
-      "description": "Groups and renders proposal history from a task data array supplied by the caller. Accepts parsed task records directly \u2014 no subprocess invocation. Filters by spec_proposal:<ref> label, resolves proposal files from spec/proposals/, and writes the grouped history to an io.Writer. Usage: the ProposalCommands wrapper reads 'br list --json' (or equivalent) from stdin, parses it into task records, and passes the slice to HistoryViewer.",
+      "description": "Groups and renders proposal history from a task data array supplied by the caller. Accepts parsed task records directly — no subprocess invocation. Filters by spec_proposal:<ref> label, resolves proposal files from spec/proposals/, and writes the grouped history to an io.Writer. Usage: the ProposalCommands wrapper reads 'br list --json' (or equivalent) from stdin, parses it into task records, and passes the slice to HistoryViewer.",
       "content": "arch_history_viewer.md",
       "implements": [
         "2e38135487be",
@@ -90,7 +90,7 @@
     {
       "id": "1d33b4c6c36e",
       "name": "Proposal lifecycle",
-      "description": "Proposal file \u2192 register (validate + copy + registered journal event) \u2192 spec change \u2192 plan \u2192 task actions \u2192 history query.",
+      "description": "Proposal file → register (validate + copy + registered journal event) → spec change → plan → task actions → history query.",
       "content": "flow_proposal_lifecycle.md",
       "uses": [
         "24180f55c0b4",
@@ -108,20 +108,13 @@
       ]
     },
     {
-      "id": "b313b3531f32",
-      "name": "History and template tests",
-      "content": "test_history_templates.md",
-      "describes": [
-        "97f73ced5a02",
-        "cc8adc823719"
-      ]
-    },
-    {
       "id": "a20cc3f7f6f1",
       "name": "Proposal command tests",
       "content": "test_proposal_commands.md",
       "describes": [
-        "21bc124a46c0"
+        "21bc124a46c0",
+        "97f73ced5a02",
+        "cc8adc823719"
       ]
     }
   ],

@@ -39,63 +39,63 @@ and after hashes, and one `refresh` receipt whose `absorbed` list names exactly 
 retired record-rewrite semantics, the absorption itself is now on the record: a refresh run is
 visible in history, not amnesiac.
 
-### Refresh refuses on diff with `added` entries
+### Refresh absorbs an added task-producing leaf
 
-**Given** the fixture has been edited to introduce a new **task-producing** content leaf (a new
-component referenced from `alpha/module.json`) so the diff contains a non-absorbable `added` entry
-**When** `runIngest("--mode", "refresh", ...)` is called
-**Then** exit code is non-zero
-**And** stderr contains a structured error naming the added entries and the reason ("refresh mode
-does not absorb structural changes; use the normal pipeline")
-**And** the journal and the snapshot are unchanged byte-for-byte
-
-**Rationale**: structural changes that owe task work must go through the normal Reconciler path.
-The fixture must add a `component`, `data_flow` or `test_section`; an added `requirement` or `api`
-is absorbed and would not refuse.
-
-### Refresh refuses on diff with `removed` entries
-
-**Given** the fixture has been edited to delete a **non-absorbable** leaf (a data_flow removed
-from `beta/module.json`) so the diff contains a non-absorbable `removed` entry
-**When** `runIngest("--mode", "refresh", ...)` is called
-**Then** exit code is non-zero, stderr names the removed entries with the same "use the normal
-pipeline" reason, and both files are unchanged
-
-**Rationale**: the removal direction is narrower than the addition direction: `component` removal
-IS absorbed, so the fixture must remove a `data_flow` or `test_section` to exercise the gate.
-
-### Refresh absorbs the absorbable structural set
-
-**Given** the fixture has been edited to add a requirement, add and remove an api, and remove a
-component whose journal pairing names a task the normal pipeline already closed
+**Given** the fixture has been edited to introduce a new content leaf of a task-producing kind (a
+new component referenced from `alpha/module.json`), so the diff contains an `added` entry
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is 0
-**And** the journal gains `added`/`removed` change events for each absorbed entry plus the
-`refresh` receipt naming them
+**And** the journal gains one `added` change event for the new node, carrying its identity, name,
+kind, module and `after` hash, closed by the `refresh` receipt naming it
 **And** the snapshot is rewritten to match the current spec state
 
-**Rationale**: the refusal gate is a filter on node type and direction, not a blanket ban. A test
-that only exercises the refusal side would pass against an implementation that refused everything.
-The component removal is paired with a journaled `task_closed` deliberately: the orphan gate, not
-the structural gate, is what keeps a component removal honest.
+**Rationale**: refresh is the authoring loop's deliberate override, taken with a stated reason. An
+added leaf whose work landed in the same change owes no task; the `added` event is what keeps the
+node's biography complete, so `spex map context` answers for it like for any pipeline-born node.
 
-### Refresh refuses while an unclosed pairing points at a removed node
+### Refresh absorbs a removed leaf whose journal pairing is unclosed
 
-**Given** the fixture's current spec graph does NOT contain a node whose journal fold still shows
-a task pairing with no `task_closed` — the only signal refresh has, since it reads no task-state
-artifact and cannot tell an open task from a finished one
+**Given** the fixture has been edited to delete a leaf (a data_flow removed from `beta/module.json`)
+whose journal fold still shows a `task_created` with no `task_closed` — the state of every task an
+implementer finished and closed in the tracker, since the journal never records a completion
+**When** `runIngest("--mode", "refresh", ...)` is called
+**Then** exit code is 0
+**And** the journal gains one `removed` change event for the node, `after: null`, closed by the
+`refresh` receipt naming it
+**And** the snapshot no longer carries the node
+
+**Rationale**: refresh reads no task-state artifact and cannot tell a finished task's pairing from
+an open one's, so it does not gate on pairings — a gate there would refuse the removal of every
+node that ever had a task. Whether the removal leaves live tracker work behind is the operator's
+check, stated with the refresh reason.
+
+### Refresh absorbs the whole declared structural set
+
+**Given** the fixture has been edited to add a requirement, add and remove an api, add a
+data_flow, and remove a component and a test_section
+**When** `runIngest("--mode", "refresh", ...)` is called
+**Then** exit code is 0
+**And** the journal gains one `added` or `removed` change event per entry — six events — plus
+the `refresh` receipt naming all of them
+**And** the snapshot is rewritten to match the current spec state
+
+**Rationale**: under the default profile every declared node type is absorbable in both
+directions. A test that only exercised one kind would pass against an implementation that still
+refused the others.
+
+### Refresh refuses an added or removed module envelope
+
+**Given** the fixture has been edited to add a whole module — a new directory with its
+`module.json`, listed in `project.json` — so the diff carries an `added` `meta` leaf
 **When** `runIngest("--mode", "refresh", ...)` is called
 **Then** exit code is non-zero
-**And** stderr contains a structured error naming the node's identity hash and the task id,
-with the reason ("live task for removed node; structural drift requires the normal pipeline") — "live" in the message meaning unclosed in the journal's sense, the only sense refresh has
-**And** both files are unchanged
+**And** stderr contains a structured error naming the added entries and the reason (the
+module/envelope leaves are always refused)
+**And** the journal and the snapshot are unchanged byte-for-byte
 
-**Rationale**: a task pointing at a deleted node signals task work the normal pipeline owes
-(close or cleanup) — and only the normal pipeline, reading the task-state artifact, can tell
-which. Refresh absorbing the removal would leave the tracker lying about live work — a state we
-want surfaced, not baselined. A finished task the journal never saw closed refuses here too, and
-that is the intended cost: the normal pipeline's cleanup path is where a finished task's removal
-is recorded.
+**Rationale**: the frame's fixed rule, not the profile's to grant. Refresh runs neither `spex
+validate` nor the completeness checker, so baselining a module appearing or vanishing would hide
+from every downstream tool a change those gates would reject.
 
 ### Refresh on no-change spec is a clean no-op
 
@@ -136,19 +136,20 @@ its receipt is what keeps that absorption accountable.
 
 ### The absorbable table is the resolved profile's declaration
 
-**Given** the absorbable-set fixture above, run once with no profile file and once with a
+**Given** the structural-set fixture above, run once with no profile file and once with a
 `spec/profile.json` byte-identical to the default declaration
 **When** `runIngest("--mode", "refresh", ...)` is called on each
-**Then** both runs absorb and refuse identically — requirement and api in either direction,
-component on removal only — because the table RefreshHandler consults is read from the resolved
-profile's per-type, per-direction absorbable declarations, and the default profile declares
-exactly the previous built-in set
-**And** with a profile declaring an `endpoint` type absorbable in neither direction, an added
-endpoint refuses the run with the same "use the normal pipeline" error the non-absorbable
-built-ins draw
+**Then** both runs absorb identically — every declared type in both directions — because the
+table RefreshHandler consults is read from the resolved profile's per-type, per-direction
+absorbable declarations, and the default profile declares every type it declares in both
+**And** with a profile declaring an `endpoint` type and no absorbable entry for it, an added
+endpoint refuses the run with a structured error naming the entry and the reason (the profile
+declares the type non-absorbable in that direction) — a declared type defaults to refused
+**And** with a profile that declares `component` absorbable on removal only, an added component
+refuses while a removed one absorbs — the profile restricts the default, and the gate follows it
 
-**Rationale**: the gate's policy moved from code to the profile without moving the gate; a
-default-profile run must be indistinguishable from the pre-profile binary.
+**Rationale**: the gate's policy lives in the profile; the gate itself does not move. A project
+that wants a narrower refresh declares it, and the declaration is data the reviewer can read.
 
 ## Edge cases
 
@@ -191,7 +192,6 @@ normal-mode complete runs. Either both move together or neither does.
 In-code Go fixtures, no on-disk testdata (the package convention). The handler-level tests in
 `ingest/refresh_test.go` build a two-module spec tree, seed its snapshot and journal via a fixture
 helper, then introduce per-scenario drift by editing content files (headline), adding or removing
-module.json entries (refusal gates), or seeding an unclosed pairing for a node about to be removed
-(orphan gate). The command-level tests in `cmd/spex/ingest_test.go` drive
+module.json entries (refusal gates), or seeding a `task_created` with no `task_closed` for a node about to be removed (the absorbed-removal scenario's precondition). The command-level tests in `cmd/spex/ingest_test.go` drive
 `spex ingest --mode refresh` end-to-end, seeding the baseline by running a complete normal-mode
 ingest first.

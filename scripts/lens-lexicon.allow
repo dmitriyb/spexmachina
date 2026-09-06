@@ -9,4 +9,3 @@
 # that retired format by its section names, historically — the mentions are
 # the record of what was broken away from, not live vocabulary.
 spec/schema/arch_profile_loader.md	retired `edges`/`hashed_fields` format
-spec/schema/test_schema_loading.md	earlier `edges`/`hashed_fields` format

@@ -332,7 +332,7 @@ Each markdown file is a content leaf. Write substantive content — these are th
 
 - **Component (`arch_*.md`)**: what this component is, its responsibilities, the behaviour a caller can observe, its contracts with the components in `uses`, and the rationale that is not recoverable from the code. No Go.
 - **Data flow (`flow_*.md`)**: how data moves between the components in `uses` — input shape, transformations, output shape, error paths.
-- **Test section (`test_*.md`)**: module integration/acceptance coverage for the components in `describes` — setup, inputs, expected outputs, edge cases. NOT unit tests (those are Go `_test.go` files).
+- **Test section (`test_*.md`)**: module integration/acceptance coverage for the components in `describes` — setup, inputs, expected outputs, edge cases. NOT unit tests (those are Go `_test.go` files). A scenario that exercises one component in isolation — one function or one component's input→output on a specific case, its return value or error asserted — is a unit test even when it reads a fixture directory, and does not belong here; `scripts/lens-test-shape.sh` rejects the code-formatted form of it, and `/spec-review` lens 9 judges the rest. Every scenario invokes a `spex` subcommand, drives two or more components together, crosses a module boundary, or drives an external system.
 
 ## Workflow
 
@@ -403,16 +403,18 @@ In a module-scoped run, also state which project-level or sibling-module edits t
 
 ### 4. Write test sections
 
-Write tests BEFORE implementation content to avoid confirmation bias — test content should be derived from requirements and component contracts, not influenced by implementation decisions.
+Write tests BEFORE implementation content to avoid confirmation bias — test content is derived from requirements and component contracts, not from implementation decisions.
 
-- For each module, create `test_sections` entries in `module.json` that cover all components
-- Each test_section's `describes` must reference component IDs — **every component must be covered by at least one test_section**, which the `test_coverage` checker enforces:
+A test leaf holds module integration/acceptance scenarios and nothing else. Unit cases — one function or one component's input → output on a specific case, its return value or error asserted — are Go `_test.go` files beside the component and never appear in the spec, even when they read a fixture directory. `scripts/lens-test-shape.sh` rejects the code-formatted form of a unit case and a leaf without a Setup section; `/spec-review` lens 9 judges the prose form.
+
+- For each module, create `test_sections` entries in `module.json` so that every component is described by at least one test section — the `test_coverage` checker enforces it:
   `component Widget (id:e44c856b0ff8) has no test_section coverage`
-- Write `test_*.md` content leaves with substantive integration/acceptance coverage:
-  - **Setup**: fixtures, test data, preconditions
-  - **Cases**: concrete input → expected output pairs
-  - **Edge cases**: boundary conditions, error paths, invalid inputs
-- Group related components into shared test_sections where they have natural testing affinity (components forming a pipeline). A test_section produces its own task only when `describes` has ≥ 2 entries; a single-component one is bundled into that component's work.
+  A component is covered by the leaf whose scenarios exercise it: the command leaf that drives it through a `spex` subcommand, or the pipeline leaf where it acts together with other components. A leaf that exists only to enumerate one component's cases is a unit-test file in disguise; do not create it.
+- Write `test_*.md` content leaves in this shape:
+  - **Setup** (mandatory `## Setup` section): the ground every scenario shares — the sample spec or sandbox the Givens build on, invocation conventions, the gate that skips the leaf. Only what two or more scenarios use; a scenario's own state is not Setup.
+  - **Scenarios**, each opening with a **Given** line: the state and data this scenario starts from, then **When**: a `spex` subcommand invoked, or a path through two or more components, or a module boundary crossed, or an external system driven (sandbox tracker, git repository, HTTP server, CI harness), then **Then**: exit code, stdout, files, journal or tracker state observed. A When that names one component alone is a unit case and does not belong here.
+  - **Edge cases**: the same shape, for boundary conditions, error paths and invalid inputs.
+- Group components into shared test sections where their scenarios naturally span them (components forming a pipeline). A test section produces its own task only when `describes` has ≥ 2 entries; a single-component one is bundled into that component's work.
 - **Per-node check**: after writing each `test_*.md`, append the test_section to the log AND run the per-node check on it. The `describes >= 2` ⇔ the-content-actually-spans-multiple-components rule is the highest-value check here.
 
 ### 5. Write architecture and data-flow content leaves

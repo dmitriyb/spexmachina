@@ -2,13 +2,17 @@
 
 Tests for the five journal invariants the ingest module enforces at baselining. Enforcement is
 `InvariantChecker`'s: the per-invariant scenarios construct a state that SHOULD violate an
-invariant and assert that the check rejects it with a specific error naming the invariant, whether
-reached through `Reconciler.Apply` or against the checker directly. Line validity is
-`JournalEncoder`'s: invariant 5's scenarios exercise the encoder that owns the schema gate. The
+invariant and assert that the check rejects it with a specific error naming the invariant,
+reached through `Reconciler.Apply`. Line validity is
+`JournalEncoder`'s: invariant 5's scenario exercises the encoder that owns the schema gate. The
 snapshot-gate scenarios assert the gate behaves on both partial and complete runs; and the Happy
 Path scenario asserts the positive integrated property that a clean complete run leaves the
 journal AND the snapshot both updated and schema-valid — both at the locations the lifecycle
 resolver answered for the fixture project.
+
+## Setup
+
+Every scenario runs `Reconciler.Apply` over a temporary `.spex/` directory holding a journal and a snapshot, with a changeset and a receipts document constructed by the scenario itself: the invariant scenarios violate exactly one invariant, the snapshot-gate and Happy Path scenarios run clean. The invariant checked is `InvariantChecker`'s; the line validity gate is `JournalEncoder`'s. The scenario's own construction is its Given; this section names only what they share.
 
 ## The Five Invariants
 
@@ -36,22 +40,25 @@ pipeline did, and a task's completion is not something the pipeline does.
 
 ### Invariant 1: ok create with no referent (negative test via injected bug)
 
-- Construct a receipts batch whose ok create op matches no change event, no prior removed event,
-  and carries no proposal stem.
+**Given** a receipts batch whose ok create op matches no change event, no prior removed event, and carries no proposal stem.
+
 - Expected: structured error naming the op; nothing appended.
 
 ### Invariant 1: double pairing refused
 
-- Construct a batch where two `task_created` receipts would pair with the same change event.
+**Given** a batch where two `task_created` receipts would pair with the same change event.
+
 - Expected: error naming the event id; nothing appended.
 
 ### Invariant 2: dangling receipt reference
 
-- Inject a receipt whose `for` names an eid absent from both the existing journal and the batch
-  being appended.
+**Given** a receipt whose `for` names an eid absent from both the existing journal and the batch being appended.
+
 - Expected: error `"ingest: receipt references unknown event <eid>"`; nothing appended.
 
 ### Invariant 3: re-run appends nothing
+
+**Given** the journal a complete reconcile left behind, captured byte-for-byte, and the identical changeset+receipts pair ready to run again.
 
 - Run a complete reconcile; capture the journal byte-for-byte. Run the identical
   changeset+receipts again.
@@ -60,6 +67,8 @@ pipeline did, and a task's completion is not something the pipeline does.
 
 ### Invariant 4: partial → snapshot not saved
 
+**Given** a receipts document whose top-level status is partial, over the temporary `.spex/`'s journal and its pre-run snapshot baseline.
+
 - Receipts top-level status is partial. Reconciler appends events for the ok ops.
 - Expected: the snapshot is unchanged on disk (assert via content equality against the
   pre-run baseline); the journal carries the ok ops' events — the two artifacts may legitimately
@@ -67,7 +76,9 @@ pipeline did, and a task's completion is not something the pipeline does.
 
 ### Invariant 4: complete → snapshot saved
 
-- Receipts status complete. Expected: snapshot rewritten with the current merkle tree in the same
+**Given** a receipts document whose top-level status is complete.
+
+- Expected: snapshot rewritten with the current merkle tree in the same
   baselining step as the journal append.
 
 ### One snapshot format across both writers
@@ -86,7 +97,8 @@ writes.
 
 ### Invariant 5: schema-invalid line refused
 
-- Construct a batch that would append a change event missing its `node` field.
+**Given** a batch that would append a change event missing its `node` field.
+
 - Expected: the journal-line schema validation fails before the write; error names the violated
   constraint; the on-disk journal is untouched.
 - Construct a batch that would append a change event whose `node_type` is `endpoint` while the
@@ -95,16 +107,9 @@ writes.
   write, error naming the kind; the journal is untouched. Rerun under a profile declaring
   `endpoint` and assert the line is appended.
 
-### Invariant 5: the encoder refuses at its own boundary
-
-- Hand `JournalEncoder` a deliberately schema-invalid event directly — no changeset, no
-  reconciliation run around it.
-- Expected: the encoder refuses the line naming the violated constraint, before any write path is
-  reached. This exercises invariant 5 against the component that owns it rather than only through
-  the integrated run above, so a future caller of the encoder inherits the gate rather than
-  re-implementing it.
-
 ### Lineage replaces the rebind invariant
+
+**Given** a journal holding an earlier `task_created` for a node whose task is finished, and a changeset carrying a plain create for that node with no close beside it.
 
 - Run a create for a node whose earlier task is finished — a plain create, no close beside it —
   to completion.
@@ -113,6 +118,8 @@ writes.
   demands the old line be gone or closed; asserting its presence, unclosed, IS the test.
 
 ### Invariant 1: retarget pairing
+
+**Given** an ok retarget changeset+receipts pair over the temporary `.spex/`, plus a variant whose `task_retargeted` receipt's `for` names an eid absent from journal and batch alike.
 
 - Run an ok retarget to completion; then construct a batch where a `task_retargeted` receipt's
   `for` names an eid absent from journal and batch alike.
@@ -123,6 +130,8 @@ writes.
 
 ### Invariant 1: absorbed batch closes under one refresh receipt
 
+**Given** a batch carrying two absorbed entries, plus a variant whose `refresh` receipt names an eid no absorbed event carries.
+
 - Run a batch with two absorbed entries to completion; then construct a batch whose `refresh`
   receipt names an eid no absorbed event carries.
 - Expected: the clean run appends two `modified` events and exactly one `refresh` receipt naming
@@ -130,6 +139,8 @@ writes.
   no-unknown-referent rule covers the `absorbed` list exactly as it covers `for`.
 
 ### Invariant 1: a cleanup's self-minted removal is one referent
+
+**Given** a cleanup create op for a node whose journal holds no prior `removed` event.
 
 - Run a cleanup create for a node with no prior `removed` event to completion.
 - Expected: exactly one `removed` event, minted from the cleanup op's own `(git_head, op_id)`,

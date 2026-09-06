@@ -245,15 +245,19 @@ func TestRefresh_ModifiedOnlyDiff_AppendsEventsAndRewritesSnapshot(t *testing.T)
 	assertSnapshotIsCurrent(t, fx)
 }
 
-// TestREQ_e68653819f38_Refresh_RefusesAddedComponent covers the
-// structural gate on the side the type filter must never open: a
-// component is bead-producing, so an added one is a bead that was
-// never created. Absorbing it would baseline the node into the
-// snapshot and remove it from `spex diff` permanently. Both files stay
-// byte-identical.
-func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsAddedComponent covers the added
+// side of a bead-producing type: the default profile declares component
+// absorbable in both directions, so a component that appeared since the
+// baseline is absorbed — one `added` event under the run's refresh
+// receipt, and the node baselined into the rewritten snapshot. Refresh
+// is the authoring loop's deliberate override, taken with a stated
+// reason: the caller has already decided this addition owes no task
+// work, so the gate does not re-litigate that decision.
+func TestREQ_e68653819f38_Refresh_AbsorbsAddedComponent(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	alphaDir := filepath.Join(fx.specDir, "alpha")
+	// The test_section and api entries are carried over verbatim so the
+	// new component is the diff's only structural entry.
 	writeFile(t, alphaDir, "module.json", `{
 		"name": "alpha",
 		"components": [
@@ -262,38 +266,55 @@ func TestREQ_e68653819f38_Refresh_RefusesAddedComponent(t *testing.T) {
 		],
 		"test_sections": [
 			{"id": "`+fx.testID+`", "name": "Widget logic", "content": "test_widget_logic.md"}
+		],
+		"apis": [
+			{"id": "aabbccddee06", "name": "spex widget list", "group": "cli"}
 		]
 	}`)
 	writeFile(t, alphaDir, "arch_new_thing.md", "# New thing\n")
 
-	journalBefore := journalBytes(t, fx.specDir)
-	snapBefore := readBytes(t, fx.snapPath)
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if summary.EventsAppended != 1 {
+		t.Errorf("events_appended: want 1 (the added component), got %d", summary.EventsAppended)
+	}
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+	}
 
-	_, err := fx.handler().Apply(fx.specDir)
-	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "added_entries" {
-		t.Fatalf("want RefreshRefusal added_entries, got %v", err)
+	newHash, err := merkle.HashFile(filepath.Join(alphaDir, "arch_new_thing.md"))
+	if err != nil {
+		t.Fatal(err)
 	}
-	if !strings.Contains(err.Error(), "aabbccddee99") {
-		t.Errorf("refusal must name the added entry: %v", err)
+	events := readJournal(t, fx.specDir)
+	ev, ok := eventForNode(events, "aabbccddee99")
+	if !ok || ev.Event != "added" || ev.NodeType != "component" || ev.Name != "NewThing" {
+		t.Fatalf("want an added component event named NewThing, got %+v (ok=%v)", ev, ok)
 	}
-	if !strings.Contains(err.Error(), "normal pipeline") {
-		t.Errorf("refusal must point at the normal pipeline: %v", err)
+	if ev.After == nil || *ev.After != newHash {
+		t.Errorf("added event after-hash: want %s, got %v", newHash, ev.After)
 	}
-	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
-		t.Error("journal must be byte-identical after refusal")
+	if ev.Path != "spec/alpha/arch_new_thing.md" {
+		t.Errorf("added event path: want spec/alpha/arch_new_thing.md, got %q", ev.Path)
 	}
-	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
-		t.Error("snapshot must be byte-identical after refusal")
+
+	last := events[len(events)-1]
+	if last.Event != "refresh" || len(last.Absorbed) != 1 || last.Absorbed[0] != ev.EID {
+		t.Errorf("want the batch closed by a refresh receipt absorbing exactly {%s}, got %+v", ev.EID, last)
 	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
-// TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow covers the other
-// structural gate: data_flow is not on the absorbable list, so deleting
-// one refuses the run with the use-the-normal-pipeline error and no
-// file changes. The Handler component stays in place so the removal is
-// the only diff entry.
-func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedDataFlow covers the removed
+// side of a record-less leaf: the default profile declares data_flow
+// absorbable in both directions, so deleting one is absorbed as a single
+// `removed` event under the refresh receipt and the snapshot is
+// rebaselined onto the spec without it. The Handler component stays in
+// place so the removal is the only structural diff entry.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedDataFlow(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	betaDir := filepath.Join(fx.specDir, "beta")
 	writeFile(t, betaDir, "module.json", `{
@@ -306,26 +327,32 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedDataFlow(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	journalBefore := journalBytes(t, fx.specDir)
-	snapBefore := readBytes(t, fx.snapPath)
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if summary.EventsAppended != 1 {
+		t.Errorf("events_appended: want 1 (the removed data_flow), got %d", summary.EventsAppended)
+	}
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
+	}
 
-	_, err := fx.handler().Apply(fx.specDir)
-	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "removed_entries" {
-		t.Fatalf("want RefreshRefusal removed_entries, got %v", err)
+	events := readJournal(t, fx.specDir)
+	ev, ok := eventForNode(events, fx.flowID)
+	if !ok || ev.Event != "removed" || ev.NodeType != "data_flow" {
+		t.Fatalf("want a removed data_flow event for %s, got %+v (ok=%v)", fx.flowID, ev, ok)
 	}
-	if !strings.Contains(err.Error(), fx.flowID) {
-		t.Errorf("refusal must name the removed entry %s: %v", fx.flowID, err)
+	if ev.Before == nil || ev.After != nil {
+		t.Errorf("a removal records a before-hash and no after-hash, got before=%v after=%v", ev.Before, ev.After)
 	}
-	if !strings.Contains(err.Error(), "normal pipeline") {
-		t.Errorf("refusal must point at the normal pipeline: %v", err)
+
+	last := events[len(events)-1]
+	if last.Event != "refresh" || len(last.Absorbed) != 1 || last.Absorbed[0] != ev.EID {
+		t.Errorf("want the batch closed by a refresh receipt absorbing exactly {%s}, got %+v", ev.EID, last)
 	}
-	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
-		t.Error("journal must be byte-identical after refusal")
-	}
-	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
-		t.Error("snapshot must be byte-identical after refusal")
-	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
 // TestREQ_e68653819f38_Refresh_AbsorbsAbsorbableStructuralSet covers
@@ -405,12 +432,17 @@ func TestREQ_e68653819f38_Refresh_AbsorbsAbsorbableStructuralSet(t *testing.T) {
 	assertSnapshotIsCurrent(t, fx)
 }
 
-// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing
-// pins the boundary that makes absorbing component removals safe: the
-// type filter admits the removal, and the live-pairing gate then
-// refuses it because the node's task is still open — no task_closed
-// answers br-handler anywhere in the journal.
-func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithLiveTaskPairing
+// pins the retirement of the live-pairing gate: the removed component's
+// task br-handler is still open — no task_closed answers it anywhere in
+// the journal — and the removal is absorbed all the same, as one
+// `removed` event named off the fold entry that pairing carries. The
+// journal cannot tell a finished task's pairing from an open one, so it
+// does not try; refresh is the authoring loop's deliberate override,
+// taken with a stated reason. Refresh writes no task lifecycle line
+// either way — the pairing is left exactly as it was, for the cleanup
+// path to answer.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithLiveTaskPairing(t *testing.T) {
 	fx := setupRefreshFixture(t)
 	betaDir := filepath.Join(fx.specDir, "beta")
 	writeFile(t, betaDir, "module.json", `{
@@ -423,36 +455,68 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithLiveTaskPairing(t *
 		t.Fatal(err)
 	}
 
-	journalBefore := journalBytes(t, fx.specDir)
-	snapBefore := readBytes(t, fx.snapPath)
+	// The state the old gate refused on: the node's own task_created is
+	// unanswered, so the fold still pairs it to br-handler.
+	foldBefore, err := mapping.NewMappingStore(filepath.Join(fx.specDir, ".history.jsonl")).List()
+	if err != nil {
+		t.Fatalf("fold journal: %v", err)
+	}
+	paired := false
+	for _, e := range foldBefore.Entries {
+		if e.Key == fx.handlerID && e.TaskID == "br-handler" && !e.Removed {
+			paired = true
+		}
+	}
+	if !paired {
+		t.Fatalf("fixture must enter the run with an unclosed br-handler pairing on %s, fold: %+v", fx.handlerID, foldBefore.Entries)
+	}
 
-	_, err := fx.handler().Apply(fx.specDir)
-	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "live_task_pairing" {
-		t.Fatalf("want RefreshRefusal live_task_pairing, got %v", err)
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
 	}
-	if !strings.Contains(err.Error(), fx.handlerID) || !strings.Contains(err.Error(), "br-handler") {
-		t.Errorf("refusal must name the node identity hash and the live task id: %v", err)
+	if summary.EventsAppended != 1 {
+		t.Errorf("events_appended: want 1 (the removed component), got %d", summary.EventsAppended)
 	}
-	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
-		t.Error("journal must be byte-identical after refusal")
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
 	}
-	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
-		t.Error("snapshot must be byte-identical after refusal")
+
+	events := readJournal(t, fx.specDir)
+	ev, ok := eventForNode(events, fx.handlerID)
+	if !ok || ev.Event != "removed" || ev.NodeType != "component" || ev.Name != "Handler" {
+		t.Fatalf("want a removed component event named Handler, got %+v (ok=%v)", ev, ok)
 	}
+	if ev.After != nil {
+		t.Errorf("a removal records no after-hash, got %v", ev.After)
+	}
+
+	last := events[len(events)-1]
+	if last.Event != "refresh" || len(last.Absorbed) != 1 || last.Absorbed[0] != ev.EID {
+		t.Errorf("want the batch closed by a refresh receipt absorbing exactly {%s}, got %+v", ev.EID, last)
+	}
+	for _, e := range events {
+		if e.Event == "task_closed" {
+			t.Errorf("refresh must answer no task pairing: br-handler stays open, got %+v", e)
+		}
+	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
-// TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing
-// pins the live-pairing gate's most important case: a removed node whose
-// open task is a cleanup bead, not the node's own original task. A
-// cleanup create's task_created pairs to the removal event itself, so
-// fold() folds it to Removed:true — a check keyed off that flag would
-// short-circuit before ever looking at TaskID/closedTaskIDs, exactly the
-// bug this test guards against. The scenario mirrors a partial
-// normal-mode run: the removal is journaled, the original task closed,
-// and a cleanup task opened against the removal's own eid, but the
-// snapshot is left untouched, so the entry is still in refresh's diff.
-func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing(t *testing.T) {
+// TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithOpenCleanupPairing
+// covers the same retirement in its hardest shape: a removed node whose
+// open task is a cleanup bead paired to the removal event itself, which
+// fold() folds to Removed:true. The old gate refused this run; refresh
+// now absorbs it, because the journal cannot tell a finished task's
+// pairing from an open one and no longer tries. The scenario mirrors a
+// partial normal-mode run: the removal is already journaled, the
+// original task closed, and a cleanup task opened against the removal's
+// own eid, but the snapshot was left untouched — so refresh has only the
+// stale snapshot to fix. It appends no second `removed` event (the
+// journal's latest change event for the node already is that removal)
+// and leaves the open cleanup pairing untouched.
+func TestREQ_e68653819f38_Refresh_AbsorbsRemovedComponentWithOpenCleanupPairing(t *testing.T) {
 	fx := setupRefreshFixture(t)
 
 	seedJournal(t, fx.specDir,
@@ -472,23 +536,45 @@ func TestREQ_e68653819f38_Refresh_RefusesRemovedComponentWithOpenCleanupPairing(
 		t.Fatal(err)
 	}
 
-	journalBefore := journalBytes(t, fx.specDir)
-	snapBefore := readBytes(t, fx.snapPath)
+	journalBefore := readJournal(t, fx.specDir)
 
-	_, err := fx.handler().Apply(fx.specDir)
-	var refusal *RefreshRefusal
-	if !errors.As(err, &refusal) || refusal.Kind != "live_task_pairing" {
-		t.Fatalf("want RefreshRefusal live_task_pairing, got %v", err)
+	summary, err := fx.handler().Apply(fx.specDir)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
 	}
-	if !strings.Contains(err.Error(), fx.handlerID) || !strings.Contains(err.Error(), "br-cleanup") {
-		t.Errorf("refusal must name the node identity hash and the open cleanup task id: %v", err)
+	if summary.EventsAppended != 0 {
+		t.Errorf("the journal already records this removal: want no new change event, got events_appended=%d", summary.EventsAppended)
 	}
-	if got := journalBytes(t, fx.specDir); string(got) != string(journalBefore) {
-		t.Error("journal must be byte-identical after refusal")
+	if !summary.SnapshotSaved || summary.Status != adapters.StatusComplete {
+		t.Errorf("want snapshot_saved=true status=complete, got %+v", summary)
 	}
-	if got := readBytes(t, fx.snapPath); string(got) != string(snapBefore) {
-		t.Error("snapshot must be byte-identical after refusal")
+
+	after := readJournal(t, fx.specDir)
+	if want := len(journalBefore) + 1; len(after) != want {
+		t.Fatalf("exactly one line (the refresh receipt) is appended: want %d lines, got %d", want, len(after))
 	}
+	receipt := after[len(after)-1]
+	if receipt.Event != "refresh" || len(receipt.Absorbed) != 0 {
+		t.Errorf("want a refresh receipt with an empty absorbed list, got %+v", receipt)
+	}
+
+	// The open cleanup pairing the old gate refused on survives the run:
+	// refresh writes no task lifecycle line.
+	fold, err := mapping.NewMappingStore(filepath.Join(fx.specDir, ".history.jsonl")).List()
+	if err != nil {
+		t.Fatalf("fold journal: %v", err)
+	}
+	paired := false
+	for _, e := range fold.Entries {
+		if e.Key == fx.handlerID && e.TaskID == "br-cleanup" && e.Removed {
+			paired = true
+		}
+	}
+	if !paired {
+		t.Errorf("the open cleanup pairing must survive absorption, fold: %+v", fold.Entries)
+	}
+
+	assertSnapshotIsCurrent(t, fx)
 }
 
 // TestREQ_e68653819f38_Refresh_MetaModifiedAbsorbedWithoutEvent pins the
@@ -1220,27 +1306,25 @@ func writeRefreshTypeSpec(t *testing.T, specDir, variant string, present bool) {
 
 // TestREQ_e68653819f38_Refresh_TypeFilterMatrix pins the default
 // profile's absorbable table cell by cell: for every node type a merkle
-// diff can carry, in both
-// structural directions, refresh either absorbs the change or refuses it
-// with a specific RefreshRefusal.Kind. Any single-cell edit to the
-// allow-list — dropping an admitted direction, or admitting a refused
-// one — fails a row here.
+// diff can carry, in both structural directions, refresh either absorbs
+// the change or refuses it with a specific RefreshRefusal.Kind. The
+// default profile declares all five of its node types absorbable in both
+// directions, so every row but "meta" absorbs; "meta" is the handler's
+// own fixed refusal, not the profile's to grant. Any single-cell edit to
+// the table — dropping an admitted direction, or admitting a refused one
+// — fails a row here.
 //
 // The journal carries a single bootstrap-only entry in every row — an
 // "added" event for the ever-present anchor component, with no
 // task_created and so no fold entry at all — just enough to clear the
-// empty-journal bootstrap guard without ever standing in for the
-// live-pairing gate: a refusal below is the type filter's own, and an
-// absorbed removal is not an artefact of a task that happened to already
-// be closed. (The live-pairing gate's own role in making component
-// removals safe is covered by RefusesRemovedComponentWithLiveTaskPairing
-// and AbsorbsAbsorbableStructuralSet.)
+// empty-journal bootstrap guard. Nothing about a row's outcome depends
+// on the journal's task pairings: refresh no longer inspects them, since
+// it cannot tell a finished task's pairing from an open one (see
+// AbsorbsRemovedComponentWithLiveTaskPairing).
 //
 // requirement is covered at both levels — a module requirement in alpha
 // and a project requirement in project.json — because tree_builder
-// reaches the two through different paths. Removing a component is
-// absorbed here where the dedicated component tests only reach the gate
-// through a journal with a task pairing.
+// reaches the two through different paths.
 func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 	cases := []struct {
 		name string
@@ -1261,14 +1345,14 @@ func TestREQ_e68653819f38_Refresh_TypeFilterMatrix(t *testing.T) {
 		{"project requirement removed", "project_requirement", refreshTypeProjectReqID, false, ""},
 		{"api added", "api", refreshTypeAPIID, true, ""},
 		{"api removed", "api", refreshTypeAPIID, false, ""},
-		{"component added", "component", refreshTypeComponentID, true, "added_entries"},
+		{"component added", "component", refreshTypeComponentID, true, ""},
 		{"component removed", "component", refreshTypeComponentID, false, ""},
 		{"meta added", "meta", "meta/" + refreshTypeGammaID, true, "added_entries"},
 		{"meta removed", "meta", "meta/" + refreshTypeGammaID, false, "removed_entries"},
-		{"data_flow added", "data_flow", refreshTypeFlowID, true, "added_entries"},
-		{"data_flow removed", "data_flow", refreshTypeFlowID, false, "removed_entries"},
-		{"test_section added", "test_section", refreshTypeTestID, true, "added_entries"},
-		{"test_section removed", "test_section", refreshTypeTestID, false, "removed_entries"},
+		{"data_flow added", "data_flow", refreshTypeFlowID, true, ""},
+		{"data_flow removed", "data_flow", refreshTypeFlowID, false, ""},
+		{"test_section added", "test_section", refreshTypeTestID, true, ""},
+		{"test_section removed", "test_section", refreshTypeTestID, false, ""},
 	}
 
 	for _, tc := range cases {
@@ -1492,11 +1576,17 @@ func TestREQ_e68653819f38_Refresh_MetaAndModuleAlwaysRefusedBothDirections(t *te
 // profile's declaration": the per-type, per-direction table
 // RefreshHandler consults is read off schema.ResolveProfile's Absorbable
 // map, not compiled into the handler. A representative sample of the
-// type-filter matrix — an absorbed api addition and a refused component
-// addition — must behave identically whether profile.json is absent (the
-// built-in default) or present and byte-identical to
-// schema.DefaultProfile(): a default-profile run must be
-// indistinguishable from the pre-profile binary.
+// type-filter matrix — an absorbed api addition, an absorbed component
+// addition, and a refused module-envelope addition — must behave
+// identically whether profile.json is absent (the built-in default) or
+// present and byte-identical to schema.DefaultProfile(): a
+// default-profile run must be indistinguishable from a run with the
+// default written out. The refusal row is "meta" because the default
+// table now declares all five of its own types absorbable in both
+// directions; the profile's power to *restrict* a built-in type is
+// covered by AbsorbableTableOverridesBuiltInDefault, and a
+// profile-declared type with no absorbable entry by
+// ProfileDeclaredTypeRefusedBothDirections.
 func TestREQ_e68653819f38_Refresh_AbsorbableTableIsResolvedProfileDeclaration(t *testing.T) {
 	defaultProfileJSON, err := json.Marshal(schema.DefaultProfile())
 	if err != nil {
@@ -1511,7 +1601,8 @@ func TestREQ_e68653819f38_Refresh_AbsorbableTableIsResolvedProfileDeclaration(t 
 		wantKind string
 	}{
 		{"api added: absorbed", "api", refreshTypeAPIID, true, ""},
-		{"component added: refused", "component", refreshTypeComponentID, true, "added_entries"},
+		{"component added: absorbed", "component", refreshTypeComponentID, true, ""},
+		{"meta added: refused", "meta", "meta/" + refreshTypeGammaID, true, "added_entries"},
 	}
 
 	for _, tc := range cases {
@@ -1669,21 +1760,22 @@ func TestREQ_e68653819f38_Refresh_ProfileDeclaredTypeRefusedBothDirections(t *te
 
 // TestREQ_e68653819f38_Refresh_AbsorbableTableOverridesBuiltInDefault
 // proves the gate reads the resolved profile rather than a table
-// compiled into the handler: a profile that flips a built-in default —
-// declaring "api" absorbable in neither direction, and "component"
-// absorbable on addition too — must flip RefreshHandler's behavior
-// accordingly. A hardcoded fallback would refuse the component addition
-// and absorb the api addition regardless of what any profile.json says;
-// only reading the table off the resolved profile changes the outcome
-// with it.
+// compiled into the handler: a profile that restricts a built-in default
+// — declaring "api" absorbable in neither direction, where the default
+// declares it absorbable in both — must flip RefreshHandler's behavior
+// accordingly. A hardcoded fallback would absorb the api addition
+// regardless of what any profile.json says. The component row is the
+// positive control on the same profile: it declares component
+// absorbable, and the addition is absorbed, so the api refusal is that
+// type's own declaration and not a profile that refuses everything.
 func TestREQ_e68653819f38_Refresh_AbsorbableTableOverridesBuiltInDefault(t *testing.T) {
 	cases := []struct {
 		name    string
 		variant string
 		key     string
 	}{
-		{"api addition, declared unabsorbable, refuses despite default absorbing it", "api", refreshTypeAPIID},
-		{"component addition, declared absorbable, absorbs despite default refusing it", "component", refreshTypeComponentID},
+		{"api addition, declared unabsorbable, refuses despite the default absorbing it", "api", refreshTypeAPIID},
+		{"component addition, declared absorbable, absorbs", "component", refreshTypeComponentID},
 	}
 
 	overriddenProfileJSON := `{

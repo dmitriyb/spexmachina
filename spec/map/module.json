@@ -91,19 +91,12 @@
   ],
   "test_sections": [
     {
-      "id": "21eae6071d42",
-      "name": "Mapping store tests",
-      "content": "test_mapping_store.md",
-      "describes": [
-        "205e67ca4aad"
-      ]
-    },
-    {
       "id": "571971ee44d6",
       "name": "Map command tests",
       "content": "test_map_command.md",
       "describes": [
-        "08909d62930b"
+        "08909d62930b",
+        "205e67ca4aad"
       ]
     },
     {

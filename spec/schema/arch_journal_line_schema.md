@@ -57,8 +57,8 @@ identity hashes were introduced, and the journal keeps the single-format propert
 
 The schema fixes the field's shape; the resolved profile fixes its membership. What a change event
 may describe is a node type the profile declares: the task-owning kinds — the plan-relevant list,
-`data_flow`, `component` and `test_section` under the default — and the refresh-absorbable ones,
-`requirement` and `api` under the default. A proposal is never a change event's subject; it
+`data_flow`, `component` and `test_section` under the default — and `requirement` and `api`; under
+the default profile every one of them is also refresh-absorbable in both directions. A proposal is never a change event's subject; it
 appears as the slug on the `registered` event that opens its lifecycle. A `meta` leaf is never a
 declared type, so no change event carries it. Task receipts pair with events of task-owning kinds
 and, for epics, with the registered event; requirement and api events exist so refresh absorption

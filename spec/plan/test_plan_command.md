@@ -20,6 +20,8 @@ Tests use a temporary directory containing:
 
 ### S1: Full pipeline — diff file to changeset on stdout
 
+**Given** Setup's spec tree, journal, diff file `diff.json` and all-open task-state file `tasks.json`.
+
 ```
 spex plan --proposal <ref> --git-head deadbeef --diff diff.json --tasks tasks.json
 ```
@@ -28,9 +30,13 @@ Capture stdout. Parse the output as JSON. Assert `"version": 4`, `git_head` as g
 
 ### S2: Diff input from stdin (pipe), and `--diff -`
 
+**Given** S1's inputs, with `diff.json` arriving on stdin rather than as a file path.
+
 `cat diff.json | spex plan --proposal <ref> --git-head <sha> --tasks tasks.json`, and the same with `--diff -`. Assert output identical to S1 in both forms.
 
 ### S3: Pipeline composition — spex diff piped into spex plan
+
+**Given** S1's inputs with `snapshot.json` and `./spec` in place of the fixture diff file, the diff produced by `spex diff` on stdin.
 
 ```
 spex diff --snapshot snapshot.json --spec-dir ./spec | spex plan --proposal <ref> --git-head <sha> --tasks tasks.json
@@ -40,17 +46,25 @@ Assert the composed pipeline produces a valid changeset. This tests that `spex d
 
 ### S4: Empty diff produces an epic-only or empty changeset
 
+**Given** S1's inputs with a diff of `{"changes": [], "errors": []}`, run once with the fold pairing an epic task and once with none.
+
 A diff with `{"changes": [], "errors": []}` exits 0. The changeset carries the proposal epic op when the fold pairs none, otherwise an empty op list. An empty diff is not an error condition.
 
 ### S5: Diff input containing errors refuses to proceed
 
-A diff JSON with a non-empty `errors` array carrying **two** entries (an `incomplete_change` and a `surviving_name`, paths and related as identity hashes). Assert exit 1, stderr carries *every* error message and not merely the first, stdout is empty, and no matching, classification or composition ran. Two entries are what makes the assertion mean anything: a single-entry fixture is satisfied by a command that prints one and stops. This is the pipeline's one gate on the diff — there is no second command downstream to re-check it.
+**Given** S1's inputs with a diff JSON whose `errors` array carries **two** entries (an `incomplete_change` and a `surviving_name`, paths and related as identity hashes).
+
+Assert exit 1, stderr carries *every* error message and not merely the first, stdout is empty, and no matching, classification or composition ran. Two entries are what makes the assertion mean anything: a single-entry fixture is satisfied by a command that prints one and stops. This is the pipeline's one gate on the diff — there is no second command downstream to re-check it.
 
 ### S6: `--tasks` drives both decisions
+
+**Given** S1's inputs over one diff that modifies one tracked node and removes another, run against the one-unlisted, all-open and empty task-state variants in turn.
 
 Run S1 against the one-unlisted variant, with the unlisted task's node modified in the diff and a second unlisted task's node removed: the modified node yields one plain create with no close beside it, and the removed node yields a cleanup create with reason `Code cleanup: <module>/<node>` and no close. Run the all-open variant over the same diff: the modified node yields a retarget, the removed node a close, and no cleanup. Run the empty variant: every tracked node reads as finished — the same output as the one-unlisted run extended to every pairing. The three runs differ in nothing but the task-state file, which is the point: the file is the whole of the tracker's contribution.
 
 ### S7: A claimed task refuses the run — exit 2
+
+**Given** S1's inputs with the one-in_progress task-state variant (two claimed tasks) and those pairings' nodes changed in the diff.
 
 Run S1 against the one-in_progress variant, with that pairing's node modified in the diff. Assert:
 - Exit code 2.
@@ -61,6 +75,8 @@ Repeat with the claimed task's node *removed* rather than modified and assert th
 
 ### S8: `--absorb` marks a node out of the op stream
 
+**Given** S1's inputs plus an absorb file marking one modified node.
+
 Run S1 with an absorb file marking one modified node:
 - The changeset's `ops` carry nothing for that node; the top-level `absorbed` array carries its entry (node, before/after hashes, reason).
 - Marking a node the diff reports `added` or `removed`, or one absent from the diff, exits 2 naming the node; stdout stays empty.
@@ -69,17 +85,25 @@ Run S1 with an absorb file marking one modified node:
 
 ### S9: Missing required flags are errors
 
+**Given** S1's inputs with one required flag omitted per run — `--proposal`, `--git-head` (or a malformed SHA), `--tasks`.
+
 Without `--proposal`, separately without `--git-head` (or with a malformed SHA), and separately without `--tasks`, exit is non-zero and stderr names the flag. No partial output is written. The `--tasks` arm is what pins the flag as required: a command that defaulted a missing artifact to "nothing in flight" would pass every other scenario and re-create in-flight work in production.
 
 ### S10: `--out` writes atomically
+
+**Given** S1's inputs with `--out changeset.json` naming a path that either holds a previous run's changeset or does not exist.
 
 `--out changeset.json` writes the file and leaves stdout empty. The write is temp-file + rename: kill the process mid-write (or simulate the failure) and assert the target path holds either the previous run's changeset or nothing — never a splice.
 
 ### S11: Deterministic output across runs
 
+**Given** S1's inputs held fixed — the same diff, task-state file, journal and `--git-head`.
+
 Run S1 five times. All five stdout captures are byte-for-byte identical: same diff + same task-state file + same journal + same `--git-head` always produce the same changeset.
 
 ### S12: Exit codes
+
+**Given** S1's inputs varied per case: valid, unreadable or malformed, contract-refusing, an empty plan-relevant list, and no project state at the resolved location.
 
 - Valid inputs → 0.
 - Unreadable or malformed inputs (missing diff file, malformed JSON, missing, unreadable or schema-invalid `--tasks`) → 1, stderr naming the input.
@@ -89,6 +113,8 @@ Run S1 five times. All five stdout captures are byte-for-byte identical: same di
 
 ### S13: The diff document itself is malformed or empty
 
+**Given** S1's inputs with the diff replaced per case by `{"changes": [`, a bare array, a zero-length file, or zero bytes piped on stdin.
+
 The `malformed JSON` case S12 lists, aimed at the diff specifically — the one input that arrives on stdin and so has no filename to blame:
 
 - A diff file holding `{"changes": [` → exit 1, stderr names the diff as the input that failed, stdout empty.
@@ -96,6 +122,8 @@ The `malformed JSON` case S12 lists, aimed at the diff specifically — the one 
 - A **zero-length** diff file, and separately zero bytes piped on stdin → exit 1. Empty input is not an empty diff: `{"changes": [], "errors": []}` is the empty diff, exits 0, and S4 covers it. Nothing is written in any of these cases, `--out` included, per the Exit Codes contract that failure modes never write a partial changeset.
 
 ### S14: A removed node's tombstone participates in nothing
+
+**Given** S1's inputs with the journal seeded per case — a node's `added` + `task_created` then `removed` + `task_closed` with the diff reporting that identity hash as `added` again, or a `registered` event and its epic `task_created` followed by a `removed` event whose entry collides with the epic's key.
 
 The journal's fold carries an entry for every removed node. Neither projection the run builds may include it:
 
@@ -106,20 +134,30 @@ The journal's fold carries an entry for every removed node. Neither projection t
 
 ### E1: `--tasks` names a file that does not exist
 
+**Given** S1's inputs with `--tasks` naming a path that does not exist or cannot be read.
+
 Exit 1, stderr carries `plan: read tasks:` wrapping the underlying file error, stdout empty. Unreadable and absent are the same failure here: the flag is required, so there is no "omitted" state for an unreadable file to fall back to.
 
 ### E2: The task-state file is valid but names no task the fold knows
+
+**Given** S1's inputs with a task-state file that lists no task the fold knows, and in a second run one that fails the task-state schema (a `closed` status, an unknown version, the raw tracker listing).
 
 Exit 0 — every tracked task reads as finished, which is the empty-variant run of S6, not an error. A file that fails the task-state schema — a `closed` status, an unknown version, the raw tracker listing — exits 1 naming the violated constraint; plan never adapts a foreign shape.
 
 ### E3: Malformed absorb file
 
+**Given** S1's inputs with an absorb file holding `{"broken":`, and in a second run one whose entry's `node` is not a 12-hex string.
+
 `{"broken":` exits 1 with a parse error naming the file; an absorb entry whose `node` is not a 12-hex string exits 2 naming the entry.
 
 ### E4: Concurrent invocations are safe
 
+**Given** one spec directory, journal and set of inputs shared by two simultaneous runs.
+
 Two simultaneous runs over the same spec directory, journal and inputs both exit 0 with identical output — the command is read-only over everything but its own stdout/`--out`.
 
 ### E5: Large diff
+
+**Given** a diff of 500 changed nodes across 20 modules whose modules declare `requires_module` edges and whose components declare `uses` edges, and a task-state file listing 300 tasks.
 
 500 changed nodes across 20 modules, a task-state file listing 300 tasks: completes in under 5 seconds, valid JSON, correct op counts, exit 0. The fixture's modules must declare `requires_module` edges and its components `uses` edges — a spec graph with none reduces dep collection to a walk over nothing, and the run would be timed doing the one thing the scenario exists to time. No leaf promises a complexity bound, so this is a smoke test on a realistic shape rather than a performance contract; it fails only when something has become pathological.

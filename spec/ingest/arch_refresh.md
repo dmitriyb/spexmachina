@@ -15,15 +15,17 @@ or the journal breaks the snapshot+journal atomicity invariant (both must always
 same point-in-time spec state).
 
 There is a class of legitimate change that rule would otherwise make impossible: drift that owes
-no task work. Two kinds qualify.
+no task work. It is the authoring loop's deliberate override, taken with a stated reason, and it absorbs every change kind.
 
 **Content edits to any leaf** where the work scope hasn't changed — an author corrects spec prose
 to match shipped code, rewrites a stale paragraph, or clarifies a contract. Content modifications
 are never gated, whatever leaf they land on.
 
-**Structural additions and removals of node types that produce no task** — requirements and apis
-in either direction, plus component *removals*. Declaring a requirement or adding an api creates
-nothing in the tracker, so baselining it costs nothing.
+**Structural additions and removals** of any node type the resolved profile declares absorbable in
+that direction — the default profile declares every type it declares, in both directions. A
+removed leaf whose tests were unit tests that stay, an added leaf whose tests landed in the same
+change: each is baselined with the operator's reason, and each lands in the journal as its own
+`added` or `removed` event, so the node's biography stays complete.
 
 Without refresh the user must either run the normal pipeline (which produces a successor task
 for already-shipped work) or skip ingest entirely (which leaves the snapshot stale relative to
@@ -96,22 +98,17 @@ following is true:
 
 | Condition | Reason |
 |-----------|--------|
-| The diff contains an `added` entry whose node type is not absorbable in the added direction | Structural change; requires the normal pipeline so task lifecycle runs. |
-| The diff contains a `removed` entry whose node type is not absorbable in the removed direction | Structural change; requires the normal pipeline. |
-| A `removed` entry's node still has a task pairing in the journal fold that the pipeline never closed — a `task_created` or `task_retargeted` with no matching `task_closed` | Work points at the vanishing node, and refresh cannot tell whether it is open or finished. The normal pipeline owes a close or a cleanup, and only it — reading the task-state artifact — can say which; absorbing the removal here would leave the tracker lying about live work, or leave shipped code with no cleanup task. |
+| The diff contains an `added` or `removed` entry whose node type the resolved profile declares non-absorbable in that direction, or one whose node type is `meta` or `module` | The first is the profile's declared policy; the second is the frame's fixed rule — baselining a module appearing or vanishing would hide it from every downstream tool. |
 | The journal is empty | The bootstrap guard: an empty journal means no cycle has ever completed, and refresh absorbs drift between cycles — the first cycle is the normal pipeline's. The guard keys on the journal, not on snapshot presence, because `spex init` writes a snapshot at birth and would make a file-existence proxy permanently true. The journal-empty predicate stays available as a gate so a future adoption-style mode and refresh can be made mutually exclusive by construction. |
 | The changeset or receipts file is non-empty | Configuration error; refresh has no per-op transitions. |
 
 `modified` entries are never gated. Only additions and removals reach the structural gate.
 
-The third row is deliberately broad, and its stderr message says "live task" in the journal's sense — a pairing the pipeline never closed — which is the only sense refresh can have. The journal never records a task's completion — a finished
-task's pairing looks exactly like an open one's — so the gate cannot narrow itself to "open"
-and does not try: a removed component whose latest pairing was never closed by the pipeline
-refuses, whatever the tracker would say. The practical consequence is that a component removal is
-refresh-absorbable only when its latest task-bearing pairing carries a `task_closed` — a removal
-close or a fold-back close the normal pipeline already issued — or when the node never had a task
-at all. Every other component removal goes through the normal pipeline, which is where its
-cleanup task is born.
+Refresh does not gate on journal pairings. It reads no task-state artifact, and the journal never
+records a task's completion — a finished task's pairing looks exactly like an open one's — so a
+gate on "unclosed pairing" would refuse every removal of a node that ever had a task. Whether a
+removal leaves live tracker work behind is the operator's check, made and stated with the refresh
+reason; the removed event the refresh journals is what a later reader traces it by.
 
 ### The absorbable set
 
@@ -119,10 +116,8 @@ The per-type, per-direction table is read from the resolved profile's absorbable
 
 | Node type | `added` | `removed` |
 |-----------|---------|-----------|
-| `requirement`   | absorbed | absorbed |
-| `api`           | absorbed | absorbed |
-| `component`     | **refused** | absorbed |
-| `data_flow`, `test_section`, `meta`, `module` | refused | refused |
+| `requirement`, `api`, `component`, `data_flow`, `test_section` (the default profile's declaration) | absorbed | absorbed |
+| `meta`, `module` (the frame's fixed rule) | refused | refused |
 
 The set is written out explicitly — in the profile, as declarations the handler reads — rather than derived by negating plan's task-producing types.
 That negation would also admit `meta` — the `project.json` / `module.json` envelope leaf — and
@@ -184,7 +179,7 @@ Once wired, the handler runs in one order:
 
 - IO error reading current files → exit 1, both files unchanged.
 - Diff computation fails → exit 1, both files unchanged.
-- Refusal (non-absorbable added/removed, or an unclosed pairing on a removed node) → exit 2 with a
+- Refusal (an added/removed entry the profile declares non-absorbable, or a `meta`/`module` leaf added or removed) → exit 2 with a
   structured stderr message naming the specific entries; both files unchanged.
 - Atomic-write failure mid-commit → exit 1, the temp file is removed and both target files are
   unchanged. The handler MUST NOT leave one file updated and the other stale.

@@ -1,14 +1,13 @@
 # Validation Pipeline Tests
 
-Integration and acceptance test scenarios for ErrorReporter and ValidateCommand.
+Integration and acceptance test scenarios for ErrorReporter and ValidateCommand, and for DAGChecker, IDValidator, CoupledSectionChecker and RequirementCoverageChecker as `spex validate` drives them (V4, V6, V9, V16, V17, V18).
 
 ## Setup
 
-These tests exercise the aggregation and orchestration layers. They use a temporary spec directory and invoke the full validation pipeline (or individual components in isolation for ErrorReporter unit scenarios). The fixture builder can inject specific errors at each checker level.
-
-The reporter takes the aggregated entries, the run's disclosure notes, the writer, and the terminal flag. Scenarios below written as `Report(errors, w, false)` predate the notes input and stand for a call passing an empty note list; only R10–R12 exercise a non-empty one.
+These tests exercise the aggregation and orchestration layers. They use a temporary spec directory and invoke the full validation pipeline. The fixture builder can inject specific errors at each checker level.
 
 ### Fixture Structure
+
 
 ```
 tmp/spec/
@@ -19,7 +18,12 @@ tmp/spec/
     test_comp1.md
 ```
 
+### Dependency Baseline
+
+V4's Given is written against a two-module baseline — modules `alpha` and `beta`, each declaring `requires_module` on the other, which is the cycle. It is scenario shorthand, not a description of any checked-in directory; the command test reads the `dag_module_cycle` fixture under `validator/testdata/`.
+
 ### CLI Invocation Pattern
+
 
 ```
 spex validate --spec-dir tmp/spec/
@@ -30,82 +34,6 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 ---
 
 ## Scenarios
-
-### ErrorReporter Scenarios
-
-#### R1: Empty error list produces valid report
-
-**Given** all checkers return empty error slices.
-**When** `Report(errors, w, false)` is called with the aggregated (empty) slice.
-**Then** it writes JSON to the writer:
-```json
-{
-  "valid": true,
-  "error_count": 0,
-  "warning_count": 0,
-  "errors": []
-}
-```
-
-#### R2: Single error produces correct report structure
-
-**Given** one `ValidationError` with `check: "schema"`, `severity: "error"`, `path: "project.json:name"`, `message: "required field missing"`.
-**When** `Report(errors, w, false)` is called.
-**Then** it writes:
-- `valid: false`
-- `error_count: 1`
-- `warning_count: 0`
-- `errors` array with exactly one entry matching the input
-
-#### R5: Errors sorted by path
-
-**Given** errors in arbitrary order: an entry at path `z`, an entry at path `b`, an entry at path `a`.
-**When** `Report(errors, w, false)` is called.
-**Then** the `errors` array is sorted `a`, `b`, `z`. Path is the only sort key.
-
-#### R6: Errors from multiple checkers are aggregated
-
-**Given** errors from `"schema"`, `"content"`, `"dag"`, `"id"`, `"name_consistency"`, and `"test_coverage"` checkers.
-**When** `Report(errors, w, false)` is called.
-**Then** all six appear in the `errors` array, each with its correct `check` field. No errors are dropped during aggregation.
-
-#### R7: Report output is valid JSON
-
-**Given** any combination of errors (including errors with special characters in messages like quotes, newlines, unicode).
-**When** `Report(errors, w, false)` is called.
-**Then** the output is parseable by `json.Unmarshal` into a `ValidationReport` struct without error.
-
-#### R8: Compact JSON when writing to non-TTY
-
-**Given** the writer is a `bytes.Buffer` and the caller passes `isTTY: false`.
-**When** `Report(errors, w, false)` is called.
-**Then** the output is compact JSON (no indentation, no trailing newlines between fields).
-
-#### R9: Pretty-printed JSON when writing to TTY
-
-**Given** the caller passes `isTTY: true`. The reporter does not detect the terminal itself — the flag is the only input that changes formatting, so the writer can still be a `bytes.Buffer` for assertion purposes.
-**When** `Report(errors, w, true)` is called.
-**Then** the output uses 2-space indentation for human readability.
-
-#### R10: Notes appear alongside errors without touching the verdict
-
-**Given** an empty error list and one disclosure note (`type: "pending_derivation"`, a message, one related hash).
-**When** the report is composed.
-**Then** the output carries `valid: true`, `error_count: 0`, `warning_count: 0`, an empty `errors` array, and a `notes` array with exactly that note. The note carries no `severity` and is not counted anywhere.
-
-#### R11: Notes key omitted when there are none
-
-**Given** any combination of errors and an empty note list.
-**When** the report is composed.
-**Then** the serialized document has no `notes` key at all — a run without disclosures emits exactly the four-key document R1 shows, so no existing consumer observes a change.
-
-#### R12: Errors and notes coexist
-
-**Given** one validation error and one disclosure note.
-**When** the report is composed.
-**Then** `valid: false`, `error_count: 1`, the error in `errors`, the note in `notes`. Neither array leaks into the other.
-
----
 
 ### ValidateCommand Scenarios
 
@@ -199,7 +127,20 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 0. Stdout JSON has `valid: true`, `error_count: 0`, `warning_count: 0`, and a `notes` array with one `pending_derivation` entry naming the requirement. Removing the `derivation` field from the same fixture flips the run to exit 1 with the `requirement_coverage` error — the pair of runs is what proves the field, and only the field, downgrades the finding.
 
+
+#### V17: Coupled section errors exit 1
+**Given** `project.json` declares a `sections` array with one entry of `type: "coupled"` whose `name` matches no module in `modules`, and a second entry whose `name` duplicates the first's.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
+**Then** exit code is 1. Stdout JSON has `valid: false` and at least two errors with `check: "coupled_section"`, each located at `project.json:/sections/<index>`: one naming the absent module the first section expects, one naming the duplicated section name. A run over the same spec with the module present, its `section.schema.json` in place, the section's body (envelope fields stripped) valid against that schema, and the duplicate removed exits 0 with no `coupled_section` error.
+
+#### V18: An unimplemented module requirement exits 1
+**Given** an otherwise valid spec whose module `alpha` declares one requirement that no component's `implements` names.
+**When** `spex validate --spec-dir tmp/spec/` is executed.
+**Then** exit code is 1. Stdout JSON has `valid: false` and one error with `check: "requirement_coverage"` naming the requirement's id and name and stating that no component implements it. Adding `implements: [<that id>]` to one of alpha's components flips the same run to exit 0 with no `requirement_coverage` error.
+
 ---
+
+
 
 ## Edge Cases
 
@@ -214,12 +155,6 @@ Output goes to stdout as JSON. Exit code is the primary assertion target for CLI
 **Given** `project.json` has `modules: []`.
 **When** `spex validate --spec-dir tmp/spec/` is executed.
 **Then** exit code is 1 with a `schema` check error: the project schema requires at least one module (`minItems: 1`), so SchemaChecker rejects the file before any structural check runs. Structural validation alone would pass — no nodes to check — but the schema is the component that decides an empty-modules project is not yet valid.
-
-### E3: Concurrent-safe error aggregation
-
-**Given** a future implementation that runs checkers in parallel.
-**When** multiple checkers append errors concurrently to a shared slice.
-**Then** all errors appear in the final report without data races. The current sequential implementation avoids this, but the ErrorReporter interface must not preclude parallelism.
 
 ### E4: Very large error count
 
