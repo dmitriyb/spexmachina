@@ -251,10 +251,14 @@ run_integration_case() {
 
         # Integration task IDs are non-deterministic (br assigns them based
         # on the sandbox repo name). Normalize: any expected task_id of
-        # "__ANY__" accepts whatever the run produced.
-        local norm_actual norm_expected
-        norm_actual=$(jq '.ops |= map(.task_id = (if .task_id == "" then "" else "__ANY__" end))' <<< "$actual")
-        norm_expected=$(jq '.ops |= map(if .task_id == "__ANY__" then . else . end)' "$sandbox/expected_receipts.json")
+        # "__ANY__" accepts whatever the run produced. An error receipt
+        # embeds br's own JSON verbatim, whose hint prose changes between br
+        # releases; only the exit status and the error code are the contract,
+        # so both sides reduce to "<command> exited N: <code>".
+        local norm_error norm_actual norm_expected
+        norm_error='.ops |= map(if .error then .error |= ((index(": ")) as $i | if $i == null then . else .[:$i] + ": " + (.[$i+2:] | . as $tail | try (fromjson | .error.code) catch $tail) end) else . end)'
+        norm_actual=$(jq "$norm_error" <<< "$actual" | jq '.ops |= map(.task_id = (if .task_id == "" then "" else "__ANY__" end))')
+        norm_expected=$(jq "$norm_error" "$sandbox/expected_receipts.json")
         if ! _jdiff "$norm_actual" "$norm_expected" >"$sandbox/diff.txt" 2>&1; then
             echo "  [FAIL] $name: receipts mismatch"
             sed 's/^/    /' "$sandbox/diff.txt"

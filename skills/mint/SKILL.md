@@ -84,12 +84,17 @@ the proposal stem (or a live epic task), and fails without one. Check the journa
 exists, run
 
 ```
-bin/spex register spec/proposals/<stem>.md --git-head <sha7>
+bin/spex register spec/proposals/drafts/<stem>.md --git-head <sha7>
+cmp spec/proposals/drafts/<stem>.md spec/proposals/<stem>.md && rm spec/proposals/drafts/<stem>.md
 ```
 
-with the **same 7-character SHA** the plan invocation below uses — the spec-edits commit — and
-commit the appended journal event with the run's artifacts. The Registrar validates the
-template's H2 sections and refuses a malformed proposal. The event's eid `<git_head>:<stem>`
+with the **same 7-character SHA** the plan invocation below uses — the spec-edits commit.
+Register copies the draft to `spec/proposals/<stem>.md` and appends the event; it refuses a
+destination that already exists, which is why `/propose` writes under `drafts/` and never to
+the destination. Remove the draft only after `cmp` confirms the copy — the effect, not the
+exit code — and commit the registered proposal, the draft's removal and the appended journal
+event together with the run's artifacts. The Registrar validates the template's H2 sections
+and refuses a malformed proposal. The event's eid `<git_head>:<stem>`
 becomes the epic's idempotency label, which is why `/propose` caps the slug at 26 characters.
 
 ```

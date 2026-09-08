@@ -14,17 +14,18 @@ what the fields mean and why they are shaped that way.
 ```
 spec/
 ├── project.json          required — the root
-├── .snapshot.json        generated — the merkle baseline, written by ingest
-├── .history.jsonl        generated — the task journal, appended by ingest
 ├── proposals/            why each change was made
 └── <module>/
     ├── module.json       one per declared module
     └── *.md              content leaves referenced by `content` fields
+.spex/
+├── snapshot.json         generated — the merkle baseline, written by ingest
+└── history.jsonl         generated — the task journal, appended by ingest
 ```
 
 Only `project.json` and the module directories it declares are authored by
-hand. The two dotfiles are written by `spex ingest` and should never be edited
-directly — see [`architecture.md`](architecture.md).
+hand. The two files under `.spex/` are created by `spex init`, written by
+`spex ingest`, committed to git, and never edited directly — see [`architecture.md`](architecture.md).
 
 ## Identity hashes
 
@@ -63,16 +64,25 @@ Required: `name`, `modules`.
 
 ### Requirements
 
-Required: `id`, `type`, `title`.
+Required: `id`, `type`, `name` — and `priority`, which the validator demands
+even though the schema calls it optional.
 
 | Field | Type | Purpose |
 |---|---|---|
-| `id` | identity hash | `SHA256("requirement/<title>")`, first 12 hex chars |
+| `id` | identity hash | `SHA256("requirement/<name>")`, first 12 hex chars |
 | `type` | `functional` \| `non_functional` | Requirement kind |
-| `title` | string | Short title — this is the name the ID derives from |
+| `name` | string | Short name — what the ID derives from |
 | `description` | string | The requirement itself, in full |
-| `priority` | integer 0–4 | Optional; validated when present |
+| `priority` | integer 0–4 | Required on a project requirement: the schema calls it optional, but `spex validate` rejects one without it (`project requirement <id> missing priority`) |
 | `depends_on` | array of identity hashes | `depends_on` edges to other requirements |
+| `derivation` | `"pending"` | Optional; declares a requirement not yet derived into any module — see below |
+
+**Bootstrapping.** `validate` requires every project requirement to be derived
+into at least one module requirement. A requirement written before its module
+exists declares `"derivation": "pending"`: the coverage check then reports it
+as a disclosure note instead of an error, and the gate stays green. Remove the
+field once a module requirement carries its `preq_id`. Module requirements
+have no such escape — the requirement-to-component link admits no exemption.
 
 ### Modules
 
@@ -109,11 +119,12 @@ Required: `name`.
 
 ### Module requirements
 
-Required: `id`, `type`, `title`, `preq_id`.
+Required: `id`, `type`, `name`, `preq_id`.
 
 Same shape as a project requirement, plus **`preq_id`** — the identity hash of
 the project requirement this one derives from. That field is what keeps the
-requirement tree connected: a module requirement never floats free.
+requirement tree connected: a module requirement never floats free. It must
+not carry `priority` or `derivation`; the module schema rejects both.
 
 ### Components
 
@@ -188,11 +199,11 @@ See [`commands.md`](commands.md).
 
 ## Generated files
 
-`spec/.snapshot.json` is the merkle baseline: the tree as of the last ingest.
+`.spex/snapshot.json` is the merkle baseline: the tree as of the last ingest.
 It moves only when `spex ingest` writes it, and moving it is a deliberate act
 — see the drift and baseline discussion in [`skills.md`](skills.md).
 
-`spec/.history.jsonl` is the task journal: append-only, one JSON object per
+`.spex/history.jsonl` is the task journal: append-only, one JSON object per
 line, schema in `schema/journal-line.schema.json`. Fold it forward for the current
 node-to-task mapping; read it whole for the biography of a node that has since
 been removed. `spex map` queries it.

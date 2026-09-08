@@ -2,8 +2,17 @@
 
 *Spec ex machina — no deus required.*
 
-A CLI (`spex`) that owns the structural half of spec-driven development.
-You define your project as a typed DAG — a JSON skeleton with markdown content leaves — and `spex` tracks it with a merkle tree, computes which tasks a change invalidates, and emits a tool-agnostic changeset an adapter applies to your tracker.
+[![release](https://img.shields.io/github/v/release/dmitriyb/spexmachina)](https://github.com/dmitriyb/spexmachina/releases)
+[![go](https://img.shields.io/github/go-mod/go-version/dmitriyb/spexmachina)](go.mod)
+[![license](https://img.shields.io/github/license/dmitriyb/spexmachina)](LICENSE)
+[![ci](https://github.com/dmitriyb/spexmachina/actions/workflows/main.yml/badge.svg)](https://github.com/dmitriyb/spexmachina/actions/workflows/main.yml)
+
+<!-- terminal recording: spex init → validate → diff → plan on a tiny spec. Placeholder until recorded. -->
+
+`spex` owns the structural half of spec-driven development. You define your
+project as a typed DAG — a JSON skeleton with markdown content leaves — and
+`spex` tracks it with a merkle tree, computes which tasks a change invalidates,
+and emits a tool-agnostic changeset an adapter applies to your tracker.
 
 ```
 spec change → validate → diff → plan → adapter → ingest
@@ -18,24 +27,21 @@ spec change → validate → diff → plan → adapter → ingest
                  └─ confirms the spec is a valid DAG
 ```
 
-**No LLM in the loop** — just deterministic graph operations: the same spec state plus the same snapshot always produce the same diff, actions and changeset.
-Every subcommand reads stdin or files, writes stdout or files, and exits with documented codes, so the pipeline above is literally a pipeline.
-Snapshots, proposals and the task journal are files committed to git; there is no external state and no database.
-Nothing in that pipeline shells out — the git SHA is caller-supplied and the tracker is reached only through an external adapter — which is why `spex` stays a single static binary with no runtime dependencies (`spex upgrade` is the one exception: it runs its own embedded, signed installer under `bash`).
-See [`docs/architecture.md`](docs/architecture.md) for the full model.
+## What it does
 
----
+- **Typed DAG spec.** Requirements, components, data flows, tests and apis with identity hashes and typed edges; `spex validate` refuses anything that is not an acyclic, fully covered graph.
+- **Merkle diff.** `spex diff` hashes the spec bottom-up and compares it against the committed snapshot, grading every change by impact.
+- **Deterministic changeset.** `spex plan` turns a diff plus live task state into an ordered list of `create` / `close` / `retarget` operations. No LLM in the loop: same spec, same snapshot, same output.
+- **Adapter, outside the binary.** The changeset is tool-agnostic; an adapter applies it to your tracker and returns receipts. `scripts/apply-br.sh` is the reference, for `br`.
+- **Journal.** `spex ingest` reconciles changeset and receipts, appends the task journal and moves the baseline. `spex map context` answers for any node, live or long removed.
+
+Everything is pipeable, exits with documented codes, and lives in files committed to git. See [`docs/architecture.md`](docs/architecture.md).
+
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) makes the same bet on spec-driven work and trusts the model with the mechanical half. spex makes that half a program: what changed, what it invalidates and which tasks that means are computed, never judged.
 
 ## Install
 
-One binary is published on the [GitHub Releases page][releases]: `spex` (linux/darwin, amd64/arm64).
-Every release archive is signed with SSHSIG (`ssh-keygen -Y sign`), verifiable with the `ssh-keygen` that already ships with OpenSSH on essentially every machine — no extra tool to install just to verify.
-
-[releases]: https://github.com/dmitriyb/spexmachina/releases
-
-### Primary: verified install script
-
-**bash / zsh:**
+Download the install script, verify it, then run it. Never `curl | sh`: a piped script cannot verify itself before it runs. Details, other shells and the trust model are in [`docs/install.md`](docs/install.md).
 
 ```bash
 curl -fsSL https://github.com/dmitriyb/spexmachina/releases/latest/download/install.sh     -o install.sh \
@@ -46,97 +52,47 @@ curl -fsSL https://github.com/dmitriyb/spexmachina/releases/latest/download/inst
 && rm -f install.sh install.sh.sig
 ```
 
-**fish:**
-
-```fish
-curl -fsSL https://github.com/dmitriyb/spexmachina/releases/latest/download/install.sh -o install.sh
-and curl -fsSL https://github.com/dmitriyb/spexmachina/releases/latest/download/install.sh.sig -o install.sh.sig
-and ssh-keygen -Y verify -f (printf 'dvbozhko@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhmCWVDP/Tcm3CqXNjTQTChbKxr223xMob9zc56Uuny release signing\n' | psub) -I dvbozhko@gmail.com -n file -s install.sh.sig < install.sh
-and bash install.sh
-and rm -f install.sh install.sh.sig
-```
-
-This downloads `install.sh`, verifies **the script itself** against the public key below, and only then runs it — never `curl | sh`.
-`install.sh` then resolves the latest release, detects your OS/arch, downloads the matching `spex` archive and its signature, and verifies the **binary** with the same key (embedded in the script, trusted because the script was just verified) before installing it.
-The script is bash, not POSIX `sh` — run it with `bash`, as above.
-Set `SPEX_INSTALL_VERSION=v0.1.0` before the final `bash install.sh` to install a specific release instead of the latest, and pass `--dir DIR` to choose the install directory (default `$HOME/.local/bin`).
-
-The block above needs bash or zsh (`<(…)` process substitution).
-Under a plain `sh`, write the allowed-signers line to a file first:
-
-```sh
-printf 'dvbozhko@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhmCWVDP/Tcm3CqXNjTQTChbKxr223xMob9zc56Uuny release signing\n' > allowed_signers
-ssh-keygen -Y verify -f allowed_signers -I dvbozhko@gmail.com -n file -s install.sh.sig < install.sh
-```
-
-### Maximal: verify the binary archive directly
-
-No install script — download the archive for your platform from the [Releases page][releases], then verify it by any one of:
-
-```bash
-# SSHSIG, against the same pinned key as above
-ssh-keygen -Y verify -f allowed_signers -I dvbozhko@gmail.com -n file \
-  -s spex_<version>_<os>_<arch>.tar.gz.sig < spex_<version>_<os>_<arch>.tar.gz
-
-# SLSA provenance via Sigstore/Rekor — identity-anchored, no key to manage
-gh attestation verify spex_<version>_<os>_<arch>.tar.gz --repo dmitriyb/spexmachina
-
-# Go users: the Go module checksum database
-go install github.com/dmitriyb/spexmachina/cmd/spex@<tag>
-```
-
-Archive names carry the version without its leading `v` — `spex_0.1.0_linux_amd64.tar.gz` for tag `v0.1.0`.
-Each release also carries a consolidated `spex_<version>_checksums.txt`, one `.sha256` per archive, and a machine-readable `manifest.json` (schema, target, sha256, size per artifact).
-
-### What each channel protects, and what it doesn't
-
-- **Primary** verifies both the install script and the binary it fetches, end to end — `download → verify → run`, never a piped script: a piped `curl … | sh` executes as it streams and cannot verify itself before running, so verification has to wrap the download from outside the stream, which is exactly why the primary path is not a one-liner pipe.
-- **Maximal** gives you the strongest per-artifact check for a single file, with no script in between.
-- The trust anchor in both cases is the public key **copied from this README** — that defeats tampering of the download in transit; the residual risk is being sent to a look-alike or phishing copy of this repository, closed by using the known repository URL and by pinning the public key **once** — copy it a single time, then verify every future release against that pinned copy rather than re-copying it from wherever you happen to land.
-- Signatures and attestations give **authenticity, not freshness**: a channel attacker who can intercept your download could still steer you to a genuine-but-older, vulnerable release (a downgrade); this applies to every channel above equally at *first install*, where there is no installed version to floor against — note it as a residual risk rather than a solved one. For *updates* this is closed: `spex upgrade` is forward-only and hard-refuses (non-overridably) a resolved latest that is older than what is installed (see Upgrading).
-
-### Public key
+Public key, pin it once:
 
 ```
 dvbozhko@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIhmCWVDP/Tcm3CqXNjTQTChbKxr223xMob9zc56Uuny release signing
 ```
 
-This is the same key across all three verification paths above (SSHSIG install script, SSHSIG archive, and the `allowed_signers` line either way), and the same line spex's sibling tools — [faber](https://github.com/dmitriyb/faber) and [portitor](https://github.com/dmitriyb/portitor) — publish, so one pinned copy serves all three.
-It can also be pinned and cross-checked against GitHub's own copy at `https://api.github.com/users/dmitriyb/ssh_signing_keys`, once it is added under Settings → SSH and GPG keys → Signing keys — useful if this README itself is ever suspected of being tampered with in a fork or mirror.
+<details>
+<summary>fish, plain sh, verifying the archive directly, upgrading</summary>
 
-### Upgrading
+- **fish** and **plain `sh`** variants of the block above: [`docs/install.md`](docs/install.md#primary-verified-install-script).
+- **Maximal**: skip the script and verify the release archive itself by SSHSIG, SLSA attestation or the Go checksum database: [`docs/install.md`](docs/install.md#maximal-verify-the-binary-archive-directly).
+- **Upgrading**: `spex upgrade` runs the same signed installer against its own path, forward-only; `--check`, `--version`, `--rollback`: [`docs/install.md`](docs/install.md#upgrading).
 
-An installed binary updates itself with `spex upgrade`, which embeds the same signed `install.sh` above and runs it against the running binary's own path — same resolve → download → SSHSIG-verify, then a safe in-place swap (move-aside + `rename(2)`, never a write over the running file), keeping the previous binary as `<path>.bak`.
-Upgrade is **forward-only**: it resolves the latest release and moves toward it, and hard-refuses (non-overridable) a resolved latest that is *older* than the installed version — a signature proves authenticity, not freshness, so a latest that moved backward is treated as a compromised-origin rollback anomaly.
-`--check` reports the comparison without changing anything (and exits 0 even when the outcome is an anomaly), `--version vX.Y.Z` installs an exact release in any direction (the deliberate path to an older release), and `--rollback` restores the backup.
-See [`docs/commands.md`](docs/commands.md) for the full flag reference.
+</details>
 
----
-
-## Usage sketch
+## Quick start
 
 ```sh
-spex validate                                   # DAG, refs, coverage — before anything else
-scripts/export-br.sh tasks.json
+spex init                                            # .spex/: empty-tree snapshot, empty journal
+spex validate                                        # the structural gate
+spex diff                                            # what changed since the snapshot, by impact
+spex register --git-head "$(git rev-parse --short HEAD)" spec/proposals/drafts/<stem>.md
+scripts/export-br.sh tasks.json                      # in-flight tasks, from the tracker
 spex diff --json | spex plan --proposal <stem> --git-head "$(git rev-parse --short HEAD)" \
-  --tasks tasks.json > changeset.json
-scripts/apply-br.sh changeset.json > receipts.json   # the adapter — outside the binary
-spex ingest --changeset changeset.json --receipts receipts.json
+                             --tasks tasks.json --out changeset.json
+scripts/apply-br.sh changeset.json receipts.json     # the adapter, outside the binary
+spex ingest --changeset changeset.json --receipts receipts.json   # move the baseline
+spex map context <node-id>                           # the spec behind one task, live or removed
 ```
 
-That is one full cycle: validate the spec, find what changed since the snapshot, decide in one pass which tasks it creates, closes and retargets, let an adapter apply the changeset, then record the result and move the baseline.
-`spex map context <node-id>` answers the other everyday question — the full spec context behind one task, live or long removed.
-Everything is pipeable and every subcommand documents its exit codes; see [`docs/commands.md`](docs/commands.md).
+That is one full cycle: validate, find what changed, decide which tasks it creates, closes and retargets, let an adapter apply them, then record the result and move the baseline. Every flag and exit code is in [`docs/commands.md`](docs/commands.md).
 
 ## Learn more
 
-- [`docs/architecture.md`](docs/architecture.md) — the module pipeline, the merkle model, how impact is classified, and where the snapshot fits.
-- [`docs/configuration.md`](docs/configuration.md) — the spec format: `project.json`, `module.json`, markdown leaves, node types and edges.
-- [`docs/commands.md`](docs/commands.md) — the full CLI reference: every subcommand, flag and exit code.
-- [`docs/skills.md`](docs/skills.md) — the authoring loop: `/propose`, `/spec`, `/spec-review`, `/drift`.
-- [`docs/enforcement-migration.md`](docs/enforcement-migration.md) — migrating a spec to the declarative enforcement contracts.
-- `spec/**` — the authoritative, requirement-level specification (spexmachina format).
+- [`docs/architecture.md`](docs/architecture.md) — the pipeline, the merkle model, impact, the journal, and the terms.
+- [`docs/configuration.md`](docs/configuration.md) — the spec format: `project.json`, `module.json`, leaves, node types, edges.
+- [`docs/commands.md`](docs/commands.md) — every subcommand, flag and exit code.
+- [`docs/skills.md`](docs/skills.md) — the authoring loop: `/propose`, `/spec`, `/spec-review`, `/mint`, `/drift`.
+- [`docs/install.md`](docs/install.md) — install channels, the trust model, the public key, upgrading.
+- `spec/**` — the authoritative, requirement-level specification, in spexmachina's own format.
 
 ## License
 
-Apache-2.0 (see `LICENSE`).
+Apache-2.0, see [`LICENSE`](LICENSE).

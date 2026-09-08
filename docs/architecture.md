@@ -25,12 +25,13 @@ A spec directory is a JSON skeleton with markdown content leaves:
 ```
 spec/
 ├── project.json          project requirements + module declarations
-├── .snapshot.json        the merkle baseline (what was last ingested)
-├── .history.jsonl        the task journal (append-only)
 ├── proposals/            why each change was made
 └── <module>/
     ├── module.json       module requirements, components, flows, tests, apis
     └── *.md              the content leaves
+.spex/
+├── snapshot.json         the merkle baseline (what was last ingested)
+└── history.jsonl         the task journal (append-only)
 ```
 
 The JSON carries structure and identity; the markdown carries prose. Six node
@@ -38,7 +39,7 @@ types live in that graph:
 
 | Node type | Declared in | Carries content? |
 |---|---|---|
-| `requirement` | `project.json`, `module.json` | no — title and description inline |
+| `requirement` | `project.json`, `module.json` | no — name and description inline |
 | `module` | `project.json` | no — a container |
 | `component` | `module.json` | yes — `content` points at a markdown leaf |
 | `data_flow` | `module.json` | yes |
@@ -88,7 +89,7 @@ change with task consequences, not a cosmetic edit.
 
 There is no `spex hash` subcommand. The tree is built on demand inside
 `spex diff` (read side) and persisted by `spex ingest` (write side). The only
-durable artifact is `spec/.snapshot.json`.
+durable artifact is `.spex/snapshot.json`.
 
 ## The pipeline
 
@@ -108,7 +109,7 @@ under `validator/`.
 
 ### diff
 
-Rebuilds the merkle tree and compares it against `spec/.snapshot.json`,
+Rebuilds the merkle tree and compares it against `.spex/snapshot.json`,
 producing a flat list of changes, each one of three types
 (`merkle/diff_engine.go`):
 
@@ -116,9 +117,11 @@ producing a flat list of changes, each one of three types
 - **Removed** — present in the snapshot, absent now (no new hash)
 - **Modified** — present in both, different hash
 
-A missing snapshot is treated as the empty tree, so the first diff on a fresh
-project reports the whole spec as added. That is the bootstrap cycle: it
-produces the initial journal and the initial snapshot together.
+`spex init` seeds the snapshot with the empty tree, so the first diff on a
+fresh project reports the whole spec as added. That is the bootstrap cycle: it
+produces the initial journal and the initial snapshot together. A missing
+snapshot is not an empty one: the pre-flight refuses with exit 3 and names
+`spex init` or `spex doctor` (see [`commands.md`](commands.md)).
 
 `diff` also runs the removed-name check (`validator.CheckRemovedNames`), which
 belongs here rather than in `validate` because it needs the classified changes
@@ -135,18 +138,23 @@ topologically orders them, assigns idempotency labels, resolves references,
 and composes the changeset. Three action types
 (`plan/action_classifier.go`):
 
-- **create** — this node needs work that does not exist yet. When it replaces
-  a task being obsoleted, the action carries `OldTaskID`, which is what
-  preserves the chain across a rename.
-- **obsolete** — the task must go: its node left the spec, or the node
-  changed and its task is closed (or its status unknown), or a test section
-  folded back to a single component. It reaches the adapter as a `close` op,
-  never an op named "obsolete".
+- **create** — this node needs work that does not exist yet: an added or
+  modified node with no pairing in the journal, or one whose earlier task is
+  absent from the task-state artifact (finished). The create is plain — no
+  close against the predecessor, no old task id carried, no lineage
+  dependency minted; the journal's event chain is the generation history,
+  and `spex map context` surfaces it. A removed node whose task is absent
+  also creates: a *cleanup* task, to have the shipped code deleted.
+- **close** — live work must stop: the node left the spec while its task was
+  still open, or a test section folded back to describing a single
+  component while its task was open.
 - **retarget** — the node changed and its task is still open, so the task's
-  target moves rather than being closed and recreated. A node whose task is
-  `in_progress` refuses the run instead: a claimed task's target never moves
-  under the implementer holding it. A closed task is not retargeted either —
-  it takes obsolete+create, like an unknown status.
+  target moves rather than being closed and recreated.
+
+A task that is `in_progress` fits none of these: the run refuses instead,
+naming every claimed task at once, because a claimed task's target never
+moves under the implementer holding it. There is no obsolete action and no
+obsolete+create path; closing is reserved for live work.
 
 Pass `--tasks <file>` (the version-1 task-state artifact the adapter's
 export half derives from the tracker, listing in-flight tasks only) so live
@@ -154,10 +162,10 @@ task status participates in the classification. The flag is required: a run
 without a task-state artifact is exit 1, not a run with an empty one, since
 an absent artifact would read every task as finished and re-create
 in-flight work. An empty artifact is the explicit nothing-in-flight case:
-no pairing is known-open and the cleanup gate defaults closed — nothing is
-retargeted, no cleanup task is minted for a removed node, and a matched
-modified node takes the obsolete+create path unless the journal already
-records that new hash or it is a test section folding back.
+every pairing reads as finished, so nothing is retargeted or closed, a
+changed node takes a plain create unless the journal already records its
+new hash or it is a test section folding back, and a removed node gets a
+cleanup task.
 
 The output is `changeset.json` (v4) — an ordered, tool-agnostic list of
 operations drawn from a `create` / `close` / `retarget` vocabulary, with
@@ -179,8 +187,8 @@ changeset, applies it to whatever tracker you actually use, and writes
 ### ingest
 
 Reads the changeset and the receipts together, reconciles them (op IDs must
-line up), appends one event per operation to `spec/.history.jsonl`, and writes
-the new `spec/.snapshot.json`. Ingest is the only writer of the baseline.
+line up), appends one event per operation to `.spex/history.jsonl`, and writes
+the new `.spex/snapshot.json`. Ingest is the only writer of the baseline.
 
 `--mode refresh` handles the other case: spec drift that owes no task work —
 a wording correction, a clarification. It takes an empty changeset and empty
@@ -192,7 +200,7 @@ whose task is still open is refused regardless of type.
 
 ## The journal
 
-`spec/.history.jsonl` is append-only, one JSON object per line, schema in
+`.spex/history.jsonl` is append-only, one JSON object per line, schema in
 `schema/journal-line.schema.json`. It is the link between spec nodes and tracker
 tasks, and it is deliberately a log rather than a table: folding it forward
 gives the current mapping, while reading it whole gives the biography of a
@@ -240,5 +248,44 @@ The spec is the truth, and it changes only in the authoring loop — the skills
 described in [`skills.md`](skills.md). Automated implementer contexts never
 write `spec/`; one that finds a spec defect files a drift report under
 `drifts/` instead, which `/drift` later triages. The baseline in
-`spec/.snapshot.json` moves only deliberately, and every refresh states its
+`.spex/snapshot.json` moves only deliberately, and every refresh states its
 reason.
+
+## Terms
+
+- **Impact level** — the grade `spex diff` prints in its third column and
+  totals under `by_impact`. Each changed leaf is graded by its node type
+  through the profile's `impact_levels` map, on the ordered scale
+  `impl_only < contract < arch_impl < structural`
+  (`merkle/impact_classifier.go`); a module's aggregate impact is the maximum
+  over its leaves. Under the default profile a test section is `impl_only`, a
+  data flow or api `contract`, a component `arch_impl`, a requirement
+  `structural`.
+- **Profile** — `schema/defaultProfile.json`, overridden by `spec/profile.json`
+  when present. It declares the node types and their fields, the coverage
+  chains `validate` enforces, the plan-relevant types (the ones that produce
+  tasks), the impact level per type, and the absorbable set. `spex` reads the
+  vocabulary from the profile rather than compiling it in.
+- **eid** — the key of a journal event: `<git_head>:<op_id>` for an event a
+  mint produced from an op, `<git_head>:<stem>` for a proposal's `registered`
+  event, `refresh:<node>:<before>:<after>` for one produced without an op. A
+  tracker label `spex:<eid>` may carry it, but the journal is the identity.
+- **Mint, refresh, absorb** — the three ways a spec change reaches the
+  baseline. A *mint* runs the full pipeline and births tasks. A *refresh*
+  (`spex ingest --mode refresh`) moves the snapshot with no task work, because
+  the correction owes none. An *absorb* marks individual nodes inside a mint
+  as cosmetic (`spex plan --absorb`, marks kept in `.spex/runs/absorb.json`),
+  so they ride in the changeset's `absorbed` array and yield no operation. The
+  decision is made per node in `/mint`, never automatically.
+- **`meta/<hash>` leaves** — synthetic merkle leaves hashing a whole
+  `module.json` envelope (`meta/project` for `project.json`), so an edit that
+  touches no content leaf still surfaces in the diff. They produce no task.
+- **The two gates** — `spex validate` (snapshot-free and corpus-local: schema,
+  references, DAG, coverage) and `spex diff` (history-relative: the
+  removed-name and incompleteness checks that need the classified changes).
+  They do not overlap, and a spec can pass one while failing the other, so the
+  authoring loop runs both.
+- **faber and portitor** — separate, optional repositories. faber orchestrates
+  autonomous implement, review and fix sessions against the tasks spex minted;
+  portitor is the git gateway that verifies what those sessions push and
+  structurally denies them writes to `spec/`. spex itself needs neither.

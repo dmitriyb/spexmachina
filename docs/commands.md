@@ -19,6 +19,59 @@ Unless a command documents otherwise, **0** means success and **1** means
 failure. `spex diff`, `spex plan` and `spex ingest` add a distinct **2**; each
 is described below.
 
+Every command that reads project state — `diff`, `plan`, `ingest`, `map`,
+`register` and `doctor` — runs the lifecycle pre-flight first and exits **3**,
+*not a spex project*, when it refuses: either `.spex/` is absent (stderr names
+`spex init`) or it is present but its snapshot or journal is missing or
+unparseable (stderr names `spex doctor`). The two messages never collapse into
+one, because running `init` on a broken project destroys the journal.
+`validate`, `render`, `hash-id`, `template`, `log` and `init` do not read
+project state and never exit 3.
+
+---
+
+## Project state
+
+### `spex init`
+
+Creates `.spex/` with exactly two files: a snapshot seeded with the canonical
+empty tree — never a snapshot of the spec that already exists, so the first
+`spex diff` reports the whole spec as added — and an empty journal, with no
+init event. The directory is committed to git, not ignored.
+
+It refuses a directory that already has `.spex/`, whatever its condition, and
+leaves it untouched: it is the one command that can destroy a journal, so it
+never overwrites. A broken state directory is `spex doctor`'s to diagnose.
+
+```sh
+spex init
+```
+
+| Exit | Meaning |
+|---|---|
+| 0 | `.spex/` created |
+| 1 | `.spex/` already exists, or the directory could not be written |
+
+### `spex doctor`
+
+Reports the health of the project state and never repairs it: after any run
+the project directory is byte-identical. The report is JSON on stdout —
+`{"healthy":…, "findings":[{"artifact":…, "status":…}]}` — with `status` one
+of `present`, `missing` or `unreadable`, a `detail` on unreadable artifacts,
+and a `fix` naming the command that resolves the finding. Only the
+never-initialised case carries a fix (`spex init`); damage inside an existing
+`.spex/` names no command, because re-initialising is how a journal dies.
+
+```sh
+spex doctor
+```
+
+| Exit | Meaning |
+|---|---|
+| 0 | healthy |
+| 1 | `.spex/` exists but its snapshot or journal is missing or unreadable |
+| 3 | never initialised — the single finding is `.spex` missing, fix `spex init` |
+
 ---
 
 ## The pipeline
@@ -52,10 +105,11 @@ Rebuilds the merkle tree and compares it against the snapshot.
 | Flag | Default | Purpose |
 |---|---|---|
 | `--json` | off | Emit JSON instead of the human summary |
-| `--snapshot <path>` | `<spec-dir>/.snapshot.json` | Snapshot to compare against |
+| `--snapshot <path>` | `.spex/snapshot.json`, as resolved by the pre-flight | Snapshot to compare against |
 
-A missing snapshot is treated as the empty tree — the first diff on a fresh
-project reports the whole spec as added.
+`spex init` seeds the snapshot with the empty tree, so the first diff on a
+fresh project reports the whole spec as added. A missing snapshot is exit 3,
+not an empty tree.
 
 ```sh
 spex diff                 # human summary
@@ -67,6 +121,7 @@ spex diff --json          # machine-readable, the form `spex plan` consumes
 | 0 | diff produced, no completeness errors |
 | 1 | input error |
 | 2 | completeness errors found — chiefly the removed-name check, which flags prose still referring to a node that just disappeared. The full diff is still on stdout; the non-zero status tells you **not** to pipe it into `spex plan`, which refuses such a diff anyway |
+| 3 | not a spex project |
 
 ### `spex plan`
 
@@ -105,11 +160,12 @@ spex diff --json | spex plan --proposal 2026-08-13-plan-module \
 | 0 | changeset written |
 | 1 | input error: bad or missing flags (`--tasks` included), malformed JSON, bad SHA, unreadable `--tasks` or journal, or a diff that still carries completeness errors |
 | 2 | contract refusal: a claimed (`in_progress`) task's node changed, an invalid absorb entry, a dep cycle, an unresolvable dep or parent |
+| 3 | not a spex project |
 
 ### `spex ingest`
 
 Reconciles a changeset with the receipts an adapter wrote, appends the
-resulting events to `spec/.history.jsonl`, and writes `spec/.snapshot.json`.
+resulting events to `.spex/history.jsonl`, and writes `.spex/snapshot.json`.
 Ingest is the only writer of the baseline.
 
 | Flag | Default | Purpose |
@@ -138,6 +194,7 @@ spex ingest --mode refresh --changeset empty.json --receipts empty.json \
 | 0 | success — complete, or partial with no reconciler errors |
 | 1 | input error: bad flags, malformed JSON, op ID mismatch, IO failure, missing pre-refresh snapshot, non-empty refresh artifacts |
 | 2 | invariant failure (journal unchanged on disk) or refresh refusal |
+| 3 | not a spex project |
 
 ---
 
@@ -188,7 +245,7 @@ Computes the identity hash for a node. It reads `spec/profile.json` under `--spe
 | Flag | Purpose |
 |---|---|
 | `--type <type>` | A node type the resolved profile declares, plus the fixed `module` type. Under the default profile: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
-| `--name <name>` | Node name or title |
+| `--name <name>` | Node name |
 | `--module <module>` | Required for module-scoped node types |
 
 ```sh
@@ -206,7 +263,28 @@ Writes a proposal template to stdout.
 
 ### `spex register <proposal-path>`
 
-Registers a proposal into `spec/proposals/`.
+Copies a proposal into `spec/proposals/` and appends a `registered` event to
+the journal, keyed `<git-head>:<stem>` — the eid that becomes the proposal
+epic's idempotency label, `spex:<git-head>:<stem>`. The proposal must be a
+`project` or `change` template with its H2 sections intact; a malformed one is
+refused before anything is written. The source file is read from
+`<proposal-path>` and copied to its dated stem; a destination that already
+exists is refused as already registered, so the source is a draft outside
+`spec/proposals/`, not the destination itself.
+
+| Flag | Default | Purpose |
+|---|---|---|
+| `--git-head <sha>` | — | Caller-supplied git HEAD SHA, 7–40 hex characters. Required; validated before the proposal is read |
+
+```sh
+spex register --git-head "$(git rev-parse --short HEAD)" drafts/2026-08-13-plan-module.md
+```
+
+| Exit | Meaning |
+|---|---|
+| 0 | registered; stdout prints the destination path |
+| 1 | missing or malformed `--git-head`, unreadable or malformed proposal, or a destination already present |
+| 3 | not a spex project |
 
 ### `spex log`
 
