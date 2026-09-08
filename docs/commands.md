@@ -189,7 +189,7 @@ Computes the identity hash for a node. It reads `spec/profile.json` under `--spe
 | Flag | Purpose |
 |---|---|
 | `--type <type>` | A node type the resolved profile declares, plus the fixed `module` type. Under the default profile: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module` |
-| `--name <name>` | Node name or title |
+| `--name <name>` | Node name |
 | `--module <module>` | Required for module-scoped node types |
 
 ```sh

@@ -82,7 +82,7 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 
 - **Required**: `name`, `modules` (at least one)
 - **Optional**: `description`, `version`, `requirements`, `sections`
-- Requirements: `id` (identity hash), `type` (`functional` | `non_functional`), `title` — required by schema; **`priority` (integer 0–4) is required by the validator**, which is the one mandatory field the schema calls optional. Omitting it yields an error entry with `check: "id"`, `path: "project.json:/requirements/<id>"` and message `project requirement <id> missing priority`.
+- Requirements: `id` (identity hash), `type` (`functional` | `non_functional`), `name` — required by schema; **`priority` (integer 0–4) is required by the validator**, which is the one mandatory field the schema calls optional. Omitting it yields an error entry with `check: "id"`, `path: "project.json:/requirements/<id>"` and message `project requirement <id> missing priority`.
   `description` and `depends_on` are optional.
 - Modules: `id`, `name`, `path` required; `description`, `requires_module` optional. **Module `name` must be lowercase and must match the `name` field in the corresponding `module.json` exactly** (e.g. `"plan"`, not `"Plan"`).
 - `sections`: project-level typed envelopes (`id`, `name`, `type`). A section of type `coupled` must name an existing module and validate against that module's `section.schema.json`. This project declares none; do not add one unless a proposal asks for it.
@@ -91,7 +91,7 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 
 - **Required**: `name`
 - **Optional**: `description`, `requirements`, `components`, `apis`, `data_flows`, `test_sections`
-- Requirements: `id`, `type`, `title`, **`preq_id`** all required — `preq_id` is the identity hash of the project requirement this one derives from. `description`, `depends_on` optional. A module requirement **must not** carry `priority`: the module `requirement` definition sets `additionalProperties: false` and has no such property, so it is a schema error.
+- Requirements: `id`, `type`, `name`, **`preq_id`** all required — `preq_id` is the identity hash of the project requirement this one derives from. `description`, `depends_on` optional. A module requirement **must not** carry `priority`: the module `requirement` definition sets `additionalProperties: false` and has no such property, so it is a schema error.
 - Components: `id`, `name`, **`content`** required, `content` non-empty (`minLength: 1`); `description`, `implements`, `uses` optional. If users or other systems invoke the module externally, that entry point is a component **and** should also be declared as an `api`.
 - APIs: `id`, `name` required; `description`, `provided_by`, `group` optional. **No `content`.**
 - Data flows: `id`, `name`, **`content`** required and non-empty; `description`, `uses` optional
@@ -135,9 +135,9 @@ The hash is `SHA256(identity_string)` truncated to the first 6 bytes (12 hex cha
 
 | Node type | Identity string |
 |-----------|-----------------|
-| Project requirement | `project/requirement/<title>` |
+| Project requirement | `project/requirement/<name>` |
 | Module | `module/<name>` |
-| Module requirement | `<module>/requirement/<title>` |
+| Module requirement | `<module>/requirement/<name>` |
 | Component | `<module>/component/<name>` |
 | API | `<module>/api/<name>` |
 | Data flow | `<module>/data_flow/<name>` |
@@ -174,9 +174,9 @@ cannot be recovered from its hash after removal
 This covers module requirements, components, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
 
 > **Legacy project requirement hashes — never recompute them.**
-> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every task already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<title>"`.
+> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every task already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<name>"`.
 
-Changing a node's `name` or `title` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
+Changing a node's `name` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
 
 There are no integer IDs in the system. The task journal (`.spex/history.jsonl`) files every change event under the changed node's own identity hash, and keys the event itself by an `eid`: `<git_head>:<op_id>` for an event a mint produced from an op, `refresh:<node>:<before>:<after>` (plus a `#N` suffix on the rare collision) for one produced without an op behind it — a whole-run refresh, or a node absorbed inside a normal run, which are indistinguishable on the wire. A tracker label carries that eid — `spex:<eid>` — but the label is optional insurance an adapter may stamp, not identity: the journal is what every downstream stage reads. The older `spex:<spec_node_id>` labels still on tasks predate the eid scheme.
 
@@ -465,10 +465,10 @@ Every finding is severity `error`. **The validator has no warning sites at all**
 Two error families are worth knowing before you meet them, both from `requirement_coverage`, which runs in two phases:
 
 - *Phase 1, project requirement → module requirement (via `preq_id`)*:
-  `project requirement <id> "<title>" is not derived into any module requirement`
+  `project requirement <id> "<name>" is not derived into any module requirement`
   Every project requirement must be derived by at least one module requirement somewhere in the tree. Adding a project requirement without a derivation is a validation failure, not a warning.
 - *Phase 2, module requirement → component (via `implements`)*:
-  `<module> requirement <id> "<title>" is not implemented by any component`
+  `<module> requirement <id> "<name>" is not implemented by any component`
   Every module requirement must be named in some component's `implements` array in the same module.
 
 **2. Deterministic completeness pass**
@@ -555,7 +555,7 @@ When modifying an existing spec:
 2. **Preserve existing IDs.** Never renumber. Never recompute an id for an unchanged node — and never recompute a project requirement id at all (see *Legacy project requirement hashes* under IDs).
 3. Add new nodes by deriving their identity hash with `bin/spex hash-id`. IDs are content-derived, not assigned.
 4. When removing a node, delete the JSON entry and its content file. Then sweep its **name** out of the corpus: `bin/spex diff` reports a `surviving_name` error for every removed api or component whose declared name still appears anywhere under `spec/` except `spec/proposals/`, which is historical and deliberately exempt.
-5. When modifying a node, update the JSON fields and the content markdown together. **Changing a `name` or `title` changes the identity hash** — the old id is gone, a new one appears, and the new id must be regenerated with `bin/spex hash-id`. The pipeline treats this as delete + create, so the rename is also a removal for rule 4's purposes.
+5. When modifying a node, update the JSON fields and the content markdown together. **Changing a `name` changes the identity hash** — the old id is gone, a new one appears, and the new id must be regenerated with `bin/spex hash-id`. The pipeline treats this as delete + create, so the rename is also a removal for rule 4's purposes.
 6. **Update everything the change touches — graph edges *and* prose.**
    - *Edges*: update every graph edge the change affects — if a component is removed, drop its id from every `uses`, `describes` and `provided_by` array.
    - *Links*: a `[[<hash>|…]]` pointing at a removed or renamed node no longer resolves and is a `link` error. Find them with `git grep '\[\[<old-hash>' spec/` and repoint or remove each one.

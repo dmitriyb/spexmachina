@@ -39,7 +39,7 @@ types live in that graph:
 
 | Node type | Declared in | Carries content? |
 |---|---|---|
-| `requirement` | `project.json`, `module.json` | no — title and description inline |
+| `requirement` | `project.json`, `module.json` | no — name and description inline |
 | `module` | `project.json` | no — a container |
 | `component` | `module.json` | yes — `content` points at a markdown leaf |
 | `data_flow` | `module.json` | yes |

@@ -61,7 +61,7 @@ Nodes only — `{id, type, name, module}` — with bare identity hashes. Roughly
 
 ### 5.1 The node vocabulary
 
-These are the only things a proposal can ask for. Identity is `<module>/<type>/<name>` for module-scoped nodes and `project/requirement/<title>` for project requirements.
+These are the only things a proposal can ask for. Identity is `<module>/<type>/<name>` for module-scoped nodes and `project/requirement/<name>` for project requirements.
 
 | Node | Declared in | Content leaf | Produces a task |
 |---|---|---|---|
@@ -79,8 +79,8 @@ These are the only things a proposal can ask for. Identity is `<module>/<type>/<
 
 **Required fields a proposal has to supply values for:**
 
-- Project requirement: `id`, `type` (`functional` | `non_functional`), `title`, and **`priority` 0–4**. The JSON Schema calls `priority` optional; the validator rejects a project requirement without it. Propose a priority for every new project requirement.
-- Module requirement: `id`, `type`, `title`, **`preq_id`** — every module requirement derives from a project requirement.
+- Project requirement: `id`, `type` (`functional` | `non_functional`), `name`, and **`priority` 0–4**. The JSON Schema calls `priority` optional; the validator rejects a project requirement without it. Propose a priority for every new project requirement.
+- Module requirement: `id`, `type`, `name`, **`preq_id`** — every module requirement derives from a project requirement.
 - Component / data flow / test section: `id`, `name`, `content` (non-empty; an empty string is a schema error, not a skipped node).
 - API: `id`, `name`.
 
