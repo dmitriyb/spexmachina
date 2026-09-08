@@ -35,9 +35,10 @@ argues against what actually exists rather than what it assumes exists.
 
 It deliberately constrains the draft to what the spec format can express: a
 proposal that cannot be turned into requirements, components, flows and tests
-is a proposal that will not survive `/spec`. The output is a proposal document
-committed to `spec/proposals/`, which is what makes every later change
-traceable to a stated reason.
+is a proposal that will not survive `/spec`. The output is a proposal draft
+committed to `spec/proposals/drafts/`; `/mint` registers it into
+`spec/proposals/`, which is what makes every later change traceable to a
+stated reason.
 
 ## `/spec`
 
@@ -108,7 +109,7 @@ human-supervised session, never by a box.
 ## How they fit together
 
 ```
-/propose ──▶ proposal in spec/proposals/
+/propose ──▶ proposal draft in spec/proposals/drafts/
               │
            /spec ──▶ spec/ written, gates green, committed
                                           │

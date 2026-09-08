@@ -64,7 +64,8 @@ Required: `name`, `modules`.
 
 ### Requirements
 
-Required: `id`, `type`, `name`.
+Required: `id`, `type`, `name` — and `priority`, which the validator demands
+even though the schema calls it optional.
 
 | Field | Type | Purpose |
 |---|---|---|
@@ -72,7 +73,7 @@ Required: `id`, `type`, `name`.
 | `type` | `functional` \| `non_functional` | Requirement kind |
 | `name` | string | Short name — what the ID derives from |
 | `description` | string | The requirement itself, in full |
-| `priority` | integer 0–4 | Optional; validated when present |
+| `priority` | integer 0–4 | Required on a project requirement: the schema calls it optional, but `spex validate` rejects one without it (`project requirement <id> missing priority`) |
 | `depends_on` | array of identity hashes | `depends_on` edges to other requirements |
 | `derivation` | `"pending"` | Optional; declares a requirement not yet derived into any module — see below |
 
@@ -122,7 +123,8 @@ Required: `id`, `type`, `name`, `preq_id`.
 
 Same shape as a project requirement, plus **`preq_id`** — the identity hash of
 the project requirement this one derives from. That field is what keeps the
-requirement tree connected: a module requirement never floats free.
+requirement tree connected: a module requirement never floats free. It must
+not carry `priority` or `derivation`; the module schema rejects both.
 
 ### Components
 

@@ -204,7 +204,7 @@ The plan file has TWO parts: **instructions header** then **proposal content**, 
 
 The plan file MUST start with:
 
-1. **Output statement**: `The result of this session is a proposal file YYYY-MM-DD-<slug>.md placed in spec/proposals/.`
+1. **Output statement**: `The result of this session is a proposal draft YYYY-MM-DD-<slug>.md placed in spec/proposals/drafts/; /mint registers it into spec/proposals/.`
 2. **Proposal type**: State whether this is a project proposal or change proposal.
 3. **Template**: Copy the FULL template for the detected proposal type (from the templates below) into the plan file. State: "Write the proposal file using this exact markdown structure."
 4. **Conformance rule**: "The proposal MUST contain ONLY the sections defined in the template. No extra top-level sections."
@@ -303,10 +303,13 @@ If the user requests changes, revise the draft and re-present — this happens n
 
 After the user approves:
 
-1. Create `spec/proposals/` directory if it does not exist.
-2. Write the approved draft to `spec/proposals/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
+1. Create `spec/proposals/drafts/` if it does not exist.
+2. Write the approved draft to `spec/proposals/drafts/YYYY-MM-DD-<name>.md` where `YYYY-MM-DD` is today's date and `<name>` is a short kebab-case slug. If the user provided `$ARGUMENTS`, use that as the name slug. If `$ARGUMENTS` is empty, derive the slug from the proposal title (e.g. "Add user auth" → `add-user-auth`).
    **The slug is capped at 26 characters**, making the stem (`YYYY-MM-DD-<name>`) at most 37. `spex register` keys the proposal's `registered` event as `<git_head>:<stem>`, and that eid becomes the epic task's idempotency label, `spex:<git_head>:<stem>`; br rejects any label over 50 characters (`Error: Validation failed: label: exceeds 50 characters`) — with the 7-character short SHA the pipeline uses, 37 is exactly the budget left for the stem. An over-long slug does not degrade: it fails the `br create` partway through the mint, long after this session ended. Shorten it here: if the slug the user gave (or the one the title implies) is longer, propose a shortened one and say why — never trim it silently.
 3. Tell the user the file path.
-4. Remind them to review and commit to git.
+4. Remind them to review and commit to git. The draft stays under `drafts/`
+   until `/mint` runs `spex register`, which copies it to
+   `spec/proposals/<stem>.md` and refuses a destination that already exists —
+   never write the draft to the destination yourself.
 
 **STOP after writing the file.** Do NOT explore code, do NOT attempt implementation, do NOT edit anything under `spec/` other than the new proposal file. The proposal skill produces exactly one artifact: the proposal file.

@@ -6,7 +6,7 @@ argument-hint: "<proposal-path-or-name> [<module>]"
 
 # /spec — Author Spec from Proposal
 
-Read a proposal from `spec/proposals/` and create or modify the spec: `project.json`, `module.json` files, and markdown content leaves. This is the LLM interface for spec authoring.
+Read a proposal from `spec/proposals/drafts/` (or `spec/proposals/` once `/mint` has registered it) and create or modify the spec: `project.json`, `module.json` files, and markdown content leaves. This is the LLM interface for spec authoring.
 
 `bin/spex validate` is the arbiter of whether the structural output is correct. Build it first (`go build -o bin/ ./cmd/spex/`) and run it often — several rules below are enforced by the validator and not by the JSON Schema, so a file that looks schema-clean can still fail.
 
@@ -19,8 +19,8 @@ Read a proposal from `spec/proposals/` and create or modify the spec: `project.j
 ### First argument — the proposal
 
 1. If it is a path to an existing file, use it directly.
-2. If it is a name (no path separator), look for `spec/proposals/*-<name>.md`.
-3. If it is empty, list `spec/proposals/` and ask the user which proposal to use.
+2. If it is a name (no path separator), look for `spec/proposals/drafts/*-<name>.md`, then `spec/proposals/*-<name>.md`.
+3. If it is empty, list `spec/proposals/drafts/` and `spec/proposals/` and ask the user which proposal to use.
 
 Read the proposal fully before proceeding.
 
