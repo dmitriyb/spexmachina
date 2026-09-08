@@ -125,7 +125,7 @@ bin/spex hash-id --module widgets --type api --name "widgetctl list"
 
 Valid `--type` values: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module`. `--module` is required for everything except a project requirement and a module. Anything else exits 1.
 
-**Never recompute an existing project requirement id.** Fifteen of this project's eighteen project requirements carry hashes that predate the convention and `hash-id` cannot reproduce them. Project-level requirement ids are exempt from the derivation check for exactly that reason. If a proposal refers to one, copy the id out of `project.json`.
+**Never recompute an existing project requirement id.** Most of this project's project requirements carry hashes that predate the convention and `hash-id` cannot reproduce them. Project-level requirement ids are exempt from the derivation check for exactly that reason. If a proposal refers to one, copy the id out of `project.json`.
 
 ### 5.4 Cross-references are hash links
 

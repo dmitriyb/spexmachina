@@ -103,7 +103,7 @@ All JSON output must conform to `schema/project.schema.json` and `schema/module.
 
 An `api` is one entry point exactly as callers write it: `spex diff`, `GET /v1/specs/{id}`, `schema.IdentityHash`. **Never a signature.**
 
-**The external surface is fully declared: 9 of the 11 modules carry an `apis` array, 15 api names in total, covering every CLI subcommand** (`schema` and `adapters` own no entry point and correctly declare none). Before adding an api, check it does not already exist in another module — names are globally unique and the identity belongs to the module owning the entry point. The block below is a quotation of `spec/merkle/module.json`, declaring `spex diff` whose component is `DiffCommand` (`c8b958ec310d`):
+**The external surface is fully declared: every module that owns an entry point carries an `apis` array, and together they cover every CLI subcommand** (`schema`, `adapters` and `delivery` own no entry point and correctly declare none). Before adding an api, check it does not already exist in another module — names are globally unique and the identity belongs to the module owning the entry point. The block below is a quotation of `spec/merkle/module.json`, declaring `spex diff` whose component is `DiffCommand` (`c8b958ec310d`):
 
 ```json
 "apis": [
@@ -174,7 +174,7 @@ cannot be recovered from its hash after removal
 This covers module requirements, components, data_flows, test_sections and apis. Project-level **requirement** ids are the sole exemption, for the reason immediately below. Module ids in `project.json` are not checked, but do derive them anyway.
 
 > **Legacy project requirement hashes — never recompute them.**
-> 15 of the 18 requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every task already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<name>"`.
+> Most of the requirements in `spec/project.json` predate the identity-hash convention and carry ids `bin/spex hash-id` cannot reproduce (`Render spec` declares `6b00623735ac` where the computed hash is `060ca1db054d`). They are **exempt, not correct**. Recomputing one rewrites the snapshot and orphans every task-journal event keyed off it, and destroys the lineage of every task already filed against it. When you touch an existing project requirement, **keep its `id` byte-for-byte** and change only the fields the proposal asks for. Only a genuinely new project requirement gets `bin/spex hash-id --type requirement --name "<name>"`.
 
 Changing a node's `name` changes its identity hash — the pipeline treats it as delete + create. Rename with care, and remember the id must be regenerated to match the new name.
 
