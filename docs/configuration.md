@@ -74,6 +74,14 @@ Required: `id`, `type`, `name`.
 | `description` | string | The requirement itself, in full |
 | `priority` | integer 0–4 | Optional; validated when present |
 | `depends_on` | array of identity hashes | `depends_on` edges to other requirements |
+| `derivation` | `"pending"` | Optional; declares a requirement not yet derived into any module — see below |
+
+**Bootstrapping.** `validate` requires every project requirement to be derived
+into at least one module requirement. A requirement written before its module
+exists declares `"derivation": "pending"`: the coverage check then reports it
+as a disclosure note instead of an error, and the gate stays green. Remove the
+field once a module requirement carries its `preq_id`. Module requirements
+have no such escape — the requirement-to-component link admits no exemption.
 
 ### Modules
 

@@ -250,3 +250,42 @@ write `spec/`; one that finds a spec defect files a drift report under
 `drifts/` instead, which `/drift` later triages. The baseline in
 `.spex/snapshot.json` moves only deliberately, and every refresh states its
 reason.
+
+## Terms
+
+- **Impact level** — the grade `spex diff` prints in its third column and
+  totals under `by_impact`. Each changed leaf is graded by its node type
+  through the profile's `impact_levels` map, on the ordered scale
+  `impl_only < contract < arch_impl < structural`
+  (`merkle/impact_classifier.go`); a module's aggregate impact is the maximum
+  over its leaves. Under the default profile a test section is `impl_only`, a
+  data flow or api `contract`, a component `arch_impl`, a requirement
+  `structural`.
+- **Profile** — `schema/defaultProfile.json`, overridden by `spec/profile.json`
+  when present. It declares the node types and their fields, the coverage
+  chains `validate` enforces, the plan-relevant types (the ones that produce
+  tasks), the impact level per type, and the absorbable set. `spex` reads the
+  vocabulary from the profile rather than compiling it in.
+- **eid** — the key of a journal event: `<git_head>:<op_id>` for an event a
+  mint produced from an op, `<git_head>:<stem>` for a proposal's `registered`
+  event, `refresh:<node>:<before>:<after>` for one produced without an op. A
+  tracker label `spex:<eid>` may carry it, but the journal is the identity.
+- **Mint, refresh, absorb** — the three ways a spec change reaches the
+  baseline. A *mint* runs the full pipeline and births tasks. A *refresh*
+  (`spex ingest --mode refresh`) moves the snapshot with no task work, because
+  the correction owes none. An *absorb* marks individual nodes inside a mint
+  as cosmetic (`spex plan --absorb`, marks kept in `.spex/runs/absorb.json`),
+  so they ride in the changeset's `absorbed` array and yield no operation. The
+  decision is made per node in `/mint`, never automatically.
+- **`meta/<hash>` leaves** — synthetic merkle leaves hashing a whole
+  `module.json` envelope (`meta/project` for `project.json`), so an edit that
+  touches no content leaf still surfaces in the diff. They produce no task.
+- **The two gates** — `spex validate` (snapshot-free and corpus-local: schema,
+  references, DAG, coverage) and `spex diff` (history-relative: the
+  removed-name and incompleteness checks that need the classified changes).
+  They do not overlap, and a spec can pass one while failing the other, so the
+  authoring loop runs both.
+- **faber and portitor** — separate, optional repositories. faber orchestrates
+  autonomous implement, review and fix sessions against the tasks spex minted;
+  portitor is the git gateway that verifies what those sessions push and
+  structurally denies them writes to `spec/`. spex itself needs neither.
