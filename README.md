@@ -37,6 +37,8 @@ spec change → validate → diff → plan → adapter → ingest
 
 Everything is pipeable, exits with documented codes, and lives in files committed to git. See [`docs/architecture.md`](docs/architecture.md).
 
+[OpenSpec](https://github.com/Fission-AI/OpenSpec) makes the same bet on spec-driven work and trusts the model with the mechanical half. spex makes that half a program: what changed, what it invalidates and which tasks that means are computed, never judged.
+
 ## Install
 
 Download the install script, verify it, then run it. Never `curl | sh`: a piped script cannot verify itself before it runs. Details, other shells and the trust model are in [`docs/install.md`](docs/install.md).
@@ -81,22 +83,6 @@ spex map context <node-id>                           # the spec behind one task,
 ```
 
 That is one full cycle: validate, find what changed, decide which tasks it creates, closes and retargets, let an adapter apply them, then record the result and move the baseline. Every flag and exit code is in [`docs/commands.md`](docs/commands.md).
-
-## How it compares
-
-Against [OpenSpec](https://github.com/Fission-AI/OpenSpec) v1.11.0, from a source-level read on 2026-08-31.
-
-| | OpenSpec | Spex Machina |
-|---|---|---|
-| Spec representation | Markdown of record, shallow model re-parsed on every read | Typed graph: JSON skeleton plus markdown leaves, schema-validated |
-| Change detection | None; a change folder's presence is the state | Merkle tree; `spex diff` derives the change from state |
-| Baseline | No persisted baseline, no drift concept | `.spex/snapshot.json`, moved only deliberately; drift-report doctrine |
-| Impact | LLM judgement from delta prose | Deterministic `diff → plan` changeset, graded by impact level |
-| Task linkage | `tasks.md` checkboxes; warns, never blocks | Changeset, receipts and journal reconciled by `spex ingest` |
-| Determinism boundary | Deterministic merge exists, but the default workflow routes the LLM around it | The LLM is excluded from the mechanical path entirely |
-| Integrations | 30+ assistants from one prose body | Claude Code skills plus an adapter contract |
-
-Same thesis, opposite trust model. OpenSpec is ahead on ergonomics and assistant coverage; spex's bet is that the mechanical half must be a program.
 
 ## Learn more
 
