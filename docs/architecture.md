@@ -138,18 +138,23 @@ topologically orders them, assigns idempotency labels, resolves references,
 and composes the changeset. Three action types
 (`plan/action_classifier.go`):
 
-- **create** — this node needs work that does not exist yet. When it replaces
-  a task being obsoleted, the action carries `OldTaskID`, which is what
-  preserves the chain across a rename.
-- **obsolete** — the task must go: its node left the spec, or the node
-  changed and its task is closed (or its status unknown), or a test section
-  folded back to a single component. It reaches the adapter as a `close` op,
-  never an op named "obsolete".
+- **create** — this node needs work that does not exist yet: an added or
+  modified node with no pairing in the journal, or one whose earlier task is
+  absent from the task-state artifact (finished). The create is plain — no
+  close against the predecessor, no old task id carried, no lineage
+  dependency minted; the journal's event chain is the generation history,
+  and `spex map context` surfaces it. A removed node whose task is absent
+  also creates: a *cleanup* task, to have the shipped code deleted.
+- **close** — live work must stop: the node left the spec while its task was
+  still open, or a test section folded back to describing a single
+  component while its task was open.
 - **retarget** — the node changed and its task is still open, so the task's
-  target moves rather than being closed and recreated. A node whose task is
-  `in_progress` refuses the run instead: a claimed task's target never moves
-  under the implementer holding it. A closed task is not retargeted either —
-  it takes obsolete+create, like an unknown status.
+  target moves rather than being closed and recreated.
+
+A task that is `in_progress` fits none of these: the run refuses instead,
+naming every claimed task at once, because a claimed task's target never
+moves under the implementer holding it. There is no obsolete action and no
+obsolete+create path; closing is reserved for live work.
 
 Pass `--tasks <file>` (the version-1 task-state artifact the adapter's
 export half derives from the tracker, listing in-flight tasks only) so live
@@ -157,10 +162,10 @@ task status participates in the classification. The flag is required: a run
 without a task-state artifact is exit 1, not a run with an empty one, since
 an absent artifact would read every task as finished and re-create
 in-flight work. An empty artifact is the explicit nothing-in-flight case:
-no pairing is known-open and the cleanup gate defaults closed — nothing is
-retargeted, no cleanup task is minted for a removed node, and a matched
-modified node takes the obsolete+create path unless the journal already
-records that new hash or it is a test section folding back.
+every pairing reads as finished, so nothing is retargeted or closed, a
+changed node takes a plain create unless the journal already records its
+new hash or it is a test section folding back, and a removed node gets a
+cleanup task.
 
 The output is `changeset.json` (v4) — an ordered, tool-agnostic list of
 operations drawn from a `create` / `close` / `retarget` vocabulary, with
