@@ -73,13 +73,18 @@ if ! CGO_ENABLED=0 go build -o "$SPEX_BIN" "$REPO_ROOT/cmd/spex" 2>"$BUILD_DIR/b
 fi
 
 # ---- Real-binary fixtures ---------------------------------------------------
-# Each fixture starts from a copy of this repo's own spec/, which `spex
-# validate`/`spex diff` already report clean against — self-hosting means we
-# never need a synthetic spec graph to exercise the gate's real contract.
+# Each fixture starts from a copy of this repo's own spec/ and its committed
+# state directory, which `spex validate`/`spex diff` already report clean
+# against — self-hosting means we never need a synthetic spec graph to
+# exercise the gate's real contract. The snapshot and journal are copied,
+# not `spex init`-seeded: a seeded empty tree would report the whole spec as
+# added and never exercise the completeness pass against a real baseline.
 
 new_fixture() {
     local dir; dir=$(mktemp -d)
     cp -r "$REPO_ROOT/spec" "$dir/spec"
+    mkdir -p "$dir/.spex"
+    cp "$REPO_ROOT/.spex/snapshot.json" "$REPO_ROOT/.spex/history.jsonl" "$dir/.spex/"
     echo "$dir/spec"
 }
 
@@ -99,7 +104,7 @@ fx_diff_build_failure=$(new_fixture)
 # A corrupted snapshot fails only the completeness pass: validate never reads
 # it, so the structural pass stays green and the gate's diff branch is
 # reached and must report the failure distinctly (not as a JSON parse error).
-echo '{not valid json' > "$fx_diff_build_failure/.snapshot.json"
+echo '{not valid json' > "$(dirname "$fx_diff_build_failure")/.spex/snapshot.json"
 
 fx_structural_failure=$(new_fixture)
 # A well-formed but uncovered requirement fails only the structural pass
@@ -108,7 +113,7 @@ jq '.components[0].implements = []' \
     "$fx_structural_failure/delivery/module.json" > "$fx_structural_failure/delivery/module.json.tmp"
 mv "$fx_structural_failure/delivery/module.json.tmp" "$fx_structural_failure/delivery/module.json"
 
-trap 'rm -rf "$BUILD_DIR" "$fx_clean" "$fx_completeness" "$fx_diff_build_failure" "$fx_structural_failure"' EXIT
+trap 'rm -rf "$BUILD_DIR" "$(dirname "$fx_clean")" "$(dirname "$fx_completeness")" "$(dirname "$fx_diff_build_failure")" "$(dirname "$fx_structural_failure")"' EXIT
 
 assert_case "clean tree: gate is green" \
     "$SPEX_BIN" "$fx_clean" 0 "completeness pass clean"
