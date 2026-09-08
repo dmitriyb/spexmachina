@@ -52,10 +52,11 @@ Rebuilds the merkle tree and compares it against the snapshot.
 | Flag | Default | Purpose |
 |---|---|---|
 | `--json` | off | Emit JSON instead of the human summary |
-| `--snapshot <path>` | `<spec-dir>/.snapshot.json` | Snapshot to compare against |
+| `--snapshot <path>` | `.spex/snapshot.json`, as resolved by the pre-flight | Snapshot to compare against |
 
-A missing snapshot is treated as the empty tree — the first diff on a fresh
-project reports the whole spec as added.
+`spex init` seeds the snapshot with the empty tree, so the first diff on a
+fresh project reports the whole spec as added. A missing snapshot is exit 3,
+not an empty tree.
 
 ```sh
 spex diff                 # human summary
@@ -109,7 +110,7 @@ spex diff --json | spex plan --proposal 2026-08-13-plan-module \
 ### `spex ingest`
 
 Reconciles a changeset with the receipts an adapter wrote, appends the
-resulting events to `spec/.history.jsonl`, and writes `spec/.snapshot.json`.
+resulting events to `.spex/history.jsonl`, and writes `.spex/snapshot.json`.
 Ingest is the only writer of the baseline.
 
 | Flag | Default | Purpose |

@@ -25,12 +25,13 @@ A spec directory is a JSON skeleton with markdown content leaves:
 ```
 spec/
 ├── project.json          project requirements + module declarations
-├── .snapshot.json        the merkle baseline (what was last ingested)
-├── .history.jsonl        the task journal (append-only)
 ├── proposals/            why each change was made
 └── <module>/
     ├── module.json       module requirements, components, flows, tests, apis
     └── *.md              the content leaves
+.spex/
+├── snapshot.json         the merkle baseline (what was last ingested)
+└── history.jsonl         the task journal (append-only)
 ```
 
 The JSON carries structure and identity; the markdown carries prose. Six node
@@ -88,7 +89,7 @@ change with task consequences, not a cosmetic edit.
 
 There is no `spex hash` subcommand. The tree is built on demand inside
 `spex diff` (read side) and persisted by `spex ingest` (write side). The only
-durable artifact is `spec/.snapshot.json`.
+durable artifact is `.spex/snapshot.json`.
 
 ## The pipeline
 
@@ -108,7 +109,7 @@ under `validator/`.
 
 ### diff
 
-Rebuilds the merkle tree and compares it against `spec/.snapshot.json`,
+Rebuilds the merkle tree and compares it against `.spex/snapshot.json`,
 producing a flat list of changes, each one of three types
 (`merkle/diff_engine.go`):
 
@@ -116,9 +117,11 @@ producing a flat list of changes, each one of three types
 - **Removed** — present in the snapshot, absent now (no new hash)
 - **Modified** — present in both, different hash
 
-A missing snapshot is treated as the empty tree, so the first diff on a fresh
-project reports the whole spec as added. That is the bootstrap cycle: it
-produces the initial journal and the initial snapshot together.
+`spex init` seeds the snapshot with the empty tree, so the first diff on a
+fresh project reports the whole spec as added. That is the bootstrap cycle: it
+produces the initial journal and the initial snapshot together. A missing
+snapshot is not an empty one: the pre-flight refuses with exit 3 and names
+`spex init` or `spex doctor` (see [`commands.md`](commands.md)).
 
 `diff` also runs the removed-name check (`validator.CheckRemovedNames`), which
 belongs here rather than in `validate` because it needs the classified changes
@@ -179,8 +182,8 @@ changeset, applies it to whatever tracker you actually use, and writes
 ### ingest
 
 Reads the changeset and the receipts together, reconciles them (op IDs must
-line up), appends one event per operation to `spec/.history.jsonl`, and writes
-the new `spec/.snapshot.json`. Ingest is the only writer of the baseline.
+line up), appends one event per operation to `.spex/history.jsonl`, and writes
+the new `.spex/snapshot.json`. Ingest is the only writer of the baseline.
 
 `--mode refresh` handles the other case: spec drift that owes no task work —
 a wording correction, a clarification. It takes an empty changeset and empty
@@ -192,7 +195,7 @@ whose task is still open is refused regardless of type.
 
 ## The journal
 
-`spec/.history.jsonl` is append-only, one JSON object per line, schema in
+`.spex/history.jsonl` is append-only, one JSON object per line, schema in
 `schema/journal-line.schema.json`. It is the link between spec nodes and tracker
 tasks, and it is deliberately a log rather than a table: folding it forward
 gives the current mapping, while reading it whole gives the biography of a
@@ -240,5 +243,5 @@ The spec is the truth, and it changes only in the authoring loop — the skills
 described in [`skills.md`](skills.md). Automated implementer contexts never
 write `spec/`; one that finds a spec defect files a drift report under
 `drifts/` instead, which `/drift` later triages. The baseline in
-`spec/.snapshot.json` moves only deliberately, and every refresh states its
+`.spex/snapshot.json` moves only deliberately, and every refresh states its
 reason.

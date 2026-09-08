@@ -14,17 +14,18 @@ what the fields mean and why they are shaped that way.
 ```
 spec/
 ├── project.json          required — the root
-├── .snapshot.json        generated — the merkle baseline, written by ingest
-├── .history.jsonl        generated — the task journal, appended by ingest
 ├── proposals/            why each change was made
 └── <module>/
     ├── module.json       one per declared module
     └── *.md              content leaves referenced by `content` fields
+.spex/
+├── snapshot.json         generated — the merkle baseline, written by ingest
+└── history.jsonl         generated — the task journal, appended by ingest
 ```
 
 Only `project.json` and the module directories it declares are authored by
-hand. The two dotfiles are written by `spex ingest` and should never be edited
-directly — see [`architecture.md`](architecture.md).
+hand. The two files under `.spex/` are created by `spex init`, written by
+`spex ingest`, committed to git, and never edited directly — see [`architecture.md`](architecture.md).
 
 ## Identity hashes
 
@@ -188,11 +189,11 @@ See [`commands.md`](commands.md).
 
 ## Generated files
 
-`spec/.snapshot.json` is the merkle baseline: the tree as of the last ingest.
+`.spex/snapshot.json` is the merkle baseline: the tree as of the last ingest.
 It moves only when `spex ingest` writes it, and moving it is a deliberate act
 — see the drift and baseline discussion in [`skills.md`](skills.md).
 
-`spec/.history.jsonl` is the task journal: append-only, one JSON object per
+`.spex/history.jsonl` is the task journal: append-only, one JSON object per
 line, schema in `schema/journal-line.schema.json`. Fold it forward for the current
 node-to-task mapping; read it whole for the biography of a node that has since
 been removed. `spex map` queries it.
