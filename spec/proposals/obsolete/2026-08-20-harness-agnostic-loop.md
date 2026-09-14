@@ -1,5 +1,14 @@
 # Change Proposal: Harness-agnostic loop
 
+**Status:** declined as worded, never registered. Its observation stands — the loop's
+contract lives in `skills/`, which no released artifact carries — but its remedy, embedding
+the loop's prose in the binary behind a `spex guide` api, would duplicate the skill set
+that `2026-09-14-authoring-commands` reduces to short loops around commands, and would
+freeze structure that proposal exists to remove. The one gap it found that no component
+enforces, the drift report's shape, moved to `2026-08-20-spex-check` as `DriftReportChecker`.
+Shipping the generalized skill set with the release is a later, smaller proposal. Kept for
+the record; nothing in the spec or the journal references this draft.
+
 ## Context
 
 The authoring loop is four skills — `/propose`, `/spec`, `/spec-review`, `/drift-fix` — and each exists as one `SKILL.md` under `skills/`, in Claude Code's skill format. `docs/skills.md` opens by saying so: "four Claude Code skills under `skills/` drive it."
