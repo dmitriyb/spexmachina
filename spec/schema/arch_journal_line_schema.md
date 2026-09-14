@@ -39,7 +39,8 @@ Defines the JSON Schema for one journal line, covering:
   journal-line [[b1baa51bd7a9|format version]], metadata outside any hashed payload: absent
   means version 1, so no existing line changes meaning; a writer stamps the current version, 1;
   and the schema pins no upper bound, because the journal is append-only and permanent, so
-  readers accept every version from 1 forward, forever.
+  readers accept every version from 1 forward, forever. The journal-line version moves on its own
+  clock: the profile format's move to version 2 stamps no different `v` and changes no line.
 
 ## Design Notes
 

@@ -69,6 +69,18 @@ These scenarios cover profile resolution and the composition acceptance criterio
 **Expected:** Resolution succeeds and the composed component definition carries an `audits` array-of-identity-hash property beside the built-in fields.
 **Verifies:** The interim rule refusing a new edge kind sourced at a built-in type is retired: built-in types compose from field declarations through the same path declared types take, so there is no frame-fixed definition left for a new field to be unable to reach. The v1 scenario asserting that refusal is superseded by this one.
 
+### P7: A version 2 profile's conventions resolve, and a version 1 document gets the defaults
+
+**Given** two fixture specs, each valid: one with a `spec/profile.json` at `profile_version` 2 declaring the default types plus `content_prefix` `ep_` and `leaf_sections` `Contract`, `Errors` on a module-scoped content-bearing `endpoint` type; one with a `spec/profile.json` at `profile_version` 1 declaring the default types and neither key.
+**When** `spex validate` and then `spex profile show` are run over each.
+**Then** both validate runs exit 0. Over the first, `spex profile show` prints `ep_` and the two headings, in that order, on `endpoint`, and `arch_`, `flow_`, `test_` with the default headings on the built-in content-bearing types. Over the second it prints the same built-in conventions filled in — resolution supplies them for a version 1 document — and the document it prints, written back as `spec/profile.json`, resolves to an equal document on the next run.
+
+### P8: A profile outside the supported range, or carrying an unknown key, fails every command the same way
+
+**Given** two fixture specs, each otherwise valid: one whose `spec/profile.json` declares `profile_version` 3; one at version 2 carrying a `leaf_sections` on the built-in `api` type, which has no content leaf, and a top-level key the format does not declare.
+**When** `spex validate`, `spex diff`, `spex profile show` and `spex node add` are run over each.
+**Then** over the first, every command exits 1 with one message on stderr naming the file, version 3 and the supported range 1 to 2, and no other output. Over the second, every command exits 1 with one message naming the file and the defective declaration — the key on a type that carries no content leaf, or the undeclared key — and no conformance error follows it: decoding is strict, and a malformed profile fails once, early, from every surface alike.
+
 
 ## JournalLineSchema Scenarios
 
