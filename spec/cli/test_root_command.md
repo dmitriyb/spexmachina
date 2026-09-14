@@ -13,7 +13,7 @@ Integration and acceptance tests for the RootCommand component.
 
 **Given** the compiled `spex` binary with every subcommand registered.
 **Input**: `spex` (no args)
-**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, plan, map, register, log, template, version, render, ingest, upgrade, init, doctor), plus cobra's own `completion` and `help`.
+**Expected**: Exit 0. Stdout contains "Usage:" and lists all registered subcommands (hash-id, diff, validate, plan, map, register, log, template, version, render, ingest, upgrade, init, doctor, node, edge, leaf, profile, migrate), plus cobra's own `completion` and `help`.
 
 ### 2. --help flag prints help
 

@@ -167,6 +167,13 @@
       "name": "Project initialization and health",
       "description": "A spex project has a declared state directory holding what the tool writes, created by an explicit init command — never implicitly, and never as a side effect of a read command. Absence of that state is an error rather than a fallback, distinguishing a project that was never initialised from one that is broken. The project's condition is diagnosable without repair: a doctor command reports what is present, missing or unreadable and names the command that would fix each finding, but never mints or moves a baseline.",
       "priority": 1
+    },
+    {
+      "id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Author spec structure",
+      "description": "The structural half of writing a spec — declaring a node under the array its type owns, deriving its id, wiring a reference field, scaffolding a content leaf, renaming a node with every reference and link rewritten, migrating a document from an earlier format version — is performed by spex commands rather than by hand. Every command is a pure function of the resolved profile and names no node type, key, field or file prefix of its own; a refusal is the validator's own predicate applied before the file is touched, and every refusal names its fix; the leaves a change obliges are printed when the change is made. The commands write only under spec/, need no initialised project, and never make hand editing illegal: spex validate remains the trust boundary over whatever door a change came through.",
+      "priority": 1
     }
   ],
   "modules": [
@@ -277,6 +284,17 @@
       "name": "delivery",
       "path": "delivery",
       "description": "Tool delivery: trigger-tiered CI carrying the spec gate, a tag-driven release pipeline producing signed and attested cross-architecture binaries, a self-verifying release manifest, and the embedded self-update mechanism spex upgrade drives."
+    },
+    {
+      "id": "906398db4723",
+      "name": "author",
+      "path": "author",
+      "description": "The write path over the spec: node, edge, leaf, profile and migration commands that change spec/ and refuse with the validator's own predicate. The mirror of validator — it reads the resolved profile through schema, runs validator's checkers over the change before writing, and reports the obligations merkle's completeness rules attach to it.",
+      "requires_module": [
+        "f03774b40bd5",
+        "9ddd3d22e686",
+        "085966b6bfa1"
+      ]
     }
   ]
 }

@@ -1,0 +1,296 @@
+{
+  "name": "author",
+  "description": "The write path over the spec: node, edge, leaf, profile and migration commands that change spec/ and refuse with the validator's own predicate. The mirror of validator — it reads the resolved profile through schema, runs validator's checkers over the change before writing, and reports the obligations merkle's completeness rules attach to it.",
+  "requirements": [
+    {
+      "id": "fe62312f507b",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Add and remove nodes by profile",
+      "description": "spex node add declares a node of a profile-declared type: it places the node under the type's plural key in project.json or the module's module.json according to the type's scope, derives the id from the node's identity, requires every field the profile marks required, and for a content-bearing type sets content to the conventional path — the type's declared content prefix joined to a snake-case slug of the name — and scaffolds the leaf. --type module registers the module in project.json and creates its module.json skeleton. spex node remove deletes a node and reports every inbound reference that still names it, refusing while any remains unless --force is given, in which case the dangling references are listed so the operator can retarget them. Neither command names a node type, plural key, field or prefix of its own: each reads the resolved profile and refuses a type or field the profile does not declare, the refusal naming what the profile does declare, so a project whose profile declares other types gets the same commands with the same behaviour."
+    },
+    {
+      "id": "dfd7be4b1dd0",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Rename a node as one transaction",
+      "description": "spex node rename performs a rename as one transaction: it derives the new id from the new name, rewrites the node, every reference field entry naming the old id in every project.json and module.json, and every typed link naming the old id in every content leaf, and moves the content file to the new conventional path. It prints the retired name so the vocabulary sweep gets it. The renamed node reaches spex diff exactly as the identity contract says a rename does — one node removed and one added — with nothing dangling: spex validate is green afterwards."
+    },
+    {
+      "id": "2b6317fa1307",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Edit reference fields with graph checks",
+      "description": "spex edge add and spex edge remove edit one entry of one reference field — implements, uses, describes, preq_id, depends_on, provided_by, requires_module, or any reference field a profile declares — checking that the target node exists, that the profile permits the source type to carry that field and that target type, that a module-local field stays module-local, and that every cycle-checked field, uses and requires_module among them, stays acyclic after the edit. Adding an entry that already exists, or removing one that is absent, changes nothing and says so."
+    },
+    {
+      "id": "1631cb19fac3",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Scaffold content leaves",
+      "description": "spex leaf scaffold writes a content leaf skeleton for an existing content-bearing node: the title heading, the section headings the profile declares for that type under leaf_sections, and one placeholder line per declared edge the leaf owes a link for. It refuses to overwrite a non-empty leaf, and a second run over a leaf it already wrote changes nothing and says so. The headings come from the profile, never from the command: a type declaring no leaf_sections gets a title and its placeholder lines alone."
+    },
+    {
+      "id": "7f193910f7ef",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Show the resolved profile",
+      "description": "spex profile show prints the resolved profile as JSON — the built-in default, or spec/profile.json when the project commits one — after the same validation every other command applies to it, so a caller can read the declared types, their plural keys, fields, reference kinds and targets, the coverage chains, the plan-relevant list, the content prefixes and the leaf sections instead of memorising them. The printed document round-trips through profile resolution unchanged."
+    },
+    {
+      "id": "fae0f8a6db18",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Migrate a spec to the current format",
+      "description": "spex migrate rewrites a spec from an earlier format version to the current one and stamps spec_version in project.json: the title-to-name rename on every requirement at both scopes, and removal of every array the resolved profile does not declare, with each removed entry and its orphaned content file reported by path so a person folds the content into a leaf the profile knows. Re-running on a current spec changes nothing and says so. The command needs no initialised project, because a document is migrated and validated before it is ever initialised."
+    },
+    {
+      "id": "6ce5fdd9e930",
+      "preq_id": "e41a250c1b7a",
+      "type": "non_functional",
+      "name": "Refusals name the fix",
+      "description": "A refusal is the validator's own predicate: before writing, a command applies the change to an in-memory copy of the spec and runs the checkers the change can violate — schema conformance, id derivation and reference integrity, link resolution, acyclicity, name declarability through the same tokenization the validator applies — and emits the validator's error before any file is touched, never a re-implementation of the rule. A refusal is a finding the after-state carries and the before-state did not; a finding the input already carried is reported as an obligation, never a refusal, so a tree that fails validation can still be edited towards passing it. Where the validator would pass, the write proceeds; the commands add no rule the validator does not hold. Every refusal carries a fix — the command, flag or value that resolves it: an undeclared type lists the declared ones, a missing required field names it and its kind, a target that does not exist says which array was searched, a name the tokenizer would not reproduce shows the declarable form."
+    },
+    {
+      "id": "11f21556b421",
+      "preq_id": "e41a250c1b7a",
+      "type": "functional",
+      "name": "Report obligations before writing",
+      "description": "Every writing command ends by running the completeness rules over the before-and-after pair it just produced and prints the content leaves the change now obliges — a requirement description change obliging every implementing component's leaf, a module.json change obliging every component in the module unless a requirement in it also changed, a component edge change obliging its own leaf — as data under an obligations key, so the cost of a change is seen when it is incurred rather than discovered when spex diff runs at the end."
+    }
+  ],
+  "components": [
+    {
+      "id": "cb8ef2b70999",
+      "name": "NodeEditor",
+      "description": "Adds a node of any profile-declared type under its plural key, derives its id, requires the declared fields, sets the conventional content path and scaffolds the leaf; removes a node, refusing while inbound references remain unless forced. Registers a module in project.json for --type module.",
+      "content": "arch_node_editor.md",
+      "implements": [
+        "fe62312f507b"
+      ],
+      "uses": [
+        "b1a81efbd240",
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "14b673e2a502",
+      "name": "NodeRenamer",
+      "description": "Renames a node as one transaction: new id, rewritten node, every reference field entry and every typed link repointed, content file moved, retired name printed for the vocabulary sweep.",
+      "content": "arch_node_renamer.md",
+      "implements": [
+        "dfd7be4b1dd0"
+      ],
+      "uses": [
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "e26d5ac76610",
+      "name": "EdgeEditor",
+      "description": "Adds or removes one entry of one reference field, checking target existence, the profile's permission for the source type to carry that field and target type, module locality, and acyclicity of every cycle-checked field.",
+      "content": "arch_edge_editor.md",
+      "implements": [
+        "2b6317fa1307"
+      ],
+      "uses": [
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "b1a81efbd240",
+      "name": "LeafScaffolder",
+      "description": "Writes a content leaf skeleton for an existing node from the profile's declared leaf sections and the node's declared edges; refuses to overwrite a non-empty leaf.",
+      "content": "arch_leaf_scaffolder.md",
+      "implements": [
+        "1631cb19fac3"
+      ],
+      "uses": [
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "62468f3bab3c",
+      "name": "ProfileInspector",
+      "description": "Prints the resolved profile as JSON after validation — the one read surface of the module, through which a caller learns the types, fields, reference kinds, chains and conventions.",
+      "content": "arch_profile_inspector.md",
+      "implements": [
+        "7f193910f7ef"
+      ]
+    },
+    {
+      "id": "b9b80a158949",
+      "name": "Migrator",
+      "description": "Rewrites a spec from an earlier format version to the current one — the title-to-name rename, removal of undeclared arrays with each orphaned entry and file reported — and stamps spec_version; idempotent on a current spec.",
+      "content": "arch_migrator.md",
+      "implements": [
+        "fae0f8a6db18"
+      ],
+      "uses": [
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "b9e7b96f6aa7",
+      "name": "ObligationReporter",
+      "description": "The shared refusal-and-obligation stage every writing command passes through: runs the validator's checkers over the in-memory after-state and turns a failure into a refusal carrying its fix; runs the completeness rules over the before-and-after pair and prints the obliged leaves under an obligations key.",
+      "content": "arch_obligation_reporter.md",
+      "implements": [
+        "6ce5fdd9e930",
+        "11f21556b421"
+      ]
+    },
+    {
+      "id": "1f9fec7c42f6",
+      "name": "AuthorCommands",
+      "description": "CLI entry points for spex node add, spex node remove, spex node rename, spex edge add, spex edge remove, spex leaf scaffold, spex profile show and spex migrate. Reads flags into plain values and hands them to the workers; owns the exit codes.",
+      "content": "arch_author_commands.md",
+      "uses": [
+        "cb8ef2b70999",
+        "14b673e2a502",
+        "e26d5ac76610",
+        "b1a81efbd240",
+        "62468f3bab3c",
+        "b9b80a158949",
+        "b9e7b96f6aa7"
+      ]
+    }
+  ],
+  "data_flows": [
+    {
+      "id": "f72baab0289d",
+      "name": "Authoring flow",
+      "description": "Proposal to validated spec through the commands: profile shown, nodes declared, edges wired, leaves scaffolded, prose written by hand, every write refused or obliged before it lands, spex validate closing the loop.",
+      "content": "flow_authoring.md",
+      "uses": [
+        "1f9fec7c42f6",
+        "cb8ef2b70999",
+        "14b673e2a502",
+        "e26d5ac76610",
+        "b1a81efbd240",
+        "62468f3bab3c",
+        "b9b80a158949",
+        "b9e7b96f6aa7"
+      ]
+    }
+  ],
+  "test_sections": [
+    {
+      "id": "aa4656487ccd",
+      "name": "Node editing tests",
+      "content": "test_node_editing.md",
+      "describes": [
+        "cb8ef2b70999",
+        "14b673e2a502",
+        "e26d5ac76610"
+      ]
+    },
+    {
+      "id": "491f9099c1dc",
+      "name": "Leaf and profile tests",
+      "content": "test_leaf_and_profile.md",
+      "describes": [
+        "b1a81efbd240",
+        "62468f3bab3c"
+      ]
+    },
+    {
+      "id": "89c1779ef94c",
+      "name": "Migration tests",
+      "content": "test_migration.md",
+      "describes": [
+        "b9b80a158949"
+      ]
+    },
+    {
+      "id": "31212f1a9d20",
+      "name": "Obligation tests",
+      "content": "test_obligation.md",
+      "describes": [
+        "b9e7b96f6aa7"
+      ]
+    },
+    {
+      "id": "0555a6152590",
+      "name": "Author command tests",
+      "content": "test_author_commands.md",
+      "describes": [
+        "1f9fec7c42f6"
+      ]
+    }
+  ],
+  "apis": [
+    {
+      "id": "e4ce2bde9c43",
+      "name": "spex node add",
+      "description": "Declare a node of a profile-declared type by type, name and, for a module-scoped type, module, with one value per declared field; scaffolds the leaf of a content-bearing type. --type module registers a module.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "d0f7520b4171",
+      "name": "spex node remove",
+      "description": "Remove a node by id; refuses while inbound references remain unless --force, which lists the dangling references instead.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "1035b507e2d9",
+      "name": "spex node rename",
+      "description": "Rename a node by id to a new name as one transaction: new id, every reference and link rewritten, content file moved, retired name printed.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "b0aa34fa5593",
+      "name": "spex edge add",
+      "description": "Add one entry to one reference field of one node: source id, field name, target id; profile-checked and cycle-checked before writing.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "b2f2dd8e0dfc",
+      "name": "spex edge remove",
+      "description": "Remove one entry from one reference field of one node: source id, field name, target id; a no-op on an absent entry.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "eecc2fb02918",
+      "name": "spex leaf scaffold",
+      "description": "Write the content leaf skeleton of an existing node by id; refuses a non-empty leaf.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "574e8085f3c9",
+      "name": "spex profile show",
+      "description": "Print the resolved profile as JSON after validation.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    },
+    {
+      "id": "e205f67eb446",
+      "name": "spex migrate",
+      "description": "Rewrite a spec from an earlier format version to the current one and stamp spec_version; reports each removed entry and orphaned file by path.",
+      "provided_by": [
+        "1f9fec7c42f6"
+      ],
+      "group": "cli"
+    }
+  ]
+}
