@@ -1,0 +1,69 @@
+// Package author is the write path over the spec: the eight `spex node`,
+// `spex edge`, `spex leaf`, `spex profile` and `spex migrate` surfaces that
+// change spec/ and refuse with the validator's own predicate rather than a
+// rule of their own. See spec/author/flow_authoring.md and
+// spec/author/module.json (data_flow node f72baab0289d).
+//
+// # Position in the authoring loop
+//
+// An authoring skill reads a proposal, runs `spex profile show` to learn
+// the project's declared types without ever naming one in the skill
+// itself, then drives the tree towards the proposal's impact table one
+// command at a time: `spex node add`/`remove`/`rename` to declare or
+// retire nodes, `spex edge add`/`remove` to wire reference fields,
+// `spex leaf scaffold` to lay down a content leaf's skeleton, and
+// `spex migrate` once, first, for a spec born under an earlier format.
+// Every write among those five surfaces passes through the same stage
+// before it reaches disk: apply the change to an in-memory copy, run the
+// validator's checkers over it, and either refuse — the validator's own
+// entry, each one carrying the fix that resolves it — or accept and print
+// what the change now obliges. `spex profile show` is the one surface with
+// no write and no obligations; it prints the resolved profile and nothing
+// else.
+//
+// # Flow
+//
+//  1. AuthorCommands reads flags into the input shapes this package
+//     declares (NodeAddInput, NodeRemoveInput, RenameInput, EdgeInput,
+//     ScaffoldInput) and hands them to the matching worker: NodeEditor,
+//     NodeRenamer, EdgeEditor or LeafScaffolder. Migrator and
+//     ProfileInspector take no input beyond the spec directory itself.
+//  2. The worker decides everything structural the caller did not name —
+//     array, id, content path — from the resolved profile and the identity
+//     contract, and applies the change to an in-memory copy of the spec.
+//  3. ObligationReporter runs the validator's checkers over that copy: a
+//     finding present in the after-state and absent from the before-state
+//     is a refusal, reported as a RefusalEntry with the fix that resolves
+//     it; a finding the before-state already carried travels instead as an
+//     obligation, using the completeness checker's own entry type
+//     (merkle.DiffError), never a re-implementation of either rule.
+//  4. On refusal, nothing is written and AuthorCommands exits 2 with the
+//     refusal document on stdout. On acceptance, the worker writes its
+//     after-state to disk and AuthorCommands prints a WriteReport — what
+//     was written, the obligations, and for a rename the retired name —
+//     and exits 0.
+//
+// # What is deferred
+//
+// This bead (spexmachina-yih0.1) scaffolds the cross-component wire
+// surface only — the shapes AuthorCommands, NodeEditor, NodeRenamer,
+// EdgeEditor, LeafScaffolder and ObligationReporter all build against, so
+// that whichever of their beads lands first does not invent it. Component
+// work is deferred to the beads that list this one as a blocker:
+// ProfileLoader/SchemaLoader (spexmachina-yih0.2/.3), ProfileInspector
+// (.4), RootCommand (.5), ObligationReporter (.6), NodeRenamer (.7),
+// LeafScaffolder (.8), Migrator (.9), NodeEditor (.10), EdgeEditor (.11)
+// and AuthorCommands (.12).
+//
+// TODO(bead:spexmachina-yih0.6): ObligationReporter's own arch leaf notes
+// that "the checkers run over an in-memory tree rather than a directory,
+// which is the one thing the validator's interface had to admit for this
+// module to exist" — the shape of that in-memory tree, and the validator
+// package change it implies, is that bead's design, not scaffolded here.
+//
+// TODO(bead:spexmachina-yih0.12): the refusal document's top-level JSON
+// envelope around []RefusalEntry is AuthorCommands' own call — the flow
+// and test leaves specify the entry shape (RefusalEntry) and the write
+// report's envelope (WriteReport) but not a wrapper for a bare refusal
+// list, so none is scaffolded here.
+package author
