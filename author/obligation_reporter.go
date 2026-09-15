@@ -181,6 +181,7 @@ var (
 	idDerivationHashRe  = regexp.MustCompile(`its identity hash is ([0-9a-f]+);`)
 	dagCycleRe          = regexp.MustCompile(`cycle: (.+)$`)
 	missingRequiredRe   = regexp.MustCompile(`missing required propert(?:y|ies) (.+)$`)
+	requiredFieldNameRe = regexp.MustCompile(`'([^']*)'`)
 	additionalPropsRe   = regexp.MustCompile(`^additional propert(?:y|ies) .+ not allowed$`)
 	referencesMissingRe = regexp.MustCompile(`^(\w+) references non-existent (.+) ([0-9a-f]{12})\b`)
 )
@@ -225,7 +226,7 @@ func computeFix(e validator.ValidationError, before fs.FS, profile *schema.Profi
 		return fmt.Sprintf("point the link at an existing node's identity hash, or add the node first: %s", e.Message)
 	case "schema":
 		if m := missingRequiredRe.FindStringSubmatch(e.Message); m != nil {
-			return fmt.Sprintf("set the required field(s) %s", m[1])
+			return missingRequiredFix(m[1], e.Path, profile)
 		}
 		if additionalPropsRe.MatchString(e.Message) {
 			if nt, ok := nodeTypeForPath(e.Path, profile); ok {
@@ -280,6 +281,16 @@ func referenceTargetFix(e validator.ValidationError, before fs.FS, profile *sche
 		}
 		permits = edge.To
 		for _, target := range edge.To {
+			// "module" is the frame's fixed interior-node concept, never a
+			// profile-declared NodeType (schema.Profile.Validate rejects a
+			// type named "module"), so the loop over profile.NodeTypes below
+			// never finds it. requires_module is the one edge kind that
+			// targets it, and the array it searches is fixed too:
+			// project.json's own "modules" key.
+			if target == "module" {
+				locations = append(locations, "project.json:/modules")
+				continue
+			}
 			for _, nt := range profile.NodeTypes {
 				if nt.Name != target {
 					continue
@@ -292,8 +303,12 @@ func referenceTargetFix(e validator.ValidationError, before fs.FS, profile *sche
 			}
 		}
 	}
-	return fmt.Sprintf("no %s %s found; %s may target %s, searched %s",
-		typeLabel, targetID, edgeKind, strings.Join(permits, "/"), strings.Join(locations, ", "))
+	fix := fmt.Sprintf("no %s %s found; %s may target %s",
+		typeLabel, targetID, edgeKind, strings.Join(permits, "/"))
+	if len(locations) > 0 {
+		fix += ", searched " + strings.Join(locations, ", ")
+	}
+	return fix
 }
 
 // nodeTypeForPath resolves a schema-checker path (e.g.
@@ -325,6 +340,68 @@ func nodeTypeForPath(errPath string, profile *schema.Profile) (schema.NodeType, 
 		}
 	}
 	return schema.NodeType{}, false
+}
+
+// missingRequiredFix is computeFix's row for a schema "missing required
+// property" violation: arch_obligation_reporter.md's fix table says the
+// carried fix is "the field's name and kind", so each field the message
+// lists is paired with fieldKindLabel's description of it — an
+// enum-constrained field like requirement's "type" names the legal values,
+// not just that a value is owed.
+func missingRequiredFix(fieldList, errPath string, profile *schema.Profile) string {
+	nt, _ := nodeTypeForPath(errPath, profile)
+	matches := requiredFieldNameRe.FindAllStringSubmatch(fieldList, -1)
+	parts := make([]string, 0, len(matches))
+	for _, m := range matches {
+		name := m[1]
+		if kind := fieldKindLabel(name, nt); kind != "" {
+			parts = append(parts, fmt.Sprintf("%s (%s)", name, kind))
+		} else {
+			parts = append(parts, name)
+		}
+	}
+	return fmt.Sprintf("set the required field(s): %s", strings.Join(parts, ", "))
+}
+
+// fieldKindLabel names the kind of a required field by its declared name:
+// id, name and content are the fixed envelope, whose kind never depends on
+// the profile; every other name is looked up on nt (the type
+// nodeTypeForPath resolved the violation's path to) so its declared kind —
+// text, with the enum it may carry; integer, with its bounds; or reference,
+// with its permitted targets — comes from the profile, never a table keyed
+// by field name. Returns "" when nt is the zero value (a root-level
+// violation names no single type) or the field is not declared on it.
+func fieldKindLabel(name string, nt schema.NodeType) string {
+	switch name {
+	case "id":
+		return "text, a 12-character identity hash"
+	case "name":
+		return "text"
+	case "content":
+		return "text, a relative path to the content leaf"
+	}
+	for _, f := range nt.Fields {
+		if f.Name != name {
+			continue
+		}
+		switch f.Kind {
+		case schema.FieldKindText:
+			if len(f.Enum) > 0 {
+				return fmt.Sprintf("text, one of: %s", strings.Join(f.Enum, ", "))
+			}
+			return "text"
+		case schema.FieldKindInteger:
+			if f.Minimum != nil && f.Maximum != nil {
+				return fmt.Sprintf("integer, %d-%d", *f.Minimum, *f.Maximum)
+			}
+			return "integer"
+		case schema.FieldKindReference:
+			return fmt.Sprintf("reference, targets: %s", strings.Join(f.Targets, ", "))
+		default:
+			return string(f.Kind)
+		}
+	}
+	return ""
 }
 
 // undeclaredTypeFix is computeFix's row for a schema "additional

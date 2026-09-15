@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 )
@@ -193,7 +194,7 @@ var envelopeFieldNames = map[string]bool{
 // early, naming the file and the defect, rather than surfacing downstream
 // as a cascade of schema-conformance errors.
 func ResolveProfile(specDir string) (*Profile, error) {
-	return ResolveProfileFS(os.DirFS(specDir))
+	return resolveProfile(os.DirFS(specDir), filepath.Join(specDir, "profile.json"))
 }
 
 // ResolveProfileFS is ResolveProfile's in-memory-tree counterpart: it reads
@@ -202,21 +203,30 @@ func ResolveProfile(specDir string) (*Profile, error) {
 // profile without materializing anything. The same absence-is-default,
 // decode-then-validate sequence applies either way.
 func ResolveProfileFS(fsys fs.FS) (*Profile, error) {
-	path := "profile.json"
-	data, err := fs.ReadFile(fsys, path)
+	return resolveProfile(fsys, "profile.json")
+}
+
+// resolveProfile is ResolveProfile and ResolveProfileFS's shared
+// implementation. displayPath is what every error message below names: the
+// full disk path ResolveProfile builds from the specDir its caller passed,
+// or the bare in-tree name ResolveProfileFS uses since an fs.FS carries no
+// disk path of its own to name. Reading itself always goes through fsys at
+// the fixed "profile.json" key — only the path an error prints differs.
+func resolveProfile(fsys fs.FS, displayPath string) (*Profile, error) {
+	data, err := fs.ReadFile(fsys, "profile.json")
 	if errors.Is(err, fs.ErrNotExist) {
 		return DefaultProfile(), nil
 	}
 	if err != nil {
-		return nil, fmt.Errorf("schema: resolve profile: read %s: %w", path, err)
+		return nil, fmt.Errorf("schema: resolve profile: read %s: %w", displayPath, err)
 	}
 
 	p, err := decodeProfile(data)
 	if err != nil {
-		return nil, fmt.Errorf("schema: resolve profile: parse %s: %w", path, err)
+		return nil, fmt.Errorf("schema: resolve profile: parse %s: %w", displayPath, err)
 	}
 	if err := p.Validate(); err != nil {
-		return nil, fmt.Errorf("schema: resolve profile: %s: %w", path, err)
+		return nil, fmt.Errorf("schema: resolve profile: %s: %w", displayPath, err)
 	}
 	p.finalize()
 	return p, nil

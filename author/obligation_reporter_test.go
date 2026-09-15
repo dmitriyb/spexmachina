@@ -835,6 +835,62 @@ func TestComputeFix_DisallowedField_ListsDeclaredFields(t *testing.T) {
 	}
 }
 
+// TestComputeFix_MissingRequiredField_NamesFieldAndKind covers "a required
+// field absent": the fix names the field's declared kind alongside its
+// name, not just the name — a text field constrained to an enum, as
+// requirement's "type" is, tells the agent which values are legal.
+func TestComputeFix_MissingRequiredField_NamesFieldAndKind(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("schema", "missing required property 'type'")
+	e.Path = "alpha/module.json:/requirements/0"
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	for _, want := range []string{"type", "functional", "non_functional"} {
+		if !bytes.Contains([]byte(got), []byte(want)) {
+			t.Fatalf("want the fix to name %q, got %q", want, got)
+		}
+	}
+}
+
+// TestComputeFix_ModuleReferenceTarget_NamesModulesArray covers
+// requires_module's target type, "module" — the frame's fixed interior-node
+// concept and never a profile-declared NodeType — which used to leave the
+// search-location clause empty and the fix's sentence dangling.
+func TestComputeFix_ModuleReferenceTarget_NamesModulesArray(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("id", "requires_module references non-existent module 000000000099")
+	e.Path = "project.json:/modules/000000000001"
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	if !bytes.Contains([]byte(got), []byte("project.json:/modules")) {
+		t.Fatalf("want the fix to name project.json's modules array, got %q", got)
+	}
+	if bytes.HasSuffix([]byte(got), []byte("searched ")) {
+		t.Fatalf("fix must not end mid-clause on a dangling 'searched ', got %q", got)
+	}
+}
+
+// TestComputeFix_ReferenceTargetFix_NoLocations_NoDanglingSearched guards
+// the empty-target-list case the review asked for: an edge kind the profile
+// does not declare (so no location is ever found to search) must not leave
+// a trailing "searched " with nothing after it.
+func TestComputeFix_ReferenceTargetFix_NoLocations_NoDanglingSearched(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("id", "fake_edge references non-existent widget 000000000099")
+	e.Path = "alpha/module.json:/components/" + f.comp1ID
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	if bytes.HasSuffix([]byte(got), []byte("searched ")) || bytes.HasSuffix([]byte(got), []byte("searched")) {
+		t.Fatalf("fix must not end with a dangling 'searched', got %q", got)
+	}
+}
+
 func validatorError(check, message string) validator.ValidationError {
 	return validator.ValidationError{Check: check, Message: message}
 }

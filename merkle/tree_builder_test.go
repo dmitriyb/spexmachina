@@ -531,10 +531,7 @@ func TestREQ2_BuildTree_MissingContentFile(t *testing.T) {
 	if !strings.Contains(err.Error(), ghostComp) {
 		t.Fatalf("error should mention spec key %s, got: %v", ghostComp, err)
 	}
-	// BuildTree reads through an fs.FS rooted at dir (BuildTreeFS's disk
-	// wrapper), so the file is named relative to that root, not as an
-	// absolute filesystem path.
-	wantPath := "bad/arch_ghost.md"
+	wantPath := filepath.Join(badDir, "arch_ghost.md")
 	if !strings.Contains(err.Error(), wantPath) {
 		t.Fatalf("error should mention missing content file path %s, got: %v", wantPath, err)
 	}
