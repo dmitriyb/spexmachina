@@ -55,11 +55,23 @@
 // LeafScaffolder (.8), Migrator (.9), NodeEditor (.10), EdgeEditor (.11)
 // and AuthorCommands (.12).
 //
-// TODO(bead:spexmachina-yih0.6): ObligationReporter's own arch leaf notes
-// that "the checkers run over an in-memory tree rather than a directory,
-// which is the one thing the validator's interface had to admit for this
-// module to exist" — the shape of that in-memory tree, and the validator
-// package change it implies, is that bead's design, not scaffolded here.
+// ObligationReporter (Report, in obligation_reporter.go) realises the
+// before/after pair as a pair of io/fs.FS values rather than a bespoke
+// in-memory struct: before is typically os.DirFS(specDir), the real spec
+// directory; after is typically a validator.MemFS, the worker's own
+// in-memory copy with the change already applied and never written to
+// disk. Every validator checker Report drives, and merkle.BuildTree and
+// merkle.CheckCompleteness beneath it, gained an *FS entry point
+// (schema.ResolveProfileFS, validator.CheckSchemaFS/CheckIDsFS/
+// CheckIDDerivationFS/CheckDAGFS/CheckLinksFS and the five non-refusal
+// checkers, merkle.BuildTreeFS, merkle.CheckCompletenessFS) that reads
+// fsys instead of a directory path; the existing directory-path functions
+// became thin os.DirFS wrappers around them, so every caller outside this
+// package keeps working unchanged. This is what lets a refusal cost one
+// validation pass over each state and no write, rather than a full on-disk
+// copy of spec/ plus a spec load per checker per state
+// (spec/author/arch_obligation_reporter.md, "Refusal is the validator's
+// predicate").
 //
 // TODO(bead:spexmachina-yih0.12): the refusal document's top-level JSON
 // envelope around []RefusalEntry is AuthorCommands' own call — the flow

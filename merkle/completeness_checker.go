@@ -2,7 +2,9 @@ package merkle
 
 import (
 	"fmt"
-	"path/filepath"
+	"io/fs"
+	"os"
+	"path"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -25,6 +27,14 @@ type DiffError struct {
 // meta-envelope sweep runs on the fixed "meta" node type under any profile.
 // Returns nil if all changes are complete.
 func CheckCompleteness(changes []ClassifiedChange, specDir string, profile *schema.Profile) []DiffError {
+	return CheckCompletenessFS(changes, os.DirFS(specDir), profile)
+}
+
+// CheckCompletenessFS is CheckCompleteness' in-memory-tree counterpart: it
+// reads the after-state via fsys rather than a directory on disk, so a
+// caller holding the after-state only in memory can check completeness
+// without ever writing it out.
+func CheckCompletenessFS(changes []ClassifiedChange, fsys fs.FS, profile *schema.Profile) []DiffError {
 	if len(changes) == 0 {
 		return nil
 	}
@@ -57,7 +67,7 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string, profile *sche
 		return nil
 	}
 
-	proj, err := readProject(specDir)
+	proj, err := readProject(fsys)
 	if err != nil {
 		return nil
 	}
@@ -83,7 +93,7 @@ func CheckCompleteness(changes []ClassifiedChange, specDir string, profile *sche
 		if !ok {
 			return nil
 		}
-		spec, err := readModuleSpec(filepath.Join(specDir, m.Path, "module.json"))
+		spec, err := readModuleSpec(fsys, path.Join(m.Path, "module.json"))
 		if err != nil {
 			return nil
 		}

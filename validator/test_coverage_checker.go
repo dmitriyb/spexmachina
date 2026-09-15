@@ -2,6 +2,8 @@ package validator
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 	"slices"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -17,12 +19,19 @@ import (
 // free for a profile to rename. A profile declaring no chain covering
 // test_section drops the check entirely.
 func CheckTestCoverage(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "test_coverage")
+	return CheckTestCoverageFS(os.DirFS(specDir))
+}
+
+// CheckTestCoverageFS is CheckTestCoverage's in-memory-tree counterpart: it
+// runs the same coverage check reading fsys rather than a directory on
+// disk.
+func CheckTestCoverageFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "test_coverage")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "test_coverage",
@@ -47,7 +56,7 @@ func CheckTestCoverage(specDir string) []ValidationError {
 
 	for _, modName := range modNames {
 		modPath := modulePathByName(project, modName)
-		result = append(result, detectUncoveredComponents(specDir, modPath, modName, modules[modName], profile, chain)...)
+		result = append(result, detectUncoveredComponents(fsys, modPath, modName, modules[modName], profile, chain)...)
 	}
 
 	return result
@@ -74,8 +83,8 @@ func testCoverageChain(profile *schema.Profile) (schema.CoverageChain, bool) {
 // pair, generically off the resolved covered NodeType's plural_key and the
 // chain's edge field otherwise, exactly as detectUncoveredRequirements reads
 // a profile-renamed coverage chain.
-func detectUncoveredComponents(specDir, modPath, modName string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) []ValidationError {
-	covered, err := coveredComponentEntries(specDir, modPath, mod, profile, chain)
+func detectUncoveredComponents(fsys fs.FS, modPath, modName string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) []ValidationError {
+	covered, err := coveredComponentEntries(fsys, modPath, mod, profile, chain)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "test_coverage",
@@ -85,7 +94,7 @@ func detectUncoveredComponents(specDir, modPath, modName string, mod *schema.Mod
 		}}
 	}
 
-	coveredIDs, err := testSectionEdgeTargets(specDir, modPath, mod, profile, chain)
+	coveredIDs, err := testSectionEdgeTargets(fsys, modPath, mod, profile, chain)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "test_coverage",
@@ -129,7 +138,7 @@ func coveredTypePluralKey(profile *schema.Profile, coveredType string) string {
 // still names one of schema.ModuleSpec's built-in types ("component" under
 // the default profile), generically off the resolved covered NodeType's
 // plural_key otherwise.
-func coveredComponentEntries(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]namedEntry, error) {
+func coveredComponentEntries(fsys fs.FS, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]namedEntry, error) {
 	if entries, ok := moduleTypedEntries(mod, chain.CoveredType); ok {
 		return entries, nil
 	}
@@ -138,7 +147,7 @@ func coveredComponentEntries(specDir, modPath string, mod *schema.ModuleSpec, pr
 	if !ok {
 		return nil, nil
 	}
-	raw, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	raw, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 	if err != nil {
 		return nil, err
 	}
@@ -151,7 +160,7 @@ func coveredComponentEntries(specDir, modPath string, mod *schema.ModuleSpec, pr
 // default profile's edge ("describes"), generically off test_section's
 // resolved plural_key and the chain's edge field otherwise, so a profile
 // renaming the edge kind is still read correctly.
-func testSectionEdgeTargets(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) (map[string]bool, error) {
+func testSectionEdgeTargets(fsys fs.FS, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) (map[string]bool, error) {
 	set := make(map[string]bool)
 
 	if chain.Edge == "describes" {
@@ -167,7 +176,7 @@ func testSectionEdgeTargets(specDir, modPath string, mod *schema.ModuleSpec, pro
 	if !ok {
 		return set, nil
 	}
-	raw, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	raw, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 	if err != nil {
 		return nil, err
 	}

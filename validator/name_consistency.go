@@ -2,6 +2,8 @@ package validator
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -12,7 +14,13 @@ import (
 // both values. Case-insensitive comparison detects likely matches and suggests
 // fixes. Lowercase convention is enforced.
 func CheckNameConsistency(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "name_consistency")
+	return CheckNameConsistencyFS(os.DirFS(specDir))
+}
+
+// CheckNameConsistencyFS is CheckNameConsistency's in-memory-tree
+// counterpart: it validates reading fsys rather than a directory on disk.
+func CheckNameConsistencyFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "name_consistency")
 	if len(errs) > 0 {
 		return errs
 	}

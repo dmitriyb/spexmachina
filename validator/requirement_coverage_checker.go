@@ -2,6 +2,8 @@ package validator
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 	"slices"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -21,12 +23,19 @@ import (
 // of an error. The module-requirement-to-component link admits no such
 // exemption.
 func CheckRequirementCoverage(specDir string) ([]ValidationError, []ValidationNote) {
-	project, modules, errs := loadSpec(specDir, "requirement_coverage")
+	return CheckRequirementCoverageFS(os.DirFS(specDir))
+}
+
+// CheckRequirementCoverageFS is CheckRequirementCoverage's in-memory-tree
+// counterpart: it runs the same coverage checks reading fsys rather than a
+// directory on disk.
+func CheckRequirementCoverageFS(fsys fs.FS) ([]ValidationError, []ValidationNote) {
+	project, modules, errs := loadSpec(fsys, "requirement_coverage")
 	if len(errs) > 0 {
 		return errs, nil
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "requirement_coverage",
@@ -40,7 +49,7 @@ func CheckRequirementCoverage(specDir string) ([]ValidationError, []ValidationNo
 	var notes []ValidationNote
 
 	if chain, ok := projectDerivationChain(profile); ok {
-		errs, ns := checkProjectRequirementCoverage(specDir, profile, project, modules, chain)
+		errs, ns := checkProjectRequirementCoverage(fsys, profile, project, modules, chain)
 		result = append(result, errs...)
 		notes = append(notes, ns...)
 	}
@@ -54,7 +63,7 @@ func CheckRequirementCoverage(specDir string) ([]ValidationError, []ValidationNo
 
 		for _, modName := range modNames {
 			modPath := modulePathByName(project, modName)
-			result = append(result, detectUncoveredRequirements(specDir, modPath, modName, modules[modName], profile, chain)...)
+			result = append(result, detectUncoveredRequirements(fsys, modPath, modName, modules[modName], profile, chain)...)
 		}
 	}
 
@@ -121,8 +130,8 @@ func findCoverageChain(profile *schema.Profile, coveredType, coveredScope string
 // schema.ModuleSpec fields are used as a fast path only when the chain
 // still names the default profile's type and edge, generically off raw JSON
 // otherwise, so a profile renaming either type is still scanned correctly.
-func checkProjectRequirementCoverage(specDir string, profile *schema.Profile, project *schema.Project, modules map[string]*schema.ModuleSpec, chain schema.CoverageChain) ([]ValidationError, []ValidationNote) {
-	covered, err := projectCoveredEntries(specDir, profile, project, chain)
+func checkProjectRequirementCoverage(fsys fs.FS, profile *schema.Profile, project *schema.Project, modules map[string]*schema.ModuleSpec, chain schema.CoverageChain) ([]ValidationError, []ValidationNote) {
+	covered, err := projectCoveredEntries(fsys, profile, project, chain)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "requirement_coverage",
@@ -135,7 +144,7 @@ func checkProjectRequirementCoverage(specDir string, profile *schema.Profile, pr
 	coveredProjectReqs := make(map[string]bool)
 	for modName, mod := range modules {
 		modPath := modulePathByName(project, modName)
-		targets, err := coveringEdgeTargets(specDir, modPath, mod, profile, chain)
+		targets, err := coveringEdgeTargets(fsys, modPath, mod, profile, chain)
 		if err != nil {
 			continue
 		}
@@ -186,7 +195,7 @@ type coverageNode struct {
 // still names the default profile's project-scoped completeness-trigger
 // type ("requirement"), generically off project.json's array at the
 // resolved NodeType's plural_key otherwise.
-func projectCoveredEntries(specDir string, profile *schema.Profile, project *schema.Project, chain schema.CoverageChain) ([]coverageNode, error) {
+func projectCoveredEntries(fsys fs.FS, profile *schema.Profile, project *schema.Project, chain schema.CoverageChain) ([]coverageNode, error) {
 	if chain.CoveredType == "requirement" {
 		out := make([]coverageNode, len(project.Requirements))
 		for i, r := range project.Requirements {
@@ -199,7 +208,7 @@ func projectCoveredEntries(specDir string, profile *schema.Profile, project *sch
 	if !ok {
 		return nil, nil
 	}
-	entries, err := rawProjectEntries(specDir, nt.PluralKey)
+	entries, err := rawProjectEntries(fsys, nt.PluralKey)
 	if err != nil {
 		return nil, err
 	}
@@ -217,7 +226,7 @@ func projectCoveredEntries(specDir string, profile *schema.Profile, project *sch
 // module.json's array at the resolved NodeType's plural_key otherwise. The
 // module-level link admits no derivation exemption, so no derivation field
 // is read here.
-func moduleCoveredEntries(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]coverageNode, error) {
+func moduleCoveredEntries(fsys fs.FS, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]coverageNode, error) {
 	if chain.CoveredType == "requirement" {
 		out := make([]coverageNode, len(mod.Requirements))
 		for i, r := range mod.Requirements {
@@ -230,7 +239,7 @@ func moduleCoveredEntries(specDir, modPath string, mod *schema.ModuleSpec, profi
 	if !ok {
 		return nil, nil
 	}
-	entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	entries, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 	if err != nil {
 		return nil, err
 	}
@@ -262,7 +271,7 @@ func entryTitle(e rawEntry) string {
 // covering side is always module-scoped, so the covering type is always
 // resolved via findModuleNodeType regardless of chain.CoveringScope, which
 // only exists to disambiguate a shared type name in messages.
-func coveringEdgeTargets(specDir, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]string, error) {
+func coveringEdgeTargets(fsys fs.FS, modPath string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) ([]string, error) {
 	switch {
 	case chain.CoveringType == "component" && chain.Edge == "implements":
 		var out []string
@@ -284,7 +293,7 @@ func coveringEdgeTargets(specDir, modPath string, mod *schema.ModuleSpec, profil
 	if !ok {
 		return nil, nil
 	}
-	entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+	entries, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 	if err != nil {
 		return nil, err
 	}
@@ -325,8 +334,8 @@ func coverageLabel(scope, typeName string) string {
 // generically. chain's declared covered/covering type names are
 // interpolated into the message; the module name itself — not a scope word
 // — leads it, per arch_requirement_coverage_checker.md.
-func detectUncoveredRequirements(specDir, modPath, modName string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) []ValidationError {
-	covered, err := moduleCoveredEntries(specDir, modPath, mod, profile, chain)
+func detectUncoveredRequirements(fsys fs.FS, modPath, modName string, mod *schema.ModuleSpec, profile *schema.Profile, chain schema.CoverageChain) []ValidationError {
+	covered, err := moduleCoveredEntries(fsys, modPath, mod, profile, chain)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "requirement_coverage",
@@ -335,7 +344,7 @@ func detectUncoveredRequirements(specDir, modPath, modName string, mod *schema.M
 			Message:  err.Error(),
 		}}
 	}
-	targets, err := coveringEdgeTargets(specDir, modPath, mod, profile, chain)
+	targets, err := coveringEdgeTargets(fsys, modPath, mod, profile, chain)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "requirement_coverage",

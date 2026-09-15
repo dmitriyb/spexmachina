@@ -2,6 +2,8 @@ package validator
 
 import (
 	"fmt"
+	"io/fs"
+	"os"
 
 	"github.com/dmitriyb/spexmachina/schema"
 )
@@ -54,12 +56,19 @@ import (
 // the default profile the derived set is today's five module-scoped types,
 // in the same order this check has always used.
 func CheckIDDerivation(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "id_derivation")
+	return CheckIDDerivationFS(os.DirFS(specDir))
+}
+
+// CheckIDDerivationFS is CheckIDDerivation's in-memory-tree counterpart: it
+// runs the same derivation check reading fsys rather than a directory on
+// disk.
+func CheckIDDerivationFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "id_derivation")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "id_derivation",
@@ -80,7 +89,7 @@ func CheckIDDerivation(specDir string) []ValidationError {
 		for _, nt := range moduleScopedNodeTypes(profile) {
 			entries, ok := moduleTypedEntries(modSpec, nt.Name)
 			if !ok {
-				raw, rerr := rawModuleEntries(specDir, mod.Path, nt.PluralKey)
+				raw, rerr := rawModuleEntries(fsys, mod.Path, nt.PluralKey)
 				if rerr != nil {
 					continue
 				}

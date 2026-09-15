@@ -168,7 +168,7 @@ func CheckRemovedNames(specDir, journalPath string, changes []merkle.ClassifiedC
 		return report, nil
 	}
 
-	project, _, errs := loadSpec(specDir, "removed_name")
+	project, _, errs := loadSpec(os.DirFS(specDir), "removed_name")
 	if len(errs) > 0 {
 		return report, fmt.Errorf("validator: removed-name check: %s", errs[0].Message)
 	}

@@ -3,9 +3,11 @@ package validator
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -18,7 +20,13 @@ import (
 // of the same name and validate against the module's section.schema.json.
 // Sections of any other type are accepted with envelope-only checks.
 func CheckCoupledSections(specDir string) []ValidationError {
-	project, _, errs := loadSpec(specDir, "coupled_section")
+	return CheckCoupledSectionsFS(os.DirFS(specDir))
+}
+
+// CheckCoupledSectionsFS is CheckCoupledSections' in-memory-tree
+// counterpart: it validates reading fsys rather than a directory on disk.
+func CheckCoupledSectionsFS(fsys fs.FS) []ValidationError {
+	project, _, errs := loadSpec(fsys, "coupled_section")
 	if len(errs) > 0 {
 		return errs
 	}
@@ -71,7 +79,7 @@ func CheckCoupledSections(specDir string) []ValidationError {
 			continue
 		}
 
-		result = append(result, checkCoupledSection(specDir, section, modulePaths, moduleNames, path)...)
+		result = append(result, checkCoupledSection(fsys, section, modulePaths, moduleNames, path)...)
 	}
 
 	return result
@@ -111,7 +119,7 @@ func checkSectionEnvelope(section schema.Section, index int, path string) ([]Val
 // checkCoupledSection validates a coupled section against its module:
 // matching module exists, section.schema.json file exists, schema compiles,
 // and the section content (envelope stripped) satisfies the schema.
-func checkCoupledSection(specDir string, section schema.Section, modulePaths map[string]string, moduleNames []string, path string) []ValidationError {
+func checkCoupledSection(fsys fs.FS, section schema.Section, modulePaths map[string]string, moduleNames []string, errPath string) []ValidationError {
 	modPath, ok := modulePaths[section.Name]
 	if !ok {
 		msg := fmt.Sprintf("coupled section %q has no matching module; add a module with name %q", section.Name, section.Name)
@@ -121,27 +129,26 @@ func checkCoupledSection(specDir string, section schema.Section, modulePaths map
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  msg,
 		}}
 	}
 
-	schemaPath := filepath.Join(specDir, modPath, "section.schema.json")
-	relSchemaPath := filepath.Join(modPath, "section.schema.json")
-	schemaData, err := os.ReadFile(schemaPath)
+	relSchemaPath := path.Join(modPath, "section.schema.json")
+	schemaData, err := fs.ReadFile(fsys, relSchemaPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, fs.ErrNotExist) {
 			return []ValidationError{{
 				Check:    "coupled_section",
 				Severity: "error",
-				Path:     path,
+				Path:     errPath,
 				Message:  fmt.Sprintf("coupled module %q is missing section.schema.json at %s", section.Name, relSchemaPath),
 			}}
 		}
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  fmt.Sprintf("read %s: %s", relSchemaPath, err),
 		}}
 	}
@@ -151,7 +158,7 @@ func checkCoupledSection(specDir string, section schema.Section, modulePaths map
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  fmt.Sprintf("parse %s as JSON: %s", relSchemaPath, err),
 		}}
 	}
@@ -162,7 +169,7 @@ func checkCoupledSection(specDir string, section schema.Section, modulePaths map
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  fmt.Sprintf("load %s: %s", relSchemaPath, err),
 		}}
 	}
@@ -171,7 +178,7 @@ func checkCoupledSection(specDir string, section schema.Section, modulePaths map
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  fmt.Sprintf("compile %s for module %q: %s", relSchemaPath, section.Name, err),
 		}}
 	}
@@ -181,13 +188,13 @@ func checkCoupledSection(specDir string, section schema.Section, modulePaths map
 		return []ValidationError{{
 			Check:    "coupled_section",
 			Severity: "error",
-			Path:     path,
+			Path:     errPath,
 			Message:  fmt.Sprintf("section %q: parse content: %s", section.Name, err),
 		}}
 	}
 
 	if err := sectionSchema.Validate(content); err != nil {
-		return contentValidationErrors(err, section.Name, relSchemaPath, path)
+		return contentValidationErrors(err, section.Name, relSchemaPath, errPath)
 	}
 	return nil
 }

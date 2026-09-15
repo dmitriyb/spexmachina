@@ -3,8 +3,9 @@ package validator
 import (
 	"bytes"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"strings"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -73,7 +74,13 @@ func compileSchemas(profile *schema.Profile) (*compiledSchemas, error) {
 // file, never as a cascade of conformance errors against a half-composed
 // schema.
 func CheckSchema(specDir string) []ValidationError {
-	profile, perr := schema.ResolveProfile(specDir)
+	return CheckSchemaFS(os.DirFS(specDir))
+}
+
+// CheckSchemaFS is CheckSchema's in-memory-tree counterpart: it validates
+// reading fsys rather than a directory on disk.
+func CheckSchemaFS(fsys fs.FS) []ValidationError {
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "schema",
@@ -96,8 +103,7 @@ func CheckSchema(specDir string) []ValidationError {
 	var errs []ValidationError
 
 	// Validate project.json.
-	projPath := filepath.Join(specDir, "project.json")
-	projErrs, projData := validateFile(projPath, "project.json", schemas.project)
+	projErrs, projData := validateFile(fsys, "project.json", "project.json", schemas.project)
 	errs = append(errs, projErrs...)
 
 	// If project.json failed to parse, we can't discover modules.
@@ -118,9 +124,9 @@ func CheckSchema(specDir string) []ValidationError {
 	}
 
 	for _, modPath := range modulePaths {
-		modFilePath := filepath.Join(specDir, modPath, "module.json")
+		modFilePath := path.Join(modPath, "module.json")
 		displayPath := modPath + "/module.json"
-		modErrs, _ := validateFile(modFilePath, displayPath, schemas.module)
+		modErrs, _ := validateFile(fsys, modFilePath, displayPath, schemas.module)
 		errs = append(errs, modErrs...)
 	}
 
@@ -129,8 +135,8 @@ func CheckSchema(specDir string) []ValidationError {
 
 // validateFile reads a JSON file, validates it against a compiled schema,
 // and returns any violations plus the parsed JSON (nil if read/parse failed).
-func validateFile(filePath, displayPath string, sch *jsonschema.Schema) ([]ValidationError, any) {
-	data, err := os.ReadFile(filePath)
+func validateFile(fsys fs.FS, filePath, displayPath string, sch *jsonschema.Schema) ([]ValidationError, any) {
+	data, err := fs.ReadFile(fsys, filePath)
 	if err != nil {
 		return []ValidationError{{
 			Check:    "schema",

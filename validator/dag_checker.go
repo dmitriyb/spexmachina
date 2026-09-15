@@ -3,8 +3,9 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -58,12 +59,18 @@ var builtinDAGEdgeCoverage = map[string]map[string]string{
 // checkExtraProjectDAGEdges; the checker holds no fixed edge list of its
 // own beyond these three fast paths.
 func CheckDAG(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "dag")
+	return CheckDAGFS(os.DirFS(specDir))
+}
+
+// CheckDAGFS is CheckDAG's in-memory-tree counterpart: it runs the same
+// cycle checks reading fsys rather than a directory on disk.
+func CheckDAGFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "dag")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "dag",
@@ -96,8 +103,8 @@ func CheckDAG(specDir string) []ValidationError {
 		}
 	}
 
-	result = append(result, checkExtraModuleDAGEdges(specDir, modNames, project, modules, profile)...)
-	result = append(result, checkExtraProjectDAGEdges(specDir, modNames, project, modules, profile)...)
+	result = append(result, checkExtraModuleDAGEdges(fsys, modNames, project, modules, profile)...)
+	result = append(result, checkExtraProjectDAGEdges(fsys, modNames, project, modules, profile)...)
 
 	return result
 }
@@ -188,7 +195,7 @@ func extraCycleEdgesForScope(profile *schema.Profile, scope string) []schema.Edg
 // same array is dropped rather than reported here, because it cannot close
 // a loop within this graph and cross-reference integrity is CheckIDs' job,
 // not this checker's.
-func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+func checkExtraModuleDAGEdges(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraCycleEdgesForScope(profile, "module")
 	if len(edges) == 0 {
 		return nil
@@ -205,7 +212,7 @@ func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema
 		// One read+decode of module.json per module, however many
 		// (edge, from-type) pairs below ask it for entries: the large-graph
 		// perf budget doesn't survive one full file re-read per pair.
-		doc, err := loadRawDoc(filepath.Join(specDir, modPath, "module.json"))
+		doc, err := loadRawDoc(fsys, path.Join(modPath, "module.json"))
 		if err != nil {
 			continue
 		}
@@ -240,13 +247,13 @@ func checkExtraModuleDAGEdges(specDir string, modNames []string, project *schema
 // depends_on edges, are not). projectEdgeSourceKey (declared in
 // id_validator.go) resolves both the same way checkExtraProjectEdges does
 // for reference-integrity checking.
-func checkExtraProjectDAGEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+func checkExtraProjectDAGEdges(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraCycleEdgesForScope(profile, "project")
 	if len(edges) == 0 {
 		return nil
 	}
 
-	doc, err := loadRawDoc(filepath.Join(specDir, "project.json"))
+	doc, err := loadRawDoc(fsys, "project.json")
 	if err != nil {
 		return nil
 	}
@@ -279,11 +286,11 @@ type rawDocCache struct {
 	top map[string]json.RawMessage
 }
 
-// loadRawDoc reads and top-level-decodes the JSON document at path.
-func loadRawDoc(path string) (*rawDocCache, error) {
-	data, err := os.ReadFile(path)
+// loadRawDoc reads and top-level-decodes the JSON document at name.
+func loadRawDoc(fsys fs.FS, name string) (*rawDocCache, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, fmt.Errorf("read %s: %w", filepath.Base(path), err)
+		return nil, fmt.Errorf("read %s: %w", path.Base(name), err)
 	}
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(data, &top); err != nil {
@@ -371,9 +378,8 @@ func reportCycles(cycles [][]string, labels map[string]string, edgeKind, path st
 // loadSpec reads project.json and all referenced module.json files, returning
 // typed structures for validation. The check parameter is used to tag any
 // load/parse errors with the correct checker name.
-func loadSpec(specDir, check string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
-	projPath := filepath.Join(specDir, "project.json")
-	projData, err := os.ReadFile(projPath)
+func loadSpec(fsys fs.FS, check string) (*schema.Project, map[string]*schema.ModuleSpec, []ValidationError) {
+	projData, err := fs.ReadFile(fsys, "project.json")
 	if err != nil {
 		return nil, nil, []ValidationError{{
 			Check:    check,
@@ -396,8 +402,8 @@ func loadSpec(specDir, check string) (*schema.Project, map[string]*schema.Module
 	modules := make(map[string]*schema.ModuleSpec, len(project.Modules))
 	var errs []ValidationError
 	for _, mod := range project.Modules {
-		modPath := filepath.Join(specDir, mod.Path, "module.json")
-		modData, err := os.ReadFile(modPath)
+		modPath := path.Join(mod.Path, "module.json")
+		modData, err := fs.ReadFile(fsys, modPath)
 		if err != nil {
 			errs = append(errs, ValidationError{
 				Check:    check,
