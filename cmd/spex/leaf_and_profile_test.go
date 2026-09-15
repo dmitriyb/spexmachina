@@ -72,7 +72,7 @@ func contentBearingNodeTypes(t *testing.T, doc map[string]any) []map[string]any 
 }
 
 // L5: The printed profile is the resolved profile.
-func TestFR5_L5_PrintedProfileIsResolvedProfile(t *testing.T) {
+func TestREQ_7f193910f7ef_L5_PrintedProfileIsResolvedProfile(t *testing.T) {
 	specDir := setupTestSpec(t)
 
 	out, err := runProfileSpex(t, "profile", "show", "--spec-dir", specDir)
@@ -145,7 +145,7 @@ func buildProfileDoc(t *testing.T, edit func(doc map[string]any)) string {
 }
 
 // L6: A version 1 profile still resolves, a version 3 one is refused.
-func TestFR5_L6_VersionOneResolvesVersionThreeRefused(t *testing.T) {
+func TestREQ_7f193910f7ef_L6_VersionOneResolvesVersionThreeRefused(t *testing.T) {
 	t.Run("version 1 resolves with default conventions filled in", func(t *testing.T) {
 		specDir := setupTestSpec(t)
 		v1 := buildProfileDoc(t, func(doc map[string]any) {

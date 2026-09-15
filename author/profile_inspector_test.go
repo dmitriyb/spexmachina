@@ -118,10 +118,9 @@ func TestShowProfile_EncodeFailure_Wrapped(t *testing.T) {
 }
 
 func TestShowProfile_NeedsNoInitialisedProject(t *testing.T) {
-	// specDir carries only project.json + module.json, no .spex/ anywhere —
-	// ShowProfile must still succeed, per arch_profile_inspector.md "What it
-	// does not do": "needs no initialised project and reads nothing under
-	// .spex/".
+	// specDir carries only project.json, no .spex/ anywhere — ShowProfile
+	// must still succeed, per arch_profile_inspector.md "What it does not
+	// do": "needs no initialised project and reads nothing under .spex/".
 	specDir := t.TempDir()
 	proj := `{"name": "p", "modules": [{"id": "000000000001", "name": "alpha", "path": "alpha"}]}`
 	if err := os.WriteFile(filepath.Join(specDir, "project.json"), []byte(proj), 0644); err != nil {
