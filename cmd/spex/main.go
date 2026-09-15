@@ -25,6 +25,7 @@ func main() {
 		newUpgradeCmd(),
 		newInitCmd(),
 		newDoctorCmd(),
+		newProfileCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
