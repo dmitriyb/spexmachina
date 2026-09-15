@@ -3,8 +3,9 @@ package validator
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"slices"
 	"strings"
 
@@ -64,12 +65,19 @@ var builtinEdgeCoverage = map[string]map[string]bool{
 // requires_module edge is the only one that ever names it, and stays
 // hardcoded in checkProjectRefs.
 func CheckIDs(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "id")
+	return CheckIDsFS(os.DirFS(specDir))
+}
+
+// CheckIDsFS is CheckIDs' in-memory-tree counterpart: it runs the same
+// uniqueness and reference-integrity checks reading fsys rather than a
+// directory on disk.
+func CheckIDsFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "id")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "id",
@@ -92,10 +100,10 @@ func CheckIDs(specDir string) []ValidationError {
 	for _, modName := range modNames {
 		result = append(result, checkModuleUniqueness(modName, modules[modName])...)
 	}
-	result = append(result, checkExtraModuleUniqueness(specDir, modNames, project, extraModuleNodeTypes(profile))...)
-	result = append(result, checkExtraProjectUniqueness(specDir, extraProjectNodeTypes(profile))...)
+	result = append(result, checkExtraModuleUniqueness(fsys, modNames, project, extraModuleNodeTypes(profile))...)
+	result = append(result, checkExtraProjectUniqueness(fsys, extraProjectNodeTypes(profile))...)
 	result = append(result, checkAPINameUniqueness(modNames, modules)...)
-	result = append(result, checkNameRecoverability(specDir, modNames, modules, project, profile)...)
+	result = append(result, checkNameRecoverability(fsys, modNames, modules, project, profile)...)
 
 	if len(result) > 0 {
 		return result
@@ -106,8 +114,8 @@ func CheckIDs(specDir string) []ValidationError {
 	for _, modName := range modNames {
 		result = append(result, checkModuleRefs(modName, modules[modName], project)...)
 	}
-	result = append(result, checkExtraModuleEdges(specDir, modNames, project, modules, profile)...)
-	result = append(result, checkExtraProjectEdges(specDir, modNames, project, modules, profile)...)
+	result = append(result, checkExtraModuleEdges(fsys, modNames, project, modules, profile)...)
+	result = append(result, checkExtraProjectEdges(fsys, modNames, project, modules, profile)...)
 
 	return result
 }
@@ -176,7 +184,7 @@ func moduleScopedNodeTypes(profile *schema.Profile) []schema.NodeType {
 // types the resolved profile declares beyond the five built into
 // schema.ModuleSpec — reached only by parsing module.json generically, since
 // those types have no dedicated Go field.
-func checkExtraModuleUniqueness(specDir string, modNames []string, project *schema.Project, extraTypes []schema.NodeType) []ValidationError {
+func checkExtraModuleUniqueness(fsys fs.FS, modNames []string, project *schema.Project, extraTypes []schema.NodeType) []ValidationError {
 	if len(extraTypes) == 0 {
 		return nil
 	}
@@ -185,7 +193,7 @@ func checkExtraModuleUniqueness(specDir string, modNames []string, project *sche
 		modPath := modulePathByName(project, modName)
 		prefix := modName + "/module.json:"
 		for _, nt := range extraTypes {
-			entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+			entries, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 			if err != nil {
 				continue
 			}
@@ -201,13 +209,13 @@ func checkExtraModuleUniqueness(specDir string, modNames []string, project *sche
 
 // checkExtraProjectUniqueness checks ID uniqueness for project-scoped node
 // types the resolved profile declares beyond "requirement".
-func checkExtraProjectUniqueness(specDir string, extraTypes []schema.NodeType) []ValidationError {
+func checkExtraProjectUniqueness(fsys fs.FS, extraTypes []schema.NodeType) []ValidationError {
 	if len(extraTypes) == 0 {
 		return nil
 	}
 	var errs []ValidationError
 	for _, nt := range extraTypes {
-		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		entries, err := rawProjectEntries(fsys, nt.PluralKey)
 		if err != nil {
 			continue
 		}
@@ -274,7 +282,7 @@ func checkAPINameUniqueness(modNames []string, modules map[string]*schema.Module
 // Enforcing the bound here rather than raising it in the scan is what keeps
 // the two in agreement: the constant they share means an unsweepable name
 // cannot be authored in the first place.
-func checkNameRecoverability(specDir string, modNames []string, modules map[string]*schema.ModuleSpec, project *schema.Project, profile *schema.Profile) []ValidationError {
+func checkNameRecoverability(fsys fs.FS, modNames []string, modules map[string]*schema.ModuleSpec, project *schema.Project, profile *schema.Profile) []ValidationError {
 	declarable := nameDeclarableNodeTypes(profile)
 	var errs []ValidationError
 	for _, modName := range modNames {
@@ -286,7 +294,7 @@ func checkNameRecoverability(specDir string, modNames []string, modules map[stri
 		for _, nt := range declarable {
 			entries, ok := moduleTypedEntries(mod, nt.Name)
 			if !ok {
-				raw, err := rawModuleEntries(specDir, modulePathByName(project, modName), nt.PluralKey)
+				raw, err := rawModuleEntries(fsys, modulePathByName(project, modName), nt.PluralKey)
 				if err != nil {
 					continue
 				}
@@ -533,7 +541,7 @@ func checkModuleRefs(modName string, mod *schema.ModuleSpec, project *schema.Pro
 // project-wide (requires_module) or cross-file (preq_id) resolves within the
 // same module, and both of those stay hardcoded in checkProjectRefs and
 // checkModuleRefs above rather than going through this generic path.
-func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+func checkExtraModuleEdges(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
 		return nil
@@ -554,14 +562,14 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 				if !ok {
 					continue
 				}
-				sources, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+				sources, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 				if err != nil || len(sources) == 0 {
 					continue
 				}
 
 				targets := map[string]bool{}
 				for _, toName := range edge.To {
-					set, err := edgeTargetSet(specDir, modPath, mod, project, profile, toName)
+					set, err := edgeTargetSet(fsys, modPath, mod, project, profile, toName)
 					if err != nil {
 						continue
 					}
@@ -590,7 +598,7 @@ func checkExtraModuleEdges(specDir string, modNames []string, project *schema.Pr
 // module's array when the "to" type is module-scoped — a project-scoped
 // source has no owning module to scope a module-local target within, so the
 // union is the only meaningful set to check such a reference against.
-func checkExtraProjectEdges(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
+func checkExtraProjectEdges(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile) []ValidationError {
 	edges := extraEdgeKinds(profile)
 	if len(edges) == 0 {
 		return nil
@@ -603,14 +611,14 @@ func checkExtraProjectEdges(specDir string, modNames []string, project *schema.P
 			if !ok {
 				continue
 			}
-			sources, err := rawProjectEntries(specDir, pluralKey)
+			sources, err := rawProjectEntries(fsys, pluralKey)
 			if err != nil || len(sources) == 0 {
 				continue
 			}
 
 			targets := map[string]bool{}
 			for _, toName := range edge.To {
-				set, err := projectEdgeTargetSet(specDir, modNames, project, modules, profile, toName)
+				set, err := projectEdgeTargetSet(fsys, modNames, project, modules, profile, toName)
 				if err != nil {
 					continue
 				}
@@ -718,12 +726,12 @@ func findProjectNodeType(profile *schema.Profile, name string) (schema.NodeType,
 // resolves against for one module: that module's own array when the type is
 // module-scoped (typed if it is one of the five built-ins, generic
 // otherwise), else project.json's array when the type is project-scoped.
-func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *schema.Project, profile *schema.Profile, typeName string) (map[string]bool, error) {
+func edgeTargetSet(fsys fs.FS, modPath string, mod *schema.ModuleSpec, project *schema.Project, profile *schema.Profile, typeName string) (map[string]bool, error) {
 	if set, ok := moduleTypeIDSet(mod, typeName); ok {
 		return set, nil
 	}
 	if nt, ok := findModuleNodeType(profile, typeName); ok {
-		entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+		entries, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 		if err != nil {
 			return nil, err
 		}
@@ -733,7 +741,7 @@ func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *sch
 		return set, nil
 	}
 	if nt, ok := findProjectNodeType(profile, typeName); ok {
-		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		entries, err := rawProjectEntries(fsys, nt.PluralKey)
 		if err != nil {
 			return nil, err
 		}
@@ -752,18 +760,18 @@ func edgeTargetSet(specDir, modPath string, mod *schema.ModuleSpec, project *sch
 // declaring "groups" to module-scoped "component"); with no owning module to
 // scope that lookup within, moduleUnionTypeIDSet resolves it against the
 // union of every module's array instead.
-func projectEdgeTargetSet(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
+func projectEdgeTargetSet(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
 	if set, ok := projectTypeIDSet(project, typeName); ok {
 		return set, nil
 	}
 	if nt, ok := findProjectNodeType(profile, typeName); ok {
-		entries, err := rawProjectEntries(specDir, nt.PluralKey)
+		entries, err := rawProjectEntries(fsys, nt.PluralKey)
 		if err != nil {
 			return nil, err
 		}
 		return entriesIDSet(entries), nil
 	}
-	return moduleUnionTypeIDSet(specDir, modNames, project, modules, profile, typeName)
+	return moduleUnionTypeIDSet(fsys, modNames, project, modules, profile, typeName)
 }
 
 // moduleUnionTypeIDSet resolves typeName as a module-scoped node type
@@ -773,7 +781,7 @@ func projectEdgeTargetSet(specDir string, modNames []string, project *schema.Pro
 // last resort for a module-scoped "to" type: a project-scoped source has no
 // owning module to scope the lookup within, so the union across all modules
 // is the only meaningful set to validate such a reference against.
-func moduleUnionTypeIDSet(specDir string, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
+func moduleUnionTypeIDSet(fsys fs.FS, modNames []string, project *schema.Project, modules map[string]*schema.ModuleSpec, profile *schema.Profile, typeName string) (map[string]bool, error) {
 	nt, generic := findModuleNodeType(profile, typeName)
 	if !generic && !builtinModuleTypeNames[typeName] {
 		return nil, fmt.Errorf("no array declared for node type %q", typeName)
@@ -792,7 +800,7 @@ func moduleUnionTypeIDSet(specDir string, modNames []string, project *schema.Pro
 			continue
 		}
 		modPath := modulePathByName(project, modName)
-		entries, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+		entries, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 		if err != nil {
 			return nil, err
 		}
@@ -950,8 +958,8 @@ func entriesIDSet(entries []rawEntry) map[string]bool {
 // rawModuleEntries reads one module's module.json array at pluralKey
 // generically, for a node type the resolved profile declares beyond the
 // five built into schema.ModuleSpec.
-func rawModuleEntries(specDir, modPath, pluralKey string) ([]rawEntry, error) {
-	data, err := os.ReadFile(filepath.Join(specDir, modPath, "module.json"))
+func rawModuleEntries(fsys fs.FS, modPath, pluralKey string) ([]rawEntry, error) {
+	data, err := fs.ReadFile(fsys, path.Join(modPath, "module.json"))
 	if err != nil {
 		return nil, fmt.Errorf("read module.json: %w", err)
 	}
@@ -961,8 +969,8 @@ func rawModuleEntries(specDir, modPath, pluralKey string) ([]rawEntry, error) {
 // rawProjectEntries reads project.json's array at pluralKey generically, for
 // a project-scoped node type the resolved profile declares beyond
 // "requirement".
-func rawProjectEntries(specDir, pluralKey string) ([]rawEntry, error) {
-	data, err := os.ReadFile(filepath.Join(specDir, "project.json"))
+func rawProjectEntries(fsys fs.FS, pluralKey string) ([]rawEntry, error) {
+	data, err := fs.ReadFile(fsys, "project.json")
 	if err != nil {
 		return nil, fmt.Errorf("read project.json: %w", err)
 	}

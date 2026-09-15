@@ -469,7 +469,6 @@ func TestFR4_E2b_DiffCommand_MalformedProfile(t *testing.T) {
 	specDir := setupTestSpec(t)
 	seedProjectState(t, specDir, merkle.EmptyTree(), time.Now())
 
-	profilePath := filepath.Join(specDir, "profile.json")
 	writeTestFile(t, specDir, "profile.json", "{not valid json")
 
 	out, stderr, exitCode := runDiff(t, "--spec-dir", specDir)
@@ -479,8 +478,11 @@ func TestFR4_E2b_DiffCommand_MalformedProfile(t *testing.T) {
 	if out != "" {
 		t.Fatalf("no diff report should print once the profile fails to resolve, got stdout: %s", out)
 	}
-	if !strings.Contains(stderr, profilePath) {
-		t.Fatalf("stderr should name the profile file %q, got: %s", profilePath, stderr)
+	// ResolveProfile reads through an fs.FS rooted at specDir
+	// (ResolveProfileFS's disk wrapper), so the file is named relative to
+	// that root, not as an absolute filesystem path.
+	if !strings.Contains(stderr, "profile.json") {
+		t.Fatalf("stderr should name the profile file %q, got: %s", "profile.json", stderr)
 	}
 	// The resolution's own single early error, not a tree-builder failure
 	// wrapping it: profile resolution must run (and fail) before

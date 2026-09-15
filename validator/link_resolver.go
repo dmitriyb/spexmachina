@@ -2,8 +2,9 @@ package validator
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 
 	"github.com/dmitriyb/spexmachina/merkle"
 	"github.com/dmitriyb/spexmachina/schema"
@@ -26,12 +27,18 @@ import (
 // This is the only checker that reads leaf bytes; CheckContentPaths stats the
 // paths but never opens them.
 func CheckLinks(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "link")
+	return CheckLinksFS(os.DirFS(specDir))
+}
+
+// CheckLinksFS is CheckLinks' in-memory-tree counterpart: it resolves links
+// reading fsys rather than a directory on disk.
+func CheckLinksFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "link")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	tree, err := merkle.BuildTree(specDir)
+	tree, err := merkle.BuildTreeFS(fsys)
 	if err != nil {
 		// Every cause of a build failure here (an unreadable content file,
 		// a malformed module.json) is already reported by another checker
@@ -56,7 +63,7 @@ func CheckLinks(specDir string) []ValidationError {
 		if !ok {
 			continue
 		}
-		result = append(result, checkModuleLinks(specDir, mod, modSpec, leafKeys, moduleKeys)...)
+		result = append(result, checkModuleLinks(fsys, mod, modSpec, leafKeys, moduleKeys)...)
 	}
 	return result
 }
@@ -79,7 +86,7 @@ func collectLinkTargets(n *merkle.Node, leaves, modules map[string]bool) {
 
 // checkModuleLinks scans every content leaf a module declares. Content refs
 // are gathered in module.json order per kind so that output is deterministic.
-func checkModuleLinks(specDir string, mod schema.Module, modSpec *schema.ModuleSpec, leafKeys, moduleKeys map[string]bool) []ValidationError {
+func checkModuleLinks(fsys fs.FS, mod schema.Module, modSpec *schema.ModuleSpec, leafKeys, moduleKeys map[string]bool) []ValidationError {
 	var contents []string
 	for _, c := range modSpec.Components {
 		if c.Content != "" {
@@ -105,8 +112,8 @@ func checkModuleLinks(specDir string, mod schema.Module, modSpec *schema.ModuleS
 		}
 		seen[content] = true
 
-		rel := filepath.ToSlash(filepath.Join(mod.Path, content))
-		data, err := os.ReadFile(filepath.Join(specDir, mod.Path, content))
+		rel := path.Join(mod.Path, content)
+		data, err := fs.ReadFile(fsys, rel)
 		if err != nil {
 			errs = append(errs, ValidationError{
 				Check:    "link",

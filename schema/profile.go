@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"slices"
 	"sort"
 )
@@ -193,9 +193,18 @@ var envelopeFieldNames = map[string]bool{
 // early, naming the file and the defect, rather than surfacing downstream
 // as a cascade of schema-conformance errors.
 func ResolveProfile(specDir string) (*Profile, error) {
-	path := filepath.Join(specDir, "profile.json")
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
+	return ResolveProfileFS(os.DirFS(specDir))
+}
+
+// ResolveProfileFS is ResolveProfile's in-memory-tree counterpart: it reads
+// "profile.json" from fsys rather than a directory on disk, so a caller
+// holding a spec as a loaded tree (never written to disk) can resolve its
+// profile without materializing anything. The same absence-is-default,
+// decode-then-validate sequence applies either way.
+func ResolveProfileFS(fsys fs.FS) (*Profile, error) {
+	path := "profile.json"
+	data, err := fs.ReadFile(fsys, path)
+	if errors.Is(err, fs.ErrNotExist) {
 		return DefaultProfile(), nil
 	}
 	if err != nil {

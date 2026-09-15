@@ -447,7 +447,6 @@ func TestFR7_ValidateCommand_ChecksRunInFixedOrder(t *testing.T) {
 func TestFR7_S17_ValidateCommand_MalformedProfile(t *testing.T) {
 	specDir := setupTestSpec(t)
 
-	profilePath := filepath.Join(specDir, "profile.json")
 	writeTestFile(t, specDir, "profile.json", "{not valid json")
 
 	out, stderr, exitCode := runValidate(t, "--spec-dir", specDir)
@@ -457,8 +456,11 @@ func TestFR7_S17_ValidateCommand_MalformedProfile(t *testing.T) {
 	if out != "" {
 		t.Fatalf("no validation report should print once the profile fails to resolve, got stdout: %s", out)
 	}
-	if !strings.Contains(stderr, profilePath) {
-		t.Fatalf("stderr should name the profile file %q, got: %s", profilePath, stderr)
+	// ResolveProfile reads through an fs.FS rooted at specDir
+	// (ResolveProfileFS's disk wrapper), so the file is named relative to
+	// that root, not as an absolute filesystem path.
+	if !strings.Contains(stderr, "profile.json") {
+		t.Fatalf("stderr should name the profile file %q, got: %s", "profile.json", stderr)
 	}
 	if !strings.Contains(stderr, "validate: schema: resolve profile") {
 		t.Fatalf("stderr should be the profile resolution's own single early error, got: %s", stderr)

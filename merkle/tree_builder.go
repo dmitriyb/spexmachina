@@ -3,8 +3,9 @@ package merkle
 import (
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
+	"path"
 	"sort"
 
 	"github.com/dmitriyb/spexmachina/schema"
@@ -45,18 +46,25 @@ func ModuleNames(tree *Node) map[string]string {
 // module.json files to discover content files, and hashes everything
 // bottom-up. Nodes are keyed by identity hash.
 func BuildTree(specDir string) (*Node, error) {
-	profile, err := schema.ResolveProfile(specDir)
+	return BuildTreeFS(os.DirFS(specDir))
+}
+
+// BuildTreeFS is BuildTree's in-memory-tree counterpart: it builds the same
+// merkle tree by reading fsys rather than a directory on disk, so a tree a
+// caller holds only in memory (never written) can be hashed exactly as a
+// tree on disk would be.
+func BuildTreeFS(fsys fs.FS) (*Node, error) {
+	profile, err := schema.ResolveProfileFS(fsys)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
-	projectJSONPath := filepath.Join(specDir, "project.json")
-	projLeaf, err := hashLeaf(projectJSONPath, "meta/project", "meta", "")
+	projLeaf, err := hashLeaf(fsys, "project.json", "meta/project", "meta", "")
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
 
-	rawProj, err := readRawFields(projectJSONPath)
+	rawProj, err := readRawFields(fsys, "project.json")
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build tree: %w", err)
 	}
@@ -71,7 +79,7 @@ func BuildTree(specDir string) (*Node, error) {
 		if nt.Scope != "project" {
 			continue
 		}
-		nodes, err := buildTypeNodes(rawProj, nt, specDir, "", profile)
+		nodes, err := buildTypeNodes(fsys, rawProj, nt, "", "", profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
@@ -80,7 +88,7 @@ func BuildTree(specDir string) (*Node, error) {
 
 	var moduleNodes []*Node
 	for _, mod := range modules {
-		mNode, err := buildModule(specDir, mod, profile)
+		mNode, err := buildModule(fsys, mod, profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build tree: %w", err)
 		}
@@ -105,19 +113,19 @@ func BuildTree(specDir string) (*Node, error) {
 	}, nil
 }
 
-func buildModule(specDir string, mod schema.Module, profile *schema.Profile) (*Node, error) {
-	modDir := filepath.Join(specDir, mod.Path)
-	modJSONPath := filepath.Join(modDir, "module.json")
+func buildModule(fsys fs.FS, mod schema.Module, profile *schema.Profile) (*Node, error) {
+	modDir := mod.Path
+	modJSONPath := path.Join(modDir, "module.json")
 
 	moduleHash := mod.ID
 
 	metaKey := "meta/" + moduleHash
-	modLeaf, err := hashLeaf(modJSONPath, metaKey, "meta", moduleHash)
+	modLeaf, err := hashLeaf(fsys, modJSONPath, metaKey, "meta", moduleHash)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
 
-	rawMod, err := readRawFields(modJSONPath)
+	rawMod, err := readRawFields(fsys, modJSONPath)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 	}
@@ -128,7 +136,7 @@ func buildModule(specDir string, mod schema.Module, profile *schema.Profile) (*N
 		if nt.Scope != "module" {
 			continue
 		}
-		nodes, err := buildTypeNodes(rawMod, nt, modDir, moduleHash, profile)
+		nodes, err := buildTypeNodes(fsys, rawMod, nt, modDir, moduleHash, profile)
 		if err != nil {
 			return nil, fmt.Errorf("merkle: build module %s: %w", mod.Name, err)
 		}
@@ -161,7 +169,7 @@ func buildModule(specDir string, mod schema.Module, profile *schema.Profile) (*N
 // field is the empty string is skipped silently — see "Empty content is not
 // a node" in arch_tree_builder.md. A type absent from raw (no module in this
 // spec declares it) contributes no nodes.
-func buildTypeNodes(raw map[string]json.RawMessage, nt schema.NodeType, baseDir, moduleHash string, profile *schema.Profile) ([]*Node, error) {
+func buildTypeNodes(fsys fs.FS, raw map[string]json.RawMessage, nt schema.NodeType, baseDir, moduleHash string, profile *schema.Profile) ([]*Node, error) {
 	data, ok := raw[nt.PluralKey]
 	if !ok {
 		return nil, nil
@@ -180,7 +188,7 @@ func buildTypeNodes(raw map[string]json.RawMessage, nt schema.NodeType, baseDir,
 			if content == "" {
 				continue
 			}
-			node, err := hashLeaf(filepath.Join(baseDir, content), id, nt.Name, moduleHash)
+			node, err := hashLeaf(fsys, path.Join(baseDir, content), id, nt.Name, moduleHash)
 			if err != nil {
 				return nil, err
 			}
@@ -260,14 +268,14 @@ func isZeroJSONValue(v interface{}) bool {
 // unparsed as json.RawMessage, so a profile-declared array can be decoded
 // generically by its plural key without a fixed Go struct field for every
 // possible node type.
-func readRawFields(path string) (map[string]json.RawMessage, error) {
-	data, err := os.ReadFile(path)
+func readRawFields(fsys fs.FS, name string) (map[string]json.RawMessage, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, fmt.Errorf("merkle: read %s: %w", path, err)
+		return nil, fmt.Errorf("merkle: read %s: %w", name, err)
 	}
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return nil, fmt.Errorf("merkle: parse %s: %w", path, err)
+		return nil, fmt.Errorf("merkle: parse %s: %w", name, err)
 	}
 	return raw, nil
 }
@@ -287,8 +295,8 @@ func extractModules(raw map[string]json.RawMessage) ([]schema.Module, error) {
 	return modules, nil
 }
 
-func hashLeaf(path, key, nodeType string, module string) (*Node, error) {
-	h, err := HashFile(path)
+func hashLeaf(fsys fs.FS, name, key, nodeType string, module string) (*Node, error) {
+	h, err := HashFileFS(fsys, name)
 	if err != nil {
 		return nil, fmt.Errorf("merkle: hash leaf %s: %w", key, err)
 	}
@@ -309,8 +317,8 @@ func collectHashes(nodes []*Node) []string {
 	return hashes
 }
 
-func readProject(specDir string) (*schema.Project, error) {
-	data, err := os.ReadFile(filepath.Join(specDir, "project.json"))
+func readProject(fsys fs.FS) (*schema.Project, error) {
+	data, err := fs.ReadFile(fsys, "project.json")
 	if err != nil {
 		return nil, fmt.Errorf("merkle: read project.json: %w", err)
 	}
@@ -321,14 +329,14 @@ func readProject(specDir string) (*schema.Project, error) {
 	return &proj, nil
 }
 
-func readModuleSpec(path string) (*schema.ModuleSpec, error) {
-	data, err := os.ReadFile(path)
+func readModuleSpec(fsys fs.FS, name string) (*schema.ModuleSpec, error) {
+	data, err := fs.ReadFile(fsys, name)
 	if err != nil {
-		return nil, fmt.Errorf("merkle: read %s: %w", path, err)
+		return nil, fmt.Errorf("merkle: read %s: %w", name, err)
 	}
 	var spec schema.ModuleSpec
 	if err := json.Unmarshal(data, &spec); err != nil {
-		return nil, fmt.Errorf("merkle: parse %s: %w", path, err)
+		return nil, fmt.Errorf("merkle: parse %s: %w", name, err)
 	}
 	return &spec, nil
 }

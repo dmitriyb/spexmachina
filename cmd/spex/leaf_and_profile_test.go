@@ -208,9 +208,11 @@ func TestREQ_7f193910f7ef_L6_VersionOneResolvesVersionThreeRefused(t *testing.T)
 			t.Fatalf("want no stdout on refusal, got: %s", out)
 		}
 
-		profilePath := filepath.Join(specDir, "profile.json")
+		// ResolveProfile reads through an fs.FS rooted at specDir
+		// (ResolveProfileFS's disk wrapper), so the file is named relative
+		// to that root, not as an absolute filesystem path.
 		msg := err.Error()
-		for _, want := range []string{profilePath, "3", "1-2"} {
+		for _, want := range []string{"profile.json", "3", "1-2"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("profile show error %q does not name %q", msg, want)
 			}

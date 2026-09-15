@@ -1,7 +1,9 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -20,12 +22,18 @@ import (
 // way, read generically off raw JSON, mirroring the pattern CheckIDDerivation
 // and CheckIDs already use for profile-declared types.
 func CheckContentPaths(specDir string) []ValidationError {
-	project, modules, errs := loadSpec(specDir, "content")
+	return CheckContentPathsFS(os.DirFS(specDir))
+}
+
+// CheckContentPathsFS is CheckContentPaths' in-memory-tree counterpart: it
+// checks content paths reading fsys rather than a directory on disk.
+func CheckContentPathsFS(fsys fs.FS) []ValidationError {
+	project, modules, errs := loadSpec(fsys, "content")
 	if len(errs) > 0 {
 		return errs
 	}
 
-	profile, perr := schema.ResolveProfile(specDir)
+	profile, perr := schema.ResolveProfileFS(fsys)
 	if perr != nil {
 		return []ValidationError{{
 			Check:    "content",
@@ -44,7 +52,7 @@ func CheckContentPaths(specDir string) []ValidationError {
 		if !ok {
 			continue
 		}
-		result = append(result, checkModuleContent(specDir, mod.Path, mod.Name, modSpec, types)...)
+		result = append(result, checkModuleContent(fsys, mod.Path, mod.Name, modSpec, types)...)
 	}
 
 	return result
@@ -118,13 +126,13 @@ func contentEntriesFromRaw(raw []rawEntry) []contentEntry {
 }
 
 // checkModuleContent collects all content references from a module and checks each.
-func checkModuleContent(specDir, modPath, modName string, mod *schema.ModuleSpec, types []schema.NodeType) []ValidationError {
+func checkModuleContent(fsys fs.FS, modPath, modName string, mod *schema.ModuleSpec, types []schema.NodeType) []ValidationError {
 	var refs []contentRef
 
 	for _, nt := range types {
 		entries, ok := moduleContentEntries(mod, nt.Name)
 		if !ok {
-			raw, err := rawModuleEntries(specDir, modPath, nt.PluralKey)
+			raw, err := rawModuleEntries(fsys, modPath, nt.PluralKey)
 			if err != nil {
 				continue
 			}
@@ -148,14 +156,14 @@ func checkModuleContent(specDir, modPath, modName string, mod *schema.ModuleSpec
 
 	var errs []ValidationError
 	for _, ref := range refs {
-		errs = append(errs, checkContentPath(specDir, modPath, modName, ref)...)
+		errs = append(errs, checkContentPath(fsys, modPath, modName, ref)...)
 	}
 	return errs
 }
 
 // checkContentPath validates a single content path: rejects path traversal,
 // then checks file existence.
-func checkContentPath(specDir, modPath, modName string, ref contentRef) []ValidationError {
+func checkContentPath(fsys fs.FS, modPath, modName string, ref contentRef) []ValidationError {
 	location := fmt.Sprintf("%s/module.json:/%s/%s/content", modName, ref.pluralKey, ref.nodeName)
 
 	for _, seg := range strings.Split(filepath.ToSlash(ref.content), "/") {
@@ -177,10 +185,10 @@ func checkContentPath(specDir, modPath, modName string, ref contentRef) []Valida
 		}}
 	}
 
-	fullPath := filepath.Join(specDir, modPath, ref.content)
-	if _, err := os.Stat(fullPath); err != nil {
+	fullPath := filepath.ToSlash(filepath.Join(modPath, ref.content))
+	if _, err := fs.Stat(fsys, fullPath); err != nil {
 		msg := fmt.Sprintf("content file not found: %s", ref.content)
-		if !os.IsNotExist(err) {
+		if !errors.Is(err, fs.ErrNotExist) {
 			msg = fmt.Sprintf("content file inaccessible: %s: %s", ref.content, err)
 		}
 		return []ValidationError{{

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"sort"
 )
@@ -20,6 +21,22 @@ func HashFile(path string) (string, error) {
 	h := sha256.New()
 	if _, err := io.Copy(h, f); err != nil {
 		return "", fmt.Errorf("merkle: hash %s: %w", path, err)
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+// HashFileFS computes the SHA-256 hash of a file read through fsys — the
+// in-memory-tree counterpart of HashFile, used when the tree being hashed is
+// not (or not yet) on disk.
+func HashFileFS(fsys fs.FS, name string) (string, error) {
+	f, err := fsys.Open(name)
+	if err != nil {
+		return "", fmt.Errorf("merkle: hash %s: %w", name, err)
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", fmt.Errorf("merkle: hash %s: %w", name, err)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
