@@ -79,8 +79,9 @@ type RefusalEntry struct {
 // WriteReport is the write-report document a writing command prints on
 // stdout once ObligationReporter has accepted a change and the caller has
 // written it: the files written, the obligations the completeness rules
-// now attach to the tree, and — for `spex node rename` only — the
-// retired name the vocabulary sweep needs
+// now attach to the tree, and — for `spex node rename` and for a
+// `spex node remove` of a name-declarable node — the retired name the
+// vocabulary sweep needs
 // (spec/author/arch_author_commands.md, "Exit codes and output").
 // Obligations reuses merkle.DiffError, the completeness checker's own
 // entry type, unchanged: they are printed here, not re-derived

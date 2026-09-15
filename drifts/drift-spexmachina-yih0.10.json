@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-yih0.10",
+  "node": "cb8ef2b70999",
+  "files": [
+    "spec/author/test_node_editing.md",
+    "spec/author/arch_node_editor.md"
+  ],
+  "claim": "test_node_editing.md scenario N1: after `spex node add` declares component Widget in module alpha (Setup's fixture, whose only test_section T1 describes Comp1 and Comp2), 'spex validate is green' before spex diff is even run.",
+  "authoritative_source": "arch_node_editor.md's \"Adding a node\" table names exactly what NodeEditor decides for a new node — file, array, id, required fields, content path, leaf — and nothing about wiring a describing test_section edge; the default profile's own coverage_chains entry {covered_type: component, edge: describes, covering_type: test_section} (schema/defaultProfile.json) makes an undescribed component a real validator finding, and arch_obligation_reporter.md classifies test_coverage as a nonRefusalChecker finding — printed as an obligation, never gating the write.",
+  "evidence": "I implemented Add exactly to arch_node_editor.md's table (TestN1_AddingComponent_PlacesDerivesScaffolds in author/node_editor_test.go) and ran it against N1's own fixture: adding Widget with no describer deterministically trips CheckTestCoverageFS with 'component Widget (id:...) has no test_section coverage', the only validator.ValidationError present afterward, surfacing as an obligation and not a refusal exactly as arch_obligation_reporter.md specifies. A NodeEditor faithful to its own arch contract cannot also make this scenario's tree validate-green, since nothing in NodeEditor's declared decisions (file/array/id/fields/content path/leaf) touches a describes edge on any test_section, and no other command runs in N1's own steps to supply one.",
+  "blocking": false,
+  "proposed_fix": "Either drop N1's 'spex validate is green' clause (the coverage gap is expected and correctly surfaces under the write's own obligations, which N1 already separately asserts), or extend N1's Given/When to also wire T1's describes edge onto Widget via a subsequent `spex edge add` before asserting green — making the green claim describe the two-command sequence rather than `spex node add` alone."
+}
