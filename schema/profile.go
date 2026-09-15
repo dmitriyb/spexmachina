@@ -52,7 +52,7 @@ type NodeType struct {
 	Fields              []Field  `json:"fields,omitempty"`
 	Comment             string   `json:"comment,omitempty"`
 	ContentPrefix       *string  `json:"content_prefix,omitempty"`
-	LeafSections        []string `json:"leaf_sections,omitempty"`
+	LeafSections        []string `json:"leaf_sections"`
 }
 
 // Edge is a derived view of one legal edge kind: the reference-field name,
@@ -255,14 +255,34 @@ func decodeProfile(data []byte) (*Profile, error) {
 }
 
 // finalize populates the derived Edges and HashedFields views from
-// NodeTypes' declared fields, and fills in the default content_prefix and
-// leaf_sections conventions a document omitted. Called once resolution
-// succeeds — never on a profile that failed Validate — so every consumer
-// that reads these views can assume they reflect a valid profile.
+// NodeTypes' declared fields, fills in the default content_prefix and
+// leaf_sections conventions a document omitted, and stamps the resolved
+// ProfileVersion. Called once resolution succeeds — never on a profile that
+// failed Validate — so every consumer that reads these views can assume
+// they reflect a valid profile.
 func (p *Profile) finalize() {
-	p.fillContentConventions()
+	if p.fillContentConventions() {
+		p.stampResolvedVersion()
+	}
 	p.Edges = deriveEdges(p.NodeTypes)
 	p.HashedFields = deriveHashedFields(p.NodeTypes)
+}
+
+// stampResolvedVersion sets the resolved profile's ProfileVersion to the
+// version 2 format. Called only when fillContentConventions actually filled
+// in a content_prefix or leaf_sections the source document left nil: at that
+// point the resolved document carries version 2's fields regardless of what
+// the source declared, so leaving ProfileVersion at version 1 (or absent)
+// would hand back a document Validate itself rejects the next time it is
+// resolved (content_prefix/leaf_sections require profile_version 2).
+// Stamping version 2 exactly when that happened is what makes "the printed
+// document round-trips through this resolution unchanged"
+// (arch_profile_loader.md, "Observability") hold for a version 1 input too,
+// while a document with nothing to fill in — no built-in content-bearing
+// types recognized — stays at whatever version it declared.
+func (p *Profile) stampResolvedVersion() {
+	version := maxProfileVersion
+	p.ProfileVersion = &version
 }
 
 // fillContentConventions fills a content-bearing type's nil ContentPrefix
@@ -275,8 +295,10 @@ func (p *Profile) finalize() {
 // wholly custom content-bearing type declaring neither key) is left as the
 // document declared it: ContentPrefix stays nil, LeafSections stays nil —
 // "empty when the type declares none" is a legal explicit value, not a
-// defect.
-func (p *Profile) fillContentConventions() {
+// defect. Reports whether it filled anything in, which is what tells
+// finalize whether the resolved document needs stamping to version 2.
+func (p *Profile) fillContentConventions() bool {
+	filled := false
 	conventions := defaultContentConventions()
 	for i, t := range p.NodeTypes {
 		if !t.RequiresContent {
@@ -286,13 +308,16 @@ func (p *Profile) fillContentConventions() {
 		if !ok {
 			continue
 		}
-		if t.ContentPrefix == nil {
+		if t.ContentPrefix == nil && def.ContentPrefix != nil {
 			p.NodeTypes[i].ContentPrefix = def.ContentPrefix
+			filled = true
 		}
 		if t.LeafSections == nil {
 			p.NodeTypes[i].LeafSections = def.LeafSections
+			filled = filled || def.LeafSections != nil
 		}
 	}
+	return filled
 }
 
 // defaultContentConventions returns the embedded default profile's own

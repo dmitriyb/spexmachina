@@ -1412,11 +1412,14 @@ func TestFR9_P6_NewReferenceFieldOnBuiltinTypeComposes(t *testing.T) {
 	}
 }
 
-// TestFR9_P7_FieldValidationNamesEachDefect covers test_schema_loading.md's
-// P7: each of the six defective field-declaration shapes fails with one
-// distinct, early error naming the declaration, with no composed schema
-// produced.
-func TestFR9_P7_FieldValidationNamesEachDefect(t *testing.T) {
+// TestFR9_FieldDeclarationDefectsNamedEarly covers arch_profile_loader.md's
+// Validate paragraph: each of the defective field- and type-declaration
+// shapes it lists fails with one distinct, early error naming the
+// declaration, with no composed schema produced. None of these shapes are a
+// numbered scenario in test_schema_loading.md — P7 now names the
+// content_prefix/leaf_sections scenario covered by
+// TestFR9_P7_ContentPrefixLeafSectionsConventions.
+func TestFR9_FieldDeclarationDefectsNamedEarly(t *testing.T) {
 	base := func(field map[string]any) string {
 		doc := map[string]any{
 			"node_types": []any{
@@ -1912,7 +1915,78 @@ func TestFR9_P7_ContentPrefixLeafSectionsConventions(t *testing.T) {
 			t.Fatalf("ResolveProfile over a version 1 document: %v", err)
 		}
 		checkBuiltinConventions(t, resolved)
+
+		// P7's round-trip clause: the document this resolution would print,
+		// written back as profile.json, resolves to an equal document on
+		// the next run — the version 1 source's filled-in conventions must
+		// themselves form a valid version 2 document.
+		reprinted, err := json.Marshal(resolved)
+		if err != nil {
+			t.Fatalf("marshal resolved profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), reprinted, 0o644); err != nil {
+			t.Fatalf("write resolved profile.json: %v", err)
+		}
+		reresolved, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile over the printed document should round-trip, got: %v", err)
+		}
+		if !reflect.DeepEqual(resolved, reresolved) {
+			t.Fatalf("the resolved profile, written back as profile.json, should resolve to an equal document on the next run:\nfirst:  %+v\nsecond: %+v", resolved, reresolved)
+		}
 	})
+}
+
+// TestFR9_LeafSectionsExplicitEmptySurvivesMarshal covers the nil-vs-empty
+// distinction NodeType.LeafSections's field comment describes: a
+// content-bearing built-in type that explicitly declares no headings
+// ([]string{}) must marshal that declaration back out, not have it dropped
+// to look like "the type never restated the built-in convention" (nil) — the
+// latter would resolve the defaults back in on the next run.
+func TestFR9_LeafSectionsExplicitEmptySurvivesMarshal(t *testing.T) {
+	profile := DefaultProfile()
+	for i := range profile.NodeTypes {
+		if profile.NodeTypes[i].Scope == "module" && profile.NodeTypes[i].Name == "component" {
+			profile.NodeTypes[i].LeafSections = []string{}
+		}
+	}
+
+	dir := t.TempDir()
+	data, err := json.Marshal(profile)
+	if err != nil {
+		t.Fatalf("marshal profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+		t.Fatalf("write profile.json: %v", err)
+	}
+
+	resolved, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile: %v", err)
+	}
+	component := nodeType(t, resolved, "module", "component")
+	if component.LeafSections == nil || len(component.LeafSections) != 0 {
+		t.Fatalf("component leaf_sections = %v, want an explicit empty slice", component.LeafSections)
+	}
+
+	reprinted, err := json.Marshal(resolved)
+	if err != nil {
+		t.Fatalf("marshal resolved profile: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "profile.json"), reprinted, 0o644); err != nil {
+		t.Fatalf("write resolved profile.json: %v", err)
+	}
+	reresolved, err := ResolveProfile(dir)
+	if err != nil {
+		t.Fatalf("ResolveProfile over the reprinted document: %v", err)
+	}
+	component = nodeType(t, reresolved, "module", "component")
+	if component.LeafSections == nil {
+		t.Fatal("component leaf_sections was filled back in with the built-in default after a round trip — the explicit empty declaration did not survive marshal")
+	}
+	if len(component.LeafSections) != 0 {
+		t.Fatalf("component leaf_sections = %v, want it to stay an explicit empty slice", component.LeafSections)
+	}
 }
 
 // TestFR9_P8_ContentPrefixLeafSectionsMalformed covers the content_prefix/
