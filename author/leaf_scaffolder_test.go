@@ -104,6 +104,96 @@ func TestREQ_1631cb19fac3_L1_SkeletonCarriesHeadingsAndOwedPlaceholder(t *testin
 	assertValidateGreen(t, f.dir)
 }
 
+// TestREQ_1631cb19fac3_OwedEdgesAllThreeSources covers the two sources L1
+// leaves untested: arch_leaf_scaffolder.md's "What a skeleton is" names
+// three sources for a component's owed links — its own `implements`, its
+// own `uses`, and every api whose `provided_by` names it. Comp1 declares
+// `implements` (R1) and no `uses`, and the fixture's one api ("demo run")
+// is provided_by Comp1 — the only non-content-bearing type in the default
+// profile — so scaffolding Comp1 exercises both the outbound `implements`
+// sweep and the inbound `provided_by` sweep owedEdges runs over every
+// non-content-bearing type (leaf_scaffolder.go:196-237).
+func TestREQ_1631cb19fac3_OwedEdgesAllThreeSources(t *testing.T) {
+	f := buildRenameFixture(t)
+	comp1Path := filepath.Join(f.dir, "alpha", "arch_comp1.md")
+	if err := os.Remove(comp1Path); err != nil {
+		t.Fatalf("remove arch_comp1.md: %v", err)
+	}
+
+	report, refusals, err := Scaffold(f.dir, ScaffoldInput{ID: f.comp1ID})
+	if err != nil {
+		t.Fatalf("Scaffold: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Scaffold: unexpected refusals: %+v", refusals)
+	}
+	if report == nil || len(report.Written) != 1 {
+		t.Fatalf("Scaffold: want a report writing exactly one file, got %+v", report)
+	}
+
+	data, err := os.ReadFile(comp1Path)
+	if err != nil {
+		t.Fatalf("read arch_comp1.md: %v", err)
+	}
+	content := string(data)
+
+	wantImplements := "[[" + f.r1ID + "|R1]]"
+	if strings.Count(content, wantImplements) != 1 {
+		t.Fatalf("arch_comp1.md wants exactly one outbound implements placeholder %s, got:\n%s", wantImplements, content)
+	}
+	wantProvidedBy := "[[" + f.apiID + "|demo run]]"
+	if strings.Count(content, wantProvidedBy) != 1 {
+		t.Fatalf("arch_comp1.md wants exactly one inbound provided_by placeholder %s, got:\n%s", wantProvidedBy, content)
+	}
+
+	assertValidateGreen(t, f.dir)
+}
+
+// TestREQ_1631cb19fac3_MissingLeafElsewhereStillObliged guards against
+// patchMissingLeaves' tree-building patch leaking into the content check:
+// it fakes every declared-but-missing leaf present so merkle.BuildTreeFS
+// can hash the tree, and that fake must not also hide a genuinely missing
+// leaf from the obligations Report prints. Deleting both arch_comp2.md and
+// test_t1.md and scaffolding Comp2 writes only arch_comp2.md; test_t1.md
+// stays missing and must still surface as a content obligation the way
+// `spex validate` would report it, per arch_obligation_reporter.md's "a
+// finding the input already carried is reported as an obligation."
+func TestREQ_1631cb19fac3_MissingLeafElsewhereStillObliged(t *testing.T) {
+	f := buildRenameFixture(t)
+	if err := os.Remove(filepath.Join(f.dir, "alpha", "arch_comp2.md")); err != nil {
+		t.Fatalf("remove arch_comp2.md: %v", err)
+	}
+	t1Path := filepath.Join(f.dir, "alpha", "test_t1.md")
+	if err := os.Remove(t1Path); err != nil {
+		t.Fatalf("remove test_t1.md: %v", err)
+	}
+
+	report, refusals, err := Scaffold(f.dir, ScaffoldInput{ID: f.comp2ID})
+	if err != nil {
+		t.Fatalf("Scaffold: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Scaffold: unexpected refusals: %+v", refusals)
+	}
+	if report == nil || len(report.Written) != 1 {
+		t.Fatalf("Scaffold: want a report writing exactly one file, got %+v", report)
+	}
+
+	var found bool
+	for _, ob := range report.Obligations {
+		if ob.Type == "content" && strings.Contains(ob.Message, "test_t1.md") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("Scaffold: want an obligation naming test_t1.md as missing, got %+v", report.Obligations)
+	}
+
+	if _, err := os.Stat(t1Path); err == nil {
+		t.Fatal("test_t1.md should not have been written by scaffolding Comp2")
+	}
+}
+
 // TestREQ_1631cb19fac3_L2_NonEmptyLeafNeverOverwritten is L2: a leaf
 // holding prose is refused, byte-identical, with a fix naming the file; the
 // same node over a present-but-empty leaf is written.

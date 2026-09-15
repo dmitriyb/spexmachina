@@ -48,6 +48,10 @@ func Scaffold(specDir string, input ScaffoldInput) (*WriteReport, []RefusalEntry
 	if err != nil {
 		return nil, nil, fmt.Errorf("author: scaffold: %w", err)
 	}
+	// trueBefore is the tree exactly as disk holds it, kept aside so the
+	// content-check re-attachment below can tell a leaf patchMissingLeaves
+	// faked present from one this write actually created.
+	trueBefore := cloneSpecFS(before)
 	// A content-bearing node whose leaf was deleted, or an adopter's node
 	// that never had one, is exactly LeafScaffolder's own precondition
 	// (arch_leaf_scaffolder.md, "Refusals and idempotence": "a leaf that is
@@ -56,9 +60,14 @@ func Scaffold(specDir string, input ScaffoldInput) (*WriteReport, []RefusalEntry
 	// there is no file to hash. patchMissingLeaves extends the "absent
 	// means the same as zero bytes" equivalence LeafScaffolder already
 	// applies to its own target leaf to every other declared leaf missing
-	// from disk too, purely so Report's before/after trees build; it never
-	// changes what CheckLinksFS or any other checker Report runs actually
-	// finds, since an empty leaf carries no links either way.
+	// from disk too, purely so Report's before/after trees build. That
+	// patch also reaches Report's own CheckContentPathsFS pass, though,
+	// since after is cloned from this patched before — every other
+	// declared-but-missing leaf reads as present there and so never
+	// resurfaces as the "content file not found" obligation
+	// arch_obligation_reporter.md says a pre-existing finding still owes.
+	// The call site re-attaches those findings by diffing against
+	// trueBefore once Report has run.
 	patchMissingLeaves(before, profile)
 
 	loc, err := locateNode(before, profile, input.ID)
@@ -104,6 +113,10 @@ func Scaffold(specDir string, input ScaffoldInput) (*WriteReport, []RefusalEntry
 	if len(refusals) > 0 {
 		return nil, refusals, nil
 	}
+
+	trueAfter := cloneSpecFS(trueBefore)
+	trueAfter[contentPath] = skeleton
+	obligations = append(obligations, validatorObligations(patchedContentFindings(after, trueAfter))...)
 
 	written := changedPaths(before, after)
 	if err := writeChanges(specDir, after, written); err != nil {
@@ -157,6 +170,30 @@ func patchMissingLeaves(mem validator.MemFS, profile *schema.Profile) {
 			}
 		}
 	}
+}
+
+// patchedContentFindings recovers the validator.CheckContentPathsFS findings
+// patchMissingLeaves' fake-present entries hid from Report's own
+// after-state pass: every finding CheckContentPathsFS raises against
+// trueAfter (the tree carrying only this Scaffold's actual write, with
+// every other declared-but-missing leaf still genuinely absent) that
+// patchedAfter's own run — the one Report already ran, and whose results
+// already travel in its refusals/obligations — does not also raise. A leaf
+// this call itself just wrote is present in both trees and so raises
+// nothing in either; only a leaf some other, unrelated node still owes is
+// found here.
+func patchedContentFindings(patchedAfter, trueAfter validator.MemFS) []validator.ValidationError {
+	seen := make(map[string]bool)
+	for _, e := range validator.CheckContentPathsFS(patchedAfter) {
+		seen[errorKey(e)] = true
+	}
+	var out []validator.ValidationError
+	for _, e := range validator.CheckContentPathsFS(trueAfter) {
+		if !seen[errorKey(e)] {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 // owedLink is one placeholder line's worth of typed link: the reference
