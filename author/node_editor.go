@@ -127,7 +127,18 @@ func Add(specDir string, input NodeAddInput) (*WriteReport, []RefusalEntry, erro
 
 	if nt.RequiresContent {
 		if existing, exists := before[contentPath]; exists && len(existing) > 0 {
-			return nil, []RefusalEntry{nonEmptyLeafRefusal(contentPath, "spex node add")}, nil
+			beforeDoc, err := decodeDoc(before, ownerFile)
+			if err != nil {
+				return nil, nil, fmt.Errorf("author: node add: %w", err)
+			}
+			if _, declared := findEntryField(beforeDoc, nt.PluralKey, id, "id"); !declared {
+				return nil, []RefusalEntry{nonEmptyLeafRefusal(contentPath, "spex node add")}, nil
+			}
+			// id is already declared: this is a true duplicate, not a leaf
+			// collision, so it falls through to Report's own "duplicate ID"
+			// refusal (Add's doc comment, "a duplicate id — is Report's own,
+			// surfaced unchanged") rather than being masked by this leaf
+			// guard.
 		}
 		loc := nodeLocation{
 			projectScope: nt.Scope == "project",
@@ -165,6 +176,10 @@ func Add(specDir string, input NodeAddInput) (*WriteReport, []RefusalEntry, erro
 // does not name is invisible to spex validate, spex diff and spex render
 // alike, and creating the two together is what closes that hole").
 func addModule(specDir string, before validator.MemFS, profile *schema.Profile, input NodeAddInput) (*WriteReport, []RefusalEntry, error) {
+	if existingID, declared := findModuleID(before, input.Name); declared {
+		return nil, []RefusalEntry{duplicateModuleNameRefusal(input.Name, existingID)}, nil
+	}
+
 	id := schema.IdentityHash("module", input.Name)
 
 	after := cloneSpecFS(before)
@@ -262,6 +277,26 @@ func undeclaredNodeTypeRefusal(typeName string, profile *schema.Profile) Refusal
 	}
 }
 
+// duplicateModuleNameRefusal is addModule's own guard for input.Name already
+// present in project.json's modules array: unlike a component or
+// requirement's id, a module's declared id is exempt from id-derivation
+// checking (validator/id_derivation_checker.go, "because a module id is
+// unchecked"), so Report's own "duplicate ID" refusal cannot be counted on
+// to fire for a second module declared under the same name — nothing
+// guarantees the existing entry's id was ever derived the way this add would
+// derive it. NodeEditor checks the name itself, before either write, so the
+// operator sees the actual cause instead of moduleSkeletonExistsRefusal's
+// "the file is not empty", whose fix would walk them into destroying the
+// declared module and duplicating the project.json entry.
+func duplicateModuleNameRefusal(name, id string) RefusalEntry {
+	return RefusalEntry{
+		Check:   "node",
+		Message: fmt.Sprintf("module %q is already declared with id %s", name, id),
+		Path:    "project.json:/modules",
+		Fix:     "choose a different module name",
+	}
+}
+
 // moduleSkeletonExistsRefusal is addModule's own guard for a modPath that
 // already holds a non-empty module.json: a directory a project.json entry
 // is about to name for the first time may already carry a hand-authored,
@@ -317,6 +352,21 @@ func findModulePath(mem validator.MemFS, name string) (string, bool) {
 	for _, m := range proj.Modules {
 		if m.Name == name {
 			return m.Path, true
+		}
+	}
+	return "", false
+}
+
+// findModuleID searches mem's project.json for a module named name,
+// returning its declared id.
+func findModuleID(mem validator.MemFS, name string) (string, bool) {
+	var proj schema.Project
+	if err := json.Unmarshal(mem["project.json"], &proj); err != nil {
+		return "", false
+	}
+	for _, m := range proj.Modules {
+		if m.Name == name {
+			return m.ID, true
 		}
 	}
 	return "", false

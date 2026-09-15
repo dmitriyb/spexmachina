@@ -359,6 +359,54 @@ func TestAdd_RefusesContentLeafCollisionWithDeclaredNode(t *testing.T) {
 	}
 }
 
+// TestAdd_TrueDuplicateName_FallsThroughToReport covers the fix for
+// PRRT_kwDORYErI86isxTC: re-adding a node under a name that derives an
+// already-declared id must not be masked by the scaffold guard as a leaf
+// collision — it falls through to Report's own "duplicate ID" refusal,
+// leaving Comp1's declared leaf and entry untouched.
+func TestAdd_TrueDuplicateName_FallsThroughToReport(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	report, refusals, err := Add(f.dir, NodeAddInput{TypeName: "component", Module: "alpha", Name: "Comp1"})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("Add: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 1 {
+		t.Fatalf("Add: want exactly one refusal, got %+v", refusals)
+	}
+	if refusals[0].Check != "id" {
+		t.Errorf("Check = %q, want %q (Report's own duplicate-id check, not the scaffold guard)", refusals[0].Check, "id")
+	}
+	if !strings.Contains(refusals[0].Message, "duplicate ID "+f.comp1ID) {
+		t.Errorf("message should be Report's own duplicate ID message, got: %s", refusals[0].Message)
+	}
+	if !strings.Contains(refusals[0].Fix, "choose a name that derives a different id") {
+		t.Errorf("fix should be Report's own duplicate-id fix, got: %s", refusals[0].Fix)
+	}
+
+	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatal(err)
+	}
+	if len(mod.Components) != 2 {
+		t.Errorf("a refusal must leave the components array unchanged, got %+v", mod.Components)
+	}
+	content, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(content), "# Comp1") {
+		t.Errorf("Comp1's declared leaf must survive a refused add, got: %s", content)
+	}
+}
+
 // TestAdd_RefusesNonEmptyModuleSkeleton covers arch_node_editor.md's
 // adopter case: a directory project.json does not yet name may already
 // carry a hand-authored, not-yet-registered module.json, and `spex node add
@@ -406,6 +454,57 @@ func TestAdd_RefusesNonEmptyModuleSkeleton(t *testing.T) {
 	}
 	if !strings.Contains(string(modData), "Existing") {
 		t.Errorf("the hand-authored module.json must survive a refused add, got: %s", modData)
+	}
+}
+
+// TestAdd_RefusesDuplicateModuleName covers the fix for
+// PRRT_kwDORYErI86isxTM: re-adding a module under an already-declared name
+// must refuse on that name directly rather than falling into the
+// non-empty-skeleton guard, whose fix would have the operator empty the
+// declared module.json and then, on the re-run, duplicate the project.json
+// entry.
+func TestAdd_RefusesDuplicateModuleName(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	beforeProj, err := os.ReadFile(filepath.Join(f.dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeMod, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report, refusals, err := Add(f.dir, NodeAddInput{TypeName: "module", Name: "alpha"})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("Add: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 1 {
+		t.Fatalf("Add: want exactly one refusal, got %+v", refusals)
+	}
+	if !strings.Contains(refusals[0].Message, `"alpha"`) || !strings.Contains(refusals[0].Message, "already declared") {
+		t.Errorf("message should name alpha as already declared, got: %s", refusals[0].Message)
+	}
+	if strings.Contains(refusals[0].Message, "not empty") {
+		t.Errorf("message must not be the non-empty-skeleton guard's, got: %s", refusals[0].Message)
+	}
+
+	afterProj, err := os.ReadFile(filepath.Join(f.dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeProj) != string(afterProj) {
+		t.Error("a refusal must leave project.json byte-identical — no duplicate modules entry")
+	}
+	afterMod, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("a refusal must leave alpha/module.json byte-identical — the declared module survives")
 	}
 }
 
