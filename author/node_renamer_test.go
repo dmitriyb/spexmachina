@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -160,7 +161,8 @@ func TestN8_RenameIsOneTransaction(t *testing.T) {
 		t.Errorf("test_t1.md should keep its unrelated Comp2 link untouched: %s", t1Content)
 	}
 
-	// spex validate is green.
+	// spex validate is green: all ten checkers spex validate runs, not just
+	// the five Report gates a write on.
 	fsys := os.DirFS(f.dir)
 	var allErrs []validator.ValidationError
 	allErrs = append(allErrs, validator.CheckSchemaFS(fsys)...)
@@ -168,6 +170,12 @@ func TestN8_RenameIsOneTransaction(t *testing.T) {
 	allErrs = append(allErrs, validator.CheckIDDerivationFS(fsys)...)
 	allErrs = append(allErrs, validator.CheckDAGFS(fsys)...)
 	allErrs = append(allErrs, validator.CheckLinksFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckContentPathsFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckNameConsistencyFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckTestCoverageFS(fsys)...)
+	reqErrs, _ := validator.CheckRequirementCoverageFS(fsys)
+	allErrs = append(allErrs, reqErrs...)
+	allErrs = append(allErrs, validator.CheckCoupledSectionsFS(fsys)...)
 	if len(allErrs) > 0 {
 		t.Errorf("spec is not green after rename: %+v", allErrs)
 	}
@@ -314,6 +322,231 @@ func TestRename_RefusesNameCollision(t *testing.T) {
 	}
 	if !strings.Contains(dup.Fix, f.comp1ID) {
 		t.Errorf("fix should name the colliding node's id %s, got: %s", f.comp1ID, dup.Fix)
+	}
+}
+
+// TestRename_CaseOnlyRenamePreservesContent covers a case-only rename such
+// as Comp1 -> comp1: snakeCase lowercases both, so the new content path
+// slugs identical to the old one (arch_comp1.md either way) even though the
+// name text — and therefore the derived id — differs. PRRT_kwDORYErI86ipbGQ:
+// treating this as a "move" when source and destination are the same path
+// used to os.Remove the only copy of the leaf. The id must still change;
+// the leaf must still exist, unchanged.
+func TestRename_CaseOnlyRenamePreservesContent(t *testing.T) {
+	f := buildRenameFixture(t)
+	before, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatalf("read arch_comp1.md: %v", err)
+	}
+
+	report, refusals, err := Rename(f.dir, RenameInput{ID: f.comp1ID, NewName: "comp1"})
+	if err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+	if report == nil {
+		t.Fatal("Rename: want a report, got nil")
+	}
+	if report.RetiredName != "Comp1" {
+		t.Errorf("RetiredName = %q, want %q", report.RetiredName, "Comp1")
+	}
+
+	after, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatalf("arch_comp1.md must still exist after a case-only rename: %v", err)
+	}
+	if string(before) != string(after) {
+		t.Errorf("arch_comp1.md's content changed on a case-only rename: got %q, want %q", after, before)
+	}
+
+	newID := schema.IdentityHash("alpha", "component", "comp1")
+	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatalf("parse module.json: %v", err)
+	}
+	var comp1 *schema.Component
+	for i := range mod.Components {
+		if mod.Components[i].ID == newID {
+			comp1 = &mod.Components[i]
+		}
+	}
+	if comp1 == nil {
+		t.Fatalf("no component with derived id %s found in %+v", newID, mod.Components)
+	}
+	if comp1.Name != "comp1" || comp1.Content != "arch_comp1.md" {
+		t.Errorf("renamed entry = %+v, want name comp1, content arch_comp1.md", comp1)
+	}
+}
+
+// TestRename_RefusesContentPathCollision covers PRRT_kwDORYErI86ipbGT:
+// renaming Comp2 to "comp1" derives a different id than Comp1's (names
+// differ by case, so the hash differs — no id collision, so Report's own
+// checks never fire), but snakeCase collapses both to the same content
+// slug. The old unconditional overwrite silently destroyed Comp1's leaf;
+// this must refuse instead, leaving both nodes' entries and Comp1's leaf
+// untouched.
+func TestRename_RefusesContentPathCollision(t *testing.T) {
+	f := buildRenameFixture(t)
+	beforeLeaf, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatalf("read arch_comp1.md: %v", err)
+	}
+	beforeMod, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+
+	report, refusals, err := Rename(f.dir, RenameInput{ID: f.comp2ID, NewName: "comp1"})
+	if err == nil {
+		t.Fatalf("Rename: want an error for a content-path collision, got report=%+v refusals=%+v", report, refusals)
+	}
+	if report != nil || refusals != nil {
+		t.Errorf("Rename: want no report and no refusals on a content-path collision, got report=%+v refusals=%+v", report, refusals)
+	}
+
+	afterLeaf, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatalf("arch_comp1.md must survive a refused rename: %v", err)
+	}
+	if string(beforeLeaf) != string(afterLeaf) {
+		t.Error("Comp1's leaf must be untouched by a refused rename")
+	}
+	afterMod, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("read module.json after refusal: %v", err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("module.json must be byte-identical after a refused rename")
+	}
+}
+
+// TestRename_RepointsDotFenceLinks covers the review on PR #519: every
+// flow_*.md leaf names its participants as bare identity-hash tokens inside
+// a ```dot fence (flow_authoring.md's own convention, and what
+// validator/markdown_scanner.go's kindDotNode resolves), not the
+// [[id|display]] form. A rename has to repoint that form too, or
+// CheckLinksFS refuses the very next validate with a stale "link target ...
+// does not resolve" error — reproduced on this fixture extended with one
+// data_flow leaf, matching PRRT_kwDORYErI86ipbGK and the review body.
+func TestRename_RepointsDotFenceLinks(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	flowID := schema.IdentityHash("alpha", "data_flow", "F1")
+	modPath := filepath.Join(f.dir, "alpha", "module.json")
+	modData, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatalf("parse module.json: %v", err)
+	}
+	mod.DataFlows = []schema.DataFlow{
+		{ID: flowID, Name: "F1", Content: "flow_f1.md", Uses: []string{f.comp1ID, f.comp2ID}},
+	}
+	writeJSON(t, modPath, mod)
+
+	flowContent := "# F1\n\n## Data Shapes\n\n```dot\ndigraph f1 {\n" +
+		"    \"" + f.comp1ID + "\" [label=\"Comp1\"];\n" +
+		"    \"" + f.comp2ID + "\" [label=\"Comp2\"];\n" +
+		"    \"" + f.comp1ID + "\" -> \"" + f.comp2ID + "\";\n" +
+		"}\n```\n"
+	writeFile(t, filepath.Join(f.dir, "alpha", "flow_f1.md"), flowContent)
+
+	report, refusals, err := Rename(f.dir, RenameInput{ID: f.comp1ID, NewName: "Core"})
+	if err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+	if report == nil {
+		t.Fatal("Rename: want a report, got nil")
+	}
+
+	newID := schema.IdentityHash("alpha", "component", "Core")
+	flowAfter, err := os.ReadFile(filepath.Join(f.dir, "alpha", "flow_f1.md"))
+	if err != nil {
+		t.Fatalf("read flow_f1.md: %v", err)
+	}
+	if !strings.Contains(string(flowAfter), "\""+newID+"\"") {
+		t.Errorf("flow_f1.md did not repoint the dot node id to %s: %s", newID, flowAfter)
+	}
+	if strings.Contains(string(flowAfter), f.comp1ID) {
+		t.Errorf("flow_f1.md still names the retired id %s: %s", f.comp1ID, flowAfter)
+	}
+
+	fsys := os.DirFS(f.dir)
+	var allErrs []validator.ValidationError
+	allErrs = append(allErrs, validator.CheckSchemaFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckIDsFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckIDDerivationFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckDAGFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckLinksFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckContentPathsFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckNameConsistencyFS(fsys)...)
+	allErrs = append(allErrs, validator.CheckTestCoverageFS(fsys)...)
+	reqErrs, _ := validator.CheckRequirementCoverageFS(fsys)
+	allErrs = append(allErrs, reqErrs...)
+	allErrs = append(allErrs, validator.CheckCoupledSectionsFS(fsys)...)
+	if len(allErrs) > 0 {
+		t.Errorf("spec is not green after rename: %+v", allErrs)
+	}
+}
+
+// TestRename_WritesCanonicalKeyOrder covers PRRT_kwDORYErI86ipbGX:
+// json.MarshalIndent over a map[string]any sorts keys alphabetically, so a
+// rewritten module.json used to reorder every array and every node entry it
+// touched. arch_node_editor.md's Formatting section — "two-space indent,
+// the profile's key order for node fields, arrays in declaration order" —
+// and N13 in test_node_editing.md both assert this holds for every write
+// this package's writers perform. Checked against raw bytes, not through
+// json.Unmarshal, which would hide the defect (a map has no key order to
+// lose).
+func TestRename_WritesCanonicalKeyOrder(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	if _, refusals, err := Rename(f.dir, RenameInput{ID: f.comp1ID, NewName: "Core"}); err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	} else if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+
+	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	mod := string(modData)
+
+	assertAscending(t, mod, []string{`"name":`, `"requirements":`, `"components":`, `"test_sections":`, `"apis":`})
+
+	entry := regexp.MustCompile(`\{[^{}]*"name":\s*"Core"[^{}]*\}`).FindString(mod)
+	if entry == "" {
+		t.Fatalf("could not find Core's entry object in module.json: %s", mod)
+	}
+	assertAscending(t, entry, []string{`"id":`, `"name":`, `"content":`, `"implements":`})
+}
+
+// assertAscending fails t if any key in keys does not appear later in s
+// than the key before it.
+func assertAscending(t *testing.T, s string, keys []string) {
+	t.Helper()
+	last := -1
+	for _, k := range keys {
+		idx := strings.Index(s, k)
+		if idx < 0 {
+			t.Fatalf("key %s not found in %s", k, s)
+		}
+		if idx < last {
+			t.Fatalf("key %s out of canonical order in %s", k, s)
+		}
+		last = idx
 	}
 }
 

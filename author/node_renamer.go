@@ -92,6 +92,12 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		nv := prefix + snakeCase(input.NewName) + ".md"
 		newContentValue = &nv
 		newContentFull = path.Join(loc.moduleDir, nv)
+
+		if nv != oldContent {
+			if collidingID, ok := contentPathCollision(docs[loc.ownerFile], loc.nodeType.PluralKey, input.ID, nv); ok && collidingID != newID {
+				return nil, nil, fmt.Errorf("author: rename: new content path %s already names %s's leaf; refusing to overwrite it", newContentFull, collidingID)
+			}
+		}
 	}
 
 	refFields := referenceFieldNames(profile)
@@ -106,7 +112,7 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		if !changed {
 			continue
 		}
-		data, err := json.MarshalIndent(doc, "", "  ")
+		data, err := json.MarshalIndent(canonicalizeDoc(doc, key, profile), "", "  ")
 		if err != nil {
 			return nil, nil, fmt.Errorf("author: rename: marshal %s: %w", key, err)
 		}
@@ -117,8 +123,16 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		if !strings.HasSuffix(key, ".md") {
 			continue
 		}
-		if newData, changed := repointLinks(data, input.ID, newID); changed {
-			after[key] = newData
+		updated := data
+		changed := false
+		if newData, ok := repointLinks(updated, input.ID, newID); ok {
+			updated, changed = newData, true
+		}
+		if newData, ok := repointDotNodeRefs(updated, input.ID, newID); ok {
+			updated, changed = newData, true
+		}
+		if changed {
+			after[key] = updated
 		}
 	}
 
@@ -127,8 +141,10 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		if !ok {
 			return nil, nil, fmt.Errorf("author: rename: content file %s not found", oldContentFull)
 		}
-		delete(after, oldContentFull)
-		after[newContentFull] = content
+		if newContentFull != oldContentFull {
+			delete(after, oldContentFull)
+			after[newContentFull] = content
+		}
 	}
 
 	refusals, obligations, err := Report(os.DirFS(specDir), after, profile)
@@ -143,7 +159,7 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 	if err := writeChanges(specDir, after, written); err != nil {
 		return nil, nil, fmt.Errorf("author: rename: %w", err)
 	}
-	if loc.nodeType.RequiresContent {
+	if loc.nodeType.RequiresContent && newContentFull != oldContentFull {
 		if err := os.Remove(filepath.Join(specDir, filepath.FromSlash(oldContentFull))); err != nil {
 			return nil, nil, fmt.Errorf("author: rename: remove %s: %w", oldContentFull, err)
 		}
@@ -257,6 +273,37 @@ func decodeDoc(mem validator.MemFS, key string) (map[string]any, error) {
 		return nil, fmt.Errorf("parse %s: %w", key, err)
 	}
 	return doc, nil
+}
+
+// contentPathCollision looks for another entry in doc's pluralKey array —
+// not the node named by excludeID — whose "content" field equals
+// newContent, returning that entry's id. Two different names can derive
+// different ids (schema.IdentityHash is case-sensitive) yet still slug to
+// the same snake-case content path, and Rename's move step would otherwise
+// silently overwrite that other entry's leaf (PRRT_kwDORYErI86ipbGT).
+// arch_node_renamer.md's refusal list names an id collision, not this one,
+// so a caller only treats the result as a refusal-worthy collision when the
+// colliding id differs from the rename's own derived id — an id collision
+// is Report's own "duplicate ID" refusal to raise, unchanged.
+func contentPathCollision(doc map[string]any, pluralKey, excludeID, newContent string) (string, bool) {
+	arr, ok := doc[pluralKey].([]any)
+	if !ok {
+		return "", false
+	}
+	for _, item := range arr {
+		obj, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		entryID, _ := obj["id"].(string)
+		if entryID == excludeID {
+			continue
+		}
+		if c, _ := obj["content"].(string); c == newContent {
+			return entryID, true
+		}
+	}
+	return "", false
 }
 
 // findEntryField searches doc's array at pluralKey for the entry whose "id"
@@ -387,6 +434,122 @@ func repointLinks(data []byte, oldID, newID string) ([]byte, bool) {
 		return data, false
 	}
 	return pattern.ReplaceAll(data, []byte("[["+newID+"|")), true
+}
+
+// repointDotNodeRefs rewrites every bare identity-hash token naming oldID to
+// newID instead, wherever it appears inside a ```dot fence — the second link
+// form validator/markdown_scanner.go's kindDotNode resolves, alongside the
+// `[[<id>|<display>]]` form repointLinks handles. Every flow_*.md leaf names
+// its participants this way (spex render --format dot's own node-ID
+// convention), so a rename of a data-flow participant needs this sweep too,
+// or CheckLinksFS refuses the after-state with a stale "link target ... does
+// not resolve" error. Reports whether anything changed.
+func repointDotNodeRefs(data []byte, oldID, newID string) ([]byte, bool) {
+	lines := strings.Split(string(data), "\n")
+	changed := false
+
+	inFence := false
+	var fenceChar byte
+	var fenceLen int
+	var fenceInfo string
+	for i, line := range lines {
+		if ch, n, info, ok := fenceLineMarker(line); ok {
+			if !inFence {
+				inFence, fenceChar, fenceLen, fenceInfo = true, ch, n, info
+			} else if ch == fenceChar && n >= fenceLen && info == "" {
+				inFence, fenceChar, fenceLen, fenceInfo = false, 0, 0, ""
+			}
+			continue
+		}
+		if inFence && fenceInfo == "dot" {
+			if newLine, ok := repointBareHashLine(line, oldID, newID); ok {
+				lines[i] = newLine
+				changed = true
+			}
+		}
+	}
+
+	if !changed {
+		return data, false
+	}
+	return []byte(strings.Join(lines, "\n")), true
+}
+
+// fenceLineMarker mirrors validator/markdown_scanner.go's unexported
+// fenceMarker: it reports whether line opens or closes a fenced code block,
+// returning the fence character, its run length and the info string, so
+// repointDotNodeRefs tracks ```dot fences the same way CheckLinksFS's
+// scanner does. Up to three leading spaces are allowed, matching CommonMark.
+func fenceLineMarker(line string) (ch byte, runLen int, info string, ok bool) {
+	trimmed := strings.TrimLeft(line, " ")
+	if len(line)-len(trimmed) > 3 {
+		return 0, 0, "", false
+	}
+	if len(trimmed) < 3 {
+		return 0, 0, "", false
+	}
+	c := trimmed[0]
+	if c != '`' && c != '~' {
+		return 0, 0, "", false
+	}
+	n := 0
+	for n < len(trimmed) && trimmed[n] == c {
+		n++
+	}
+	if n < 3 {
+		return 0, 0, "", false
+	}
+	rest := strings.TrimSpace(trimmed[n:])
+	if c == '`' && strings.Contains(rest, "`") {
+		return 0, 0, "", false
+	}
+	if idx := strings.IndexAny(rest, " \t"); idx >= 0 {
+		rest = rest[:idx]
+	}
+	return c, n, rest, true
+}
+
+// repointBareHashLine replaces every standalone occurrence of oldID in line
+// with newID — "standalone" meaning its neighbours are not word characters,
+// the same rule validator/markdown_scanner.go's scanBareHashes applies to
+// keep a 64-hex content hash from being read as five consecutive identity
+// hashes. oldID and newID are always 12 lowercase-hex characters (schema.
+// IdentityHash's output), so a literal search is exact — no regex needed.
+func repointBareHashLine(line, oldID, newID string) (string, bool) {
+	changed := false
+	var b strings.Builder
+	i := 0
+	for {
+		rel := strings.Index(line[i:], oldID)
+		if rel < 0 {
+			b.WriteString(line[i:])
+			break
+		}
+		start := i + rel
+		end := start + len(oldID)
+		before := start == 0 || !isWordByte(line[start-1])
+		after := end == len(line) || !isWordByte(line[end])
+		if before && after {
+			b.WriteString(line[i:start])
+			b.WriteString(newID)
+			changed = true
+			i = end
+		} else {
+			b.WriteString(line[i : start+1])
+			i = start + 1
+		}
+	}
+	return b.String(), changed
+}
+
+// isWordByte mirrors validator/markdown_scanner.go's unexported isWordByte:
+// the neighbour-character rule scanBareHashes and repointBareHashLine both
+// use to tell a standalone identity hash from a substring of a longer token.
+func isWordByte(c byte) bool {
+	return c == '_' ||
+		(c >= '0' && c <= '9') ||
+		(c >= 'a' && c <= 'z') ||
+		(c >= 'A' && c <= 'Z')
 }
 
 // snakeCase is the "snake-case slug of the name" NodeEditor's content-path
