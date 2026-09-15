@@ -1,5 +1,5 @@
 {
-  "profile_version": 1,
+  "profile_version": 2,
   "node_types": [
     {
       "name": "requirement",
@@ -32,6 +32,8 @@
       "scope": "module",
       "requires_content": true,
       "name_declarable": true,
+      "content_prefix": "arch_",
+      "leaf_sections": ["Responsibilities", "Interface"],
       "fields": [
         {"name": "implements", "kind": "reference", "targets": ["requirement"], "cardinality": "many", "description": "Requirement identity hashes this component implements (implements edge)."},
         {"name": "uses", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Identity hashes of other components this one depends on (uses edge)."}
@@ -42,6 +44,8 @@
       "plural_key": "data_flows",
       "scope": "module",
       "requires_content": true,
+      "content_prefix": "flow_",
+      "leaf_sections": ["Data Shapes"],
       "fields": [
         {"name": "uses", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Component identity hashes involved in this data flow (uses edge)."}
       ]
@@ -51,6 +55,8 @@
       "plural_key": "test_sections",
       "scope": "module",
       "requires_content": true,
+      "content_prefix": "test_",
+      "leaf_sections": ["Setup", "Scenarios", "Edge Cases"],
       "fields": [
         {"name": "describes", "kind": "reference", "targets": ["component"], "cardinality": "many", "description": "Component identity hashes described by this test section (describes edge)."}
       ]
