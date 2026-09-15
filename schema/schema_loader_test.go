@@ -1662,8 +1662,8 @@ func TestFR9_P9_EmbeddedDefaultProfileIsOrdinaryDocument(t *testing.T) {
 	}
 	embedded.finalize()
 
-	if embedded.ProfileVersion == nil || *embedded.ProfileVersion != 1 {
-		t.Fatalf("embedded defaultProfile.json should declare profile_version 1, got %v", embedded.ProfileVersion)
+	if embedded.ProfileVersion == nil || *embedded.ProfileVersion != 2 {
+		t.Fatalf("embedded defaultProfile.json should declare profile_version 2, got %v", embedded.ProfileVersion)
 	}
 
 	dir := t.TempDir()
@@ -1804,4 +1804,220 @@ func TestFR3_FormatVersionDeclarations(t *testing.T) {
 	if JournalLineVersion != 1 {
 		t.Fatalf("JournalLineVersion = %d, want 1", JournalLineVersion)
 	}
+}
+
+func strPtr(s string) *string { return &s }
+
+// nodeType looks up a node type by (scope, name) in a resolved profile, the
+// way the P7/P8 content_prefix/leaf_sections tests below repeatedly need to.
+func nodeType(t *testing.T, p *Profile, scope, name string) NodeType {
+	t.Helper()
+	for _, nt := range p.NodeTypes {
+		if nt.Scope == scope && nt.Name == name {
+			return nt
+		}
+	}
+	t.Fatalf("no node type %s:%s in resolved profile", scope, name)
+	return NodeType{}
+}
+
+// TestFR9_P7_ContentPrefixLeafSectionsConventions covers test_schema_loading.md's
+// P7: a profile_version 2 document's own content_prefix/leaf_sections
+// declarations resolve as declared, while a type it does not restate — the
+// three built-in content-bearing types, under either fixture — resolves
+// with the default profile's own conventions filled in, since neither
+// fixture below overrides them.
+func TestFR9_P7_ContentPrefixLeafSectionsConventions(t *testing.T) {
+	checkBuiltinConventions := func(t *testing.T, p *Profile) {
+		t.Helper()
+		component := nodeType(t, p, "module", "component")
+		if component.ContentPrefix == nil || *component.ContentPrefix != "arch_" {
+			t.Fatalf("component content_prefix = %v, want \"arch_\"", component.ContentPrefix)
+		}
+		if !slices.Equal(component.LeafSections, []string{"Responsibilities", "Interface"}) {
+			t.Fatalf("component leaf_sections = %v, want [Responsibilities Interface]", component.LeafSections)
+		}
+
+		dataFlow := nodeType(t, p, "module", "data_flow")
+		if dataFlow.ContentPrefix == nil || *dataFlow.ContentPrefix != "flow_" {
+			t.Fatalf("data_flow content_prefix = %v, want \"flow_\"", dataFlow.ContentPrefix)
+		}
+		if !slices.Equal(dataFlow.LeafSections, []string{"Data Shapes"}) {
+			t.Fatalf("data_flow leaf_sections = %v, want [Data Shapes]", dataFlow.LeafSections)
+		}
+
+		testSection := nodeType(t, p, "module", "test_section")
+		if testSection.ContentPrefix == nil || *testSection.ContentPrefix != "test_" {
+			t.Fatalf("test_section content_prefix = %v, want \"test_\"", testSection.ContentPrefix)
+		}
+		if !slices.Equal(testSection.LeafSections, []string{"Setup", "Scenarios", "Edge Cases"}) {
+			t.Fatalf("test_section leaf_sections = %v, want [Setup Scenarios Edge Cases]", testSection.LeafSections)
+		}
+	}
+
+	t.Run("version 2 document declares its own conventions on a custom type", func(t *testing.T) {
+		profile := DefaultProfile()
+		profile.NodeTypes = append(profile.NodeTypes, NodeType{
+			Name:            "endpoint",
+			PluralKey:       "endpoints",
+			Scope:           "module",
+			RequiresContent: true,
+			ContentPrefix:   strPtr("ep_"),
+			LeafSections:    []string{"Contract", "Errors"},
+		})
+
+		dir := t.TempDir()
+		data, err := json.Marshal(profile)
+		if err != nil {
+			t.Fatalf("marshal profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+
+		resolved, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile: %v", err)
+		}
+
+		endpoint := nodeType(t, resolved, "module", "endpoint")
+		if endpoint.ContentPrefix == nil || *endpoint.ContentPrefix != "ep_" {
+			t.Fatalf("endpoint content_prefix = %v, want \"ep_\"", endpoint.ContentPrefix)
+		}
+		if !slices.Equal(endpoint.LeafSections, []string{"Contract", "Errors"}) {
+			t.Fatalf("endpoint leaf_sections = %v, want [Contract Errors]", endpoint.LeafSections)
+		}
+		checkBuiltinConventions(t, resolved)
+	})
+
+	t.Run("version 1 document gets the default conventions filled in", func(t *testing.T) {
+		profile := DefaultProfile()
+		profile.ProfileVersion = nil
+		for i := range profile.NodeTypes {
+			profile.NodeTypes[i].ContentPrefix = nil
+			profile.NodeTypes[i].LeafSections = nil
+		}
+
+		dir := t.TempDir()
+		data, err := json.Marshal(profile)
+		if err != nil {
+			t.Fatalf("marshal profile: %v", err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), data, 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+
+		resolved, err := ResolveProfile(dir)
+		if err != nil {
+			t.Fatalf("ResolveProfile over a version 1 document: %v", err)
+		}
+		checkBuiltinConventions(t, resolved)
+	})
+}
+
+// TestFR9_P8_ContentPrefixLeafSectionsMalformed covers the content_prefix/
+// leaf_sections half of test_schema_loading.md's P8: a version 1 document
+// declaring either key, a leaf_sections/content_prefix on a type that
+// carries no content leaf, and an empty content_prefix are each malformed —
+// named, distinct, early failures. The profile_version-out-of-range half of
+// P8 is pinned separately by TestFR9_P8_ProfileVersionOutOfRangeFailsEarly.
+func TestFR9_P8_ContentPrefixLeafSectionsMalformed(t *testing.T) {
+	cases := []struct {
+		name    string
+		doc     string
+		wantErr string
+	}{
+		{
+			name: "content_prefix under profile_version 1 is malformed",
+			doc: `{
+				"profile_version": 1,
+				"node_types": [
+					{"name": "widget", "plural_key": "widgets", "scope": "module", "requires_content": true, "content_prefix": "wg_"}
+				]
+			}`,
+			wantErr: "content_prefix/leaf_sections",
+		},
+		{
+			name: "leaf_sections with an absent (version 1) profile_version is malformed",
+			doc: `{
+				"node_types": [
+					{"name": "widget", "plural_key": "widgets", "scope": "module", "requires_content": true, "leaf_sections": ["Notes"]}
+				]
+			}`,
+			wantErr: "content_prefix/leaf_sections",
+		},
+		{
+			name: "leaf_sections on a type with no content leaf is malformed",
+			doc: `{
+				"profile_version": 2,
+				"node_types": [
+					{"name": "widget", "plural_key": "widgets", "scope": "module", "leaf_sections": ["Notes"]}
+				]
+			}`,
+			wantErr: "carries no content leaf",
+		},
+		{
+			name: "content_prefix on a type with no content leaf is malformed",
+			doc: `{
+				"profile_version": 2,
+				"node_types": [
+					{"name": "widget", "plural_key": "widgets", "scope": "module", "content_prefix": "wg_"}
+				]
+			}`,
+			wantErr: "carries no content leaf",
+		},
+		{
+			name: "empty content_prefix is malformed",
+			doc: `{
+				"profile_version": 2,
+				"node_types": [
+					{"name": "widget", "plural_key": "widgets", "scope": "module", "requires_content": true, "content_prefix": ""}
+				]
+			}`,
+			wantErr: "content_prefix: must not be empty",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(tc.doc), 0o644); err != nil {
+				t.Fatalf("write profile.json: %v", err)
+			}
+			_, err := ResolveProfile(dir)
+			if err == nil {
+				t.Fatal("expected an error, got nil")
+			}
+			if !strings.Contains(err.Error(), "profile.json") {
+				t.Fatalf("error should name the profile file, got: %v", err)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("error should contain %q, got: %v", tc.wantErr, err)
+			}
+		})
+	}
+
+	t.Run("a top-level key the format does not declare fails at decode, naming the file", func(t *testing.T) {
+		dir := t.TempDir()
+		doc := `{
+			"profile_version": 2,
+			"node_types": [
+				{"name": "widget", "plural_key": "widgets", "scope": "module"}
+			],
+			"not_a_real_key": true
+		}`
+		if err := os.WriteFile(filepath.Join(dir, "profile.json"), []byte(doc), 0o644); err != nil {
+			t.Fatalf("write profile.json: %v", err)
+		}
+		_, err := ResolveProfile(dir)
+		if err == nil {
+			t.Fatal("expected an error resolving a document with an undeclared top-level key, got nil")
+		}
+		if !strings.Contains(err.Error(), "profile.json") {
+			t.Fatalf("error should name the profile file, got: %v", err)
+		}
+		if !strings.Contains(err.Error(), "not_a_real_key") {
+			t.Fatalf("error should name the undeclared key, got: %v", err)
+		}
+	})
 }

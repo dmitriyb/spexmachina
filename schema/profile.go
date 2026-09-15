@@ -29,15 +29,30 @@ import (
 // module-scoped one — carried by the built-in requirement and api types on
 // both scopes, empty (and so absent from the composed entry) on every other
 // declared type.
+// ContentPrefix and LeafSections are profile format version 2's two
+// per-type declarations, valid only on a content-bearing type
+// (RequiresContent): the filename prefix a node's conventional content path
+// is built from, and the ordered "##" headings a leaf of that type
+// carries. Both are pointers/nilable so resolution can tell "the document
+// did not declare this" (nil) apart from "the document declared it empty"
+// ([]string{} for LeafSections, an explicitly empty string for
+// ContentPrefix) — the latter is a validation defect for ContentPrefix,
+// while an empty LeafSections is legal ("empty when the type declares
+// none"). finalize fills a nil value in with the default profile's own
+// convention for a type it recognizes by (Scope, Name), so a document that
+// omits them for a built-in type still resolves with the conventions this
+// repository's own leaves already follow.
 type NodeType struct {
-	Name                string  `json:"name"`
-	PluralKey           string  `json:"plural_key"`
-	Scope               string  `json:"scope"` // "project" or "module"
-	RequiresContent     bool    `json:"requires_content,omitempty"`
-	CompletenessTrigger bool    `json:"completeness_trigger,omitempty"`
-	NameDeclarable      bool    `json:"name_declarable,omitempty"`
-	Fields              []Field `json:"fields,omitempty"`
-	Comment             string  `json:"comment,omitempty"`
+	Name                string   `json:"name"`
+	PluralKey           string   `json:"plural_key"`
+	Scope               string   `json:"scope"` // "project" or "module"
+	RequiresContent     bool     `json:"requires_content,omitempty"`
+	CompletenessTrigger bool     `json:"completeness_trigger,omitempty"`
+	NameDeclarable      bool     `json:"name_declarable,omitempty"`
+	Fields              []Field  `json:"fields,omitempty"`
+	Comment             string   `json:"comment,omitempty"`
+	ContentPrefix       *string  `json:"content_prefix,omitempty"`
+	LeafSections        []string `json:"leaf_sections,omitempty"`
 }
 
 // Edge is a derived view of one legal edge kind: the reference-field name,
@@ -128,13 +143,16 @@ var defaultProfileFS embed.FS
 
 // Supported profile format versions. Version 1 is the field-declaration
 // format this contract ships; an absent profile_version means version 1.
-// A document declaring a version outside this range — or a pre-versioning
-// document in the retired edges/hashed_fields format, which carries no
-// profile_version at all and fails ordinary validation as malformed — is
-// rejected before any other check runs.
+// Version 2 adds the per-content-bearing-type ContentPrefix and
+// LeafSections declarations; a version 1 document carrying either is
+// malformed, the fix being to stamp profile_version 2. A document declaring
+// a version outside this range — or a pre-versioning document in the
+// retired edges/hashed_fields format, which carries no profile_version at
+// all and fails ordinary validation as malformed — is rejected before any
+// other check runs.
 const (
 	minProfileVersion = 1
-	maxProfileVersion = 1
+	maxProfileVersion = 2
 )
 
 // SupportedSpecVersion is the spec format version this binary supports,
@@ -237,12 +255,68 @@ func decodeProfile(data []byte) (*Profile, error) {
 }
 
 // finalize populates the derived Edges and HashedFields views from
-// NodeTypes' declared fields. Called once resolution succeeds — never on a
-// profile that failed Validate — so every consumer that reads these two
-// views can assume they reflect a valid profile.
+// NodeTypes' declared fields, and fills in the default content_prefix and
+// leaf_sections conventions a document omitted. Called once resolution
+// succeeds — never on a profile that failed Validate — so every consumer
+// that reads these views can assume they reflect a valid profile.
 func (p *Profile) finalize() {
+	p.fillContentConventions()
 	p.Edges = deriveEdges(p.NodeTypes)
 	p.HashedFields = deriveHashedFields(p.NodeTypes)
+}
+
+// fillContentConventions fills a content-bearing type's nil ContentPrefix
+// and/or nil LeafSections in with the built-in default profile's own
+// declaration for a type it recognizes by (Scope, Name) — what
+// arch_profile_loader.md's format-version paragraph calls "resolution
+// fills in with the default conventions" for a version 1 document, or for
+// any document that simply does not restate a built-in type's own
+// convention. A type defaultContentConventions does not recognize (a
+// wholly custom content-bearing type declaring neither key) is left as the
+// document declared it: ContentPrefix stays nil, LeafSections stays nil —
+// "empty when the type declares none" is a legal explicit value, not a
+// defect.
+func (p *Profile) fillContentConventions() {
+	conventions := defaultContentConventions()
+	for i, t := range p.NodeTypes {
+		if !t.RequiresContent {
+			continue
+		}
+		def, ok := conventions[t.Scope+":"+t.Name]
+		if !ok {
+			continue
+		}
+		if t.ContentPrefix == nil {
+			p.NodeTypes[i].ContentPrefix = def.ContentPrefix
+		}
+		if t.LeafSections == nil {
+			p.NodeTypes[i].LeafSections = def.LeafSections
+		}
+	}
+}
+
+// defaultContentConventions returns the embedded default profile's own
+// content-bearing node types, keyed by "<scope>:<name>", decoded directly
+// from defaultProfile.json without Validate/finalize — so this lookup never
+// itself resolves a profile, which is what lets fillContentConventions call
+// it from inside finalize (including DefaultProfile's own) without
+// recursing back into DefaultProfile.
+func defaultContentConventions() map[string]NodeType {
+	data, err := defaultProfileFS.ReadFile("defaultProfile.json")
+	if err != nil {
+		panic(fmt.Sprintf("schema: read embedded defaultProfile.json: %v", err))
+	}
+	p, err := decodeProfile(data)
+	if err != nil {
+		panic(fmt.Sprintf("schema: decode embedded defaultProfile.json: %v", err))
+	}
+	out := make(map[string]NodeType, len(p.NodeTypes))
+	for _, t := range p.NodeTypes {
+		if t.RequiresContent {
+			out[t.Scope+":"+t.Name] = t
+		}
+	}
+	return out
 }
 
 // deriveEdges rebuilds the earlier profile format's "edges" view from every
@@ -351,9 +425,11 @@ func (p *Profile) findField(typeName, scope, fieldName string) (Field, bool) {
 // fails here), an enumeration on a non-text field, bounds on a non-integer
 // field, a duplicate field name within one type, a field name colliding
 // with an envelope field, a plan-relevant entry naming an undeclared type
-// or a type already listed, or a coverage/impact-level/absorbable entry
+// or a type already listed, a coverage/impact-level/absorbable entry
 // naming an undeclared type or a field that does not exist, is not a
-// reference field, or does not target the covered type —
+// reference field, or does not target the covered type, a content_prefix or
+// leaf_sections declared under profile_version 1 or on a type that carries
+// no content leaf, or an empty content_prefix —
 // is collected and returned together via errors.Join, so a malformed
 // profile is reported in one pass rather than one field at a time across
 // repeated runs.
@@ -384,6 +460,22 @@ func (p *Profile) Validate() error {
 		}
 		if t.Name != "" {
 			declared[t.Name] = true
+		}
+	}
+
+	effectiveVersion := 1
+	if p.ProfileVersion != nil {
+		effectiveVersion = *p.ProfileVersion
+	}
+	for i, t := range p.NodeTypes {
+		path := fmt.Sprintf("node_types[%d]", i)
+		if t.ContentPrefix == nil && t.LeafSections == nil {
+			continue
+		}
+		check(effectiveVersion >= 2, path, "content_prefix/leaf_sections: require profile_version 2 (declared under profile_version 1); the fix is to stamp profile_version 2")
+		check(t.RequiresContent, path, fmt.Sprintf("content_prefix/leaf_sections: declared on node type %q, which carries no content leaf", t.Name))
+		if t.ContentPrefix != nil {
+			check(*t.ContentPrefix != "", path, "content_prefix: must not be empty")
 		}
 	}
 
