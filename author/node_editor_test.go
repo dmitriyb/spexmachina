@@ -269,6 +269,146 @@ func TestN3_ModuleRegisteredAndSkeletoned(t *testing.T) {
 	}
 }
 
+// TestAdd_RefusesNonEmptyContentLeaf covers arch_leaf_scaffolder.md's
+// non-overwrite guard as `spex node add` hits it (arch_node_editor.md: the
+// content path is "scaffolded through LeafScaffolder"): a hand-written,
+// non-empty file already at the derived content path refuses rather than
+// being silently replaced by the skeleton, and nothing is written.
+func TestAdd_RefusesNonEmptyContentLeaf(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	contentPath := filepath.Join(f.dir, "alpha", "arch_widget.md")
+	writeFile(t, contentPath, "# Widget\n\nHand-written prose that must survive.\n")
+
+	before, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report, refusals, err := Add(f.dir, NodeAddInput{TypeName: "component", Module: "alpha", Name: "Widget"})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("Add: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 1 {
+		t.Fatalf("Add: want exactly one refusal, got %+v", refusals)
+	}
+	if !strings.Contains(refusals[0].Message, "arch_widget.md") {
+		t.Errorf("message should name the leaf, got: %s", refusals[0].Message)
+	}
+	if !strings.Contains(refusals[0].Fix, "spex node add") {
+		t.Errorf("fix should point back at spex node add, got: %s", refusals[0].Fix)
+	}
+
+	after, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("a refusal must leave alpha/module.json byte-identical")
+	}
+	content, err := os.ReadFile(contentPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(content), "Hand-written prose that must survive.") {
+		t.Errorf("the existing leaf must survive a refused add, got: %s", content)
+	}
+}
+
+// TestAdd_RefusesContentLeafCollisionWithDeclaredNode covers the same guard
+// hit via a name that slugs to an already-declared node's content path: a
+// name that differs only in case from Comp1 still derives a distinct id, but
+// snake_case's slug collides on arch_comp1.md, which is not empty either.
+func TestAdd_RefusesContentLeafCollisionWithDeclaredNode(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	report, refusals, err := Add(f.dir, NodeAddInput{TypeName: "component", Module: "alpha", Name: "COMP1"})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("Add: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 1 {
+		t.Fatalf("Add: want exactly one refusal, got %+v", refusals)
+	}
+	if !strings.Contains(refusals[0].Message, "arch_comp1.md") {
+		t.Errorf("message should name the colliding leaf, got: %s", refusals[0].Message)
+	}
+
+	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatal(err)
+	}
+	if len(mod.Components) != 2 {
+		t.Errorf("a refusal must leave the components array unchanged, got %+v", mod.Components)
+	}
+	content, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_comp1.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(content), "# Comp1") {
+		t.Errorf("Comp1's declared leaf must survive a refused add, got: %s", content)
+	}
+}
+
+// TestAdd_RefusesNonEmptyModuleSkeleton covers arch_node_editor.md's
+// adopter case: a directory project.json does not yet name may already
+// carry a hand-authored, not-yet-registered module.json, and `spex node add
+// --type module` must refuse rather than reduce it to the bare
+// `{"name": ...}` skeleton, losing every declaration already in it.
+func TestAdd_RefusesNonEmptyModuleSkeleton(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	betaDir := filepath.Join(f.dir, "beta")
+	if err := os.MkdirAll(betaDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	modPath := filepath.Join(betaDir, "module.json")
+	writeFile(t, modPath, `{"name":"beta","components":[{"id":"deadbeefcafe","name":"Existing"}]}`+"\n")
+
+	before, err := os.ReadFile(filepath.Join(f.dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report, refusals, err := Add(f.dir, NodeAddInput{TypeName: "module", Name: "beta"})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("Add: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 1 {
+		t.Fatalf("Add: want exactly one refusal, got %+v", refusals)
+	}
+	if !strings.Contains(refusals[0].Message, "beta/module.json") && !strings.Contains(refusals[0].Path, "module.json") {
+		t.Errorf("refusal should name beta/module.json, got: %+v", refusals[0])
+	}
+
+	after, err := os.ReadFile(filepath.Join(f.dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("a refusal must leave project.json byte-identical — beta must not be registered")
+	}
+	modData, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(modData), "Existing") {
+		t.Errorf("the hand-authored module.json must survive a refused add, got: %s", modData)
+	}
+}
+
 // TestN4_UndeclaredTypeRefused covers N4: a type the resolved profile does
 // not declare is refused with the declared list as the fix, never a fixed
 // list compiled into NodeEditor — the same run over a fixture whose profile

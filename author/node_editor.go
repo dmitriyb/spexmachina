@@ -126,6 +126,9 @@ func Add(specDir string, input NodeAddInput) (*WriteReport, []RefusalEntry, erro
 	after[ownerFile] = append(data, '\n')
 
 	if nt.RequiresContent {
+		if existing, exists := before[contentPath]; exists && len(existing) > 0 {
+			return nil, []RefusalEntry{nonEmptyLeafRefusal(contentPath, "spex node add")}, nil
+		}
 		loc := nodeLocation{
 			projectScope: nt.Scope == "project",
 			moduleName:   input.Module,
@@ -182,6 +185,9 @@ func addModule(specDir string, before validator.MemFS, profile *schema.Profile, 
 	after["project.json"] = append(data, '\n')
 
 	modPath := path.Join(input.Name, "module.json")
+	if existing, exists := before[modPath]; exists && len(existing) > 0 {
+		return nil, []RefusalEntry{moduleSkeletonExistsRefusal(modPath)}, nil
+	}
 	modSkeleton, err := marshalIndentNoEscape(canonicalizeDoc(map[string]any{"name": input.Name}, modPath, profile))
 	if err != nil {
 		return nil, nil, fmt.Errorf("author: node add: marshal %s: %w", modPath, err)
@@ -253,6 +259,23 @@ func undeclaredNodeTypeRefusal(typeName string, profile *schema.Profile) Refusal
 		Message: fmt.Sprintf("%q is not a type the resolved profile declares", typeName),
 		Path:    "profile.json",
 		Fix:     "declared types: " + strings.Join(declaredTypeNames(profile), ", "),
+	}
+}
+
+// moduleSkeletonExistsRefusal is addModule's own guard for a modPath that
+// already holds a non-empty module.json: a directory a project.json entry
+// is about to name for the first time may already carry a hand-authored,
+// not-yet-registered module.json (arch_node_editor.md, "a directory
+// project.json does not name is invisible" — the adopter case), and
+// overwriting it with the bare `{"name": ...}` skeleton would destroy every
+// declaration already in it, the same destruction LeafScaffolder's own
+// non-overwrite guard refuses for a content leaf (nonEmptyLeafRefusal).
+func moduleSkeletonExistsRefusal(modPath string) RefusalEntry {
+	return RefusalEntry{
+		Check:   "node",
+		Message: fmt.Sprintf("%s is not empty; refusing to overwrite it", modPath),
+		Path:    modPath,
+		Fix:     fmt.Sprintf("empty %s or move it aside, then re-run spex node add --type module", modPath),
 	}
 }
 

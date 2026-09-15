@@ -100,7 +100,7 @@ func Scaffold(specDir string, input ScaffoldInput) (*WriteReport, []RefusalEntry
 		if string(existing) == string(skeleton) {
 			return &WriteReport{}, nil, nil
 		}
-		return nil, []RefusalEntry{nonEmptyLeafRefusal(contentPath)}, nil
+		return nil, []RefusalEntry{nonEmptyLeafRefusal(contentPath, "spex leaf scaffold")}, nil
 	}
 
 	after := cloneSpecFS(before)
@@ -448,16 +448,19 @@ func notContentBearingRefusal(id string, loc nodeLocation, profile *schema.Profi
 	}
 }
 
-// nonEmptyLeafRefusal is Scaffold's own guard for a leaf that already holds
-// bytes other than exactly the skeleton Scaffold would write: prose is the
-// one thing in the tree Scaffold must never destroy
+// nonEmptyLeafRefusal is LeafScaffolder's own guard for a leaf that already
+// holds bytes other than exactly the skeleton it would write: prose is the
+// one thing in the tree the tool must never destroy
 // (arch_leaf_scaffolder.md, "Refusals and idempotence": "the refusal names
-// the file and says to empty or move it").
-func nonEmptyLeafRefusal(contentPath string) RefusalEntry {
+// the file and says to empty or move it"). Both `spex leaf scaffold` (via
+// Scaffold) and `spex node add` (via Add, for the content-bearing node it
+// declares) hit this same guard — command names the fix as the one to
+// re-run once the file is out of the way.
+func nonEmptyLeafRefusal(contentPath, command string) RefusalEntry {
 	return RefusalEntry{
 		Check:   "scaffold",
 		Message: fmt.Sprintf("%s is not empty; refusing to overwrite it", contentPath),
 		Path:    contentPath,
-		Fix:     fmt.Sprintf("empty %s or move it aside, then re-run spex leaf scaffold", contentPath),
+		Fix:     fmt.Sprintf("empty %s or move it aside, then re-run %s", contentPath, command),
 	}
 }
