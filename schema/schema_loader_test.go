@@ -1619,7 +1619,7 @@ func TestFR9_P8_ProfileVersionOutOfRangeFailsEarly(t *testing.T) {
 	})
 
 	// An explicit "profile_version": 0 is not the same as an absent field:
-	// zero is outside the supported range [1,1] and must be rejected the
+	// zero is outside the supported range 1-2 and must be rejected the
 	// same way 99 is, naming the declared version and the range — a *int
 	// (rather than int with the zero value doubling as "absent") is what
 	// lets Validate tell the two cases apart.
