@@ -94,11 +94,16 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		newContentFull = path.Join(loc.moduleDir, nv)
 
 		if nv != oldContent {
-			if collidingID, ok := contentPathCollision(docs[loc.ownerFile], loc.nodeType.PluralKey, input.ID, nv); ok && collidingID != newID {
-				return nil, nil, fmt.Errorf("author: rename: new content path %s already names %s's leaf; refusing to overwrite it", newContentFull, collidingID)
+			if _, occupied := before[newContentFull]; occupied {
+				collidingID, _ := contentPathCollision(docs[loc.ownerFile], loc.nodeType.PluralKey, input.ID, nv)
+				if collidingID != newID {
+					return nil, nil, fmt.Errorf("author: rename: new content path %s already exists; refusing to overwrite it", newContentFull)
+				}
 			}
 		}
 	}
+
+	contentLeaves := declaredContentLeaves(docs, docKeys, profile)
 
 	refFields := referenceFieldNames(profile)
 	after := cloneSpecFS(before)
@@ -119,8 +124,9 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		after[key] = append(data, '\n')
 	}
 
-	for key, data := range after {
-		if !strings.HasSuffix(key, ".md") {
+	for key := range contentLeaves {
+		data, ok := after[key]
+		if !ok {
 			continue
 		}
 		updated := data
@@ -280,11 +286,15 @@ func decodeDoc(mem validator.MemFS, key string) (map[string]any, error) {
 // newContent, returning that entry's id. Two different names can derive
 // different ids (schema.IdentityHash is case-sensitive) yet still slug to
 // the same snake-case content path, and Rename's move step would otherwise
-// silently overwrite that other entry's leaf (PRRT_kwDORYErI86ipbGT).
-// arch_node_renamer.md's refusal list names an id collision, not this one,
-// so a caller only treats the result as a refusal-worthy collision when the
-// colliding id differs from the rename's own derived id — an id collision
-// is Report's own "duplicate ID" refusal to raise, unchanged.
+// silently overwrite that other entry's leaf (PRRT_kwDORYErI86ipbGT). Its
+// caller only calls this once it already knows the new path is occupied
+// (checked directly against the before-state, which also catches an
+// undeclared leaf sitting there — PRRT_kwDORYErI86ip63e, since an
+// undeclared file has no array entry for this function to find); this
+// function's only remaining job is telling that declared case apart from
+// the id-collision case Report's own "duplicate ID" refusal already covers
+// — the caller only refuses when the colliding id differs from the
+// rename's own derived id.
 func contentPathCollision(doc map[string]any, pluralKey, excludeID, newContent string) (string, bool) {
 	arr, ok := doc[pluralKey].([]any)
 	if !ok {
@@ -587,6 +597,53 @@ func specDocKeys(mem validator.MemFS) ([]string, error) {
 		keys = append(keys, path.Join(mod.Path, "module.json"))
 	}
 	return keys, nil
+}
+
+// declaredContentLeaves is the set of "every content leaf" arch_node_renamer.md
+// step 4 scopes the link-repoint sweep to: every path a content-bearing node
+// type's "content" field names, across every doc in docs, joined with that
+// doc's owning directory ("" for project.json, the module's directory for a
+// module.json). This is the same declared-only set
+// validator/content_resolver.go's CheckContentPathsFS walks (content-bearing
+// types read off the resolved profile, not a fixed three-type list, so a
+// profile-declared type beyond components/data_flows/test_sections is swept
+// too) — deliberately narrower than every .md file under specDir, since
+// spec/proposals/ holds historical documents that name a retired id on
+// purpose (validator/removed_name_checker.go's corpusDirSkip) and an
+// undeclared stray .md is not a leaf CheckLinksFS or anything else in the
+// pipeline reads (PRRT_kwDORYErI86ip63h). Called once, before any doc in
+// docs is mutated, so a caller repointing links in after still finds these
+// paths at their pre-rename location.
+func declaredContentLeaves(docs map[string]map[string]any, docKeys []string, profile *schema.Profile) map[string]bool {
+	leaves := make(map[string]bool)
+	for _, key := range docKeys {
+		scope := "module"
+		dir := path.Dir(key)
+		if key == "project.json" {
+			scope = "project"
+			dir = ""
+		}
+		doc := docs[key]
+		for _, nt := range profile.NodeTypes {
+			if nt.Scope != scope || !nt.RequiresContent {
+				continue
+			}
+			arr, ok := doc[nt.PluralKey].([]any)
+			if !ok {
+				continue
+			}
+			for _, item := range arr {
+				obj, ok := item.(map[string]any)
+				if !ok {
+					continue
+				}
+				if c, _ := obj["content"].(string); c != "" {
+					leaves[path.Join(dir, c)] = true
+				}
+			}
+		}
+	}
+	return leaves
 }
 
 // loadSpecMemFS reads every file under specDir into a validator.MemFS — the

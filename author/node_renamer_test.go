@@ -550,6 +550,144 @@ func assertAscending(t *testing.T, s string, keys []string) {
 	}
 }
 
+// TestRename_WritesCanonicalKeyOrderForProjectRequirement covers
+// PRRT_kwDORYErI86ip63Z: the profile declares a project requirement's
+// fields as type, priority, derivation, depends_on, but schema.Requirement's
+// struct tags — the order canonicalizeDoc used to take array-entry order
+// from — put derivation last, after depends_on. Renaming P2 (which already
+// carries derivation "pending" via buildRenameFixture's base fixture, with
+// depends_on added here) must write derivation ahead of depends_on, the
+// profile's order, not schema's.
+func TestRename_WritesCanonicalKeyOrderForProjectRequirement(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	projPath := filepath.Join(f.dir, "project.json")
+	data, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("read project.json: %v", err)
+	}
+	var proj schema.Project
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatalf("parse project.json: %v", err)
+	}
+	for i := range proj.Requirements {
+		if proj.Requirements[i].ID == f.p2ID {
+			proj.Requirements[i].DependsOn = []string{f.p1ID}
+		}
+	}
+	writeJSON(t, projPath, proj)
+
+	if _, refusals, err := Rename(f.dir, RenameInput{ID: f.p2ID, NewName: "P2Renamed"}); err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	} else if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+
+	projData, err := os.ReadFile(projPath)
+	if err != nil {
+		t.Fatalf("read project.json: %v", err)
+	}
+	projStr := string(projData)
+
+	entry := regexp.MustCompile(`\{[^{}]*"name":\s*"P2Renamed"[^{}]*\}`).FindString(projStr)
+	if entry == "" {
+		t.Fatalf("could not find P2Renamed's entry object in project.json: %s", projStr)
+	}
+	assertAscending(t, entry, []string{`"id":`, `"name":`, `"type":`, `"priority":`, `"derivation":`, `"depends_on":`})
+}
+
+// TestRename_WritesCanonicalKeyOrderForModuleRequirement is
+// TestRename_WritesCanonicalKeyOrderForProjectRequirement's module-scope
+// counterpart: the profile declares a module requirement's fields as type,
+// preq_id, depends_on, but schema.ModuleRequirement's struct tags put
+// preq_id ahead of type. Same root cause, same fix (profileFieldOrder,
+// scope-aware), covered here so both scopes of the twice-declared
+// "requirement" type are exercised.
+func TestRename_WritesCanonicalKeyOrderForModuleRequirement(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	if _, refusals, err := Rename(f.dir, RenameInput{ID: f.r1ID, NewName: "R1Renamed"}); err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	} else if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+
+	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	modStr := string(modData)
+
+	entry := regexp.MustCompile(`\{[^{}]*"name":\s*"R1Renamed"[^{}]*\}`).FindString(modStr)
+	if entry == "" {
+		t.Fatalf("could not find R1Renamed's entry object in module.json: %s", modStr)
+	}
+	assertAscending(t, entry, []string{`"id":`, `"name":`, `"type":`, `"preq_id":`})
+}
+
+// TestRename_RefusesUndeclaredContentPathCollision covers
+// PRRT_kwDORYErI86ip63e: contentPathCollision only ever scanned declared
+// entries of loc.nodeType.PluralKey, so an undeclared .md file already
+// sitting at the derived destination path was silently overwritten by the
+// move step — arch_stray.md here plays the undeclared leaf the review
+// reproduced this with (spex validate is green with it present: nothing
+// in module.json names it). Renaming Comp2 to a name that slugs to
+// "stray" must refuse rather than clobber it.
+func TestRename_RefusesUndeclaredContentPathCollision(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	strayPath := filepath.Join(f.dir, "alpha", "arch_stray.md")
+	strayContent := "# Stray\n\nAn undeclared leaf: no module.json entry names this file.\n"
+	writeFile(t, strayPath, strayContent)
+
+	report, refusals, err := Rename(f.dir, RenameInput{ID: f.comp2ID, NewName: "Stray"})
+	if err == nil {
+		t.Fatalf("Rename: want an error for an undeclared content-path collision, got report=%+v refusals=%+v", report, refusals)
+	}
+	if report != nil || refusals != nil {
+		t.Errorf("Rename: want no report and no refusals on a content-path collision, got report=%+v refusals=%+v", report, refusals)
+	}
+
+	after, err := os.ReadFile(strayPath)
+	if err != nil {
+		t.Fatalf("arch_stray.md must survive a refused rename: %v", err)
+	}
+	if string(after) != strayContent {
+		t.Error("arch_stray.md's content must be untouched by a refused rename")
+	}
+}
+
+// TestRename_DoesNotSweepProposals covers PRRT_kwDORYErI86ip63h: the old
+// sweep repointed links in every .md under specDir, including
+// spec/proposals/ — historical documents that name a retired id on purpose
+// (validator/removed_name_checker.go's corpusDirSkip convention). A proposal
+// naming a node being renamed must be left exactly as written.
+func TestRename_DoesNotSweepProposals(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	proposalsDir := filepath.Join(f.dir, "proposals")
+	if err := os.MkdirAll(proposalsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	proposalPath := filepath.Join(proposalsDir, "2026-01-01-retire-comp1.md")
+	proposalContent := "# Retire Comp1\n\nSee [[" + f.comp1ID + "|Comp1]] for the node this proposal retired.\n"
+	writeFile(t, proposalPath, proposalContent)
+
+	if _, refusals, err := Rename(f.dir, RenameInput{ID: f.comp1ID, NewName: "Core"}); err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	} else if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+
+	after, err := os.ReadFile(proposalPath)
+	if err != nil {
+		t.Fatalf("read proposal after rename: %v", err)
+	}
+	if string(after) != proposalContent {
+		t.Errorf("proposal was repointed by the rename sweep: got %q, want %q", after, proposalContent)
+	}
+}
+
 // TestRename_RefusesUndeclarableName covers "a name the tokenizer would not
 // reproduce is refused with the form it would reproduce" — the same
 // declarability rule checkNameRecoverability applies at declaration time,

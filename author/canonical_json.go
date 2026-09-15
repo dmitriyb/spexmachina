@@ -18,16 +18,27 @@ import (
 // alphabetical map order, which is all a plain map[string]any can produce.
 //
 // docKey is "project.json" or "<module>/module.json" — which fixed
-// top-level shape and per-array entry shape apply. A key doc does not carry
-// is skipped; a key the fixed shape does not name (a profile-declared field
-// or node type beyond schema's typed structs) is appended after the known
-// ones, alphabetically, so nothing is ever dropped.
+// top-level shape, scope, and frame-fixed array shapes apply. A key doc does
+// not carry is skipped; a key the fixed shape does not name (a
+// profile-declared field or node type beyond schema's typed structs) is
+// appended after the known ones, alphabetically, so nothing is ever dropped.
+//
+// Per-array entry order is always taken from the resolved profile
+// (profileFieldOrder), never from a schema struct's field tags: the two can
+// disagree (PRRT_kwDORYErI86ip63Z — a project requirement's profile
+// declaration and schema.Requirement's tag order put priority, derivation
+// and depends_on in different relative positions), and arch_node_editor.md
+// names the profile as the source of truth. frameArrayOrders is the
+// fallback for an array the profile does not declare at all — project.json's
+// "modules" and "sections", frame concepts rather than profile node types.
 func canonicalizeDoc(doc map[string]any, docKey string, profile *schema.Profile) orderedFields {
 	topOrder := moduleDocOrder
-	arrayOrders := moduleArrayOrders
+	scope := "module"
+	frameArrayOrders := map[string][]string(nil)
 	if docKey == "project.json" {
 		topOrder = projectDocOrder
-		arrayOrders = projectArrayOrders
+		scope = "project"
+		frameArrayOrders = projectFrameArrayOrders
 	}
 
 	vals := make(map[string]any, len(doc))
@@ -37,9 +48,9 @@ func canonicalizeDoc(doc map[string]any, docKey string, profile *schema.Profile)
 			vals[k] = v
 			continue
 		}
-		order, known := arrayOrders[k]
-		if !known {
-			order = profileFieldOrder(profile, k)
+		order := profileFieldOrder(profile, scope, k)
+		if order == nil {
+			order = frameArrayOrders[k]
 		}
 		vals[k] = orderArray(arr, order)
 	}
@@ -84,18 +95,25 @@ func orderedKeys(m map[string]any, order []string) []string {
 	return append(keys, extra...)
 }
 
-// profileFieldOrder is the key order for a node type beyond schema's typed
-// structs: the universal envelope (id, name, description, content for a
+// profileFieldOrder is the canonical key order for one array property:
+// the universal envelope (id, name, description, content for a
 // content-bearing type) followed by the resolved profile's own declared
-// fields for the type naming pluralKey, in declaration order — "the
-// profile's key order for node fields" for exactly the case schema has no
-// struct for.
-func profileFieldOrder(profile *schema.Profile, pluralKey string) []string {
+// fields for the node type naming pluralKey at the given scope, in
+// declaration order — "the profile's key order for node fields", the sole
+// source arch_node_editor.md names. scope disambiguates "requirements",
+// which the profile declares once per scope (schema/profile.go) with
+// different fields each time (project: type, priority, derivation,
+// depends_on; module: type, preq_id, depends_on) — matching on plural key
+// alone would silently pick whichever scope's declaration happens to come
+// first in profile.NodeTypes. Returns nil when no node type at that scope
+// declares pluralKey (a frame-fixed array, e.g. project.json's "modules" or
+// "sections"), so the caller can fall back to a fixed order for those.
+func profileFieldOrder(profile *schema.Profile, scope, pluralKey string) []string {
 	if profile == nil {
 		return nil
 	}
 	for _, nt := range profile.NodeTypes {
-		if nt.PluralKey != pluralKey {
+		if nt.PluralKey != pluralKey || nt.Scope != scope {
 			continue
 		}
 		order := []string{"id", "name", "description"}
@@ -145,9 +163,12 @@ func (o orderedFields) MarshalJSON() ([]byte, error) {
 }
 
 // jsonKeyOrder reads t's exported fields' `json:"..."` tags in declaration
-// order — the order schema's struct definitions already fix for every
-// built-in document and node-entry shape, and the same order the files
-// under spec/ are hand-maintained in today.
+// order. Used only for a document's top level and for the frame-fixed
+// arrays (project.json's "modules" and "sections") that no profile node
+// type declares — never for a profile-declared node type's own array
+// entries, where the profile itself is the order of record
+// (profileFieldOrder), not whatever order schema's Go struct happens to
+// declare its fields in (PRRT_kwDORYErI86ip63Z).
 func jsonKeyOrder(t reflect.Type) []string {
 	keys := make([]string, 0, t.NumField())
 	for i := 0; i < t.NumField(); i++ {
@@ -169,16 +190,12 @@ var (
 	projectDocOrder = jsonKeyOrder(reflect.TypeOf(schema.Project{}))
 	moduleDocOrder  = jsonKeyOrder(reflect.TypeOf(schema.ModuleSpec{}))
 
-	projectArrayOrders = map[string][]string{
-		"requirements": jsonKeyOrder(reflect.TypeOf(schema.Requirement{})),
-		"modules":      jsonKeyOrder(reflect.TypeOf(schema.Module{})),
-		"sections":     jsonKeyOrder(reflect.TypeOf(schema.Section{})),
-	}
-	moduleArrayOrders = map[string][]string{
-		"requirements":  jsonKeyOrder(reflect.TypeOf(schema.ModuleRequirement{})),
-		"components":    jsonKeyOrder(reflect.TypeOf(schema.Component{})),
-		"data_flows":    jsonKeyOrder(reflect.TypeOf(schema.DataFlow{})),
-		"test_sections": jsonKeyOrder(reflect.TypeOf(schema.TestSection{})),
-		"apis":          jsonKeyOrder(reflect.TypeOf(schema.API{})),
+	// projectFrameArrayOrders covers project.json's arrays that are frame
+	// concepts, not profile-declared node types — profileFieldOrder returns
+	// nil for these, since no entry in profile.NodeTypes names them, so
+	// there is no profile/struct-tag disagreement to have here.
+	projectFrameArrayOrders = map[string][]string{
+		"modules":  jsonKeyOrder(reflect.TypeOf(schema.Module{})),
+		"sections": jsonKeyOrder(reflect.TypeOf(schema.Section{})),
 	}
 )
