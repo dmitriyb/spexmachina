@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-yih0.6",
+  "node": "b9e7b96f6aa7",
+  "files": [
+    "spec/author/test_obligation.md",
+    "spec/author/arch_obligation_reporter.md"
+  ],
+  "claim": "test_obligation.md scenario O3: after O1 has already added requirement R2 to disk (no snapshot taken between), a subsequent `spex edge add` naming R2 as target must itself produce obligations naming Comp2's leaf only — 'requirement R2 (…) added but component Comp2 content leaf unchanged' — and not Comp1's, because 'R2's leaf is still an added requirement in this diff, so the whole-module sweep O2 saw is skipped'.",
+  "authoritative_source": "arch_obligation_reporter.md, \"What it does not do\": \"It does not read .spex/: the before-state is the tree on disk, not the baseline snapshot\" — i.e. ObligationReporter's before-state for a given command is disk contents right now, with no memory of any earlier command in the session.",
+  "evidence": "O3's before-state (per the arch leaf) is disk-after-O1, which already carries R2 with an identical hash on both sides of O3's own diff (O3 only edits Comp2's implements array in module.json) — so R2 cannot classify as Added in O3's local diff, only module alpha's meta leaf changed with no requirement change, which is exactly O2's shape and correctly obliges every component in the module (Comp1 and Comp2), not Comp2 alone. Reproducing O3's literal expectation would require ObligationReporter to know R2 is \"recently added\" across the two separate command invocations — cross-command memory the arch leaf explicitly disclaims (\"does not read .spex/\"), and no fallback exists either: the fixture this test itself specifies has no .spex/ directory at all (an uninitialised adopter is flow_authoring.md's own stated first use). I implemented and ran both halves of the scenario (O1's write, then O3's edge add) against the documented per-command disk-diff mechanism; it deterministically and correctly produces two obligations (Comp1 and Comp2), confirmed by an actual test run, not just analysis.",
+  "blocking": false,
+  "proposed_fix": "Either drop O3's claim that the meta sweep is suppressed (accept that the command's own obligations mirror O2's shape — two entries — and reserve the 'R2 still counts as added' framing for the *cumulative* `spex diff --json` oracle taken against a snapshot from before O1, which is a separate, already-consistent claim), or, if per-command suppression across a chained session is actually wanted, give ObligationReporter an explicit, in-session carry-forward mechanism for 'recently added, not yet closed out' nodes — which is a design change to the arch leaf's stated interface (currently: two trees plus a profile, no other input), not a bug in this implementation."
+}

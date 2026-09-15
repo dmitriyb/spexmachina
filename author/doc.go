@@ -55,11 +55,15 @@
 // LeafScaffolder (.8), Migrator (.9), NodeEditor (.10), EdgeEditor (.11)
 // and AuthorCommands (.12).
 //
-// TODO(bead:spexmachina-yih0.6): ObligationReporter's own arch leaf notes
-// that "the checkers run over an in-memory tree rather than a directory,
-// which is the one thing the validator's interface had to admit for this
-// module to exist" — the shape of that in-memory tree, and the validator
-// package change it implies, is that bead's design, not scaffolded here.
+// ObligationReporter (Report, in obligation_reporter.go) realises the
+// before/after pair as two spec directories rather than a bespoke in-memory
+// struct: beforeDir is the real spec directory, afterDir is the worker's
+// own scratch copy of it with the change already applied. Every validator
+// and merkle function in this codebase already takes a directory path, so
+// this is the shape that lets ObligationReporter reuse those checkers
+// unchanged rather than forking their logic onto a new tree type — the
+// worker's copy is never the real beforeDir and is never written back by
+// Report itself.
 //
 // TODO(bead:spexmachina-yih0.12): the refusal document's top-level JSON
 // envelope around []RefusalEntry is AuthorCommands' own call — the flow
