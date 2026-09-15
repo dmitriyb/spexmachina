@@ -117,7 +117,7 @@ func Rename(specDir string, input RenameInput) (*WriteReport, []RefusalEntry, er
 		if !changed {
 			continue
 		}
-		data, err := json.MarshalIndent(canonicalizeDoc(doc, key, profile), "", "  ")
+		data, err := marshalIndentNoEscape(canonicalizeDoc(doc, key, profile))
 		if err != nil {
 			return nil, nil, fmt.Errorf("author: rename: marshal %s: %w", key, err)
 		}

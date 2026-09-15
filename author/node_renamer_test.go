@@ -625,6 +625,52 @@ func TestRename_WritesCanonicalKeyOrderForModuleRequirement(t *testing.T) {
 	assertAscending(t, entry, []string{`"id":`, `"name":`, `"type":`, `"preq_id":`})
 }
 
+// TestRename_PreservesHTMLCharsInDescriptions covers
+// PRRT_kwDORYErI86iqWlO: json.Marshal HTML-escapes `<`, `>` and `&`, so a
+// hand-authored description containing one of those bytes used to come back
+// re-encoded as a <-style escape in any doc this package rewrote —
+// arch_node_editor.md licenses reformatting to indent, key order and array
+// order only, never re-encoding a character inside a field value. Comp2's
+// description here is untouched by the rename itself (only its "uses" entry
+// changes, which is what pulls alpha/module.json into the rewrite set), so
+// this isolates the writer's escaping behavior from the rename's own edits.
+func TestRename_PreservesHTMLCharsInDescriptions(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	modPath := filepath.Join(f.dir, "alpha", "module.json")
+	data, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(data, &mod); err != nil {
+		t.Fatalf("parse module.json: %v", err)
+	}
+	const wantDesc = `see spec/<module-path>/section.schema.json & friends`
+	for i := range mod.Components {
+		if mod.Components[i].ID == f.comp2ID {
+			mod.Components[i].Description = wantDesc
+		}
+	}
+	writeJSON(t, modPath, mod)
+
+	if _, refusals, err := Rename(f.dir, RenameInput{ID: f.comp1ID, NewName: "Core"}); err != nil {
+		t.Fatalf("Rename: unexpected error: %v", err)
+	} else if len(refusals) > 0 {
+		t.Fatalf("Rename: unexpected refusals: %+v", refusals)
+	}
+
+	modData, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatalf("read module.json: %v", err)
+	}
+	modStr := string(modData)
+
+	if !strings.Contains(modStr, wantDesc) {
+		t.Fatalf("module.json HTML-escaped or otherwise lost the raw description; want %q to appear verbatim in:\n%s", wantDesc, modStr)
+	}
+}
+
 // TestRename_RefusesUndeclaredContentPathCollision covers
 // PRRT_kwDORYErI86ip63e: contentPathCollision only ever scanned declared
 // entries of loc.nodeType.PluralKey, so an undeclared .md file already

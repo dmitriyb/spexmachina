@@ -146,13 +146,13 @@ func (o orderedFields) MarshalJSON() ([]byte, error) {
 		if i > 0 {
 			buf.WriteByte(',')
 		}
-		kb, err := json.Marshal(k)
+		kb, err := marshalNoEscape(k)
 		if err != nil {
 			return nil, err
 		}
 		buf.Write(kb)
 		buf.WriteByte(':')
-		vb, err := json.Marshal(o.vals[k])
+		vb, err := marshalNoEscape(o.vals[k])
 		if err != nil {
 			return nil, err
 		}
@@ -160,6 +160,40 @@ func (o orderedFields) MarshalJSON() ([]byte, error) {
 	}
 	buf.WriteByte('}')
 	return buf.Bytes(), nil
+}
+
+// marshalNoEscape is json.Marshal with HTML escaping turned off. The
+// content this package rewrites is hand-authored spec prose, not HTML, so a
+// `<`, `>` or `&` inside a description must round-trip byte for byte rather
+// than come back as a <-style escape (PRRT_kwDORYErI86iqWlO) — plain
+// json.Marshal always escapes those three bytes and offers no option to
+// turn it off, so this goes through a json.Encoder instead, which does.
+func marshalNoEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
+}
+
+// marshalIndentNoEscape is json.MarshalIndent with HTML escaping turned
+// off. json.MarshalIndent has no such option itself, and it wouldn't be
+// enough even if it did: MarshalIndent works by calling Marshal (which
+// always escapes) and then re-indenting the already-escaped bytes, so an
+// orderedFields value whose own MarshalJSON already avoids escaping (via
+// marshalNoEscape above) would still come back escaped through this path
+// unless the indent step itself is driven by an encoder with escaping off.
+func marshalIndentNoEscape(v any) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(v); err != nil {
+		return nil, err
+	}
+	return bytes.TrimRight(buf.Bytes(), "\n"), nil
 }
 
 // jsonKeyOrder reads t's exported fields' `json:"..."` tags in declaration
