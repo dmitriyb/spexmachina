@@ -2,7 +2,6 @@ package author
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"sort"
@@ -80,9 +79,13 @@ type RemovedEntry struct {
 //
 //   - A write or a no-op: (report, nil, nil). report.AlreadyCurrent is true
 //     for a no-op, with nothing else populated.
-//   - A refusal: (nil, refusals, nil). In practice this never happens — see
-//     migrateRefusalsAndObligations below — but the shape is kept for
-//     consistency with every other worker in this package.
+//   - A refusal: (nil, refusals, nil). In practice this never happens — the
+//     rename and the removals only ever narrow or clear a location's schema
+//     violations, never introduce one (arch_migrator.md, "Boundaries") —
+//     but the shape is kept for consistency with every other worker in this
+//     package, which is why Migrate's write passes through Report like
+//     every other write in this module, under the reporter's one rule
+//     (arch_obligation_reporter.md).
 //   - An input error: (nil, nil, err). specDir cannot be read, or the
 //     profile fails to resolve.
 func Migrate(specDir string) (*MigrateReport, []RefusalEntry, error) {
@@ -141,7 +144,7 @@ func Migrate(specDir string) (*MigrateReport, []RefusalEntry, error) {
 		return &MigrateReport{AlreadyCurrent: true}, nil, nil
 	}
 
-	refusals, obligations, err := migrateRefusalsAndObligations(os.DirFS(specDir), after, profile)
+	refusals, obligations, err := Report(os.DirFS(specDir), after, profile)
 	if err != nil {
 		return nil, nil, fmt.Errorf("author: migrate: %w", err)
 	}
@@ -285,57 +288,4 @@ func stampSpecVersion(doc map[string]any) bool {
 	}
 	doc["spec_version"] = schema.SupportedSpecVersion
 	return true
-}
-
-// migrateRefusalsAndObligations mirrors Report's refusal/obligation split
-// (obligation_reporter.go) — the same refusalCheckers/nonRefusalCheckers/
-// completenessObligations Report itself drives — but classifies "did the
-// change introduce this" by (Check, Path) rather than by Report's exact
-// message-text match. Migrate's two edits only ever narrow or clear a
-// location's schema violations, never widen them: the title-to-name rename
-// can turn a combined "missing required properties 'preq_id', 'name'"
-// finding at one location into a narrower "missing required property
-// 'preq_id'" at the same location without the input having changed in any
-// way this command is responsible for, and Report's own message-equality
-// test would misread that narrowing as new. Migrator is the one writer in
-// this package where matching on location alone is still correct — no other
-// worker's edit is guaranteed to only ever fix or leave alone a location's
-// conformance — which is what arch_migrator.md's "Boundaries" promises: "The
-// rename and the removals introduce none [refusals], so the input's own
-// defects ... reach the report as obligations rather than as a refusal, and
-// the migration lands."
-func migrateRefusalsAndObligations(before, after fs.FS, profile *schema.Profile) ([]RefusalEntry, []merkle.DiffError, error) {
-	beforeErrs := refusalCheckers(before)
-	afterErrs := refusalCheckers(after)
-
-	priorLocations := make(map[string]bool, len(beforeErrs))
-	for _, e := range beforeErrs {
-		priorLocations[e.Check+"\x00"+e.Path] = true
-	}
-
-	var refusals []RefusalEntry
-	for _, e := range afterErrs {
-		if priorLocations[e.Check+"\x00"+e.Path] {
-			continue
-		}
-		refusals = append(refusals, RefusalEntry{
-			Check:   e.Check,
-			Message: e.Message,
-			Path:    e.Path,
-			Fix:     computeFix(e, before, profile),
-		})
-	}
-	if len(refusals) > 0 {
-		return refusals, nil, nil
-	}
-
-	completeness, err := completenessObligations(before, after, profile)
-	if err != nil {
-		return nil, nil, err
-	}
-	var obligations []merkle.DiffError
-	obligations = append(obligations, completeness...)
-	obligations = append(obligations, validatorObligations(afterErrs)...)
-	obligations = append(obligations, validatorObligations(nonRefusalCheckers(after))...)
-	return nil, obligations, nil
 }

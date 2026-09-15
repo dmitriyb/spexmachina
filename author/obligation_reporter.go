@@ -53,11 +53,13 @@ func Report(before, after fs.FS, profile *schema.Profile) (refusals []RefusalEnt
 
 	introduced := make(map[string]bool, len(beforeErrs))
 	for _, e := range beforeErrs {
-		introduced[errorKey(e)] = true
+		for _, atom := range errorAtoms(e) {
+			introduced[atom] = true
+		}
 	}
 
 	for _, e := range afterErrs {
-		if introduced[errorKey(e)] {
+		if allIntroduced(errorAtoms(e), introduced) {
 			continue
 		}
 		refusals = append(refusals, RefusalEntry{
@@ -142,6 +144,48 @@ func validatorObligations(errs []validator.ValidationError) []merkle.DiffError {
 // finding" exactly when `spex validate` would.
 func errorKey(e validator.ValidationError) string {
 	return e.Check + "\x00" + e.Path + "\x00" + e.Message
+}
+
+// errorAtoms breaks a validator.ValidationError into the finer-grained
+// claims errorKey's whole-message comparison cannot see through: jsonschema
+// bundles every missing property at one location into a single "missing
+// required propert(y|ies) '...'" message, so a change that supplies one of
+// several missing fields narrows the message's field list without the
+// change having introduced anything — and a before/after comparison keyed
+// on the message text alone reads that narrowing as a brand new finding.
+// For that one message shape, the atoms are one per field named
+// (check+path+field), so "before had 'preq_id', 'name' missing, after has
+// only 'preq_id' missing" compares as a subset, not a new finding — while a
+// field that was NOT already missing before still shows up as a fresh atom,
+// so a genuinely new violation at the same location is still caught. Every
+// other message shape's sole atom is errorKey(e) itself, preserving
+// message-exact comparison.
+func errorAtoms(e validator.ValidationError) []string {
+	if e.Check == "schema" {
+		if m := missingRequiredRe.FindStringSubmatch(e.Message); m != nil {
+			fields := requiredFieldNameRe.FindAllStringSubmatch(m[1], -1)
+			if len(fields) > 0 {
+				atoms := make([]string, 0, len(fields))
+				for _, f := range fields {
+					atoms = append(atoms, e.Check+"\x00"+e.Path+"\x00required:"+f[1])
+				}
+				return atoms
+			}
+		}
+	}
+	return []string{errorKey(e)}
+}
+
+// allIntroduced reports whether every atom in atoms is already present in
+// introduced — i.e. e contributes nothing the before-state didn't already
+// carry, so it is not a refusal.
+func allIntroduced(atoms []string, introduced map[string]bool) bool {
+	for _, a := range atoms {
+		if !introduced[a] {
+			return false
+		}
+	}
+	return true
 }
 
 // completenessObligations builds the merkle trees on both sides of the

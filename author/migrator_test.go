@@ -493,7 +493,13 @@ func TestM5_UnmigratableAuthoringDefectStillMigrates(t *testing.T) {
 // TestM6_NoInitNeededTouchesNothingOutsideSpec is M6: Migrate needs no
 // initialised project (a bare fixture with no .spex/ migrates cleanly), and
 // touches nothing outside the spec directory it was given (a healthy .spex/
-// sitting beside an adopter's spec is byte-identical before and after).
+// sitting beside an adopter's spec is byte-identical before and after). It
+// also asserts M6's central claim directly: both runs exit 0 with
+// byte-identical trees under spec/, so the migration's output does not
+// depend on whether a .spex/ happens to sit beside it — bare and specDir
+// are independent copies of the same buildLegacyFixture fixture, so a
+// divergence here would mean Migrate reads or is influenced by something
+// outside the spec directory it was given.
 func TestM6_NoInitNeededTouchesNothingOutsideSpec(t *testing.T) {
 	bare := buildLegacyFixture(t)
 	if _, refusals, err := Migrate(bare.dir); err != nil {
@@ -502,6 +508,7 @@ func TestM6_NoInitNeededTouchesNothingOutsideSpec(t *testing.T) {
 		t.Fatalf("Migrate (no .spex/ anywhere): unexpected refusals: %+v", refusals)
 	}
 	assertValidateGreen(t, bare.dir)
+	bareTree := treeSnapshot(t, bare.dir)
 
 	adopter := buildLegacyFixture(t)
 	specDir := copyTree(t, adopter.dir)
@@ -523,4 +530,9 @@ func TestM6_NoInitNeededTouchesNothingOutsideSpec(t *testing.T) {
 		t.Errorf(".spex/ changed across Migrate: before %v, after %v", before, after)
 	}
 	assertValidateGreen(t, specDir)
+
+	specTree := treeSnapshot(t, specDir)
+	if !reflect.DeepEqual(bareTree, specTree) {
+		t.Errorf("migrated trees under spec/ differ between the no-.spex/ run and the .spex/-adjacent run: bare %v, adopter %v", bareTree, specTree)
+	}
 }
