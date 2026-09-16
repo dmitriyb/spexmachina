@@ -108,4 +108,32 @@
 // call the flow and test leaves left open: a refusal prints []RefusalEntry
 // itself, with no wrapper object — the same bare-array shape a write
 // report's own `obligations` key already holds.
+//
+// # spex node set (spexmachina-444f.1)
+//
+// Widens the shared wire surface for a fourth NodeEditor surface,
+// `spex node set`: NodeSetInput (types.go), carrying an existing node's
+// id, declared field values keyed by name, declared field names to
+// unset, or both — the shape flow_authoring.md's "Into a worker" names
+// for a set ("an id with field values keyed by declared field name,
+// field names to unset, or both") and arch_node_editor.md's "Setting a
+// field" details. No existing shape changed: WriteReport, RefusalEntry
+// and every other worker's input are untouched, since a set's report
+// carries nothing beyond what a write already reports and its refusals
+// are the same RefusalEntry every other surface returns.
+//
+// Component work is deferred to the beads that list this one as a
+// blocker: ObligationReporter (spexmachina-444f.2) gains whatever
+// computeFix rows a set's own schema violations need (a kind or
+// enumeration mismatch reaching the checkers rather than being rejected
+// as an input error, per arch_node_editor.md's "each with the
+// validator's own schema entry and the declared kind or enumeration as
+// the fix"); NodeEditor (spexmachina-444f.3) adds the Set function
+// itself — finding the entry at either scope, converting values by kind,
+// and refusing name, id, content, a reference field and a module id with
+// the surface that owns each, per the table in arch_node_editor.md's
+// "Setting a field"; AuthorCommands (spexmachina-444f.4) wires
+// `spex node set` in cmd/spex/node.go, `--field`/`--unset` flags
+// mirroring `spex node add`'s own; the CLI-level scenarios are
+// spexmachina-444f.5's (test_node_editing.md).
 package author

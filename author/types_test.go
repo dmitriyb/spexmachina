@@ -88,6 +88,39 @@ func TestNodeRemoveInput_Force(t *testing.T) {
 	}
 }
 
+func TestNodeSetInput_FieldsKeyedByDeclaredName(t *testing.T) {
+	in := NodeSetInput{
+		ID: "abc123def456",
+		Fields: map[string]string{
+			"description": "updated text",
+			"priority":    "2",
+		},
+	}
+	if in.ID != "abc123def456" || in.Fields["description"] != "updated text" || in.Fields["priority"] != "2" {
+		t.Fatalf("NodeSetInput fields not carried: %+v", in)
+	}
+}
+
+func TestNodeSetInput_Unset(t *testing.T) {
+	in := NodeSetInput{ID: "abc123def456", Unset: []string{"priority"}}
+	if in.ID != "abc123def456" || len(in.Unset) != 1 || in.Unset[0] != "priority" {
+		t.Fatalf("NodeSetInput.Unset not carried: %+v", in)
+	}
+}
+
+func TestNodeSetInput_FieldsAndUnsetTogether(t *testing.T) {
+	// arch_node_editor.md, "Setting a field": one or more values, one or
+	// more fields to unset, or both in one invocation.
+	in := NodeSetInput{
+		ID:     "abc123def456",
+		Fields: map[string]string{"description": "updated text"},
+		Unset:  []string{"priority"},
+	}
+	if len(in.Fields) != 1 || len(in.Unset) != 1 {
+		t.Fatalf("NodeSetInput must carry both Fields and Unset at once: %+v", in)
+	}
+}
+
 func TestRenameInput_IDAndNewName(t *testing.T) {
 	in := RenameInput{ID: "abc123def456", NewName: "Comp2"}
 	if in.ID != "abc123def456" || in.NewName != "Comp2" {
