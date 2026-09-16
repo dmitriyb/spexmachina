@@ -278,7 +278,9 @@ func owedEdges(mem validator.MemFS, profile *schema.Profile, loc nodeLocation, e
 
 // fieldValues reads field off obj as a list of identity-hash strings
 // regardless of the reference field's declared cardinality: a "one" field
-// carries a single string, a "many" field a JSON array of strings.
+// carries a single string, a "many" field a JSON array of strings — or a
+// []string when the entry has not been through JSON yet, which is the shape
+// NodeEditor's convertFieldValue leaves on a node being added.
 func fieldValues(obj map[string]any, field string) []string {
 	v, ok := obj[field]
 	if !ok {
@@ -290,6 +292,8 @@ func fieldValues(obj map[string]any, field string) []string {
 			return nil
 		}
 		return []string{x}
+	case []string:
+		return x
 	case []any:
 		out := make([]string, 0, len(x))
 		for _, e := range x {
