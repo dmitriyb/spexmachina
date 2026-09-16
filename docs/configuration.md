@@ -23,9 +23,36 @@ spec/
 └── history.jsonl         generated — the task journal, appended by ingest
 ```
 
-Only `project.json` and the module directories it declares are authored by
-hand. The two files under `.spex/` are created by `spex init`, written by
-`spex ingest`, committed to git, and never edited directly — see [`architecture.md`](architecture.md).
+Only `project.json`, an optional `profile.json` and the module directories
+`project.json` declares are authored — by hand, or through the authoring
+commands (`spex node`, `spex edge`, `spex leaf`, `spex migrate`, see
+[`commands.md`](commands.md#authoring)), which write the same files and refuse
+what `spex validate` would reject. The two files under `.spex/` are created by
+`spex init`, written by `spex ingest`, committed to git, and never edited
+directly — see [`architecture.md`](architecture.md).
+
+## The profile
+
+`spec/profile.json`, when present, declares the node taxonomy: each type's
+name, plural array key, scope, fields (kind, requiredness, hash participation,
+enumerations, and for reference kinds the permitted targets and cardinality),
+whether it carries a content leaf, the coverage chains, the plan-relevant
+types, and what refresh may absorb. Absent, the built-in default applies — the
+five types this document describes. `spex profile show` prints the resolved
+profile either way.
+
+The document declares `profile_version`. Version 2 adds two per-type
+conventions for content-bearing types, which the authoring commands read:
+
+| Field | Purpose |
+|---|---|
+| `content_prefix` | The filename prefix a new node's leaf gets — `arch_`, `flow_`, `test_` under the default profile — joined to a slug of the node name |
+| `leaf_sections` | The ordered `##` headings a scaffolded leaf of that type carries; empty means none |
+
+A version 1 profile resolves with the defaults for both. A binary refuses a
+profile outside its supported range with one message naming the file, its
+version and the range. `project.json` declares `spec_version` for the spec
+format itself; `spex migrate` moves a pre-versioning spec to the current one.
 
 ## Identity hashes
 
@@ -45,9 +72,11 @@ spex hash-id --type component --module merkle --name "Hasher"
 not match, so a hand-edited or stale hash fails the gate rather than silently
 pointing somewhere wrong.
 
-**Renaming a node changes its ID.** There is no rename operation — the old
-identity is removed and a new one is added. This is intentional: the name is
-part of the node's identity, so changing it carries task consequences.
+**Renaming a node changes its ID.** `spex node rename` performs it as one
+transaction — new id, every reference and link repointed, the leaf moved — but
+the pipeline still sees the old identity removed and a new one added. This is
+intentional: the name is part of the node's identity, so changing it carries
+task consequences.
 
 ## `project.json`
 

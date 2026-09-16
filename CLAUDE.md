@@ -21,6 +21,7 @@ The pipeline is `spex validate → diff → plan → <adapter> → ingest`.
 | Mapping | Task journal (`.spex/history.jsonl`) linking spec nodes to tasks (`spex map context`) | Schema |
 | Proposal | Proposal lifecycle (register, log, templates) | — |
 | Render | Generate markdown, DOT, JSON from spec | Schema |
+| Author | The write path over `spec/`: `spex node`, `spex edge`, `spex leaf scaffold`, `spex profile show`, `spex migrate` — profile-driven, refusing with the validator's own errors and a fix, printing what a change obliges | Schema, Validator, Merkle |
 
 ## Technical Constraints
 

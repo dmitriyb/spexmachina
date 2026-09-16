@@ -30,6 +30,7 @@ spec change → validate → diff → plan → adapter → ingest
 ## What it does
 
 - **Typed DAG spec.** Requirements, components, data flows, tests and apis with identity hashes and typed edges; `spex validate` refuses anything that is not an acyclic, fully covered graph.
+- **Authoring commands.** `spex node`, `spex edge` and `spex leaf scaffold` write the spec's structure from the declared profile; a change the validator would reject is refused with the fix named, and every write prints what it obliges. Prose is the only thing left to write by hand.
 - **Merkle diff.** `spex diff` hashes the spec bottom-up and compares it against the committed snapshot, grading every change by impact.
 - **Deterministic changeset.** `spex plan` turns a diff plus live task state into an ordered list of `create` / `close` / `retarget` operations. No LLM in the loop: same spec, same snapshot, same output.
 - **Adapter, outside the binary.** The changeset is tool-agnostic; an adapter applies it to your tracker and returns receipts. `scripts/apply-br.sh` is the reference, for `br`.

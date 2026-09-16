@@ -8,7 +8,7 @@ argument-hint: "[proposal-name]"
 
 Draft a structured proposal by researching the spec, code, and existing proposals, then present the full draft in plan mode for user approval.
 
-A proposal is prose, but it is prose `/spec` must turn into spec files. Step 5 is the set of things `/spec` can actually author. A proposal that ignores it proposes work nobody can carry out — a name that cannot be declared, a link that cannot resolve, a Go signature that cannot live in an arch leaf. Draft against the format, not against a memory of it.
+A proposal is prose, but it is prose `/spec` must turn into spec files through `spex`'s authoring commands. Step 5 is the set of things those commands can declare, and how to read what a change costs off them instead of estimating it. A proposal that ignores it proposes work nobody can carry out — a name that cannot be declared, a link that cannot resolve, a Go signature that cannot live in an arch leaf.
 
 ## Step 1: Detect Proposal Type
 
@@ -55,129 +55,46 @@ Every node this project already has, as one compact table, instead of re-greppin
 bin/spex render --format json --slim | jq -r '.nodes[] | "\(.type)\t\(.name)\t\(.id)"'
 ```
 
-Nodes only — `{id, type, name, module}` — with bare identity hashes. Roughly 24 KB against 790 KB for the full `--format json` graph. Edges are omitted; read those from `module.json`. Every id in that table except the `module` rows is a legal link target (Step 5.4).
+Nodes only — `{id, type, name, module}` — with bare identity hashes. Roughly 24 KB against 790 KB for the full `--format json` graph. Edges are omitted; read those from `module.json`. Every id in that table except the `module` rows is a legal link target (Step 5.3).
 
 ## Step 5: Constrain the proposal to what the format allows
 
-### 5.1 The node vocabulary
+`/spec` authors the spec through `spex`'s authoring commands, which read the resolved profile and refuse anything the format cannot hold. A proposal therefore does not need to restate the format; it needs to propose things the commands can declare, and to say what they cost.
 
-These are the only things a proposal can ask for. Identity is `<module>/<type>/<name>` for module-scoped nodes and `project/requirement/<name>` for project requirements.
+### 5.1 The vocabulary is the profile's
 
-| Node | Declared in | Content leaf | Produces a task |
-|---|---|---|---|
-| project requirement | `project.json` → `requirements[]` | none — hashes from its JSON fields | no |
-| module | `project.json` → `modules[]` + `<mod>/module.json` | none — a synthetic `meta/<hash>` leaf hashes the whole `module.json` | no — the `meta` leaf is what changes, and `meta` produces none |
-| module requirement | `module.json` → `requirements[]` | none — hashes from its JSON fields | no |
-| **api** | `module.json` → `apis[]` | none — hashes from its JSON fields | no |
-| component | `module.json` → `components[]` | required, non-empty (`arch_*.md`) | yes |
-| data flow | `module.json` → `data_flows[]` | required, non-empty (`flow_*.md`) | yes |
-| test section | `module.json` → `test_sections[]` | required, non-empty (`test_*.md`) | only when `describes` names ≥ 2 components |
+Run `bin/spex profile show`. Its `node_types` are the only things a proposal can ask for — under the default profile: project and module `requirement`, `component`, `data_flow`, `test_section`, `api`, plus the frame's `module`. Each type's `fields` say what a new node must carry (a project requirement's `type` and `priority`, a module requirement's `preq_id`); its `requires_content` says whether it owns a leaf; the `coverage_chains` say what one new node drags in: a project requirement needs a module requirement deriving from it, a module requirement an implementing component, a component a describing test section. A test section produces its own task only when it describes two or more components. Say these consequences in the Impact expectation rather than letting `/spec` discover them.
 
-**`api` is how a proposal declares an external surface** — a CLI invocation, an HTTP route, a library entry point. `name` is the exact string callers write (`spex diff`, `GET /v1/specs/{id}`, `schema.IdentityHash`), never a signature. It has no content file. `provided_by` lists identity hashes of components **in the same module** and is referentially checked; involvement from other modules is already expressed by component `uses` edges. `group` is a freeform renderer label — spex never branches on it. **API names are globally unique across every module**; component names only need to be unique inside their own module.
+**`api` is how a proposal declares an external surface** — the exact string callers write (`spex diff`, `GET /v1/specs/{id}`), never a signature, with no content file, `provided_by` module-local, and a name globally unique across modules. **Never propose an impl section**; the type no longer exists.
 
-**Never propose an impl section.** The `impl_sections` array no longer exists: the schema rejects it and `bin/spex hash-id` refuses the type. Content that used to go there belongs in the arch leaf of the component implementing the relevant requirement — or nowhere.
+### 5.2 Names and ids
 
-**Required fields a proposal has to supply values for:**
+A component or api name must be its own tokenization in at most six words — no brackets, parentheses, trailing periods or possessives; `spex node add` refuses anything else and prints the declarable form. Write the declarable form in the proposal. Ids are derived by the commands and never appear in a proposal as new values; an existing node is referred to by the id the slim render shows, and an existing project requirement's id is never recomputed or renamed.
 
-- Project requirement: `id`, `type` (`functional` | `non_functional`), `name`, and **`priority` 0–4**. The JSON Schema calls `priority` optional; the validator rejects a project requirement without it. Propose a priority for every new project requirement.
-- Module requirement: `id`, `type`, `name`, **`preq_id`** — every module requirement derives from a project requirement.
-- Component / data flow / test section: `id`, `name`, `content` (non-empty; an empty string is a schema error, not a skipped node).
-- API: `id`, `name`.
+### 5.3 Cross-references are hash links
 
-**Coverage obligations that turn one proposed node into several:**
+Content leaves reference other nodes as `[[<12-hex identity hash>|<display text>]]`; module nodes are not linkable. When a proposal wants a specific cross-reference made, name the target node and let `/spec` fetch its hash.
 
-- A new project requirement needs at least one module requirement deriving from it, or `spex validate` fails.
-- A new module requirement needs at least one component whose `implements` names it.
-- A new component needs at least one test section whose `describes` names it.
-- `uses` edges between components and `requires_module` edges between modules must stay acyclic.
+### 5.4 Arch leaves describe behaviour, not code
 
-So "add a component" is really "add a component, its arch leaf, and its test coverage" — say so in the Impact expectation.
+Arch leaves carry no language: no `func`, no signatures, no ```go fences. The one exception is pseudocode where a requirement's *description* is itself the algorithm or the bound. Propose observable behaviour — stdout, exit codes, files written, ordering, error conditions, naming conventions — and the unrecoverable why: rejected alternatives, constraints imposed from elsewhere, historical reasons.
 
-### 5.2 Do not name things that cannot be named
+### 5.5 Say what the change costs — by running it
 
-An api or component `name` is rejected unless **tokenizing it reproduces it exactly, in at most 6 whitespace-separated words**. Tokenization strips `` ` * _ " ' ( ) [ ] , ; : ! ? “ ” ‘ ’ `` from both ends of each word, plus a trailing `.` and a trailing possessive — both the straight `'s` and the curly `’s`. It deliberately keeps `/ - { } < > |`.
+The completeness rules make proposals larger than they look: a requirement description change obliges a changed leaf on every implementing component; a project requirement change walks down to every component under it; any `module.json` change moves the module's `meta` leaf and obliges every component in the module unless a requirement in it also changed; a rename is a removal plus an addition with a corpus-wide sweep for the old name.
 
-The rule exists because a removed node's name is recovered by hashing corpus phrases against its identity hash. A name no phrase can equal is a name whose removal can never be swept.
-
-| Rejected | Why | Declarable form |
-|---|---|---|
-| `spex validate [--json]` | brackets are stripped | `spex validate --json` |
-| `Validator (core)` | parens are stripped | `Validator core` |
-| `Widget.` | trailing period is stripped | `Widget` |
-| `Bob's` | possessive suffix is stripped | `Bob` |
-| `_private` | leading underscore is stripped | `private` |
-| `This component name is seven words long` | 7 words, limit is 6 | shorter |
-
-Accepted, verified: `spex diff`, `GET /v1/specs/{id}`, `schema.IdentityHash`, `spex render --format json --slim`, `WidgetLister`.
-
-A proposal that says "declare an api called `spex diff [--json]`" is proposing something unauthorable. Write the declarable form in the proposal, and if the optional-argument shape matters to a reader, put it in the prose rather than the name.
-
-### 5.3 Ids are derived, never invented
-
-Every module-scoped id must equal `IdentityHash(module, node_type, name)`. The validator errors on any that does not, because three mechanisms read the hash backwards to recover the name.
+Do not compute the impact expectation by hand. Apply the proposal's structural changes to a scratch copy and read the cost off the commands:
 
 ```bash
-bin/spex hash-id --type requirement --name "Serve widgets"                 # project requirement
-bin/spex hash-id --type module --name widgets                              # module
-bin/spex hash-id --module widgets --type component --name WidgetLister
-bin/spex hash-id --module widgets --type api --name "widgetctl list"
+S=$(mktemp -d) && cp -r spec .spex "$S"/ && P="$S/spec"
+bin/spex node add <name> --type <t> --module <m> -s "$P" ...    # one per new node
+bin/spex edge add <source-id> <field> <target-id> -s "$P"       # one per edge
+bin/spex diff -s "$P" --json | jq '.changes, .errors'           # the cumulative cost
 ```
 
-Valid `--type` values: `requirement`, `component`, `data_flow`, `test_section`, `api`, `module`. `--module` is required for everything except a project requirement and a module. Anything else exits 1.
+Each command's `obligations` is the cost of that step; `spex diff` against the copied snapshot is the cost of the whole change, entry for entry what `/spec` will have to discharge. The tables in the Impact expectation — new nodes, modified nodes and the leaves they oblige, tasks — are read from that output. Nothing under the real `spec/` is touched.
 
-**Never recompute an existing project requirement id.** Most of this project's project requirements carry hashes that predate the convention and `hash-id` cannot reproduce them. Project-level requirement ids are exempt from the derivation check for exactly that reason. If a proposal refers to one, copy the id out of `project.json`.
-
-### 5.4 Cross-references are hash links
-
-Content leaves reference other nodes as `[[<12-hex identity hash>|<display text>]]`. Display text is free-form and never checked, and it may contain a code span — but the backticks go *inside* the display half, never around the whole link: `` [[3f9a1c7b2e04|`spex validate`]] ``. Inline code spans are not tracked by the link scanner, so wrapping a `[[…]]` in backticks does not stop it being resolved; prose that needs to show the link syntax literally belongs in a fence.
-
-- Name-based links are rejected: a name carries no type segment, so it cannot be turned back into a hash.
-- **Module nodes are not linkable.** Only leaves are: requirements, apis, components, data flows, test sections.
-- A `[[` must close with `]]` before the next blank line, fence or end of file.
-
-When a proposal wants a specific cross-reference made, name the target node and let `/spec` fetch its hash from the slim render.
-
-### 5.5 Arch leaves describe behaviour, not code
-
-Arch leaves carry no language: no `func`, no signatures, no ```go fences. The one exception is pseudocode where a requirement's *description* is itself the algorithm or the bound — and then it is language-neutral pseudocode, not Go.
-
-Nothing in `spex validate` checks this; it is authoring discipline, which means a proposal that promises "the arch leaf will document the `Validate(specDir string) []ValidationError` signature" will simply produce a leaf that has to be rewritten. Propose observable behaviour instead: stdout, exit codes, files written, ordering, error conditions, naming conventions.
-
-What an arch leaf is *for*: falsifiable statements a reader with the built binary could prove wrong, and the unrecoverable why — rejected alternatives, constraints imposed from elsewhere, historical reasons. Facts about a git-tracked file, instructions to a future implementer, and anything the arch leaf already says belong nowhere.
-
-### 5.6 Say what the change costs
-
-`spex diff` exits **0** clean, **2** on completeness errors, **1** when the tree cannot be built, **3** when the lifecycle pre-flight refuses an uninitialised or broken project. Two of those completeness rules make proposals larger than they look, and the Impact expectation section should account for them.
-
-**Touching a requirement's description obliges a changed content leaf on every implementing component.** Changing one line of one module requirement:
-
-```
-modified   structural   widgets    5533b6eb0761
-modified   structural   widgets    meta/3fe17d5b8078
-
-1 error(s):
-  error: [incomplete_change] requirement 'Widget listing' (widgets) description changed
-         but component WidgetLister content leaf unchanged
-diff: 1 completeness error(s) found     # exit 2
-```
-
-The project-requirement form is worse: it walks project requirement → every module requirement deriving from it → every component implementing those, and demands a changed leaf from each.
-
-**Changing anything in a `module.json` moves that module's `meta` leaf**, which obliges a changed content leaf on **every** component in the module — unless a requirement in that module also changed, which suppresses the meta rule. Adding one api and touching nothing else:
-
-```
-added      contract     widgets    b707fba93042
-modified   structural   widgets    meta/3fe17d5b8078
-
-1 error(s):
-  error: [incomplete_change] module widgets meta changed
-         but component WidgetLister content leaf unchanged
-diff: 1 completeness error(s) found     # exit 2
-```
-
-**Renaming a node is delete-plus-create.** The name is the identity, so a rename destroys one node and mints another: a new hash, a close of the old node's task if it is still open (a cleanup create if it is finished), a create for the new node with no lineage edge back, every inbound link rewritten, and a corpus-wide sweep for surviving mentions of the old name. A proposal that renames things is proposing expensive work — name the cost in the Impact expectation rather than letting `/spec` discover it.
-
-`spex validate` has no warnings. Every finding is an error, `warning_count` is always 0, and a spec either validates or does not.
+`spex validate` has no warnings. Every finding is an error, and a spec either validates or does not.
 
 ### Say which way the baseline moves
 
@@ -231,7 +148,7 @@ If the user discusses changes to the draft, update the proposal content in Part 
 
 1. **Context** — What is the current state? What triggered this change?
 2. **Proposed change** — What specifically will change in the spec? Which modules, requirements, apis or components are affected, and are they added, modified or removed?
-3. **Impact expectation** — What tasks will be created, retargeted or closed? Which content leaves must change to satisfy the completeness rules of 5.6? What is the expected scope of work?
+3. **Impact expectation** — What tasks will be created, retargeted or closed? Which content leaves must change to satisfy the completeness rules of 5.5? What is the expected scope of work?
 
 ### Project Proposal Template
 
