@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -100,7 +102,13 @@ func newAuthorRootCmd() *cobra.Command {
 }
 
 // runAuthorSpex runs the AuthorCommands tree with args, capturing stdout
-// and stderr separately — A2 asserts on both.
+// and stderr separately — A2 asserts on both. cli.NewRootCmd() sets
+// SilenceErrors: true, so cobra itself never writes a returned RunE error to
+// root.SetErr's buffer — that write is main.go's job
+// (fmt.Fprintln(os.Stderr, err)) once Execute() returns. Since this harness
+// drives Execute() directly rather than main(), it has to perform that same
+// write itself, or every non-zero run reports an empty stderr regardless of
+// what the real binary would print.
 func runAuthorSpex(t *testing.T, args ...string) (stdout, stderr string, execErr error) {
 	t.Helper()
 	root := newAuthorRootCmd()
@@ -112,6 +120,9 @@ func runAuthorSpex(t *testing.T, args ...string) (stdout, stderr string, execErr
 	stdout = captureStdout(t, func() {
 		execErr = root.Execute()
 	})
+	if execErr != nil {
+		fmt.Fprintln(errBuf, execErr)
+	}
 	stderr = errBuf.String()
 	return
 }
@@ -307,30 +318,38 @@ func TestA2_ExitCodesAreDocumentedSet(t *testing.T) {
 }
 
 // A3: Output is machine-readable when piped — one compact JSON document,
-// parseable with no prose around it.
+// parseable with no prose around it — and the same documents pretty-print
+// identically on a terminal.
 func TestA3_OutputMachineReadableWhenPiped(t *testing.T) {
 	dir := t.TempDir()
 	buildAuthorCmdFixture(t, dir)
 
-	out, _, err := runAuthorSpex(t, "profile", "show", "--spec-dir", dir)
+	profileOut, _, err := runAuthorSpex(t, "profile", "show", "--spec-dir", dir)
 	if err != nil {
 		t.Fatalf("profile show: unexpected error: %v", err)
 	}
-	assertCompactJSONDoc(t, "profile show", out)
+	assertCompactJSONDoc(t, "profile show", profileOut)
 
-	out, _, err = runAuthorSpex(t, "node", "add", "Widget", "--type", "component", "--module", "alpha", "--spec-dir", dir)
+	nodeOut, _, err := runAuthorSpex(t, "node", "add", "Widget", "--type", "component", "--module", "alpha", "--spec-dir", dir)
 	if err != nil {
 		t.Fatalf("node add: unexpected error: %v", err)
 	}
-	assertCompactJSONDoc(t, "node add", out)
+	assertCompactJSONDoc(t, "node add", nodeOut)
 
 	var report map[string]any
-	if jerr := json.Unmarshal([]byte(out), &report); jerr != nil {
-		t.Fatalf("node add output is not valid JSON: %v\n%s", jerr, out)
+	if jerr := json.Unmarshal([]byte(nodeOut), &report); jerr != nil {
+		t.Fatalf("node add output is not valid JSON: %v\n%s", jerr, nodeOut)
 	}
 	if _, ok := report["obligations"]; !ok {
-		t.Errorf("write report carries no obligations key: %s", out)
+		t.Errorf("write report carries no obligations key: %s", nodeOut)
 	}
+
+	// The pretty branch of printAuthorJSON (author_output.go) is what a
+	// terminal run takes instead of the compact branch just asserted above;
+	// exercise it directly over the same two documents since driving the
+	// CLI with a real TTY isn't practical from a test.
+	assertPrettyMatchesCompact(t, "profile show", profileOut)
+	assertPrettyMatchesCompact(t, "node add", nodeOut)
 }
 
 // assertCompactJSONDoc checks that s is exactly one line of valid JSON with
@@ -344,6 +363,36 @@ func assertCompactJSONDoc(t *testing.T, label, s string) {
 	var v any
 	if err := json.Unmarshal([]byte(trimmed), &v); err != nil {
 		t.Fatalf("%s: not valid JSON: %v\n%s", label, err, s)
+	}
+}
+
+// assertPrettyMatchesCompact decodes compactJSON, re-encodes it through
+// printAuthorJSON's pretty=true branch, and checks the indented form is
+// actually indented and decodes back to the identical value — the
+// terminal half of A3 that assertCompactJSONDoc's piped half doesn't cover.
+func assertPrettyMatchesCompact(t *testing.T, label, compactJSON string) {
+	t.Helper()
+	var compactVal any
+	if err := json.Unmarshal([]byte(compactJSON), &compactVal); err != nil {
+		t.Fatalf("%s: compact document is not valid JSON: %v", label, err)
+	}
+
+	var buf bytes.Buffer
+	if err := printAuthorJSON(&buf, compactVal, true); err != nil {
+		t.Fatalf("%s: printAuthorJSON(pretty=true): %v", label, err)
+	}
+	pretty := buf.String()
+
+	if !strings.Contains(pretty, "\n  ") {
+		t.Errorf("%s: pretty output is not indented:\n%s", label, pretty)
+	}
+
+	var prettyVal any
+	if err := json.Unmarshal([]byte(pretty), &prettyVal); err != nil {
+		t.Fatalf("%s: pretty document is not valid JSON: %v\n%s", label, err, pretty)
+	}
+	if !reflect.DeepEqual(compactVal, prettyVal) {
+		t.Errorf("%s: pretty document decodes to a different value than the compact one", label)
 	}
 }
 
