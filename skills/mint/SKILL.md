@@ -159,6 +159,30 @@ these budgets until br fails partway through.
 Exit 2 on a claimed task is the reason to mint a module's changes in one run rather than
 dribbling them across several while tasks are in flight.
 
+### Work riding with the epic
+
+A proposal may carry a section headed `### Work riding with the epic` (any suffix): skills,
+docs, scripts — work the proposal owes that the graph cannot mint, because no spec node
+declares it. Twice an epic has closed complete with that section undone, because nothing in
+the tracker knew it existed. The mint makes it exist. After the adapter has applied the
+changeset and before ingest, create one task under the epic carrying the section's text:
+
+```bash
+epic=$(jq -r '.ops[] | select(.op_id == "op-proposal_epic-<stem>") | .task_id' receipts.json)
+awk '/^### Work riding with the epic/{f=1; next} f && /^#{1,3} /{exit} f' \
+  spec/proposals/<stem>.md > riding.md
+br create --title "<stem>: work riding with the epic" --type task --parent "$epic" \
+  --description-file riding.md
+```
+
+`op-proposal_epic-<stem>` is the changeset op whose `spec_node_kind` is `proposal_epic`; its
+receipt carries the epic's task id. One task per epic whatever the section's length. The tracker then holds what the section only asked for:
+the epic is not done while a child is open, and `br ready` shows the task to whoever closes
+the epic. A proposal without the section mints no such task. The task is outside the journal
+— it pairs with no node and no receipt names it — which is why it is created here by hand
+rather than by the changeset, and why it never enters the task-state artifact's concerns:
+it is not plan-relevant work, it is the epic's own checklist.
+
 ## Step 4: Refresh
 
 For the pure spec-yields run — every node's correction pinned, no ops owed:
