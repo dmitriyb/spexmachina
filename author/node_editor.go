@@ -614,7 +614,7 @@ func Set(specDir string, input NodeSetInput) (*WriteReport, []RefusalEntry, erro
 
 	for name := range input.Fields {
 		if slices.Contains(input.Unset, name) {
-			return nil, []RefusalEntry{setUnsetConflictRefusal(name)}, nil
+			return nil, []RefusalEntry{setUnsetConflictRefusal(name, loc, input.ID)}, nil
 		}
 	}
 
@@ -700,10 +700,11 @@ func moduleSetRefusal(id string) RefusalEntry {
 // setUnsetConflictRefusal is Set's own guard for a field name given to both
 // --field and --unset in the same invocation (arch_node_editor.md, "Setting
 // a field": "a name given to both is refused").
-func setUnsetConflictRefusal(name string) RefusalEntry {
+func setUnsetConflictRefusal(name string, loc nodeLocation, id string) RefusalEntry {
 	return RefusalEntry{
 		Check:   "node",
 		Message: fmt.Sprintf("%q was named to both set and unset in the same invocation", name),
+		Path:    entryPathFor(loc, id),
 		Fix:     "name a field in --field or --unset, not both",
 	}
 }

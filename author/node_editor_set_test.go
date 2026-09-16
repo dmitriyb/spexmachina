@@ -485,6 +485,9 @@ func TestN20_OwnershipRefusalsNameTheirSurface(t *testing.T) {
 			if len(refusals) != 1 {
 				t.Fatalf("Set: want exactly one refusal, got %+v", refusals)
 			}
+			if refusals[0].Path == "" {
+				t.Error("refusal should carry a non-empty Path")
+			}
 			for _, want := range tc.want {
 				if !strings.Contains(refusals[0].Fix, want) {
 					t.Errorf("fix should contain %q, got: %s", want, refusals[0].Fix)
