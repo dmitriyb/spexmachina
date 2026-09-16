@@ -40,8 +40,9 @@
 //  4. On refusal, nothing is written and AuthorCommands exits 2 with the
 //     refusal document on stdout. On acceptance, the worker writes its
 //     after-state to disk and AuthorCommands prints a WriteReport — what
-//     was written, the obligations, and for a rename the retired name —
-//     and exits 0.
+//     was written, the obligations, for a rename the retired name, and
+//     for an edge add that displaced a cardinality-one target the
+//     replaced target — and exits 0.
 //
 // # What is deferred
 //
