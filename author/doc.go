@@ -24,9 +24,9 @@
 // # Flow
 //
 //  1. AuthorCommands reads flags into the input shapes this package
-//     declares (NodeAddInput, NodeRemoveInput, RenameInput, EdgeInput,
-//     ScaffoldInput) and hands them to the matching worker: NodeEditor,
-//     NodeRenamer, EdgeEditor or LeafScaffolder. Migrator and
+//     declares (NodeAddInput, NodeSetInput, NodeRemoveInput, RenameInput,
+//     EdgeInput, ScaffoldInput) and hands them to the matching worker:
+//     NodeEditor, NodeRenamer, EdgeEditor or LeafScaffolder. Migrator and
 //     ProfileInspector take no input beyond the spec directory itself.
 //  2. The worker decides everything structural the caller did not name —
 //     array, id, content path — from the resolved profile and the identity
@@ -111,7 +111,7 @@
 //
 // # spex node set (spexmachina-444f.1)
 //
-// Widens the shared wire surface for a fourth NodeEditor surface,
+// Widens the shared wire surface for NodeEditor's third surface,
 // `spex node set`: NodeSetInput (types.go), carrying an existing node's
 // id, declared field values keyed by name, declared field names to
 // unset, or both — the shape flow_authoring.md's "Into a worker" names
