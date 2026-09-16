@@ -53,9 +53,6 @@ type NodeRemoveInput struct {
 // `spex node rename`, "derived", or the hand edit respectively
 // (spec/author/arch_node_editor.md, "Setting a field": "Every field this
 // command will not touch has a surface that owns it").
-//
-// TODO(bead:spexmachina-444f.3): NodeEditor's Set function, consuming
-// this shape, is this bead's own deferred work.
 type NodeSetInput struct {
 	ID     string
 	Fields map[string]string
