@@ -11,7 +11,7 @@ import (
 	"golang.org/x/term"
 )
 
-// authorRefusalError is a contract refusal from one of the eight AuthorCommands
+// authorRefusalError is a contract refusal from one of the nine AuthorCommands
 // surfaces: ObligationReporter (or a worker's own guard) refused the change
 // before anything was written. Its structured error document has already
 // been printed to stdout by the time this is constructed; main.go reads
@@ -54,7 +54,7 @@ func printAuthorJSON(w io.Writer, v any, pretty bool) error {
 //   - otherwise: report goes to stdout as the write report, exit 0.
 //
 // report is passed as any because the callers' report types differ
-// (*author.WriteReport for six of the eight surfaces, *author.MigrateReport
+// (*author.WriteReport for seven of the nine surfaces, *author.MigrateReport
 // for spex migrate) yet print exactly the same way.
 func finishAuthorResult(cmdName string, report any, refusals []author.RefusalEntry, err error) error {
 	if err != nil {

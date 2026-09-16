@@ -93,7 +93,7 @@ func writeAuthorJSON(t *testing.T, path string, v any) {
 	}
 }
 
-// newAuthorRootCmd assembles the eight AuthorCommands surfaces plus
+// newAuthorRootCmd assembles the nine AuthorCommands surfaces plus
 // validate, the tree every scenario in this file drives.
 func newAuthorRootCmd() *cobra.Command {
 	root := cli.NewRootCmd()
@@ -146,7 +146,7 @@ func TestA1_EverySurfaceRegisteredAndHasHelp(t *testing.T) {
 	}
 
 	nodeHelp := run(t, "node", "--help")
-	for _, name := range []string{"add", "remove", "rename"} {
+	for _, name := range []string{"add", "set", "remove", "rename"} {
 		if !strings.Contains(nodeHelp, name) {
 			t.Errorf("spex node --help does not list %q:\n%s", name, nodeHelp)
 		}
@@ -171,6 +171,7 @@ func TestA1_EverySurfaceRegisteredAndHasHelp(t *testing.T) {
 
 	surfaces := [][]string{
 		{"node", "add", "--help"},
+		{"node", "set", "--help"},
 		{"node", "remove", "--help"},
 		{"node", "rename", "--help"},
 		{"edge", "add", "--help"},
@@ -493,7 +494,7 @@ func TestA5_RetiredNameReachesStdoutAsData(t *testing.T) {
 	}
 }
 
-// A6: --spec-dir is honoured on every surface — running each of the eight
+// A6: --spec-dir is honoured on every surface — running each of the nine
 // surfaces against a second fixture leaves a first fixture at a different
 // path byte-identical before and after.
 func TestA6_SpecDirIsolation(t *testing.T) {
@@ -522,6 +523,9 @@ func TestA6_SpecDirIsolation(t *testing.T) {
 	cases := []surfaceCase{
 		{"node add", func(f authorCmdFixture, dir string) []string {
 			return []string{"node", "add", "Widget", "--type", "component", "--module", "alpha", "--spec-dir", dir}
+		}},
+		{"node set", func(f authorCmdFixture, dir string) []string {
+			return []string{"node", "set", f.comp1ID, "--field", "description=New text", "--spec-dir", dir}
 		}},
 		{"node remove", func(f authorCmdFixture, dir string) []string {
 			return []string{"node", "remove", f.comp2ID, "--force", "--spec-dir", dir}
