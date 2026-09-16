@@ -272,10 +272,16 @@ func assertEveryCommandFailsUniformly(t *testing.T, specDir, profilePath string,
 			if err == nil {
 				t.Fatalf("%s: want a non-zero exit over a malformed profile.json, got output: %s", c.name, out)
 			}
+			if exitCodeOf(err) != 0 {
+				t.Errorf("%s: want the default exit code (1), got explicit code %d", c.name, exitCodeOf(err))
+			}
 			if out != "" {
 				t.Errorf("%s: want no stdout on refusal, got: %s", c.name, out)
 			}
 			msg := err.Error()
+			if strings.Contains(msg, "\n") {
+				t.Errorf("%s: want one message with no conformance error following it, got multi-line: %q", c.name, msg)
+			}
 			for _, want := range append([]string{profilePath}, wantSubstrs...) {
 				if !strings.Contains(msg, want) {
 					t.Errorf("%s: error %q does not name %q", c.name, msg, want)
