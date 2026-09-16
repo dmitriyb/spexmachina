@@ -34,6 +34,57 @@ func allValidatorErrors(t *testing.T, dir string) []validator.ValidationError {
 	return errs
 }
 
+// TestN1_AddTimeReferenceFieldsReachTheSkeleton pins the add-time half of
+// arch_leaf_scaffolder.md's "What a skeleton is", point 3: a component
+// declared with its implements and uses in the same spex node add gets one
+// placeholder link per owed edge in the skeleton NodeEditor scaffolds, and
+// that skeleton is byte-identical to what spex leaf scaffold would write, so
+// a follow-up scaffold is the documented no-op rather than a non-empty-leaf
+// refusal. Before the fix, convertFieldValue's []string never reached
+// owedEdges' reader and the add-time skeleton carried no placeholders.
+func TestN1_AddTimeReferenceFieldsReachTheSkeleton(t *testing.T) {
+	f := buildRenameFixture(t)
+
+	report, refusals, err := Add(f.dir, NodeAddInput{
+		TypeName: "component", Module: "alpha", Name: "Widget",
+		Fields: map[string]string{"implements": f.r1ID, "uses": f.comp1ID},
+	})
+	if err != nil {
+		t.Fatalf("Add: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Add: unexpected refusals: %+v", refusals)
+	}
+	if report == nil {
+		t.Fatal("Add: want a report, got nil")
+	}
+
+	content, err := os.ReadFile(filepath.Join(f.dir, "alpha", "arch_widget.md"))
+	if err != nil {
+		t.Fatalf("read arch_widget.md: %v", err)
+	}
+	for _, want := range []string{
+		"implements: [[" + f.r1ID + "|R1]]",
+		"uses: [[" + f.comp1ID + "|Comp1]]",
+	} {
+		if !strings.Contains(string(content), want) {
+			t.Errorf("add-time skeleton lacks placeholder %q:\n%s", want, content)
+		}
+	}
+
+	widgetID := schema.IdentityHash("alpha", "component", "Widget")
+	again, refusals, err := Scaffold(f.dir, ScaffoldInput{ID: widgetID})
+	if err != nil {
+		t.Fatalf("Scaffold: unexpected error: %v", err)
+	}
+	if len(refusals) > 0 {
+		t.Fatalf("Scaffold after add: want the already-scaffolded no-op, got refusals %+v", refusals)
+	}
+	if again == nil || len(again.Written) != 0 {
+		t.Errorf("Scaffold after add: want nothing written, got %+v", again)
+	}
+}
+
 // TestN1_AddingComponent_PlacesDerivesScaffolds covers test_node_editing.md's
 // N1: adding a component to an existing module places it under the type's
 // plural key, derives its id the same way spex hash-id would, sets the
