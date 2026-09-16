@@ -915,6 +915,37 @@ func TestPlanCommand_S12_MalformedJournalLine_BrokenProject(t *testing.T) {
 	}
 }
 
+// TestPlanCommand_J1_SchemaViolatingJournalLine_BrokenProject covers
+// test_schema_loading.md's J1 for `spex plan`: a journal line that is
+// well-formed JSON but violates the journal-line schema — an event outside
+// the declared set — stops the command before the store is read, exiting
+// with the not-a-project code and naming `spex doctor`. This is distinct
+// from TestPlanCommand_S12_MalformedJournalLine_BrokenProject, which covers
+// a line that fails to parse as JSON at all.
+func TestPlanCommand_J1_SchemaViolatingJournalLine_BrokenProject(t *testing.T) {
+	f := setupPlanFixture(t)
+	writeTestJournal(t, f.specDir, []string{
+		`{"event":"registered","eid":"cafe0000:` + f.proposal + `","proposal":"` + f.proposal + `","git_head":"cafe0000"}`,
+		`{"event":"bogus","eid":"e-bad"}`,
+	})
+
+	stdout, _, err := runPlan(t, "",
+		"--proposal", f.proposal, "--git-head", f.gitHead, "--diff", f.diffPath, "--tasks", f.tasksAllOpen, "--spec-dir", f.specDir,
+	)
+	if err == nil {
+		t.Fatal("want error for a journal line that violates the journal-line schema")
+	}
+	if code := exitCodeOf(err); code != exitNotAProject {
+		t.Errorf("want the not-a-project exit code %d, got %d (%v)", exitNotAProject, code, err)
+	}
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Errorf("want error naming 'spex doctor', got %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("want no changeset produced, got stdout: %q", stdout)
+	}
+}
+
 func TestPlanCommand_S12_UnresolvableDep_Exit2(t *testing.T) {
 	dir := t.TempDir()
 	specDir := filepath.Join(dir, "spec")
@@ -1026,6 +1057,56 @@ func TestPlanCommand_E2_TasksFileFailsSchema_Exit1(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "plan: read tasks:") {
 		t.Errorf("want error prefixed 'plan: read tasks:', got %v", err)
+	}
+}
+
+// TestPlanCommand_T1_TasksFileFailsSchema_OtherViolations covers the
+// remaining two of test_schema_loading.md's T1 three ways a --tasks file can
+// fail the task-state schema — a "closed" status is covered separately by
+// TestPlanCommand_E2_TasksFileFailsSchema_Exit1: an envelope declaring
+// version 2 (only version 1 is admitted), and the tracker's raw listing
+// shape (a bare array, not the required {version, tasks} envelope). Each
+// exits 1 naming the failed --tasks input; no changeset is written.
+func TestPlanCommand_T1_TasksFileFailsSchema_OtherViolations(t *testing.T) {
+	f := setupPlanFixture(t)
+
+	cases := []struct {
+		name string
+		doc  string
+	}{
+		{
+			name: "envelope version 2",
+			doc:  `{"version":2,"tasks":[{"task_id":"task-existing","status":"open"}]}`,
+		},
+		{
+			name: "tracker's raw listing shape instead of {version, tasks}",
+			doc:  `[{"task_id":"task-existing","status":"open"}]`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "tasks.json")
+			if err := os.WriteFile(path, []byte(tc.doc), 0644); err != nil {
+				t.Fatal(err)
+			}
+			stdout, _, err := runPlan(t, "",
+				"--proposal", f.proposal, "--git-head", f.gitHead,
+				"--diff", f.diffPath, "--tasks", path, "--spec-dir", f.specDir,
+			)
+			if err == nil {
+				t.Fatalf("want error for a task-state file with %s", tc.name)
+			}
+			if code := exitCodeOf(err); code != 1 {
+				t.Errorf("want exit 1, got %d (%v)", code, err)
+			}
+			if !strings.Contains(err.Error(), "plan: read tasks:") {
+				t.Errorf("want error prefixed 'plan: read tasks:', got %v", err)
+			}
+			if stdout != "" {
+				t.Errorf("want no changeset produced, got stdout: %q", stdout)
+			}
+		})
 	}
 }
 

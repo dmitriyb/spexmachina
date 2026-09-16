@@ -294,6 +294,65 @@ func TestFR_MapList_MalformedLine(t *testing.T) {
 	}
 }
 
+// TestFR_MapList_J1_SchemaViolatingLine covers test_schema_loading.md's J1:
+// a third journal line that is well-formed JSON but violates the
+// journal-line schema — an event outside the declared set — stops `spex map
+// list` before the store is read, exiting with the not-a-spex-project code
+// and naming both `spex doctor` and the offending line. This is distinct
+// from TestFR_MapList_MalformedLine, which covers a line that is not valid
+// JSON at all; here the line parses as JSON but fails schema validation.
+func TestFR_MapList_J1_SchemaViolatingLine(t *testing.T) {
+	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
+	writeTestJournal(t, dir, []string{
+		`{"event":"added","eid":"e1","node":"aaaaaaaaaaaa","name":"Foo","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
+		`{"event":"task_created","for":"e1","task_id":"t1"}`,
+		`{"event":"bogus","eid":"e2"}`,
+	})
+
+	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want error for a journal line that violates the journal-line schema, got nil")
+	}
+	if exitCodeOf(err) != exitNotAProject {
+		t.Fatalf("want exit code %d, got %d (%v)", exitNotAProject, exitCodeOf(err), err)
+	}
+	if !strings.Contains(err.Error(), "spex doctor") {
+		t.Fatalf("want error naming 'spex doctor', got %v", err)
+	}
+	if !strings.Contains(err.Error(), "line 3") {
+		t.Fatalf("want error naming the offending line (3), got %v", err)
+	}
+	if out != "" {
+		t.Errorf("want no output document produced, got stdout: %q", out)
+	}
+}
+
+// TestFR_MapList_J1_DeclaredEventAccepted is the other half of J1: the same
+// third line, valid JSON with a declared event, is accepted.
+func TestFR_MapList_J1_DeclaredEventAccepted(t *testing.T) {
+	dir := t.TempDir()
+	seedMapSnapshot(t, dir)
+	writeTestJournal(t, dir, []string{
+		`{"event":"added","eid":"e1","node":"aaaaaaaaaaaa","name":"Foo","node_type":"component","module":"m","before":null,"after":"h1","git_head":"g1","proposal":"p1"}`,
+		`{"event":"task_created","for":"e1","task_id":"t1"}`,
+		`{"event":"added","eid":"e2","node":"bbbbbbbbbbbb","name":"Bar","node_type":"component","module":"m","before":null,"after":"h2","git_head":"g2","proposal":"p1"}`,
+		`{"event":"task_created","for":"e2","task_id":"t2"}`,
+	})
+
+	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("want no error for a well-formed, schema-valid journal, got %v", err)
+	}
+	var entries []map[string]any
+	if err := json.Unmarshal([]byte(out), &entries); err != nil {
+		t.Fatalf("output should be valid JSON array: %v\noutput: %s", err, out)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("want 2 entries, got %d: %s", len(entries), out)
+	}
+}
+
 // setupMapContextTestSpec creates a spec directory with project.json, one
 // module declaring a live component, and a journal pairing that component
 // with a task plus recording one removed node's biography.
