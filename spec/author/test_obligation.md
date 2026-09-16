@@ -4,10 +4,10 @@ Acceptance scenarios for ObligationReporter as every writing command drives it: 
 
 ## Setup
 
-The fixture of the node editing tests — `tmp/spec/` with module `alpha`, requirement R1, components Comp1 and Comp2, test section T1 and api `demo run` — with a snapshot taken before each scenario so that `spex diff --spec-dir tmp/spec/ --json` afterwards reports the change the command made. The two oracles every scenario is read against:
+The fixture of the node editing tests — `tmp/spec/` with project requirements P1 and P2 (P2 declaring derivation pending), module `alpha`, requirement R1 deriving from P1, components Comp1 and Comp2, test section T1 and api `demo run` — with a snapshot taken before each scenario so that `spex diff --spec-dir tmp/spec/ --json` afterwards reports the change the command made. The two oracles every scenario is read against:
 
 - **Parity**: the same change applied by hand to a copy of the fixture, then `spex validate` over the copy. A command's refusal must equal the validator's error on the copy — same `check`, same message — and a command that writes must leave a tree the validator accepts to the same degree the hand copy is accepted.
-- **Obligations**: `spex diff --json`'s `errors` array after the write must equal, entry for entry, what the command printed under `obligations` on stdout.
+- **Obligations**: `spex diff --json`'s `errors` array after the write must equal, entry for entry, the completeness entries the command printed under `obligations` on stdout; a validator finding an accepted change leaves open — O5's `requirement_coverage` — travels under `obligations` alone, since `spex diff` runs no validator check. The two completeness lists are one computation over one pair, so this holds for a command run over the tree the snapshot recorded; O3 runs a second command without a fresh snapshot and shows where they part.
 
 ## Scenarios
 
@@ -27,7 +27,7 @@ The fixture of the node editing tests — `tmp/spec/` with module `alpha`, requi
 
 **Given** the fixture after O1, with no snapshot taken between.
 **When** `spex edge add` is run with source Comp2, field `implements`, target R2.
-**Then** exit 0, and the command's `obligations` names Comp2's leaf only — `requirement R2 (…) added but component Comp2 content leaf unchanged` — and not Comp1's: R2's leaf is still an added requirement in this diff, so the whole-module sweep O2 saw is skipped and only the requirement rules apply. `spex diff --json` agrees entry for entry.
+**Then** exit 0, and the command's `obligations` names Comp1's and Comp2's leaves — O2's shape, because the reporter's before-state is the tree O1 left on disk, where R2 already exists: in this command's own diff only the module's `meta` leaf moved. `spex diff --json` against the snapshot from before O1 reports one entry — `requirement R2 (…) added but component Comp2 content leaf unchanged` — and not Comp1's: in the cumulative diff R2 is an added requirement, so the whole-module sweep is suppressed and the requirement rules apply. The two lists differ because obligations are a function of the pair they are computed over, not a running total: the edge closed O1's `not implemented` obligation, and the sweep's suppression is decided per diff.
 
 ### O4: A refusal is the validator's error with a fix attached
 

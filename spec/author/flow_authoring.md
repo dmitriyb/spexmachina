@@ -71,7 +71,7 @@ digraph authoring_flow {
 
 **Out of the reporter**: either a refusal — the validator's entry list, each entry carrying `check`, `message`, `path` and a `fix` — or an acceptance carrying the completeness checker's entry list as `obligations`.
 
-**On stdout**: one JSON document per run. A refusal's error document, or a write report carrying the files written, the `obligations`, and for a rename the `retired_name`; for `spex profile show`, the resolved profile itself. Compact when piped, pretty-printed on a terminal.
+**On stdout**: one JSON document per run. A refusal's error document, or a write report carrying the files written, the `obligations`, for a rename the `retired_name`, and for an edge add that displaced a cardinality-one target the `replaced_target`; for `spex profile show`, the resolved profile itself. Compact when piped, pretty-printed on a terminal.
 
 ## Error paths
 

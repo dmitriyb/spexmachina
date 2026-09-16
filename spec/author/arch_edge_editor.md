@@ -19,7 +19,7 @@ Then the after-state goes through [[b9e7b96f6aa7|ObligationReporter]], which is 
 
 ## Idempotence
 
-Adding an entry the field already holds changes nothing and says so. Removing one the field does not hold changes nothing and says so. A field with cardinality one — `preq_id` — is set by add and cleared by remove, and adding to it when it already holds a different target is a refusal naming the current target, not a silent overwrite: a required field of cardinality one is retargeted by removing and adding, so that the removal is visible.
+Adding an entry the field already holds changes nothing and says so. Removing one the field does not hold changes nothing and says so. A field with cardinality one — `preq_id` — holds one target: add sets it, and adding a different target replaces the one held, the write report carrying the replaced target under `replaced_target` so that the retarget is visible rather than silent. Remove clears it, and for a required field that is a refusal carrying the validator's `schema` and `id` entries — the same two a hand edit of the absent field earns from `spex validate` — so a required cardinality-one field is retargeted by one add, never through a cleared state it cannot reach.
 
 ## Obligations
 

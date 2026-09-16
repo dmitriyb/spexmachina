@@ -31,7 +31,7 @@ Three codes, in the documented shape [[91f6f338de19|Composable]] asks for and wi
 
 There is no not-a-spex-project code here, because these commands run no pre-flight — an uninitialised project is their intended first use. A caller branches on the code, never on a message. Every non-zero run puts one error line on stderr with no usage block beside it, and a refusal puts its structured error document — the validator's entries, each with its `fix` — on stdout.
 
-A successful writing command prints one write report on stdout: what was written, by file; the `obligations` the change incurred; and for a rename the `retired_name`. Compact when piped, pretty-printed on a terminal, exactly as the profile document `spex profile show` prints. The report is the only prose-free channel the authoring skills read, which is why every fact a skill needs — the fix, the obligation, the retired name — is a key in it rather than a sentence.
+A successful writing command prints one write report on stdout: what was written, by file; the `obligations` the change incurred; for a rename the `retired_name`; and for an edge add that displaced a cardinality-one target the `replaced_target`. Compact when piped, pretty-printed on a terminal, exactly as the profile document `spex profile show` prints. The report is the only prose-free channel the authoring skills read, which is why every fact a skill needs — the fix, the obligation, the retired name — is a key in it rather than a sentence.
 
 ## Boundaries
 
