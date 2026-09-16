@@ -1,14 +1,10 @@
 [
   {
-    "node": "bbdb70e6f9f7",
-    "reason": "Registration section: the constructor count moves from fourteen to nineteen with the author module's five; no VersionCommand flag, output or behaviour moved. The count is RootCommand's registration list, pinned by Root Command Tests scenario 1 through RootCommand's task in this epic; no VersionCommand test pins it"
+    "node": "b9e7b96f6aa7",
+    "reason": "last sentence of What it does not do: per-command obligations are what one write leaves open, not a running total, and a later command can close an earlier one's; no refusal, fix-table row or obligation rule moved; pinned by TestO3_EdgeAddToRecentlyAddedRequirement in author/obligation_reporter_test.go for the per-command pair, and by TestREQ8_C9_MetaChangedWithoutRequirementChanges and TestREQ8_C4_AddedRequirementImplementorUnchanged in merkle/completeness_checker_test.go for the cumulative diff's rules"
   },
   {
-    "node": "79946d618829",
-    "reason": "one sentence after the spec_version paragraph: profile format version 2 changes nothing in project.schema.json, and spec_version 1 is what spex migrate stamps — the stamp is Migrator's task; no ProjectSchema property or constraint moved; pinned by the golden comparison in schema/project_schema_test.go, which ProfileLoader's task must keep green"
-  },
-  {
-    "node": "65013bcc73e6",
-    "reason": "one clause in the journal-line version bullet: profile format version 2 stamps no different v and changes no line; no line shape or field moved; pinned by schema/journal_line_schema_test.go staying green"
+    "node": "31212f1a9d20",
+    "reason": "Setup's Obligations oracle limited to the completeness entries, and O3's Then rewritten to the per-command list versus the cumulative diff's; no scenario added or removed; pinned by TestO3_EdgeAddToRecentlyAddedRequirement and TestO5_UnderivedProjectRequirement_AcceptedAsObligation in author/obligation_reporter_test.go"
   }
 ]

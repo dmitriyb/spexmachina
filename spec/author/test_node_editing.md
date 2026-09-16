@@ -8,7 +8,7 @@ A fixture spec under a temporary directory, built once per scenario from a commi
 
 ```
 tmp/spec/
-  project.json          # two requirements; one module: alpha
+  project.json          # two requirements: P1, and P2 declaring derivation pending; one module: alpha
   alpha/
     module.json         # requirement R1 (preq → project requirement P1)
                         # components Comp1 (implements R1), Comp2 (uses Comp1)
@@ -29,7 +29,7 @@ The parity oracle shared by the refusal scenarios: the same change applied by ha
 
 **Given** the fixture, and a snapshot of it.
 **When** `spex node add` is run with type `component`, module `alpha` and name `Widget`.
-**Then** exit 0. `alpha/module.json` carries a new entry in `components` whose `id` equals what `spex hash-id --type component --module alpha --name Widget` prints and whose `content` is `arch_widget.md`; that file exists and opens with the heading `# Widget`. `spex validate` is green. `spex diff --json` reports exactly one `added` change of node type `component` plus the `meta` change of module `alpha`, and the `errors` array contains the meta-obligation entries for Comp1 and Comp2 — the same entries the command printed under `obligations` on stdout.
+**Then** exit 0. `alpha/module.json` carries a new entry in `components` whose `id` equals what `spex hash-id --type component --module alpha --name Widget` prints and whose `content` is `arch_widget.md`; that file exists and opens with the heading `# Widget`. `spex validate` reports the one error an undescribed component earns under the default profile's coverage chain — `test_coverage` for `Widget`, since T1 describes Comp1 and Comp2 only — and the command's stdout carried that finding under `obligations`, not as a refusal. `spex diff --json` reports exactly one `added` change of node type `component` plus the `meta` change of module `alpha`, and its `errors` array holds the meta-obligation entries for Comp1 and Comp2 — the entries the command printed under `obligations` beside the coverage finding.
 
 ### N2: A project-scoped type lands in project.json
 
@@ -65,7 +65,7 @@ The parity oracle shared by the refusal scenarios: the same change applied by ha
 
 **Given** the fixture.
 **When** `spex node remove` is run with Comp1's id and `--force`.
-**Then** exit 0. Comp1's entry and `arch_comp1.md` are gone; the same inbound references N6 listed are printed as dangling, and `spex validate` now reports each of them — `id` errors for the arrays, `link` errors for the leaves — which is exactly the list the command printed. `spex diff --json` reports one `removed` component and the `surviving_name` error for `Comp1`.
+**Then** exit 0. Comp1's entry and `arch_comp1.md` are gone; the same inbound references N6 listed are printed as dangling, and `spex validate` now reports each of them — `id` errors for the arrays, `link` errors for the leaves — and the `requirement_coverage` error for R1, which Comp1 alone implemented; that is exactly the list the command printed. `spex diff --json` reports one `removed` component. Whether a `surviving_name` error fires for the display text of the dangling links in `arch_comp2.md` and `test_t1.md` is the removal sweep's rule and is not asserted here, as in N8; a variant of the fixture whose `arch_comp2.md` also mentions `Comp1` in plain prose before the removal gets the `surviving_name` error for that line.
 
 ### N8: A rename is one transaction across arrays, leaves and the content file
 
@@ -110,3 +110,9 @@ The parity oracle shared by the refusal scenarios: the same change applied by ha
 **Given** the fixture with no `.spex/` directory, and a copy of it with an initialised, healthy `.spex/`.
 **When** N1's `spex node add` is run over both.
 **Then** both exit 0 with byte-identical trees under `spec/`, and the initialised copy's `.spex/` is byte-identical before and after.
+
+### N15: A cardinality-one field is retargeted by one add, and a required one is never cleared
+
+**Given** the fixture, where R1's `preq_id` holds P1, and a snapshot of it.
+**When** `spex edge add` is run with source R1, field `preq_id`, target P2, and then `spex edge remove` with source R1, field `preq_id`, target P2.
+**Then** the add exits 0 and R1's `preq_id` holds P2; the write report carries P1 under `replaced_target`, and its `obligations` carry the completeness entry for R1 — `requirement R1 (…) changed but component Comp1 content leaf unchanged`, since a module requirement's leaf hashes its `preq_id` — and the validator's `requirement_coverage` finding for P1, now derived by nothing: an obligation, not a refusal, because the validator accepts the hand copy to the same degree. `spex diff --json` reports R1 as `modified` alongside the `meta` change of `alpha`. The remove is refused with the tree unchanged: the error document carries the validator's `schema` entry for the missing required `preq_id`, its `fix` naming the field and its kind, and the `id` entry for the requirement missing its `preq_id`; the parity oracle holds — the same entry with `preq_id` deleted by hand fails `spex validate` with the same two `check` values and messages. A required field of cardinality one has no cleared state to pass through; it is retargeted by the add alone.
