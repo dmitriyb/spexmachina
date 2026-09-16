@@ -255,6 +255,115 @@ spex hash-id --type component --module merkle --name "Hasher"
 
 ---
 
+## Authoring
+
+The write path over `spec/`. Every command reads the resolved profile, applies
+the change to an in-memory copy, runs the validator's own checkers over it, and
+either refuses — nothing written, the error document on stdout with a `fix` per
+entry — or writes and prints a report: the files `written`, the `obligations`
+the change incurred (the completeness checker's entries for this write against
+the tree as it was), and where relevant a `retired_name` or `replaced_target`.
+None of them reads or writes `.spex/`, none needs an initialised project, and
+all honour `--spec-dir`. Output is compact when piped, pretty-printed on a
+terminal.
+
+| Exit | Meaning |
+|---|---|
+| 0 | written; the report is on stdout |
+| 1 | input error: missing or malformed flag, no `project.json` under `--spec-dir`, malformed or out-of-range profile |
+| 2 | refused: the validator's entries, each with a `fix`, on stdout; the tree is untouched |
+
+### `spex profile show`
+
+Prints the resolved profile as one JSON document: `spec/profile.json` when
+present, the built-in default otherwise, after validation. A version 1 profile
+prints with the version 2 conventions filled in. Read it for the declared
+types, their plural keys, fields, reference kinds and targets, coverage chains,
+and per content-bearing type the `content_prefix` and `leaf_sections`.
+
+```sh
+spex profile show | jq '.node_types[] | {name, scope, fields: [.fields[].name]}'
+```
+
+### `spex node add <name>`
+
+Declares a node. File, array, id, required fields and content path are decided
+from the profile; a content-bearing node gets its leaf skeleton at the same
+time.
+
+| Flag | Purpose |
+|---|---|
+| `--type <type>` | A type the resolved profile declares, or `module`. Required |
+| `--module <module>` | The owning module, for a module-scoped type |
+| `--field <name>=<value>` | One declared field value; repeatable. Reference fields take an id, or a comma-separated list for many |
+
+`--type module` appends the module to `project.json` and writes a
+`module.json` skeleton declaring its name, so the module is visible to every
+gate from its first moment.
+
+```sh
+spex node add widgets --type module
+spex node add "List widgets" --type requirement --module widgets \
+  --field type=functional --field preq_id=2836ae8c6551 --field description="Lists them."
+spex node add WidgetLister --type component --module widgets \
+  --field description="Lists widgets." --field implements=3207191d7b70
+```
+
+### `spex node remove <id>`
+
+Removes a node and its leaf. While anything still references the id — a
+reference field in any JSON file, a typed link in any leaf — the removal is
+refused and each reference is listed with the `spex edge remove` that
+retargets it.
+
+| Flag | Purpose |
+|---|---|
+| `--force` | Remove anyway; the same list is printed as what was left dangling |
+
+A module id is refused, forced or not. The report carries the `retired_name`
+for the vocabulary sweep.
+
+### `spex node rename <id> <new-name>`
+
+One transaction: the new id is derived, the entry rewritten, every reference
+field and every typed link naming the old id repointed, and the content file
+moved. A refusal — undeclarable name, collision, module id — writes nothing.
+The report carries the `retired_name`; the pipeline still sees a removal plus
+an addition.
+
+### `spex edge add <source-id> <field> <target-id>`
+
+Adds one entry to one reference field, after checking that the target exists,
+that the source type declares the field, that the field permits the target's
+type, that a module-local field stays module-local, and that every
+cycle-checked field stays acyclic. Adding an entry already held changes nothing
+and says so. On a cardinality-one field such as `preq_id`, a different target
+replaces the held one and the report carries it under `replaced_target`.
+
+### `spex edge remove <source-id> <field> <target-id>`
+
+The inverse. Clearing a required cardinality-one field is refused with the
+validator's own entries; retarget it with one `spex edge add` instead.
+
+### `spex leaf scaffold <id>`
+
+Writes a content leaf's skeleton — `# <name>`, the type's `leaf_sections` as
+`##` headings, and one placeholder line with a typed link per edge the leaf
+owes — for a node whose leaf is absent or empty. A non-empty leaf is never
+overwritten; the refusal names the file. A leaf holding exactly the skeleton is
+reported as already scaffolded.
+
+### `spex migrate`
+
+Brings a spec from an earlier format version to the current one: the
+`title`-to-`name` rename on every requirement, removal of every array the
+profile does not declare (each removed entry reported, its content file
+reported as orphaned and left on disk), and `spec_version` stamped in
+`project.json`. A current tree is reported as current and left byte-identical,
+so running it is the check.
+
+---
+
 ## Proposals
 
 ### `spex template <project|change>`

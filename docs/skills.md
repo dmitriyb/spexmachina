@@ -8,6 +8,19 @@ skills never guess at structure, and `spex` never guesses at intent.
 
 Each skill is a `SKILL.md` invoked as a slash command.
 
+The split runs through authoring itself. The structure of a spec — which
+array a node lives in, its id, its content path, its edges, the headings its
+leaf carries — is written by the authoring commands (`spex node`, `spex edge`,
+`spex leaf scaffold`, driven by `spex profile show`), which refuse a change the
+validator would reject and print what a change obliges. The skills therefore
+carry no table of node types or file conventions; they hold the judgement —
+what belongs in a leaf, what a scenario is, what a proposal should say — and
+one loop: read the profile, declare, link, scaffold, write prose, validate,
+apply the fix a refusal names, repeat. Because the loop never names a node
+type, it is the same loop under any profile. That claim is verified for the
+default profile and exercised by a test-only custom profile, and by nothing
+else until a project with its own profile runs it.
+
 ## The doctrine
 
 Three rules govern the whole loop. Everything below is an expression of them.
@@ -33,26 +46,30 @@ project or a change to an existing one, enters plan mode, clarifies intent,
 then researches the current spec before drafting anything — so the proposal
 argues against what actually exists rather than what it assumes exists.
 
-It deliberately constrains the draft to what the spec format can express: a
-proposal that cannot be turned into requirements, components, flows and tests
-is a proposal that will not survive `/spec`. The output is a proposal draft
-committed to `spec/proposals/drafts/`; `/mint` registers it into
-`spec/proposals/`, which is what makes every later change traceable to a
-stated reason.
+It deliberately constrains the draft to what the authoring commands can
+declare, and it reads the change's cost off them rather than estimating it:
+the structural changes are applied to a scratch copy of the spec and the
+impact expectation is taken from the commands' `obligations` and from
+`spex diff` over the copy. The output is a proposal draft committed to
+`spec/proposals/drafts/`; `/mint` registers it into `spec/proposals/`, which is
+what makes every later change traceable to a stated reason.
 
 ## `/spec`
 
 *Read a proposal and author spec files: `project.json`, `module.json`, and
 markdown content leaves.*
 
-Takes a registered proposal and writes the spec. It resolves node types,
-computes identity hashes, lays out module directories and content leaves, and
-maps external interfaces onto `api` nodes. It runs in create mode for new
-material and alter mode for changes to existing modules.
+Takes a proposal and writes the spec through the commands: every node is a
+`spex node add`, every edge a `spex edge add`, every removal or rename the
+command that performs it as one transaction, and every leaf starts from the
+skeleton the commands scaffold. The skill writes prose and nothing else
+directly. A refusal's `fix` is the next command; a report's `obligations` are
+the leaves that now owe an edit.
 
 The bulk of the skill is judgment about *where content belongs* — what earns
-an architecture leaf versus a description field versus a test section — which
-is exactly the part a schema cannot enforce and `spex validate` cannot check.
+an architecture leaf versus a description field versus a test section, what a
+scenario is and is not — which is exactly the part a schema cannot enforce and
+`spex validate` cannot check.
 
 ## `/spec-review`
 
