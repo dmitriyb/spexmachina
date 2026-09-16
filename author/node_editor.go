@@ -7,6 +7,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -554,6 +555,239 @@ func moduleRemoveRefusal(id string) RefusalEntry {
 		Path:    "project.json:/modules/" + id,
 		Fix:     "spex node remove does not remove modules: delete the project.json modules entry, remove the module's directory, and remove every requires_module edge naming it, by hand",
 	}
+}
+
+// Set is NodeEditor's third half of spec/author/arch_node_editor.md,
+// "Setting a field": given the spec directory and a NodeSetInput naming an
+// existing node's id, one or more declared field values to write, one or
+// more declared field names to unset, or both, it finds the node's entry at
+// either scope, rewrites the values in place, and passes the result through
+// Report before any of it reaches disk. A value is converted by kind the
+// same way Add converts one (convertFieldValue's integer/text halves — a
+// reference field never reaches conversion, since it is refused before the
+// entry is ever touched), except that a value which fails to convert is
+// written to the entry as the raw string it was given rather than aborted
+// as an input error: the resulting schema violation surfaces through Report
+// as a refusal carrying computeFix's own fix, exactly the shape
+// test_node_editing.md's N17 asks for ("--field priority=five is refused
+// ... the error document carries the validator's schema entry").
+//
+// name, id and content, every reference field the node's type declares, and
+// a module id are refused before the entry is ever touched — NodeEditor's
+// own ownership guard, not the validator's (arch_node_editor.md, "Every
+// field this command will not touch has a surface that owns it"). A field
+// the type does not declare at all is not refused here: it is written onto
+// the entry exactly as Add leaves an undeclared field for Report's own
+// schema check to catch, so the fix it carries is the validator's, not a
+// second implementation of "list the declared fields" (test_node_editing.md
+// N20: "the fields the profile declares on component for colour, as the
+// validator's schema entry for an undeclared property carries them").
+//
+// Three outcomes:
+//
+//   - A write or a no-op: (report, nil, nil). report.Written is empty when
+//     every named field already held the value being set and every named
+//     unset field was already absent — "changes nothing and says so"
+//     (arch_node_editor.md, "Setting a field").
+//   - A refusal: (nil, refusals, nil). Nothing is written: either
+//     NodeEditor's own ownership guard, or whatever Report's validator pass
+//     finds newly wrong with the after-state.
+//   - An input error: (nil, nil, err). input.ID names no node in the tree.
+func Set(specDir string, input NodeSetInput) (*WriteReport, []RefusalEntry, error) {
+	profile, err := schema.ResolveProfile(specDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+
+	before, err := loadSpecMemFS(specDir)
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+
+	loc, err := locateNode(before, profile, input.ID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+	if loc.isModule {
+		return nil, []RefusalEntry{moduleSetRefusal(input.ID)}, nil
+	}
+
+	for name := range input.Fields {
+		if slices.Contains(input.Unset, name) {
+			return nil, []RefusalEntry{setUnsetConflictRefusal(name)}, nil
+		}
+	}
+
+	names := make([]string, 0, len(input.Fields)+len(input.Unset))
+	for name := range input.Fields {
+		names = append(names, name)
+	}
+	names = append(names, input.Unset...)
+	for _, name := range names {
+		if refusal, owned := fieldOwnershipRefusal(name, loc, input.ID); owned {
+			return nil, []RefusalEntry{refusal}, nil
+		}
+	}
+
+	after := cloneSpecFS(before)
+	doc, err := decodeDoc(after, loc.ownerFile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+	entry, ok := findEntryMap(doc, loc.nodeType.PluralKey, input.ID)
+	if !ok {
+		return nil, nil, fmt.Errorf("author: node set: entry for %s not found in %s", input.ID, loc.ownerFile)
+	}
+
+	changed := false
+	for name, raw := range input.Fields {
+		f, _ := findField(loc.nodeType, name)
+		next := convertSetFieldValue(f, raw)
+		if existing, has := entry[name]; has && setValueUnchanged(existing, next) {
+			continue
+		}
+		entry[name] = next
+		changed = true
+	}
+	for _, name := range input.Unset {
+		if _, has := entry[name]; !has {
+			continue
+		}
+		delete(entry, name)
+		changed = true
+	}
+
+	if !changed {
+		return &WriteReport{}, nil, nil
+	}
+
+	data, err := marshalIndentNoEscape(canonicalizeDoc(doc, loc.ownerFile, profile))
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: marshal %s: %w", loc.ownerFile, err)
+	}
+	after[loc.ownerFile] = append(data, '\n')
+
+	refusals, obligations, err := Report(os.DirFS(specDir), after, profile)
+	if err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+	if len(refusals) > 0 {
+		return nil, refusals, nil
+	}
+
+	written := changedPaths(before, after)
+	if err := writeChanges(specDir, after, written); err != nil {
+		return nil, nil, fmt.Errorf("author: node set: %w", err)
+	}
+
+	return &WriteReport{Written: written, Obligations: obligations}, nil, nil
+}
+
+// moduleSetRefusal is Set's own guard for input.ID naming a module: a
+// module's fields are project.json's own modules entry and module.json's
+// declarations, never a single node's field-edit path could safely reach,
+// exactly as Remove and Rename refuse a module id too (arch_node_editor.md,
+// "Setting a field": "a module id | the hand edit").
+func moduleSetRefusal(id string) RefusalEntry {
+	return RefusalEntry{
+		Check:   "node",
+		Message: fmt.Sprintf("%s is a module id; spex node set does not edit modules", id),
+		Path:    "project.json:/modules/" + id,
+		Fix:     "spex node set does not edit modules: edit the project.json modules entry and the module's module.json by hand",
+	}
+}
+
+// setUnsetConflictRefusal is Set's own guard for a field name given to both
+// --field and --unset in the same invocation (arch_node_editor.md, "Setting
+// a field": "a name given to both is refused").
+func setUnsetConflictRefusal(name string) RefusalEntry {
+	return RefusalEntry{
+		Check:   "node",
+		Message: fmt.Sprintf("%q was named to both set and unset in the same invocation", name),
+		Fix:     "name a field in --field or --unset, not both",
+	}
+}
+
+// fieldOwnershipRefusal is Set's own guard, ahead of Report: name, id and
+// content (for a content-bearing type) are each owned by a different
+// surface than spex node set, and so is every reference field the node's
+// type declares (arch_node_editor.md's "Every field this command will not
+// touch has a surface that owns it" table). A field the type does not
+// declare at all is not refused here — Set's own doc comment explains why —
+// so this returns (zero, false) for it, the same answer it gives for any
+// field this guard does not own.
+func fieldOwnershipRefusal(name string, loc nodeLocation, id string) (RefusalEntry, bool) {
+	switch name {
+	case "name":
+		return RefusalEntry{
+			Check:   "node",
+			Message: "name is the node's identity; spex node set does not rename",
+			Path:    entryPathFor(loc, id),
+			Fix:     "spex node rename",
+		}, true
+	case "id":
+		return RefusalEntry{
+			Check:   "node",
+			Message: "id is derived from the node's scope, type and name",
+			Path:    entryPathFor(loc, id),
+			Fix:     "id is derived; nothing sets it directly",
+		}, true
+	case "content":
+		if loc.nodeType.RequiresContent {
+			return RefusalEntry{
+				Check:   "node",
+				Message: "content is derived from the type's content prefix and the node's name",
+				Path:    entryPathFor(loc, id),
+				Fix:     "content is derived; nothing sets it directly",
+			}, true
+		}
+	default:
+		if f, declared := findField(loc.nodeType, name); declared && f.Kind == schema.FieldKindReference {
+			return RefusalEntry{
+				Check:   "node",
+				Message: fmt.Sprintf("%q is a reference field on %s", name, loc.nodeType.Name),
+				Path:    entryPathFor(loc, id),
+				Fix:     "spex edge add and spex edge remove",
+			}, true
+		}
+	}
+	return RefusalEntry{}, false
+}
+
+// convertSetFieldValue converts raw the same way Add's convertFieldValue
+// converts an integer field's value, but never returns an error: a value
+// that fails to parse as the field's declared kind is left as the raw
+// string it was given, so the resulting schema violation surfaces through
+// Report as a refusal instead of aborting the command before Report ever
+// runs (Set's own doc comment; test_node_editing.md N17). f's zero value —
+// an undeclared field, or the envelope's description — takes the text
+// branch, same as convertFieldValue's own default case.
+func convertSetFieldValue(f schema.Field, raw string) any {
+	if f.Kind == schema.FieldKindInteger {
+		if n, err := strconv.Atoi(raw); err == nil {
+			return n
+		}
+	}
+	return raw
+}
+
+// setValueUnchanged reports whether next — a value convertSetFieldValue
+// just produced — equals the entry's existing JSON-decoded value: an int
+// against the float64 encoding/json always decodes a JSON number to, or a
+// string against a string. It never sees anything else: convertSetFieldValue
+// only ever returns int or string, and a reference field (the only declared
+// kind capable of holding a slice) is refused before Set ever reaches this
+// comparison.
+func setValueUnchanged(existing, next any) bool {
+	switch n := next.(type) {
+	case int:
+		f, ok := existing.(float64)
+		return ok && float64(n) == f
+	case string:
+		s, ok := existing.(string)
+		return ok && s == n
+	}
+	return false
 }
 
 // introducedFindings mirrors Report's own refusal-detection logic (Report,
