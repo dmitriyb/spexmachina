@@ -45,6 +45,7 @@ With no second argument the run owns the whole tree.
 | `spex node add <name> --type <t> [--module <m>] [--field k=v]…` | declares a node: file, array, id, required fields and content path all decided from the profile; a content-bearing node gets its leaf skeleton; `--type module` registers a module and writes its `module.json` | `written`, `obligations` |
 | `spex node remove <id> [--force]` | removes a node and its leaf; refuses while anything still references it, listing each reference with the `spex edge remove` that retargets it; `--force` removes anyway and lists what it left dangling | `written`, `obligations`, `retired_name` |
 | `spex node rename <id> <new-name>` | one transaction: new id, every reference field and every typed link repointed, the leaf moved | `written`, `obligations`, `retired_name` |
+| `spex node set <id> [--field k=v]… [--unset k]…` | replaces a declared non-reference field's value or removes an optional one; refuses `name` (naming `rename`), `id`, `content`, every reference field (naming `edge add`), and a module id | `written`, `obligations` |
 | `spex edge add <source-id> <field> <target-id>` | one entry on one reference field, with target, field, target-type and cycle checks; on a cardinality-one field it replaces the held target | `written`, `obligations`, `replaced_target` |
 | `spex edge remove <source-id> <field> <target-id>` | the inverse; clearing a required cardinality-one field is refused | `written`, `obligations` |
 | `spex leaf scaffold <id>` | writes a leaf skeleton — title, the profile's headings, one placeholder link per owed edge — for a node whose leaf is absent or empty; never overwrites prose | `written` |
@@ -54,7 +55,7 @@ Every command honours `--spec-dir`, reads and writes only under it, needs no ini
 
 Reference fields — `implements`, `uses`, `describes`, `provided_by`, `preq_id`, `depends_on` — can be given at add time as `--field name=id` (comma-separated for lists) or wired afterwards with `spex edge add`. Field names are the profile's, read from `spex profile show`, never remembered.
 
-Two things the commands do not do. **Editing a scalar field of an existing node** — a requirement's `description`, a `priority`, a `type` — has no command yet; it is the one JSON edit made by hand, on the entry alone, and `spex diff` reports what it obliges. **Writing prose** is yours.
+The commands cover every change to `project.json` and `module.json`: declaring, removing and renaming nodes, setting and unsetting their fields, adding and removing edges. Nothing in those two files is edited by hand. **Writing prose** is yours, and it is the only direct write.
 
 ## Reading a report
 
@@ -109,6 +110,8 @@ Issue the commands in dependency order, so that each target exists before the ed
 4. apis, then their `provided_by` edges;
 5. data flows with their `uses`;
 6. test sections with their `describes`. A test section owes its own task only when it describes two or more components; a single-component section is bundled into that component's work, so group components whose scenarios naturally span them.
+
+For each change to an existing node's fields — a requirement's `description`, a project requirement's `priority`, a `derivation: pending` flag that a new module requirement now retires — `spex node set <id> --field k=v` or `--unset k`. Its `obligations` are the leaves the changed requirement now reaches; a description change on a module requirement obliges every implementing component's leaf, and on a project requirement every component under it.
 
 For each removal the proposal asks for: `spex node remove <id>`; read the inbound list it refuses with, retarget each reference with the `edge remove` and `edge add` it names, then remove again. Use `--force` only when the dangling references are ones this same run will retarget next. For each rename: `spex node rename`. Both print a `retired_name`; note it for step 6.
 
@@ -194,7 +197,7 @@ Tell the user:
 
 - The files written — the union of the `written` lists — and any `<!-- TODO -->` markers that need follow-up.
 - Every `retired_name` and the sweep done for it.
-- Any hand edit made under the scalar-field exception, and any refusal that exposed a command gap.
+- Any refusal that exposed a command gap: an edit the proposal needed that no command could express.
 - In a scoped run, the project-level or sibling-module edits the proposal still needs, and any out-of-scope gate findings left in place.
 - Which nodes look like absorb candidates and why — advisory only; the classification is `/mint`'s, made against the committed diff.
 - Remind them to review and commit on the working branch, landing on `main` via PR. The mint runs against that commit.

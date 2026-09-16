@@ -331,6 +331,31 @@ moved. A refusal — undeclarable name, collision, module id — writes nothing.
 The report carries the `retired_name`; the pipeline still sees a removal plus
 an addition.
 
+### `spex node set <id>`
+
+Replaces the value of a declared non-reference field on an existing node —
+text, integer or enumeration, and the envelope's `description` — at either
+scope, in whichever file holds the entry. Values are converted by kind as
+`spex node add` converts them.
+
+| Flag | Purpose |
+|---|---|
+| `--field <name>=<value>` | Set one declared field; repeatable |
+| `--unset <name>` | Remove one optional field; repeatable. A required field is refused with the validator's own entry |
+
+Refused, each naming the surface that owns the field: `name` (`spex node
+rename`), `id` and `content` (derived, never set), every reference field
+(`spex edge add` / `spex edge remove`), an undeclared field (the declared
+list), and a module id (the hand edit). Setting a value already held, or
+unsetting an absent field, writes nothing and says so. The report's
+`obligations` carry what the moved hash now reaches — a module requirement's
+description obliges every implementing component's leaf.
+
+```sh
+spex node set 1631cb19fac3 --field description="Scaffold content leaves, amended."
+spex node set 2836ae8c6551 --unset derivation
+```
+
 ### `spex edge add <source-id> <field> <target-id>`
 
 Adds one entry to one reference field, after checking that the target exists,
