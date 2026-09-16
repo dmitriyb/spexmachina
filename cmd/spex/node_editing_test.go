@@ -18,12 +18,13 @@ import (
 )
 
 // This file is cmd/spex's half of spec/author/test_node_editing.md, the
-// "Node editing tests" test section (aa4656487ccd) — N1-N15, run over the
-// real `spex node add|remove|rename` and `spex edge add|remove` command
-// trees. author/node_editor_test.go, author/node_renamer_test.go and
-// author/edge_editor_test.go already exercise NodeEditor, NodeRenamer and
-// EdgeEditor directly (Add/Remove/Rename/AddEdge/RemoveEdge) under the same
-// N1-N14 names; this file is their CLI-level mirror, the same relationship
+// "Node editing tests" test section (aa4656487ccd) — N1-N21, run over the
+// real `spex node add|set|remove|rename` and `spex edge add|remove` command
+// trees. author/node_editor_test.go, author/node_editor_set_test.go,
+// author/node_renamer_test.go and author/edge_editor_test.go already
+// exercise NodeEditor, NodeRenamer and EdgeEditor directly
+// (Add/Set/Remove/Rename/AddEdge/RemoveEdge) under the same N1-N21 names;
+// this file is their CLI-level mirror, the same relationship
 // leaf_and_profile_test.go has to author/leaf_scaffolder_test.go.
 
 // runNodeEditingSpex assembles the node, edge, diff, validate, hash-id and
@@ -1584,5 +1585,825 @@ func TestN15_CardinalityOneRetargetedByAddNeverClearedByRemove(t *testing.T) {
 	}
 	if handIDMsg != idEntry.Message {
 		t.Errorf("command id message %q != hand-edit validator message %q", idEntry.Message, handIDMsg)
+	}
+}
+
+// obligationsOfType filters obligations by DiffError.Type — this package's
+// mirror of author's own obligationsOfType (obligation_reporter_test.go),
+// unreachable from here.
+func obligationsOfType(obligations []merkle.DiffError, typ string) []merkle.DiffError {
+	var out []merkle.DiffError
+	for _, o := range obligations {
+		if o.Type == typ {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// setProjectRequirementPriority overwrites id's priority in dir's
+// project.json directly, bypassing the command under test — N17 needs P1
+// to start at priority 1 before the scenario's own --field priority=2 set.
+func setProjectRequirementPriority(t *testing.T, dir, id string, priority int) {
+	t.Helper()
+	path := filepath.Join(dir, "project.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proj schema.Project
+	if err := json.Unmarshal(data, &proj); err != nil {
+		t.Fatal(err)
+	}
+	for i := range proj.Requirements {
+		if proj.Requirements[i].ID == id {
+			proj.Requirements[i].Priority = &priority
+		}
+	}
+	writeAuthorJSON(t, path, proj)
+}
+
+// setModuleRequirementDescription overwrites id's description in dir's
+// alpha/module.json directly — N21 needs a known starting value for the
+// no-op half of its scenario.
+func setModuleRequirementDescription(t *testing.T, dir, id, desc string) {
+	t.Helper()
+	path := filepath.Join(dir, "alpha", "module.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(data, &mod); err != nil {
+		t.Fatal(err)
+	}
+	for i := range mod.Requirements {
+		if mod.Requirements[i].ID == id {
+			mod.Requirements[i].Description = desc
+		}
+	}
+	writeAuthorJSON(t, path, mod)
+}
+
+// N16: Setting a module requirement's description obliges exactly the
+// implementing leaves.
+func TestN16_SetModuleRequirementDescription_ObligesImplementingLeaf(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+
+	beforeProj, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--field", "description=R1's new description", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out)
+	}
+	report := decodeWriteReport(t, out)
+
+	modData, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatal(err)
+	}
+	var r1 *schema.ModuleRequirement
+	for i := range mod.Requirements {
+		if mod.Requirements[i].ID == f.r1ID {
+			r1 = &mod.Requirements[i]
+		}
+	}
+	if r1 == nil {
+		t.Fatalf("R1 not found in %+v", mod.Requirements)
+	}
+	if r1.Description != "R1's new description" {
+		t.Errorf("R1.Description = %q, want %q", r1.Description, "R1's new description")
+	}
+	if r1.PreqID != f.p1ID || r1.Type != "functional" || r1.Title != "R1" {
+		t.Errorf("R1's other fields must be unchanged, got %+v", r1)
+	}
+
+	afterProj, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeProj) != string(afterProj) {
+		t.Error("project.json must be untouched by a module-scoped set")
+	}
+
+	completeness := obligationsOfType(report.Obligations, "incomplete_change")
+	if len(completeness) != 1 {
+		t.Fatalf("want exactly one completeness obligation, got %+v", report.Obligations)
+	}
+	if completeness[0].Path != f.r1ID {
+		t.Errorf("obligation Path = %q, want R1's id %s", completeness[0].Path, f.r1ID)
+	}
+	if len(completeness[0].Related) != 1 || completeness[0].Related[0] != f.comp1ID {
+		t.Errorf("obligation Related = %v, want exactly [%s]", completeness[0].Related, f.comp1ID)
+	}
+	if strings.Contains(completeness[0].Message, "Comp2") {
+		t.Errorf("obligation must not name Comp2 (the requirement-changed rule), got %q", completeness[0].Message)
+	}
+
+	// spex diff --json against the snapshot: R1 modified beside alpha's
+	// meta change, and its errors array holds that same single entry.
+	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr == nil {
+		t.Fatal("want diff to exit non-zero: the incomplete_change obligation lands in its errors array")
+	}
+	diff := decodeDiffJSON(t, diffOut)
+
+	var modifiedReqs, metaChanges []diffChange
+	for _, c := range diff.Changes {
+		switch {
+		case c.NodeType == "requirement" && c.Type == "modified":
+			modifiedReqs = append(modifiedReqs, c)
+		case c.NodeType == "meta" && c.Module == "alpha":
+			metaChanges = append(metaChanges, c)
+		}
+	}
+	if len(modifiedReqs) != 1 || modifiedReqs[0].Path != f.r1ID {
+		t.Errorf("modified requirements = %+v, want exactly one with path %s", modifiedReqs, f.r1ID)
+	}
+	if len(metaChanges) != 1 {
+		t.Errorf("want exactly one meta change (alpha), got %+v", diff.Changes)
+	}
+	if len(diff.Changes) != 2 {
+		t.Errorf("want exactly two changes total, got %+v", diff.Changes)
+	}
+	if len(diff.Errors) != 1 || diff.Errors[0].Path != completeness[0].Path || diff.Errors[0].Message != completeness[0].Message {
+		t.Errorf("diff errors = %+v, want exactly the write report's own completeness entry %+v", diff.Errors, completeness[0])
+	}
+
+	// Parity oracle, accepting direction: the same description written by
+	// hand into a copy's module.json gives spex diff --json the same
+	// entry, so the command discovered nothing the hand edit would not
+	// have earned.
+	handDir := t.TempDir()
+	buildNodeEditingFixture(t, handDir)
+	handTree, err := merkle.BuildTree(handDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, handDir, handTree, time.Now())
+	setModuleRequirementDescription(t, handDir, f.r1ID, "R1's new description")
+
+	handDiffOut, handDiffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", handDir)
+	if handDiffErr == nil {
+		t.Fatal("want the hand-edited diff to exit non-zero too")
+	}
+	handDiff := decodeDiffJSON(t, handDiffOut)
+	if len(handDiff.Errors) != 1 || handDiff.Errors[0].Path != completeness[0].Path || handDiff.Errors[0].Message != completeness[0].Message {
+		t.Errorf("hand-edit diff errors = %+v, want the same entry the command discovered %+v", handDiff.Errors, completeness[0])
+	}
+}
+
+// N17: A project requirement's field lands in project.json and the walk
+// down is the obligation.
+func TestN17_SetProjectRequirementPriority_WalksDownToImplementor(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+	setProjectRequirementPriority(t, dir, f.p1ID, 1)
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+
+	beforeMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runNodeEditingSpex(t, "node", "set", f.p1ID, "--field", "priority=2", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out)
+	}
+	report := decodeWriteReport(t, out)
+
+	projData, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proj schema.Project
+	if err := json.Unmarshal(projData, &proj); err != nil {
+		t.Fatal(err)
+	}
+	var p1 *schema.Requirement
+	for i := range proj.Requirements {
+		if proj.Requirements[i].ID == f.p1ID {
+			p1 = &proj.Requirements[i]
+		}
+	}
+	if p1 == nil || p1.Priority == nil || *p1.Priority != 2 {
+		t.Fatalf("P1.Priority = %+v, want 2", p1)
+	}
+	if !strings.Contains(string(projData), `"priority": 2`) {
+		t.Errorf("priority must be written as a JSON number, got: %s", projData)
+	}
+
+	afterMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("alpha/module.json must be untouched by a project-scoped set")
+	}
+
+	completeness := obligationsOfType(report.Obligations, "incomplete_change")
+	if len(completeness) != 1 {
+		t.Fatalf("want exactly one completeness obligation, got %+v", report.Obligations)
+	}
+	if completeness[0].Path != f.p1ID {
+		t.Errorf("obligation Path = %q, want P1's id %s", completeness[0].Path, f.p1ID)
+	}
+	if !containsStr(completeness[0].Related, f.comp1ID) {
+		t.Errorf("obligation Related = %v, want to name Comp1", completeness[0].Related)
+	}
+
+	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr == nil {
+		t.Fatal("want diff to exit non-zero: the incomplete_change obligation lands in its errors array")
+	}
+	diff := decodeDiffJSON(t, diffOut)
+	var modifiedReqs, metaChanges []diffChange
+	for _, c := range diff.Changes {
+		switch {
+		case c.NodeType == "requirement" && c.Type == "modified":
+			modifiedReqs = append(modifiedReqs, c)
+		case c.NodeType == "meta" && c.Module == "":
+			metaChanges = append(metaChanges, c)
+		}
+	}
+	if len(modifiedReqs) != 1 || modifiedReqs[0].Path != f.p1ID {
+		t.Errorf("modified requirements = %+v, want exactly one with path %s", modifiedReqs, f.p1ID)
+	}
+	if len(metaChanges) != 1 {
+		t.Errorf("want exactly one project-level meta change, got %+v", diff.Changes)
+	}
+	if len(diff.Errors) != 1 || diff.Errors[0].Path != completeness[0].Path || diff.Errors[0].Message != completeness[0].Message {
+		t.Errorf("diff errors = %+v, want exactly the write report's own completeness entry %+v", diff.Errors, completeness[0])
+	}
+
+	settledProj := projData
+
+	// --unset priority is refused with the tree unchanged: the schema
+	// leaves the field optional, but the validator's own presence check
+	// (the "id" check) does not.
+	out2, err := runNodeEditingSpex(t, "node", "set", f.p1ID, "--unset", "priority", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for unsetting a project requirement's priority")
+	}
+	if exitCodeOf(err) != author.ExitRefusal {
+		t.Errorf("want exit code %d, got %d", author.ExitRefusal, exitCodeOf(err))
+	}
+	refusals2 := decodeRefusals(t, out2)
+	var foundPriorityRefusal *author.RefusalEntry
+	for i := range refusals2 {
+		if refusals2[i].Check == "id" && strings.Contains(refusals2[i].Message, "missing priority") {
+			foundPriorityRefusal = &refusals2[i]
+		}
+	}
+	if foundPriorityRefusal == nil {
+		t.Fatalf("want the validator's id-check refusal for missing priority, got %+v", refusals2)
+	}
+	after2, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(settledProj) != string(after2) {
+		t.Error("a refusal must leave project.json byte-identical")
+	}
+
+	// --field priority=five is refused through the validator's own schema
+	// entry, its fix naming the field as an integer.
+	out3, err := runNodeEditingSpex(t, "node", "set", f.p1ID, "--field", "priority=five", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for a non-integer priority")
+	}
+	refusals3 := decodeRefusals(t, out3)
+	var schemaEntry *author.RefusalEntry
+	for i := range refusals3 {
+		if refusals3[i].Check == "schema" && strings.Contains(refusals3[i].Fix, "priority") && strings.Contains(refusals3[i].Fix, "integer") {
+			schemaEntry = &refusals3[i]
+		}
+	}
+	if schemaEntry == nil {
+		t.Fatalf("want the validator's schema refusal naming priority as an integer, got %+v", refusals3)
+	}
+	after3, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(settledProj) != string(after3) {
+		t.Error("a refusal must leave project.json byte-identical")
+	}
+
+	// R1's enumerated "type" is refused the same way, naming the
+	// enumeration.
+	out4, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--field", "type=optional", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for an out-of-enumeration type")
+	}
+	refusals4 := decodeRefusals(t, out4)
+	var enumEntry *author.RefusalEntry
+	for i := range refusals4 {
+		if refusals4[i].Check == "schema" && strings.Contains(refusals4[i].Fix, "functional") && strings.Contains(refusals4[i].Fix, "non_functional") {
+			enumEntry = &refusals4[i]
+		}
+	}
+	if enumEntry == nil {
+		t.Fatalf("want the validator's schema refusal listing the enumeration, got %+v", refusals4)
+	}
+	after4, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(afterMod) != string(after4) {
+		t.Error("a refusal must leave alpha/module.json byte-identical")
+	}
+
+	// Parity oracle: the hand copy with "priority": "five" fails spex
+	// validate with the same schema entry.
+	handDir := t.TempDir()
+	handF := buildNodeEditingFixture(t, handDir)
+	handPath := filepath.Join(handDir, "project.json")
+	handData, err := os.ReadFile(handPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(handData, &raw); err != nil {
+		t.Fatal(err)
+	}
+	reqs := raw["requirements"].([]any)
+	for _, r := range reqs {
+		reqMap := r.(map[string]any)
+		if reqMap["id"] == handF.p1ID {
+			reqMap["priority"] = "five"
+		}
+	}
+	handOut, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(handPath, handOut, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	valOut, err := runNodeEditingSpex(t, "validate", "--spec-dir", handDir)
+	if err == nil {
+		t.Fatal("want validate to fail over the hand-edited non-integer priority")
+	}
+	valReport := decodeValidationReport(t, valOut)
+	var handSchemaMsg string
+	for _, e := range valReport.Errors {
+		if e.Check == "schema" && strings.Contains(e.Path, "priority") {
+			handSchemaMsg = e.Message
+		}
+	}
+	if handSchemaMsg == "" {
+		t.Fatalf("want a hand-edit schema error naming priority, got %+v", valReport.Errors)
+	}
+	if handSchemaMsg != schemaEntry.Message {
+		t.Errorf("command schema message %q != hand-edit validator message %q", schemaEntry.Message, handSchemaMsg)
+	}
+}
+
+// N18: Removing the pending mark once a module derives the requirement.
+func TestN18_UnsetPendingDerivation_OnceModuleDerives(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+
+	r2ID := hashID(t, dir, "requirement", "alpha", "R2")
+	if out, err := runNodeEditingSpex(t, "node", "add", "R2", "--type", "requirement", "--module", "alpha",
+		"--field", "type=functional", "--field", "preq_id="+f.p2ID, "--spec-dir", dir); err != nil {
+		t.Fatalf("node add R2: unexpected error: %v\n%s", err, out)
+	}
+	if out, err := runNodeEditingSpex(t, "edge", "add", f.comp2ID, "implements", r2ID, "--spec-dir", dir); err != nil {
+		t.Fatalf("edge add: unexpected error: %v\n%s", err, out)
+	}
+
+	if valOut, err := runNodeEditingSpex(t, "validate", "--spec-dir", dir); err != nil {
+		t.Fatalf("want the fixture green before the unset (pending_derivation is a note, not an error): %v\n%s", err, valOut)
+	}
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+
+	out, err := runNodeEditingSpex(t, "node", "set", f.p2ID, "--unset", "derivation", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out)
+	}
+	report := decodeWriteReport(t, out)
+	if len(report.Obligations) != 0 {
+		t.Errorf("Obligations = %+v, want none: derivation is unhashed and moves no requirement leaf", report.Obligations)
+	}
+
+	projData, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var proj schema.Project
+	if err := json.Unmarshal(projData, &proj); err != nil {
+		t.Fatal(err)
+	}
+	var p2 *schema.Requirement
+	for i := range proj.Requirements {
+		if proj.Requirements[i].ID == f.p2ID {
+			p2 = &proj.Requirements[i]
+		}
+	}
+	if p2 == nil {
+		t.Fatalf("P2 not found in %+v", proj.Requirements)
+	}
+	if p2.Derivation != "" {
+		t.Errorf("P2.Derivation = %q, want empty", p2.Derivation)
+	}
+	if p2.Type != "functional" || p2.Priority == nil || *p2.Priority != 2 {
+		t.Errorf("P2's other fields must be unchanged, got %+v", p2)
+	}
+
+	if _, err := runNodeEditingSpex(t, "validate", "--spec-dir", dir); err != nil {
+		t.Fatal("spec should be green with no note after removing the pending mark")
+	}
+
+	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr != nil {
+		t.Fatalf("diff: unexpected error: %v\n%s", diffErr, diffOut)
+	}
+	diff := decodeDiffJSON(t, diffOut)
+	if len(diff.Changes) != 1 || diff.Changes[0].NodeType != "meta" || diff.Changes[0].Module != "" {
+		t.Errorf("want exactly one project-level meta change, got %+v", diff.Changes)
+	}
+	if len(diff.Errors) != 0 {
+		t.Errorf("want no diff errors, got %+v", diff.Errors)
+	}
+
+	// A second --unset derivation on P2 is a no-op.
+	out2, err := runNodeEditingSpex(t, "node", "set", f.p2ID, "--unset", "derivation", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out2)
+	}
+	report2 := decodeWriteReport(t, out2)
+	if len(report2.Written) != 0 {
+		t.Errorf("second unset should be a no-op, got %+v", report2)
+	}
+	afterProj, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(projData) != string(afterProj) {
+		t.Error("a no-op unset must leave project.json byte-identical")
+	}
+}
+
+// N19: A required field is never unset.
+func TestN19_RequiredFieldNeverUnset(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+
+	beforeMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--unset", "type", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for unsetting the required type")
+	}
+	if exitCodeOf(err) != author.ExitRefusal {
+		t.Errorf("want exit code %d, got %d", author.ExitRefusal, exitCodeOf(err))
+	}
+	refusals := decodeRefusals(t, out)
+	var typeEntry *author.RefusalEntry
+	for i := range refusals {
+		if refusals[i].Check == "schema" && strings.Contains(refusals[i].Fix, "type") {
+			typeEntry = &refusals[i]
+		}
+	}
+	if typeEntry == nil {
+		t.Fatalf("want the validator's schema refusal for missing type, got %+v", refusals)
+	}
+	afterMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("a refusal must leave alpha/module.json byte-identical")
+	}
+
+	out2, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--unset", "preq_id", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for unsetting the reference field preq_id")
+	}
+	refusals2 := decodeRefusals(t, out2)
+	if len(refusals2) != 1 {
+		t.Fatalf("want exactly one refusal (NodeEditor's own ownership guard), got %+v", refusals2)
+	}
+	if !strings.Contains(refusals2[0].Fix, "spex edge add") || !strings.Contains(refusals2[0].Fix, "spex edge remove") {
+		t.Errorf("fix should name spex edge add and spex edge remove, got: %s", refusals2[0].Fix)
+	}
+	afterMod2, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod2) {
+		t.Error("a refusal must leave alpha/module.json byte-identical")
+	}
+
+	// Parity oracle: the same entry with type deleted by hand fails spex
+	// validate with the same check value and message.
+	handDir := t.TempDir()
+	handF := buildNodeEditingFixture(t, handDir)
+	handModPath := filepath.Join(handDir, "alpha", "module.json")
+	handData, err := os.ReadFile(handModPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(handData, &raw); err != nil {
+		t.Fatal(err)
+	}
+	reqs := raw["requirements"].([]any)
+	for _, r := range reqs {
+		reqMap := r.(map[string]any)
+		if reqMap["id"] == handF.r1ID {
+			delete(reqMap, "type")
+		}
+	}
+	handOut, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(handModPath, handOut, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	valOut, err := runNodeEditingSpex(t, "validate", "--spec-dir", handDir)
+	if err == nil {
+		t.Fatal("want validate to fail over the hand-edited missing type")
+	}
+	valReport := decodeValidationReport(t, valOut)
+	var handMsg string
+	for _, e := range valReport.Errors {
+		if e.Check == "schema" && strings.Contains(e.Message, "type") {
+			handMsg = e.Message
+		}
+	}
+	if handMsg == "" {
+		t.Fatalf("want a hand-edit schema error naming type, got %+v", valReport.Errors)
+	}
+	if handMsg != typeEntry.Message {
+		t.Errorf("command message %q != hand-edit validator message %q", typeEntry.Message, handMsg)
+	}
+}
+
+// N20: Identity, derived and reference fields each name the command that
+// owns them.
+func TestN20_OwnershipRefusalsNameTheirSurface(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+
+	beforeMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeProj, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{"name", []string{f.comp1ID, "--field", "name=Core"}, []string{"spex node rename"}},
+		{"id", []string{f.comp1ID, "--field", "id=000000000000"}, []string{"derived"}},
+		{"content", []string{f.comp1ID, "--field", "content=arch_other.md"}, []string{"derived"}},
+		{"implements", []string{f.comp1ID, "--field", "implements=" + f.r1ID}, []string{"spex edge add", "spex edge remove"}},
+		{"preq_id", []string{f.r1ID, "--field", "preq_id=" + f.p2ID}, []string{"spex edge add", "spex edge remove"}},
+		{"module id", []string{"000000000001", "--field", "description=anything"}, []string{"project.json", "module.json"}},
+		{"set and unset the same field", []string{f.comp1ID, "--field", "description=x", "--unset", "description"}, []string{"both"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			args := append([]string{"node", "set"}, tc.args...)
+			args = append(args, "--spec-dir", dir)
+			out, err := runNodeEditingSpex(t, args...)
+			if err == nil {
+				t.Fatalf("want a non-zero exit for %s, got clean output: %s", tc.name, out)
+			}
+			if exitCodeOf(err) != author.ExitRefusal {
+				t.Errorf("want exit code %d, got %d", author.ExitRefusal, exitCodeOf(err))
+			}
+			refusals := decodeRefusals(t, out)
+			if len(refusals) != 1 {
+				t.Fatalf("want exactly one refusal, got %+v", refusals)
+			}
+			if refusals[0].Path == "" {
+				t.Error("refusal should carry a non-empty Path")
+			}
+			for _, want := range tc.want {
+				if !strings.Contains(refusals[0].Fix, want) {
+					t.Errorf("fix should contain %q, got: %s", want, refusals[0].Fix)
+				}
+			}
+		})
+	}
+
+	t.Run("colour", func(t *testing.T) {
+		out, err := runNodeEditingSpex(t, "node", "set", f.comp1ID, "--field", "colour=red", "--spec-dir", dir)
+		if err == nil {
+			t.Fatal("want a non-zero exit for an undeclared field")
+		}
+		refusals := decodeRefusals(t, out)
+		if len(refusals) != 1 {
+			t.Fatalf("want exactly one refusal, got %+v", refusals)
+		}
+		if refusals[0].Check != "schema" {
+			t.Errorf("Check = %q, want %q (Report's own check, not an ownership refusal)", refusals[0].Check, "schema")
+		}
+		for _, want := range []string{"id", "name", "content", "implements", "uses"} {
+			if !strings.Contains(refusals[0].Fix, want) {
+				t.Errorf("fix should list declared field %q, got: %s", want, refusals[0].Fix)
+			}
+		}
+	})
+
+	afterMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("no case in N20 should have written to alpha/module.json")
+	}
+	afterProj, err := os.ReadFile(filepath.Join(dir, "project.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeProj) != string(afterProj) {
+		t.Error("no case in N20 should have written to project.json")
+	}
+}
+
+// N21: The current value is a no-op, and the write is canonical.
+func TestN21_NoOpIsCanonicalWrite(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+	setModuleRequirementDescription(t, dir, f.r1ID, "D")
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+	beforeMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--field", "description=D", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out)
+	}
+	report := decodeWriteReport(t, out)
+	if len(report.Written) != 0 {
+		t.Errorf("Written = %v, want none for a no-op", report.Written)
+	}
+	if len(report.Obligations) != 0 {
+		t.Errorf("Obligations = %+v, want none for a no-op", report.Obligations)
+	}
+
+	afterMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(beforeMod) != string(afterMod) {
+		t.Error("a no-op set must leave the tree byte-identical")
+	}
+
+	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr != nil {
+		t.Fatalf("diff: unexpected error: %v\n%s", diffErr, diffOut)
+	}
+	diff := decodeDiffJSON(t, diffOut)
+	if len(diff.Changes) != 0 {
+		t.Errorf("spex diff must report no change for a no-op set, got %+v", diff.Changes)
+	}
+
+	// Rewrite the same file by hand as compact, one-line JSON, then make a
+	// real change: the write must land in canonical form.
+	modPath := filepath.Join(dir, "alpha", "module.json")
+	data, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	compact, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modPath, compact, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	snapshotTree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, snapshotTree, time.Now())
+
+	out2, err := runNodeEditingSpex(t, "node", "set", f.r1ID, "--field", "description=D2", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("node set: unexpected error: %v\n%s", err, out2)
+	}
+	report2 := decodeWriteReport(t, out2)
+
+	afterData, err := os.ReadFile(modPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(afterData), "{\n  \"") {
+		t.Errorf("want the file reformatted to two-space indent, got: %s", afterData[:20])
+	}
+
+	diffOut2, diffErr2 := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr2 == nil {
+		t.Fatal("want diff to exit non-zero: the incomplete_change obligation lands in its errors array")
+	}
+	diff2 := decodeDiffJSON(t, diffOut2)
+	var modifiedReqs []diffChange
+	for _, c := range diff2.Changes {
+		if c.NodeType == "requirement" && c.Type == "modified" {
+			modifiedReqs = append(modifiedReqs, c)
+		}
+	}
+	if len(modifiedReqs) != 1 || modifiedReqs[0].Path != f.r1ID {
+		t.Errorf("want exactly one modified requirement (R1), got %+v", diff2.Changes)
+	}
+
+	completeness := obligationsOfType(report2.Obligations, "incomplete_change")
+	if len(completeness) != 1 {
+		t.Fatalf("want exactly the one Comp1 obligation, nothing extra from the reformat, got %+v", report2.Obligations)
+	}
+	if completeness[0].Path != f.r1ID || len(completeness[0].Related) != 1 || completeness[0].Related[0] != f.comp1ID {
+		t.Errorf("want the N16 Comp1 obligation, got %+v", completeness[0])
+	}
+
+	// The same set over a copy left hand-formatted a different way
+	// (four-space indent, as in N13) produces a byte-identical file.
+	dir2 := t.TempDir()
+	f2 := buildNodeEditingFixture(t, dir2)
+	setModuleRequirementDescription(t, dir2, f2.r1ID, "D")
+	modPath2 := filepath.Join(dir2, "alpha", "module.json")
+	data2, err := os.ReadFile(modPath2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw2 map[string]any
+	if err := json.Unmarshal(data2, &raw2); err != nil {
+		t.Fatal(err)
+	}
+	fourSpace, err := json.MarshalIndent(raw2, "", "    ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modPath2, fourSpace, 0644); err != nil {
+		t.Fatal(err)
+	}
+	tree2, err := merkle.BuildTree(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir2, tree2, time.Now())
+
+	if out3, err := runNodeEditingSpex(t, "node", "set", f2.r1ID, "--field", "description=D2", "--spec-dir", dir2); err != nil {
+		t.Fatalf("node set over the differently hand-formatted copy: unexpected error: %v\n%s", err, out3)
+	}
+	after2, err := os.ReadFile(modPath2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(afterData) != string(after2) {
+		t.Errorf("node set over a differently hand-formatted copy produced a different file:\nfirst:\n%s\nsecond:\n%s", afterData, after2)
 	}
 }
