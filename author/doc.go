@@ -73,9 +73,9 @@
 // (spec/author/arch_obligation_reporter.md, "Refusal is the validator's
 // predicate").
 //
-// TODO(bead:spexmachina-yih0.12): the refusal document's top-level JSON
-// envelope around []RefusalEntry is AuthorCommands' own call — the flow
-// and test leaves specify the entry shape (RefusalEntry) and the write
-// report's envelope (WriteReport) but not a wrapper for a bare refusal
-// list, so none is scaffolded here.
+// AuthorCommands (cmd/spex's node.go, edge.go, leaf.go, migrate.go,
+// author_output.go) made the refusal document's top-level JSON envelope
+// call the flow and test leaves left open: a refusal prints []RefusalEntry
+// itself, with no wrapper object — the same bare-array shape a write
+// report's own `obligations` key already holds.
 package author

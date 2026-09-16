@@ -26,6 +26,10 @@ func main() {
 		newInitCmd(),
 		newDoctorCmd(),
 		newProfileCmd(),
+		newNodeCmd(),
+		newEdgeCmd(),
+		newLeafCmd(),
+		newMigrateCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
