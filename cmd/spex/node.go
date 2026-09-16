@@ -7,17 +7,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// newNodeCmd is the `spex node` grouping: it registers add, remove and
+// newNodeCmd is the `spex node` grouping: it registers add, set, remove and
 // rename and carries no RunE of its own, so a bare `spex node` prints this
 // grouping's help and exits 0 — the same shape `spex profile` already uses
-// — per spec/author/arch_author_commands.md, "The eight surfaces": "a
+// — per spec/author/arch_author_commands.md, "The nine surfaces": "a
 // grouping here owns nothing a child does not."
 func newNodeCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "node",
-		Short: "Declare, remove or rename spec nodes",
+		Short: "Declare, set, remove or rename spec nodes",
 	}
-	cmd.AddCommand(newNodeAddCmd(), newNodeRemoveCmd(), newNodeRenameCmd())
+	cmd.AddCommand(newNodeAddCmd(), newNodeSetCmd(), newNodeRemoveCmd(), newNodeRenameCmd())
 	return cmd
 }
 
@@ -64,6 +64,48 @@ func runNodeAddE(cmd *cobra.Command, name, typeName, module string, rawFields []
 		Fields:   fields,
 	})
 	return finishAuthorResult("node add", report, refusals, err)
+}
+
+// newNodeSetCmd is `spex node set`, NodeEditor's field-edit surface.
+// --field and --unset are the two flags the spec fixes for this surface
+// (spec/author/arch_author_commands.md, "Five flags are fixed by the
+// spec"): --field name=value, repeatable, replaces a declared
+// non-reference field's value; --unset name, repeatable, removes an
+// optional one; the two may appear together in one invocation, with a
+// name given to both refused by the worker.
+func newNodeSetCmd() *cobra.Command {
+	var fields []string
+	var unset []string
+
+	cmd := &cobra.Command{
+		Use:   "set <id>",
+		Short: "Set declared field values on an existing node",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runNodeSetE(cmd, args[0], fields, unset)
+		},
+	}
+	cmd.Flags().StringArrayVar(&fields, "field", nil, "a declared field value as key=value; repeatable")
+	cmd.Flags().StringArrayVar(&unset, "unset", nil, "a declared optional field name to remove; repeatable")
+	return cmd
+}
+
+func runNodeSetE(cmd *cobra.Command, id string, rawFields, unset []string) error {
+	specDir, err := resolveSpecDir(cmd)
+	if err != nil {
+		return err
+	}
+	fields, err := parseFieldFlags(rawFields)
+	if err != nil {
+		return fmt.Errorf("node set: %w", err)
+	}
+
+	report, refusals, err := author.Set(specDir, author.NodeSetInput{
+		ID:     id,
+		Fields: fields,
+		Unset:  unset,
+	})
+	return finishAuthorResult("node set", report, refusals, err)
 }
 
 // newNodeRemoveCmd is `spex node remove`. --force is the one flag the spec
