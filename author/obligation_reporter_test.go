@@ -891,6 +891,116 @@ func TestComputeFix_ReferenceTargetFix_NoLocations_NoDanglingSearched(t *testing
 	}
 }
 
+// TestComputeFix_EnumViolation_NamesEnumValues covers "a value ... outside
+// its enumeration": an enum-constrained text field given a value outside
+// its declared enumeration gets a fix naming the values it admits.
+func TestComputeFix_EnumViolation_NamesEnumValues(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("schema", "value must be one of 'functional', 'non_functional'")
+	e.Path = "project.json:/requirements/0/type"
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	for _, want := range []string{"type", "functional", "non_functional"} {
+		if !bytes.Contains([]byte(got), []byte(want)) {
+			t.Fatalf("want the fix to name %q, got %q", want, got)
+		}
+	}
+}
+
+// TestComputeFix_WrongType_NamesDeclaredKind covers "a value of the wrong
+// kind": a string given for an integer field gets a fix naming the field's
+// declared kind.
+func TestComputeFix_WrongType_NamesDeclaredKind(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("schema", "got string, want integer")
+	e.Path = "project.json:/requirements/0/priority"
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	for _, want := range []string{"priority", "integer"} {
+		if !bytes.Contains([]byte(got), []byte(want)) {
+			t.Fatalf("want the fix to name %q, got %q", want, got)
+		}
+	}
+}
+
+// TestComputeFix_OutOfRangeInteger_NamesDeclaredBounds covers "a value ...
+// outside its enumeration" for a bounded integer field: an out-of-range
+// value gets a fix naming the field's declared bounds.
+func TestComputeFix_OutOfRangeInteger_NamesDeclaredBounds(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	e := validatorError("schema", "maximum: got 99, want 4")
+	e.Path = "project.json:/requirements/0/priority"
+	got := computeFix(e, os.DirFS(f.dir), profile)
+
+	for _, want := range []string{"priority", "0-4"} {
+		if !bytes.Contains([]byte(got), []byte(want)) {
+			t.Fatalf("want the fix to name %q, got %q", want, got)
+		}
+	}
+}
+
+// TestComputeFix_WrongValue_UnresolvedField_FallsBackToMessage guards the
+// case wrongValueFix cannot resolve — a root-level path with no single
+// field — leaving computeFix's fallback-to-message behaviour intact rather
+// than returning an empty fix.
+func TestComputeFix_WrongValue_UnresolvedField_FallsBackToMessage(t *testing.T) {
+	msg := "value must be 'functional'"
+	got := computeFix(validatorError("schema", msg), emptyFS(), schema.DefaultProfile())
+	if got != msg {
+		t.Fatalf("want the fix to fall back to the message, got %q", got)
+	}
+}
+
+// TestEnumViolation_ReportedAsRefusalWithFix is the end-to-end shape a
+// `spex node set` writing an enumerated field's out-of-enumeration value
+// would produce: NodeEditor's Set converts the field by kind but does not
+// itself enforce the enumeration (spec/author/module.json's "Set declared
+// field values": "an enumerated field refuses a value outside its
+// enumeration, each with the validator's own schema entry ... as the fix"),
+// so the after-state Report runs the checkers over is the one place the
+// violation is actually caught, as a refusal carrying computeFix's fix.
+func TestEnumViolation_ReportedAsRefusalWithFix(t *testing.T) {
+	f := buildObligationFixture(t)
+	profile := mustProfile(t, f.dir)
+
+	after := memFSFromDir(t, f.dir)
+	proj := readProjectMem(t, after)
+	proj.Requirements[0].Type = "bogus"
+	writeProjectMem(t, after, proj)
+
+	refusals, obligations, err := Report(os.DirFS(f.dir), after, profile)
+	if err != nil {
+		t.Fatalf("Report: %v", err)
+	}
+	if obligations != nil {
+		t.Fatalf("want no obligations on a refusal, got %+v", obligations)
+	}
+	var found bool
+	for _, r := range refusals {
+		if r.Check != "schema" {
+			continue
+		}
+		if !bytes.Contains([]byte(r.Message), []byte("bogus")) && !bytes.Contains([]byte(r.Message), []byte("functional")) {
+			continue
+		}
+		found = true
+		for _, want := range []string{"type", "functional", "non_functional"} {
+			if !bytes.Contains([]byte(r.Fix), []byte(want)) {
+				t.Fatalf("want the fix to name %q, got %q", want, r.Fix)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("want a schema refusal for the out-of-enumeration value, got %+v", refusals)
+	}
+}
+
 func validatorError(check, message string) validator.ValidationError {
 	return validator.ValidationError{Check: check, Message: message}
 }
