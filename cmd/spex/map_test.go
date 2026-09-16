@@ -310,7 +310,7 @@ func TestFR_MapList_J1_SchemaViolatingLine(t *testing.T) {
 		`{"event":"bogus","eid":"e2"}`,
 	})
 
-	_, err := runSpex(t, "map", "list", "--spec-dir", dir)
+	out, err := runSpex(t, "map", "list", "--spec-dir", dir)
 	if err == nil {
 		t.Fatal("want error for a journal line that violates the journal-line schema, got nil")
 	}
@@ -322,6 +322,9 @@ func TestFR_MapList_J1_SchemaViolatingLine(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line 3") {
 		t.Fatalf("want error naming the offending line (3), got %v", err)
+	}
+	if out != "" {
+		t.Errorf("want no output document produced, got stdout: %q", out)
 	}
 }
 
