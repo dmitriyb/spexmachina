@@ -1,10 +1,6 @@
 [
   {
-    "node": "b9e7b96f6aa7",
-    "reason": "last sentence of What it does not do: per-command obligations are what one write leaves open, not a running total, and a later command can close an earlier one's; no refusal, fix-table row or obligation rule moved; pinned by TestO3_EdgeAddToRecentlyAddedRequirement in author/obligation_reporter_test.go for the per-command pair, and by TestREQ8_C9_MetaChangedWithoutRequirementChanges and TestREQ8_C4_AddedRequirementImplementorUnchanged in merkle/completeness_checker_test.go for the cumulative diff's rules"
-  },
-  {
-    "node": "31212f1a9d20",
-    "reason": "Setup's Obligations oracle limited to the completeness entries, and O3's Then rewritten to the per-command list versus the cumulative diff's; no scenario added or removed; pinned by TestO3_EdgeAddToRecentlyAddedRequirement and TestO5_UnderivedProjectRequirement_AcceptedAsObligation in author/obligation_reporter_test.go"
+    "node": "b6758cdfabc4",
+    "reason": "count-only corrections in The declared surfaces prose: sixteen of nineteen constructors declared as apis, four spex node children, twenty-six declared surfaces; the constructor list and registration order are unchanged and no code path moves; no Go test asserts the counts — the evidence is the slim render listing 26 api nodes and spex validate green on the graph the counts describe"
   }
 ]

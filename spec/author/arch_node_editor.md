@@ -1,6 +1,6 @@
 # NodeEditor
 
-The component behind `spex node add` and `spex node remove`: it declares a node of any type the resolved profile knows and retires one, and it is the one place a new node's array, id and content path are decided. [[fe62312f507b|Add and remove nodes by profile]] is its contract.
+The component behind `spex node add`, `spex node set` and `spex node remove`: it declares a node of any type the resolved profile knows, changes a declared value on one that exists, and retires one, and it is the one place a new node's array, id and content path are decided. [[fe62312f507b|Add and remove nodes by profile]] is its contract for the first and the last; [[6b69d1984dbe|Set declared field values]] for the edit in between.
 
 ## Adding a node
 
@@ -20,6 +20,24 @@ The editor names no type, key, field or prefix itself. A type the profile does n
 `--type module` is the one addition outside the profile's types, because modules are frame nodes, not declared ones. It appends the entry to `project.json`'s `modules` — name, path equal to the name, the derived module id — and writes a `module.json` skeleton declaring the name and nothing else, so the module is visible to every gate from its first moment: a directory `project.json` does not name is invisible to `spex validate`, `spex diff` and `spex render` alike, and creating the two together is what closes that hole.
 
 The write goes through [[b9e7b96f6aa7|ObligationReporter]] first: the after-state is checked by the validator's own predicate, a refusal names its fix, and a write reports the leaves it obliges — which, for a new node in an existing module, is every component in that module, since the module's `meta` leaf moved and no requirement did.
+
+## Setting a field
+
+The caller names an id and one or more declared fields with a value each, one or more fields to unset, or both in one invocation — a name given to both is refused. The editor finds the entry at either scope, in whichever file holds it, and replaces the values in place: nothing else on the entry moves, and the id, which is the name's hash, cannot. What it accepts is decided by the profile the same way adding is: a field the node's type declares as text, integer or enumeration, and the envelope's `description`. A value is converted by kind exactly as `spex node add` converts one, so an integer field refuses a non-integer and an enumerated field refuses a value outside its enumeration, each with the validator's own `schema` entry and the declared kind or enumeration as the fix. `--unset` removes an optional field; on a field the validator requires, the refusal is the entry a hand edit deleting it would earn — the `schema` entry for a field the type declares required, the `id` entry for a project requirement's `priority`, which the schema leaves optional and the validator's presence check does not.
+
+Every field this command will not touch has a surface that owns it, and the refusal names that surface, with the contract-refusal exit code and the tree untouched:
+
+| Field | Refused with |
+|---|---|
+| `name` | `spex node rename` — the name is the identity, and a rename moves the id, every reference and the leaf with it |
+| `id`, `content` | that both are derived — from the name and from the type's content prefix — and nothing sets them |
+| a reference field — `implements`, `uses`, `describes`, `provided_by`, `preq_id`, `depends_on`, or any the profile declares | `spex edge add` and `spex edge remove` |
+| a field the type does not declare | the fields it does declare |
+| a module id | the hand edit, as removing and renaming refuse a module id too |
+
+One field, one write path. That is why the reference fields are refused here rather than accepted as a convenience: two commands able to write the same array would let it be edited without the graph checks the edge commands apply. It is also why `spex node add` was not stretched into an upsert — add creates and refuses a duplicate, and a command that either creates or changes depending on what the tree already holds answers "what did this run do" with the tree's prior state rather than with its name.
+
+Setting a field to the value it already holds changes nothing and says so; unsetting a field that is absent does the same. A real change is written through [[b9e7b96f6aa7|ObligationReporter]] like every other write, and the report carries what the moved hash obliges under the completeness rules: a module requirement's description reaches every implementing component's leaf; a project requirement's walks down through every deriving module requirement to every implementing component; a field the profile declares unhashed — `derivation` under the default profile — moves no requirement leaf and obliges nothing, though the project envelope's own `meta` leaf still records the byte change, inert as it is everywhere else. This is the obligation that, before the command existed, a hand edit of the same entry left for `spex diff` to find at the end of the session, and printing it at the moment the edit is made is most of what the command is for.
 
 ## Removing a node
 

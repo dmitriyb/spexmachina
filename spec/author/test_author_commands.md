@@ -1,18 +1,18 @@
 # Author command tests
 
-Acceptance scenarios for AuthorCommands: the surface the eight apis present — exit codes, stdout shape, flag handling — as opposed to what each worker does with the values, which the other test leaves in this module cover.
+Acceptance scenarios for AuthorCommands: the surface the nine apis present — exit codes, stdout shape, flag handling — as opposed to what each worker does with the values, which the other test leaves in this module cover.
 
 ## Setup
 
-The fixture of the node editing tests — `tmp/spec/` with module `alpha`, components Comp1 and Comp2, test section T1 and api `demo run` — and the compiled `spex` binary. Every scenario invokes one or more of `spex node add`, `spex node remove`, `spex node rename`, `spex edge add`, `spex edge remove`, `spex leaf scaffold`, `spex profile show` and `spex migrate` with `--spec-dir tmp/spec/`, and asserts on the exit code first.
+The fixture of the node editing tests — `tmp/spec/` with module `alpha`, components Comp1 and Comp2, test section T1 and api `demo run` — and the compiled `spex` binary. Every scenario invokes one or more of `spex node add`, `spex node set`, `spex node remove`, `spex node rename`, `spex edge add`, `spex edge remove`, `spex leaf scaffold`, `spex profile show` and `spex migrate` with `--spec-dir tmp/spec/`, and asserts on the exit code first.
 
 ## Scenarios
 
 ### A1: Every surface is registered and has help
 
 **Given** the compiled binary.
-**When** `spex --help`, `spex node --help`, `spex edge --help` and each of the eight surfaces with `--help` are run.
-**Then** every run exits 0; `spex --help` lists `node`, `edge`, `leaf`, `profile` and `migrate` among the subcommands; `spex node --help` lists `add`, `remove` and `rename`; `spex edge --help` lists `add` and `remove`; `spex leaf --help` lists `scaffold` and `spex profile --help` lists `show`; and a bare `spex node`, `spex edge`, `spex leaf` or `spex profile` prints that grouping's help and exits 0.
+**When** `spex --help`, `spex node --help`, `spex edge --help` and each of the nine surfaces with `--help` are run.
+**Then** every run exits 0; `spex --help` lists `node`, `edge`, `leaf`, `profile` and `migrate` among the subcommands; `spex node --help` lists `add`, `set`, `remove` and `rename`; `spex edge --help` lists `add` and `remove`; `spex leaf --help` lists `scaffold` and `spex profile --help` lists `show`; and a bare `spex node`, `spex edge`, `spex leaf` or `spex profile` prints that grouping's help and exits 0.
 
 ### A2: Exit codes are the documented set
 
@@ -43,5 +43,5 @@ The fixture of the node editing tests — `tmp/spec/` with module `alpha`, compo
 ### A6: --spec-dir is honoured on every surface
 
 **Given** two fixtures at different paths.
-**When** each of the eight surfaces is run with `--spec-dir` naming the second.
+**When** each of the nine surfaces is run with `--spec-dir` naming the second.
 **Then** the first fixture is byte-identical before and after every run.

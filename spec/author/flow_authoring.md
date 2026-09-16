@@ -23,7 +23,7 @@ digraph authoring_flow {
     "1f9fec7c42f6"   -> "62468f3bab3c"  [label="2. profile show"];
     "62468f3bab3c"   -> "1f9fec7c42f6"  [label="resolved profile, JSON"];
     "1f9fec7c42f6"   -> "b9b80a158949"  [label="0. migrate, adopters only"];
-    "1f9fec7c42f6"   -> "cb8ef2b70999"  [label="3. node add / remove"];
+    "1f9fec7c42f6"   -> "cb8ef2b70999"  [label="3. node add / set / remove"];
     "1f9fec7c42f6"   -> "14b673e2a502"  [label="3. node rename"];
     "1f9fec7c42f6"   -> "e26d5ac76610"  [label="4. edge add / remove"];
     "1f9fec7c42f6"   -> "b1a81efbd240"  [label="5. leaf scaffold"];
@@ -51,7 +51,7 @@ digraph authoring_flow {
 
 **1–2. Read the profile.** The agent reads the proposal, then runs `spex profile show`. [[62468f3bab3c|ProfileInspector]] hands back the resolved profile as one JSON document — the declared types with plural keys, fields, reference kinds and targets, the coverage chains, and per content-bearing type its content prefix and leaf sections. This is the only place a skill learns a type's name from, which is what keeps the skill ontology-free.
 
-**3. Declare nodes.** Each node in the proposal's impact table becomes one `spex node add`, and [[1f9fec7c42f6|AuthorCommands]] hands the type, name, module and field values to [[cb8ef2b70999|NodeEditor]], which decides file, array, id and content path from the profile. A retired node is a `spex node remove`; a renamed one goes to [[14b673e2a502|NodeRenamer]] as a single transaction and comes back with a retired name for the vocabulary sweep.
+**3. Declare nodes.** Each node in the proposal's impact table becomes one `spex node add`, and [[1f9fec7c42f6|AuthorCommands]] hands the type, name, module and field values to [[cb8ef2b70999|NodeEditor]], which decides file, array, id and content path from the profile. A changed value on a node that exists — a requirement's description, a priority, a pending mark removed — is a `spex node set` to the same worker, which rewrites the entry in place and reports at this step what the change obliges, so that the leaves a description change owes are known here rather than found at step 7. A retired node is a `spex node remove`; a renamed one goes to [[14b673e2a502|NodeRenamer]] as a single transaction and comes back with a retired name for the vocabulary sweep.
 
 **4. Wire edges.** `implements`, `uses`, `describes`, `provided_by`, `preq_id`, `depends_on`, `requires_module`: one `spex edge add` each through [[e26d5ac76610|EdgeEditor]], which checks the target exists, the profile permits the field and target type, and every cycle-checked field stays acyclic.
 
@@ -65,7 +65,7 @@ digraph authoring_flow {
 
 ## Data Shapes
 
-**Into a worker**: a type name, a node name, a module name where the type is module-scoped, and field values keyed by declared field name — or, for edges, a source id, a field name and a target id; for a rename, an id and a new name; for a scaffold, an id. Every id is a 12-character identity hash and every type and field name is looked up in the resolved profile, never matched against a literal in the code.
+**Into a worker**: a type name, a node name, a module name where the type is module-scoped, and field values keyed by declared field name — or, for a set, an id with field values keyed by declared field name, field names to unset, or both; for edges, a source id, a field name and a target id; for a rename, an id and a new name; for a scaffold, an id. Every id is a 12-character identity hash and every type and field name is looked up in the resolved profile, never matched against a literal in the code.
 
 **Into the reporter**: the tree as read from disk and the tree as the worker left it in memory, plus the resolved profile.
 

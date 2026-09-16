@@ -24,6 +24,10 @@ A refusal is an error document on stdout, and each entry carries a `fix` field b
 | a duplicate id or name | the existing node's id and file |
 | an inbound reference blocking a removal | the `spex edge remove` invocation that retargets it, and `--force` |
 | a cycle | the cycle, as the validator's `dag` entry states it |
+| a value of the wrong kind, or outside its enumeration | the field's declared kind, or the values its enumeration admits |
+| a field, node or leaf another surface owns | that surface — `spex node rename`, `spex edge add`, `spex edge remove` — or the hand edit |
+
+The last row is the one refusal that is not the validator's predicate. A command owns what it writes, and a value another surface owns — a reference field, which the edge commands write under their graph checks; a name, which a rename moves together with the id, every reference and the leaf; a module entry, which no command writes; a leaf that already holds prose — is refused before the checkers run, with that surface as the fix, so that no field has two write paths. Ownership adds no validation rule: the hand edit the refusal points at is still judged by the validator alone.
 
 This is the property a short authoring skill depends on. A tool whose errors are terse makes the skill pre-empt them; a tool whose errors carry the fix lets the skill's loop be "run the command, apply the fix it names".
 
