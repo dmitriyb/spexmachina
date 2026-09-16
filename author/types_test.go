@@ -155,10 +155,11 @@ func TestWriteReport_CanonicalFieldOrder(t *testing.T) {
 		Obligations: []merkle.DiffError{
 			{Type: "incomplete_change", Message: "m", Path: "p", Related: []string{"r1"}},
 		},
-		RetiredName: "Comp1",
+		RetiredName:    "Comp1",
+		ReplacedTarget: "P1",
 	}
 	got := encode(t, r)
-	fieldOrder(t, got, "write report", "written", "obligations", "retired_name")
+	fieldOrder(t, got, "write report", "written", "obligations", "retired_name", "replaced_target")
 }
 
 func TestWriteReport_RetiredNameOmittedWhenEmpty(t *testing.T) {
@@ -171,6 +172,34 @@ func TestWriteReport_RetiredNameOmittedWhenEmpty(t *testing.T) {
 	got := encode(t, r)
 	if strings.Contains(got, "retired_name") {
 		t.Fatalf("retired_name must be omitted when empty: %s", got)
+	}
+}
+
+func TestWriteReport_ReplacedTargetOmittedWhenEmpty(t *testing.T) {
+	// Only a spex edge add that displaces a cardinality-one field's
+	// existing target sets replaced_target; every other writing surface
+	// must omit the key entirely rather than emit "" (flow_authoring.md,
+	// "On stdout": "for an edge add that displaced a cardinality-one
+	// target the `replaced_target`").
+	r := WriteReport{
+		Written:     []string{"alpha/module.json"},
+		Obligations: []merkle.DiffError{},
+	}
+	got := encode(t, r)
+	if strings.Contains(got, "replaced_target") {
+		t.Fatalf("replaced_target must be omitted when empty: %s", got)
+	}
+}
+
+func TestWriteReport_ReplacedTargetCarriesDisplacedTarget(t *testing.T) {
+	r := WriteReport{
+		Written:        []string{"alpha/module.json"},
+		Obligations:    []merkle.DiffError{},
+		ReplacedTarget: "P1",
+	}
+	got := encode(t, r)
+	if !strings.Contains(got, `"replaced_target":"P1"`) {
+		t.Fatalf("replaced_target must carry the displaced target id: %s", got)
 	}
 }
 
@@ -204,14 +233,15 @@ func TestWriteReport_RoundTrip(t *testing.T) {
 		Obligations: []merkle.DiffError{
 			{Type: "incomplete_change", Message: "m", Path: "p", Related: []string{"r1", "r2"}},
 		},
-		RetiredName: "Comp1",
+		RetiredName:    "Comp1",
+		ReplacedTarget: "P1",
 	}
 	wire := encode(t, original)
 	var got WriteReport
 	if err := json.Unmarshal([]byte(wire), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if got.RetiredName != original.RetiredName || len(got.Written) != len(original.Written) || len(got.Obligations) != len(original.Obligations) {
+	if got.RetiredName != original.RetiredName || got.ReplacedTarget != original.ReplacedTarget || len(got.Written) != len(original.Written) || len(got.Obligations) != len(original.Obligations) {
 		t.Fatalf("roundtrip mismatch:\n got %+v\nwant %+v", got, original)
 	}
 }

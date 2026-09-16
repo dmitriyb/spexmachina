@@ -79,16 +79,28 @@ type RefusalEntry struct {
 // WriteReport is the write-report document a writing command prints on
 // stdout once ObligationReporter has accepted a change and the caller has
 // written it: the files written, the obligations the completeness rules
-// now attach to the tree, and — for `spex node rename` and for a
+// now attach to the tree, — for `spex node rename` and for a
 // `spex node remove` of a name-declarable node — the retired name the
-// vocabulary sweep needs
-// (spec/author/arch_author_commands.md, "Exit codes and output").
-// Obligations reuses merkle.DiffError, the completeness checker's own
-// entry type, unchanged: they are printed here, not re-derived
+// vocabulary sweep needs, and — for a `spex edge add` that retargeted a
+// cardinality-one field already holding a different target — the target
+// it displaced
+// (spec/author/arch_author_commands.md, "Exit codes and output";
+// spec/author/flow_authoring.md, "On stdout"). Obligations reuses
+// merkle.DiffError, the completeness checker's own entry type, unchanged:
+// they are printed here, not re-derived
 // (spec/author/arch_obligation_reporter.md, "Obligations are printed, not
 // discovered").
+//
+// ReplacedTarget is EdgeEditor's field to populate
+// (spec/author/arch_edge_editor.md, "Idempotence": "add sets it, and
+// adding a different target replaces the one held, the write report
+// carrying the replaced target under `replaced_target`") —
+// TODO(bead:spexmachina-yih0.17): AddEdge's cardinality-one branch still
+// refuses a retarget instead of replacing and populating this field; see
+// the TODO markers in edge_editor.go.
 type WriteReport struct {
-	Written     []string           `json:"written"`
-	Obligations []merkle.DiffError `json:"obligations"`
-	RetiredName string             `json:"retired_name,omitempty"`
+	Written        []string           `json:"written"`
+	Obligations    []merkle.DiffError `json:"obligations"`
+	RetiredName    string             `json:"retired_name,omitempty"`
+	ReplacedTarget string             `json:"replaced_target,omitempty"`
 }

@@ -304,12 +304,21 @@ func findEntryMap(doc map[string]any, pluralKey, id string) (map[string]any, boo
 
 // setEdgeField adds targetID to entry's value for field, per field's
 // declared cardinality (arch_edge_editor.md, "Idempotence"): cardinality
-// "one" sets the field when it is empty, reports the current value as a
-// conflict when it already holds a different target — never a silent
-// overwrite, since "a required field of cardinality one is retargeted by
-// removing and adding, so that the removal is visible" — and reports no
-// change when it already holds targetID; cardinality "many" appends when
-// targetID is absent and reports no change when it is already present.
+// "one" sets the field when it is empty, and reports no change when it
+// already holds targetID; cardinality "many" appends when targetID is
+// absent and reports no change when it is already present.
+//
+// TODO(bead:spexmachina-yih0.17): the cardinality-"one" branch still
+// treats an already-set field holding a different target as a conflict —
+// via the conflict return value AddEdge turns into
+// cardinalityOneConflictRefusal — instead of replacing it. Per the
+// corrected arch_edge_editor.md, "Idempotence" ("adding a different
+// target replaces the one held, the write report carrying the replaced
+// target under `replaced_target`", spec/author/test_node_editing.md's
+// N15), a different cur should overwrite entry[field.Name] and report
+// changed=true plus cur as the replaced target — WriteReport.ReplacedTarget
+// (author/types.go) is the field AddEdge should populate from it — rather
+// than a refusal.
 func setEdgeField(entry map[string]any, field schema.Field, targetID string) (changed bool, conflict string) {
 	if field.Cardinality == "one" {
 		cur, _ := entry[field.Name].(string)
@@ -335,6 +344,17 @@ func setEdgeField(entry map[string]any, field schema.Field, targetID string) (ch
 // "one" field is cleared by deleting the key entirely rather than setting
 // it to "", so a subsequent schema check sees an absent field, not an empty
 // string one.
+//
+// TODO(bead:spexmachina-yih0.17): a cardinality-"one" field.Required (e.g.
+// preq_id) should never reach this unconditional clear — per the corrected
+// arch_edge_editor.md, "Idempotence" ("Remove clears it, and for a
+// required field that is a refusal carrying the validator's `schema` and
+// `id` entries", spec/author/test_node_editing.md's N15), RemoveEdge
+// should refuse before calling clearEdgeField when field.Required is true
+// and field.Cardinality is "one", naming the same two entries a hand
+// deletion of the field earns from `spex validate` (schema: missing
+// required field; id: the node missing its preq_id) — never a silent
+// clear to an absent state.
 func clearEdgeField(entry map[string]any, field schema.Field, targetID string) bool {
 	if field.Cardinality == "one" {
 		cur, _ := entry[field.Name].(string)
@@ -431,11 +451,19 @@ func moduleLocalRefusal(before validator.MemFS, profile *schema.Profile, srcLoc,
 }
 
 // cardinalityOneConflictRefusal is EdgeEditor's own check for a
-// cardinality-"one" field that already holds a different target
-// (arch_edge_editor.md's "Idempotence": "a required field of cardinality
-// one is retargeted by removing and adding, so that the removal is
-// visible"). The fix names the spex edge remove invocation that clears the
-// current target first.
+// cardinality-"one" field that already holds a different target.
+//
+// TODO(bead:spexmachina-yih0.17): this refusal's rationale is the
+// superseded reading of arch_edge_editor.md's "Idempotence" ("a required
+// field of cardinality one is retargeted by removing and adding, so that
+// the removal is visible"); the corrected text has AddEdge replace the
+// held target instead (see setEdgeField's TODO), so this refusal — and
+// its call site in AddEdge — should no longer fire there. A refusal
+// carrying the validator's `schema`/`id` entries belongs on the
+// RemoveEdge side of a required field instead (see clearEdgeField's
+// TODO); whether that reuses this helper's shape or a new one is this
+// bead's call. The fix names the spex edge remove invocation that clears
+// the current target first.
 func cardinalityOneConflictRefusal(loc nodeLocation, input EdgeInput, current string) RefusalEntry {
 	return RefusalEntry{
 		Check:   "edge",
