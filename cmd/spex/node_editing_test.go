@@ -18,7 +18,7 @@ import (
 )
 
 // This file is cmd/spex's half of spec/author/test_node_editing.md, the
-// "Node editing tests" test section (aa4656487ccd) — N1-N14, run over the
+// "Node editing tests" test section (aa4656487ccd) — N1-N15, run over the
 // real `spex node add|remove|rename` and `spex edge add|remove` command
 // trees. author/node_editor_test.go, author/node_renamer_test.go and
 // author/edge_editor_test.go already exercise NodeEditor, NodeRenamer and
@@ -1409,5 +1409,180 @@ func TestN14_NoInitialisedProjectNeeded(t *testing.T) {
 	}
 	if string(beforeSpex) != string(afterSpex) {
 		t.Error(".spex/ must be byte-identical before and after: node add reads and writes nothing under it")
+	}
+}
+
+// N15: A cardinality-one field is retargeted by one add, and a required
+// one is never cleared. The CLI-level mirror of
+// TestAddEdge_CardinalityOneRetarget_ReplacesAndReportsDisplacedTarget and
+// TestRemoveEdge_RequiredCardinalityOne_RefusesRatherThanClear
+// (author/edge_editor_test.go).
+func TestN15_CardinalityOneRetargetedByAddNeverClearedByRemove(t *testing.T) {
+	dir := t.TempDir()
+	f := buildNodeEditingFixture(t, dir)
+
+	tree, err := merkle.BuildTree(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir, tree, time.Now())
+
+	addOut, err := runNodeEditingSpex(t, "edge", "add", f.r1ID, "preq_id", f.p2ID, "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("edge add: unexpected error: %v\n%s", err, addOut)
+	}
+	addReport := decodeWriteReport(t, addOut)
+	if len(addReport.Written) == 0 {
+		t.Fatalf("edge add: want a write, got %+v", addReport)
+	}
+	if addReport.ReplacedTarget != f.p1ID {
+		t.Errorf("replaced_target = %q, want the displaced target %q", addReport.ReplacedTarget, f.p1ID)
+	}
+
+	modData, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var mod schema.ModuleSpec
+	if err := json.Unmarshal(modData, &mod); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range mod.Requirements {
+		if r.ID == f.r1ID && r.PreqID != f.p2ID {
+			t.Errorf("R1's preq_id should now be %s, got %s", f.p2ID, r.PreqID)
+		}
+	}
+
+	addKeys := obligationKeys(addReport.Obligations)
+	if !containsSubstr(addKeys, "Comp1") {
+		t.Errorf("want a completeness obligation naming Comp1 (R1's implementor), got %+v", addReport.Obligations)
+	}
+	if !containsSubstr(addKeys, f.p1ID) {
+		t.Errorf("want a requirement_coverage obligation naming P1, now derived by nothing, got %+v", addReport.Obligations)
+	}
+
+	diffOut, _ := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	diff := decodeDiffJSON(t, diffOut)
+	var modifiedReq, metaChanges []diffChange
+	for _, c := range diff.Changes {
+		switch {
+		case c.NodeType == "requirement" && c.Type == "modified":
+			modifiedReq = append(modifiedReq, c)
+		case c.NodeType == "meta" && c.Module == "alpha":
+			metaChanges = append(metaChanges, c)
+		}
+	}
+	if len(modifiedReq) != 1 {
+		t.Errorf("want exactly one modified requirement (R1), got %+v", diff.Changes)
+	}
+	if len(metaChanges) != 1 {
+		t.Errorf("want exactly one meta change (alpha), got %+v", diff.Changes)
+	}
+	if len(diff.Changes) != 2 {
+		t.Errorf("want exactly two changes total, got %+v", diff.Changes)
+	}
+
+	afterAdd, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	removeOut, err := runNodeEditingSpex(t, "edge", "remove", f.r1ID, "preq_id", f.p2ID, "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want a non-zero exit for removing a required cardinality-one field")
+	}
+	refusals := decodeRefusals(t, removeOut)
+	if len(refusals) != 2 {
+		t.Fatalf("want exactly two refusals (schema + id), got %+v", refusals)
+	}
+
+	var schemaEntry, idEntry *author.RefusalEntry
+	for i := range refusals {
+		switch refusals[i].Check {
+		case "schema":
+			schemaEntry = &refusals[i]
+		case "id":
+			idEntry = &refusals[i]
+		}
+	}
+	if schemaEntry == nil {
+		t.Fatalf("want a schema refusal for the missing required preq_id, got %+v", refusals)
+	}
+	if !strings.Contains(schemaEntry.Message, "preq_id") {
+		t.Errorf("schema message should name preq_id, got: %s", schemaEntry.Message)
+	}
+	if !strings.Contains(schemaEntry.Fix, "preq_id") || !strings.Contains(schemaEntry.Fix, "reference") {
+		t.Errorf("schema fix should name the field and its kind, got: %s", schemaEntry.Fix)
+	}
+	if idEntry == nil {
+		t.Fatalf("want an id refusal for the requirement missing its preq_id, got %+v", refusals)
+	}
+	if !strings.Contains(idEntry.Message, f.r1ID) || !strings.Contains(idEntry.Message, "missing preq_id") {
+		t.Errorf("id message should be the validator's own 'missing preq_id' finding, got: %s", idEntry.Message)
+	}
+
+	afterRemove, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(afterAdd) != string(afterRemove) {
+		t.Error("a refusal must leave the tree byte-identical")
+	}
+
+	// Parity oracle: the same entry with preq_id deleted by hand fails
+	// spex validate with the same two check values and messages.
+	handDir := t.TempDir()
+	handF := buildNodeEditingFixture(t, handDir)
+	handModPath := filepath.Join(handDir, "alpha", "module.json")
+	handData, err := os.ReadFile(handModPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(handData, &raw); err != nil {
+		t.Fatal(err)
+	}
+	reqs := raw["requirements"].([]any)
+	for _, r := range reqs {
+		reqMap := r.(map[string]any)
+		if reqMap["id"] == handF.r1ID {
+			delete(reqMap, "preq_id")
+		}
+	}
+	handOut, err := json.MarshalIndent(raw, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(handModPath, handOut, 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	valOut, err := runNodeEditingSpex(t, "validate", "--spec-dir", handDir)
+	if err == nil {
+		t.Fatal("want validate to fail over the hand-edited missing preq_id")
+	}
+	valReport := decodeValidationReport(t, valOut)
+	var handSchemaMsg, handIDMsg string
+	for _, e := range valReport.Errors {
+		switch e.Check {
+		case "schema":
+			handSchemaMsg = e.Message
+		case "id":
+			if strings.Contains(e.Message, "missing preq_id") {
+				handIDMsg = e.Message
+			}
+		}
+	}
+	if handSchemaMsg == "" {
+		t.Fatalf("want a hand-edit schema error, got %+v", valReport.Errors)
+	}
+	if handIDMsg == "" {
+		t.Fatalf("want a hand-edit id error naming missing preq_id, got %+v", valReport.Errors)
+	}
+	if handSchemaMsg != schemaEntry.Message {
+		t.Errorf("command schema message %q != hand-edit validator message %q", schemaEntry.Message, handSchemaMsg)
+	}
+	if handIDMsg != idEntry.Message {
+		t.Errorf("command id message %q != hand-edit validator message %q", idEntry.Message, handIDMsg)
 	}
 }
