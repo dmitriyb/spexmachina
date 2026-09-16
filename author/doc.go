@@ -80,9 +80,10 @@
 // (missing required property) and "id" ("missing preq_id") findings,
 // which is exactly the "same two entries a hand edit ... earns from spex
 // validate" the corrected spec calls for. Asserted by N15
-// (edge_editor_test.go and cmd/spex/node_editing_test.go); AuthorCommands
-// (.18) needs no change of its own, since finishAuthorResult already
-// prints whatever WriteReport carries.
+// (edge_editor_test.go); the CLI-level N15 scenario in
+// cmd/spex/node_editing_test.go is spexmachina-yih0.19's deliverable.
+// AuthorCommands (.18) needs no change of its own, since
+// finishAuthorResult already prints whatever WriteReport carries.
 //
 // ObligationReporter (Report, in obligation_reporter.go) realises the
 // before/after pair as a pair of io/fs.FS values rather than a bespoke
