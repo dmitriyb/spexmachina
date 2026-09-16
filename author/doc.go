@@ -40,8 +40,9 @@
 //  4. On refusal, nothing is written and AuthorCommands exits 2 with the
 //     refusal document on stdout. On acceptance, the worker writes its
 //     after-state to disk and AuthorCommands prints a WriteReport — what
-//     was written, the obligations, and for a rename the retired name —
-//     and exits 0.
+//     was written, the obligations, for a rename the retired name, and
+//     for an edge add that displaced a cardinality-one target the
+//     replaced target — and exits 0.
 //
 // # What is deferred
 //
@@ -54,6 +55,29 @@
 // (.4), RootCommand (.5), ObligationReporter (.6), NodeRenamer (.7),
 // LeafScaffolder (.8), Migrator (.9), NodeEditor (.10), EdgeEditor (.11)
 // and AuthorCommands (.12).
+//
+// # Cardinality-one retarget correction (spexmachina-yih0.16)
+//
+// A drift triage against .10/.11/.6/.15's implementation corrected the
+// spec (baseline bfd0982): a cardinality-one reference field (preq_id
+// under the default profile) is retargeted by one `spex edge add` — the
+// add replacing the held target rather than refusing — and a required
+// cardinality-one field can no longer be cleared by `spex edge remove` at
+// all, since a required field has no valid state to pass through
+// (spec/author/arch_edge_editor.md, "Idempotence";
+// spec/author/test_node_editing.md's N15). This bead widens the one
+// shared shape the correction touches — WriteReport gained
+// ReplacedTarget, the `replaced_target` key flow_authoring.md's "On
+// stdout" now names beside `retired_name` — so EdgeEditor has somewhere
+// to report the displaced target once it replaces instead of refusing.
+// The behavior itself — AddEdge replacing instead of refusing,
+// RemoveEdge refusing a required field instead of clearing it — is
+// deferred to EdgeEditor (spexmachina-yih0.17, see the TODO markers in
+// edge_editor.go's setEdgeField, clearEdgeField and
+// cardinalityOneConflictRefusal) and asserted by the Node editing tests
+// (spexmachina-yih0.19, N15); AuthorCommands (.18) needs no change of its
+// own, since finishAuthorResult already prints whatever WriteReport
+// carries.
 //
 // ObligationReporter (Report, in obligation_reporter.go) realises the
 // before/after pair as a pair of io/fs.FS values rather than a bespoke
