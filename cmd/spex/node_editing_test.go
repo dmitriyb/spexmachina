@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -153,6 +154,50 @@ func decodeValidationReport(t *testing.T, out string) validator.ValidationReport
 		t.Fatalf("stdout is not a validation report: %v\n%s", err, out)
 	}
 	return report
+}
+
+// canonicalObjectKeys reads back a canonically-written file's own key order
+// for the array-entry object whose "id" value is idValue, by indentation
+// rather than by decoding into a Go struct (which would discard the order
+// entirely): every key line at the same indent as the "id" line, until
+// indentation drops back out of the object. It relies on nothing but the
+// two-space, one-key-per-line shape canonicalizeDoc's json.Encoder produces.
+func canonicalObjectKeys(t *testing.T, data []byte, idValue string) []string {
+	t.Helper()
+	lines := strings.Split(string(data), "\n")
+
+	target := -1
+	indent := 0
+	for i, line := range lines {
+		trimmed := strings.TrimLeft(line, " ")
+		if strings.HasPrefix(trimmed, `"id": "`+idValue+`"`) {
+			target = i
+			indent = len(line) - len(trimmed)
+			break
+		}
+	}
+	if target == -1 {
+		t.Fatalf("no \"id\": %q line found in:\n%s", idValue, data)
+	}
+
+	var keys []string
+	for i := target; i < len(lines); i++ {
+		line := lines[i]
+		trimmed := strings.TrimLeft(line, " ")
+		curIndent := len(line) - len(trimmed)
+		if curIndent < indent {
+			break
+		}
+		if curIndent != indent || !strings.HasPrefix(trimmed, `"`) {
+			continue
+		}
+		end := strings.Index(trimmed[1:], `"`)
+		if end == -1 {
+			continue
+		}
+		keys = append(keys, trimmed[1:1+end])
+	}
+	return keys
 }
 
 // hashID runs `spex hash-id` and returns the printed identity hash, trimmed
@@ -393,6 +438,21 @@ func TestN2_ProjectScopedTypeLandsInProjectJSON(t *testing.T) {
 	}
 	if !containsSubstr(reqKeys, "New rule") {
 		t.Errorf("want a requirement_coverage obligation naming 'New rule', got %+v", report.Obligations)
+	}
+
+	// spex validate: the same finding the write report printed as an
+	// obligation, this time as the one refusal-shaped error a fresh,
+	// undescribed project requirement earns.
+	valOut, err := runNodeEditingSpex(t, "validate", "--spec-dir", dir)
+	if err == nil {
+		t.Fatal("want validate to report the new requirement's own coverage gap")
+	}
+	valReport := decodeValidationReport(t, valOut)
+	if len(valReport.Errors) != 1 || valReport.Errors[0].Check != "requirement_coverage" {
+		t.Errorf("want exactly one requirement_coverage error, got %+v", valReport.Errors)
+	}
+	if len(reqKeys) != 1 || valReport.Errors[0].Message != reqKeys[0] {
+		t.Errorf("validate message %q must be byte-identical to the write report's obligation message %+v", valReport.Errors[0].Message, reqKeys)
 	}
 }
 
@@ -655,6 +715,47 @@ func TestN6_RemovingReferencedNodeRefusesListingInboundRefs(t *testing.T) {
 		t.Errorf("want at least 2 'link' refusals (arch_comp2.md, test_t1.md), got %+v", linkRefusals)
 	}
 
+	// The scenario names each inbound reference individually, by field and
+	// by file:line — not merely by count.
+	findRefusal := func(refs []author.RefusalEntry, pathContains string) *author.RefusalEntry {
+		for i := range refs {
+			if strings.Contains(refs[i].Path, pathContains) {
+				return &refs[i]
+			}
+		}
+		return nil
+	}
+
+	comp2Uses := findRefusal(idRefusals, "alpha/module.json:/components/"+f.comp2ID)
+	if comp2Uses == nil || !strings.Contains(comp2Uses.Message, "uses") {
+		t.Errorf("want an id refusal naming Comp2's uses field at alpha/module.json:/components/%s, got %+v", f.comp2ID, idRefusals)
+	}
+	t1Describes := findRefusal(idRefusals, "alpha/module.json:/test_sections/"+f.t1ID)
+	if t1Describes == nil || !strings.Contains(t1Describes.Message, "describes") {
+		t.Errorf("want an id refusal naming T1's describes field at alpha/module.json:/test_sections/%s, got %+v", f.t1ID, idRefusals)
+	}
+	apiProvidedBy := findRefusal(idRefusals, "alpha/module.json:/apis/"+f.apiID)
+	if apiProvidedBy == nil || !strings.Contains(apiProvidedBy.Message, "provided_by") {
+		t.Errorf("want an id refusal naming the api's provided_by field at alpha/module.json:/apis/%s, got %+v", f.apiID, idRefusals)
+	}
+
+	comp2Link := findRefusal(linkRefusals, "alpha/arch_comp2.md:")
+	if comp2Link == nil {
+		t.Errorf("want a link refusal at alpha/arch_comp2.md:<line>, got %+v", linkRefusals)
+	}
+	t1Link := findRefusal(linkRefusals, "alpha/test_t1.md:")
+	if t1Link == nil {
+		t.Errorf("want a link refusal at alpha/test_t1.md:<line>, got %+v", linkRefusals)
+	}
+	if comp2Link != nil && t1Link != nil && comp2Link.Path == t1Link.Path {
+		t.Errorf("want the two link refusals to name different files, both got %s", comp2Link.Path)
+	}
+	for _, r := range linkRefusals {
+		if r.Path == "" {
+			t.Errorf("want every link refusal to carry a non-empty file:line path, got %+v", r)
+		}
+	}
+
 	afterMod, err := os.ReadFile(filepath.Join(dir, "alpha", "module.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -672,6 +773,18 @@ func TestN6_RemovingReferencedNodeRefusesListingInboundRefs(t *testing.T) {
 }
 
 // N7: A forced removal lists what it left dangling.
+//
+// NOTE on divergence from test_node_editing.md's N7 prose: as
+// drifts/drift-spexmachina-yih0.15.json records (non-blocking), "spex diff
+// --json reports ... the surviving_name error for Comp1" does not hold for
+// this fixture. The forced removal takes arch_comp1.md — the one file where
+// "Comp1" was a bare prose token — with it; every other corpus mention is
+// wikilink display text ("[[<id>|Comp1]]" in arch_comp2.md and
+// test_t1.md), which validator.CheckRemovedNames's tokenizer folds into one
+// non-matching token per link rather than isolating "Comp1" as its own
+// phrase. So the sweep finds nothing to report, and this test asserts what
+// `spex diff --json` actually returns: one removed component and no
+// surviving_name error.
 func TestN7_ForcedRemovalListsWhatItLeftDangling(t *testing.T) {
 	dir := t.TempDir()
 	f := buildNodeEditingFixture(t, dir)
@@ -727,7 +840,10 @@ func TestN7_ForcedRemovalListsWhatItLeftDangling(t *testing.T) {
 		}
 	}
 
-	diffOut, _ := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
+	if diffErr == nil {
+		t.Fatal("want diff to exit non-zero: the incomplete_change obligation lands in its errors array")
+	}
 	diff := decodeDiffJSON(t, diffOut)
 	var removedComponents []diffChange
 	for _, c := range diff.Changes {
@@ -737,6 +853,20 @@ func TestN7_ForcedRemovalListsWhatItLeftDangling(t *testing.T) {
 	}
 	if len(removedComponents) != 1 || removedComponents[0].Path != f.comp1ID {
 		t.Errorf("removed components = %+v, want exactly one with path %s", removedComponents, f.comp1ID)
+	}
+
+	// See the NOTE above TestN7's declaration and
+	// drifts/drift-spexmachina-yih0.15.json: the spec's own "and the
+	// surviving_name error for Comp1" does not hold for this fixture, so
+	// this asserts what the command actually returns rather than dropping
+	// the clause unmarked.
+	for _, e := range diff.Errors {
+		if e.Type == "surviving_name" {
+			t.Errorf("want no surviving_name error for this fixture (see drifts/drift-spexmachina-yih0.15.json), got %+v", e)
+		}
+	}
+	if len(diff.Errors) != 1 || diff.Errors[0].Type != "incomplete_change" {
+		t.Errorf("want exactly the incomplete_change entry for module alpha's unchanged Comp2 leaf, got %+v", diff.Errors)
 	}
 }
 
@@ -1172,6 +1302,51 @@ func TestN13_HandFormattedFileReformattedNoHashMoves(t *testing.T) {
 		if indent%2 != 0 {
 			t.Errorf("want every indent level to be a multiple of two spaces, got %d in line %q", indent, line)
 		}
+	}
+
+	// The profile's key order for node fields: Comp2 now carries implements
+	// (this add) alongside its original content and uses, all after id/name.
+	gotKeys := canonicalObjectKeys(t, after, f.comp2ID)
+	wantKeys := []string{"id", "name", "content", "implements", "uses"}
+	if !slices.Equal(gotKeys, wantKeys) {
+		t.Errorf("Comp2's field key order = %v, want %v", gotKeys, wantKeys)
+	}
+
+	// The same add over a copy of the fixture left hand-formatted a
+	// different way (one line, no indent at all, rather than this test's
+	// own four-space rewrite) produces a byte-identical file.
+	dir2 := t.TempDir()
+	f2 := buildNodeEditingFixture(t, dir2)
+	modPath2 := filepath.Join(dir2, "alpha", "module.json")
+	data2, err := os.ReadFile(modPath2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw2 map[string]any
+	if err := json.Unmarshal(data2, &raw2); err != nil {
+		t.Fatal(err)
+	}
+	oneLine, err := json.Marshal(raw2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(modPath2, oneLine, 0644); err != nil {
+		t.Fatal(err)
+	}
+	tree2, err := merkle.BuildTree(dir2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedProjectState(t, dir2, tree2, time.Now())
+	if out2, err := runNodeEditingSpex(t, "edge", "add", f2.comp2ID, "implements", f2.r1ID, "--spec-dir", dir2); err != nil {
+		t.Fatalf("edge add over the second, differently hand-formatted copy: unexpected error: %v\n%s", err, out2)
+	}
+	after2, err := os.ReadFile(modPath2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(after2) {
+		t.Errorf("edge add over a differently hand-formatted copy produced a different file:\nfirst:\n%s\nsecond:\n%s", after, after2)
 	}
 
 	diffOut, _ := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)

@@ -1,0 +1,13 @@
+{
+  "bead": "spexmachina-yih0.15",
+  "node": "aa4656487ccd",
+  "files": [
+    "spec/author/test_node_editing.md",
+    "spec/author/arch_node_editor.md"
+  ],
+  "claim": "test_node_editing.md scenario N7: after `spex node remove <Comp1> --force`, 'spex diff --json reports one removed component and the surviving_name error for Comp1'.",
+  "authoritative_source": "arch_node_editor.md's own description of the removal-time name sweep ('the retired name still appears in the corpus wherever prose mentioned it, and `spex diff` reports each site as a `surviving_name` error') plus validator.CheckRemovedNames (validator/removed_name_checker.go), the sweep `spex diff` actually runs: tokenizeCorpus's trim cutset strips `[` and `]` from token ends but never splits on the internal `|` a wikilink uses, so `[[<id>|Comp1]]` tokenizes to one token, `<id>|Comp1` — never the bare word `Comp1` the removed node's identity hash would match.",
+  "evidence": "I ran N7's own scenario end to end (cmd/spex/node_editing_test.go's TestN7, driving the real `spex node remove --force` and `spex diff --json` command trees over the Setup fixture): forced removal deletes Comp1's entry and arch_comp1.md — the one file where 'Comp1' appeared as a bare prose token, in its '# Comp1' heading — and the only remaining corpus mentions of 'Comp1' are wikilink display text in arch_comp2.md ('Uses [[<id>|Comp1]].') and test_t1.md ('Describes [[<id>|Comp1]] and [[<id>|Comp2]].'), each one non-matching token per the tokenizer rule above. `spex diff --json`'s errors array therefore holds exactly one entry, `incomplete_change` ('module alpha meta changed but component Comp2 content leaf unchanged'), and no `surviving_name`: CheckRemovedNames reports zero survivors for this fixture, not because the mentions were correctly judged clean but because the tokenizer cannot isolate a name from inside pipe-syntax link markup at all.",
+  "blocking": false,
+  "proposed_fix": "Either teach tokenizeCorpus to also surface the display-text half of a `[[id|Display]]` link as its own candidate phrase (matching arch_node_editor.md's 'wherever prose mentioned it'), or narrow N7's Then clause to not assert `surviving_name` for a fixture whose only surviving mentions are link display text, and cover the `surviving_name` path with a fixture that still carries a bare-prose mention after the removal."
+}
