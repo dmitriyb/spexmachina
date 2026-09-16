@@ -18,7 +18,7 @@ import (
 )
 
 // This file is cmd/spex's half of spec/author/test_node_editing.md, the
-// "Node editing tests" test section (aa4656487ccd) — N1-N14, run over the
+// "Node editing tests" test section (aa4656487ccd) — N1-N15, run over the
 // real `spex node add|remove|rename` and `spex edge add|remove` command
 // trees. author/node_editor_test.go, author/node_renamer_test.go and
 // author/edge_editor_test.go already exercise NodeEditor, NodeRenamer and
