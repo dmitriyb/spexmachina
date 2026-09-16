@@ -70,14 +70,20 @@
 // ReplacedTarget, the `replaced_target` key flow_authoring.md's "On
 // stdout" now names beside `retired_name` — so EdgeEditor has somewhere
 // to report the displaced target once it replaces instead of refusing.
-// The behavior itself — AddEdge replacing instead of refusing,
-// RemoveEdge refusing a required field instead of clearing it — is
-// deferred to EdgeEditor (spexmachina-yih0.17, see the TODO markers in
-// edge_editor.go's setEdgeField, clearEdgeField and
-// cardinalityOneConflictRefusal) and asserted by the Node editing tests
-// (spexmachina-yih0.19, N15); AuthorCommands (.18) needs no change of its
-// own, since finishAuthorResult already prints whatever WriteReport
-// carries.
+// The behavior itself — AddEdge replacing instead of refusing, RemoveEdge
+// refusing a required field instead of clearing it — is EdgeEditor's own
+// (spexmachina-yih0.17): setEdgeField's cardinality-one branch now
+// replaces and reports the displaced target instead of refusing;
+// RemoveEdge needed no new check of its own for the required-field
+// refusal — clearing a required preq_id already surfaces, through the
+// normal Report pass, as the validator's own newly-introduced "schema"
+// (missing required property) and "id" ("missing preq_id") findings,
+// which is exactly the "same two entries a hand edit ... earns from spex
+// validate" the corrected spec calls for. Asserted by N15
+// (edge_editor_test.go); the CLI-level N15 scenario in
+// cmd/spex/node_editing_test.go is spexmachina-yih0.19's deliverable.
+// AuthorCommands (.18) needs no change of its own, since
+// finishAuthorResult already prints whatever WriteReport carries.
 //
 // ObligationReporter (Report, in obligation_reporter.go) realises the
 // before/after pair as a pair of io/fs.FS values rather than a bespoke

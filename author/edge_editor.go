@@ -38,12 +38,14 @@ var moduleLocalFields = map[string]bool{"provided_by": true}
 //   - A write or a no-op: (report, nil, nil). report.Written is empty when
 //     the field already held the entry — "adding an entry the field
 //     already holds changes nothing and says so"
-//     (arch_edge_editor.md, "Idempotence") — never a refusal.
+//     (arch_edge_editor.md, "Idempotence") — never a refusal. For a
+//     cardinality-one field that already held a different target, the
+//     write replaces it and report.ReplacedTarget carries the target it
+//     displaced, so the retarget is visible rather than silent.
 //   - A refusal: (nil, refusals, nil). Nothing is written: either one of
-//     EdgeEditor's own four checks, a cardinality-one field already holding
-//     a different target, or whatever Report's validator pass finds newly
-//     wrong with the after-state (only acyclicity, by construction — the
-//     other four checks already passed).
+//     EdgeEditor's own four checks, or whatever Report's validator pass
+//     finds newly wrong with the after-state (only acyclicity, by
+//     construction — the other four checks already passed).
 //   - An input error: (nil, nil, err). input.SourceID names no node
 //     (module or profile-declared) anywhere in the tree.
 func AddEdge(specDir string, input EdgeInput) (*WriteReport, []RefusalEntry, error) {
@@ -93,10 +95,7 @@ func AddEdge(specDir string, input EdgeInput) (*WriteReport, []RefusalEntry, err
 		return nil, nil, fmt.Errorf("author: edge add: %s not found in %s", input.SourceID, ownerFile)
 	}
 
-	changed, conflict := setEdgeField(entry, field, input.TargetID)
-	if conflict != "" {
-		return nil, []RefusalEntry{cardinalityOneConflictRefusal(srcLoc, input, conflict)}, nil
-	}
+	changed, replaced := setEdgeField(entry, field, input.TargetID)
 	if !changed {
 		return &WriteReport{}, nil, nil
 	}
@@ -120,7 +119,7 @@ func AddEdge(specDir string, input EdgeInput) (*WriteReport, []RefusalEntry, err
 		return nil, nil, fmt.Errorf("author: edge add: %w", err)
 	}
 
-	return &WriteReport{Written: written, Obligations: obligations}, nil, nil
+	return &WriteReport{Written: written, Obligations: obligations, ReplacedTarget: replaced}, nil, nil
 }
 
 // RemoveEdge is EdgeEditor's other half: given the spec directory and an
@@ -304,32 +303,19 @@ func findEntryMap(doc map[string]any, pluralKey, id string) (map[string]any, boo
 
 // setEdgeField adds targetID to entry's value for field, per field's
 // declared cardinality (arch_edge_editor.md, "Idempotence"): cardinality
-// "one" sets the field when it is empty, and reports no change when it
+// "one" sets the field when it is empty, replaces it when it already holds
+// a different target — reporting the displaced value as replaced, so the
+// retarget is visible rather than silent — and reports no change when it
 // already holds targetID; cardinality "many" appends when targetID is
 // absent and reports no change when it is already present.
-//
-// TODO(bead:spexmachina-yih0.17): the cardinality-"one" branch still
-// treats an already-set field holding a different target as a conflict —
-// via the conflict return value AddEdge turns into
-// cardinalityOneConflictRefusal — instead of replacing it. Per the
-// corrected arch_edge_editor.md, "Idempotence" ("adding a different
-// target replaces the one held, the write report carrying the replaced
-// target under `replaced_target`", spec/author/test_node_editing.md's
-// N15), a different cur should overwrite entry[field.Name] and report
-// changed=true plus cur as the replaced target — WriteReport.ReplacedTarget
-// (author/types.go) is the field AddEdge should populate from it — rather
-// than a refusal.
-func setEdgeField(entry map[string]any, field schema.Field, targetID string) (changed bool, conflict string) {
+func setEdgeField(entry map[string]any, field schema.Field, targetID string) (changed bool, replaced string) {
 	if field.Cardinality == "one" {
 		cur, _ := entry[field.Name].(string)
 		if cur == targetID {
 			return false, ""
 		}
-		if cur != "" {
-			return false, cur
-		}
 		entry[field.Name] = targetID
-		return true, ""
+		return true, cur
 	}
 	arr, _ := entry[field.Name].([]any)
 	if slices.ContainsFunc(arr, func(v any) bool { s, ok := v.(string); return ok && s == targetID }) {
@@ -343,18 +329,15 @@ func setEdgeField(entry map[string]any, field schema.Field, targetID string) (ch
 // declared cardinality, reporting whether anything changed. A cardinality-
 // "one" field is cleared by deleting the key entirely rather than setting
 // it to "", so a subsequent schema check sees an absent field, not an empty
-// string one.
-//
-// TODO(bead:spexmachina-yih0.17): a cardinality-"one" field.Required (e.g.
-// preq_id) should never reach this unconditional clear — per the corrected
-// arch_edge_editor.md, "Idempotence" ("Remove clears it, and for a
-// required field that is a refusal carrying the validator's `schema` and
-// `id` entries", spec/author/test_node_editing.md's N15), RemoveEdge
-// should refuse before calling clearEdgeField when field.Required is true
-// and field.Cardinality is "one", naming the same two entries a hand
-// deletion of the field earns from `spex validate` (schema: missing
-// required field; id: the node missing its preq_id) — never a silent
-// clear to an absent state.
+// string one. clearEdgeField itself does not distinguish a required field
+// from an optional one: RemoveEdge always builds the after-state and hands
+// it to Report, so clearing a required cardinality-one field (e.g.
+// preq_id) surfaces as a refusal there — the validator's own "schema"
+// entry (missing required property) and "id" entry (the node missing its
+// preq_id), both newly introduced by the after-state — exactly per
+// arch_edge_editor.md's "Idempotence": "for a required field that is a
+// refusal carrying the validator's schema and id entries ... never through
+// a cleared state it cannot reach." No separate check is needed here.
 func clearEdgeField(entry map[string]any, field schema.Field, targetID string) bool {
 	if field.Cardinality == "one" {
 		cur, _ := entry[field.Name].(string)
@@ -447,29 +430,6 @@ func moduleLocalRefusal(before validator.MemFS, profile *schema.Profile, srcLoc,
 		Message: fmt.Sprintf("%s references non-existent %s %s (%s is module-local)", input.Field, tgtLoc.nodeType.Name, input.TargetID, input.Field),
 		Path:    entryPathFor(srcLoc, input.SourceID),
 		Fix:     fmt.Sprintf("%s is module-local; %s's own components: %s", input.Field, srcLoc.moduleName, strings.Join(permitted, ", ")),
-	}
-}
-
-// cardinalityOneConflictRefusal is EdgeEditor's own check for a
-// cardinality-"one" field that already holds a different target.
-//
-// TODO(bead:spexmachina-yih0.17): this refusal's rationale is the
-// superseded reading of arch_edge_editor.md's "Idempotence" ("a required
-// field of cardinality one is retargeted by removing and adding, so that
-// the removal is visible"); the corrected text has AddEdge replace the
-// held target instead (see setEdgeField's TODO), so this refusal — and
-// its call site in AddEdge — should no longer fire there. A refusal
-// carrying the validator's `schema`/`id` entries belongs on the
-// RemoveEdge side of a required field instead (see clearEdgeField's
-// TODO); whether that reuses this helper's shape or a new one is this
-// bead's call. The fix names the spex edge remove invocation that clears
-// the current target first.
-func cardinalityOneConflictRefusal(loc nodeLocation, input EdgeInput, current string) RefusalEntry {
-	return RefusalEntry{
-		Check:   "edge",
-		Message: fmt.Sprintf("%s already holds %s and has cardinality one; it cannot also hold %s", input.Field, current, input.TargetID),
-		Path:    entryPathFor(loc, input.SourceID),
-		Fix:     fmt.Sprintf("run `spex edge remove --source %s --field %s --target %s` first, then add %s", input.SourceID, input.Field, current, input.TargetID),
 	}
 }
 

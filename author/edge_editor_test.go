@@ -438,28 +438,27 @@ func TestAddEdge_TargetDoesNotExist_RefusesNamingSearchedArrays(t *testing.T) {
 	}
 }
 
-// TestAddEdge_CardinalityOneConflict_RefusesNamingCurrentTarget exercises
-// arch_edge_editor.md's "Idempotence": preq_id has cardinality one; R1
-// already holds P1, so adding P2 is refused naming P1 as the current
-// target rather than silently overwritten.
-func TestAddEdge_CardinalityOneConflict_RefusesNamingCurrentTarget(t *testing.T) {
+// TestAddEdge_CardinalityOneRetarget_ReplacesAndReportsDisplacedTarget
+// exercises N15 (test_node_editing.md): preq_id has cardinality one; R1
+// already holds P1, so adding P2 replaces it — the write succeeds, R1's
+// preq_id now holds P2, and the write report carries P1 under
+// ReplacedTarget so the retarget is visible rather than silent
+// (arch_edge_editor.md, "Idempotence").
+func TestAddEdge_CardinalityOneRetarget_ReplacesAndReportsDisplacedTarget(t *testing.T) {
 	f := buildRenameFixture(t)
 
 	report, refusals, err := AddEdge(f.dir, EdgeInput{SourceID: f.r1ID, Field: "preq_id", TargetID: f.p2ID})
 	if err != nil {
 		t.Fatalf("AddEdge: unexpected error: %v", err)
 	}
-	if report != nil {
-		t.Fatalf("AddEdge: want no report on refusal, got %+v", report)
+	if len(refusals) > 0 {
+		t.Fatalf("AddEdge: unexpected refusals: %+v", refusals)
 	}
-	if len(refusals) != 1 {
-		t.Fatalf("AddEdge: want exactly one refusal, got %+v", refusals)
+	if report == nil || len(report.Written) == 0 {
+		t.Fatalf("AddEdge: want a write, got %+v", report)
 	}
-	if !strings.Contains(refusals[0].Message, f.p1ID) {
-		t.Errorf("message should name the current target %s, got: %s", f.p1ID, refusals[0].Message)
-	}
-	if !strings.Contains(refusals[0].Fix, "spex edge remove") || !strings.Contains(refusals[0].Fix, f.p1ID) {
-		t.Errorf("fix should name the remove-then-add sequence with the current target, got: %s", refusals[0].Fix)
+	if report.ReplacedTarget != f.p1ID {
+		t.Errorf("ReplacedTarget = %q, want the displaced target %q", report.ReplacedTarget, f.p1ID)
 	}
 
 	modData, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
@@ -471,9 +470,77 @@ func TestAddEdge_CardinalityOneConflict_RefusesNamingCurrentTarget(t *testing.T)
 		t.Fatal(err)
 	}
 	for _, r := range mod.Requirements {
-		if r.ID == f.r1ID && r.PreqID != f.p1ID {
-			t.Errorf("R1's preq_id must be unchanged, got %s", r.PreqID)
+		if r.ID == f.r1ID && r.PreqID != f.p2ID {
+			t.Errorf("R1's preq_id should now be %s, got %s", f.p2ID, r.PreqID)
 		}
+	}
+
+	keys := obligationKeys(t, report.Obligations)
+	if !containsSubstring(keys, "Comp1") {
+		t.Errorf("want a completeness obligation naming Comp1 (R1's implementor), got %+v", report.Obligations)
+	}
+	if !containsSubstring(keys, f.p1ID) {
+		t.Errorf("want a requirement_coverage obligation naming P1, now derived by nothing, got %+v", report.Obligations)
+	}
+}
+
+// TestRemoveEdge_RequiredCardinalityOne_RefusesRatherThanClear exercises
+// N15's other half: preq_id is required, so RemoveEdge cannot clear it to
+// an absent state. The after-state Report builds is missing a required
+// field, which the validator's own schema and id checks — newly
+// introduced by this change — refuse before anything is written
+// (arch_edge_editor.md, "Idempotence": "a required cardinality-one field
+// is retargeted by one add, never through a cleared state it cannot
+// reach").
+func TestRemoveEdge_RequiredCardinalityOne_RefusesRatherThanClear(t *testing.T) {
+	f := buildRenameFixture(t)
+	before, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	report, refusals, err := RemoveEdge(f.dir, EdgeInput{SourceID: f.r1ID, Field: "preq_id", TargetID: f.p1ID})
+	if err != nil {
+		t.Fatalf("RemoveEdge: unexpected error: %v", err)
+	}
+	if report != nil {
+		t.Fatalf("RemoveEdge: want no report on refusal, got %+v", report)
+	}
+	if len(refusals) != 2 {
+		t.Fatalf("RemoveEdge: want exactly two refusals (schema + id), got %+v", refusals)
+	}
+
+	var schemaEntry, idEntry *RefusalEntry
+	for i := range refusals {
+		switch refusals[i].Check {
+		case "schema":
+			schemaEntry = &refusals[i]
+		case "id":
+			idEntry = &refusals[i]
+		}
+	}
+	if schemaEntry == nil {
+		t.Fatalf("want a schema refusal for the missing required preq_id, got %+v", refusals)
+	}
+	if !strings.Contains(schemaEntry.Message, "preq_id") {
+		t.Errorf("schema message should name preq_id, got: %s", schemaEntry.Message)
+	}
+	if !strings.Contains(schemaEntry.Fix, "preq_id") || !strings.Contains(schemaEntry.Fix, "reference") {
+		t.Errorf("schema fix should name the field and its kind, got: %s", schemaEntry.Fix)
+	}
+	if idEntry == nil {
+		t.Fatalf("want an id refusal for the requirement missing its preq_id, got %+v", refusals)
+	}
+	if !strings.Contains(idEntry.Message, f.r1ID) || !strings.Contains(idEntry.Message, "missing preq_id") {
+		t.Errorf("id message should be the validator's own 'missing preq_id' finding, got: %s", idEntry.Message)
+	}
+
+	after, err := os.ReadFile(filepath.Join(f.dir, "alpha", "module.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(before) != string(after) {
+		t.Error("RemoveEdge: a refusal must leave the tree byte-identical")
 	}
 }
 
@@ -650,24 +717,27 @@ func TestAddEdge_UnknownSourceID_IsInputError(t *testing.T) {
 
 // TestSetEdgeField_CardinalityOne and TestSetEdgeField_CardinalityMany are
 // unit tests for setEdgeField's two cardinality branches — the mechanics
-// AddEdge's cardinality-one conflict and no-op paths build on.
+// AddEdge's cardinality-one replace and no-op paths build on.
 func TestSetEdgeField_CardinalityOne(t *testing.T) {
 	field := schema.Field{Name: "preq_id", Cardinality: "one"}
 
 	entry := map[string]any{}
-	if changed, conflict := setEdgeField(entry, field, "aaa"); !changed || conflict != "" {
-		t.Fatalf("setting an empty cardinality-one field: changed=%v conflict=%q, want true, \"\"", changed, conflict)
+	if changed, replaced := setEdgeField(entry, field, "aaa"); !changed || replaced != "" {
+		t.Fatalf("setting an empty cardinality-one field: changed=%v replaced=%q, want true, \"\"", changed, replaced)
 	}
 	if entry["preq_id"] != "aaa" {
 		t.Fatalf("preq_id = %v, want aaa", entry["preq_id"])
 	}
 
-	if changed, conflict := setEdgeField(entry, field, "aaa"); changed || conflict != "" {
-		t.Fatalf("re-adding the same target: changed=%v conflict=%q, want false, \"\"", changed, conflict)
+	if changed, replaced := setEdgeField(entry, field, "aaa"); changed || replaced != "" {
+		t.Fatalf("re-adding the same target: changed=%v replaced=%q, want false, \"\"", changed, replaced)
 	}
 
-	if changed, conflict := setEdgeField(entry, field, "bbb"); changed || conflict != "aaa" {
-		t.Fatalf("adding a different target: changed=%v conflict=%q, want false, \"aaa\"", changed, conflict)
+	if changed, replaced := setEdgeField(entry, field, "bbb"); !changed || replaced != "aaa" {
+		t.Fatalf("adding a different target: changed=%v replaced=%q, want true, \"aaa\"", changed, replaced)
+	}
+	if entry["preq_id"] != "bbb" {
+		t.Fatalf("preq_id = %v, want bbb (replaced)", entry["preq_id"])
 	}
 }
 
