@@ -23,7 +23,11 @@ import (
 // trees. author/node_editor_test.go, author/node_editor_set_test.go,
 // author/node_renamer_test.go and author/edge_editor_test.go already
 // exercise NodeEditor, NodeRenamer and EdgeEditor directly
-// (Add/Set/Remove/Rename/AddEdge/RemoveEdge) under the same N1-N21 names;
+// (Add/Set/Remove/Rename/AddEdge/RemoveEdge) under the same N1-N14 and
+// N16-N21 names; N15 lives there as
+// TestAddEdge_CardinalityOneRetarget_ReplacesAndReportsDisplacedTarget and
+// TestRemoveEdge_RequiredCardinalityOne_RefusesRatherThanClear instead
+// (author/doc.go:83 calls out the CLI-level N15 scenario here on purpose).
 // this file is their CLI-level mirror, the same relationship
 // leaf_and_profile_test.go has to author/leaf_scaffolder_test.go.
 
@@ -2037,8 +2041,13 @@ func TestN18_UnsetPendingDerivation_OnceModuleDerives(t *testing.T) {
 		t.Errorf("P2's other fields must be unchanged, got %+v", p2)
 	}
 
-	if _, err := runNodeEditingSpex(t, "validate", "--spec-dir", dir); err != nil {
-		t.Fatal("spec should be green with no note after removing the pending mark")
+	valOut2, err := runNodeEditingSpex(t, "validate", "--spec-dir", dir)
+	if err != nil {
+		t.Fatalf("spec should be green after removing the pending mark: %v\n%s", err, valOut2)
+	}
+	valReport2 := decodeValidationReport(t, valOut2)
+	if len(valReport2.Notes) != 0 {
+		t.Errorf("Notes = %+v, want none after removing the pending mark", valReport2.Notes)
 	}
 
 	diffOut, diffErr := runNodeEditingSpex(t, "diff", "--json", "--spec-dir", dir)
@@ -2351,14 +2360,23 @@ func TestN21_NoOpIsCanonicalWrite(t *testing.T) {
 		t.Fatal("want diff to exit non-zero: the incomplete_change obligation lands in its errors array")
 	}
 	diff2 := decodeDiffJSON(t, diffOut2)
-	var modifiedReqs []diffChange
+	var modifiedReqs, metaChanges []diffChange
 	for _, c := range diff2.Changes {
-		if c.NodeType == "requirement" && c.Type == "modified" {
+		switch {
+		case c.NodeType == "requirement" && c.Type == "modified":
 			modifiedReqs = append(modifiedReqs, c)
+		case c.NodeType == "meta" && c.Module == "alpha":
+			metaChanges = append(metaChanges, c)
 		}
 	}
 	if len(modifiedReqs) != 1 || modifiedReqs[0].Path != f.r1ID {
 		t.Errorf("want exactly one modified requirement (R1), got %+v", diff2.Changes)
+	}
+	if len(metaChanges) != 1 {
+		t.Errorf("want exactly one meta change (alpha), got %+v", diff2.Changes)
+	}
+	if len(diff2.Changes) != 2 {
+		t.Errorf("want no component, api or test_section hash to move — the reformat moved no hash, and nothing else — got %+v", diff2.Changes)
 	}
 
 	completeness := obligationsOfType(report2.Obligations, "incomplete_change")
@@ -2367,6 +2385,9 @@ func TestN21_NoOpIsCanonicalWrite(t *testing.T) {
 	}
 	if completeness[0].Path != f.r1ID || len(completeness[0].Related) != 1 || completeness[0].Related[0] != f.comp1ID {
 		t.Errorf("want the N16 Comp1 obligation, got %+v", completeness[0])
+	}
+	if len(diff2.Errors) != 1 || diff2.Errors[0].Path != completeness[0].Path || diff2.Errors[0].Message != completeness[0].Message {
+		t.Errorf("diff errors = %+v, want exactly the write report's own completeness entry %+v", diff2.Errors, completeness[0])
 	}
 
 	// The same set over a copy left hand-formatted a different way
