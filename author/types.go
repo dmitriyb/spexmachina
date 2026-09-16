@@ -91,13 +91,11 @@ type RefusalEntry struct {
 // (spec/author/arch_obligation_reporter.md, "Obligations are printed, not
 // discovered").
 //
-// ReplacedTarget is EdgeEditor's field to populate
+// ReplacedTarget is EdgeEditor's field, populated by AddEdge when a
+// cardinality-one field already held a different target
 // (spec/author/arch_edge_editor.md, "Idempotence": "add sets it, and
 // adding a different target replaces the one held, the write report
-// carrying the replaced target under `replaced_target`") —
-// TODO(bead:spexmachina-yih0.17): AddEdge's cardinality-one branch still
-// refuses a retarget instead of replacing and populating this field; see
-// the TODO markers in edge_editor.go.
+// carrying the replaced target under `replaced_target`").
 type WriteReport struct {
 	Written        []string           `json:"written"`
 	Obligations    []merkle.DiffError `json:"obligations"`
