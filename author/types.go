@@ -2,7 +2,7 @@ package author
 
 import "github.com/dmitriyb/spexmachina/merkle"
 
-// Exit-code vocabulary for the eight `spex node|edge|leaf|profile|migrate`
+// Exit-code vocabulary for the nine `spex node|edge|leaf|profile|migrate`
 // surfaces, per arch_author_commands.md's "Exit codes and output". Unlike
 // spex diff/plan/ingest, there is no not-a-spex-project code here: none of
 // these commands runs a pre-flight against .spex/, because an uninitialised

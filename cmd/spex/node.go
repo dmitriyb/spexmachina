@@ -26,7 +26,7 @@ func newNodeCmd() *cobra.Command {
 // name, or the frame value "module"); --module and --field are this
 // implementation's own vocabulary choice for the module name and the
 // per-field values flow_authoring.md leaves open
-// (spec/author/arch_author_commands.md, "Three flags are fixed by the
+// (spec/author/arch_author_commands.md, "Five flags are fixed by the
 // spec").
 func newNodeAddCmd() *cobra.Command {
 	var typeName, module string

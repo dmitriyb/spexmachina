@@ -1,4 +1,4 @@
-// Package author is the write path over the spec: the eight `spex node`,
+// Package author is the write path over the spec: the nine `spex node`,
 // `spex edge`, `spex leaf`, `spex profile` and `spex migrate` surfaces that
 // change spec/ and refuse with the validator's own predicate rather than a
 // rule of their own. See spec/author/flow_authoring.md and
