@@ -37,6 +37,31 @@ type NodeRemoveInput struct {
 	Force bool
 }
 
+// NodeSetInput is what `spex node set` hands to NodeEditor: an existing
+// node's id, one or more declared field values to write, one or more
+// declared field names to unset, or both in one invocation — a name given
+// to both is refused. Fields is keyed by declared field name exactly as
+// NodeAddInput.Fields is, and its values are converted by kind the same
+// way `spex node add` converts them: an integer field refuses a
+// non-integer and an enumerated field refuses a value outside its
+// enumeration, each with the validator's own schema entry and the
+// declared kind or enumeration as the fix
+// (spec/author/arch_node_editor.md, "Setting a field"). A reference
+// field, `name`, `id`, `content` or a module id named in Fields or Unset
+// is refused with the surface that owns it — NodeEditor's own guard, not
+// the validator's — naming `spex edge add`/`spex edge remove`,
+// `spex node rename`, "derived", or the hand edit respectively
+// (spec/author/arch_node_editor.md, "Setting a field": "Every field this
+// command will not touch has a surface that owns it").
+//
+// TODO(bead:spexmachina-444f.3): NodeEditor's Set function, consuming
+// this shape, is this bead's own deferred work.
+type NodeSetInput struct {
+	ID     string
+	Fields map[string]string
+	Unset  []string
+}
+
 // RenameInput is what `spex node rename` hands to NodeRenamer: the
 // node's id and its new name. NodeRenamer derives the new id itself from
 // the node's scope, type and the new name (spec/author/arch_node_renamer.md).
