@@ -228,6 +228,7 @@ var (
 	requiredFieldNameRe = regexp.MustCompile(`'([^']*)'`)
 	additionalPropsRe   = regexp.MustCompile(`^additional propert(?:y|ies) .+ not allowed$`)
 	referencesMissingRe = regexp.MustCompile(`^(\w+) references non-existent (.+) ([0-9a-f]{12})\b`)
+	wrongValueRe        = regexp.MustCompile(`^(?:value must be|got \S+, want |minimum: got|maximum: got)`)
 )
 
 // computeFix derives the command, flag or value that resolves one refusal
@@ -277,6 +278,11 @@ func computeFix(e validator.ValidationError, before fs.FS, profile *schema.Profi
 				return disallowedFieldFix(nt)
 			}
 			return undeclaredTypeFix(e.Path, profile)
+		}
+		if wrongValueRe.MatchString(e.Message) {
+			if fix := wrongValueFix(e, profile); fix != "" {
+				return fix
+			}
 		}
 		return e.Message
 	default:
@@ -405,6 +411,47 @@ func missingRequiredFix(fieldList, errPath string, profile *schema.Profile) stri
 		}
 	}
 	return fmt.Sprintf("set the required field(s): %s", strings.Join(parts, ", "))
+}
+
+// wrongValueFix is computeFix's row for "a value of the wrong kind, or
+// outside its enumeration" (spec/author/arch_obligation_reporter.md, "Every
+// refusal names its fix"): the jsonschema library's "type", "enum",
+// "minimum" and "maximum" keyword violations all name a single field at the
+// end of the violation's instance path, so the fix reuses fieldKindLabel —
+// the same declared-kind lookup missingRequiredFix uses for an absent
+// field — rather than echoing the library's own wording. Returns "" when
+// the path names no single field the profile declares (a root-level
+// violation, or a field wrongValueRe's caller mis-detected), in which case
+// computeFix's caller falls back to the message itself.
+func wrongValueFix(e validator.ValidationError, profile *schema.Profile) string {
+	field := lastPathSegment(e.Path)
+	if field == "" {
+		return ""
+	}
+	nt, _ := nodeTypeForPath(e.Path, profile)
+	kind := fieldKindLabel(field, nt)
+	if kind == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s must be %s", field, kind)
+}
+
+// lastPathSegment returns the final segment of a schema-checker path's
+// instance location — e.g. "project.json:/requirements/0/priority" ->
+// "priority" — the field name a value-kind violation is reported against.
+// A path with no ":" (the whole document failed) or an empty instance
+// location returns "".
+func lastPathSegment(errPath string) string {
+	idx := strings.Index(errPath, ":")
+	if idx < 0 {
+		return ""
+	}
+	instance := strings.Trim(errPath[idx+1:], "/")
+	if instance == "" {
+		return ""
+	}
+	segs := strings.Split(instance, "/")
+	return segs[len(segs)-1]
 }
 
 // fieldKindLabel names the kind of a required field by its declared name:
