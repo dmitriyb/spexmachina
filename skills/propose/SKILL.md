@@ -25,6 +25,8 @@ Call `EnterPlanMode`. The system assigns a plan file path — you will write the
 
 If `$ARGUMENTS` is empty and the user's intent is unclear, use `AskUserQuestion` to ask **one focused question** about what the proposal should cover. Do not present a checklist or menu. If `$ARGUMENTS` or prior conversation make the intent clear, skip this step.
 
+If `$ARGUMENTS` names a review decisions directory (`.spex/runs/review/`, written by `/spec-review all`), that is the whole intent: a review proposal carrying every accepted finding as decided, nothing else. Ask nothing.
+
 ## Step 4: Research
 
 Read relevant files silently — do not narrate each file you read. Go straight to drafting after research.
@@ -37,6 +39,7 @@ Read relevant files silently — do not narrate each file you read. Go straight 
 4. All `spec/proposals/*.md` — prior proposals (avoid duplication/contradiction)
 5. `CLAUDE.md` at the repo root — language, frameworks, build tools, conventions
 6. Relevant source code if the proposal involves implementation changes
+7. For a review proposal, the decisions directory first: `FINDINGS.tsv` (two verbatim quotes, the contradiction and the replacement text per finding), `VERDICTS.tsv` (only `holds` rows count), `DECISIONS.tsv` (`accepted` / `declined` / the chosen option, with its reason). The proposed change is the decisions, node by node; a declined finding is not proposed
 
 ### For project proposals, read:
 
