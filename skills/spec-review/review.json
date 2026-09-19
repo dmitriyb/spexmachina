@@ -1,0 +1,12 @@
+{
+  "reviewers": {
+    "small": 1,
+    "large": 2
+  },
+  "large_when": {
+    "seam_modules_at_least": 3,
+    "staged_share_at_least": 0.3
+  },
+  "read_call_bytes": 24000,
+  "flag_pattern": "--[a-z][a-z0-9-]+"
+}
