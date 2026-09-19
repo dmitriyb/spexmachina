@@ -69,6 +69,15 @@ its lines naming staged paths.
   confines the audit to it.
 - `$ARGUMENTS` is `all` → the seed is every node.
 
+**The `all` contract.** A full audit ends in a review proposal, never in spec edits, and Step 8
+does not apply. The reviewer stops at the Step 7 report. The caller presents the audit results,
+the cost figures and the findings table, then discusses the open questions one per message —
+what the spec says today, the possible edits, each assessed on correctness rather than on size,
+and a lean — until every finding that holds is accepted or declined. The caller then writes
+`.spex/runs/review/` (run scratch, announced first): `FINDINGS.tsv`, `VERDICTS.tsv`, and
+`DECISIONS.tsv` with one row per finding — `id`, `accepted` / `declined` / the chosen option,
+one sentence of reason. That directory is `/propose`'s input, and the run ends there.
+
 The script's summary ends with a `size` line, `large` or `small` from the thresholds in
 `skills/spec-review/review.json` (seam reach and staged share of the corpus), and the number of
 independent reviewers that size calls for. How many reviews run, and how their findings are
@@ -546,7 +555,7 @@ rest are listed at the end of the report with the verifier's reason, so a wrong 
 appealed by quote rather than by re-review. A finding also holds without verification when two
 independent runs produced it with the same quotes.
 
-## Step 8: Fix in-session (after the go)
+## Step 8: Fix in-session (after the go) — per-change mode only
 
 Before the go, the caller audits the run:
 
